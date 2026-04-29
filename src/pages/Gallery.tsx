@@ -16,7 +16,6 @@ import { getImagePreference } from '../services/imageService';
 import { toDateValue } from '../lib/dateUtils';
 import { LocationTagInput } from '../components/LocationTagInput';
 import Pagination from '../components/Pagination';
-import { GallerySkeleton } from '../components/GallerySkeleton';
 import { extractGpsFromMultipleFiles, findMostFrequentGpsCoordinates } from '../services/exifService';
 import type { GalleryItem } from '../types/entities';
 import type { UploadSessionResponse, UploadFileResponse, GalleryCreateResponse } from '../types/api';
@@ -43,13 +42,13 @@ const GalleryCard = React.memo(({ gallery, viewMode, isAdmin, deletingGalleryId,
       to={`/gallery/${gallery.id}`}
       className={clsx(
         viewMode === 'list'
-          ? 'flex gap-4 p-4 bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all w-full'
-          : 'block bg-white rounded-[32px] border border-gray-100 overflow-hidden hover:shadow-xl transition-all'
+          ? 'flex gap-4 p-3 bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all w-full'
+          : 'block bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all'
       )}
     >
       {viewMode === 'list' ? (
         <>
-          <div className="w-24 h-24 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+          <div className="w-20 h-20 bg-[#f7f5f0] rounded overflow-hidden flex-shrink-0">
             <SmartImage
               src={(Array.isArray(gallery.images) && gallery.images[0]?.url) || ''}
               alt={gallery.title}
@@ -58,18 +57,15 @@ const GalleryCard = React.memo(({ gallery, viewMode, isAdmin, deletingGalleryId,
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-lg font-serif font-bold group-hover:text-brand-olive transition-colors truncate">{gallery.title}</h3>
-              <span className="px-2 py-0.5 bg-black/50 backdrop-blur-md text-white text-[10px] font-bold rounded-full flex-shrink-0">
+              <h3 className="text-sm font-medium text-[#2c2c2c] group-hover:text-[#c8951e] transition-colors truncate">{gallery.title}</h3>
+              <span className="px-1.5 py-0.5 bg-[#f7f5f0] text-[#9e968e] text-[10px] font-medium rounded flex-shrink-0">
                 {Array.isArray(gallery.images) ? gallery.images.length : 0} 张
               </span>
             </div>
-            <p className="text-gray-400 text-sm line-clamp-2">
+            <p className="text-[#9e968e] text-xs line-clamp-1">
               {gallery.description || '暂无描述'}
             </p>
-            <p className="text-gray-300 text-xs mt-1">
-              {(gallery.description || '').substring(0, 50)}...
-            </p>
-            <div className="flex items-center gap-3 text-gray-400 text-xs mt-2">
+            <div className="flex items-center gap-3 text-[#9e968e] text-[11px] mt-1">
               <span className="flex items-center gap-1"><Clock size={10} /> {toDateValue(gallery.createdAt) ? format(toDateValue(gallery.createdAt)!, 'yyyy-MM-dd') : '刚刚'}</span>
               <span className="flex items-center gap-1"><UserIcon size={10} /> {gallery.authorUid?.substring(0, 6)}</span>
             </div>
@@ -81,22 +77,22 @@ const GalleryCard = React.memo(({ gallery, viewMode, isAdmin, deletingGalleryId,
             <SmartImage
               src={(Array.isArray(gallery.images) && gallery.images[0]?.url) || ''}
               alt={gallery.title}
-              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />
-            <div className="absolute top-4 right-4 px-3 py-1 bg-black/50 backdrop-blur-md text-white text-[10px] font-bold rounded-full">
+            <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/40 text-white text-[10px] font-medium rounded">
               {Array.isArray(gallery.images) ? gallery.images.length : 0} 张
             </div>
           </div>
-          <div className="p-6">
-            <h3 className="text-xl font-serif font-bold mb-2 group-hover:text-brand-olive transition-colors">{gallery.title}</h3>
-            <div className="flex flex-wrap gap-1 mb-4">
-              {gallery.tags?.map((tag: string) => (
-                <span key={tag} className="text-[10px] text-brand-olive bg-brand-cream px-2 py-0.5 rounded">#{tag}</span>
+          <div className="p-3">
+            <h3 className="text-sm font-medium text-[#2c2c2c] mb-1 group-hover:text-[#c8951e] transition-colors truncate">{gallery.title}</h3>
+            <div className="flex flex-wrap gap-1 mb-2">
+              {gallery.tags?.slice(0, 3).map((tag: string) => (
+                <span key={tag} className="text-[10px] text-[#c8951e] bg-[#f7f5f0] px-1.5 py-0.5 rounded">{tag}</span>
               ))}
             </div>
-            <div className="flex items-center justify-between text-gray-400 text-xs">
-              <span className="flex items-center gap-1"><Clock size={12} /> {toDateValue(gallery.createdAt) ? format(toDateValue(gallery.createdAt)!, 'yyyy-MM-dd') : '刚刚'}</span>
-              <span className="flex items-center gap-1"><UserIcon size={12} /> {gallery.authorUid?.substring(0, 6)}</span>
+            <div className="flex items-center justify-between text-[#9e968e] text-[11px]">
+              <span className="flex items-center gap-1"><Clock size={10} /> {toDateValue(gallery.createdAt) ? format(toDateValue(gallery.createdAt)!, 'yyyy-MM-dd') : '刚刚'}</span>
+              <span className="flex items-center gap-1"><UserIcon size={10} /> {gallery.authorUid?.substring(0, 6)}</span>
             </div>
           </div>
         </>
@@ -106,30 +102,29 @@ const GalleryCard = React.memo(({ gallery, viewMode, isAdmin, deletingGalleryId,
       <button
         onClick={(event) => onRequestDelete(event, gallery)}
         disabled={deletingGalleryId === gallery.id}
-        className="absolute top-4 left-4 p-2 rounded-full border border-white/70 bg-white/85 text-gray-500 shadow-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:text-red-500 transition-all disabled:cursor-not-allowed disabled:opacity-60"
+        className="absolute top-2 left-2 p-1.5 rounded bg-white/90 border border-[#e0dcd3] text-[#9e968e] hover:text-red-500 transition-all disabled:cursor-not-allowed disabled:opacity-60"
         title="删除图集"
         aria-label="删除图集"
       >
-        <Trash2 size={14} />
+        <Trash2 size={12} />
       </button>
     ) : null}
     <button
       onClick={(event) => onCopyLink(event, gallery.id)}
       className={clsx(
-        'p-2 rounded-full border bg-white/85 text-gray-500 shadow-sm hover:text-brand-olive transition-all',
-        viewMode === 'list' ? 'absolute top-4 right-4' : 'absolute bottom-4 right-4 sm:opacity-0 sm:group-hover:opacity-100'
+        'p-1.5 rounded bg-white/90 border border-[#e0dcd3] text-[#9e968e] hover:text-[#c8951e] transition-all',
+        viewMode === 'list' ? 'absolute top-2 right-2' : 'absolute bottom-2 right-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
       )}
       title="复制内链"
       aria-label="复制图集内链"
     >
-      <Link2 size={14} />
+      <Link2 size={12} />
     </button>
   </div>
 ));
 
 const GalleryList = () => {
   const [galleries, setGalleries] = useState<GalleryItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const { user, isAdmin, isBanned } = useAuth();
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [galleryToDelete, setGalleryToDelete] = useState<{ id: string; title: string } | null>(null);
@@ -158,15 +153,12 @@ const GalleryList = () => {
 
   useEffect(() => {
     const fetchGalleries = async () => {
-      setLoading(true);
       try {
         const data = await apiGet<{ galleries: GalleryItem[] }>('/api/galleries');
         setGalleries(data.galleries || []);
       } catch (error) {
         console.error('Fetch galleries error:', error);
         setGalleries([]);
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -213,110 +205,119 @@ const GalleryList = () => {
     }
   };
 
-  if (loading) {
-    return <GallerySkeleton />;
-  }
-
   return (
-    <div className="max-w-7xl mx-auto px-4 py-12">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
-        <div>
-          <h1 className="text-5xl font-serif font-bold text-brand-olive mb-2">图集馆</h1>
-          <p className="text-gray-500 italic">诗扶图集 · 记录每一帧绝色</p>
-        </div>
-        {user && !isBanned && (
-          <button 
-            onClick={() => setIsUploadModalOpen(true)}
-            className="px-6 py-3 bg-brand-olive text-white rounded-full font-medium hover:bg-brand-olive/90 transition-all flex items-center gap-2 shadow-md"
-          >
-            <Plus size={18} /> 上传图集
-          </button>
-        )}
-        <ViewModeSelector value={viewMode} onChange={setViewMode} />
-      </div>
+    <div
+      className="min-h-[calc(100vh-60px)]"
+      style={{
+        backgroundColor: '#f7f5f0',
+        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+        lineHeight: 1.8,
+      }}
+    >
+      <style>{`
+        .gallery-page ::selection {
+          background-color: #fdf5d8;
+          color: #c8951e;
+        }
+      `}</style>
 
-      {loading ? (
-        <div className={clsx('grid', VIEW_MODE_CONFIG[viewMode].gridCols, VIEW_MODE_CONFIG[viewMode].gap)}>
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className={clsx(
-              viewMode === 'list' ? 'h-24' : VIEW_MODE_CONFIG[viewMode].cardHeight,
-              'bg-white rounded-[32px] animate-pulse border border-gray-100'
-            )}></div>
-          ))}
-        </div>
-      ) : galleries.length > 0 ? (
-        <>
-          <div className={clsx('grid', VIEW_MODE_CONFIG[viewMode].gridCols, VIEW_MODE_CONFIG[viewMode].gap)}>
-            {paginatedGalleries.map((gallery) => (
-            <GalleryCard
-              key={gallery.id}
-              gallery={gallery}
-              viewMode={viewMode}
-              isAdmin={isAdmin}
-              deletingGalleryId={deletingGalleryId}
-              onCopyLink={handleCopyGalleryLink}
-              onRequestDelete={handleRequestDeleteGallery}
-            />
-          ))}
+      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 gallery-page">
+        {/* Header */}
+        <header className="mb-7">
+          <div className="flex items-end justify-between flex-wrap gap-3">
+            <h1 className="text-[1.75rem] font-bold text-[#2c2c2c] tracking-[0.12em]">图集馆</h1>
+            <div className="flex items-center gap-3">
+              <ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
+              {user && !isBanned && (
+                <button
+                  onClick={() => setIsUploadModalOpen(true)}
+                  className="px-5 py-2 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] transition-all flex items-center gap-2"
+                >
+                  <Plus size={15} /> 上传图集
+                </button>
+              )}
+            </div>
           </div>
-          {totalGalleryPages > 1 && (
-            <Pagination
-              page={page}
-              totalPages={totalGalleryPages}
-              onPageChange={handlePageChange}
-              pageSize={pageSize}
-              onPageSizeChange={handlePageSizeChange}
-              showPageSizeSelector
-            />
-          )}
-        </>
-      ) : (
-        <div className="bg-white p-20 rounded-[40px] border border-gray-100 text-center">
-          <ImageIcon size={48} className="mx-auto text-gray-200 mb-6" />
-          <p className="text-gray-400 italic">暂无图集，快来上传吧！</p>
-        </div>
-      )}
+        </header>
 
-      {/* Upload Modal */}
-      <AnimatePresence>
-        {isUploadModalOpen && (
-          <UploadModal onClose={() => setIsUploadModalOpen(false)} />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {galleryToDelete && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-[40px] p-8 max-w-md w-full shadow-2xl"
-            >
-              <h3 className="text-2xl font-serif font-bold text-gray-900 mb-4">确认删除</h3>
-              <p className="text-gray-500 mb-8">
-                您确定要删除图集《{galleryToDelete.title}》吗？此操作无法撤销。
-              </p>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setGalleryToDelete(null)}
-                  disabled={Boolean(deletingGalleryId)}
-                  className="flex-grow px-6 py-4 bg-gray-100 text-gray-600 rounded-2xl font-bold hover:bg-gray-200 transition-all disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleConfirmDeleteGallery}
-                  disabled={Boolean(deletingGalleryId)}
-                  className="flex-grow px-6 py-4 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-600 transition-all disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {deletingGalleryId ? '删除中...' : '确定删除'}
-                </button>
+        {/* Content */}
+        {galleries.length > 0 ? (
+          <>
+            <div className={clsx('grid', VIEW_MODE_CONFIG[viewMode].gridCols, 'gap-3')}>
+              {paginatedGalleries.map((gallery) => (
+                <GalleryCard
+                  key={gallery.id}
+                  gallery={gallery}
+                  viewMode={viewMode}
+                  isAdmin={isAdmin}
+                  deletingGalleryId={deletingGalleryId}
+                  onCopyLink={handleCopyGalleryLink}
+                  onRequestDelete={handleRequestDeleteGallery}
+                />
+              ))}
+            </div>
+            {totalGalleryPages > 1 && (
+              <div className="mt-8">
+                <Pagination
+                  page={page}
+                  totalPages={totalGalleryPages}
+                  onPageChange={handlePageChange}
+                  pageSize={pageSize}
+                  onPageSizeChange={handlePageSizeChange}
+                  showPageSizeSelector
+                />
               </div>
-            </motion.div>
+            )}
+          </>
+        ) : (
+          <div className="py-20 text-center text-[#9e968e] italic tracking-[0.1em]">
+            <ImageIcon size={48} className="mx-auto text-[#e0dcd3] mb-6" />
+            暂无图集，快来上传吧！
           </div>
         )}
-      </AnimatePresence>
+
+        {/* Upload Modal */}
+        <AnimatePresence>
+          {isUploadModalOpen && (
+            <UploadModal onClose={() => setIsUploadModalOpen(false)} />
+          )}
+        </AnimatePresence>
+
+        {/* Delete Confirm */}
+        <AnimatePresence>
+          {galleryToDelete && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-white rounded p-8 max-w-md w-full border border-[#e0dcd3]"
+              >
+                <h3 className="text-xl font-semibold text-[#2c2c2c] mb-4 tracking-wide">确认删除</h3>
+                <p className="text-[#6b6560] mb-8 text-[0.9375rem]">
+                  您确定要删除图集《{galleryToDelete.title}》吗？此操作无法撤销。
+                </p>
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setGalleryToDelete(null)}
+                    disabled={Boolean(deletingGalleryId)}
+                    className="flex-1 px-6 py-3 bg-[#f0ece3] text-[#6b6560] rounded font-semibold hover:bg-[#e0dcd3] transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleConfirmDeleteGallery}
+                    disabled={Boolean(deletingGalleryId)}
+                    className="flex-1 px-6 py-3 bg-red-500 text-white rounded font-semibold hover:bg-red-600 transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {deletingGalleryId ? '删除中...' : '确定删除'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 };
@@ -354,16 +355,13 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
   };
 
   const extractLocationFromImages = async (imageFiles: File[]) => {
-    // 如果已经设置了地点，不再自动提取
     if (locationName) return;
 
     try {
-      // 提取 GPS 信息
       const gpsResults = await extractGpsFromMultipleFiles(imageFiles);
       const mostFrequentGps = findMostFrequentGpsCoordinates(gpsResults);
 
       if (mostFrequentGps) {
-        // 调用 API 解析经纬度为行政区划
         const data = await apiPost<{
           result?: {
             adcode: string;
@@ -387,14 +385,13 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
       }
     } catch (error) {
       console.error('Failed to extract location from images:', error);
-      // 静默失败，不影响用户上传体验
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-      const maxSize = 10 * 1024 * 1024; // 10MB
+      const maxSize = 10 * 1024 * 1024;
 
       const validFiles: { file: File; previewUrl: string }[] = [];
       const invalidFiles: string[] = [];
@@ -419,14 +416,12 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
       if (validFiles.length > 0) {
         setFiles((prev) => [...prev, ...validFiles]);
 
-        // If title is empty and we have a folder path, try to use the folder name
         if (!title && validFiles[0]?.file && (validFiles[0].file as any).webkitRelativePath) {
           const path = (validFiles[0].file as any).webkitRelativePath;
           const folderName = path.split('/')[0];
           if (folderName) setTitle(folderName);
         }
 
-        // 尝试从图片 EXIF 中提取地点信息
         extractLocationFromImages(validFiles.map(f => f.file));
       }
     }
@@ -446,7 +441,6 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    // 自动获取存储策略，决定是否启用三重存储
     const preference = await getImagePreference();
     const useTripleStorage = preference.strategy === 's3' || preference.strategy === 'external';
 
@@ -462,8 +456,7 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
   const handleUpload = async () => {
     if (!user || files.length === 0) return show('请选择图片', { variant: 'error' });
     if (isBanned) return show('账号已被封禁，无法上传图集', { variant: 'error' });
-    
-    // Group files by folder if possible
+
     const groups: { [key: string]: File[] } = {};
     files.forEach((entry) => {
       const path = (entry.file as any).webkitRelativePath || '';
@@ -533,7 +526,6 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
           locationCode: locationCode,
         });
 
-        // 跳转到刚创建的图集详情页
         if (galleryResponse.gallery?.id) {
           navigate(`/gallery/${galleryResponse.gallery.id}`);
         }
@@ -549,51 +541,51 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
     >
-      <motion.div 
+      <motion.div
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
-        className="bg-white rounded-[40px] w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
+        className="bg-white rounded w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col border border-[#e0dcd3]"
       >
-        <div className="p-8 border-b border-gray-100 flex justify-between items-center">
-          <h2 className="text-3xl font-serif font-bold text-brand-olive">上传新图集</h2>
-          <button onClick={handleClose} className="p-2 text-gray-400 hover:text-red-500 transition-colors">
+        <div className="p-6 border-b border-[#e0dcd3] flex justify-between items-center">
+          <h2 className="text-[1.5rem] font-bold text-[#2c2c2c] tracking-[0.12em]">上传新图集</h2>
+          <button onClick={handleClose} className="p-2 text-[#9e968e] hover:text-red-500 transition-colors">
             <X size={24} />
           </button>
         </div>
 
-        <div className="flex-grow overflow-y-auto p-8 space-y-8">
+        <div className="flex-grow overflow-y-auto p-6 space-y-6">
           <div className="space-y-2">
-            <label htmlFor="gallery-create-title" className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">图集标题</label>
+            <label className="text-xs font-medium text-[#9e968e]">图集标题 <span className="text-red-500">*</span></label>
             <input
-              id="gallery-create-title"
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="例如：2024 Live 现场返图"
-              className="w-full px-6 py-4 bg-brand-cream rounded-2xl border-none focus:ring-2 focus:ring-brand-olive/20"
+              className="w-full px-4 py-3 bg-[#f7f5f0] border border-[#e0dcd3] rounded focus:outline-none focus:border-[#c8951e] text-base"
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">标签 (逗号分隔)</label>
-              <input 
-                type="text" 
+              <label className="text-xs font-medium text-[#9e968e]">标签 (逗号分隔)</label>
+              <input
+                type="text"
                 value={tags}
                 onChange={e => setTags(e.target.value)}
                 placeholder="例如：Live, 绝色, 2024"
-                className="w-full px-6 py-4 bg-brand-cream rounded-2xl border-none focus:ring-2 focus:ring-brand-olive/20"
+                className="w-full px-4 py-3 bg-[#f7f5f0] border border-[#e0dcd3] rounded focus:outline-none focus:border-[#c8951e] text-base"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">地点</label>
+              <label className="text-xs font-medium text-[#9e968e]">地点</label>
               <LocationTagInput
                 value={locationName}
                 locationCode={locationCode}
@@ -610,65 +602,65 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">描述 (可选)</label>
-            <textarea 
+            <label className="text-xs font-medium text-[#9e968e]">描述 (可选)</label>
+            <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="简单介绍一下这个图集..."
               rows={3}
-              className="w-full px-6 py-4 bg-brand-cream rounded-2xl border-none focus:ring-2 focus:ring-brand-olive/20 resize-none"
+              className="w-full px-4 py-3 bg-[#f7f5f0] border border-[#e0dcd3] rounded focus:outline-none focus:border-[#c8951e] resize-none text-base"
             />
           </div>
 
           <div className="space-y-4">
             <div className="flex flex-wrap gap-4">
-              <button 
+              <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex-1 min-w-[200px] p-8 border-2 border-dashed border-gray-200 rounded-3xl hover:border-brand-olive hover:bg-brand-cream transition-all flex flex-col items-center justify-center gap-3 group"
+                className="flex-1 min-w-[160px] p-6 border-2 border-dashed border-[#e0dcd3] rounded hover:border-[#c8951e] hover:bg-[#f7f5f0] transition-all flex flex-col items-center justify-center gap-2 group"
               >
-                <Upload size={32} className="text-gray-300 group-hover:text-brand-olive" />
-                <span className="text-sm font-bold text-gray-400 group-hover:text-brand-olive">选择多张图片</span>
-                <input 
-                  type="file" 
-                  multiple 
-                  accept="image/*" 
-                  className="hidden" 
-                  ref={fileInputRef} 
+                <Upload size={28} className="text-[#9e968e] group-hover:text-[#c8951e]" />
+                <span className="text-sm text-[#6b6560] group-hover:text-[#c8951e]">选择多张图片</span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  className="hidden"
+                  ref={fileInputRef}
                   onChange={handleFileChange}
                 />
               </button>
 
-              <button 
+              <button
                 onClick={() => folderInputRef.current?.click()}
-                className="flex-1 min-w-[200px] p-8 border-2 border-dashed border-gray-200 rounded-3xl hover:border-brand-olive hover:bg-brand-cream transition-all flex flex-col items-center justify-center gap-3 group"
+                className="flex-1 min-w-[160px] p-6 border-2 border-dashed border-[#e0dcd3] rounded hover:border-[#c8951e] hover:bg-[#f7f5f0] transition-all flex flex-col items-center justify-center gap-2 group"
               >
-                <Folder size={32} className="text-gray-300 group-hover:text-brand-olive" />
-                <span className="text-sm font-bold text-gray-400 group-hover:text-brand-olive">上传整个文件夹</span>
-                <input 
-                  type="file" 
+                <Folder size={28} className="text-[#9e968e] group-hover:text-[#c8951e]" />
+                <span className="text-sm text-[#6b6560] group-hover:text-[#c8951e]">上传整个文件夹</span>
+                <input
+                  type="file"
                   // @ts-ignore
-                  webkitdirectory="" 
-                  directory="" 
-                  multiple 
-                  className="hidden" 
-                  ref={folderInputRef} 
+                  webkitdirectory=""
+                  directory=""
+                  multiple
+                  className="hidden"
+                  ref={folderInputRef}
                   onChange={handleFileChange}
                 />
               </button>
             </div>
 
             {files.length > 0 && (
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-4 p-4 bg-brand-cream rounded-3xl">
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 p-3 bg-[#f7f5f0] border border-[#e0dcd3] rounded">
                 {files.map((item, i) => (
-                  <div key={i} className="relative aspect-square rounded-xl overflow-hidden group">
-                    <img 
+                  <div key={i} className="relative aspect-square rounded overflow-hidden group">
+                    <img
                       src={item.previewUrl}
-                      alt="" 
-                      className="w-full h-full object-cover" 
+                      alt=""
+                      className="w-full h-full object-cover"
                     />
-                    <button 
+                    <button
                       onClick={() => removeFile(i)}
-                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <X size={12} />
                     </button>
@@ -679,21 +671,21 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
           </div>
         </div>
 
-        <div className="p-8 border-t border-gray-100 flex items-center justify-between">
-          <div className="flex-grow mr-8">
+        <div className="p-6 border-t border-[#e0dcd3] flex items-center justify-between">
+          <div className="flex-grow mr-6">
             {uploading && (
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-brand-olive transition-all duration-300" 
+              <div className="w-full h-2 bg-[#f0ece3] rounded overflow-hidden">
+                <div
+                  className="h-full bg-[#c8951e] transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 ></div>
               </div>
             )}
           </div>
-          <button 
+          <button
             onClick={handleUpload}
             disabled={uploading || files.length === 0}
-            className="px-12 py-4 bg-brand-olive text-white rounded-full font-bold hover:bg-brand-olive/90 transition-all shadow-lg flex items-center gap-2 disabled:opacity-50"
+            className="px-8 py-3 bg-[#c8951e] text-white rounded font-medium hover:bg-[#dca828] transition-all flex items-center gap-2 disabled:opacity-50"
           >
             {uploading ? `上传中 ${progress}%` : '开始上传'}
           </button>

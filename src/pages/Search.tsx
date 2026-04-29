@@ -6,27 +6,22 @@ import {
 	MessageSquare,
 	Image as ImageIcon,
 	Clock,
-	ChevronRight,
 	Tag,
 	Filter,
 	Sparkles,
 	Calendar,
 	Camera,
 	Music,
-	Layers,
 } from "lucide-react";
 import { useUserPreferences } from "../context/UserPreferencesContext";
 import { ViewModeSelector } from "../components/ViewModeSelector";
 import { VIEW_MODE_CONFIG } from "../lib/viewModes";
 import { format } from "date-fns";
 import { clsx } from "clsx";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { SmartImage } from "../components/SmartImage";
 import { apiGet, apiUpload } from "../lib/apiClient";
 import { toDateValue } from "../lib/dateUtils";
-import { useTheme } from "../context/ThemeContext";
-import { withThemeSearch, mergeSearchParamsWithTheme } from "../lib/theme";
-import type { ThemeName } from "../lib/theme";
 import type { WikiItem, PostItem, GalleryItem, SongItem, AlbumItem } from "../types/entities";
 import { MixedSearchResultCard } from "../components/MixedSearchResultCard";
 import type { MixedSearchResult, SearchSuggestion } from "../hooks/useSearch";
@@ -36,78 +31,64 @@ type SearchSuggestionType = SearchSuggestion;
 interface SearchWikiCardProps {
 	page: WikiItem;
 	viewMode: string;
-	theme: ThemeName;
 }
 
-const SearchWikiCard = React.memo(({ page, viewMode, theme }: SearchWikiCardProps) => (
+const SearchWikiCard = React.memo(({ page, viewMode }: SearchWikiCardProps) => (
 	<Link
-		to={withThemeSearch(`/wiki/${page.slug}`, theme)}
+		to={`/wiki/${page.slug}`}
 		className={clsx(
 			viewMode === "list"
-				? "flex gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-brand-olive/20 hover:shadow-lg transition-all w-full"
-				: "bg-white p-6 rounded-3xl border border-gray-100 hover:border-brand-olive/20 hover:shadow-lg transition-all group",
+				? "flex gap-4 p-3 bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all w-full"
+				: "block bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all group",
 		)}
 	>
 		{viewMode === "list" ? (
 			<>
-				<div className="w-24 h-24 bg-brand-cream/50 rounded-lg flex items-center justify-center flex-shrink-0">
-					<Book
-						size={32}
-						className="text-brand-olive/40"
-					/>
+				<div className="w-20 h-20 bg-[#f7f5f0] rounded flex items-center justify-center flex-shrink-0">
+					<Book size={24} className="text-[#c8951e]/40" />
 				</div>
 				<div className="flex-1 min-w-0">
 					<div className="flex items-center gap-2 mb-1">
-						<span className="px-2 py-0.5 bg-brand-cream text-brand-olive text-[10px] font-bold uppercase tracking-wider rounded">
+						<span className="px-2 py-0.5 bg-[#f7f5f0] text-[#c8951e] text-[10px] font-medium rounded">
 							{page.category}
 						</span>
 					</div>
-					<h3 className="text-lg font-serif font-bold mb-1 group-hover:text-brand-olive transition-colors truncate">
+					<h3 className="text-sm font-semibold text-[#2c2c2c] group-hover:text-[#c8951e] transition-colors truncate">
 						{page.title}
 					</h3>
-					<p className="text-gray-400 text-sm line-clamp-2 italic">
-						{page.content
-							.replace(/[#*`]/g, "")
-							.substring(0, 100)}
+					<p className="text-[#9e968e] text-xs line-clamp-2 italic">
+						{page.content.replace(/[#*`]/g, "").substring(0, 80)}
 					</p>
-					<p className="text-gray-300 text-xs mt-1">
-						{page.content
-							.replace(/[#*`]/g, "")
-							.substring(0, 50)}
-						...
+					<p className="text-[#9e968e]/70 text-[10px] mt-1 flex items-center gap-1">
+						<Clock size={10} />
+						{toDateValue(page.updatedAt)
+							? format(toDateValue(page.updatedAt)!, "yyyy-MM-dd")
+							: "刚刚"}
 					</p>
 				</div>
 			</>
 		) : (
 			<>
-				<div className="flex items-center gap-2 mb-3">
-					<span className="px-2 py-0.5 bg-brand-cream text-brand-olive text-[10px] font-bold uppercase tracking-wider rounded">
-						{page.category}
-					</span>
-				</div>
-				<h3 className="text-xl font-serif font-bold mb-2 group-hover:text-brand-olive transition-colors">
-					{page.title}
-				</h3>
-				<p className="text-gray-400 text-sm line-clamp-2 mb-4 italic leading-relaxed">
-					{page.content
-						.replace(/[#*`]/g, "")
-						.substring(0, 100)}
-					...
-				</p>
-				<div className="flex items-center justify-between text-gray-400 text-[10px]">
-					<span className="flex items-center gap-1">
-						<Clock size={12} />{" "}
-						{toDateValue(page.updatedAt)
-							? format(
-									toDateValue(page.updatedAt)!,
-									"yyyy-MM-dd",
-								)
-							: "刚刚"}
-					</span>
-					<ChevronRight
-						size={14}
-						className="group-hover:translate-x-1 transition-transform"
-					/>
+				<div className="p-4">
+					<div className="flex items-center gap-2 mb-2">
+						<span className="px-2 py-0.5 bg-[#f7f5f0] text-[#c8951e] text-[10px] font-medium rounded">
+							{page.category}
+						</span>
+					</div>
+					<h3 className="text-sm font-semibold text-[#2c2c2c] mb-2 group-hover:text-[#c8951e] transition-colors truncate">
+						{page.title}
+					</h3>
+					<p className="text-[#9e968e] text-xs line-clamp-2 mb-3 italic">
+						{page.content.replace(/[#*`]/g, "").substring(0, 60)}...
+					</p>
+					<div className="flex items-center justify-between text-[10px] text-[#9e968e]">
+						<span className="flex items-center gap-1">
+							<Clock size={10} />
+							{toDateValue(page.updatedAt)
+								? format(toDateValue(page.updatedAt)!, "yyyy-MM-dd")
+								: "刚刚"}
+						</span>
+					</div>
 				</div>
 			</>
 		)}
@@ -117,62 +98,54 @@ const SearchWikiCard = React.memo(({ page, viewMode, theme }: SearchWikiCardProp
 interface SearchGalleryCardProps {
 	gallery: GalleryItem;
 	viewMode: string;
-	theme: ThemeName;
 }
 
-const SearchGalleryCard = React.memo(({ gallery, viewMode, theme }: SearchGalleryCardProps) => (
+const SearchGalleryCard = React.memo(({ gallery, viewMode }: SearchGalleryCardProps) => (
 	<Link
-		to={withThemeSearch(`/gallery/${gallery.id}`, theme)}
+		to={`/gallery/${gallery.id}`}
 		className={clsx(
 			viewMode === "list"
-				? "flex gap-4 p-3 bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all w-full"
-				: "bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all group",
+				? "flex gap-4 p-3 bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all w-full"
+				: "block bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all group",
 		)}
 	>
 		{viewMode === "list" ? (
 			<>
-				<div className="w-24 h-24 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+				<div className="w-20 h-20 bg-[#f7f5f0] rounded overflow-hidden flex-shrink-0">
 					<SmartImage
-						src={(Array.isArray(gallery.images) && gallery.images[0]?.url) || ''}
+						src={(Array.isArray(gallery.images) && gallery.images[0]?.url) || ""}
 						alt=""
 						className="w-full h-full object-cover"
 					/>
 				</div>
 				<div className="flex-1 min-w-0 flex items-center">
 					<div className="flex-1 min-w-0">
-						<h3 className="text-sm font-serif font-bold truncate group-hover:text-brand-olive transition-colors">
+						<h3 className="text-sm font-semibold text-[#2c2c2c] truncate group-hover:text-[#c8951e] transition-colors">
 							{gallery.title}
 						</h3>
-						<p className="text-xs text-gray-400">
+						<p className="text-xs text-[#9e968e] line-clamp-1">
 							{gallery.description || "暂无描述"}
 						</p>
-						<p className="text-[10px] text-gray-300 mt-1">
-							{(gallery.description || "").substring(
-								0,
-								50,
-							)}
-							...
-						</p>
 					</div>
-					<span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full flex-shrink-0">
+					<span className="text-[10px] text-[#9e968e] bg-[#f7f5f0] px-2 py-0.5 rounded flex-shrink-0 ml-2">
 						{Array.isArray(gallery.images) ? gallery.images.length : 0} 张
 					</span>
 				</div>
 			</>
 		) : (
 			<>
-				<div className="h-32 overflow-hidden">
+				<div className={clsx("overflow-hidden", VIEW_MODE_CONFIG[viewMode].cardHeight)}>
 					<SmartImage
-						src={(Array.isArray(gallery.images) && gallery.images[0]?.url) || ''}
+						src={(Array.isArray(gallery.images) && gallery.images[0]?.url) || ""}
 						alt=""
-						className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+						className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
 					/>
 				</div>
-				<div className="p-4">
-					<h3 className="text-sm font-serif font-bold truncate group-hover:text-brand-olive transition-colors">
+				<div className="p-3">
+					<h3 className="text-sm font-semibold text-[#2c2c2c] truncate group-hover:text-[#c8951e] transition-colors">
 						{gallery.title}
 					</h3>
-					<p className="text-[10px] text-gray-400">
+					<p className="text-[10px] text-[#9e968e] mt-1">
 						{Array.isArray(gallery.images) ? gallery.images.length : 0} 张图片
 					</p>
 				</div>
@@ -184,57 +157,44 @@ const SearchGalleryCard = React.memo(({ gallery, viewMode, theme }: SearchGaller
 interface SearchMusicCardProps {
 	track: SongItem;
 	viewMode: string;
-	theme: ThemeName;
 }
 
-const SearchMusicCard = React.memo(({ track, viewMode, theme }: SearchMusicCardProps) => (
+const SearchMusicCard = React.memo(({ track, viewMode }: SearchMusicCardProps) => (
 	<Link
-		to={withThemeSearch(`/music/${track.id}`, theme)}
+		to={`/music/${track.id}`}
 		className={clsx(
 			viewMode === "list"
-				? "flex gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-pink-200 hover:shadow-lg transition-all w-full"
-				: "bg-white p-6 rounded-3xl border border-gray-100 hover:border-pink-200 hover:shadow-lg transition-all group",
+				? "flex gap-4 p-3 bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all w-full"
+				: "block bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all group",
 		)}
 	>
 		{viewMode === "list" ? (
 			<>
-				<div className="w-16 h-16 rounded-lg overflow-hidden bg-brand-cream flex-shrink-0">
-					<SmartImage
-						src={track.cover}
-						alt=""
-						className="w-full h-full object-cover"
-					/>
+				<div className="w-14 h-14 rounded overflow-hidden bg-[#f7f5f0] flex-shrink-0">
+					<SmartImage src={track.cover} alt="" className="w-full h-full object-cover" />
 				</div>
 				<div className="flex-1 min-w-0 flex items-center">
 					<div className="flex-1 min-w-0">
-						<h3 className="text-sm font-serif font-bold truncate group-hover:text-pink-500 transition-colors">
+						<h3 className="text-sm font-semibold text-[#2c2c2c] truncate group-hover:text-[#c8951e] transition-colors">
 							{track.title}
 						</h3>
-						<p className="text-xs text-gray-500 truncate">
+						<p className="text-xs text-[#9e968e] truncate">
 							{track.artist} — {track.album}
 						</p>
 					</div>
 				</div>
 			</>
 		) : (
-			<div className="flex items-center gap-4">
-				<div className="w-16 h-16 rounded-xl overflow-hidden bg-brand-cream flex-shrink-0">
-					<SmartImage
-						src={track.cover}
-						alt=""
-						className="w-full h-full object-cover"
-					/>
+			<div className="p-4 flex items-center gap-3">
+				<div className="w-14 h-14 rounded overflow-hidden bg-[#f7f5f0] flex-shrink-0">
+					<SmartImage src={track.cover} alt="" className="w-full h-full object-cover" />
 				</div>
 				<div className="flex-1 min-w-0">
-					<h3 className="text-lg font-serif font-bold truncate group-hover:text-pink-500 transition-colors">
+					<h3 className="text-sm font-semibold text-[#2c2c2c] truncate group-hover:text-[#c8951e] transition-colors">
 						{track.title}
 					</h3>
-					<p className="text-sm text-gray-500 truncate">
-						{track.artist}
-					</p>
-					<p className="text-xs text-gray-400 truncate">
-						{track.album}
-					</p>
+					<p className="text-xs text-[#9e968e] truncate">{track.artist}</p>
+					<p className="text-[10px] text-[#9e968e] truncate">{track.album}</p>
 				</div>
 			</div>
 		)}
@@ -244,57 +204,48 @@ const SearchMusicCard = React.memo(({ track, viewMode, theme }: SearchMusicCardP
 interface SearchAlbumCardProps {
 	album: AlbumItem;
 	viewMode: string;
-	theme: ThemeName;
 }
 
-const SearchAlbumCard = React.memo(({ album, viewMode, theme }: SearchAlbumCardProps) => (
+const SearchAlbumCard = React.memo(({ album, viewMode }: SearchAlbumCardProps) => (
 	<Link
-		to={withThemeSearch(`/album/${album.id}`, theme)}
+		to={`/album/${album.id}`}
 		className={clsx(
 			viewMode === "list"
-				? "flex gap-4 p-3 bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all w-full"
-				: "bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all group",
+				? "flex gap-4 p-3 bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all w-full"
+				: "block bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all group",
 		)}
 	>
 		{viewMode === "list" ? (
 			<>
-				<div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-					<SmartImage
-						src={album.cover}
-						alt=""
-						className="w-full h-full object-cover"
-					/>
+				<div className="w-14 h-14 rounded overflow-hidden bg-[#f7f5f0] flex-shrink-0">
+					<SmartImage src={album.cover} alt="" className="w-full h-full object-cover" />
 				</div>
 				<div className="flex-1 min-w-0 flex items-center">
 					<div className="flex-1 min-w-0">
-						<h3 className="text-sm font-serif font-bold truncate group-hover:text-purple-500 transition-colors">
+						<h3 className="text-sm font-semibold text-[#2c2c2c] truncate group-hover:text-[#c8951e] transition-colors">
 							{album.title}
 						</h3>
-						<p className="text-xs text-gray-400">
-							{album.artist}
-						</p>
+						<p className="text-xs text-[#9e968e]">{album.artist}</p>
 					</div>
-					<span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full flex-shrink-0">
+					<span className="text-[10px] text-[#9e968e] bg-[#f7f5f0] px-2 py-0.5 rounded flex-shrink-0 ml-2">
 						{album.trackCount} 曲
 					</span>
 				</div>
 			</>
 		) : (
 			<>
-				<div className="h-40 overflow-hidden">
+				<div className={clsx("overflow-hidden", VIEW_MODE_CONFIG[viewMode].cardHeight)}>
 					<SmartImage
 						src={album.cover}
 						alt=""
-						className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+						className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
 					/>
 				</div>
-				<div className="p-4">
-					<h3 className="text-sm font-serif font-bold truncate group-hover:text-purple-500 transition-colors">
+				<div className="p-3">
+					<h3 className="text-sm font-semibold text-[#2c2c2c] truncate group-hover:text-[#c8951e] transition-colors">
 						{album.title}
 					</h3>
-					<p className="text-[10px] text-gray-400">
-						{album.artist} · {album.trackCount} 曲
-					</p>
+					<p className="text-[10px] text-[#9e968e]">{album.artist} · {album.trackCount} 曲</p>
 				</div>
 			</>
 		)}
@@ -321,35 +272,24 @@ const Search = () => {
 		"all" | "wiki" | "posts" | "galleries" | "music" | "albums" | "semantic"
 	>("all");
 	const { preferences, setViewMode } = useUserPreferences();
-	const { theme } = useTheme();
 	const viewMode = preferences.viewMode;
 
-	// Advanced Filters
 	const [showFilters, setShowFilters] = useState(false);
 	const [selectedTags, setSelectedTags] = useState<string[]>([]);
-	const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
-		start: "",
-		end: "",
-	});
-	const [contentType, setContentType] = useState<
-		"all" | "wiki" | "posts" | "galleries" | "music" | "albums"
-	>("all");
+	const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
+	const [contentType, setContentType] = useState<"all" | "wiki" | "posts" | "galleries" | "music" | "albums">("all");
 	const [semanticImageSearch, setSemanticImageSearch] = useState(false);
 
-	// AI Image Search
 	const [aiSearching, setAiSearching] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
-	// Hot Keywords
 	const [hotKeywords, setHotKeywords] = useState<string[]>([]);
 
-	// Suggest Dropdown
 	const [suggestions, setSuggestions] = useState<SearchSuggestionType[]>([]);
 	const [showSuggest, setShowSuggest] = useState(false);
 	const [suggestLoading, setSuggestLoading] = useState(false);
 	const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	// Mixed Semantic Search Results
 	const [mixedResults, setMixedResults] = useState<MixedSearchResult[]>([]);
 	const [isMixedSearch, setIsMixedSearch] = useState(false);
 
@@ -401,9 +341,6 @@ const Search = () => {
 		suggestTimeoutRef.current = setTimeout(() => fetchSuggestions(val), 300);
 	};
 
-	/**
-	 * 执行混合语义搜索
-	 */
 	const performMixedSearch = async (q: string, limit = 24) => {
 		try {
 			const data = await apiGet<{
@@ -427,7 +364,7 @@ const Search = () => {
 		setShowSuggest(false);
 		const currentQuery = q || searchQuery;
 		setSearchParams(
-			mergeSearchParamsWithTheme(searchParams, { q: currentQuery }, theme),
+			(() => { const sp = new URLSearchParams(searchParams); sp.set('q', currentQuery); return sp; })(),
 		);
 		setSearchQuery(currentQuery);
 
@@ -439,7 +376,6 @@ const Search = () => {
 		};
 
 		try {
-			// 如果启用了语义图片搜索，执行混合搜索
 			if (filters.semanticImageSearch && currentQuery) {
 				setIsMixedSearch(true);
 				const mixedSearchResults = await performMixedSearch(currentQuery, 24);
@@ -449,7 +385,6 @@ const Search = () => {
 				return;
 			}
 
-			// 否则执行传统搜索
 			setIsMixedSearch(false);
 			setMixedResults([]);
 
@@ -474,9 +409,7 @@ const Search = () => {
 			}>("/api/search", {
 				q: currentQuery,
 				type: apiType,
-				...(filters.dateRange.start
-					? { startDate: filters.dateRange.start }
-					: {}),
+				...(filters.dateRange.start ? { startDate: filters.dateRange.start } : {}),
 				...(filters.dateRange.end ? { endDate: filters.dateRange.end } : {}),
 			});
 
@@ -554,27 +487,61 @@ const Search = () => {
 		results.music.length +
 		results.albums.length;
 
-	/**
-	 * 按 sourceType 统计混合搜索结果
-	 */
 	const getMixedResultsCount = (type: "gallery" | "wiki" | "post") => {
 		return mixedResults.filter((r) => r.sourceType === type).length;
 	};
 
-	return (
-		<div className="max-w-7xl mx-auto px-4 py-12">
-			<div className="max-w-4xl mx-auto mb-16">
-				<h1 className="text-5xl font-serif font-bold text-brand-olive mb-8 text-center">
-					高级搜索
-				</h1>
+	const tabItems = isMixedSearch
+		? [
+				{ id: "semantic", label: "智能匹配", count: mixedResults.length },
+				{ id: "gallery", label: "图库", count: getMixedResultsCount("gallery") },
+				{ id: "wiki", label: "百科", count: getMixedResultsCount("wiki") },
+				{ id: "post", label: "帖子", count: getMixedResultsCount("post") },
+		  ]
+		: [
+				{ id: "all", label: "全部", count: totalResults },
+				{ id: "wiki", label: "百科", count: results.wiki.length },
+				{ id: "posts", label: "帖子", count: results.posts.length },
+				{ id: "galleries", label: "图集", count: results.galleries.length },
+				{ id: "music", label: "音乐", count: results.music.length },
+				{ id: "albums", label: "专辑", count: results.albums.length },
+		  ];
 
-				<div className="bg-white rounded-[40px] p-8 shadow-xl border border-gray-100 mb-8">
+	return (
+		<div
+			className="min-h-[calc(100vh-60px)]"
+			style={{
+				backgroundColor: "#f7f5f0",
+				fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+				lineHeight: 1.8,
+			}}
+		>
+			<style>{`
+				.search-page ::selection {
+					background-color: #fdf5d8;
+					color: #c8951e;
+				}
+			`}</style>
+
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 search-page">
+				{/* Header */}
+				<header className="mb-7">
+					<div className="flex items-end justify-between flex-wrap gap-3">
+						<h1 className="text-[1.75rem] font-bold text-[#2c2c2c] tracking-[0.12em]">搜索</h1>
+						<div className="flex items-center gap-3">
+							<ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
+						</div>
+					</div>
+				</header>
+
+				{/* Search Box */}
+				<div className="bg-white border border-[#e0dcd3] rounded p-6 mb-6">
 					<form
 						onSubmit={(e) => {
 							e.preventDefault();
 							handleSearch(searchQuery);
 						}}
-						className="relative group mb-6"
+						className="relative group mb-5"
 					>
 						<input
 							type="text"
@@ -584,20 +551,20 @@ const Search = () => {
 								searchQuery.length >= 2 && fetchSuggestions(searchQuery)
 							}
 							placeholder="搜索百科、帖子、图集、音乐或专辑..."
-							className="w-full px-14 py-6 bg-brand-cream/30 rounded-[32px] border-none focus:ring-4 focus:ring-brand-olive/10 transition-all text-xl font-serif"
+							className="w-full px-12 py-4 bg-[#f7f5f0] border border-[#e0dcd3] rounded focus:outline-none focus:border-[#c8951e] transition-all text-base"
 						/>
 						<SearchIcon
-							className="absolute left-6 top-1/2 -translate-y-1/2 text-brand-olive/40 group-focus-within:text-brand-olive transition-colors"
-							size={24}
+							className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9e968e] group-focus-within:text-[#c8951e] transition-colors"
+							size={20}
 						/>
 
 						<AnimatePresence>
 							{showSuggest && suggestions.length > 0 && (
 								<motion.div
-									initial={{ opacity: 0, y: -8, scale: 0.98 }}
-									animate={{ opacity: 1, y: 0, scale: 1 }}
-									exit={{ opacity: 0, y: -8, scale: 0.98 }}
-									className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-gray-100 shadow-xl z-50 overflow-hidden"
+									initial={{ opacity: 0, y: -4 }}
+									animate={{ opacity: 1, y: 0 }}
+									exit={{ opacity: 0, y: -4 }}
+									className="absolute left-0 right-0 top-full mt-2 bg-white border border-[#e0dcd3] rounded z-50 overflow-hidden"
 								>
 									{suggestions.map((s, i) => (
 										<button
@@ -609,48 +576,44 @@ const Search = () => {
 												} else {
 													setShowSuggest(false);
 													if (s.type === "wiki" && s.id) {
-														navigate(withThemeSearch(`/wiki/${s.id}`, theme));
+														navigate(`/wiki/${s.id}`);
 													} else if (s.type === "post" && s.id) {
-														navigate(withThemeSearch(`/forum/${s.id}`, theme));
+														navigate(`/forum/${s.id}`);
 													} else if (s.type === "music" && s.id) {
-														navigate(withThemeSearch(`/music/${s.id}`, theme));
+														navigate(`/music/${s.id}`);
 													} else if (s.type === "album" && s.id) {
-														navigate(withThemeSearch(`/album/${s.id}`, theme));
+														navigate(`/album/${s.id}`);
 													}
 												}
 											}}
-											className="w-full text-left px-4 py-3 hover:bg-brand-cream/50 transition-colors border-b border-gray-50 last:border-0"
+											className="w-full text-left px-4 py-2.5 hover:bg-[#f7f5f0] transition-colors border-b border-[#f0ece3] last:border-0"
 										>
 											<div className="flex items-center gap-3">
-												<span
-													className={clsx(
-														"px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-														s.type === "keyword"
-															? "bg-orange-100 text-orange-600"
-															: s.type === "wiki"
-																? "bg-brand-cream text-brand-olive"
-																: s.type === "music"
-																	? "bg-pink-100 text-pink-600"
-																	: s.type === "album"
-																		? "bg-purple-100 text-purple-600"
-																		: "bg-brand-primary/10 text-brand-primary",
-													)}
-												>
+												<span className={clsx(
+													"px-2 py-0.5 rounded text-[10px] font-medium",
+													s.type === "keyword"
+														? "bg-[#f0ece3] text-[#6b6560]"
+														: s.type === "wiki"
+															? "bg-[#f7f5f0] text-[#c8951e]"
+															: s.type === "music"
+																? "bg-red-50 text-red-600"
+															: s.type === "album"
+																? "bg-purple-50 text-purple-600"
+															: "bg-[#f0ece3] text-[#6b6560]",
+												)}>
 													{s.type === "keyword"
 														? "搜索"
 														: s.type === "wiki"
 															? "百科"
 															: s.type === "music"
 																? "音乐"
-																: s.type === "album"
-																	? "专辑"
-																	: "帖子"}
+															: s.type === "album"
+																? "专辑"
+															: "帖子"}
 												</span>
-												<span className="text-sm text-gray-700">{s.text}</span>
+												<span className="text-sm text-[#2c2c2c]">{s.text}</span>
 												{s.subtext && (
-													<span className="text-xs text-gray-400">
-														{s.subtext}
-													</span>
+													<span className="text-xs text-[#9e968e]">{s.subtext}</span>
 												)}
 											</div>
 										</button>
@@ -659,23 +622,23 @@ const Search = () => {
 							)}
 						</AnimatePresence>
 
-						<div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+						<div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
 							<button
 								type="button"
 								onClick={() => fileInputRef.current?.click()}
 								disabled={aiSearching}
-								className="p-3 bg-brand-cream text-brand-olive rounded-2xl hover:bg-brand-olive hover:text-white transition-all"
+								className="p-2.5 bg-[#f7f5f0] text-[#9e968e] rounded hover:text-[#c8951e] hover:bg-[#f7f5f0] transition-all"
 								title="AI 图片搜索"
 							>
 								{aiSearching ? (
-									<Sparkles className="animate-spin" size={20} />
+									<Sparkles className="animate-spin" size={18} />
 								) : (
-									<Camera size={20} />
+									<Camera size={18} />
 								)}
 							</button>
 							<button
 								type="submit"
-								className="px-8 py-3 bg-brand-olive text-white rounded-2xl font-bold hover:bg-brand-olive/90 transition-all shadow-md"
+								className="px-6 py-2.5 bg-[#c8951e] text-white rounded font-medium hover:bg-[#dca828] transition-all"
 							>
 								搜索
 							</button>
@@ -689,39 +652,30 @@ const Search = () => {
 						/>
 					</form>
 
-					<div className="flex items-center justify-between">
-						<div className="flex flex-wrap items-center gap-3">
-							<span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-								热门:
-							</span>
-							{hotKeywords.slice(0, 4).map((tag) => (
+					<div className="flex items-center justify-between flex-wrap gap-3">
+						<div className="flex flex-wrap items-center gap-2">
+							<span className="text-xs text-[#9e968e]">热门:</span>
+							{hotKeywords.slice(0, 6).map((tag) => (
 								<button
 									key={tag}
 									onClick={() => handleSearch(tag)}
-									className="px-4 py-1.5 bg-brand-cream text-brand-olive text-xs font-medium rounded-full hover:bg-brand-olive hover:text-white transition-all"
+									className="px-3 py-1 bg-[#f7f5f0] text-[#6b6560] text-xs rounded hover:text-[#c8951e] hover:bg-[#f7f5f0] transition-all"
 								>
-									#{tag}
+									{tag}
 								</button>
 							))}
 						</div>
-						<div className="flex items-center gap-4">
-							<ViewModeSelector
-								value={viewMode}
-								onChange={setViewMode}
-								size="sm"
-							/>
-							<button
-								onClick={() => setShowFilters(!showFilters)}
-								className={clsx(
-									"flex items-center gap-2 text-sm font-bold transition-colors",
-									showFilters
-										? "text-brand-olive"
-										: "text-gray-400 hover:text-brand-olive",
-								)}
-							>
-								<Filter size={18} /> {showFilters ? "隐藏筛选" : "高级筛选"}
-							</button>
-						</div>
+						<button
+							onClick={() => setShowFilters(!showFilters)}
+							className={clsx(
+								"flex items-center gap-2 text-sm transition-colors",
+								showFilters
+									? "text-[#c8951e]"
+									: "text-[#9e968e] hover:text-[#c8951e]",
+							)}
+						>
+							<Filter size={16} /> {showFilters ? "隐藏筛选" : "高级筛选"}
+						</button>
 					</div>
 
 					<AnimatePresence>
@@ -730,12 +684,12 @@ const Search = () => {
 								initial={{ height: 0, opacity: 0 }}
 								animate={{ height: "auto", opacity: 1 }}
 								exit={{ height: 0, opacity: 0 }}
-								className="overflow-hidden mt-8 pt-8 border-t border-gray-100"
+								className="overflow-hidden mt-5 pt-5 border-t border-[#e0dcd3]"
 							>
-								<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-									<div className="space-y-4">
-										<h4 className="text-xs font-bold uppercase tracking-widest text-brand-olive/60 flex items-center gap-2">
-											<Tag size={14} /> 标签筛选
+								<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+									<div className="space-y-3">
+										<h4 className="text-xs font-semibold text-[#6b6560] tracking-[0.12em] uppercase flex items-center gap-2">
+											<Tag size={12} /> 标签筛选
 										</h4>
 										<div className="flex flex-wrap gap-2">
 											{hotKeywords.map((tag) => (
@@ -743,10 +697,10 @@ const Search = () => {
 													key={tag}
 													onClick={() => toggleTag(tag)}
 													className={clsx(
-														"px-3 py-1 rounded-full text-xs transition-all",
+														"px-3 py-1 rounded text-xs transition-all",
 														selectedTags.includes(tag)
-															? "bg-brand-olive text-white"
-															: "bg-gray-50 text-gray-400 hover:bg-gray-100",
+															? "bg-[#c8951e] text-white"
+															: "bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]",
 													)}
 												>
 													{tag}
@@ -755,9 +709,9 @@ const Search = () => {
 										</div>
 									</div>
 
-									<div className="space-y-4">
-										<h4 className="text-xs font-bold uppercase tracking-widest text-brand-olive/60 flex items-center gap-2">
-											<Calendar size={14} /> 时间范围
+									<div className="space-y-3">
+										<h4 className="text-xs font-semibold text-[#6b6560] tracking-[0.12em] uppercase flex items-center gap-2">
+											<Calendar size={12} /> 时间范围
 										</h4>
 										<div className="grid grid-cols-2 gap-2">
 											<input
@@ -766,7 +720,7 @@ const Search = () => {
 												onChange={(e) =>
 													setDateRange({ ...dateRange, start: e.target.value })
 												}
-												className="w-full px-3 py-2 bg-gray-50 rounded-xl border-none text-xs focus:ring-2 focus:ring-brand-olive/20"
+												className="w-full px-3 py-2 bg-white border border-[#e0dcd3] rounded text-xs focus:outline-none focus:border-[#c8951e]"
 											/>
 											<input
 												type="date"
@@ -774,67 +728,58 @@ const Search = () => {
 												onChange={(e) =>
 													setDateRange({ ...dateRange, end: e.target.value })
 												}
-												className="w-full px-3 py-2 bg-gray-50 rounded-xl border-none text-xs focus:ring-2 focus:ring-brand-olive/20"
+												className="w-full px-3 py-2 bg-white border border-[#e0dcd3] rounded text-xs focus:outline-none focus:border-[#c8951e]"
 											/>
 										</div>
 									</div>
 
-									<div className="space-y-4">
-										<h4 className="text-xs font-bold uppercase tracking-widest text-brand-olive/60 flex items-center gap-2">
-											<Book size={14} /> 内容类型
+									<div className="space-y-3">
+										<h4 className="text-xs font-semibold text-[#6b6560] tracking-[0.12em] uppercase flex items-center gap-2">
+											<Book size={12} /> 内容类型
 										</h4>
 										<div className="flex flex-wrap gap-2">
-											{[
-												"all",
-												"wiki",
-												"posts",
-												"galleries",
-												"music",
-												"albums",
-											].map((type) => (
+											{["all", "wiki", "posts", "galleries", "music", "albums"].map((type) => (
 												<button
 													key={type}
 													onClick={() => setContentType(type as any)}
 													className={clsx(
-														"px-3 py-1 rounded-full text-xs transition-all capitalize",
+														"px-3 py-1 rounded text-xs transition-all capitalize",
 														contentType === type
-															? "bg-brand-olive text-white"
-															: "bg-gray-50 text-gray-400 hover:bg-gray-100",
+															? "bg-[#c8951e] text-white"
+															: "bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]",
 													)}
 												>
-													{type === "all" ? "全部" : type}
+													{type === "all" ? "全部" : type === "posts" ? "帖子" : type === "galleries" ? "图集" : type === "music" ? "音乐" : type === "albums" ? "专辑" : "百科"}
 												</button>
 											))}
 										</div>
 									</div>
 
-									<div className="space-y-4">
-										<h4 className="text-xs font-bold uppercase tracking-widest text-brand-olive/60 flex items-center gap-2">
-											<Sparkles size={14} /> AI 搜图
+									<div className="space-y-3">
+										<h4 className="text-xs font-semibold text-[#6b6560] tracking-[0.12em] uppercase flex items-center gap-2">
+											<Sparkles size={12} /> AI 搜图
 										</h4>
 										<div className="flex flex-wrap gap-2">
 											<button
-												onClick={() =>
-													setSemanticImageSearch(!semanticImageSearch)
-												}
+												onClick={() => setSemanticImageSearch(!semanticImageSearch)}
 												className={clsx(
-													"px-3 py-1 rounded-full text-xs transition-all flex items-center gap-1.5",
+													"px-3 py-1 rounded text-xs transition-all flex items-center gap-1.5",
 													semanticImageSearch
-														? "bg-brand-olive text-white"
-														: "bg-gray-50 text-gray-400 hover:bg-gray-100",
+														? "bg-[#c8951e] text-white"
+														: "bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]",
 												)}
 											>
 												<Sparkles size={12} />
 												语义搜图
 											</button>
 										</div>
-										<p className="text-[10px] text-gray-400">
+										<p className="text-[10px] text-[#9e968e]">
 											开启后，文字搜索将同时对图集进行语义匹配
 										</p>
 									</div>
 								</div>
 
-								<div className="mt-8 flex justify-end gap-4">
+								<div className="mt-5 flex justify-end gap-3">
 									<button
 										onClick={() => {
 											setSelectedTags([]);
@@ -842,13 +787,13 @@ const Search = () => {
 											setContentType("all");
 											setSemanticImageSearch(false);
 										}}
-										className="text-xs font-bold text-gray-400 hover:text-red-500"
+										className="text-xs text-[#9e968e] hover:text-red-500 transition-colors"
 									>
 										重置筛选
 									</button>
 									<button
 										onClick={() => handleSearch(searchQuery)}
-										className="px-6 py-2 bg-brand-cream text-brand-olive rounded-full text-xs font-bold hover:bg-brand-olive hover:text-white transition-all"
+										className="px-5 py-2 bg-[#c8951e] text-white rounded text-xs font-medium hover:bg-[#dca828] transition-all"
 									>
 										应用筛选
 									</button>
@@ -857,338 +802,256 @@ const Search = () => {
 						)}
 					</AnimatePresence>
 				</div>
-			</div>
 
-			{loading ? (
-				<div className="space-y-8 animate-pulse">
-					{[1, 2, 3].map((i) => (
-						<div
-							key={i}
-							className="h-32 bg-white rounded-3xl border border-gray-100"
-						></div>
-					))}
-				</div>
-			) : hasSearched ||
-				selectedTags.length > 0 ||
-				dateRange.start ||
-				dateRange.end ? (
-				<div className="space-y-12">
-					<div className="flex flex-wrap gap-4 border-b border-gray-100 pb-6">
-						{isMixedSearch ? (
-							// 混合搜索结果标签
-							<>
-								{[
-									{
-										id: "semantic",
-										label: "智能匹配",
-										icon: Sparkles,
-										count: mixedResults.length,
-									},
-									{
-										id: "gallery",
-										label: "图库",
-										icon: ImageIcon,
-										count: getMixedResultsCount("gallery"),
-									},
-									{
-										id: "wiki",
-										label: "百科",
-										icon: Book,
-										count: getMixedResultsCount("wiki"),
-									},
-									{
-										id: "post",
-										label: "帖子",
-										icon: MessageSquare,
-										count: getMixedResultsCount("post"),
-									},
-								].map((tab) => (
-									<button
-										key={tab.id}
-										onClick={() => setActiveTab(tab.id as any)}
-										className={clsx(
-											"px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2",
-											activeTab === tab.id
-												? "bg-brand-olive text-white"
-												: "bg-white text-gray-400 border border-gray-100 hover:border-brand-olive/20",
-										)}
-									>
-										<tab.icon size={14} />
-										{tab.label}{" "}
-										<span className="text-[10px] opacity-60 bg-black/10 px-1.5 py-0.5 rounded-full">
-											{tab.count}
-										</span>
-									</button>
-								))}
-							</>
-						) : (
-							// 传统搜索结果标签
-							<>
-								{[
-									{ id: "all", label: "全部", count: totalResults },
-									{ id: "wiki", label: "百科", count: results.wiki.length },
-									{ id: "posts", label: "帖子", count: results.posts.length },
-									{
-										id: "galleries",
-										label: "图集",
-										count: results.galleries.length,
-									},
-									{ id: "music", label: "音乐", count: results.music.length },
-									{ id: "albums", label: "专辑", count: results.albums.length },
-								].map((tab) => (
-									<button
-										key={tab.id}
-										onClick={() => setActiveTab(tab.id as any)}
-										className={clsx(
-											"px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2",
-											activeTab === tab.id
-												? "bg-brand-olive text-white"
-												: "bg-white text-gray-400 border border-gray-100 hover:border-brand-olive/20",
-										)}
-									>
-										{tab.label}{" "}
-										<span className="text-[10px] opacity-60 bg-black/10 px-1.5 py-0.5 rounded-full">
-											{tab.count}
-										</span>
-									</button>
-								))}
-							</>
-						)}
+				{/* Results */}
+				{loading ? (
+					<div className="space-y-3 animate-pulse">
+						{[1, 2, 3].map((i) => (
+							<div key={i} className="h-24 bg-white border border-[#e0dcd3] rounded" />
+						))}
 					</div>
-
+				) : hasSearched || selectedTags.length > 0 || dateRange.start || dateRange.end ? (
 					<div className="space-y-8">
-						<AnimatePresence mode="wait">
-							{/* 混合搜索结果展示 */}
-							{isMixedSearch && mixedResults.length > 0 && (
-								<motion.section
-									initial={{ opacity: 0, y: 20 }}
-									animate={{ opacity: 1, y: 0 }}
-									exit={{ opacity: 0, y: -20 }}
-									className="space-y-4"
-								>
-									<div
+						{/* Tab bar */}
+						<div className="flex items-end justify-between border-b border-[#e0dcd3] mb-5">
+							<div className="flex gap-5">
+								{tabItems.map((tab) => (
+									<button
+										key={tab.id}
+										onClick={() => setActiveTab(tab.id as any)}
 										className={clsx(
-											"grid",
-											VIEW_MODE_CONFIG[viewMode].gridCols,
-											VIEW_MODE_CONFIG[viewMode].gap,
+											"text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer",
+											activeTab === tab.id
+												? "text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]"
+												: "text-[#9e968e] hover:text-[#c8951e]",
 										)}
 									>
-										{mixedResults
-											.filter((result) => {
-												if (activeTab === "semantic") return true;
-												return result.sourceType === activeTab;
-											})
-											.map((result, index) => (
-												<MixedSearchResultCard
-													key={`${result.sourceType}-${result.sourceId}-${index}`}
-													result={result}
-													viewMode={viewMode}
-													theme={theme}
-													showSimilarity={true}
-												/>
-											))}
-									</div>
-								</motion.section>
+										{tab.label}
+										<span className="text-[0.8125rem] text-[#9e968e] ml-1.5">{tab.count}</span>
+									</button>
+								))}
+							</div>
+							<div className="pb-2 text-[0.8125rem] text-[#9e968e]">
+								{isMixedSearch ? `${mixedResults.length} 个结果` : `${totalResults} 个结果`}
+							</div>
+						</div>
+
+						<div className="space-y-8">
+							<AnimatePresence mode="wait">
+								{isMixedSearch && mixedResults.length > 0 && (
+									<motion.section
+										initial={{ opacity: 0, y: 12 }}
+										animate={{ opacity: 1, y: 0 }}
+										exit={{ opacity: 0, y: -12 }}
+										className="space-y-4"
+									>
+										<div
+											className={clsx(
+												"grid",
+												VIEW_MODE_CONFIG[viewMode].gridCols,
+												VIEW_MODE_CONFIG[viewMode].gap,
+											)}
+										>
+											{mixedResults
+												.filter((result) => {
+													if (activeTab === "semantic") return true;
+													return result.sourceType === activeTab;
+												})
+												.map((result, index) => (
+													<MixedSearchResultCard
+														key={`${result.sourceType}-${result.sourceId}-${index}`}
+														result={result}
+														viewMode={viewMode}
+														showSimilarity={true}
+													/>
+												))}
+										</div>
+									</motion.section>
 								)}
 
-							{/* 传统搜索结果展示 */}
-							{!isMixedSearch && (
-								<>
-									{(activeTab === "all" || activeTab === "wiki") &&
-										results.wiki.length > 0 && (
-											<motion.section
-												initial={{ opacity: 0, y: 20 }}
-												animate={{ opacity: 1, y: 0 }}
-												exit={{ opacity: 0, y: -20 }}
-												className="space-y-4"
-											>
-												<h2 className="text-sm font-bold text-brand-olive uppercase tracking-widest flex items-center gap-2">
-													<Book size={16} /> 百科页面
-												</h2>
-												<div
-													className={clsx(
-														"grid",
-														VIEW_MODE_CONFIG[viewMode].gridCols,
-														VIEW_MODE_CONFIG[viewMode].gap,
-													)}
+								{!isMixedSearch && (
+									<>
+										{(activeTab === "all" || activeTab === "wiki") &&
+											results.wiki.length > 0 && (
+												<motion.section
+													initial={{ opacity: 0, y: 12 }}
+													animate={{ opacity: 1, y: 0 }}
+													exit={{ opacity: 0, y: -12 }}
+													className="space-y-4"
 												>
-													{results.wiki.map((page) => (
-														<SearchWikiCard
-															key={page.id}
-															page={page}
-															viewMode={viewMode}
-															theme={theme}
-														/>
-													))}
-												</div>
-											</motion.section>
-										)}
+													<h2 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
+														<Book size={14} className="text-[#c8951e]" /> 百科页面
+													</h2>
+													<div
+														className={clsx(
+															"grid",
+															VIEW_MODE_CONFIG[viewMode].gridCols,
+															VIEW_MODE_CONFIG[viewMode].gap,
+														)}
+													>
+														{results.wiki.map((page) => (
+															<SearchWikiCard
+																key={page.id}
+																page={page}
+																viewMode={viewMode}
+															/>
+														))}
+													</div>
+												</motion.section>
+											)}
 
-									{(activeTab === "all" || activeTab === "posts") &&
-										results.posts.length > 0 && (
-											<motion.section
-												initial={{ opacity: 0, y: 20 }}
-												animate={{ opacity: 1, y: 0 }}
-												exit={{ opacity: 0, y: -20 }}
-												className="space-y-4"
-											>
-												<h2 className="text-sm font-bold text-brand-olive uppercase tracking-widest flex items-center gap-2">
-													<MessageSquare size={16} /> 社区帖子
-												</h2>
-												<div className="space-y-4">
-													{results.posts.map((post) => (
-														<Link
-															key={post.id}
-															to={withThemeSearch(`/forum/${post.id}`, theme)}
-															className="block bg-white p-6 rounded-3xl border border-gray-100 hover:border-brand-olive/20 hover:shadow-lg transition-all group"
-														>
-															<div className="flex items-center gap-2 mb-2">
-																<span className="px-2 py-0.5 bg-brand-cream text-brand-olive text-[10px] font-bold uppercase tracking-wider rounded">
-																	{post.section}
-																</span>
-																<span className="text-[10px] text-gray-400 flex items-center gap-1">
-																	<Clock size={10} />{" "}
-																	{toDateValue(post.updatedAt)
-																		? format(
-																				toDateValue(post.updatedAt)!,
-																				"yyyy-MM-dd",
-																			)
-																		: "刚刚"}
-																</span>
-															</div>
-															<h3 className="text-xl font-serif font-bold group-hover:text-brand-olive transition-colors">
-																{post.title}
-															</h3>
-														</Link>
-													))}
-												</div>
-											</motion.section>
-										)}
-
-									{(activeTab === "all" || activeTab === "galleries") &&
-										results.galleries.length > 0 && (
-											<motion.section
-												initial={{ opacity: 0, y: 20 }}
-												animate={{ opacity: 1, y: 0 }}
-												exit={{ opacity: 0, y: -20 }}
-												className="space-y-4"
-											>
-												<h2 className="text-sm font-bold text-brand-olive uppercase tracking-widest flex items-center gap-2">
-													<ImageIcon size={16} /> 图集馆
-												</h2>
-												<div
-													className={clsx(
-														"grid",
-														VIEW_MODE_CONFIG[viewMode].gridCols,
-														VIEW_MODE_CONFIG[viewMode].gap,
-													)}
+										{(activeTab === "all" || activeTab === "posts") &&
+											results.posts.length > 0 && (
+												<motion.section
+													initial={{ opacity: 0, y: 12 }}
+													animate={{ opacity: 1, y: 0 }}
+													exit={{ opacity: 0, y: -12 }}
+													className="space-y-4"
 												>
-													{results.galleries.map((gallery) => (
-														<SearchGalleryCard
-															key={gallery.id}
-															gallery={gallery}
-															viewMode={viewMode}
-															theme={theme}
-														/>
-													))}
-												</div>
-											</motion.section>
-										)}
+													<h2 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
+														<MessageSquare size={14} className="text-[#c8951e]" /> 社区帖子
+													</h2>
+													<div className="space-y-3">
+														{results.posts.map((post) => (
+															<Link
+																key={post.id}
+																to={`/forum/${post.id}`}
+																className="block bg-white border border-[#e0dcd3] rounded p-4 hover:border-[#c8951e] transition-all group"
+															>
+																<div className="flex items-center gap-2 mb-1.5">
+																	<span className="px-2 py-0.5 bg-[#f7f5f0] text-[#c8951e] text-[10px] font-medium rounded">
+																		{post.section}
+																	</span>
+																	<span className="text-[10px] text-[#9e968e] flex items-center gap-1">
+																		<Clock size={10} />
+																		{toDateValue(post.updatedAt)
+																			? format(toDateValue(post.updatedAt)!, "yyyy-MM-dd")
+																			: "刚刚"}
+																	</span>
+																</div>
+																<h3 className="text-sm font-semibold text-[#2c2c2c] group-hover:text-[#c8951e] transition-colors">
+																	{post.title}
+																</h3>
+															</Link>
+														))}
+													</div>
+												</motion.section>
+											)}
 
-									{(activeTab === "all" || activeTab === "music") &&
-										results.music.length > 0 && (
-											<motion.section
-												initial={{ opacity: 0, y: 20 }}
-												animate={{ opacity: 1, y: 0 }}
-												exit={{ opacity: 0, y: -20 }}
-												className="space-y-4"
-											>
-												<h2 className="text-sm font-bold text-brand-olive uppercase tracking-widest flex items-center gap-2">
-													<Music size={16} /> 音乐曲目
-												</h2>
-												<div
-													className={clsx(
-														"grid",
-														VIEW_MODE_CONFIG[viewMode].gridCols,
-														VIEW_MODE_CONFIG[viewMode].gap,
-													)}
+										{(activeTab === "all" || activeTab === "galleries") &&
+											results.galleries.length > 0 && (
+												<motion.section
+													initial={{ opacity: 0, y: 12 }}
+													animate={{ opacity: 1, y: 0 }}
+													exit={{ opacity: 0, y: -12 }}
+													className="space-y-4"
 												>
-													{results.music.map((track) => (
-														<SearchMusicCard
-															key={track.docId}
-															track={track}
-															viewMode={viewMode}
-															theme={theme}
-														/>
-													))}
-												</div>
-											</motion.section>
-										)}
+													<h2 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
+														<ImageIcon size={14} className="text-[#c8951e]" /> 图集馆
+													</h2>
+													<div
+														className={clsx(
+															"grid",
+															VIEW_MODE_CONFIG[viewMode].gridCols,
+															VIEW_MODE_CONFIG[viewMode].gap,
+														)}
+													>
+														{results.galleries.map((gallery) => (
+															<SearchGalleryCard
+																key={gallery.id}
+																gallery={gallery}
+																viewMode={viewMode}
+															/>
+														))}
+													</div>
+												</motion.section>
+											)}
 
-									{(activeTab === "all" || activeTab === "albums") &&
-										results.albums.length > 0 && (
-											<motion.section
-												initial={{ opacity: 0, y: 20 }}
-												animate={{ opacity: 1, y: 0 }}
-												exit={{ opacity: 0, y: -20 }}
-												className="space-y-4"
-											>
-												<h2 className="text-sm font-bold text-brand-olive uppercase tracking-widest flex items-center gap-2">
-													<Music size={16} /> 音乐专辑
-												</h2>
-												<div
-													className={clsx(
-														"grid",
-														VIEW_MODE_CONFIG[viewMode].gridCols,
-														VIEW_MODE_CONFIG[viewMode].gap,
-													)}
+										{(activeTab === "all" || activeTab === "music") &&
+											results.music.length > 0 && (
+												<motion.section
+													initial={{ opacity: 0, y: 12 }}
+													animate={{ opacity: 1, y: 0 }}
+													exit={{ opacity: 0, y: -12 }}
+													className="space-y-4"
 												>
-													{results.albums.map((album) => (
-														<SearchAlbumCard
-															key={album.docId}
-															album={album}
-															viewMode={viewMode}
-															theme={theme}
-														/>
-													))}
-												</div>
-											</motion.section>
-										)}
-								</>
+													<h2 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
+														<Music size={14} className="text-[#c8951e]" /> 音乐曲目
+													</h2>
+													<div
+														className={clsx(
+															"grid",
+															VIEW_MODE_CONFIG[viewMode].gridCols,
+															VIEW_MODE_CONFIG[viewMode].gap,
+														)}
+													>
+														{results.music.map((track) => (
+															<SearchMusicCard
+																key={track.docId}
+																track={track}
+																viewMode={viewMode}
+															/>
+														))}
+													</div>
+												</motion.section>
+											)}
+
+										{(activeTab === "all" || activeTab === "albums") &&
+											results.albums.length > 0 && (
+												<motion.section
+													initial={{ opacity: 0, y: 12 }}
+													animate={{ opacity: 1, y: 0 }}
+													exit={{ opacity: 0, y: -12 }}
+													className="space-y-4"
+												>
+													<h2 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
+														<Music size={14} className="text-[#c8951e]" /> 音乐专辑
+													</h2>
+													<div
+														className={clsx(
+															"grid",
+															VIEW_MODE_CONFIG[viewMode].gridCols,
+															VIEW_MODE_CONFIG[viewMode].gap,
+														)}
+													>
+														{results.albums.map((album) => (
+															<SearchAlbumCard
+																key={album.docId}
+																album={album}
+																viewMode={viewMode}
+															/>
+														))}
+													</div>
+												</motion.section>
+											)}
+									</>
+								)}
+							</AnimatePresence>
+
+							{/* Empty state */}
+							{isMixedSearch && mixedResults.length === 0 && !loading && (
+								<div className="bg-white border border-[#e0dcd3] rounded p-20 text-center">
+									<Sparkles size={48} className="mx-auto text-[#e0dcd3] mb-6" />
+									<p className="text-[#9e968e] italic">未找到语义匹配的结果</p>
+									<p className="text-[#9e968e]/70 text-sm mt-2">尝试使用其他关键词或上传图片搜索</p>
+								</div>
 							)}
-						</AnimatePresence>
 
-						{/* 空状态 */}
-						{isMixedSearch && mixedResults.length === 0 && !loading && (
-							<div className="bg-white p-20 rounded-[40px] border border-gray-100 text-center">
-								<Sparkles
-									size={48}
-									className="mx-auto text-brand-olive/20 mb-6"
-								/>
-								<p className="text-gray-400 italic">未找到语义匹配的结果</p>
-								<p className="text-gray-300 text-sm mt-2">尝试使用其他关键词或上传图片搜索</p>
-							</div>
-						)}
-
-						{!isMixedSearch && totalResults === 0 && !loading && (
-							<div className="bg-white p-20 rounded-[40px] border border-gray-100 text-center">
-								<SearchIcon
-									size={48}
-									className="mx-auto text-brand-olive/20 mb-6"
-								/>
-								<p className="text-gray-400 italic">未找到符合筛选条件的结果</p>
-							</div>
-						)}
+							{!isMixedSearch && totalResults === 0 && !loading && (
+								<div className="bg-white border border-[#e0dcd3] rounded p-20 text-center">
+									<SearchIcon size={48} className="mx-auto text-[#e0dcd3] mb-6" />
+									<p className="text-[#9e968e] italic">未找到符合筛选条件的结果</p>
+								</div>
+							)}
+						</div>
 					</div>
-				</div>
-			) : (
-				<div className="bg-white p-20 rounded-[40px] border border-gray-100 text-center">
-					<Tag size={48} className="mx-auto text-brand-olive/20 mb-6" />
-					<p className="text-gray-400 italic">
-						输入关键词、上传图片或使用高级筛选开始探索
-					</p>
-				</div>
-			)}
+				) : (
+					<div className="bg-white border border-[#e0dcd3] rounded p-20 text-center">
+						<Tag size={48} className="mx-auto text-[#e0dcd3] mb-6" />
+						<p className="text-[#9e968e] italic">输入关键词、上传图片或使用高级筛选开始探索</p>
+					</div>
+				)}
+			</div>
 		</div>
 	);
 };

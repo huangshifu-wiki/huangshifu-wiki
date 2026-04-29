@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 import { useI18n } from '../../lib/i18n';
 
 interface BatchActionsProps {
@@ -18,27 +17,25 @@ const BatchActions: React.FC<BatchActionsProps> = ({
 	if (selectedCount === 0) return null;
 
 	return (
-		<motion.div
-			initial={{ y: 100 }}
-			animate={{ y: 0 }}
-			className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 bg-gray-900 text-white px-8 py-4 rounded-full shadow-2xl flex items-center gap-8"
+		<div
+			className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 bg-[#2c2c2c] text-white px-6 py-3 rounded flex items-center gap-6"
 		>
-			<span className="text-sm font-bold">{t('music.selectedCount', { count: selectedCount })}</span>
-			<div className="flex gap-4">
+			<span className="text-sm font-semibold tracking-wide">{t('music.selectedCount', { count: selectedCount })}</span>
+			<div className="flex gap-3">
 				<button
 					onClick={onCancelSelect}
-					className="text-sm text-gray-400 hover:text-white"
+					className="text-sm text-[#9e968e] hover:text-white transition-colors"
 				>
 					{t('music.cancelSelect')}
 				</button>
 				<button
 					onClick={onBatchDelete}
-					className="px-6 py-2 bg-red-500 text-white rounded-full text-sm font-bold hover:bg-red-600 transition-all"
+					className="px-5 py-1.5 bg-[#c8951e] text-white rounded text-sm font-semibold hover:bg-[#dca828] transition-all"
 				>
 					{t('music.batchDelete')}
 				</button>
 			</div>
-		</motion.div>
+		</div>
 	);
 };
 

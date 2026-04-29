@@ -18,19 +18,19 @@ interface ConfirmModalProps {
 
 const variantStyles = {
 	danger: {
-		iconBg: "bg-red-100",
+		iconBg: "bg-red-50",
 		iconText: "text-red-600",
 		buttonBg: "bg-red-600 hover:bg-red-700",
 	},
 	warning: {
-		iconBg: "bg-amber-100",
+		iconBg: "bg-amber-50",
 		iconText: "text-amber-600",
 		buttonBg: "bg-amber-600 hover:bg-amber-700",
 	},
 	info: {
-		iconBg: "bg-brand-cream",
-		iconText: "text-brand-olive",
-		buttonBg: "bg-brand-olive hover:bg-brand-olive/90",
+		iconBg: "bg-[#fdf5d8]",
+		iconText: "text-[#c8951e]",
+		buttonBg: "bg-[#c8951e] hover:bg-[#dca828]",
 	},
 };
 
@@ -56,26 +56,26 @@ export const ConfirmModal = ({
 					initial={{ opacity: 0 }}
 					animate={{ opacity: 1 }}
 					exit={{ opacity: 0 }}
-					className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+					className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40"
 					onClick={onClose}
 				>
 					<motion.div
 						initial={{ opacity: 0, scale: 0.95, y: 8 }}
 						animate={{ opacity: 1, scale: 1, y: 0 }}
 						exit={{ opacity: 0, scale: 0.95, y: 8 }}
-						className="w-full max-w-md bg-white rounded-3xl border border-gray-100 shadow-2xl p-8"
+						className="w-full max-w-md bg-white rounded border border-[#e0dcd3] p-6"
 						onClick={(e) => e.stopPropagation()}
 					>
 						<div className="flex items-center gap-3 mb-4">
-							<div className={clsx("p-2 rounded-full", styles.iconBg)}>
+							<div className={clsx("p-2 rounded", styles.iconBg)}>
 								<AlertTriangle className={clsx("w-5 h-5", styles.iconText)} />
 							</div>
-							<h3 className="text-xl font-serif font-bold text-gray-900">
+							<h3 className="text-lg font-bold text-[#2c2c2c]">
 								{title}
 							</h3>
 						</div>
 
-						<p className="text-gray-600 leading-relaxed mb-6">
+						<p className="text-sm text-[#6b6560] leading-relaxed mb-6">
 							{message}
 						</p>
 
@@ -84,7 +84,7 @@ export const ConfirmModal = ({
 								type="button"
 								onClick={onClose}
 								disabled={loading}
-								className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+								className="px-4 py-2 rounded border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e] transition-all disabled:opacity-50 text-sm"
 							>
 								{cancelText}
 							</button>
@@ -93,7 +93,7 @@ export const ConfirmModal = ({
 								onClick={onConfirm}
 								disabled={loading}
 								className={clsx(
-									"px-5 py-2.5 rounded-xl text-white font-semibold transition-all disabled:opacity-50 inline-flex items-center gap-2",
+									"px-5 py-2 rounded text-white font-medium transition-all disabled:opacity-50 inline-flex items-center gap-2 text-sm",
 									styles.buttonBg,
 								)}
 							>

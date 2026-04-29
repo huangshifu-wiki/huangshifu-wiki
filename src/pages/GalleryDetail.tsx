@@ -2,19 +2,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Eye,
-  EyeOff,
   GripVertical,
   Link2,
   Plus,
   Save,
   Trash2,
   User as UserIcon,
+  Eye,
+  EyeOff,
+  Clock,
 } from 'lucide-react';
-import { format } from 'date-fns';
 import { clsx } from 'clsx';
 import { useAuth } from '../context/AuthContext';
 import { SmartImage } from '../components/SmartImage';
@@ -133,7 +130,6 @@ const GalleryDetail = () => {
 
   const [gallery, setGallery] = useState<GalleryItem | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeIndex, setActiveIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
@@ -167,7 +163,6 @@ const GalleryDetail = () => {
       setLoading(true);
       const data = await apiGet<{ gallery: GalleryItem }>(`/api/galleries/${galleryId}`);
       setGallery(data.gallery);
-      setActiveIndex(0);
       applyDraft((prev) => {
         if (prev) {
           releasePendingImageUrls(prev.images);
@@ -213,20 +208,9 @@ const GalleryDetail = () => {
     () => (editing ? draft?.images || [] : (gallery?.images || []).map(toEditableImage)),
     [draft?.images, editing, gallery?.images],
   );
-  const activeImage = images[activeIndex] || null;
 
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const canManage = Boolean(user && gallery && !isBanned && (gallery.authorUid === user.uid || isAdmin));
-
-  const handlePrev = () => {
-    if (!images.length) return;
-    setActiveIndex((prev) => (prev - 1 + images.length) % images.length);
-  };
-
-  const handleNext = () => {
-    if (!images.length) return;
-    setActiveIndex((prev) => (prev + 1) % images.length);
-  };
 
   const handleOpenLightbox = (index: number) => {
     setLightboxIndex(index);
@@ -264,7 +248,6 @@ const GalleryDetail = () => {
     setEditing(false);
     setPageDragDepth(0);
     setDraggingIndex(null);
-    setActiveIndex((prev) => Math.min(prev, Math.max(0, (gallery?.images.length || 1) - 1)));
   };
 
   const handleSaveMeta = async () => {
@@ -285,11 +268,9 @@ const GalleryDetail = () => {
           maxFiles: pendingImages.length,
         });
         const sessionId = sessionData.session.id;
-        const assetIds: string[] = [];
 
         for (const image of pendingImages) {
           const uploadResult = await uploadFileToSession(sessionId, image.pendingFile!);
-          assetIds.push(uploadResult.asset.id);
           assetIdByClientId.set(image.clientId, uploadResult.asset.id);
         }
 
@@ -312,7 +293,6 @@ const GalleryDetail = () => {
       setGallery(result.gallery);
       applyDraft(null);
       setEditing(false);
-      setActiveIndex((prev) => Math.min(prev, Math.max(0, result.gallery.images.length - 1)));
       show('图集修改已保存');
     } catch (error) {
       console.error('Save gallery meta error:', error);
@@ -371,7 +351,6 @@ const GalleryDetail = () => {
     const formData = new FormData();
     formData.append('file', file);
 
-    // 自动获取存储策略，决定是否启用三重存储
     const preference = await getImagePreference();
     const useTripleStorage = preference.strategy === 's3' || preference.strategy === 'external';
 
@@ -448,7 +427,6 @@ const GalleryDetail = () => {
         images: nextImages,
       };
     });
-    setActiveIndex((prev) => Math.min(prev, Math.max(0, nextImages.length - 1)));
     show(image.isPending ? '已移除待上传图片' : '已加入待删除列表');
   };
 
@@ -467,7 +445,6 @@ const GalleryDetail = () => {
         images: next,
       };
     });
-    setActiveIndex(toIndex);
   };
 
   const onThumbDragStart = (event: React.DragEvent<HTMLDivElement>, index: number) => {
@@ -511,239 +488,242 @@ const GalleryDetail = () => {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        <div className="h-[560px] bg-white rounded-[40px] border border-gray-100 animate-pulse" />
+      <div
+        className="min-h-[calc(100vh-60px)]"
+        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+      >
+        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+          <div className="h-48 bg-[#f0ece3] rounded animate-pulse" />
+        </div>
       </div>
     );
   }
 
   if (!gallery) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
-        <p className="text-gray-400 italic">图集不存在或已被删除</p>
-        <Link to="/gallery" className="inline-flex items-center gap-2 mt-4 text-brand-olive hover:underline">
-          <ArrowLeft size={16} /> 返回图集列表
-        </Link>
+      <div
+        className="min-h-[calc(100vh-60px)]"
+        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+      >
+        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+          <Link to="/gallery" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors">
+            <ArrowLeft size={16} /> 返回图集列表
+          </Link>
+          <div className="mt-6 bg-white rounded border border-[#e0dcd3] p-10 text-center text-[#9e968e] italic tracking-[0.1em]">
+            图集不存在或已被删除
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div
-      className="relative min-h-screen"
+      className="min-h-[calc(100vh-60px)]"
+      style={{
+        backgroundColor: '#f7f5f0',
+        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+        lineHeight: 1.8,
+      }}
       onDragEnter={handlePageDragEnter}
       onDragOver={handlePageDragOver}
       onDragLeave={handlePageDragLeave}
       onDrop={handlePageDrop}
     >
+      <style>{`
+        .gallery-detail-page ::selection {
+          background-color: #fdf5d8;
+          color: #c8951e;
+        }
+      `}</style>
+
       {editing && canManage && pageDragDepth > 0 ? (
-        <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center bg-brand-cream/70 px-4 text-brand-olive backdrop-blur-[2px]">
-          <div className="w-full max-w-3xl rounded-[36px] border-2 border-dashed border-brand-olive bg-white/92 px-8 py-12 text-center shadow-lg">
-            <p className="text-lg font-bold">松开鼠标即可加入待上传列表</p>
-            <p className="mt-2 text-sm text-brand-olive/70">整个图集页面都可以拖入图片，保存时统一上传并生效</p>
+        <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center bg-[#f7f5f0]/80 px-4">
+          <div className="w-full max-w-3xl rounded border-2 border-dashed border-[#c8951e] bg-white/95 px-8 py-12 text-center">
+            <p className="text-lg font-bold text-[#2c2c2c]">松开鼠标即可加入待上传列表</p>
+            <p className="mt-2 text-sm text-[#9e968e]">整个图集页面都可以拖入图片，保存时统一上传并生效</p>
           </div>
         </div>
       ) : null}
-      <div className="max-w-6xl mx-auto px-4 py-12 space-y-8">
-      <div className="flex items-center justify-between gap-3">
-        <Link to="/gallery" className="inline-flex items-center gap-2 text-gray-400 hover:text-brand-olive transition-colors">
-          <ArrowLeft size={18} /> 返回图集
-        </Link>
-        {canManage && (
-          <div className="flex flex-wrap items-center gap-2">
-            {editing ? (
-              <>
-                <button
-                  onClick={handleSaveMeta}
-                  disabled={saving || uploading}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-brand-primary text-gray-900 disabled:opacity-50"
-                >
-                  <Save size={14} /> {saving || uploading ? '保存中...' : '保存修改'}
-                </button>
-                <button
-                  onClick={handleCancelEdit}
-                  disabled={saving || uploading}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border border-gray-200 text-gray-600 hover:text-brand-olive hover:border-brand-olive/40 disabled:opacity-50"
-                >
-                  取消编辑
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={handleEnterEditMode}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border border-gray-200 text-gray-600 hover:text-brand-olive hover:border-brand-olive/40"
-              >
-                <Save size={14} /> 打开编辑模式
-              </button>
-            )}
-            <button
-              onClick={handleTogglePublish}
-              disabled={!editing || saving || uploading}
-              className={clsx(
-                'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold disabled:opacity-50',
-                (editing ? draft?.published : gallery.published) ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700',
-              )}
-            >
-              {(editing ? draft?.published : gallery.published) ? <Eye size={14} /> : <EyeOff size={14} />}
-              {editing ? ((draft?.published ? '设为草稿' : '设为发布') as string) : (gallery.published ? '已发布' : '草稿中')}
-            </button>
-            <input ref={addImagesInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleAddImages} />
-          </div>
-        )}
-      </div>
 
-      <section className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden">
-        <div className="relative bg-black/5">
-          <div className="relative aspect-[16/9] max-h-[70vh]">
-            {activeImage ? (
-              editing ? (
-                <SmartImage src={activeImage.url} alt={activeImage.name || gallery.title} className="w-full h-full object-contain bg-black/80" fetchpriority="high" lazy={false} />
+      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 gallery-detail-page">
+        {/* Breadcrumb + Actions */}
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
+          <Link to="/gallery" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors">
+            <ArrowLeft size={16} /> 返回图集列表
+          </Link>
+          {canManage && (
+            <div className="flex flex-wrap items-center gap-2">
+              {editing ? (
+                <>
+                  <button
+                    onClick={handleSaveMeta}
+                    disabled={saving || uploading}
+                    className="px-4 py-2 text-[0.9375rem] rounded bg-[#c8951e] text-white hover:bg-[#dca828] transition-all flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Save size={16} /> {saving || uploading ? '保存中...' : '保存修改'}
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    disabled={saving || uploading}
+                    className="px-4 py-2 text-[0.9375rem] rounded border border-[#e0dcd3] text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] transition-all disabled:opacity-50"
+                  >
+                    取消编辑
+                  </button>
+                </>
               ) : (
-                <button onClick={() => handleOpenLightbox(activeIndex)} className="absolute inset-0 w-full h-full">
-                  <SmartImage src={activeImage.url} alt={activeImage.name || gallery.title} className="w-full h-full object-contain bg-black/80" fetchpriority="high" lazy={false} />
+                <button
+                  onClick={handleEnterEditMode}
+                  className="px-4 py-2 text-[0.9375rem] rounded border border-[#e0dcd3] text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] transition-all flex items-center gap-2"
+                >
+                  <Save size={16} /> 打开编辑模式
                 </button>
-              )
-            ) : (
-              <div className="w-full h-full bg-gray-100" />
-            )}
-          </div>
-          {images.length > 1 && (
-            <>
-              <button onClick={handlePrev} className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/90 text-gray-700 hover:bg-white">
-                <ChevronLeft size={20} />
+              )}
+              <button
+                onClick={handleTogglePublish}
+                disabled={!editing || saving || uploading}
+                className={clsx(
+                  'px-3 py-2 rounded text-sm font-medium transition-all disabled:opacity-50 flex items-center gap-1.5',
+                  (editing ? draft?.published : gallery.published)
+                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    : 'bg-amber-50 text-amber-700 border border-amber-200',
+                )}
+              >
+                {(editing ? draft?.published : gallery.published) ? <Eye size={14} /> : <EyeOff size={14} />}
+                {editing ? ((draft?.published ? '设为草稿' : '设为发布') as string) : (gallery.published ? '已发布' : '草稿中')}
               </button>
-              <button onClick={handleNext} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/90 text-gray-700 hover:bg-white">
-                <ChevronRight size={20} />
+              <button
+                onClick={handleCopyLink}
+                className="px-4 py-2 text-[0.9375rem] rounded border border-[#e0dcd3] text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] transition-all flex items-center gap-2"
+                title="复制内链"
+              >
+                <Link2 size={16} /> 复制内链
               </button>
-            </>
+              <input ref={addImagesInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleAddImages} />
+            </div>
           )}
         </div>
 
-        <div className="p-8 sm:p-10">
-          <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-            <div className="min-w-0 flex-1">
-              {editing && draft ? (
-                <div className="space-y-3 max-w-2xl">
-                  <div className="space-y-1.5">
-                    <label htmlFor="gallery-title" className="block text-sm font-medium text-gray-600">
-                      图集标题
-                    </label>
-                      <input
-                        id="gallery-title"
-                        type="text"
-                        value={draft.title}
-                        onChange={(event) => applyDraft((prev) => prev ? { ...prev, title: event.target.value } : prev)}
-                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-olive/20"
-                        placeholder="图集标题"
-                      />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label htmlFor="gallery-description" className="block text-sm font-medium text-gray-600">
-                      图集描述
-                    </label>
-                      <textarea
-                        id="gallery-description"
-                        value={draft.description}
-                        onChange={(event) => applyDraft((prev) => prev ? { ...prev, description: event.target.value } : prev)}
-                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-olive/20 resize-none"
-                        rows={3}
-                        placeholder="图集描述"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label htmlFor="gallery-tags" className="block text-sm font-medium text-gray-600">
-                      标签
-                    </label>
-                      <input
-                        id="gallery-tags"
-                        type="text"
-                        value={draft.tagsText}
-                        onChange={(event) => applyDraft((prev) => prev ? { ...prev, tagsText: event.target.value } : prev)}
-                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-olive/20"
-                        placeholder="标签，逗号分隔"
-                      />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label htmlFor="gallery-copyright" className="block text-sm font-medium text-gray-600">
-                      版权标识
-                    </label>
-                      <input
-                        id="gallery-copyright"
-                        type="text"
-                        value={draft.copyrightText}
-                        onChange={(event) => applyDraft((prev) => prev ? { ...prev, copyrightText: event.target.value } : prev)}
-                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-olive/20"
-                        placeholder="版权信息，如：© 2024 作者名"
-                      />
-                  </div>
+        {/* Header */}
+        <header className="mb-6">
+          {editing && draft ? (
+            <div className="space-y-4 max-w-2xl">
+              <div className="space-y-1.5">
+                <label htmlFor="gallery-title" className="block text-sm font-medium text-[#6b6560]">
+                  图集标题
+                </label>
+                <input
+                  id="gallery-title"
+                  type="text"
+                  value={draft.title}
+                  onChange={(event) => applyDraft((prev) => prev ? { ...prev, title: event.target.value } : prev)}
+                  className="w-full px-4 py-2.5 rounded border border-[#e0dcd3] bg-white focus:outline-none focus:border-[#c8951e] text-base"
+                  placeholder="图集标题"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="gallery-description" className="block text-sm font-medium text-[#6b6560]">
+                  图集描述
+                </label>
+                <textarea
+                  id="gallery-description"
+                  value={draft.description}
+                  onChange={(event) => applyDraft((prev) => prev ? { ...prev, description: event.target.value } : prev)}
+                  className="w-full px-4 py-2.5 rounded border border-[#e0dcd3] bg-white focus:outline-none focus:border-[#c8951e] resize-none text-base"
+                  rows={3}
+                  placeholder="图集描述"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="gallery-tags" className="block text-sm font-medium text-[#6b6560]">
+                    标签
+                  </label>
+                  <input
+                    id="gallery-tags"
+                    type="text"
+                    value={draft.tagsText}
+                    onChange={(event) => applyDraft((prev) => prev ? { ...prev, tagsText: event.target.value } : prev)}
+                    className="w-full px-4 py-2.5 rounded border border-[#e0dcd3] bg-white focus:outline-none focus:border-[#c8951e] text-base"
+                    placeholder="标签，逗号分隔"
+                  />
                 </div>
-              ) : (
-                <>
-                  <h1 className="text-3xl sm:text-4xl font-serif font-bold text-gray-900 mb-2">{gallery.title}</h1>
-                  <p className="text-gray-500 leading-relaxed">{gallery.description || '暂无描述'}</p>
-                  {gallery.copyright && (
-                    <p className="text-xs text-gray-400 mt-1">{gallery.copyright}</p>
-                  )}
-                </>
+                <div className="space-y-1.5">
+                  <label htmlFor="gallery-copyright" className="block text-sm font-medium text-[#6b6560]">
+                    版权标识
+                  </label>
+                  <input
+                    id="gallery-copyright"
+                    type="text"
+                    value={draft.copyrightText}
+                    onChange={(event) => applyDraft((prev) => prev ? { ...prev, copyrightText: event.target.value } : prev)}
+                    className="w-full px-4 py-2.5 rounded border border-[#e0dcd3] bg-white focus:outline-none focus:border-[#c8951e] text-base"
+                    placeholder="版权信息，如：© 2024 作者名"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <h1 className="text-[1.75rem] font-bold text-[#2c2c2c] tracking-[0.12em] mb-2">
+                {gallery.title}
+              </h1>
+              <p className="text-[#6b6560] leading-relaxed">
+                {gallery.description || '暂无描述'}
+              </p>
+              {gallery.copyright && (
+                <p className="text-xs text-[#9e968e] mt-1">{gallery.copyright}</p>
               )}
             </div>
+          )}
+        </header>
 
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-black/5 text-gray-600 text-xs rounded-full font-bold">
-                {activeIndex + 1} / {images.length}
-              </span>
-              <button
-                onClick={handleCopyLink}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-gray-200 text-gray-600 text-xs font-bold hover:text-brand-olive hover:border-brand-olive/40 transition-colors"
-                title="复制内链"
-                aria-label="复制图集内链"
-              >
-                <Link2 size={12} /> 复制内链
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 mb-4">
-            {gallery.tags?.map((tag) => (
-              <span key={tag} className="text-[11px] text-brand-olive bg-brand-cream px-2.5 py-1 rounded-full">
+        {/* Info bar */}
+        <div className="flex items-end justify-between border-b border-[#e0dcd3] mb-6 pb-2">
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]">
+              {images.length} 张图片
+            </span>
+            {!editing && gallery.tags?.map((tag) => (
+              <span key={tag} className="text-[11px] text-[#c8951e] bg-[#f7f5f0] border border-[#e0dcd3] px-2 py-0.5 rounded">
                 #{tag}
               </span>
             ))}
-            <span
-              className={clsx(
-                'text-[11px] px-2.5 py-1 rounded-full font-bold',
-                (editing ? draft?.published : gallery.published) ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
-              )}
-            >
-              {(editing ? draft?.published : gallery.published) ? '已发布' : '草稿'}
-            </span>
+            {!editing && (
+              <span
+                className={clsx(
+                  'text-[11px] px-2 py-0.5 rounded font-medium',
+                  gallery.published ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200',
+                )}
+              >
+                {gallery.published ? '已发布' : '草稿'}
+              </span>
+            )}
             {editing ? (
-              <span className="text-[11px] px-2.5 py-1 rounded-full font-bold bg-brand-cream text-brand-olive">
+              <span className="text-[11px] px-2 py-0.5 rounded font-medium bg-[#f0ece3] text-[#6b6560] border border-[#e0dcd3]">
                 编辑模式
               </span>
             ) : null}
           </div>
-
-          <div className="flex flex-wrap items-center gap-6 text-xs text-gray-400">
-            <span className="flex items-center gap-1">
-              <Clock size={12} /> {formatDateTime(gallery.createdAt)}
-            </span>
-            <span className="flex items-center gap-1">
-              <UserIcon size={12} /> {gallery.authorName || gallery.authorUid?.slice(0, 8)}
-            </span>
+          <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-[#9e968e]">
+            <span className="flex items-center gap-1"><Clock size={14} /> {formatDateTime(gallery.createdAt)}</span>
+            <span className="flex items-center gap-1"><UserIcon size={14} /> {gallery.authorName || gallery.authorUid?.slice(0, 8)}</span>
             {gallery.publishedAt ? <span>发布于 {formatDateTime(gallery.publishedAt)}</span> : null}
           </div>
         </div>
-      </section>
 
-      {(images.length > 1 || editing) && (
-        <section className="bg-white rounded-[32px] border border-gray-100 p-4 sm:p-6">
+        {/* Images Grid */}
+        <section className="mb-10">
           {editing ? (
-            <p className="mb-3 text-xs text-gray-500">
+            <p className="mb-3 text-xs text-[#9e968e]">
               拖拽缩略图可调整顺序，点击删除只会先加入本地修改，保存后统一提交。也可以把图片拖到整个页面中加入待上传列表。
             </p>
           ) : null}
-          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 gap-3">
+
+          <div className={clsx(
+            'grid gap-4',
+            editing ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-3'
+          )}>
             {images.map((image, index) => (
               <div
                 key={image.clientId || image.id}
@@ -758,17 +738,33 @@ const GalleryDetail = () => {
                   onThumbDrop(index);
                 }}
                 className={clsx(
-                  'relative h-20 rounded-xl overflow-hidden',
-                  index === activeIndex ? 'ring-2 ring-brand-olive' : 'ring-1 ring-transparent hover:ring-gray-200',
+                  'relative overflow-hidden rounded cursor-zoom-in group',
+                  editing ? 'aspect-square' : 'aspect-[3/4]',
                   draggingIndex === index && 'opacity-60',
                 )}
               >
-                <button onClick={() => setActiveIndex(index)} className="w-full h-full">
-                  <SmartImage src={image.url} alt={image.name || ''} className="w-full h-full object-cover" />
+                <button
+                  onClick={() => !editing && handleOpenLightbox(index)}
+                  className="w-full h-full"
+                  disabled={editing}
+                >
+                  <SmartImage
+                    src={image.url}
+                    alt={image.name || ''}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                  />
                 </button>
 
+                {!editing && (
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300 pointer-events-none">
+                    <div className="absolute bottom-3 right-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 bg-black/40 text-white text-xs px-2 py-1 rounded">
+                      查看大图
+                    </div>
+                  </div>
+                )}
+
                 {editing && canManage && (
-                  <div className="absolute inset-x-0 top-0 flex items-center justify-between p-1 bg-black/35 text-white opacity-0 hover:opacity-100 transition-opacity">
+                  <div className="absolute inset-x-0 top-0 flex items-center justify-between p-1.5 bg-black/40 text-white opacity-0 hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => handleDeleteImage(index)}
                       className="p-1 rounded bg-black/40 hover:bg-red-500/80"
@@ -778,11 +774,11 @@ const GalleryDetail = () => {
                     </button>
                     <div className="flex items-center gap-1">
                       {image.isPending ? (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] px-1 py-0.5 rounded bg-brand-primary/80 text-gray-900">
+                        <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-[#c8951e] text-white">
                           待上传
                         </span>
                       ) : null}
-                      <span className="inline-flex items-center gap-0.5 text-[10px] px-1 py-0.5 rounded bg-black/40">
+                      <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-black/40">
                         <GripVertical size={10} /> 拖拽
                       </span>
                     </div>
@@ -790,146 +786,151 @@ const GalleryDetail = () => {
                 )}
               </div>
             ))}
+
             {editing && canManage ? (
               <button
                 type="button"
                 onClick={() => addImagesInputRef.current?.click()}
                 disabled={uploading || saving}
-                className="flex h-20 items-center justify-center rounded-xl border border-dashed border-brand-olive/35 bg-brand-cream/55 text-brand-olive transition-colors hover:border-brand-olive hover:bg-brand-cream disabled:opacity-50"
+                className="flex aspect-square items-center justify-center rounded border border-dashed border-[#c8951e]/40 bg-[#f7f5f0] text-[#c8951e] transition-colors hover:border-[#c8951e] hover:bg-[#f7f5f0] disabled:opacity-50"
                 title={uploading ? '上传中' : '加入图片'}
               >
-                <Plus size={20} />
+                <Plus size={24} />
               </button>
             ) : null}
           </div>
         </section>
-      )}
 
-      {gallery.published && (
-        <section className="bg-white rounded-[32px] border border-gray-100 p-6 sm:p-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-6">评论</h2>
+        {/* Comments */}
+        {gallery.published && (
+          <section className="border-t border-[#e0dcd3] pt-8">
+            <h2 className="text-base font-semibold text-[#2c2c2c] tracking-[0.12em] mb-6 pb-2.5 border-b border-[#e0dcd3] flex items-center gap-2">
+              <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
+              评论
+            </h2>
 
-          {user && !isBanned && (
-            <form onSubmit={handleAddComment} className="mb-8">
-              {replyTo && (
-                <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
-                  <span>回复给 {replyTo.authorName}</span>
-                  <button
-                    type="button"
-                    onClick={() => setReplyTo(null)}
-                    className="text-brand-primary hover:underline"
-                  >
-                    取消
-                  </button>
-                </div>
-              )}
-              <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-gray-100 flex-shrink-0 overflow-hidden">
-                  <img
-                    src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-                <div className="flex-grow">
-                  <textarea
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="写下你的评论..."
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-olive/20 resize-none"
-                    rows={3}
-                  />
-                  <div className="flex justify-end mt-2">
+            {user && !isBanned && (
+              <form onSubmit={handleAddComment} className="mb-8">
+                {replyTo && (
+                  <div className="flex items-center gap-2 mb-2 text-xs text-[#9e968e]">
+                    <span>回复给 {replyTo.authorName}</span>
                     <button
-                      type="submit"
-                      disabled={!newComment.trim() || submittingComment}
-                      className="px-4 py-2 bg-brand-primary text-gray-900 text-sm font-bold rounded-full hover:bg-brand-olive disabled:opacity-50"
+                      type="button"
+                      onClick={() => setReplyTo(null)}
+                      className="text-[#c8951e] hover:underline"
                     >
-                      {submittingComment ? '发送中...' : '发送'}
+                      取消
                     </button>
                   </div>
-                </div>
-              </div>
-            </form>
-          )}
-
-          {user && isBanned && (
-            <p className="text-center text-gray-400 italic mb-8">账号已被封禁，无法评论</p>
-          )}
-
-          {!user && (
-            <p className="text-center text-gray-400 italic mb-8">登录后可参与评论</p>
-          )}
-
-          <div className="space-y-6">
-            {comments.length > 0 ? comments.filter((c) => !c.parentId).map((comment) => (
-              <div key={comment.id} className="space-y-4">
+                )}
                 <div className="flex gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex-shrink-0 overflow-hidden">
+                  <div className="w-10 h-10 rounded bg-[#f0ece3] flex-shrink-0 overflow-hidden">
                     <img
-                      src={comment.authorPhoto || `https://picsum.photos/seed/${comment.authorUid}/100/100`}
+                      src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`}
                       alt=""
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
                     />
                   </div>
                   <div className="flex-grow">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-bold text-gray-700">{comment.authorName || '匿名用户'}</span>
-                      <span className="text-[10px] text-gray-400">{formatDateTime(comment.createdAt)}</span>
-                    </div>
-                    <p className="text-gray-600 text-sm leading-relaxed mb-2">{comment.content}</p>
-                    {user && !isBanned && (
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="写下你的评论..."
+                      className="w-full px-4 py-3 rounded border border-[#e0dcd3] bg-white focus:outline-none focus:border-[#c8951e] resize-none text-base"
+                      rows={3}
+                    />
+                    <div className="flex justify-end mt-2">
                       <button
-                        onClick={() => {
-                          setReplyTo(comment);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className="text-[10px] font-bold text-brand-primary hover:underline"
+                        type="submit"
+                        disabled={!newComment.trim() || submittingComment}
+                        className="px-5 py-2 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] transition-all disabled:opacity-50"
                       >
-                        回复
+                        {submittingComment ? '发送中...' : '发送'}
                       </button>
-                    )}
+                    </div>
                   </div>
                 </div>
-
-                {comments.filter((c) => c.parentId === comment.id).length > 0 && (
-                  <div className="ml-14 space-y-4 border-l-2 border-brand-primary/20 pl-6">
-                    {comments.filter((c) => c.parentId === comment.id).map((reply) => (
-                      <div key={reply.id} className="flex gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gray-100 flex-shrink-0 overflow-hidden">
-                          <img
-                            src={reply.authorPhoto || `https://picsum.photos/seed/${reply.authorUid}/100/100`}
-                            alt=""
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        </div>
-                        <div className="flex-grow">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-gray-700">{reply.authorName || '匿名用户'}</span>
-                            <span className="text-[10px] text-gray-400">{formatDateTime(reply.createdAt)}</span>
-                          </div>
-                          <p className="text-gray-600 text-xs leading-relaxed">{reply.content}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )) : (
-              <p className="text-center text-gray-400 italic py-8">暂无评论，快来抢沙发吧！</p>
+              </form>
             )}
-          </div>
-        </section>
-      )}
 
-      <div className="text-right">
-        <button onClick={() => navigate('/gallery')} className="text-xs text-gray-400 hover:text-brand-olive">
-          返回图集列表
-        </button>
-      </div>
+            {user && isBanned && (
+              <p className="text-center text-[#9e968e] italic mb-8">账号已被封禁，无法评论</p>
+            )}
+
+            {!user && (
+              <p className="text-center text-[#9e968e] italic mb-8">登录后可参与评论</p>
+            )}
+
+            <div className="space-y-6">
+              {comments.length > 0 ? comments.filter((c) => !c.parentId).map((comment) => (
+                <div key={comment.id} className="space-y-4">
+                  <div className="flex gap-3">
+                    <div className="w-10 h-10 rounded bg-[#f0ece3] flex-shrink-0 overflow-hidden">
+                      <img
+                        src={comment.authorPhoto || `https://picsum.photos/seed/${comment.authorUid}/100/100`}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <div className="flex-grow">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-[#2c2c2c]">{comment.authorName || '匿名用户'}</span>
+                        <span className="text-[10px] text-[#9e968e]">{formatDateTime(comment.createdAt)}</span>
+                      </div>
+                      <p className="text-[#6b6560] text-sm leading-relaxed mb-2">{comment.content}</p>
+                      {user && !isBanned && (
+                        <button
+                          onClick={() => {
+                            setReplyTo(comment);
+                            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                          }}
+                          className="text-[10px] font-medium text-[#c8951e] hover:underline"
+                        >
+                          回复
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {comments.filter((c) => c.parentId === comment.id).length > 0 && (
+                    <div className="ml-14 space-y-4 border-l-2 border-[#e0dcd3] pl-6">
+                      {comments.filter((c) => c.parentId === comment.id).map((reply) => (
+                        <div key={reply.id} className="flex gap-3">
+                          <div className="w-8 h-8 rounded bg-[#f0ece3] flex-shrink-0 overflow-hidden">
+                            <img
+                              src={reply.authorPhoto || `https://picsum.photos/seed/${reply.authorUid}/100/100`}
+                              alt=""
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                          <div className="flex-grow">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-semibold text-[#2c2c2c]">{reply.authorName || '匿名用户'}</span>
+                              <span className="text-[10px] text-[#9e968e]">{formatDateTime(reply.createdAt)}</span>
+                            </div>
+                            <p className="text-[#6b6560] text-xs leading-relaxed">{reply.content}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )) : (
+                <p className="text-center text-[#9e968e] italic py-8">暂无评论，快来抢沙发吧！</p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Back to list */}
+        <div className="mt-10 pt-6 border-t border-[#e0dcd3] text-right">
+          <button onClick={() => navigate('/gallery')} className="text-xs text-[#9e968e] hover:text-[#c8951e] transition-colors">
+            返回图集列表
+          </button>
+        </div>
       </div>
 
       {lightboxOpen && (

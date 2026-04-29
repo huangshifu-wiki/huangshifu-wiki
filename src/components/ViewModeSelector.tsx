@@ -23,7 +23,7 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({ value, onCha
 
   return (
     <div className={clsx(
-      'inline-flex bg-gray-100 rounded-full p-1',
+      'inline-flex border border-[#e0dcd3] bg-white rounded p-0.5',
       size === 'sm' ? 'gap-0.5' : 'gap-1'
     )}>
       {modes.map((mode) => (
@@ -32,11 +32,11 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({ value, onCha
           onClick={() => onChange(mode)}
           aria-label={VIEW_MODE_LABELS[mode]}
           className={clsx(
-            'rounded-full transition-all inline-flex items-center gap-1.5 font-medium',
-            size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm',
+            'rounded transition-all inline-flex items-center gap-1.5 font-medium',
+            size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-1.5 text-sm',
             value === mode
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'bg-[#c8951e] text-white'
+              : 'text-[#9e968e] hover:text-[#6b6560]'
           )}
           title={VIEW_MODE_LABELS[mode]}
         >

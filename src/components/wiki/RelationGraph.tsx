@@ -213,11 +213,11 @@ const RelationGraph = ({ graph, currentSlug, onNodeClick }: RelationGraphProps) 
   }, [graph, currentSlug, handleClick]);
 
   if (!graph.nodes.length) {
-    return <div className="text-sm text-gray-500">暂无可展示的关系图谱。</div>;
+    return <div className="text-sm text-[#9e968e]">暂无可展示的关系图谱。</div>;
   }
 
   return (
-    <div className="rounded-3xl border border-brand-olive/20 bg-gradient-to-br from-brand-cream/30 to-white p-6 sm:p-8 shadow-sm">
+    <div className="rounded border border-[#c8951e]/20 bg-gradient-to-br from-[#f7f5f0] to-white p-6 sm:p-8">
       <div
         ref={containerRef}
         className="w-full h-[400px] sm:h-[500px]"
@@ -226,24 +226,24 @@ const RelationGraph = ({ graph, currentSlug, onNodeClick }: RelationGraphProps) 
       />
 
       <div className="mt-6 flex flex-wrap gap-4 text-sm">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-cream/50 rounded-full">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#6B8E23] shadow-sm" />
-          <span className="text-gray-700 font-medium">相关人物</span>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0] rounded">
+          <span className="inline-block h-3 w-3 rounded bg-[#6B8E23]" />
+          <span className="text-[#6b6560] font-medium">相关人物</span>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-cream/50 rounded-full">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#CD853F] shadow-sm" />
-          <span className="text-gray-700 font-medium">作品关联</span>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0] rounded">
+          <span className="inline-block h-3 w-3 rounded bg-[#CD853F]" />
+          <span className="text-[#6b6560] font-medium">作品关联</span>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-cream/50 rounded-full">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#4682B4] shadow-sm" />
-          <span className="text-gray-700 font-medium">时间线关联</span>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0] rounded">
+          <span className="inline-block h-3 w-3 rounded bg-[#4682B4]" />
+          <span className="text-[#6b6560] font-medium">时间线关联</span>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-cream/50 rounded-full">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#9370DB] shadow-sm" />
-          <span className="text-gray-700 font-medium">自定义关系</span>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0] rounded">
+          <span className="inline-block h-3 w-3 rounded bg-[#9370DB]" />
+          <span className="text-[#6b6560] font-medium">自定义关系</span>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100/50 rounded-full">
-          <span className="text-gray-500 font-medium">虚线表示反向推断关系</span>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0]/50 rounded">
+          <span className="text-[#9e968e] font-medium">虚线表示反向推断关系</span>
         </div>
       </div>
     </div>

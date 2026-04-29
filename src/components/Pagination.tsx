@@ -38,18 +38,18 @@ export const Pagination: React.FC<PaginationProps> = ({
   };
 
   return (
-    <footer className="px-6 md:px-8 py-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+    <footer className="px-4 md:px-6 py-3 border-t border-[#e0dcd3] flex items-center justify-between flex-wrap gap-3">
       <div className="flex items-center gap-3">
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-[#9e968e]">
           第 {Math.min(page, totalPages)} / {totalPages} 页
         </p>
         {showPageSizeSelector && pageSize && onPageSizeChange && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">每页</span>
+            <span className="text-xs text-[#9e968e]">每页</span>
             <select
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className="text-xs border border-gray-200 rounded-full px-2 py-1 text-gray-600 bg-white hover:bg-gray-50 cursor-pointer"
+              className="text-xs border border-[#e0dcd3] rounded px-2 py-1 text-[#6b6560] bg-white hover:border-[#c8951e] cursor-pointer focus:outline-none"
             >
               {pageSizeOptions.map((size) => (
                 <option key={size} value={size}>
@@ -65,9 +65,9 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={handlePrev}
           disabled={page <= 1}
           className={clsx(
-            'inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-full',
-            'border border-gray-200 text-gray-600 hover:bg-gray-50',
-            'disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+            'inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded',
+            'border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]',
+            'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
           )}
         >
           <ChevronLeft size={14} /> 上一页
@@ -76,9 +76,9 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={handleNext}
           disabled={page >= totalPages}
           className={clsx(
-            'inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-full',
-            'border border-gray-200 text-gray-600 hover:bg-gray-50',
-            'disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+            'inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded',
+            'border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]',
+            'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
           )}
         >
           下一页 <ChevronRight size={14} />

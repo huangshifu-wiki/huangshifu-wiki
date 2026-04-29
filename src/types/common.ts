@@ -10,4 +10,3 @@ export type Platform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo';
 
 export type ViewMode = 'large' | 'medium' | 'small' | 'list';
 
-export type ThemeName = 'default' | 'academy';

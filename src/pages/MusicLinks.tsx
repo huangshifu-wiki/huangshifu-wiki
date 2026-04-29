@@ -22,11 +22,11 @@ type SongItem = {
 };
 
 const platformInfo: Array<{ key: keyof PlatformIds; label: string; color: string; bgColor: string }> = [
-  { key: 'neteaseId', label: '网易云', color: 'text-blue-700', bgColor: 'bg-blue-100' },
-  { key: 'tencentId', label: 'QQ音乐', color: 'text-green-700', bgColor: 'bg-green-100' },
-  { key: 'kugouId', label: '酷狗', color: 'text-red-700', bgColor: 'bg-red-100' },
-  { key: 'baiduId', label: '百度', color: 'text-orange-700', bgColor: 'bg-orange-100' },
-  { key: 'kuwoId', label: '酷我', color: 'text-purple-700', bgColor: 'bg-purple-100' },
+  { key: 'neteaseId', label: '网易云', color: 'text-[#c8951e]', bgColor: 'bg-[#fdf5d8]' },
+  { key: 'tencentId', label: 'QQ音乐', color: 'text-[#c8951e]', bgColor: 'bg-[#fdf5d8]' },
+  { key: 'kugouId', label: '酷狗', color: 'text-[#c8951e]', bgColor: 'bg-[#fdf5d8]' },
+  { key: 'baiduId', label: '百度', color: 'text-[#c8951e]', bgColor: 'bg-[#fdf5d8]' },
+  { key: 'kuwoId', label: '酷我', color: 'text-[#c8951e]', bgColor: 'bg-[#fdf5d8]' },
 ];
 
 function buildPlatformUrl(platform: Platform, id: string): string {
@@ -135,186 +135,194 @@ const MusicLinks = () => {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        <div className="flex items-center justify-center py-24">
-          <Loader2 size={32} className="animate-spin text-gray-400" />
-        </div>
+      <div className="min-h-[60vh] flex items-center justify-center" style={{ backgroundColor: '#f7f5f0' }}>
+        <Loader2 size={32} className="animate-spin text-[#c8951e]" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-12">
-      <header className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-brand-primary text-gray-900 rounded-xl shadow-lg">
-            <Link2 size={24} />
+    <div
+      className="min-h-[calc(100vh-60px)]"
+      style={{
+        backgroundColor: '#f7f5f0',
+        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+        lineHeight: 1.8,
+      }}
+    >
+      <div className="max-w-[1100px] mx-auto px-6 py-12">
+        {/* Header */}
+        <header className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <Link2 size={20} className="text-[#c8951e]" />
+            <h1 className="text-2xl font-bold text-[#2c2c2c] tracking-[0.05em]">歌曲关联管理</h1>
           </div>
-          <h1 className="text-4xl font-serif font-bold text-gray-900">歌曲关联管理</h1>
-        </div>
-        <p className="text-gray-500">管理同一歌曲在不同平台的关联</p>
-      </header>
+          <p className="text-sm text-[#9e968e]">管理同一歌曲在不同平台的关联</p>
+        </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
-          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-          <p className="text-xs text-gray-500">总歌曲数</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
-          <p className="text-2xl font-bold text-blue-600">{stats.linkedCount}</p>
-          <p className="text-xs text-gray-500">已关联</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
-          <p className="text-2xl font-bold text-yellow-600">{stats.partialCount}</p>
-          <p className="text-xs text-gray-500">部分关联</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
-          <p className="text-2xl font-bold text-green-600">{stats.fullyLinkedCount}</p>
-          <p className="text-xs text-gray-500">全部关联</p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-gray-50 flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索歌名或艺术家..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25"
-            />
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+          <div className="bg-white border border-[#e0dcd3] rounded p-4">
+            <p className="text-2xl font-semibold text-[#2c2c2c]">{stats.total}</p>
+            <p className="text-xs text-[#9e968e] mt-1">总歌曲数</p>
           </div>
-          <div className="flex gap-3">
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as 'all' | 'partial' | 'unlinked')}
-              className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25 text-sm"
-            >
-              <option value="all">全部状态</option>
-              <option value="partial">部分关联</option>
-              <option value="unlinked">未关联</option>
-            </select>
-            <select
-              value={filterPlatform}
-              onChange={(e) => setFilterPlatform(e.target.value as Platform | 'all')}
-              className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25 text-sm"
-            >
-              <option value="all">全部平台</option>
-              <option value="netease">网易云</option>
-              <option value="tencent">QQ音乐</option>
-              <option value="kugou">酷狗</option>
-              <option value="baidu">百度</option>
-              <option value="kuwo">酷我</option>
-            </select>
+          <div className="bg-white border border-[#e0dcd3] rounded p-4">
+            <p className="text-2xl font-semibold text-[#c8951e]">{stats.linkedCount}</p>
+            <p className="text-xs text-[#9e968e] mt-1">已关联</p>
+          </div>
+          <div className="bg-white border border-[#e0dcd3] rounded p-4">
+            <p className="text-2xl font-semibold text-[#c8951e]">{stats.partialCount}</p>
+            <p className="text-xs text-[#9e968e] mt-1">部分关联</p>
+          </div>
+          <div className="bg-white border border-[#e0dcd3] rounded p-4">
+            <p className="text-2xl font-semibold text-[#c8951e]">{stats.fullyLinkedCount}</p>
+            <p className="text-xs text-[#9e968e] mt-1">全部关联</p>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-50">
-                <th className="text-left text-xs font-bold text-gray-500 uppercase tracking-wider px-6 py-4">歌曲</th>
-                <th className="text-center text-xs font-bold text-gray-500 uppercase tracking-wider px-4 py-4">网易云</th>
-                <th className="text-center text-xs font-bold text-gray-500 uppercase tracking-wider px-4 py-4">QQ音乐</th>
-                <th className="text-center text-xs font-bold text-gray-500 uppercase tracking-wider px-4 py-4">酷狗</th>
-                <th className="text-center text-xs font-bold text-gray-500 uppercase tracking-wider px-4 py-4">百度</th>
-                <th className="text-center text-xs font-bold text-gray-500 uppercase tracking-wider px-4 py-4">酷我</th>
-                <th className="text-center text-xs font-bold text-gray-500 uppercase tracking-wider px-4 py-4">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSongs.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
-                    未找到匹配的歌曲
-                  </td>
+        {/* Filter Bar */}
+        <div className="bg-white border border-[#e0dcd3] rounded mb-6 overflow-hidden">
+          <div className="p-4 border-b border-[#e0dcd3] flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9e968e]" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索歌名或艺术家..."
+                className="w-full pl-9 pr-4 py-2 text-sm bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:border-[#c8951e] focus:outline-none text-[#2c2c2c]"
+              />
+            </div>
+            <div className="flex gap-2">
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as 'all' | 'partial' | 'unlinked')}
+                className="px-3 py-2 text-sm bg-white border border-[#e0dcd3] rounded focus:border-[#c8951e] focus:outline-none text-[#6b6560]"
+              >
+                <option value="all">全部状态</option>
+                <option value="partial">部分关联</option>
+                <option value="unlinked">未关联</option>
+              </select>
+              <select
+                value={filterPlatform}
+                onChange={(e) => setFilterPlatform(e.target.value as Platform | 'all')}
+                className="px-3 py-2 text-sm bg-white border border-[#e0dcd3] rounded focus:border-[#c8951e] focus:outline-none text-[#6b6560]"
+              >
+                <option value="all">全部平台</option>
+                <option value="netease">网易云</option>
+                <option value="tencent">QQ音乐</option>
+                <option value="kugou">酷狗</option>
+                <option value="baidu">百度</option>
+                <option value="kuwo">酷我</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#e0dcd3] bg-[#f7f5f0]">
+                  <th className="text-left font-medium text-[#6b6560] px-4 py-3">歌曲</th>
+                  <th className="text-center font-medium text-[#6b6560] px-3 py-3">网易云</th>
+                  <th className="text-center font-medium text-[#6b6560] px-3 py-3">QQ音乐</th>
+                  <th className="text-center font-medium text-[#6b6560] px-3 py-3">酷狗</th>
+                  <th className="text-center font-medium text-[#6b6560] px-3 py-3">百度</th>
+                  <th className="text-center font-medium text-[#6b6560] px-3 py-3">酷我</th>
+                  <th className="text-center font-medium text-[#6b6560] px-3 py-3">操作</th>
                 </tr>
-              ) : (
-                paginatedSongs.map((song) => {
-                  const linkedPlatforms = platformInfo.filter((p) => song.platformIds?.[p.key]);
-                  const unlinkedPlatforms = platformInfo.filter((p) => !song.platformIds?.[p.key]);
-                  return (
-                    <tr key={song.docId} className="border-b border-gray-50 hover:bg-gray-50/50">
-                      <td className="px-6 py-4">
-                        <Link to={`/music/${song.docId}`} className="flex items-center gap-3 hover:text-brand-primary">
-                          <img
-                            src={song.cover}
-                            alt=""
-                            className="w-10 h-10 rounded-lg object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                          <div className="min-w-0">
-                            <p className="font-bold text-gray-900 truncate max-w-[200px]">{song.title}</p>
-                            <p className="text-xs text-gray-500 truncate max-w-[200px]">{song.artist}</p>
-                          </div>
-                        </Link>
-                      </td>
-                      {platformInfo.map((platform) => {
-                        const isLinked = Boolean(song.platformIds?.[platform.key]);
-                        return (
-                          <td key={platform.key} className="px-4 py-4 text-center">
-                            {isLinked ? (
-                              <a
-                                href={buildPlatformUrl(
-                                  platform.key.replace('Id', '') as Platform,
-                                  song.platformIds![platform.key]!
-                                )}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={clsx(
-                                  'inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-all hover:scale-110',
-                                  platform.bgColor,
-                                  platform.color
-                                )}
-                                title={song.platformIds![platform.key]}
-                              >
-                                ✓
-                              </a>
-                            ) : (
-                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs text-gray-300">
-                                —
-                              </span>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td className="px-4 py-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
+              </thead>
+              <tbody>
+                {filteredSongs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-12 text-[#9e968e]">
+                      未找到匹配的歌曲
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedSongs.map((song) => {
+                    const linkedPlatforms = platformInfo.filter((p) => song.platformIds?.[p.key]);
+                    const unlinkedPlatforms = platformInfo.filter((p) => !song.platformIds?.[p.key]);
+                    return (
+                      <tr key={song.docId} className="border-b border-[#e0dcd3] hover:bg-[#f7f5f0]/50 transition-colors">
+                        <td className="px-4 py-3">
+                          <Link to={`/music/${song.docId}`} className="flex items-center gap-3 group">
+                            <img
+                              src={song.cover}
+                              alt=""
+                              className="w-10 h-10 rounded object-cover border border-[#e0dcd3]"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="min-w-0">
+                              <p className="font-medium text-[#2c2c2c] truncate max-w-[180px] group-hover:text-[#c8951e] transition-colors">{song.title}</p>
+                              <p className="text-xs text-[#9e968e] truncate max-w-[180px]">{song.artist}</p>
+                            </div>
+                          </Link>
+                        </td>
+                        {platformInfo.map((platform) => {
+                          const isLinked = Boolean(song.platformIds?.[platform.key]);
+                          return (
+                            <td key={platform.key} className="px-3 py-3 text-center">
+                              {isLinked ? (
+                                <a
+                                  href={buildPlatformUrl(
+                                    platform.key.replace('Id', '') as Platform,
+                                    song.platformIds![platform.key]!
+                                  )}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={clsx(
+                                    'inline-flex items-center justify-center w-7 h-7 rounded text-xs font-medium transition-all hover:scale-110',
+                                    platform.bgColor,
+                                    platform.color
+                                  )}
+                                  title={song.platformIds![platform.key]}
+                                >
+                                  ✓
+                                </a>
+                              ) : (
+                                <span className="inline-flex items-center justify-center w-7 h-7 rounded text-xs text-[#e0dcd3]">
+                                  —
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="px-3 py-3 text-center">
                           <Link
                             to={`/music/${song.docId}`}
-                            className="p-2 text-gray-400 hover:text-brand-primary transition-colors"
+                            className="p-1.5 text-[#9e968e] hover:text-[#c8951e] transition-colors inline-flex"
                             title="编辑"
                           >
                             <ExternalLink size={16} />
                           </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="px-6 py-4 border-t border-gray-50">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-gray-500">
-              显示 {paginatedSongs.length} / {filteredSongs.length} 首歌曲（共 {songs.length} 首）
-            </p>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-          {totalFilteredPages > 1 && (
-            <Pagination
-              page={page}
-              totalPages={totalFilteredPages}
-              onPageChange={handlePageChange}
-              pageSize={pageSize}
-              onPageSizeChange={handlePageSizeChange}
-              showPageSizeSelector
-            />
-          )}
+
+          {/* Pagination */}
+          <div className="px-4 py-3 border-t border-[#e0dcd3] bg-[#f7f5f0]">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <p className="text-xs text-[#9e968e]">
+                显示 {paginatedSongs.length} / {filteredSongs.length} 首歌曲（共 {songs.length} 首）
+              </p>
+              {totalFilteredPages > 1 && (
+                <Pagination
+                  page={page}
+                  totalPages={totalFilteredPages}
+                  onPageChange={handlePageChange}
+                  pageSize={pageSize}
+                  onPageSizeChange={handlePageSizeChange}
+                  showPageSizeSelector
+                />
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

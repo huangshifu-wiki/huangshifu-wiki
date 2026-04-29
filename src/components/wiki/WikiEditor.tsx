@@ -1,11 +1,9 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { useTheme } from "../../context/ThemeContext";
 import { useToast } from "../../components/Toast";
 import { apiGet, apiPost, apiPut } from "../../lib/apiClient";
 import { randomId } from "../../lib/randomId";
-import { withThemeSearch } from "../../lib/theme";
 import { splitTagsInput } from "../../lib/contentUtils";
 import { generateWikiIntro } from "../../services/aiService";
 import { uploadMarkdownImage } from "../../services/imageService";
@@ -37,7 +35,6 @@ const WikiEditor = () => {
 	const isNew = !slug || slug === "new";
 	const navigate = useNavigate();
 	const { user, profile, isAdmin, isBanned } = useAuth();
-	const { theme } = useTheme();
 
 	const [formData, setFormData] = useState({
 		title: "",
@@ -340,7 +337,6 @@ const WikiEditor = () => {
 				editorName: profile?.displayName || user.displayName || "匿名用户",
 			});
 
-			navigate(withThemeSearch(`/wiki/${pageSlug}`, theme));
 		} catch (e) {
 			console.error("Error saving wiki page:", e);
 			show("保存失败，请检查网络或权限", { variant: "error" });
@@ -350,14 +346,14 @@ const WikiEditor = () => {
 
 	return (
 		<div className="max-w-5xl mx-auto px-4 py-12">
-			<div className="bg-white rounded-[40px] p-8 sm:p-16 border border-gray-100 shadow-sm">
+				<div className="bg-white rounded p-8 sm:p-12 border border-[#e0dcd3]">
 				<div className="flex justify-between items-center mb-12">
-					<h1 className="text-4xl font-serif font-bold text-brand-olive">
+					<h1 className="text-[1.75rem] font-bold text-[#2c2c2c] tracking-[0.12em]">
 						{isNew ? "创建新百科" : "编辑百科"}
 					</h1>
 					<button
 						onClick={() => navigate(-1)}
-						className="p-2 text-gray-400 hover:text-red-500"
+						className="p-2 text-[#9e968e] hover:text-red-500"
 					>
 						<X size={24} />
 					</button>
@@ -372,7 +368,7 @@ const WikiEditor = () => {
 				>
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 						<div className="space-y-2">
-							<label className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">
+							<label className="text-xs font-medium text-[#9e968e]">
 								标题
 							</label>
 							<input
@@ -383,11 +379,11 @@ const WikiEditor = () => {
 									setFormData({ ...formData, title: e.target.value })
 								}
 								placeholder="例如：黄诗扶"
-								className="w-full px-6 py-4 bg-brand-cream rounded-2xl border-none focus:ring-2 focus:ring-brand-olive/20 font-serif text-xl"
+								className="w-full px-4 py-3 bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:outline-none focus:border-[#c8951e] font-serif text-base"
 							/>
 						</div>
 						<div className="space-y-2">
-							<label className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">
+							<label className="text-xs font-medium text-[#9e968e]">
 								分类
 							</label>
 							<select
@@ -395,7 +391,7 @@ const WikiEditor = () => {
 								onChange={(e) =>
 									setFormData({ ...formData, category: e.target.value })
 								}
-								className="w-full px-6 py-4 bg-brand-cream rounded-2xl border-none focus:ring-2 focus:ring-brand-olive/20 font-serif text-xl appearance-none"
+								className="w-full px-4 py-3 bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:outline-none focus:border-[#c8951e] font-serif text-base appearance-none"
 							>
 								<option value="biography">人物介绍</option>
 								<option value="music">音乐作品</option>
@@ -405,7 +401,7 @@ const WikiEditor = () => {
 							</select>
 						</div>
 						<div className="space-y-2">
-							<label className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">
+							<label className="text-xs font-medium text-[#9e968e]">
 								事件日期 (可选)
 							</label>
 							<input
@@ -414,14 +410,14 @@ const WikiEditor = () => {
 								onChange={(e) =>
 									setFormData({ ...formData, eventDate: e.target.value })
 								}
-								className="w-full px-6 py-4 bg-brand-cream rounded-2xl border-none focus:ring-2 focus:ring-brand-olive/20 font-serif text-xl"
+								className="w-full px-4 py-3 bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:outline-none focus:border-[#c8951e] font-serif text-base"
 							/>
 						</div>
 					</div>
 
 					<div className="space-y-2">
 						<div className="flex justify-between items-center">
-							<label className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">
+							<label className="text-xs font-medium text-[#9e968e]">
 								内容 (Markdown) <span className="text-red-500">*</span>
 							</label>
 							<button
@@ -439,13 +435,13 @@ const WikiEditor = () => {
 									setGenerating(false);
 								}}
 								disabled={generating}
-								className="text-xs font-bold text-brand-olive flex items-center gap-1 hover:underline disabled:opacity-50"
+								className="text-xs font-medium text-[#c8951e] flex items-center gap-1 hover:underline disabled:opacity-50"
 							>
 								<Sparkles size={12} />{" "}
 								{generating ? "生成中..." : "AI 辅助写开头"}
 							</button>
 						</div>
-						<div className="border border-gray-100 rounded-[32px] overflow-hidden">
+						<div className="border border-[#e0dcd3] rounded overflow-hidden">
 							<MdEditor
 								style={{ height: "500px" }}
 								renderHTML={(text) => {
@@ -484,7 +480,7 @@ const WikiEditor = () => {
 					</div>
 
 					<div className="space-y-2">
-						<label className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">
+						<label className="text-xs font-medium text-[#9e968e]">
 							标签 (逗号分隔)
 						</label>
 						<input
@@ -494,12 +490,12 @@ const WikiEditor = () => {
 								setFormData({ ...formData, tags: e.target.value })
 							}
 							placeholder="例如：古风, 原创, 歌手"
-							className="w-full px-6 py-4 bg-brand-cream rounded-2xl border-none focus:ring-2 focus:ring-brand-olive/20"
+							className="w-full px-4 py-3 bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:outline-none focus:border-[#c8951e]"
 						/>
 					</div>
 
 					<div className="space-y-2">
-						<label className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">
+						<label className="text-xs font-medium text-[#9e968e]">
 							地点
 						</label>
 						<LocationTagInput
@@ -534,10 +530,10 @@ const WikiEditor = () => {
 						<button
 							type="button"
 							onClick={() => setShowGraphPreview(!showGraphPreview)}
-							className={`w-full px-4 py-3 rounded-2xl text-sm font-bold transition-all flex items-center justify-between ${
+							className={`w-full px-4 py-2.5 rounded text-sm font-medium transition-all flex items-center justify-between ${
 								showGraphPreview
-									? "bg-brand-olive text-white"
-									: "bg-brand-olive/10 text-brand-olive hover:bg-brand-olive/20"
+									? "bg-[#c8951e] text-white"
+									: "bg-[#f7f5f0] text-[#6b6560] hover:bg-[#e8e4db]"
 							}`}
 						>
 							<div className="flex items-center gap-2">
@@ -564,21 +560,21 @@ const WikiEditor = () => {
 									exit={{ height: 0, opacity: 0 }}
 									className="overflow-hidden"
 								>
-									<div className="p-4 bg-brand-cream/30 rounded-2xl border border-brand-cream">
+									<div className="p-4 bg-[#faf9f6] rounded border border-[#e0dcd3]">
 										<div className="flex items-center justify-between mb-3">
-											<h3 className="text-sm font-bold text-brand-olive">
+											<h3 className="text-sm font-semibold text-[#2c2c2c]">
 												关联图谱
 											</h3>
 											<button
 												type="button"
 												onClick={() => setShowGraphPreview(false)}
-												className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+												className="p-1.5 text-[#9e968e] hover:text-[#6b6560] rounded hover:bg-[#f7f5f0]"
 											>
 												<X size={16} />
 											</button>
 										</div>
 										{formData.relations.length === 0 ? (
-											<div className="py-8 text-center text-gray-500 text-sm">
+											<div className="py-8 text-center text-[#9e968e] text-sm">
 												暂无关联数据，请先添加关联
 											</div>
 										) : (
@@ -590,7 +586,7 @@ const WikiEditor = () => {
 													currentTitle={formData.title || "新页面"}
 													height={360}
 												/>
-												<div className="mt-3 flex items-center justify-center gap-4 text-xs text-gray-500">
+												<div className="mt-3 flex items-center justify-center gap-4 text-xs text-[#9e968e]">
 													<span>💡 提示：拖动图谱查看，滚轮缩放</span>
 												</div>
 											</>
@@ -607,10 +603,10 @@ const WikiEditor = () => {
 							type="button"
 							onClick={handleAIRecommend}
 							disabled={isRecommending || !formData.title || !formData.content}
-							className={`w-full px-4 py-3 rounded-2xl text-sm font-bold transition-all flex items-center justify-between ${
+							className={`w-full px-4 py-2.5 rounded text-sm font-medium transition-all flex items-center justify-between ${
 								showRecommendations
-									? "bg-brand-primary text-white"
-									: "bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20"
+									? "bg-[#c8951e] text-white"
+									: "bg-[#f7f5f0] text-[#c8951e] hover:bg-[#e8e4db]"
 							} disabled:opacity-50 disabled:cursor-not-allowed`}
 						>
 							<div className="flex items-center gap-2">
@@ -639,9 +635,9 @@ const WikiEditor = () => {
 									exit={{ height: 0, opacity: 0 }}
 									className="overflow-hidden"
 								>
-									<div className="p-4 bg-brand-cream/30 rounded-2xl border border-brand-cream">
+									<div className="p-4 bg-[#faf9f6] rounded border border-[#e0dcd3]">
 										<div className="flex items-center justify-between mb-3">
-											<h3 className="text-sm font-bold text-brand-primary">
+											<h3 className="text-sm font-semibold text-[#c8951e]">
 												AI 推荐关联
 											</h3>
 											<div className="flex items-center gap-2">
@@ -649,7 +645,7 @@ const WikiEditor = () => {
 													<button
 														type="button"
 														onClick={handleCancelRecommendation}
-														className="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-xs font-bold hover:bg-red-200 transition-all"
+														className="px-3 py-1.5 bg-red-50 text-red-600 rounded text-xs font-medium hover:bg-red-100 transition-all"
 													>
 														取消
 													</button>
@@ -657,7 +653,7 @@ const WikiEditor = () => {
 												<button
 													type="button"
 													onClick={() => setShowRecommendations(false)}
-													className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+													className="p-1.5 text-[#9e968e] hover:text-[#6b6560] rounded hover:bg-[#f7f5f0]"
 												>
 													<X size={16} />
 												</button>
@@ -666,13 +662,13 @@ const WikiEditor = () => {
 
 										{isRecommending ? (
 											<div className="py-8 text-center">
-												<div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary"></div>
-												<p className="mt-3 text-sm text-gray-600">
+												<div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#c8951e]"></div>
+												<p className="mt-3 text-sm text-[#6b6560]">
 													AI 正在分析内容并推荐关联...
 												</p>
 											</div>
 										) : recommendations.length === 0 ? (
-											<div className="py-8 text-center text-gray-500 text-sm">
+											<div className="py-8 text-center text-[#9e968e] text-sm">
 												暂无推荐，请先填写标题和内容后重试
 											</div>
 										) : (
@@ -680,32 +676,32 @@ const WikiEditor = () => {
 												{recommendations.map((rec, index) => (
 													<div
 														key={rec.targetSlug}
-														className="p-4 bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all"
+														className="p-4 bg-white rounded border border-[#e0dcd3] hover:border-[#c8951e] transition-all"
 													>
 														<div className="flex items-start justify-between gap-3">
 															<div className="flex-1">
 																<div className="flex items-center gap-2 mb-2">
-																	<h4 className="font-bold text-brand-olive text-sm">
+																	<h4 className="font-semibold text-[#2c2c2c] text-sm">
 																		{rec.targetTitle}
 																	</h4>
-																	<span className="px-2 py-0.5 bg-brand-olive/10 text-brand-olive text-[10px] rounded-full">
+																	<span className="px-2 py-0.5 bg-[#f7f5f0] text-[#9e968e] text-[10px] rounded">
 																		{rec.category}
 																	</span>
 																</div>
-																<p className="text-xs text-gray-600 mb-2">
+																<p className="text-xs text-[#6b6560] mb-2">
 																	{rec.reason}
 																</p>
 																<div className="flex items-center gap-3 mb-2">
 																	<div className="flex-1">
-																		<div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+																		<div className="flex items-center justify-between text-[10px] text-[#9e968e] mb-1">
 																			<span>置信度</span>
-																			<span className="font-bold text-brand-primary">
+																			<span className="font-bold text-[#c8951e]">
 																				{(rec.confidence * 100).toFixed(0)}%
 																			</span>
 																		</div>
-																		<div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+																		<div className="h-1.5 bg-[#f0ece0] rounded-full overflow-hidden">
 																			<div
-																				className="h-full bg-gradient-to-r from-brand-primary to-brand-olive rounded-full transition-all"
+																				className="h-full bg-[#c8951e] rounded-full transition-all"
 																				style={{
 																					width: `${rec.confidence * 100}%`,
 																				}}
@@ -713,9 +709,9 @@ const WikiEditor = () => {
 																		</div>
 																	</div>
 																</div>
-																<div className="flex items-center gap-2 text-[10px] text-gray-500">
+																<div className="flex items-center gap-2 text-[10px] text-[#9e968e]">
 																	<span>建议类型：</span>
-																	<span className="px-1.5 py-0.5 bg-gray-100 rounded">
+																	<span className="px-1.5 py-0.5 bg-[#f7f5f0] rounded">
 																		{
 																			{
 																				related_person: "相关人物",
@@ -734,7 +730,7 @@ const WikiEditor = () => {
 																onClick={() =>
 																	handleAddRecommendation(rec)
 																}
-																className="px-3 py-2 bg-brand-primary text-white rounded-lg text-xs font-bold hover:bg-brand-primary/90 transition-all whitespace-nowrap"
+																className="px-3 py-1.5 bg-[#c8951e] text-white rounded text-xs font-medium hover:bg-[#dca828] transition-all whitespace-nowrap"
 															>
 																添加关联
 															</button>
@@ -754,7 +750,7 @@ const WikiEditor = () => {
 							type="button"
 							onClick={() => handleSubmit("draft")}
 							disabled={Boolean(savingMode)}
-							className="px-8 py-4 bg-gray-100 text-gray-700 rounded-full font-bold hover:bg-gray-200 transition-all flex items-center gap-2 disabled:opacity-50"
+							className="px-6 py-2.5 bg-[#f7f5f0] text-[#6b6560] rounded font-medium hover:bg-[#e8e4db] transition-all flex items-center gap-2 disabled:opacity-50"
 						>
 							<Save size={18} />{" "}
 							{savingMode === "draft" ? "保存中..." : "保存草稿"}
@@ -762,7 +758,7 @@ const WikiEditor = () => {
 						<button
 							type="submit"
 							disabled={Boolean(savingMode)}
-							className="px-12 py-4 bg-brand-olive text-white rounded-full font-bold hover:bg-brand-olive/90 hover:scale-105 active:scale-95 transition-all shadow-lg flex items-center gap-2 disabled:opacity-50"
+							className="px-8 py-2.5 bg-[#c8951e] text-white rounded font-medium hover:bg-[#dca828] transition-all flex items-center gap-2 disabled:opacity-50"
 						>
 							<Sparkles size={18} />{" "}
 							{savingMode === "pending" ? "提交中..." : "提交审核"}

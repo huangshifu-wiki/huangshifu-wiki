@@ -106,26 +106,26 @@ export default function WikiLinkPreview({ slug, children }: WikiLinkPreviewProps
       {children}
       {isVisible && (
         <div
-          className={`absolute z-50 left-0 w-72 p-4 bg-white rounded-xl shadow-lg border border-gray-100 text-sm text-gray-700 ${
+          className={`absolute z-50 left-0 w-72 p-4 bg-white rounded shadow-lg border border-[#e0dcd3] text-sm text-[#6b6560] ${
             position === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2'
           }`}
         >
           {loading && (
             <div className="flex items-center justify-center py-4">
-              <div className="w-5 h-5 border-2 border-brand-olive border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-[#c8951e] border-t-transparent rounded-full animate-spin" />
             </div>
           )}
           {!loading && preview && (
             <>
-              <h4 className="font-bold text-brand-olive mb-2 line-clamp-1">{preview.title}</h4>
-              <p className="text-gray-600 text-xs leading-relaxed line-clamp-3">{getExcerpt(preview.content)}</p>
-              <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-400">
-                <span className="px-1.5 py-0.5 bg-brand-cream rounded text-brand-olive">{preview.category}</span>
+              <h4 className="font-semibold text-[#2c2c2c] mb-2 line-clamp-1">{preview.title}</h4>
+              <p className="text-[#6b6560] text-xs leading-relaxed line-clamp-3">{getExcerpt(preview.content)}</p>
+              <div className="mt-2 pt-2 border-t border-[#f0ece0] flex items-center gap-2 text-xs text-[#9e968e]">
+                <span className="px-1.5 py-0.5 bg-[#f7f5f0] rounded text-[#c8951e]">{preview.category}</span>
               </div>
             </>
           )}
           {!loading && !preview && (
-            <p className="text-gray-400 text-center py-2">无法加载预览</p>
+            <p className="text-[#9e968e] text-center py-2">无法加载预览</p>
           )}
         </div>
       )}

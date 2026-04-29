@@ -35,9 +35,9 @@ function DefaultErrorFallback({ error, resetError }: FallbackProps) {
   const errorMessage = parseErrorMessage(error.message) || "抱歉，应用遇到了一个错误。";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-brand-cream p-4">
-      <div className="bg-white p-8 md:p-12 rounded-[40px] border border-gray-100 shadow-xl max-w-2xl w-full text-center">
-        <div className="w-16 h-16 md:w-20 md:h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 md:mb-8">
+    <div className="min-h-screen flex items-center justify-center bg-[#f7f5f0] p-4">
+      <div className="bg-white p-8 md:p-12 rounded-[40px] border border-[#e0dcd3] max-w-2xl w-full text-center">
+        <div className="w-16 h-16 md:w-20 md:h-20 bg-red-50 text-red-500 rounded flex items-center justify-center mx-auto mb-6 md:mb-8">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="32"
@@ -56,18 +56,18 @@ function DefaultErrorFallback({ error, resetError }: FallbackProps) {
           </svg>
         </div>
 
-        <h1 className="text-2xl md:text-3xl font-serif font-bold text-brand-olive mb-3 md:mb-4">
+        <h1 className="text-2xl md:text-3xl font-serif font-bold text-[#c8951e] mb-3 md:mb-4">
           出错了
         </h1>
 
-        <p className="text-gray-600 mb-6 md:mb-8 leading-relaxed text-sm md:text-base">
+        <p className="text-[#6b6560] mb-6 md:mb-8 leading-relaxed text-sm md:text-base">
           {errorMessage}
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <button
             onClick={resetError}
-            className="px-6 py-3 bg-brand-olive text-white rounded-full font-medium hover:bg-brand-olive/90 transition-all flex items-center justify-center gap-2"
+            className="px-6 py-3 bg-[#c8951e] text-white rounded font-medium hover:bg-[#dca828] transition-all flex items-center justify-center gap-2"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -90,7 +90,7 @@ function DefaultErrorFallback({ error, resetError }: FallbackProps) {
 
           <button
             onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-gray-100 text-gray-700 rounded-full font-medium hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+            className="px-6 py-3 bg-[#f7f5f0] text-[#6b6560] rounded font-medium hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

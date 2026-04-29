@@ -377,7 +377,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 				{/* 类型筛选 */}
 				<div>
-					<label className="block text-xs font-bold text-brand-olive/60 mb-1">
+					<label className="block text-xs font-medium text-[#9e968e] mb-1">
 						关联类型
 					</label>
 					<select
@@ -388,7 +388,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 								type: e.target.value as FilterOptions["type"],
 							})
 						}
-						className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-olive/20"
+						className="w-full px-3 py-2 bg-white rounded border border-[#e0dcd3] text-sm focus:outline-none focus:border-[#c8951e]"
 					>
 						<option value="all">全部类型</option>
 						<option value="related_person">相关人物</option>
@@ -400,7 +400,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 
 				{/* 排序方式 */}
 				<div>
-					<label className="block text-xs font-bold text-brand-olive/60 mb-1">
+					<label className="block text-xs font-medium text-[#9e968e] mb-1">
 						排序方式
 					</label>
 					<select
@@ -408,7 +408,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 						onChange={(e) =>
 							setSortStrategy(e.target.value as SortStrategy)
 						}
-						className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-olive/20"
+						className="w-full px-3 py-2 bg-white rounded border border-[#e0dcd3] text-sm focus:outline-none focus:border-[#c8951e]"
 					>
 						<option value="quality">质量优先</option>
 						<option value="type_grouped">类型分组</option>
@@ -419,13 +419,13 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 
 				{/* 搜索框 */}
 				<div>
-					<label className="block text-xs font-bold text-brand-olive/60 mb-1">
+					<label className="block text-xs font-medium text-[#9e968e] mb-1">
 						搜索
 					</label>
 					<div className="relative">
 						<Search
 							size={14}
-							className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+							className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9e968e]"
 						/>
 						<input
 							type="text"
@@ -437,17 +437,17 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 								})
 							}
 							placeholder="搜索标题、描述..."
-							className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-olive/20"
+							className="w-full pl-9 pr-3 py-2 bg-white rounded border border-[#e0dcd3] text-sm focus:outline-none focus:border-[#c8951e]"
 						/>
 					</div>
 				</div>
 			</div>
 
 			{/* 筛选结果统计 */}
-			<div className="flex items-center justify-between text-xs text-gray-500">
+			<div className="flex items-center justify-between text-xs text-[#9e968e]">
 				<span>
 					显示{" "}
-					<span className="font-bold text-brand-olive">
+					<span className="font-semibold text-[#c8951e]">
 						{filteredAndSortedRelations.length}
 					</span>{" "}
 					/ {relations.length} 个关联
@@ -461,7 +461,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 							setFilterOptions(DEFAULT_FILTER_OPTIONS);
 							setSortStrategy(DEFAULT_SORT_STRATEGY);
 						}}
-						className="text-brand-primary hover:underline"
+						className="text-[#c8951e] hover:underline"
 					>
 						重置筛选
 					</button>
@@ -474,7 +474,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 		<div className="space-y-4">
 			{/* 标题栏 */}
 			<div className="flex items-center justify-between">
-				<label className="text-xs font-bold uppercase tracking-widest text-brand-olive/60">
+				<label className="text-xs font-medium text-[#9e968e]">
 					相关页面
 				</label>
 				<div className="flex items-center gap-2">
@@ -482,10 +482,10 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 						type="button"
 						onClick={() => setShowFilters(!showFilters)}
 						className={clsx(
-							"px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5",
+							"px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1.5",
 							showFilters
-								? "bg-brand-olive text-white"
-								: "bg-brand-olive/10 text-brand-olive hover:bg-brand-olive/20",
+								? "bg-[#c8951e] text-white"
+								: "bg-[#f7f5f0] text-[#6b6560] hover:bg-[#e8e4db]",
 						)}
 					>
 						<Filter size={14} />
@@ -499,7 +499,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 					<button
 						type="button"
 						onClick={handleAddRelation}
-						className="px-4 py-1.5 bg-brand-primary/10 text-brand-primary rounded-xl text-xs font-bold hover:bg-brand-primary/20 transition-all"
+						className="px-4 py-1.5 bg-[#c8951e]/10 text-[#c8951e] rounded text-xs font-medium hover:bg-[#c8951e]/20 transition-all"
 					>
 						+ 添加关联
 					</button>
@@ -515,7 +515,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 						exit={{ height: 0, opacity: 0 }}
 						className="overflow-hidden"
 					>
-						<div className="p-4 bg-brand-cream/30 rounded-2xl border border-brand-cream">
+						<div className="p-4 bg-[#faf9f6] rounded border border-[#e0dcd3]">
 							<FilterControls />
 						</div>
 					</motion.div>
@@ -556,7 +556,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 			{/* 空状态 */}
 			{relations.length > 0 &&
 				filteredAndSortedRelations.length === 0 && (
-					<div className="p-8 text-center text-gray-500 bg-brand-cream/30 rounded-2xl border border-brand-cream">
+					<div className="p-8 text-center text-[#9e968e] bg-[#faf9f6] rounded border border-[#e0dcd3]">
 						<p className="text-sm">没有符合筛选条件的关联</p>
 						<button
 							type="button"
@@ -567,7 +567,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 								});
 								setSortStrategy(DEFAULT_SORT_STRATEGY);
 							}}
-							className="mt-2 text-brand-primary hover:underline text-sm"
+							className="mt-2 text-[#c8951e] hover:underline text-sm"
 						>
 							重置筛选条件
 						</button>
@@ -581,23 +581,23 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 						initial={{ opacity: 0 }}
 						animate={{ opacity: 1 }}
 						exit={{ opacity: 0 }}
-						className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+						className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
 						onClick={handleCancelEdit}
 					>
 						<motion.div
 							initial={{ scale: 0.95, y: 20 }}
 							animate={{ scale: 1, y: 0 }}
 							exit={{ scale: 0.95, y: 20 }}
-							className="bg-white rounded-2xl p-6 max-w-md w-full"
+							className="bg-white rounded p-6 max-w-md w-full"
 							onClick={(e) => e.stopPropagation()}
 						>
 							<div className="flex items-center justify-between mb-4">
-								<h3 className="text-lg font-bold text-brand-olive">
+								<h3 className="text-lg font-semibold text-[#2c2c2c]">
 									编辑关联
 								</h3>
 								<button
 									onClick={handleCancelEdit}
-									className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+									className="p-1.5 text-[#9e968e] hover:text-[#6b6560] rounded hover:bg-[#f7f5f0]"
 								>
 									<X size={20} />
 								</button>
@@ -605,7 +605,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 
 							<div className="space-y-3">
 								<div>
-									<label className="block text-xs font-bold text-gray-600 mb-1">
+									<label className="block text-xs font-medium text-[#6b6560] mb-1">
 										关联类型
 									</label>
 									<select
@@ -616,7 +616,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 												type: e.target.value as WikiRelationType,
 											})
 										}
-										className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 text-sm"
+										className="w-full px-3 py-2 bg-white rounded border border-[#e0dcd3] text-sm"
 									>
 										<option value="related_person">相关人物</option>
 										<option value="work_relation">作品关联</option>
@@ -626,19 +626,19 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 								</div>
 
 								<div>
-									<label className="block text-xs font-bold text-gray-600 mb-1">
+									<label className="block text-xs font-medium text-[#6b6560] mb-1">
 										目标页面
 									</label>
 									<input
 										type="text"
 										value={editingRelation.targetSlug}
 										readOnly
-										className="w-full px-3 py-2 bg-gray-50 rounded-xl border border-gray-200 text-sm text-gray-500"
+										className="w-full px-3 py-2 bg-[#faf9f6] rounded border border-[#e0dcd3] text-sm text-[#9e968e]"
 									/>
 								</div>
 
 								<div>
-									<label className="block text-xs font-bold text-gray-600 mb-1">
+									<label className="block text-xs font-medium text-[#6b6560] mb-1">
 										显示名称
 									</label>
 									<input
@@ -651,12 +651,12 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 											})
 										}
 										placeholder="可选"
-										className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 text-sm"
+										className="w-full px-3 py-2 bg-white rounded border border-[#e0dcd3] text-sm"
 									/>
 								</div>
 
 								<div>
-									<label className="flex items-center gap-2 text-sm text-gray-600">
+									<label className="flex items-center gap-2 text-sm text-[#6b6560]">
 										<input
 											type="checkbox"
 											checked={editingRelation.bidirectional}
@@ -666,7 +666,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 													bidirectional: e.target.checked,
 												})
 											}
-											className="rounded"
+className="rounded border border-[#e0dcd3]"
 										/>
 										双向关联
 									</label>
@@ -676,13 +676,13 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 							<div className="flex gap-3 mt-6">
 								<button
 									onClick={handleCancelEdit}
-									className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-200 transition-all"
+									className="flex-1 px-4 py-2 bg-[#f7f5f0] text-[#6b6560] rounded text-sm font-medium hover:bg-[#e8e4db] transition-all"
 								>
 									取消
 								</button>
 								<button
 									onClick={handleSaveEdit}
-									className="flex-1 px-4 py-2 bg-brand-olive text-white rounded-xl text-sm font-bold hover:bg-brand-olive/90 transition-all"
+									className="flex-1 px-4 py-2 bg-[#c8951e] text-white rounded text-sm font-medium hover:bg-[#dca828] transition-all"
 								>
 									保存
 								</button>
@@ -693,7 +693,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 			</AnimatePresence>
 
 			{/* 添加关联表单 */}
-			<div className="flex flex-col gap-3 p-4 bg-brand-cream/30 rounded-2xl border border-brand-cream">
+			<div className="flex flex-col gap-3 p-4 bg-[#faf9f6] rounded border border-[#e0dcd3]">
 				<div className="flex flex-col sm:flex-row gap-3">
 					<select
 						value={newRelation.type}
@@ -703,7 +703,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 								type: e.target.value as WikiRelationType,
 							})
 						}
-						className="px-4 py-2 bg-white rounded-xl border border-gray-200 text-sm"
+						className="px-4 py-2 bg-white rounded border border-[#e0dcd3] text-sm"
 					>
 						<option value="related_person">相关人物</option>
 						<option value="work_relation">作品关联</option>
@@ -723,7 +723,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 								handleRelationInputChange(pastedText, true);
 							}}
 							placeholder="粘贴链接或 [[页面标题]]"
-							className="w-full px-4 py-2 bg-white rounded-xl border border-gray-200 text-sm"
+							className="w-full px-4 py-2 bg-white rounded border border-[#e0dcd3] text-sm"
 							onKeyDown={(e) => {
 								if (!showRelationDropdown) return;
 								if (e.key === "ArrowDown") {
@@ -759,9 +759,9 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 									initial={{ opacity: 0, y: -4 }}
 									animate={{ opacity: 1, y: 0 }}
 									exit={{ opacity: 0, y: -4 }}
-									className="absolute z-50 mt-1 w-full bg-white rounded-xl border border-gray-200 shadow-lg max-h-60 overflow-auto"
+									className="absolute z-50 mt-1 w-full bg-white rounded border border-[#e0dcd3] shadow-lg max-h-60 overflow-auto"
 								>
-									<div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100 bg-gray-50">
+									<div className="px-3 py-2 text-xs text-[#9e968e] border-b border-[#f0ece0] bg-[#faf9f6]">
 										直接输入{" "}
 										<code className="bg-gray-200 px-1 rounded">
 											[[标题]]
@@ -769,18 +769,18 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 										格式更快
 									</div>
 									{relationSearchLoading ? (
-										<div className="px-4 py-2 text-sm text-gray-500">
+										<div className="px-4 py-2 text-sm text-[#9e968e]">
 											搜索中...
 										</div>
 									) : relationSearchResults.length === 0 ? (
-										<div className="px-4 py-2 text-sm text-gray-500">
+										<div className="px-4 py-2 text-sm text-[#9e968e]">
 											未找到相关页面，请尝试输入 [[页面标题]]
 										</div>
 									) : (
 										relationSearchResults.map((result, idx) => (
 											<div
 												key={result.id}
-												className={`px-4 py-2 cursor-pointer ${idx === relationSelectedIndex ? "bg-brand-primary/10" : "hover:bg-gray-50"}`}
+												className={`px-4 py-2 cursor-pointer ${idx === relationSelectedIndex ? "bg-[#c8951e]/10" : "hover:bg-[#faf9f6]"}`}
 												onClick={() => {
 													setNewRelation({
 														...newRelation,
@@ -792,11 +792,11 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 													setRelationSelectedIndex(idx)
 												}
 											>
-												<div className="text-sm font-medium text-brand-olive">
+												<div className="text-sm font-medium text-[#2c2c2c]">
 													{result.text}
 												</div>
-												<div className="text-xs text-gray-500 truncate flex items-center gap-2">
-													<span className="bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">
+												<div className="text-xs text-[#9e968e] truncate flex items-center gap-2">
+													<span className="bg-[#f7f5f0] px-1.5 py-0.5 rounded text-[10px]">
 														{result.id}
 													</span>
 													<span>{result.subtext}</span>
@@ -815,9 +815,9 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 							setNewRelation({ ...newRelation, label: e.target.value })
 						}
 						placeholder="显示名称 (可选)"
-						className="flex-1 px-4 py-2 bg-white rounded-xl border border-gray-200 text-sm"
+						className="flex-1 px-4 py-2 bg-white rounded border border-[#e0dcd3] text-sm"
 					/>
-					<label className="flex items-center gap-2 text-xs text-gray-500 whitespace-nowrap">
+					<label className="flex items-center gap-2 text-xs text-[#9e968e] whitespace-nowrap">
 						<input
 							type="checkbox"
 							checked={newRelation.bidirectional}

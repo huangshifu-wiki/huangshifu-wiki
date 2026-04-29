@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { getFitScale as getFitScaleUtil, computeNextScale } from '../utils/lightbox';
 
 interface LightboxImage {
   id: string;
@@ -13,178 +14,290 @@ interface LightboxProps {
   onClose: () => void;
 }
 
-const SWIPE_THRESHOLD_X = 30;
-const SWIPE_THRESHOLD_Y = 50;
+const MIN_PIXEL_SCALE = 0.05;
+const MAX_PIXEL_SCALE = 5;
+const ZOOM_RATIO = 0.1;
 
 export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
-  const [transitioning, setTransitioning] = useState(false);
+  const [pixelScale, setPixelScale] = useState(1);
+  const [translateX, setTranslateX] = useState(0);
+  const [translateY, setTranslateY] = useState(0);
+  const [isImageLoading, setIsImageLoading] = useState(true);
+  const [imageNaturalWidth, setImageNaturalWidth] = useState(0);
+  const [imageNaturalHeight, setImageNaturalHeight] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const triggerElementRef = useRef<HTMLElement | null>(null);
+  const lightboxStateKey = useRef<string | null>(null);
 
-  // Touch gesture state - use refs for touch tracking to avoid stale closures
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const touchDeltaRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
-  const [swipeOffsetX, setSwipeOffsetX] = useState(0);
-  const [snapBack, setSnapBack] = useState(false);
+  // Drag refs (avoid stale closures during high-frequency events)
+  const dragStartX = useRef(0);
+  const dragStartY = useRef(0);
+  const initialTranslateXRef = useRef(0);
+  const initialTranslateYRef = useRef(0);
+
+  // Pinch refs
+  const isPinching = useRef(false);
+  const initialPinchDistance = useRef(0);
+  const initialPinchScale = useRef(1);
 
   const activeImage = images[activeIndex];
-  const hasPrev = images.length > 1;
-  const hasNext = images.length > 1;
+  const currentImageUrl = activeImage?.url || '';
 
-  const handlePrev = useCallback(() => {
-    if (transitioning) return;
-    setTransitioning(true);
-    setActiveIndex((prev) => (prev - 1 + images.length) % images.length);
-    setTimeout(() => setTransitioning(false), 200);
-  }, [images.length, transitioning]);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
-  const handleNext = useCallback(() => {
-    if (transitioning) return;
-    setTransitioning(true);
-    setActiveIndex((prev) => (prev + 1) % images.length);
-    setTimeout(() => setTransitioning(false), 200);
-  }, [images.length, transitioning]);
+  const getFitScale = useCallback(() => {
+    return getFitScaleUtil(imageNaturalWidth, imageNaturalHeight, window.innerWidth, window.innerHeight);
+  }, [imageNaturalWidth, imageNaturalHeight]);
 
-  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    const touch = event.touches[0];
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-    touchDeltaRef.current = { dx: 0, dy: 0 };
-    setSnapBack(false);
-    setSwipeOffsetX(0);
+  const resetImageState = useCallback(() => {
+    setIsImageLoading(true);
+    setImageNaturalWidth(0);
+    setImageNaturalHeight(0);
+    setPixelScale(1);
+    setTranslateX(0);
+    setTranslateY(0);
+    setIsDragging(false);
   }, []);
 
-  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    if (!touchStartRef.current) return;
-
-    const touch = event.touches[0];
-    const dx = touch.clientX - touchStartRef.current.x;
-    const dy = touch.clientY - touchStartRef.current.y;
-
-    touchDeltaRef.current = { dx, dy };
-
-    // Only apply horizontal swipe gesture (ignore primarily vertical swipes)
-    if (Math.abs(dx) > Math.abs(dy)) {
-      event.preventDefault();
-      setSwipeOffsetX(dx);
+  const close = useCallback(() => {
+    if (lightboxStateKey.current) {
+      lightboxStateKey.current = null;
+      window.history.back();
     }
+    onCloseRef.current();
   }, []);
 
-  const handleTouchEnd = useCallback(() => {
-    const touchStart = touchStartRef.current;
-    const { dx, dy } = touchDeltaRef.current;
+  const prev = useCallback(() => {
+    if (images.length <= 1) return;
+    setActiveIndex((idx) => (idx - 1 + images.length) % images.length);
+    resetImageState();
+  }, [images.length, resetImageState]);
 
-    touchStartRef.current = null;
-    touchDeltaRef.current = { dx: 0, dy: 0 };
+  const next = useCallback(() => {
+    if (images.length <= 1) return;
+    setActiveIndex((idx) => (idx + 1) % images.length);
+    resetImageState();
+  }, [images.length, resetImageState]);
 
-    if (!touchStart) return;
+  const prevRef = useRef(prev);
+  prevRef.current = prev;
+  const nextRef = useRef(next);
+  nextRef.current = next;
+  const closeRef = useRef(close);
+  closeRef.current = close;
 
-    // Check if vertical swipe down threshold met (close lightbox)
-    if (dy > SWIPE_THRESHOLD_Y) {
-      onClose();
-      setSwipeOffsetX(0);
-      return;
-    }
-
-    // Check if horizontal swipe threshold met
-    if (Math.abs(dx) >= SWIPE_THRESHOLD_X) {
-      if (dx < 0) {
-        // Swipe left = next image
-        handleNext();
-      } else {
-        // Swipe right = prev image
-        handlePrev();
-      }
-      setSwipeOffsetX(0);
-      return;
-    }
-
-    // Snap back with animation if threshold not met
-    setSnapBack(true);
-    setTimeout(() => {
-      setSwipeOffsetX(0);
-      setSnapBack(false);
-    }, 200);
-  }, [onClose, handleNext, handlePrev]);
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      } else if (event.key === 'ArrowLeft' && hasPrev) {
-        handlePrev();
-      } else if (event.key === 'ArrowRight' && hasNext) {
-        handleNext();
-      } else if (event.key === 'Tab') {
-        const focusableElements = containerRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        );
-        if (!focusableElements || focusableElements.length === 0) return;
-
-        const firstElement = focusableElements[0];
-        const lastElement = focusableElements[focusableElements.length - 1];
-
-        if (event.shiftKey && document.activeElement === firstElement) {
-          event.preventDefault();
-          lastElement?.focus();
-        } else if (!event.shiftKey && document.activeElement === lastElement) {
-          event.preventDefault();
-          firstElement?.focus();
-        }
-      }
-    },
-    [onClose, handlePrev, handleNext, hasPrev, hasNext],
-  );
-
+  // Mount / unmount effects — run exactly once to avoid duplicate pushState
   useEffect(() => {
     triggerElementRef.current = document.activeElement as HTMLElement;
     closeButtonRef.current?.focus();
-    document.addEventListener('keydown', handleKeyDown);
     document.body.style.overflow = 'hidden';
+
+    const key = `lightbox-${Date.now()}`;
+    lightboxStateKey.current = key;
+    window.history.pushState({ [key]: true, lightboxOpen: true }, '', '');
+
+    const handlePopstate = (e: PopStateEvent) => {
+      if (lightboxStateKey.current && !e.state?.[lightboxStateKey.current]) {
+        lightboxStateKey.current = null;
+        onCloseRef.current();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          e.preventDefault();
+          prevRef.current();
+          break;
+        case 'ArrowRight':
+        case 'ArrowDown':
+          e.preventDefault();
+          nextRef.current();
+          break;
+        case 'Escape':
+          e.preventDefault();
+          closeRef.current();
+          break;
+        case 'Tab': {
+          const focusableElements = containerRef.current?.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          );
+          if (!focusableElements || focusableElements.length === 0) return;
+          const firstElement = focusableElements[0];
+          const lastElement = focusableElements[focusableElements.length - 1];
+          if (e.shiftKey && document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement?.focus();
+          } else if (!e.shiftKey && document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement?.focus();
+          }
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopstate);
+    document.addEventListener('keydown', handleKeyDown);
+
     return () => {
+      window.removeEventListener('popstate', handlePopstate);
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
       triggerElementRef.current?.focus();
     };
-  }, [handleKeyDown]);
+  }, []);
 
-  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
-      onClose();
-    }
+  // Wheel zoom
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    setPixelScale((scale) => computeNextScale(scale, e.deltaY < 0, ZOOM_RATIO, MIN_PIXEL_SCALE, MAX_PIXEL_SCALE));
+  }, []);
+
+  // Mouse drag
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    setIsDragging(true);
+    dragStartX.current = e.clientX;
+    dragStartY.current = e.clientY;
+    initialTranslateXRef.current = translateX;
+    initialTranslateYRef.current = translateY;
+  }, [translateX, translateY]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const deltaX = e.clientX - dragStartX.current;
+    const deltaY = e.clientY - dragStartY.current;
+    setTranslateX(initialTranslateXRef.current + deltaX);
+    setTranslateY(initialTranslateYRef.current + deltaY);
+  }, [isDragging]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Touch handling
+  const getPinchDistance = (touches: React.TouchList) => {
+    const touch0 = touches[0];
+    const touch1 = touches[1];
+    const dx = touch0.clientX - touch1.clientX;
+    const dy = touch0.clientY - touch1.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
   };
+
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLImageElement>) => {
+    if (e.touches.length === 2) {
+      isPinching.current = true;
+      initialPinchDistance.current = getPinchDistance(e.touches);
+      initialPinchScale.current = pixelScale;
+    } else if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      setIsDragging(true);
+      dragStartX.current = touch.clientX;
+      dragStartY.current = touch.clientY;
+      initialTranslateXRef.current = translateX;
+      initialTranslateYRef.current = translateY;
+    }
+  }, [pixelScale, translateX, translateY]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLImageElement>) => {
+    if (e.touches.length === 2 && isPinching.current) {
+      e.preventDefault();
+      const distance = getPinchDistance(e.touches);
+      const pinchScale = distance / initialPinchDistance.current;
+      setPixelScale(Math.min(MAX_PIXEL_SCALE, Math.max(MIN_PIXEL_SCALE, initialPinchScale.current * pinchScale)));
+    } else if (e.touches.length === 1 && isDragging) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - dragStartX.current;
+      const deltaY = touch.clientY - dragStartY.current;
+      setTranslateX(initialTranslateXRef.current + deltaX);
+      setTranslateY(initialTranslateYRef.current + deltaY);
+    }
+  }, [isDragging]);
+
+  const handleTouchEnd = useCallback(() => {
+    isPinching.current = false;
+    setIsDragging(false);
+  }, []);
+
+  const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setImageNaturalWidth(img.naturalWidth);
+    setImageNaturalHeight(img.naturalHeight);
+    setIsImageLoading(false);
+    const fit = getFitScaleUtil(img.naturalWidth, img.naturalHeight, window.innerWidth, window.innerHeight);
+    setPixelScale(fit);
+    setTranslateX(0);
+    setTranslateY(0);
+  }, []);
+
+  // Toolbar actions
+  const zoomIn = useCallback(() => {
+    setPixelScale((s) => computeNextScale(s, true, ZOOM_RATIO, MIN_PIXEL_SCALE, MAX_PIXEL_SCALE));
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setPixelScale((s) => computeNextScale(s, false, ZOOM_RATIO, MIN_PIXEL_SCALE, MAX_PIXEL_SCALE));
+  }, []);
+
+  const zoomToFit = useCallback(() => {
+    setPixelScale(getFitScale());
+    setTranslateX(0);
+    setTranslateY(0);
+  }, [getFitScale]);
+
+  const zoomToActual = useCallback(() => {
+    setPixelScale(1);
+    setTranslateX(0);
+    setTranslateY(0);
+  }, []);
+
+  const displayScale = isImageLoading ? null : Math.round(pixelScale * 100);
 
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-sm"
-      onClick={handleBackdropClick}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 select-none"
+      onWheel={handleWheel}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
     >
+      {/* Close button */}
       <button
         ref={closeButtonRef}
-        onClick={onClose}
-        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+        onClick={close}
+        className="absolute top-4 right-4 z-30 p-2 rounded bg-white/10 text-white hover:bg-white/20 transition-colors"
         aria-label="关闭"
       >
         <X size={24} />
       </button>
 
+      {/* Image counter */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/60 text-sm z-30">
+        {activeIndex + 1} / {images.length}
+      </div>
+
+      {/* Prev / Next buttons */}
       {images.length > 1 && (
         <>
           <button
-            onClick={handlePrev}
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-30"
+            onClick={prev}
+            className="absolute left-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded bg-white/10 text-white hover:bg-white/20 transition-colors"
             aria-label="上一张"
           >
             <ChevronLeft size={28} />
           </button>
           <button
-            onClick={handleNext}
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-30"
+            onClick={next}
+            className="absolute right-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded bg-white/10 text-white hover:bg-white/20 transition-colors"
             aria-label="下一张"
           >
             <ChevronRight size={28} />
@@ -192,28 +305,78 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
         </>
       )}
 
-      <div
-        className="max-w-[90vw] max-h-[90vh] flex items-center justify-center"
-        style={{
-          transform: swipeOffsetX !== 0 ? `translateX(${swipeOffsetX}px)` : undefined,
-          transition: snapBack ? 'transform 200ms ease-out' : undefined,
-          opacity: transitioning ? 0 : 1,
-        }}
-      >
+      {/* Backdrop click to close */}
+      <div className="absolute inset-0 z-0" onClick={close} />
+
+      {/* Image container */}
+      <div className="relative z-10 flex items-center justify-center pointer-events-none shrink-0">
         {activeImage && (
           <img
-            src={activeImage.url}
+            key={currentImageUrl}
+            src={currentImageUrl}
             alt={activeImage.name || ''}
-            className="max-w-full max-h-[90vh] object-contain"
-            style={{ userSelect: 'none' }}
+            className={[
+              'object-contain pointer-events-auto max-w-none max-h-none shrink-0',
+              isDragging ? 'cursor-grabbing' : 'cursor-grab',
+            ].join(' ')}
+            style={
+              isImageLoading
+                ? { visibility: 'hidden' }
+                : {
+                    width: `${imageNaturalWidth}px`,
+                    height: `${imageNaturalHeight}px`,
+                    transform: `scale(${pixelScale}) translate(${translateX / pixelScale}px, ${translateY / pixelScale}px)`,
+                  }
+            }
+            draggable={false}
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onLoad={onImageLoad}
           />
         )}
       </div>
 
-      <div className="absolute pb-safe bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3">
-        <span className="px-4 py-1.5 rounded-full bg-white/10 text-white text-sm font-medium">
-          {activeIndex + 1} / {images.length}
-        </span>
+      {/* Bottom toolbar */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/40 rounded px-4 py-2 z-30">
+        <button
+          onClick={zoomOut}
+          className="text-white/70 hover:text-white w-8 h-8 flex items-center justify-center transition-colors"
+          title="缩小"
+        >
+          <ZoomOut size={20} />
+        </button>
+
+        <div className="text-white/80 text-sm min-w-[60px] text-center font-mono">
+          {displayScale !== null ? `${displayScale}%` : '-'}
+        </div>
+
+        <button
+          onClick={zoomIn}
+          className="text-white/70 hover:text-white w-8 h-8 flex items-center justify-center transition-colors"
+          title="放大"
+        >
+          <ZoomIn size={20} />
+        </button>
+
+        <div className="w-px h-5 bg-white/20 mx-1" />
+
+        <button
+          onClick={zoomToActual}
+          className="text-white/70 hover:text-white px-2 h-8 flex items-center justify-center transition-colors text-sm font-medium"
+          title="实际大小 (1:1)"
+        >
+          1:1
+        </button>
+
+        <button
+          onClick={zoomToFit}
+          className="text-white/70 hover:text-white w-8 h-8 flex items-center justify-center transition-colors"
+          title="适应屏幕"
+        >
+          <Maximize size={18} />
+        </button>
       </div>
     </div>
   );

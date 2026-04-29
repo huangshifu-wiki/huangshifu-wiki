@@ -1,8 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Disc, X, Music as MusicIcon, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useMusic } from '../context/MusicContext';
-import { clsx } from 'clsx';
 import { formatTime } from '../lib/formatUtils';
 import { apiGet } from '../lib/apiClient';
 import type { MusicPlayUrlResponse } from '../types/api';
@@ -20,7 +19,6 @@ export const GlobalMusicPlayer = () => {
     currentTime: contextCurrentTime, duration: contextDuration, volume: contextVolume, isMuted: contextIsMuted,
     seekTo, setVolume: contextSetVolume, toggleMute: contextToggleMute, setDuration: contextSetDuration
   } = useMusic();
-  const [isExpanded, setIsExpanded] = useState(false);
   const [resolvedPlayUrl, setResolvedPlayUrl] = useState('');
   const [resolvingPlayUrl, setResolvingPlayUrl] = useState(false);
   const [playUrlError, setPlayUrlError] = useState('');
@@ -34,7 +32,6 @@ export const GlobalMusicPlayer = () => {
   const volumeHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const timeUpdateRef = useRef<number>(0);
-  const stallCheckRef = useRef<number>(0);
 
   useEffect(() => {
     const resolvePlayUrl = async () => {
@@ -257,211 +254,119 @@ export const GlobalMusicPlayer = () => {
   if (!currentSong) return null;
 
   return (
-    <motion.div 
-      initial={{ y: 100 }}
-      animate={{ y: 0 }}
-      className={clsx(
-        "fixed left-0 right-0 z-[60] bg-white/90 backdrop-blur-xl border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] transition-all duration-500",
-        isExpanded ? "bottom-0 h-auto" : "bottom-16 md:bottom-0 h-20"
-      )}
+    <div
+      className="fixed left-0 right-0 z-[200] bg-white/96 border-t border-[#e0dcd3]"
+      style={{ bottom: 0, backdropFilter: 'blur(16px)' }}
     >
-      <div className="max-w-7xl mx-auto px-4 h-full flex flex-col">
-        {/* Progress Bar (Mini) */}
-        {!isExpanded && (
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gray-100">
-            <input
-              type="range"
-              min="0"
-              max={contextDuration || 0}
-              value={contextCurrentTime}
-              onChange={handleProgressChange}
-              disabled={!contextDuration || resolvingPlayUrl}
-              className="absolute top-0 left-0 w-full h-1 appearance-none cursor-pointer accent-[#FFD700] bg-transparent"
-            />
-            <motion.div
-              className="h-full bg-brand-primary pointer-events-none"
-              initial={{ width: 0 }}
-              animate={{ width: `${contextDuration > 0 ? (contextCurrentTime / contextDuration) * 100 : 0}%` }}
-            />
-          </div>
-        )}
+      {/* Progress bar */}
+      <div className="absolute top-[-1px] left-0 right-0 h-[2px] bg-[#ebe8e0] cursor-pointer">
+        <input
+          type="range"
+          min="0"
+          max={contextDuration || 0}
+          value={contextCurrentTime}
+          onChange={handleProgressChange}
+          disabled={!contextDuration || resolvingPlayUrl}
+          className="absolute top-0 left-0 w-full h-[2px] appearance-none cursor-pointer bg-transparent"
+          style={{ accentColor: '#c8951e' }}
+        />
+        <div
+          className="h-full bg-[#c8951e] pointer-events-none"
+          style={{ width: `${contextDuration > 0 ? (contextCurrentTime / contextDuration) * 100 : 0}%`, transition: 'width 0.3s linear' }}
+        />
+      </div>
 
-        <div className="flex items-center justify-between h-20">
-          <div className="flex items-center gap-4 flex-1 min-w-0">
-            <div className="relative group cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
-              <motion.div 
-                animate={{ rotate: isPlaying ? 360 : 0 }}
-                transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-                className="w-12 h-12 rounded-full border-2 border-gray-900 overflow-hidden shadow-lg"
-              >
-                <img src={currentSong.cover} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-              </motion.div>
-              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-full transition-opacity">
-                {isExpanded ? <ChevronDown size={16} className="text-white" /> : <ChevronUp size={16} className="text-white" />}
-              </div>
-            </div>
-            <div className="min-w-0">
-              <h4 className="font-bold text-gray-900 truncate">{currentSong.title}</h4>
-              <p className="text-xs text-gray-400 truncate">{currentSong.artist}</p>
-              {audioStats.isStalling && (
-                <p className="text-xs text-amber-500 animate-pulse">缓冲中...</p>
-              )}
-              {!audioStats.isStalling && audioStats.bufferHealth < 3 && audioStats.bufferHealth > 0 && (
-                <p className="text-xs text-gray-400">缓冲: {audioStats.bufferHealth.toFixed(1)}s</p>
-              )}
-            </div>
-          </div>
+      <div className="max-w-[1100px] mx-auto px-6 flex items-center gap-4" style={{ padding: '10px 24px' }}>
+        {/* Cover */}
+        <img
+          src={currentSong.cover}
+          alt=""
+          className="w-11 h-11 rounded object-cover flex-shrink-0 bg-[#f0ece3]"
+          referrerPolicy="no-referrer"
+        />
 
-          <div className="flex items-center gap-6">
-            <div className="hidden md:flex items-center gap-4">
-              <button onClick={handlePlayPrevious} className="text-gray-400 hover:text-gray-900 transition-colors">
-                <SkipBack size={20} />
-              </button>
-              <button 
-                onClick={togglePlay}
-                className="w-10 h-10 bg-gray-900 text-white rounded-full flex items-center justify-center hover:scale-105 transition-all shadow-md"
-              >
-                {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
-              </button>
-              <button onClick={handlePlayNext} className="text-gray-400 hover:text-gray-900 transition-colors">
-                <SkipForward size={20} />
-              </button>
-            </div>
-            
-            {/* Mobile Play Button */}
-            <button 
-              onClick={togglePlay}
-              className="md:hidden w-10 h-10 bg-gray-900 text-white rounded-full flex items-center justify-center"
-            >
-              {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
-            </button>
-
-            <div className="hidden lg:flex items-center gap-2 text-xs font-bold text-gray-400 w-24 justify-end">
-              <span>{formatTime(contextCurrentTime)}</span>
-              <span>/</span>
-              <span>{formatTime(contextDuration)}</span>
-            </div>
-
-            <div 
-              className="relative hidden md:block"
-              onMouseEnter={handleVolumeMouseEnter}
-              onMouseLeave={handleVolumeMouseLeave}
-            >
-              <button
-                onClick={contextToggleMute}
-                className="p-2 text-gray-400 hover:text-gray-900 transition-colors"
-              >
-                <Volume2 size={20} />
-              </button>
-              <AnimatePresence>
-                {volumeSliderExpanded && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-white rounded-xl shadow-lg border border-gray-100 flex items-center gap-2 lg:flex"
-                  >
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={contextIsMuted ? 0 : contextVolume}
-                      onChange={(e) => contextSetVolume(parseFloat(e.target.value))}
-                      className="w-20 h-1 bg-gray-100 rounded-full appearance-none cursor-pointer accent-[#FFD700]"
-                    />
-                    <span className="text-xs text-gray-400 w-6 text-right">
-                      {Math.round((contextIsMuted ? 0 : contextVolume) * 100)}
-                    </span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <button 
-              onClick={() => setCurrentSong(null)}
-              className="p-2 text-gray-300 hover:text-red-500 transition-colors"
-            >
-              <X size={20} />
-            </button>
-          </div>
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <p className="text-[0.875rem] font-semibold text-[#2c2c2c] truncate tracking-wide">{currentSong.title}</p>
+          <p className="text-xs text-[#9e968e] truncate mt-0.5">{currentSong.artist}</p>
+          {audioStats.isStalling && (
+            <p className="text-[0.7rem] text-amber-600 animate-pulse">缓冲中...</p>
+          )}
         </div>
 
-        <AnimatePresence>
-          {isExpanded && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="pb-8 pt-4 border-t border-gray-50"
-            >
-              <div className="flex flex-col md:flex-row gap-8 items-center">
-                <div className="w-32 sm:w-40 md:w-48 h-32 sm:h-40 md:h-48 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl flex-shrink-0">
-                  <img src={currentSong.cover} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                </div>
-                <div className="flex-grow w-full">
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-2 sm:gap-4 mb-4">
-                    <div className="min-w-0">
-                      <h3 className="text-xl sm:text-2xl font-serif font-bold text-gray-900 truncate">{currentSong.title}</h3>
-                      <p className="text-sm sm:text-base text-brand-primary font-bold truncate">{currentSong.artist} — {currentSong.album}</p>
-                    </div>
-                    <div className="text-xs sm:text-sm font-bold text-gray-400 whitespace-nowrap">
-                      {formatTime(contextCurrentTime)} / {formatTime(contextDuration)}
-                    </div>
-                  </div>
-                  
-                  <input 
-                    type="range"
-                    min="0"
-                    max={contextDuration || 0}
-                    value={contextCurrentTime}
-                    onChange={handleProgressChange}
-                    disabled={!contextDuration || resolvingPlayUrl}
-                    className="w-full h-1.5 bg-gray-100 rounded-full appearance-none cursor-pointer accent-[#FFD700] mb-6"
-                  />
+        {/* Controls */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button
+            onClick={handlePlayPrevious}
+            className="p-1.5 text-[#6b6560] hover:text-[#c8951e] hover:bg-[#f0ece3] rounded-full transition-all"
+          >
+            <SkipBack size={18} />
+          </button>
+          <button
+            onClick={togglePlay}
+            className="w-9 h-9 bg-[#c8951e] text-white rounded-full flex items-center justify-center hover:bg-[#dca828] transition-all"
+          >
+            {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
+          </button>
+          <button
+            onClick={handlePlayNext}
+            className="p-1.5 text-[#6b6560] hover:text-[#c8951e] hover:bg-[#f0ece3] rounded-full transition-all"
+          >
+            <SkipForward size={18} />
+          </button>
+        </div>
 
-                  {playUrlError ? (
-                    <p className="text-xs text-amber-600 mt-2">{playUrlError}</p>
-                  ) : null}
+        {/* Time */}
+        <div className="hidden md:flex items-center gap-1 text-xs text-[#9e968e] w-20 justify-end flex-shrink-0">
+          <span>{formatTime(contextCurrentTime)}</span>
+          <span>/</span>
+          <span>{formatTime(contextDuration)}</span>
+        </div>
 
-                  <div className="flex items-center justify-center sm:justify-start gap-6 sm:gap-8">
-                    <button onClick={handlePlayPrevious} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
-                      <SkipBack size={24} className="sm:w-7 sm:h-7" />
-                    </button>
-                    <button 
-                      onClick={togglePlay}
-                      className="w-14 h-14 sm:w-16 sm:h-16 bg-gray-900 text-white rounded-full flex items-center justify-center hover:scale-105 transition-all shadow-xl"
-                    >
-                      {isPlaying ? <Pause size={28} className="sm:w-8 sm:h-8" /> : <Play size={28} className="sm:w-8 sm:h-8 ml-0.5" />}
-                    </button>
-                    <button onClick={handlePlayNext} className="p-2 text-gray-400 hover:text-gray-900 transition-colors">
-                      <SkipForward size={24} className="sm:w-7 sm:h-7" />
-                    </button>
-                  </div>
+        {/* Volume */}
+        <div
+          className="relative hidden md:block flex-shrink-0"
+          onMouseEnter={handleVolumeMouseEnter}
+          onMouseLeave={handleVolumeMouseLeave}
+        >
+          <button
+            onClick={contextToggleMute}
+            className="p-1.5 text-[#6b6560] hover:text-[#c8951e] hover:bg-[#f0ece3] rounded-full transition-all"
+          >
+            <Volume2 size={18} />
+          </button>
+          <AnimatePresence>
+            {volumeSliderExpanded && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 6 }}
+                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-white rounded border border-[#e0dcd3] flex items-center gap-2"
+              >
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={contextIsMuted ? 0 : contextVolume}
+                  onChange={(e) => contextSetVolume(parseFloat(e.target.value))}
+                  className="w-20 h-1 bg-[#ebe8e0] rounded-full appearance-none cursor-pointer"
+                  style={{ accentColor: '#c8951e' }}
+                />
+                <span className="text-xs text-[#9e968e] w-6 text-right">
+                  {Math.round((contextIsMuted ? 0 : contextVolume) * 100)}
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-                  <div className="flex items-center gap-2 sm:gap-4 mt-4">
-                    <button
-                      onClick={contextToggleMute}
-                      className="text-gray-400 hover:text-gray-900 transition-colors p-1 sm:p-0"
-                    >
-                      <Volume2 size={18} className="sm:w-5 sm:h-5" />
-                    </button>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={contextIsMuted ? 0 : contextVolume}
-                      onChange={(e) => contextSetVolume(parseFloat(e.target.value))}
-                      className="flex-grow h-1 bg-gray-100 rounded-full appearance-none cursor-pointer accent-[#FFD700]"
-                    />
-                    <span className="text-xs text-gray-400 w-8 hidden sm:inline">{Math.round((contextIsMuted ? 0 : contextVolume) * 100)}%</span>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <button
+          onClick={() => setCurrentSong(null)}
+          className="p-1.5 text-[#9e968e] hover:text-red-500 hover:bg-[#f0ece3] rounded-full transition-all flex-shrink-0"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       <audio
@@ -476,6 +381,6 @@ export const GlobalMusicPlayer = () => {
         onError={onError}
         onEnded={playNext}
       />
-    </motion.div>
+    </div>
   );
 };

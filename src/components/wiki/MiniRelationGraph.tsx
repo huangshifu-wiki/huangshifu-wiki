@@ -220,26 +220,26 @@ const MiniRelationGraph: React.FC<MiniRelationGraphProps> = ({
 	};
 
 	return (
-		<div className="relative rounded-2xl border border-gray-200 bg-gray-50 overflow-hidden">
+		<div className="relative rounded border border-[#e0dcd3] bg-[#faf9f6] overflow-hidden">
 			{/* 控制按钮 */}
 			<div className="absolute top-3 right-3 z-10 flex gap-2">
 				<button
 					onClick={handleZoomOut}
-					className="p-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-all text-gray-600 hover:text-brand-olive"
+					className="p-2 bg-white rounded transition-all text-[#6b6560] hover:text-[#c8951e]"
 					title="缩小"
 				>
 					<ZoomOut size={16} />
 				</button>
 				<button
 					onClick={handleZoomIn}
-					className="p-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-all text-gray-600 hover:text-brand-olive"
+					className="p-2 bg-white rounded transition-all text-[#6b6560] hover:text-[#c8951e]"
 					title="放大"
 				>
 					<ZoomIn size={16} />
 				</button>
 				<button
 					onClick={handleReset}
-					className="p-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-all text-gray-600 hover:text-brand-olive"
+					className="p-2 bg-white rounded transition-all text-[#6b6560] hover:text-[#c8951e]"
 					title="重置"
 				>
 					<Maximize size={16} />
@@ -373,20 +373,20 @@ const MiniRelationGraph: React.FC<MiniRelationGraphProps> = ({
 					return (
 						<div
 							key={type}
-							className="flex items-center gap-1.5 px-2 py-1 bg-white/90 rounded-lg text-[10px]"
+							className="flex items-center gap-1.5 px-2 py-1 bg-white/90 rounded text-[10px]"
 						>
 							<div
 								className="w-2 h-2 rounded-full"
 								style={{ backgroundColor: color }}
 							/>
-							<span className="text-gray-600">{label}</span>
+							<span className="text-[#6b6560]">{label}</span>
 						</div>
 					);
 				})}
 			</div>
 
 			{/* 统计信息 */}
-			<div className="absolute bottom-3 right-3 z-10 px-3 py-2 bg-white/90 rounded-lg text-[10px] text-gray-600">
+			<div className="absolute bottom-3 right-3 z-10 px-3 py-2 bg-white/90 rounded text-[10px] text-[#6b6560]">
 								<span className="font-bold">{nodes.length}</span> 个节点 ·{" "}
 								<span className="font-bold">{edges.length}</span> 条关联
 			</div>

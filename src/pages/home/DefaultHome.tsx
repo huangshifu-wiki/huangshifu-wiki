@@ -1,31 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
   Book,
   MessageSquare,
   Music,
+  Image,
   Calendar,
   ArrowRight,
+  Disc3,
+  Library,
   Clock,
-  Heart,
-  Flame,
+  MapPin,
 } from 'lucide-react';
-import { format } from 'date-fns';
 import { apiGet } from '../../lib/apiClient';
-import { toDateValue } from '../../lib/dateUtils';
-import { useTheme } from '../../context/ThemeContext';
-import { withThemeSearch } from '../../lib/theme';
-import GlassCard from '../../components/GlassCard';
-import { AnimatedStat } from '../../components/home/AnimatedStat';
-import { CategoryCard } from '../../components/home/CategoryCard';
-import { HomeSkeleton } from '../../components/HomeSkeleton';
 import type { HomeFeedResponse } from '../../types/home';
 
 export const DefaultHome = () => {
-  const { theme } = useTheme();
-  const [feed, setFeed] = useState<HomeFeedResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [, setFeed] = useState<HomeFeedResponse | null>(null);
 
   useEffect(() => {
     const fetchFeed = async () => {
@@ -35,264 +26,175 @@ export const DefaultHome = () => {
       } catch (e) {
         console.error('Error fetching home feed:', e);
       }
-      setLoading(false);
     };
     fetchFeed();
   }, []);
 
-  if (loading) {
-    return <HomeSkeleton />;
-  }
+  const navCards = [
+    { title: '百科', icon: <Book size={18} />, link: '/wiki' },
+    { title: '论坛', icon: <MessageSquare size={18} />, link: '/forum' },
+    { title: '图集', icon: <Image size={18} />, link: '/gallery' },
+    { title: '音乐', icon: <Music size={18} />, link: '/music' },
+    { title: '活动', icon: <Calendar size={18} />, link: '/wiki?category=event' },
+  ];
+
+  const quickLinks = [
+    { title: '时间轴', link: '/wiki/timeline', icon: <Clock size={16} /> },
+    { title: '年表', link: '/wiki?category=timeline', icon: <Calendar size={16} /> },
+    { title: '地图', link: '/wiki', icon: <MapPin size={16} /> },
+  ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      {/* Hero Section - ywj 风格大字体 */}
-      <section className="relative h-[70vh] min-h-[500px] rounded-[40px] overflow-hidden mb-12 shadow-2xl">
-        <div className="absolute inset-0 bg-gradient-to-br from-brand-primary/35 via-white/20 to-black/30" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-12 sm:p-20">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
+    <div
+      className="min-h-[calc(100vh-60px)]"
+      style={{
+        backgroundColor: '#f7f5f0',
+        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+        lineHeight: 1.8,
+      }}
+    >
+      <style>{`
+        .home-page ::selection {
+          background-color: #fdf5d8;
+          color: #c8951e;
+        }
+      `}</style>
+
+      <div className="max-w-[1100px] mx-auto px-6 py-12 pb-32 home-page">
+        {/* Hero */}
+        <header className="mb-16 text-center">
+          <h1
+            className="text-[3.5rem] sm:text-[5rem] font-bold tracking-[0.15em] text-[#2c2c2c] mb-4"
+            style={{ fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
           >
-            <h1 className="text-white text-display sm:text-[100px] font-serif font-bold mb-6 leading-tight">
-              黄诗扶{' '}
-              <span className="text-2xl sm:text-3xl font-normal english-text opacity-80 block sm:inline ml-0 sm:ml-4">
-                Huang Shifu
-              </span>
-            </h1>
-            <p className="text-white/80 text-xl font-serif italic max-w-2xl mb-10 leading-relaxed">
-              "以诗入乐，以乐咏诗。在这里，探索关于黄诗扶的一切。"
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <Link
-                to={withThemeSearch('/wiki', theme)}
-                className="px-8 py-4 bg-brand-primary text-gray-900 rounded-full font-bold hover:scale-105 transition-all flex items-center gap-2 shadow-lg"
-              >
-                进入百科 <ArrowRight size={20} />
-              </Link>
-              <Link
-                to={withThemeSearch('/forum', theme)}
-                className="px-8 py-4 bg-white/10 backdrop-blur-md border border-white/30 text-white rounded-full font-medium hover:bg-white/20 transition-all"
-              >
-                参与社区讨论
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-      </section>
+            黄诗扶
+          </h1>
+          <p className="text-[#9e968e] text-lg sm:text-xl italic tracking-[0.1em] mb-10">
+            人生难得一知音
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to='/wiki'
+              className="px-6 py-2.5 bg-[#c8951e] text-white text-[0.9375rem] rounded hover:bg-[#dca828] transition-all flex items-center gap-2"
+            >
+              <Library size={16} /> 进入百科
+            </Link>
+            <Link
+              to='/music'
+              className="px-6 py-2.5 border border-[#e0dcd3] text-[#6b6560] text-[0.9375rem] rounded hover:text-[#c8951e] hover:border-[#c8951e] transition-all flex items-center gap-2"
+            >
+              <Music size={16} /> 曲库
+            </Link>
+          </div>
+        </header>
 
-      {/* Bento Grid Layout */}
-      <section className="bento-grid mb-16">
-        {/* 百科全书 */}
-        <motion.div
-          className="bento-item-large"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <GlassCard className="w-full p-6 sm:p-8">
-            <div className="flex justify-between items-end mb-8">
-              <div>
-                <h2 className="text-4xl font-serif font-bold text-gray-900 mb-2">百科全书</h2>
-                <p className="text-gray-500 italic">Wiki Encyclopedia</p>
-              </div>
+        {/* Nav Cards */}
+        <section className="mb-12">
+          <div className="flex items-end justify-between border-b border-[#e0dcd3] mb-6">
+            <h2 className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]">
+              内容
+            </h2>
+            <Link
+              to='/wiki'
+              className="text-[0.8125rem] text-[#c8951e] font-medium hover:text-[#dca828] transition-colors flex items-center gap-1 pb-2"
+            >
+              查看全部 <ArrowRight size={14} />
+            </Link>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+            {navCards.map((card) => (
               <Link
-                to={withThemeSearch('/wiki', theme)}
-                className="text-brand-primary font-bold flex items-center gap-1 hover:underline"
+                key={card.title}
+                to={card.link}
+                className="px-3 py-2.5 bg-white border border-[#e0dcd3] rounded hover:border-[#c8951e] transition-all group"
               >
-                查看全部 <ArrowRight size={16} />
-              </Link>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {[
-                {
-                  title: '人物介绍',
-                  icon: <Book size={32} />,
-                  desc: '生平经历、艺术风格与成就',
-                  link: '/wiki?category=biography',
-                },
-                {
-                  title: '音乐作品',
-                  icon: <Music size={32} />,
-                  desc: '原创、翻唱及合作曲目全收录',
-                  link: '/music',
-                },
-                {
-                  title: '专辑一览',
-                  icon: <Book size={32} />,
-                  desc: '历年发行专辑与EP详情',
-                  link: '/wiki?category=album',
-                },
-                {
-                  title: '活动记录',
-                  icon: <Calendar size={32} />,
-                  desc: '演出、直播与线下活动时间线',
-                  link: '/wiki?category=event',
-                },
-              ].map((cat) => (
-                <CategoryCard key={cat.title} cat={cat} theme={theme} />
-              ))}
-            </div>
-          </GlassCard>
-        </motion.div>
-
-        {/* 热门帖子 */}
-        {feed?.hotPosts && feed.hotPosts.length > 0 && (
-          <motion.div
-            className="bento-item-tall"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
-            <GlassCard className="w-full p-6 sm:p-8 flex flex-col h-full">
-              <div className="flex justify-between items-end mb-6">
-                <h2 className="text-2xl font-serif font-bold text-gray-900 flex items-center gap-2">
-                  <Flame size={20} className="text-orange-500" /> 热门帖子
-                </h2>
-                <Link
-                  to={withThemeSearch('/forum?sort=hot', theme)}
-                  className="text-brand-primary font-bold text-sm hover:underline"
-                >
-                  查看更多
-                </Link>
-              </div>
-              <div className="space-y-4 flex-grow">
-                {feed.hotPosts.slice(0, 4).map((post) => (
-                  <Link
-                    key={post.id}
-                    to={withThemeSearch(`/forum/${post.id}`, theme)}
-                    className="block p-4 rounded-2xl bg-brand-primary/5 border border-brand-primary/10 hover:border-brand-primary/30 transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="px-2 py-1 bg-brand-primary/20 text-brand-primary text-[10px] font-bold uppercase tracking-wider rounded">
-                        {post.section === 'music'
-                          ? '音乐讨论'
-                          : post.section === 'news'
-                            ? '动态资讯'
-                            : post.section === 'fanart'
-                              ? '二创交流'
-                              : '问答区'}
-                      </span>
-                    </div>
-                    <h4 className="text-base font-serif font-bold mb-2 group-hover:text-brand-primary transition-colors line-clamp-2">
-                      {post.title}
-                    </h4>
-                    <div className="flex items-center gap-4 text-gray-400 text-sm">
-                      <span className="flex items-center gap-1">
-                        <MessageSquare size={14} /> {post.commentsCount || 0}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Heart size={14} /> {post.likesCount || 0}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </GlassCard>
-          </motion.div>
-        )}
-
-        {/* 社区动态 */}
-        <motion.div
-          className="bento-item-large"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        >
-          <GlassCard className="w-full p-6 sm:p-8">
-            <div className="flex justify-between items-end mb-6">
-              <h2 className="text-3xl font-serif font-bold text-gray-900">社区动态</h2>
-              <Link
-                to={withThemeSearch('/forum', theme)}
-                className="text-brand-primary font-bold text-sm hover:underline"
-              >
-                更多讨论
-              </Link>
-            </div>
-            <div className="space-y-4">
-              {loading ? (
-                [1, 2, 3].map((i) => (
-                  <div key={i} className="h-20 bg-gray-100 rounded-2xl animate-pulse"></div>
-                ))
-              ) : (feed?.recentPosts?.length ?? 0) > 0 ? (
-                feed!.recentPosts.slice(0, 3).map((post) => (
-                  <Link
-                    key={post.id}
-                    to={withThemeSearch(`/forum/${post.id}`, theme)}
-                    className="block p-4 rounded-2xl bg-white border border-gray-100 hover:border-brand-primary/20 transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="px-2 py-1 bg-brand-primary/10 text-brand-primary text-[10px] font-bold uppercase tracking-wider rounded">
-                        {post.section === 'music'
-                          ? '音乐讨论'
-                          : post.section === 'news'
-                            ? '动态资讯'
-                            : post.section === 'fanart'
-                              ? '二创交流'
-                              : '问答区'}
-                      </span>
-                      <span className="text-gray-400 text-xs flex items-center gap-1">
-                        <Clock size={12} />
-                        {toDateValue(post.updatedAt)
-                          ? format(toDateValue(post.updatedAt)!, 'MM-dd HH:mm')
-                          : '刚刚'}
-                      </span>
-                    </div>
-                    <h4 className="text-lg font-serif font-bold mb-2 group-hover:text-brand-primary transition-colors">
-                      {post.title}
-                    </h4>
-                    <div className="flex items-center gap-4 text-gray-400 text-sm">
-                      <span className="flex items-center gap-1">
-                        <MessageSquare size={14} /> {post.commentsCount || 0}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Heart size={14} /> {post.likesCount || 0}
-                      </span>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <div className="bg-white p-8 rounded-2xl border border-gray-100 text-center italic text-gray-400">
-                  暂无社区动态
+                <div className="flex items-center gap-2 text-[#c8951e]">
+                  {card.icon}
+                  <span className="font-medium text-[#2c2c2c] group-hover:text-[#c8951e] transition-colors">
+                    {card.title}
+                  </span>
                 </div>
-              )}
-            </div>
-          </GlassCard>
-        </motion.div>
+              </Link>
+            ))}
+          </div>
+        </section>
 
-        {/* 加入我们 */}
-        <motion.div
-          className="bento-item-tall"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-        >
-          <GlassCard className="w-full p-6 sm:p-8 text-gray-900 bg-gradient-to-br from-brand-primary to-brand-primary/80">
-            <div className="mb-8">
-              <h2 className="text-3xl font-serif font-bold mb-4">加入我们</h2>
-              <p className="text-gray-800/70 font-serif italic leading-relaxed">
-                "诗扶小筑是一个由粉丝自发维护的社区。无论你是资深乐迷，还是刚被圈粉的新人，这里都有你的位置。"
+        {/* Intro + Quick Links */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 mb-12">
+          <section>
+            <div className="flex items-end justify-between border-b border-[#e0dcd3] mb-5">
+              <h2 className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]">
+                关于
+              </h2>
+            </div>
+            <div className="p-5 bg-white border border-[#e0dcd3] rounded">
+              <p className="text-[#6b6560] leading-[1.9] text-[0.9375rem] mb-4">
+                黄诗扶，古风音乐人、歌手。毕业于英国布里斯托大学，代表作有《吹梦到西洲》《人间不值得》《九万字》等。
+                本百科旨在系统整理与黄诗扶相关的音乐作品、人物资料、活动记录与时间线，方便知音查阅。
+              </p>
+              <p className="text-[#6b6560] leading-[1.9] text-[0.9375rem]">
+                百科内容开放编辑，欢迎补充资料、修正错误。所有修改均经过审核后发布，以确保信息的准确性。
               </p>
             </div>
-            <div className="space-y-4">
-              <AnimatedStat value={1240} suffix="+" label="收录曲目" icon={<Music size={20} />} />
-              <AnimatedStat
-                value={5600}
-                suffix="+"
-                label="社区成员"
-                icon={<MessageSquare size={20} />}
-              />
-              <Link
-                to={withThemeSearch('/forum', theme)}
-                className="mt-4 px-6 py-3 bg-white text-brand-primary rounded-full font-bold hover:bg-white/90 transition-all text-center block"
-              >
-                立即加入
-              </Link>
+          </section>
+
+          <aside>
+            <div className="flex items-end justify-between border-b border-[#e0dcd3] mb-5">
+              <h2 className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]">
+                快速导航
+              </h2>
             </div>
-          </GlassCard>
-        </motion.div>
-      </section>
+            <div className="flex flex-col gap-2">
+              {quickLinks.map((item) => (
+                <Link
+                  key={item.title}
+                  to={item.link}
+                  className="flex items-center gap-3 p-3 bg-white border border-[#e0dcd3] rounded hover:border-[#c8951e] transition-all group"
+                >
+                  <span className="text-[#c8951e]">{item.icon}</span>
+                  <p className="text-sm font-medium text-[#2c2c2c] group-hover:text-[#c8951e] transition-colors">
+                    {item.title}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </aside>
+        </div>
+
+        {/* Stats */}
+        <section className="border-t border-[#e0dcd3] pt-8">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-1 text-[#c8951e]">
+                <Music size={18} />
+                <span className="text-2xl font-semibold text-[#2c2c2c]">1,240+</span>
+              </div>
+              <p className="text-xs text-[#9e968e] tracking-wider">收录曲目</p>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-1 text-[#c8951e]">
+                <Book size={18} />
+                <span className="text-2xl font-semibold text-[#2c2c2c]">200+</span>
+              </div>
+              <p className="text-xs text-[#9e968e] tracking-wider">百科词条</p>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-1 text-[#c8951e]">
+                <Disc3 size={18} />
+                <span className="text-2xl font-semibold text-[#2c2c2c]">30+</span>
+              </div>
+              <p className="text-xs text-[#9e968e] tracking-wider">专辑与 EP</p>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-1 text-[#c8951e]">
+                <Calendar size={18} />
+                <span className="text-2xl font-semibold text-[#2c2c2c]">100+</span>
+              </div>
+              <p className="text-xs text-[#9e968e] tracking-wider">活动记录</p>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   );
 };

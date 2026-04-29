@@ -2,22 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { getI18n } from '../../src/lib/i18n';
 
 describe('getI18n', () => {
-  describe('theme selection', () => {
-    it('returns t function for default theme', () => {
-      const { t } = getI18n('default');
+  describe('locale retrieval', () => {
+    it('returns t function', () => {
+      const { t } = getI18n();
       expect(typeof t).toBe('function');
     });
 
-    it('returns t function for academy theme', () => {
-      const { t } = getI18n('academy');
-      expect(typeof t).toBe('function');
-    });
-
-    it('falls back to defaultLocale for unknown theme', () => {
-      const unknownTheme = getI18n('unknown_theme');
+    it('ignores theme parameter and always returns default locale', () => {
       const defaultTheme = getI18n('default');
+      const academyTheme = getI18n('academy');
+      const unknownTheme = getI18n('unknown');
 
-      expect(unknownTheme.t('nav.home')).toBe(defaultTheme.t('nav.home'));
+      expect(defaultTheme.t('nav.home')).toBe(academyTheme.t('nav.home'));
+      expect(academyTheme.t('nav.home')).toBe(unknownTheme.t('nav.home'));
     });
   });
 
@@ -35,11 +32,6 @@ describe('getI18n', () => {
     it('retrieves deeply nested values', () => {
       const { t } = getI18n('default');
       expect(t('home.hero.title')).toBe('欢迎来到黄诗扶wiki');
-    });
-
-    it('retrieves deeply nested values with academy theme', () => {
-      const { t } = getI18n('academy');
-      expect(t('home.hero.title')).toBe('欢迎来到从前书院');
     });
 
     it('returns the key itself if not found', () => {
@@ -77,26 +69,6 @@ describe('getI18n', () => {
     it('handles missing params object gracefully', () => {
       const { t } = getI18n('default');
       expect(t('music.selectedCount')).toBe('已选择 {{count}} 首歌曲');
-    });
-  });
-
-  describe('theme-specific translations', () => {
-    it('returns academy-specific translation', () => {
-      const { t } = getI18n('academy');
-      expect(t('nav.home')).toBe('书院大堂');
-    });
-
-    it('returns default theme translation', () => {
-      const { t } = getI18n('default');
-      expect(t('nav.home')).toBe('首页');
-    });
-
-    it('returns different translations for same key between themes', () => {
-      const defaultTheme = getI18n('default');
-      const academyTheme = getI18n('academy');
-
-      expect(defaultTheme.t('app.title')).toBe('黄诗扶wiki');
-      expect(academyTheme.t('app.title')).toBe('从前书院 · 黄诗扶生日特别版');
     });
   });
 });

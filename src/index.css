@@ -53,64 +53,11 @@
   --hover-scale: 0.95;
 
   /* 超大字体排版 */
-  --text-display: 4.5rem;
-  --text-hero: 3rem;
-  --text-section: 2rem;
-
-  --radius-xs: 0.25rem;
-  --radius-sm: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.5rem;
-  --radius-2xl: 2rem;
-  --radius-3xl: 2.5rem;
-  --radius-full: 9999px;
-
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.10);
-  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.12);
-  --shadow-2xl: 0 24px 64px rgba(0, 0, 0, 0.16);
-  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.06);
-  
-  --space-xs: 0.25rem;
-  --space-sm: 0.5rem;
-  --space-md: 1rem;
-  --space-lg: 1.5rem;
-  --space-xl: 2rem;
-  --space-2xl: 3rem;
-  --space-3xl: 4rem;
-
-  --transition-fast: 150ms ease;
-  --transition-base: 200ms ease;
-  --transition-slow: 300ms ease;
-  --transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 :root,
 [data-theme="default"] {
   color-scheme: light;
-}
-
-[data-theme="academy"] {
-  --color-brand-primary: #7B4B3A;
-  --color-brand-olive: #5D4037;
-  --color-brand-cream: #F5F1E8;
-  --color-brand-paper: #FFFDF8;
-  --color-theme-bg: #F5F1E8;
-  --color-theme-text: #2C1810;
-  --color-theme-muted: #6B5B4F;
-  --color-theme-surface: #FFFDF8;
-  --color-theme-surface-alt: #EFE7DA;
-  --color-theme-border: #D6C9B8;
-  --color-theme-accent: #5D4037;
-  --color-theme-accent-strong: #2C1810;
-  --font-theme-main: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
-  --font-theme-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
-  --radius-theme-card: 0.25rem;
-  --shadow-theme-card: 0 0 0 1px var(--color-theme-border);
-  --theme-header-image: linear-gradient(135deg, rgba(93, 64, 55, 0.18), rgba(245, 241, 232, 0.85));
 }
 
 @layer base {
@@ -147,108 +94,24 @@
   }
 }
 
-[data-theme="academy"] body {
-  background-image: linear-gradient(rgba(245, 241, 232, 0.85), rgba(245, 241, 232, 0.95));
-}
 
-[data-theme="academy"] .academy-nav-shell {
-  background: color-mix(in srgb, var(--color-theme-surface) 88%, #ffffff 12%);
-  border-bottom-color: var(--color-theme-border);
-  box-shadow: 0 1px 0 rgba(44, 24, 16, 0.06);
-}
 
-[data-theme="academy"] .academy-wordmark {
-  letter-spacing: 0.03em;
-}
 
-[data-theme="academy"] .academy-logo-medallion {
-  border: 1px solid color-mix(in srgb, var(--color-theme-accent) 40%, transparent);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
-}
 
-[data-theme="academy"] .academy-theme-toggle {
-  border-color: var(--color-theme-border);
-  background: color-mix(in srgb, var(--color-theme-surface-alt) 72%, white 28%);
-}
 
-[data-theme="academy"] .academy-home-wrap {
-  position: relative;
-}
 
-[data-theme="academy"] .academy-home-wrap::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: repeating-linear-gradient(
-    90deg,
-    rgba(93, 64, 55, 0.04) 0,
-    rgba(93, 64, 55, 0.04) 1px,
-    transparent 1px,
-    transparent 30px
-  );
-  opacity: 0.55;
-}
 
-[data-theme="academy"] .academy-hero-surface {
-  box-shadow: inset 0 0 0 1px rgba(93, 64, 55, 0.2), 0 14px 30px rgba(44, 24, 16, 0.08);
-}
 
-[data-theme="academy"] .academy-hero-overlay {
-  background: linear-gradient(180deg, rgba(245, 241, 232, 0.16) 0%, rgba(44, 24, 16, 0.2) 100%);
-}
 
-[data-theme="academy"] .academy-highlight-card {
-  border-style: solid;
-  border-width: 1px;
-  border-color: color-mix(in srgb, var(--color-theme-border) 76%, #ffffff 24%);
-  background: linear-gradient(160deg, rgba(255, 253, 248, 0.96), rgba(239, 231, 218, 0.72));
-}
 
-[data-theme="academy"] .academy-announcement {
-  background: linear-gradient(180deg, #8f2b24 0 2rem, rgba(245, 241, 232, 0.95) 2rem 100%);
-  color: var(--color-theme-accent-strong);
-  border-top: 1px solid var(--color-theme-border);
-  border-bottom: 1px solid var(--color-theme-border);
-}
 
-[data-theme="academy"] .academy-announcement-link {
-  color: var(--color-theme-accent);
-}
 
-[data-theme="academy"] .academy-announcement-ribbon {
-  color: #fff4e6;
-  background: rgba(44, 24, 16, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-}
 
-[data-theme="academy"] .academy-easter-button {
-  border: 1px dashed color-mix(in srgb, var(--color-theme-accent) 55%, transparent);
-  background: color-mix(in srgb, var(--color-theme-surface-alt) 65%, white 35%);
-}
 
-[data-theme="academy"] .academy-easter-panel {
-  border: 1px solid color-mix(in srgb, var(--color-theme-border) 80%, transparent);
-  background: linear-gradient(160deg, rgba(255, 253, 248, 0.95), rgba(239, 231, 218, 0.7));
-}
 
-[data-theme="academy"] .academy-lecturer-card {
-  border: 1px solid color-mix(in srgb, var(--color-theme-border) 78%, white 22%);
-  background: linear-gradient(165deg, rgba(255, 253, 248, 0.98), rgba(245, 241, 232, 0.72));
-}
 
-[data-theme="academy"] .academy-mapping-table {
-  border: 1px solid var(--color-theme-border);
-}
 
-[data-theme="academy"] .academy-mapping-table thead {
-  background: rgba(143, 43, 36, 0.1);
-}
 
-[data-theme="academy"] .academy-mapping-table th,
-[data-theme="academy"] .academy-mapping-table td {
-  border-color: color-mix(in srgb, var(--color-theme-border) 80%, white 20%);
-}
 
 .theme-surface {
   background: var(--color-theme-surface);
@@ -821,55 +684,6 @@ html {
 
 .table-scroll-wrapper.scroll-hint-animate::after {
   animation: scroll-hint-pulse 2s ease-in-out 3;
-}
-
-/* ========================================
-   Task 8: Safari color-mix() Fallback
-   Older Safari versions (< 16.4) do not
-   support color-mix(). Provide solid color
-   fallbacks using @supports rule.
-   ======================================== */
-@supports not (background: color-mix(in srgb, red 50%, blue)) {
-  /* Fallback for academy theme color-mix usages */
-  [data-theme="academy"] .academy-nav-shell {
-    background: var(--color-theme-surface);
-  }
-
-  [data-theme="academy"] .academy-logo-medallion {
-    border-color: rgba(93, 64, 55, 0.4);
-  }
-
-  [data-theme="academy"] .academy-theme-toggle {
-    background: var(--color-theme-surface-alt);
-  }
-
-  [data-theme="academy"] .academy-highlight-card {
-    border-color: var(--color-theme-border);
-  }
-
-  [data-theme="academy"] .academy-easter-button {
-    border-color: rgba(93, 64, 55, 0.55);
-    background: var(--color-theme-surface-alt);
-  }
-
-  [data-theme="academy"] .academy-easter-panel {
-    border-color: var(--color-theme-border);
-  }
-
-  [data-theme="academy"] .academy-lecturer-card {
-    border-color: var(--color-theme-border);
-  }
-
-  [data-theme="academy"] .academy-mapping-table th,
-  [data-theme="academy"] .academy-mapping-table td {
-    border-color: var(--color-theme-border);
-  }
-
-  /* Generic fallback for any color-mix usage */
-  .color-mix-fallback {
-    background: var(--color-theme-surface, #ffffff);
-    border-color: var(--color-theme-border, #e5e5e5);
-  }
 }
 
 /* ========================================

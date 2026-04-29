@@ -10,17 +10,12 @@ import {
 	Shield,
 	Image as ImageIcon,
 	Search,
-	MessageCircle,
 	Menu,
 	X,
-	Sun,
-	Moon,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { logoutRequest } from "../lib/auth";
 import { useToast } from "./Toast";
-import { useTheme } from "../context/ThemeContext";
-import { withThemeSearch } from "../lib/theme";
 import { useI18n } from "../lib/i18n";
 import { AuthModal } from "./Navbar/AuthModal";
 import type { AuthMode } from "./Navbar/AuthModal";
@@ -29,21 +24,12 @@ import { MobileMenu } from "./Navbar/MobileMenu";
 
 export const Navbar = () => {
 	const { user, profile, isAdmin, isBanned } = useAuth();
-	const { isAcademy, theme, toggleTheme } = useTheme();
 	const { t } = useI18n();
 	const navigate = useNavigate();
 	const [isMenuOpen, setIsMenuOpen] = useState(false);
 	const [authModalOpen, setAuthModalOpen] = useState(false);
 	const [authInitialMode, setAuthInitialMode] = useState<AuthMode>("login");
 	const { show } = useToast();
-	const themedTo = (path: string) =>
-		withThemeSearch(path, isAcademy ? "academy" : "default");
-	const themeLabel = theme === "academy" ? t('app.title') : t('app.title');
-
-	const handleThemeToggle = () => {
-		toggleTheme();
-		setIsMenuOpen(false);
-	};
 
 	const openAuthModal = (mode: AuthMode) => {
 		setAuthInitialMode(mode);
@@ -66,219 +52,142 @@ export const Navbar = () => {
 
 	return (
 		<nav
-			className={clsx(
-				"sticky top-0 z-50 bg-brand-paper/80 backdrop-blur-md border-b border-gray-200",
-				isAcademy && "academy-nav-shell",
-			)}
+			className="sticky top-0 z-[100] border-b border-[#e0dcd3]"
+			style={{ background: 'rgba(247, 245, 240, 0.92)', backdropFilter: 'blur(12px)' }}
 		>
-			<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-				<div className="flex justify-between h-16 items-center">
-					<div className="flex items-center gap-8">
-						<Link to={themedTo("/")} className="flex items-center gap-2 group">
-							<div
-								className={clsx(
-									"w-10 h-10 rounded-full bg-brand-olive flex items-center justify-center text-white font-serif italic text-xl",
-									isAcademy && "academy-logo-medallion",
-								)}
-							>
-								诗
-							</div>
-							<span
-								className={clsx(
-									"font-serif text-2xl font-semibold tracking-tight text-brand-olive",
-									isAcademy && "academy-wordmark",
-								)}
-							>
-								诗扶小筑
-							</span>
-						</Link>
+			<style>{`
+				.nav-link-gufeng {
+					position: relative;
+					text-decoration: none;
+					padding: 4px 0;
+					transition: all 0.3s ease;
+					font-size: 0.9375rem;
+					letter-spacing: 0.08em;
+					color: #6b6560;
+				}
+				.nav-link-gufeng:hover {
+					color: #c8951e;
+				}
+				.nav-link-gufeng.active {
+					color: #c8951e;
+				}
+				.nav-link-gufeng.active::after {
+					content: '';
+					position: absolute;
+					bottom: -4px;
+					left: 50%;
+					transform: translateX(-50%);
+					width: 16px;
+					height: 2px;
+					background: #c8951e;
+					border-radius: 1px;
+				}
+			`}</style>
 
-						<div className="hidden md:flex items-center gap-6">
-							<NavLink
-								to={themedTo("/wiki")}
-								className={({ isActive }) =>
-									clsx(
-										"flex items-center gap-1.5 text-sm font-medium transition-colors",
-										isActive
-											? "text-brand-olive"
-											: "text-gray-500 hover:text-brand-olive",
-									)
-								}
-							>
-								<Book size={18} />
-								{t('nav.wiki')}
-							</NavLink>
-							<NavLink
-								to={themedTo("/forum")}
-								className={({ isActive }) =>
-									clsx(
-										"flex items-center gap-1.5 text-sm font-medium transition-colors",
-										isActive
-											? "text-brand-olive"
-											: "text-gray-500 hover:text-brand-olive",
-									)
-								}
-							>
-								<MessageSquare size={18} />
-								{t('nav.forum')}
-							</NavLink>
-							<NavLink
-								to={themedTo("/gallery")}
-								className={({ isActive }) =>
-									clsx(
-										"flex items-center gap-1.5 text-sm font-medium transition-colors",
-										isActive
-											? "text-brand-olive"
-											: "text-gray-500 hover:text-brand-olive",
-									)
-								}
-							>
-								<ImageIcon size={18} />
-								{t('nav.gallery')}
-							</NavLink>
-							<NavLink
-								to={themedTo("/music")}
-								className={({ isActive }) =>
-									clsx(
-										"flex items-center gap-1.5 text-sm font-medium transition-colors",
-										isActive
-											? "text-brand-olive"
-											: "text-gray-500 hover:text-brand-olive",
-									)
-								}
-							>
-								<Music size={18} />
-								{t('nav.music')}
-							</NavLink>
-							<NavLink
-								to={themedTo("/search")}
-								className={({ isActive }) =>
-									clsx(
-										"flex items-center gap-1.5 text-sm font-medium transition-colors",
-										isActive
-											? "text-brand-olive"
-											: "text-gray-500 hover:text-brand-olive",
-									)
-								}
-							>
-								<Search size={18} />
-								搜索
-							</NavLink>
+			<div className="max-w-[1100px] mx-auto px-6" style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+				<div className="flex items-center gap-7">
+					<Link to="/" className="flex items-center gap-2 group" style={{ textDecoration: 'none', color: 'inherit' }}>
+						<div className="w-7 h-7 flex items-center justify-center text-white text-sm" style={{ background: '#c8951e', borderRadius: '4px' }}>
+							诗
 						</div>
-					</div>
+						<span className="font-semibold text-[#2c2c2c]" style={{ fontSize: '1.25rem', letterSpacing: '0.15em' }}>
+							诗扶小筑
+						</span>
+					</Link>
 
-					<div className="flex items-center gap-4">
-						<div className="hidden md:flex items-center gap-4">
-							<button
-								type="button"
-								onClick={handleThemeToggle}
-								className={clsx(
-									"flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 text-xs font-medium text-gray-600 hover:text-brand-olive hover:border-brand-olive/40 transition-colors",
-									isAcademy &&
-										"academy-theme-toggle text-[color:var(--color-theme-accent-strong)]",
-								)}
-								title={`切换到${theme === "academy" ? "诗扶小筑" : "从前书院"}`}
-							>
-								{theme === "academy" ? <Sun size={16} /> : <Moon size={16} />}
-								{themeLabel}
-							</button>
-							{user ? (
-								<div className="flex items-center gap-4">
-									{isBanned && (
-										<span className="text-[10px] font-bold px-2 py-1 rounded bg-red-50 text-red-600">
-											账号受限
-										</span>
+					<div className="hidden md:flex items-center" style={{ gap: '28px' }}>
+						<NavLink to="/wiki" className="nav-link-gufeng">{t('nav.wiki')}</NavLink>
+						<NavLink to="/forum" className="nav-link-gufeng">{t('nav.forum')}</NavLink>
+						<NavLink to="/gallery" className="nav-link-gufeng">{t('nav.gallery')}</NavLink>
+						<NavLink to="/music" className="nav-link-gufeng">{t('nav.music')}</NavLink>
+						<NavLink to="/search" className="nav-link-gufeng">搜索</NavLink>
+					</div>
+				</div>
+
+				<div className="flex items-center" style={{ gap: '16px' }}>
+					<div className="hidden md:flex items-center" style={{ gap: '16px' }}>
+						{user ? (
+							<div className="flex items-center" style={{ gap: '16px' }}>
+								{isBanned && (
+									<span className="text-[10px] font-bold px-2 py-1 rounded bg-red-50 text-red-600">
+										账号受限
+									</span>
 									)}
-									{!isAcademy && isAdmin && (
-										<Link
-											to="/admin"
-											className="text-gray-500 hover:text-brand-olive"
-										>
-											<Shield size={20} />
+									{isAdmin && (
+										<Link to="/admin" className="text-[#9e968e] hover:text-[#c8951e] transition-colors">
+											<Shield size={18} />
 										</Link>
 									)}
-									{!isAcademy && user && (
-										<NotificationPanel
-											theme={theme}
-											onNavigate={handleNotifNavigate}
-										/>
+									{user && (
+										<NotificationPanel onNavigate={handleNotifNavigate} />
 									)}
-									{!isAcademy && user && (
-										<Link
-											to="/profile"
-											className="flex items-center gap-2 group"
-										>
+									{user && (
+										<Link to="/profile" className="flex items-center gap-2 group">
 											<img
 												src={profile?.photoURL || user.photoURL || ""}
 												alt=""
-												className="w-8 h-8 rounded-full border border-gray-200"
+												className="w-8 h-8 object-cover"
+												style={{ borderRadius: '50%', border: '1px solid #e0dcd3' }}
 												referrerPolicy="no-referrer"
 											/>
-											<span className="hidden sm:inline text-sm font-medium text-gray-700 group-hover:text-brand-olive">
+											<span className="hidden sm:inline text-sm text-[#2c2c2c] group-hover:text-[#c8951e] transition-colors">
 												{profile?.displayName || user.displayName}
 											</span>
 										</Link>
 									)}
-									{!isAcademy && user && (
+									{user && (
 										<button
 											type="button"
 											onClick={handleLogout}
-											className="text-gray-400 hover:text-red-500 transition-colors"
+											className="text-[#9e968e] hover:text-red-500 transition-colors"
 										>
-											<LogOut size={20} />
+											<LogOut size={18} />
 										</button>
 									)}
 								</div>
 							) : (
-								!isAcademy && (
-									<div className="flex items-center gap-2">
+								(
+									<div className="flex items-center gap-3">
 										<button
 											type="button"
 											onClick={() => openAuthModal("register")}
-											className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-500 text-white text-sm font-medium hover:bg-green-600 transition-all shadow-sm"
+											className="text-xs text-[#6b6560] hover:text-[#c8951e] transition-colors"
 										>
-											<MessageCircle size={18} />
-											账号注册
+											注册
 										</button>
+										<span className="text-[#e0dcd3]">|</span>
 										<button
 											type="button"
 											onClick={() => openAuthModal("login")}
-											className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-olive text-white text-sm font-medium hover:bg-brand-olive/90 transition-all shadow-sm"
+											className="text-xs text-[#6b6560] hover:text-[#c8951e] transition-colors"
 										>
-											<LogIn size={18} />
-											账号登录
+											登录
 										</button>
 									</div>
 								)
-							)}
+								)
+							}
 						</div>
 
 						{/* Mobile Menu Toggle */}
 						<button
 							type="button"
 							onClick={() => setIsMenuOpen(!isMenuOpen)}
-							className="md:hidden p-2 text-gray-500 hover:text-brand-olive transition-colors"
+							className="md:hidden p-2 text-[#9e968e] hover:text-[#c8951e] transition-colors"
 						>
 							{isMenuOpen ? <X size={24} /> : <Menu size={24} />}
 						</button>
 					</div>
 				</div>
-			</div>
 
-			{/* Mobile Menu */}
 			<MobileMenu
 				open={isMenuOpen}
 				onClose={() => setIsMenuOpen(false)}
-				theme={theme}
-				themeLabel={themeLabel}
-				isAcademy={isAcademy}
-				onThemeToggle={handleThemeToggle}
 				onOpenAuth={openAuthModal}
 				onLogout={handleLogout}
 			/>
 
-			{/* Auth Modal */}
-			{!isAcademy && (
+			{(
 				<AuthModal
 					key={authInitialMode}
 					open={authModalOpen}

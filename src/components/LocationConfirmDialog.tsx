@@ -31,75 +31,67 @@ export const LocationConfirmDialog = ({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onSkip} />
-
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[90vw] max-w-md overflow-hidden">
-        <div className="p-6">
+      <div className="absolute inset-0 bg-black/40" onClick={onSkip} />
+      <div className="relative bg-white rounded border border-[#e0dcd3] w-[90vw] max-w-md overflow-hidden">
+        <div className="p-5">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-amber-100 rounded-full">
-              <MapPin className="w-5 h-5 text-amber-600" />
+            <div className="p-2 rounded bg-[#fdf5d8]">
+              <MapPin size={18} className="text-[#c8951e]" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-800">检测到拍摄地点</h3>
-              <p className="text-sm text-gray-500">是否使用从图片中提取的地点？</p>
+              <h3 className="text-base font-bold text-[#2c2c2c]">检测到拍摄地点</h3>
+              <p className="text-sm text-[#9e968e]">是否使用从图片中提取的地点？</p>
             </div>
           </div>
 
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-brand-primary" />
-              <span className="ml-2 text-gray-500">正在解析地点...</span>
+              <Loader2 size={22} className="animate-spin text-[#c8951e]" />
+              <span className="ml-2 text-sm text-[#6b6560]">正在解析地点...</span>
             </div>
           ) : detectedLocation ? (
             <div className="space-y-4">
-              <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-                <div className="font-medium text-amber-800">
-                  {detectedLocation.fullName}
-                </div>
-                <div className="text-sm text-amber-600 mt-1">
-                  {detectedLocation.levelName}
-                </div>
+              <div className="p-3 rounded border border-[#e0dcd3] bg-[#f7f5f0]">
+                <div className="text-sm font-medium text-[#2c2c2c]">{detectedLocation.fullName}</div>
+                <div className="text-xs text-[#9e968e] mt-1">{detectedLocation.levelName}</div>
               </div>
-
               <div className="flex gap-2">
                 <button
                   onClick={onConfirm}
-                  className="flex-1 px-4 py-2.5 bg-brand-primary text-white rounded-xl font-medium hover:bg-brand-primary/90 transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-2 rounded bg-[#c8951e] text-white font-medium hover:bg-[#dca828] transition-all flex items-center justify-center gap-2 text-sm"
                 >
-                  <Check className="w-4 h-4" />
+                  <Check size={15} />
                   使用该地点
                 </button>
                 <button
                   onClick={onChange}
-                  className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
+                  className="flex-1 px-4 py-2 rounded border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e] transition-all text-sm"
                 >
                   更换地点
                 </button>
               </div>
-
               <button
                 onClick={onSkip}
-                className="w-full px-4 py-2 text-gray-400 hover:text-gray-600 text-sm transition-colors"
+                className="w-full px-4 py-2 text-[#9e968e] hover:text-[#c8951e] text-sm transition-colors"
               >
                 暂不设置地点
               </button>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-center">
-                <p className="text-gray-500">未能在图片中检测到有效的 GPS 信息</p>
+              <div className="p-3 rounded border border-[#e0dcd3] bg-[#f7f5f0] text-center">
+                <p className="text-sm text-[#9e968e]">未能在图片中检测到有效的 GPS 信息</p>
               </div>
-
               <div className="flex gap-2">
                 <button
                   onClick={onChange}
-                  className="flex-1 px-4 py-2.5 bg-brand-primary text-white rounded-xl font-medium hover:bg-brand-primary/90 transition-colors"
+                  className="flex-1 px-4 py-2 rounded bg-[#c8951e] text-white font-medium hover:bg-[#dca828] transition-all text-sm"
                 >
                   手动选择地点
                 </button>
                 <button
                   onClick={onSkip}
-                  className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
+                  className="flex-1 px-4 py-2 rounded border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e] transition-all text-sm"
                 >
                   跳过
                 </button>

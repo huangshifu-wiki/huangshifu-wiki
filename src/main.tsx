@@ -4,7 +4,6 @@ import App from './App.tsx';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { randomId } from './lib/randomId';
-import { applyThemeToDocument, resolveTheme, setThemeMetaColor } from './lib/theme';
 import { initThirdPartyScripts } from './utils/scriptLoader';
 import { initWebVitals } from './utils/webVitals';
 import './index.css';
@@ -23,14 +22,6 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
-}
-
-const initialTheme = resolveTheme(window.location.search, window.localStorage);
-applyThemeToDocument(initialTheme);
-setThemeMetaColor(initialTheme);
-
-if (typeof document !== 'undefined' && initialTheme === 'academy') {
-  document.title = '从前书院 · 黄诗扶生日特别版';
 }
 
 // 初始化 Web Vitals 性能监控

@@ -30,17 +30,11 @@ type CustomPlatformLink = {
 
 const normalizeCustomPlatformLinkUrl = (value: string) => {
   const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-
+  if (!trimmed) return '';
   const raw = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-
   try {
     const parsed = new URL(raw);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return '';
-    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
     return parsed.toString();
   } catch {
     return '';
@@ -106,12 +100,8 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
   useEffect(() => {
     if (open) {
       apiGet<{ platforms: CustomPlatformConfig[] }>('/api/music-platforms')
-        .then(data => {
-          setCustomPlatforms(data.platforms || []);
-        })
-        .catch(() => {
-          setCustomPlatforms([]);
-        });
+        .then(data => setCustomPlatforms(data.platforms || []))
+        .catch(() => setCustomPlatforms([]));
     }
   }, [open]);
 
@@ -140,16 +130,8 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!formData.title.trim()) {
-      show('请输入歌曲标题', { variant: 'error' });
-      return;
-    }
-
-    if (!formData.artist.trim()) {
-      show('请输入艺术家名称', { variant: 'error' });
-      return;
-    }
+    if (!formData.title.trim()) { show('请输入歌曲标题', { variant: 'error' }); return; }
+    if (!formData.artist.trim()) { show('请输入艺术家名称', { variant: 'error' }); return; }
 
     const normalizedCustomPlatformLinks = customPlatformLinks.map((link) => ({
       label: link.label.trim(),
@@ -158,16 +140,13 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
     const hasIncompleteCustomPlatformLink = normalizedCustomPlatformLinks.some(
       (link) => (link.label || link.url) && (!link.label || !link.url),
     );
-
     if (hasIncompleteCustomPlatformLink) {
       show('自定义平台链接需要同时填写平台名称和地址', { variant: 'error' });
       return;
     }
-
     const hasInvalidCustomPlatformLink = normalizedCustomPlatformLinks.some(
       (link) => link.url && !normalizeCustomPlatformLinkUrl(link.url),
     );
-
     if (hasInvalidCustomPlatformLink) {
       show('自定义平台链接地址无效，请填写正确的 http/https 链接', { variant: 'error' });
       return;
@@ -175,7 +154,7 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
 
     setSaving(true);
     try {
-      const result = await apiPatch<{ song: SongItem; error?: string; conflict?: boolean; conflictingSong?: { docId: string; title: string; artist: string } }>(`/api/music/${song.docId}`, {
+      await apiPatch(`/api/music/${song.docId}`, {
         title: formData.title.trim(),
         artist: formData.artist.trim(),
         album: formData.album.trim(),
@@ -186,7 +165,7 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
         kugouId: platformIds.kugouId || null,
         baiduId: platformIds.baiduId || null,
         kuwoId: platformIds.kuwoId || null,
-        customPlatformIds: customPlatformIds,
+        customPlatformIds,
         customPlatformLinks: normalizedCustomPlatformLinks.filter((link) => link.label && link.url),
       });
       show('歌曲已更新');
@@ -231,124 +210,120 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
 
   return (
     <>
-      <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm p-4 flex items-center justify-center">
-        <div className="w-full max-w-lg max-h-[90vh] overflow-hidden bg-white rounded-[36px] shadow-2xl border border-gray-100 flex flex-col">
-          <header className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+      <div className="fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center">
+        <div className="w-full max-w-lg max-h-[90vh] overflow-hidden bg-white rounded border border-[#e0dcd3] flex flex-col">
+          <header className="px-5 py-4 border-b border-[#e0dcd3] flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-serif font-bold text-gray-900">编辑歌曲</h3>
-              <p className="text-xs text-gray-500 mt-1">修改歌曲基本信息</p>
+              <h3 className="text-base font-bold text-[#2c2c2c]">编辑歌曲</h3>
+              <p className="text-xs text-[#9e968e] mt-0.5">修改歌曲基本信息</p>
             </div>
             <button
               onClick={onClose}
-              className="p-2 rounded-full text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+              className="p-1.5 rounded text-[#9e968e] hover:text-[#2c2c2c] hover:bg-[#f7f5f0] transition-colors"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </header>
 
-          <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">歌曲标题 *</label>
+          <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#2c2c2c]">歌曲标题 <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={formData.title}
                 onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
                 placeholder="歌曲名称"
-                className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25"
+                className="w-full px-3 py-2 text-sm bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:border-[#c8951e] focus:outline-none text-[#2c2c2c]"
               />
             </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">艺术家 *</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#2c2c2c]">艺术家 <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={formData.artist}
                 onChange={(e) => setFormData((prev) => ({ ...prev, artist: e.target.value }))}
                 placeholder="歌手名称"
-                className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25"
+                className="w-full px-3 py-2 text-sm bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:border-[#c8951e] focus:outline-none text-[#2c2c2c]"
               />
             </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">专辑</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#2c2c2c]">专辑</label>
               <input
                 type="text"
                 value={formData.album}
                 onChange={(e) => setFormData((prev) => ({ ...prev, album: e.target.value }))}
                 placeholder="所属专辑（可选）"
-                className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25"
+                className="w-full px-3 py-2 text-sm bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:border-[#c8951e] focus:outline-none text-[#2c2c2c]"
               />
             </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">歌词</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#2c2c2c]">歌词</label>
               <textarea
                 value={formData.lyric || ''}
                 onChange={(e) => setFormData((prev) => ({ ...prev, lyric: e.target.value }))}
                 placeholder="歌词内容（可选，每行一句）"
                 rows={6}
-                className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25 resize-none font-mono text-sm"
+                className="w-full px-3 py-2 text-sm bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:border-[#c8951e] focus:outline-none resize-none"
               />
             </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">歌曲描述</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#2c2c2c]">歌曲描述</label>
               <textarea
                 value={formData.description || ''}
                 onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                 placeholder="创作者的话、创作背景等（可选，支持 Markdown）"
                 rows={3}
-                className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25 resize-none text-sm"
+                className="w-full px-3 py-2 text-sm bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:border-[#c8951e] focus:outline-none resize-none"
               />
             </div>
 
             <button
               type="button"
               onClick={() => setPlatformExpanded((prev) => !prev)}
-              className="w-full flex items-center justify-between p-4 rounded-2xl border border-gray-100 bg-gray-50/60 hover:bg-gray-100/60 transition-colors"
+              className="w-full flex items-center justify-between p-3 rounded border border-[#e0dcd3] bg-[#f7f5f0]/50 hover:bg-[#f7f5f0] transition-colors"
             >
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-700">关联平台</span>
+                <span className="text-sm font-medium text-[#2c2c2c]">关联平台</span>
                 {linkedPlatforms.length > 0 && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-brand-primary/20 text-brand-primary font-bold">
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-[#fdf5d8] text-[#c8951e] font-medium">
                     已关联 {linkedPlatforms.length} 个
                   </span>
                 )}
               </div>
-              {platformExpanded ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+              {platformExpanded ? <ChevronUp size={16} className="text-[#9e968e]" /> : <ChevronDown size={16} className="text-[#9e968e]" />}
             </button>
 
             {platformExpanded && (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {platformFields.map((platform) => {
                   const currentId = platformIds[platform.key] || '';
                   const isLinked = Boolean(currentId);
                   return (
-                    <div key={platform.key} className="flex items-center gap-3">
-                      <span className="w-24 text-sm text-gray-600 shrink-0">{platform.label}</span>
+                    <div key={platform.key} className="flex items-center gap-2">
+                      <span className="w-24 text-xs text-[#6b6560] shrink-0">{platform.label}</span>
                       <input
                         type="text"
                         value={currentId}
                         onChange={(e) => handlePlatformIdChange(platform.key, e.target.value)}
                         placeholder={isLinked ? '已关联' : '输入平台歌曲ID'}
-                        className="flex-1 px-3 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25 text-sm font-mono"
+                        className="flex-1 px-3 py-2 text-sm bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:border-[#c8951e] focus:outline-none text-[#2c2c2c]"
                       />
                       {isLinked && (
                         <a
                           href={platform.urlPattern(currentId)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-2 text-gray-400 hover:text-brand-primary transition-colors"
+                          className="p-1.5 text-[#9e968e] hover:text-[#c8951e] transition-colors"
                         >
-                          <ExternalLink size={16} />
+                          <ExternalLink size={14} />
                         </a>
                       )}
                       <button
                         type="button"
                         onClick={() => setMatchingPlatform(platform.key.replace('Id', '') as Platform)}
-                        className="px-3 py-2 rounded-xl border border-gray-200 text-xs text-gray-600 hover:text-brand-primary hover:border-brand-primary/40 transition-colors flex items-center gap-1"
+                        className="px-3 py-2 rounded border border-[#e0dcd3] text-xs text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] transition-all flex items-center gap-1"
                       >
-                        <Search size={14} />
+                        <Search size={13} />
                         匹配
                       </button>
                     </div>
@@ -357,40 +332,33 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
               </div>
             )}
 
-            {/* 预设平台 */}
             {customPlatforms.length > 0 && (
               <>
                 <button
                   type="button"
                   onClick={() => setCustomPlatformExpanded((prev) => !prev)}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border border-gray-100 bg-gray-50/60 hover:bg-gray-100/60 transition-colors"
+                  className="w-full flex items-center justify-between p-3 rounded border border-[#e0dcd3] bg-[#f7f5f0]/50 hover:bg-[#f7f5f0] transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semiboldtext-gray-700">预设平台</span>
+                    <span className="text-sm font-medium text-[#2c2c2c]">预设平台</span>
                     {Object.keys(customPlatformIds).length > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-[#fdf5d8] text-[#c8951e] font-medium">
                         已添加 {Object.keys(customPlatformIds).length} 个
                       </span>
                     )}
                   </div>
-                  {customPlatformExpanded ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                  {customPlatformExpanded ? <ChevronUp size={16} className="text-[#9e968e]" /> : <ChevronDown size={16} className="text-[#9e968e]" />}
                 </button>
 
                 {customPlatformExpanded && (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {customPlatforms.map((platform) => {
                       const currentId = customPlatformIds[platform.key] || '';
                       const isLinked = Boolean(currentId);
-                      const buildUrl = (id: string) => {
-                        return platform.urlPattern.replace('{id}', id);
-                      };
+                      const buildUrl = (id: string) => platform.urlPattern.replace('{id}', id);
                       return (
-                        <div key={platform.key} className="flex items-center gap-3">
-                          <span className={clsx(
-                            'w-20 text-xs px-2 py-1 rounded-full text-center shrink-0',
-                            platform.bgColor,
-                            platform.color
-                          )}>
+                        <div key={platform.key} className="flex items-center gap-2">
+                          <span className="w-20 text-xs px-2 py-1 rounded text-center shrink-0 bg-[#fdf5d8] text-[#c8951e] font-medium">
                             {platform.label}
                           </span>
                           <input
@@ -401,7 +369,7 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
                               [platform.key]: e.target.value,
                             }))}
                             placeholder={isLinked ? '已添加' : '输入平台ID'}
-                            className="flex-1 px-3 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25 text-sm font-mono"
+                            className="flex-1 px-3 py-2 text-sm bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:border-[#c8951e] focus:outline-none text-[#2c2c2c]"
                           />
                           {isLinked && (
                             <>
@@ -409,9 +377,9 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
                                 href={buildUrl(currentId)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="p-2 text-gray-400 hover:text-brand-primary transition-colors"
+                                className="p-1.5 text-[#9e968e] hover:text-[#c8951e] transition-colors"
                               >
-                                <ExternalLink size={16} />
+                                <ExternalLink size={14} />
                               </a>
                               <button
                                 type="button"
@@ -420,10 +388,10 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
                                   delete next[platform.key];
                                   return next;
                                 })}
-                                className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                className="p-1.5 text-[#9e968e] hover:text-red-500 transition-colors"
                                 title="移除"
                               >
-                                <Trash2 size={16} />
+                                <Trash2 size={14} />
                               </button>
                             </>
                           )}
@@ -435,60 +403,58 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
               </>
             )}
 
-            {/* 自定义链接 */}
-            <div className="space-y-3 rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
+            <div className="rounded border border-[#e0dcd3] bg-[#f7f5f0]/50 p-3 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-gray-700">自定义平台链接</p>
-                  <p className="text-xs text-gray-500 mt-1">例如哔哩哔哩、5sing 或其他发布平台</p>
+                  <p className="text-sm font-medium text-[#2c2c2c]">自定义平台链接</p>
+                  <p className="text-xs text-[#9e968e] mt-0.5">例如哔哩哔哩、5sing 或其他发布平台</p>
                 </div>
                 <button
                   type="button"
                   onClick={handleAddCustomPlatformLink}
-                  className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-gray-200 text-xs text-gray-600 hover:text-brand-primary hover:border-brand-primary/40 transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-1.5 rounded border border-[#e0dcd3] text-xs text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] transition-all"
                 >
-                  <Plus size={14} /> 添加链接
+                  <Plus size={13} /> 添加链接
                 </button>
               </div>
 
               {customPlatformLinks.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {customPlatformLinks.map((link, index) => {
                     const previewUrl = normalizeCustomPlatformLinkUrl(link.url);
                     return (
-                      <div key={`custom-link-${index}`} className="rounded-2xl border border-gray-200 bg-white p-3 space-y-3">
-                        <div className="flex items-center gap-3">
+                      <div key={`custom-link-${index}`} className="rounded border border-[#e0dcd3] bg-white p-3 space-y-2">
+                        <div className="flex items-center gap-2">
                           <input
                             type="text"
                             value={link.label}
                             onChange={(e) => handleCustomPlatformLinkChange(index, 'label', e.target.value)}
                             placeholder="平台名称，例如 Bilibili"
-                            className="w-40 px-3 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25 text-sm"
+                            className="w-36 px-3 py-2 text-sm bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:border-[#c8951e] focus:outline-none text-[#2c2c2c]"
                           />
                           <input
                             type="text"
                             value={link.url}
                             onChange={(e) => handleCustomPlatformLinkChange(index, 'url', e.target.value)}
-                            placeholder="链接地址，例如 https://www.bilibili.com/..."
-                            className="flex-1 px-3 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary/25 text-sm"
+                            placeholder="链接地址"
+                            className="flex-1 px-3 py-2 text-sm bg-[#f7f5f0] rounded border border-[#e0dcd3] focus:border-[#c8951e] focus:outline-none text-[#2c2c2c]"
                           />
-                          {previewUrl ? (
+                          {previewUrl && (
                             <a
                               href={previewUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-2 text-gray-400 hover:text-brand-primary transition-colors"
+                              className="p-1.5 text-[#9e968e] hover:text-[#c8951e] transition-colors"
                             >
-                              <ExternalLink size={16} />
+                              <ExternalLink size={14} />
                             </a>
-                          ) : null}
+                          )}
                           <button
                             type="button"
                             onClick={() => handleRemoveCustomPlatformLink(index)}
-                            className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                            aria-label="删除链接"
+                            className="p-1.5 text-[#9e968e] hover:text-red-500 transition-colors"
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
@@ -496,38 +462,38 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
                   })}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-gray-200 bg-white/70 px-4 py-6 text-sm text-gray-400 text-center">
+                <div className="rounded border border-dashed border-[#e0dcd3] bg-white/70 px-3 py-4 text-xs text-[#9e968e] text-center">
                   暂无自定义平台链接
                 </div>
               )}
             </div>
 
-            <div className="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
+            <div className="rounded border border-[#e0dcd3] bg-[#f7f5f0]/50 p-3">
               <div className="flex items-center gap-3">
-                <img src={song.cover} alt="" className="w-12 h-12 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                <img src={song.cover} alt="" className="w-12 h-12 rounded object-cover border border-[#e0dcd3]" referrerPolicy="no-referrer" />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{song.title}</p>
-                  <p className="text-xs text-gray-500 truncate">{song.artist}</p>
-                  <p className="text-xs text-gray-400 mt-1">ID: {song.id}</p>
+                  <p className="text-sm font-medium text-[#2c2c2c] truncate">{song.title}</p>
+                  <p className="text-xs text-[#9e968e] truncate">{song.artist}</p>
+                  <p className="text-xs text-[#9e968e] mt-0.5">ID: {song.id}</p>
                 </div>
               </div>
             </div>
           </form>
 
-          <footer className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3">
+          <footer className="px-5 py-3 border-t border-[#e0dcd3] bg-[#f7f5f0]/50 flex justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-white"
+              className="px-4 py-2 rounded border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e] transition-all text-sm"
             >
               取消
             </button>
             <button
               onClick={handleSubmit}
               disabled={saving}
-              className="px-5 py-2.5 rounded-xl bg-gray-900 text-white font-semibold hover:bg-gray-800 disabled:opacity-50 inline-flex items-center gap-2"
+              className="px-5 py-2 rounded bg-[#c8951e] text-white font-medium hover:bg-[#dca828] disabled:opacity-50 inline-flex items-center gap-2 text-sm transition-all"
             >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : null}
+              {saving ? <Loader2 size={14} className="animate-spin" /> : null}
               {saving ? '保存中...' : '保存'}
             </button>
           </footer>

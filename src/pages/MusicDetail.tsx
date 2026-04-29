@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock, ExternalLink, Heart, Link2, MessageSquare, Play, ChevronDown, ChevronUp } from 'lucide-react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Clock, ExternalLink, Heart, Link2, MessageSquare, Play, ChevronDown, ChevronUp, Music as MusicIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 
@@ -87,6 +87,7 @@ const formatDate = (value: string | null | undefined) => {
 
 const MusicDetail = () => {
   const { songId } = useParams();
+  const navigate = useNavigate();
   const [song, setSong] = useState<SongItem | null>(null);
   const [posts, setPosts] = useState<PostItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,6 +95,8 @@ const MusicDetail = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [customPlatforms, setCustomPlatforms] = useState<CustomPlatformConfig[]>([]);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [lyricsExpanded, setLyricsExpanded] = useState(false);
+  const [lyricsCopied, setLyricsCopied] = useState(false);
   const { user, isAdmin } = useAuth();
   const { setCurrentSong, setIsPlaying, setPlaylist } = useMusic();
   const { show } = useToast();
@@ -149,6 +152,17 @@ const MusicDetail = () => {
     show('复制链接失败，请稍后重试', { variant: 'error' });
   };
 
+  const handleCopyLyrics = async () => {
+    if (!song?.lyric) return;
+    try {
+      await navigator.clipboard.writeText(song.lyric);
+      setLyricsCopied(true);
+      setTimeout(() => setLyricsCopied(false), 2000);
+    } catch {
+      show('复制失败，请手动复制', { variant: 'error' });
+    }
+  };
+
   const handleToggleFavorite = async () => {
     if (!song || !song.docId) return;
     if (!user) {
@@ -179,223 +193,329 @@ const MusicDetail = () => {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-12">
-        <div className="h-48 bg-white rounded-[32px] border border-gray-100 animate-pulse" />
+      <div
+        className="min-h-screen"
+        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+      >
+        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+          <div className="h-48 bg-[#f0ece3] rounded animate-pulse" />
+        </div>
       </div>
     );
   }
 
   if (!song) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-12">
-        <Link to="/music" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-brand-primary transition-colors">
-          <ArrowLeft size={16} /> 返回音乐馆
-        </Link>
-        <div className="mt-6 bg-white rounded-[32px] border border-gray-100 p-10 text-center text-gray-400">
-          歌曲不存在或已被删除
+      <div
+        className="min-h-screen"
+        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+      >
+        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+          <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors">
+            <ArrowLeft size={16} /> 返回音乐馆
+          </Link>
+          <div className="mt-6 bg-white rounded border border-[#e0dcd3] p-10 text-center text-[#9e968e] italic tracking-[0.1em]">
+            歌曲不存在或已被删除
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12 space-y-6">
-      <Link to="/music" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-brand-primary transition-colors">
-        <ArrowLeft size={16} /> 返回音乐馆
-      </Link>
+    <div
+      className="min-h-screen"
+      style={{ backgroundColor: '#f7f5f0', color: '#2c2c2c', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif", lineHeight: 1.8 }}
+    >
+      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+        <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors mb-5">
+          <ArrowLeft size={16} /> 返回音乐馆
+        </Link>
 
-      <section className="bg-white rounded-[32px] border border-gray-100 p-6 sm:p-8 shadow-sm">
-        <div className="flex flex-col md:flex-row gap-6 md:items-center md:justify-between">
-          <div className="flex gap-5 min-w-0">
-            <SmartImage
-              src={song.cover}
-              alt={song.title}
-              className="w-24 h-24 rounded-2xl object-cover shadow"
-            />
-            <div className="min-w-0">
-              <h1 className="text-3xl font-serif font-bold text-gray-900 truncate">{song.title}</h1>
-              <p className="text-sm text-gray-500 mt-1">{song.artist} · {song.album}</p>
-              <p className="text-xs text-gray-400 mt-2">ID: {song.id}</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={handlePlay}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand-primary text-gray-900 text-sm font-bold hover:scale-105 transition-all"
-            >
-              <Play size={16} /> 播放
-            </button>
-            <button
-              onClick={handleToggleFavorite}
-              disabled={favoriting}
-              className={clsx(
-                'inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm transition-colors',
-                song.favoritedByMe
-                  ? 'border-red-200 text-red-500 bg-red-50'
-                  : 'border-gray-200 text-gray-600 hover:text-red-500 hover:border-red-200',
-                favoriting && 'opacity-50 cursor-not-allowed',
-              )}
-            >
-              <Heart size={15} /> {song.favoritedByMe ? '已收藏' : '收藏'}
-            </button>
-            <button
-              onClick={handleCopyLink}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 text-sm text-gray-600 hover:text-brand-primary hover:border-brand-primary/40"
-            >
-              <Link2 size={15} /> 复制内链
-            </button>
-            <a
-              href={getSongExternalUrl(song)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 text-sm text-gray-600 hover:text-brand-primary hover:border-brand-primary/40"
-            >
-              <ExternalLink size={15} /> 原始链接
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* 自定义链接 - PR #70 */}
-      {customPlatformLinks.length > 0 && (
-        <section className="bg-white rounded-[32px] border border-gray-100 p-6 sm:p-8 shadow-sm">
-          <div className="flex items-center justify-between mb-4 gap-3">
-            <h2 className="text-xl font-serif font-bold text-gray-900">更多平台</h2>
-            <span className="text-xs px-3 py-1 rounded-full bg-brand-primary/15 text-gray-700 font-semibold">
-              {customPlatformLinks.length} 个链接
-            </span>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {customPlatformLinks.map((link) => (
-              <a
-                key={`${link.label}-${link.url}`}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 px-4 py-3 hover:border-brand-primary/40 hover:bg-brand-cream/20 transition-colors"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 truncate">{link.label}</p>
-                  <p className="text-xs text-gray-500 truncate">{link.url}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
+          {/* Main Content */}
+          <div>
+            {/* Detail Header */}
+            <div className="flex flex-col md:flex-row gap-5 mb-6 pb-6 border-b border-[#e0dcd3]">
+              <SmartImage
+                src={song.cover}
+                alt={song.title}
+                className="w-40 h-40 md:w-44 md:h-44 object-cover flex-shrink-0 rounded bg-[#f0ece3]"
+              />
+              <div className="flex-1 flex flex-col justify-center min-w-0">
+                <h1 className="text-[1.75rem] font-bold text-[#2c2c2c] tracking-[0.12em] mb-1.5">{song.title}</h1>
+                <p className="text-base text-[#6b6560] tracking-[0.08em] mb-3">{song.artist}</p>
+                <div className="flex flex-wrap gap-x-5 gap-y-2 mb-4 text-sm text-[#9e968e]">
+                  <span>专辑：{song.album}</span>
+                  <span>ID：{song.id}</span>
                 </div>
-                <ExternalLink size={16} className="text-gray-400 shrink-0" />
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 预设平台 - main 分支 */}
-      {customPlatforms.length > 0 && song?.customPlatformIds && Object.keys(song.customPlatformIds).length > 0 && (
-        <section className="bg-white rounded-[32px] border border-gray-100 p-6 sm:p-8 shadow-sm">
-          <h2 className="text-xl font-serif font-bold text-gray-900 mb-4">预设平台</h2>
-          <div className="flex flex-wrap gap-2">
-            {customPlatforms
-              .filter(p => song.customPlatformIds?.[p.key])
-              .map(platform => {
-                const id = song.customPlatformIds![platform.key];
-                const url = platform.urlPattern.replace('{id}', id);
-                return (
-                  <a
-                    key={platform.key}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={handlePlay}
+                    className="inline-flex items-center gap-2 px-6 py-2 bg-[#c8951e] text-white rounded text-[0.9375rem] tracking-[0.08em] hover:bg-[#dca828] transition-all"
+                  >
+                    <Play size={16} /> 播放
+                  </button>
+                  <button
+                    onClick={handleToggleFavorite}
+                    disabled={favoriting}
                     className={clsx(
-                      'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all hover:scale-105',
-                      platform.bgColor,
-                      platform.color
+                      'inline-flex items-center gap-2 px-5 py-2.5 border text-[0.9375rem] rounded transition-all',
+                      song.favoritedByMe
+                        ? 'border-red-200 text-red-500 bg-red-50'
+                        : 'border-[#e0dcd3] text-[#6b6560] hover:text-red-500 hover:border-red-200',
+                      favoriting && 'opacity-50 cursor-not-allowed',
                     )}
                   >
-                    {platform.label}
-                    <ExternalLink size={12} />
+                    <Heart size={15} /> {song.favoritedByMe ? '已收藏' : '收藏'}
+                  </button>
+                  <button
+                    onClick={handleCopyLink}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 border border-[#e0dcd3] text-[0.9375rem] text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] rounded transition-all"
+                  >
+                    <Link2 size={15} /> 复制内链
+                  </button>
+                  <a
+                    href={getSongExternalUrl(song)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 border border-[#e0dcd3] text-[0.9375rem] text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] rounded transition-all"
+                  >
+                    <ExternalLink size={15} /> 原始链接
                   </a>
-                );
-              })}
-          </div>
-        </section>
-      )}
-
-      <section className="bg-white rounded-[32px] border border-gray-100 p-6 sm:p-8 shadow-sm">
-        <h2 className="text-xl font-serif font-bold text-gray-900 mb-4">歌词</h2>
-        <LyricsDisplay lyric={song?.lyric || ''} />
-      </section>
-
-      {song?.description && (
-        <section className="bg-white rounded-[32px] border border-gray-100 p-6 sm:p-8 shadow-sm">
-          <h2 className="text-xl font-serif font-bold text-gray-900 mb-4">歌曲描述</h2>
-          <div className={clsx('prose prose-sm max-w-none text-gray-600 whitespace-pre-wrap', !descExpanded && 'line-clamp-6')}>
-            {song.description}
-          </div>
-          {song.description.length > 200 ? (
-            <button
-              onClick={() => setDescExpanded(!descExpanded)}
-              className="text-sm text-brand-primary hover:underline mt-3 inline-flex items-center gap-1"
-            >
-              {descExpanded ? (
-                <>收起 <ChevronUp size={14} /></>
-              ) : (
-                <>展开 <ChevronDown size={14} /></>
-              )}
-            </button>
-          ) : null}
-        </section>
-      )}
-
-      <section className="bg-white rounded-[32px] border border-gray-100 p-6 sm:p-8 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-serif font-bold text-gray-900 flex items-center gap-2">
-            <MessageSquare size={18} className="text-brand-primary" /> 关联乐评
-          </h2>
-          <Link
-            to={`/forum/new?musicDocId=${song.docId}&musicTitle=${encodeURIComponent(song.title)}`}
-            className="px-3 py-1.5 bg-brand-primary text-gray-900 rounded-full text-xs font-bold hover:scale-105 transition-all"
-          >
-            发表乐评
-          </Link>
-        </div>
-
-        {posts.length > 0 ? (
-          <div className="space-y-3">
-            {posts.map((post) => (
-              <Link
-                key={post.id}
-                to={`/forum/${post.id}`}
-                className="block border border-gray-100 rounded-2xl p-4 hover:shadow-md hover:border-brand-primary/20 transition-all"
-              >
-                <h3 className="font-bold text-gray-900 mb-2">{post.title}</h3>
-                <div className="flex items-center gap-4 text-xs text-gray-400">
-                  <span className="flex items-center gap-1"><Heart size={12} /> {post.likesCount || 0}</span>
-                  <span className="flex items-center gap-1"><MessageSquare size={12} /> {post.commentsCount || 0}</span>
-                  <span className="flex items-center gap-1"><Clock size={12} /> {formatDate(post.updatedAt)}</span>
                 </div>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="text-sm text-gray-400 italic">暂无乐评，快来发表第一篇吧！</div>
-        )}
-      </section>
+              </div>
+            </div>
 
-      {isAdmin && song?.docId && (
-        <section className="bg-white rounded-[32px] border border-gray-100 p-6 sm:p-8 shadow-sm">
-          <h2 className="text-xl font-serif font-bold text-gray-900 mb-4">管理功能</h2>
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => setIsEditModalOpen(true)}
-              className="px-4 py-2 rounded-full border border-gray-200 text-sm text-gray-600 hover:text-brand-primary hover:border-brand-primary/40 transition-colors"
-            >
-              编辑歌曲
-            </button>
-            <SongCoverManager
-              songDocId={song.docId}
-              currentCover={song.cover}
-              onCoverUpdated={(newCoverUrl) => setSong((prev) => prev ? { ...prev, cover: newCoverUrl } : prev)}
-            />
+            {/* Lyrics */}
+            <div className="mb-10">
+              <div className="flex items-center gap-3 mb-4">
+                <h2 className="text-base font-semibold text-[#2c2c2c] tracking-[0.12em] flex items-center gap-2">
+                  <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
+                  歌词
+                </h2>
+                {song?.lyric && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleCopyLyrics}
+                      className="text-xs px-3 py-1.5 border border-[#e0dcd3] text-[#9e968e] hover:text-[#c8951e] hover:border-[#c8951e] rounded transition-all duration-300"
+                    >
+                      {lyricsCopied ? '已复制' : '复制歌词'}
+                    </button>
+                    <button
+                      onClick={() => setLyricsExpanded(!lyricsExpanded)}
+                      className="text-xs px-3 py-1.5 border border-[#e0dcd3] text-[#9e968e] hover:text-[#c8951e] hover:border-[#c8951e] rounded transition-all duration-300"
+                    >
+                      {lyricsExpanded ? '收起' : '展开'}
+                    </button>
+                  </div>
+                )}
+              </div>
+                <div
+                className={clsx(
+                  'text-lg leading-normal text-[#6b6560] whitespace-pre-line tracking-[0.04em] py-3 px-1 overflow-hidden transition-all',
+                  !lyricsExpanded && 'max-h-[300px]'
+                )}
+              >
+                <LyricsDisplay lyric={song?.lyric || ''} />
+              </div>
+            </div>
+
+            {/* Description */}
+            {song?.description && (
+              <div className="mb-10">
+                <h2 className="text-base font-semibold text-[#2c2c2c] tracking-[0.12em] mb-4 pb-2.5 border-b border-[#e0dcd3] flex items-center gap-2">
+                  <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
+                  歌曲描述
+                </h2>
+                <div className={clsx('text-[#6b6560] leading-relaxed whitespace-pre-wrap', !descExpanded && 'line-clamp-6')}>
+                  {song.description}
+                </div>
+                {song.description.length > 200 ? (
+                  <button
+                    onClick={() => setDescExpanded(!descExpanded)}
+                    className="text-xs px-3 py-1.5 border border-[#e0dcd3] text-[#9e968e] hover:text-[#c8951e] hover:border-[#c8951e] rounded transition-all duration-300 mt-3 inline-flex items-center gap-1"
+                  >
+                    {descExpanded ? (
+                      <>收起 <ChevronUp size={14} /></>
+                    ) : (
+                      <>展开 <ChevronDown size={14} /></>
+                    )}
+                  </button>
+                ) : null}
+              </div>
+            )}
+
+            {/* Related Posts */}
+            <div className="mb-10">
+              <div className="flex items-center justify-between mb-4 pb-2.5 border-b border-[#e0dcd3]">
+                <h2 className="text-base font-semibold text-[#2c2c2c] tracking-[0.12em] flex items-center gap-2">
+                  <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
+                  关联乐评
+                </h2>
+                  <Link
+                    to={`/forum/new?musicDocId=${song.docId}&musicTitle=${encodeURIComponent(song.title)}`}
+                    className="px-4 py-2 bg-[#c8951e] text-white rounded text-xs font-semibold hover:bg-[#dca828] transition-all"
+                  >
+                  发表乐评
+                </Link>
+              </div>
+
+              {posts.length > 0 ? (
+                <div className="flex flex-col">
+                  {posts.map((post) => (
+                    <Link
+                      key={post.id}
+                      to={`/forum/${post.id}`}
+                      className="py-3.5 border-b border-[#e0dcd3] transition-colors group"
+                    >
+                      <p className="text-[0.9375rem] text-[#2c2c2c] mb-1 tracking-[0.04em] group-hover:text-[#c8951e] transition-colors">{post.title}</p>
+                      <div className="flex items-center gap-3 text-xs text-[#9e968e]">
+                        <span className="flex items-center gap-1"><Heart size={12} /> {post.likesCount || 0}</span>
+                        <span className="flex items-center gap-1"><MessageSquare size={12} /> {post.commentsCount || 0}</span>
+                        <span className="flex items-center gap-1"><Clock size={12} /> {formatDate(post.updatedAt)}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-[#9e968e] italic tracking-[0.1em] py-6">暂无乐评，快来发表第一篇吧！</div>
+              )}
+            </div>
+
+            {/* Custom Platform Links */}
+            {customPlatformLinks.length > 0 && (
+              <div className="mb-10">
+                <h2 className="text-base font-semibold text-[#2c2c2c] tracking-[0.12em] mb-4 pb-2.5 border-b border-[#e0dcd3] flex items-center gap-2">
+                  <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
+                  更多平台
+                </h2>
+                <div className="flex flex-col">
+                  {customPlatformLinks.map((link) => (
+                    <a
+                      key={`${link.label}-${link.url}`}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2.5 py-2.5 border-b border-[#ebe8e0] text-sm text-[#6b6560] hover:text-[#c8951e] hover:pl-1 transition-all"
+                    >
+                      <ExternalLink size={16} className="text-[#9e968e] flex-shrink-0" />
+                      <span className="truncate">{link.label}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Preset Platforms */}
+            {customPlatforms.length > 0 && song?.customPlatformIds && Object.keys(song.customPlatformIds).length > 0 && (
+              <div className="mb-10">
+                <h2 className="text-base font-semibold text-[#2c2c2c] tracking-[0.12em] mb-4 pb-2.5 border-b border-[#e0dcd3] flex items-center gap-2">
+                  <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
+                  预设平台
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {customPlatforms
+                    .filter(p => song.customPlatformIds?.[p.key])
+                    .map(platform => {
+                      const id = song.customPlatformIds![platform.key];
+                      const url = platform.urlPattern.replace('{id}', id);
+                      return (
+                        <a
+                          key={platform.key}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all hover:text-[#c8951e] border-b border-transparent hover:border-[#c8951e]"
+                          style={{ color: '#9e968e' }}
+                        >
+                          {platform.label}
+                          <ExternalLink size={12} />
+                        </a>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Admin */}
+            {isAdmin && song?.docId && (
+              <div className="mb-10">
+                <h2 className="text-base font-semibold text-[#2c2c2c] tracking-[0.12em] mb-4 pb-2.5 border-b border-[#e0dcd3] flex items-center gap-2">
+                  <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
+                  管理功能
+                </h2>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="px-5 py-2 border border-[#e0dcd3] text-sm text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] rounded transition-all"
+                  >
+                    编辑歌曲
+                  </button>
+                  <SongCoverManager
+                    songDocId={song.docId}
+                    currentCover={song.cover}
+                    onCoverUpdated={(newCoverUrl) => setSong((prev) => prev ? { ...prev, cover: newCoverUrl } : prev)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
-        </section>
-      )}
+
+          {/* Sidebar */}
+          <aside className="lg:sticky lg:top-20">
+            <div className="py-5 border-b border-[#e0dcd3]">
+              <h3 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-3.5">歌曲信息</h3>
+              <div className="flex flex-col gap-2.5 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9e968e]">歌手</span>
+                  <span className="text-[#2c2c2c]">{song.artist}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9e968e]">专辑</span>
+                  <span className="text-[#2c2c2c]">{song.album}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9e968e]">平台 ID</span>
+                  <span className="text-[#2c2c2c]">{song.id}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="py-5">
+              <h3 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-3.5">操作</h3>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handlePlay}
+                  className="flex items-center gap-2 text-sm text-[#6b6560] hover:text-[#c8951e] hover:pl-1 transition-all"
+                >
+                  <Play size={14} /> 播放歌曲
+                </button>
+                <button
+                  onClick={handleToggleFavorite}
+                  className="flex items-center gap-2 text-sm text-[#6b6560] hover:text-[#c8951e] hover:pl-1 transition-all"
+                >
+                  <Heart size={14} /> {song.favoritedByMe ? '取消收藏' : '收藏歌曲'}
+                </button>
+                <button
+                  onClick={handleCopyLink}
+                  className="flex items-center gap-2 text-sm text-[#6b6560] hover:text-[#c8951e] hover:pl-1 transition-all"
+                >
+                  <Link2 size={14} /> 复制内链
+                </button>
+                <a
+                  href={getSongExternalUrl(song)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sm text-[#6b6560] hover:text-[#c8951e] hover:pl-1 transition-all"
+                >
+                  <ExternalLink size={14} /> 原始链接
+                </a>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
 
       {isAdmin && song && (
         <SongEditModal

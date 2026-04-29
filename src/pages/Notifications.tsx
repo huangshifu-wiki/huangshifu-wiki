@@ -4,16 +4,14 @@ import {
 	CheckCheck,
 	ChevronLeft,
 	ChevronRight,
-	Filter,
 	MessageCircle,
 	ThumbsUp,
 	ShieldCheck,
+	Loader2,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../lib/apiClient";
-import { useTheme } from "../context/ThemeContext";
-import { mergeSearchParamsWithTheme, withThemeSearch } from "../lib/theme";
 
 type NotificationType = "reply" | "like" | "review_result";
 
@@ -126,18 +124,17 @@ function getNotificationTypeLabel(type: NotificationType) {
 
 function NotificationTypeIcon({ type }: { type: NotificationType }) {
 	if (type === "reply") {
-		return <MessageCircle size={16} className="text-sky-600" />;
+		return <MessageCircle size={14} className="text-[#c8951e]" />;
 	}
 	if (type === "like") {
-		return <ThumbsUp size={16} className="text-rose-600" />;
+		return <ThumbsUp size={14} className="text-[#c8951e]" />;
 	}
-	return <ShieldCheck size={16} className="text-emerald-600" />;
+	return <ShieldCheck size={14} className="text-[#c8951e]" />;
 }
 
 const Notifications = () => {
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
-	const { theme } = useTheme();
 	const rawFilter = searchParams.get("filter");
 	const filter: NotificationFilter = isNotificationFilter(rawFilter)
 		? rawFilter
@@ -195,14 +192,9 @@ const Notifications = () => {
 	const totalPages = Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE));
 
 	const updateQuery = (nextFilter: NotificationFilter, nextPage = 1) => {
-		const next = mergeSearchParamsWithTheme(
-			searchParams,
-			{
-				filter: nextFilter,
-				page: String(nextPage),
-			},
-			theme,
-		);
+		const next = new URLSearchParams(searchParams);
+		next.set('filter', nextFilter);
+		next.set('page', String(nextPage));
 		setSearchParams(next);
 	};
 
@@ -241,75 +233,75 @@ const Notifications = () => {
 	};
 
 	return (
-		<div className="max-w-5xl mx-auto px-4 py-10">
-			<div className="mb-6">
+		<div
+			className="min-h-[calc(100vh-60px)]"
+			style={{
+				backgroundColor: '#f7f5f0',
+				fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+				lineHeight: 1.8,
+			}}
+		>
+			<div className="max-w-[900px] mx-auto px-6 py-12">
 				<Link
-					to={withThemeSearch("/", theme)}
-					className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-brand-olive transition-colors"
+					to="/"
+					className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors mb-6"
 				>
 					<ChevronLeft size={16} />
 					返回首页
 				</Link>
-			</div>
 
-			<section className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden">
-				<header className="px-6 md:px-8 py-6 border-b border-gray-100">
-					<div className="flex flex-wrap items-center justify-between gap-4">
-						<div>
-							<h1 className="text-3xl font-serif font-bold text-brand-olive flex items-center gap-3">
-								<Bell size={24} />
-								通知中心
-							</h1>
-							<p className="text-sm text-gray-500 mt-1">
-								未读 {data.unreadCount} 条，共 {data.total} 条
-							</p>
-						</div>
+				{/* Header */}
+				<div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+					<div>
+						<h1 className="text-2xl font-bold text-[#2c2c2c] flex items-center gap-2 tracking-[0.05em]">
+							<Bell size={22} className="text-[#c8951e]" />
+							通知中心
+						</h1>
+						<p className="text-sm text-[#9e968e] mt-1">
+							未读 {data.unreadCount} 条，共 {data.total} 条
+						</p>
+					</div>
+					<button
+						onClick={markAllNotificationsRead}
+						disabled={markingAllRead || data.unreadCount === 0}
+						className="inline-flex items-center gap-2 px-4 py-2 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						<CheckCheck size={16} />
+						{markingAllRead ? "处理中..." : "全部标记已读"}
+					</button>
+				</div>
+
+				{/* Filter Tabs */}
+				<div className="flex items-center gap-1 border-b border-[#e0dcd3] mb-6 overflow-x-auto">
+					{FILTER_OPTIONS.map((option) => (
 						<button
-							onClick={markAllNotificationsRead}
-							disabled={markingAllRead || data.unreadCount === 0}
-							className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-olive text-white text-sm font-medium hover:bg-brand-olive/90 disabled:opacity-50 disabled:cursor-not-allowed"
+							key={option.id}
+							onClick={() => updateQuery(option.id, 1)}
+							className={clsx(
+								"px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap relative",
+								filter === option.id
+									? "text-[#c8951e]"
+									: "text-[#6b6560] hover:text-[#c8951e]",
+							)}
 						>
-							<CheckCheck size={16} />
-							{markingAllRead ? "处理中..." : "全部标记已读"}
+							{option.label}
+							{filter === option.id && (
+								<span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#c8951e] rounded-[1px]" />
+							)}
 						</button>
-					</div>
+					))}
+				</div>
 
-					<div className="mt-5 flex flex-wrap items-center gap-2">
-						<span className="inline-flex items-center gap-1 text-xs text-gray-500 px-3 py-1 rounded-full bg-gray-50">
-							<Filter size={14} />
-							筛选
-						</span>
-						{FILTER_OPTIONS.map((option) => (
-							<button
-								key={option.id}
-								onClick={() => updateQuery(option.id, 1)}
-								className={clsx(
-									"px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
-									filter === option.id
-										? "bg-brand-olive text-white"
-										: "bg-gray-50 text-gray-600 hover:bg-gray-100",
-								)}
-							>
-								{option.label}
-							</button>
-						))}
-					</div>
-				</header>
-
-				<div className="min-h-[360px]">
+				{/* List */}
+				<div className="bg-white border border-[#e0dcd3] rounded overflow-hidden min-h-[360px]">
 					{loading ? (
-						<div className="p-8 space-y-3">
-							{[1, 2, 3, 4].map((item) => (
-								<div
-									key={item}
-									className="h-20 bg-gray-50 rounded-2xl animate-pulse"
-								/>
-							))}
+						<div className="flex items-center justify-center py-20">
+							<Loader2 size={24} className="animate-spin text-[#c8951e]" />
 						</div>
 					) : data.notifications.length === 0 ? (
-						<div className="p-16 text-center text-gray-400">
-							<Bell className="mx-auto mb-4" size={42} />
-							当前筛选下暂无通知
+						<div className="flex flex-col items-center justify-center py-20 text-[#9e968e]">
+							<Bell size={36} className="mb-3 opacity-50" />
+							<p>当前筛选下暂无通知</p>
 						</div>
 					) : (
 						<ul>
@@ -319,9 +311,10 @@ const Notifications = () => {
 									<li
 										key={notif.id}
 										className={clsx(
-											"px-6 md:px-8 py-4 border-b border-gray-50 last:border-b-0",
-											!notif.isRead && "bg-sky-50/50",
-										)}
+											"px-6 py-4 border-b border-[#e0dcd3] last:border-b-0 transition-colors",
+											!notif.isRead && "bg-[#fdf5d8]/30",
+										)
+										}
 									>
 										<div className="flex items-start justify-between gap-4">
 											<button
@@ -330,18 +323,18 @@ const Notifications = () => {
 														markNotificationRead(notif.id);
 													}
 													if (link) {
-														navigate(withThemeSearch(link, theme));
+														navigate(link);
 													}
 												}}
 												className="text-left flex-1"
 											>
 												<div className="flex items-center gap-2 mb-1">
 													<NotificationTypeIcon type={notif.type} />
-													<span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+													<span className="text-[11px] px-2 py-0.5 rounded bg-[#f7f5f0] text-[#6b6560]">
 														{getNotificationTypeLabel(notif.type)}
 													</span>
 													{!notif.isRead && (
-														<span className="text-[11px] text-sky-700 font-medium">
+														<span className="text-[11px] text-[#c8951e] font-medium">
 															未读
 														</span>
 													)}
@@ -350,13 +343,13 @@ const Notifications = () => {
 													className={clsx(
 														"text-sm",
 														!notif.isRead
-															? "font-medium text-gray-900"
-															: "text-gray-700",
+															? "font-medium text-[#2c2c2c]"
+															: "text-[#6b6560]",
 													)}
 												>
 													{getNotificationText(notif)}
 												</p>
-												<p className="text-xs text-gray-400 mt-1">
+												<p className="text-xs text-[#9e968e] mt-1">
 													{new Date(notif.createdAt).toLocaleString("zh-CN")}
 												</p>
 											</button>
@@ -364,28 +357,29 @@ const Notifications = () => {
 											{!notif.isRead ? (
 												<button
 													onClick={() => markNotificationRead(notif.id)}
-													className="text-xs text-brand-olive hover:underline"
+													className="text-xs text-[#c8951e] hover:underline shrink-0"
 												>
 													标记已读
 												</button>
 											) : null}
 										</div>
 									</li>
-								);
-							})}
-						</ul>
-					)}
-				</div>
+									);
+								})}
+							</ul>
+						)}
+					</div>
 
-				<footer className="px-6 md:px-8 py-4 border-t border-gray-100 flex items-center justify-between">
-					<p className="text-xs text-gray-400">
+				{/* Pagination */}
+				<div className="flex items-center justify-between mt-6 flex-wrap gap-3">
+					<p className="text-xs text-[#9e968e]">
 						第 {Math.min(page, totalPages)} / {totalPages} 页
 					</p>
 					<div className="flex items-center gap-2">
 						<button
 							onClick={() => updateQuery(filter, Math.max(1, page - 1))}
 							disabled={page <= 1}
-							className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+							className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
 						>
 							<ChevronLeft size={14} /> 上一页
 						</button>
@@ -394,13 +388,13 @@ const Notifications = () => {
 								updateQuery(filter, Math.min(totalPages, page + 1))
 							}
 							disabled={page >= totalPages}
-							className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+							className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
 						>
 							下一页 <ChevronRight size={14} />
 						</button>
 					</div>
-				</footer>
-			</section>
+				</div>
+			</div>
 		</div>
 	);
 };

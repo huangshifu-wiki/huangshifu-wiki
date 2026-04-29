@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Disc3, Play, Heart, ExternalLink, Link2, ChevronDown, ChevronUp } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -42,11 +42,20 @@ type AlbumResponse = {
 
 const AlbumDetail = () => {
   const { albumId } = useParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [album, setAlbum] = useState<AlbumResponse['album'] | null>(null);
   const [favoriting, setFavoriting] = useState<string | null>(null);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [descNeedExpand, setDescNeedExpand] = useState(false);
+  const descRef = useRef<HTMLDivElement>(null);
   const { user, isAdmin } = useAuth();
+
+  useEffect(() => {
+    if (descRef.current && !descExpanded) {
+      setDescNeedExpand(descRef.current.scrollHeight > descRef.current.clientHeight + 1);
+    }
+  }, [album?.description, descExpanded]);
   const { currentSong, playAlbumTracks } = useMusic();
   const { show } = useToast();
 
@@ -122,141 +131,172 @@ const AlbumDetail = () => {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-12">
-        <div className="h-40 bg-white rounded-[32px] border border-gray-100 animate-pulse" />
+      <div
+        className="min-h-screen"
+        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+      >
+        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+          <div className="h-40 bg-[#f0ece3] rounded animate-pulse" />
+        </div>
       </div>
     );
   }
 
   if (!album) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-12">
-        <Link to="/music" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-brand-olive transition-colors">
-          <ArrowLeft size={16} /> 返回音乐馆
-        </Link>
-        <div className="mt-6 bg-white rounded-[32px] border border-gray-100 p-10 text-center text-gray-400">
-          专辑不存在或已被删除
+      <div
+        className="min-h-screen"
+        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+      >
+        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+          <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors">
+            <ArrowLeft size={16} /> 返回音乐馆
+          </Link>
+          <div className="mt-6 bg-white rounded border border-[#e0dcd3] p-10 text-center text-[#9e968e] italic tracking-[0.1em]">
+            专辑不存在或已被删除
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
-      <Link to="/music" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-brand-olive transition-colors">
-        <ArrowLeft size={16} /> 返回音乐馆
-      </Link>
+    <div
+      className="min-h-screen"
+      style={{ backgroundColor: '#f7f5f0', color: '#2c2c2c', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif", lineHeight: 1.8 }}
+    >
+      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+        <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors mb-5">
+          <ArrowLeft size={16} /> 返回音乐馆
+        </Link>
 
-      <section className="mt-6 bg-white rounded-[32px] border border-gray-100 overflow-hidden shadow-sm">
-        <header className="px-6 md:px-8 py-6 border-b border-gray-100 flex flex-col md:flex-row gap-5 md:items-center md:justify-between">
-          <div className="flex items-center gap-4 min-w-0">
-            <SmartImage src={album.cover} alt="" className="w-20 h-20 rounded-2xl object-cover shadow" />
-            <div className="min-w-0">
-              <h1 className="text-3xl font-serif font-bold text-gray-900 truncate">{album.title}</h1>
-              <p className="text-sm text-gray-500">{album.artist} · {album.tracks.length} 首歌曲</p>
-              {album.description ? (
-                <div className="mt-1">
-                  <p className={clsx('text-xs text-gray-400', !descExpanded && 'line-clamp-2')}>
-                    {album.description}
-                  </p>
-                  {album.description.length > 60 ? (
-                    <button
-                      onClick={() => setDescExpanded(!descExpanded)}
-                      className="text-xs text-brand-olive hover:underline mt-1 inline-flex items-center gap-0.5"
-                    >
-                      {descExpanded ? (
-                        <>收起 <ChevronUp size={12} /></>
-                      ) : (
-                        <>展开 <ChevronDown size={12} /></>
-                      )}
-                    </button>
-                  ) : null}
-                </div>
+        {/* Detail Header */}
+        <div className="flex flex-col md:flex-row gap-5 mb-6 pb-6 border-b border-[#e0dcd3]">
+          <SmartImage
+            src={album.cover}
+            alt={album.title}
+            className="w-40 h-40 md:w-44 md:h-44 object-cover flex-shrink-0 rounded bg-[#f0ece3]"
+          />
+          <div className="flex-1 flex flex-col justify-center min-w-0">
+            <h1 className="text-[1.75rem] font-bold text-[#2c2c2c] tracking-[0.12em] mb-1.5">{album.title}</h1>
+            <p className="text-base text-[#6b6560] tracking-[0.08em] mb-4">{album.artist} · {album.tracks.length} 首歌曲</p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => handlePlay(0)}
+                disabled={album.tracks.length === 0}
+                className="inline-flex items-center gap-2 px-6 py-2 bg-[#c8951e] text-white rounded text-[0.9375rem] tracking-[0.08em] hover:bg-[#dca828] transition-all disabled:opacity-50"
+              >
+                <Play size={16} /> 播放专辑
+              </button>
+              <button
+                onClick={handleCopyAlbumLink}
+                className="inline-flex items-center gap-2 px-5 py-2.5 border border-[#e0dcd3] text-[0.9375rem] text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] rounded transition-all"
+              >
+                <Link2 size={15} /> 复制内链
+              </button>
+              {album.platformUrl ? (
+                <a
+                  href={album.platformUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-[#e0dcd3] text-[0.9375rem] text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] rounded transition-all"
+                >
+                  <ExternalLink size={15} /> 原始链接
+                </a>
               ) : null}
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleCopyAlbumLink}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 text-sm text-gray-600 hover:text-brand-olive hover:border-brand-olive/40"
-              title="复制内链"
-            >
-              <Link2 size={14} /> 复制内链
-            </button>
-            {album.platformUrl ? (
-              <a
-                href={album.platformUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 text-sm text-gray-600 hover:text-brand-olive hover:border-brand-olive/40"
-              >
-                <ExternalLink size={14} /> 原始链接
-              </a>
-            ) : null}
-            <button
-              onClick={() => handlePlay(0)}
-              disabled={album.tracks.length === 0}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand-olive text-white text-sm font-bold hover:bg-brand-olive/90 disabled:opacity-50"
-            >
-              <Play size={16} /> 播放专辑
-            </button>
-          </div>
-        </header>
-
-        <ul>
-          {album.tracks.map((track, index) => (
-            <li
-              key={track.docId}
-              className={clsx(
-                'px-6 md:px-8 py-4 border-b border-gray-50 last:border-b-0 flex items-center gap-3 hover:bg-gray-50 transition-colors',
-                currentSong?.docId === track.docId && 'bg-brand-primary/5',
-              )}
-            >
+        {/* Description */}
+        {album.description ? (
+          <div className="mb-10">
+            <h2 className="text-base font-semibold text-[#2c2c2c] tracking-[0.12em] mb-4 flex items-center gap-2">
+              <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
+              专辑简介
+            </h2>
+            <div ref={descRef} className={clsx('text-[#6b6560] leading-relaxed whitespace-pre-wrap', !descExpanded && 'line-clamp-3')}>
+              {album.description}
+            </div>
+            {descNeedExpand && (
               <button
-                onClick={() => handlePlay(index)}
-                className="w-8 h-8 rounded-full bg-gray-100 text-gray-600 hover:bg-brand-olive hover:text-white transition-colors inline-flex items-center justify-center"
+                onClick={() => setDescExpanded(!descExpanded)}
+                className="text-xs px-3 py-1.5 border border-[#e0dcd3] text-[#9e968e] hover:text-[#c8951e] hover:border-[#c8951e] rounded transition-all duration-300 mt-3 inline-flex items-center gap-0.5"
               >
-                <Play className="text-[14px] md:text-[16px]" />
-              </button>
-              <span className="text-xs font-bold text-gray-300 w-4">{(track.trackOrder ?? index) + 1}</span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-900 truncate">{track.title}</p>
-                <p className="text-xs text-gray-400 truncate">{track.artist}</p>
-              </div>
-              <button
-                onClick={() => toggleFavorite(track)}
-                disabled={favoriting === track.docId}
-                className={clsx(
-                  'p-2 transition-colors',
-                  track.favoritedByMe ? 'text-red-500' : 'text-gray-400 hover:text-red-500',
-                  favoriting === track.docId && 'opacity-50 cursor-not-allowed',
+                {descExpanded ? (
+                  <>收起 <ChevronUp size={12} /></>
+                ) : (
+                  <>展开 <ChevronDown size={12} /></>
                 )}
-              >
-                <Heart size={16} />
               </button>
-            </li>
-          ))}
-        </ul>
-
-        {album.tracks.length === 0 ? (
-          <div className="px-6 md:px-8 py-10 text-center text-gray-400">
-            <Disc3 className="mx-auto mb-2" size={28} />
-            当前专辑暂无曲目
+            )}
           </div>
         ) : null}
-      </section>
 
-      {isAdmin && albumId && (
-        <section className="mt-6 bg-white rounded-[32px] border border-gray-100 p-6 md:p-8 shadow-sm">
-          <h2 className="text-xl font-serif font-bold text-gray-900 mb-4">管理功能</h2>
-          <AlbumCoverManager
-            albumDocId={albumId}
-            currentCover={album.cover}
-            onCoverUpdated={(newCoverUrl) => setAlbum((prev) => prev ? { ...prev, cover: newCoverUrl } : prev)}
-          />
-        </section>
-      )}
+        {/* Track List */}
+        <div className="mb-10">
+          <h2 className="text-base font-semibold text-[#2c2c2c] tracking-[0.12em] mb-4 flex items-center gap-2">
+            <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
+            曲目列表
+          </h2>
+          <div className="flex flex-col">
+            {album.tracks.map((track, index) => (
+              <div
+                key={track.docId}
+                onClick={() => navigate(`/music/${track.docId}`)}
+                className={clsx(
+                  'flex items-center gap-4 py-3 px-1 border-b border-[#e0dcd3] cursor-pointer transition-colors',
+                  currentSong?.docId === track.docId && 'bg-[#fdf5d8]/40'
+                )}
+              >
+                <span className="text-sm text-[#9e968e] w-7 text-right flex-shrink-0">{(track.trackOrder ?? index) + 1}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handlePlay(index); }}
+                  className="w-8 h-8 flex items-center justify-center text-[#6b6560] hover:text-[#c8951e] hover:bg-[#f0ece3] rounded-full transition-all flex-shrink-0"
+                >
+                  <Play size={14} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-base text-[#2c2c2c] truncate hover:text-[#c8951e] transition-colors">{track.title}</p>
+                  <p className="text-xs text-[#9e968e] truncate">{track.artist}</p>
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleFavorite(track); }}
+                  disabled={favoriting === track.docId}
+                  className={clsx(
+                    'p-2 transition-colors flex-shrink-0',
+                    track.favoritedByMe ? 'text-red-500' : 'text-[#9e968e] hover:text-red-500',
+                    favoriting === track.docId && 'opacity-50 cursor-not-allowed',
+                  )}
+                >
+                  <Heart size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+          {album.tracks.length === 0 ? (
+            <div className="py-10 text-center text-[#9e968e] italic">
+              <Disc3 className="mx-auto mb-2" size={28} />
+              当前专辑暂无曲目
+            </div>
+          ) : null}
+        </div>
+
+        {/* Admin */}
+        {isAdmin && albumId && (
+          <div className="mb-10">
+            <h2 className="text-base font-semibold text-[#2c2c2c] tracking-[0.12em] mb-4 flex items-center gap-2">
+              <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
+              管理功能
+            </h2>
+            <AlbumCoverManager
+              albumDocId={albumId}
+              currentCover={album.cover}
+              onCoverUpdated={(newCoverUrl) => setAlbum((prev) => prev ? { ...prev, cover: newCoverUrl } : prev)}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 };

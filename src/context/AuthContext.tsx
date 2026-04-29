@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import type { User } from '../lib/auth';
 import { UserPreferencesProvider } from './UserPreferencesContext';
-import { useTheme } from './ThemeContext';
 import type { UserProfile } from '../types/entities';
 
 // 延迟加载 auth 模块，避免首屏阻塞
@@ -35,7 +34,6 @@ const AuthContext = createContext<AuthContextType>({
 const LAZY_INIT_DELAY = 100; // 延迟初始化时间（毫秒），足够让首屏渲染完成
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAcademy } = useTheme();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const authModuleRef = useRef<AuthModule | null>(null);
@@ -54,14 +52,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const initializeAuth = useCallback(async (immediate = false) => {
     // 如果已经在初始化中或已完成，则跳过
     if (isInitializedRef.current && !immediate) return;
-
-    // Academy 模式下跳过认证
-    if (isAcademy) {
-      setUser(null);
-      setLoading(false);
-      isInitializedRef.current = true;
-      return;
-    }
 
     try {
       // 动态导入 auth 模块
@@ -85,17 +75,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
       isInitializedRef.current = true;
     }
-  }, [isAcademy, cleanupSubscription]);
+  }, [cleanupSubscription]);
 
   // 延迟初始化 - 使用 requestIdleCallback 或 setTimeout
   useEffect(() => {
-    if (isAcademy) {
-      setUser(null);
-      setLoading(false);
-      isInitializedRef.current = true;
-      return;
-    }
-
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let idleCallbackId: number | null = null;
 
@@ -125,7 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cleanupSubscription();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAcademy, cleanupSubscription, initializeAuth]);
+  }, [cleanupSubscription, initializeAuth]);
 
   // 确保初始化完成（用于需要认证的操作）
   const ensureInitialized = useCallback(async () => {
@@ -135,8 +118,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 刷新认证状态
   const refreshAuth = useCallback(async () => {
-    if (isAcademy) return;
-
     try {
       setLoading(true);
       if (!authModuleRef.current) {
@@ -148,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setLoading(false);
     }
-  }, [isAcademy]);
+  }, []);
 
   // 构建用户资料
   const profile = user

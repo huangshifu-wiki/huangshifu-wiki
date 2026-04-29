@@ -34,26 +34,26 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
 			initial={{ opacity: 0, y: -10 }}
 			animate={{ opacity: 1, y: 0 }}
 			exit={{ opacity: 0, y: -10 }}
-			className={`p-4 rounded-2xl border-2 ${isNew || isEditing ? "border-brand-olive/30 bg-brand-olive/5" : "border-gray-100 bg-white"} hover:shadow-md transition-all`}
+			className={`p-4 rounded border ${isNew || isEditing ? "border-[#c8951e]/30 bg-[#c8951e]/5" : "border-[#e0dcd3] bg-white"} hover:border-[#c8951e]/40 transition-all`}
 		>
 			<div className="flex items-start justify-between gap-3">
 				<div className="flex-1">
 					<div className="flex items-center gap-2 mb-1">
-						<h4 className="font-bold text-brand-olive text-base">
+						<h4 className="font-semibold text-[#2c2c2c] text-base">
 							{relation.metadata?.title || relation.label || relation.targetSlug}
 						</h4>
 						{isNew && (
-							<span className="px-2 py-0.5 bg-brand-olive text-white text-[10px] font-bold rounded-full">
+							<span className="px-2 py-0.5 bg-[#c8951e] text-white text-[10px] font-medium rounded">
 								新建
 							</span>
 						)}
 						{isEditing && (
-							<span className="px-2 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded-full">
+							<span className="px-2 py-0.5 bg-[#4a90d9] text-white text-[10px] font-medium rounded">
 								编辑中
 							</span>
 						)}
 					</div>
-					<div className="flex items-center gap-2 text-xs text-gray-500">
+					<div className="flex items-center gap-2 text-xs text-[#9e968e]">
 						<span className="flex items-center gap-1">
 							<Link2 size={12} />
 							{typeLabel}
@@ -71,7 +71,7 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
 					{onEdit && (
 						<button
 							onClick={() => onEdit(relation)}
-							className="p-1.5 text-gray-400 hover:text-brand-olive transition-colors rounded-lg hover:bg-brand-olive/10"
+							className="p-1.5 text-[#9e968e] hover:text-[#c8951e] transition-colors rounded hover:bg-[#f7f5f0]"
 							title="编辑关联"
 						>
 							<Edit2 size={14} />
@@ -81,7 +81,7 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
 					{onRemove && (
 						<button
 							onClick={onRemove}
-							className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+							className="p-1.5 text-[#9e968e] hover:text-red-500 transition-colors rounded hover:bg-red-50"
 							title="移除关联"
 						>
 							<X size={14} />
@@ -91,7 +91,7 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
 					{onConfirm && isNew && (
 						<button
 							onClick={onConfirm}
-							className="p-1.5 text-green-600 hover:text-green-700 transition-colors rounded-lg hover:bg-green-50"
+							className="p-1.5 text-green-600 hover:text-green-700 transition-colors rounded hover:bg-green-50"
 							title="确认添加"
 						>
 							<Check size={14} />
@@ -102,14 +102,14 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
 
 			{/* 描述信息 */}
 			{relation.metadata?.description && (
-				<p className="text-sm text-gray-600 mt-3 line-clamp-2">
+				<p className="text-sm text-[#6b6560] mt-3 line-clamp-2">
 					{relation.metadata.description}
 				</p>
 			)}
 
 			{/* 封面图片 */}
 			{relation.metadata?.coverImage && (
-				<div className="mt-3 rounded-xl overflow-hidden">
+				<div className="mt-3 rounded overflow-hidden">
 					<img
 						src={relation.metadata.coverImage}
 						alt="Cover"
@@ -125,13 +125,13 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
 						relation.metadata.tags.slice(0, 5).map((tag, idx) => (
 							<span
 								key={idx}
-								className="px-2 py-1 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-full"
+								className="px-2 py-1 bg-[#f7f5f0] text-[#6b6560] text-[10px] font-medium rounded"
 							>
 								#{tag}
 							</span>
 						))}
 					{relation.metadata?.authorName && (
-						<span className="px-2 py-1 bg-brand-cream text-brand-olive text-[10px] font-bold rounded-full">
+						<span className="px-2 py-1 bg-[#f7f5f0] text-[#c8951e] text-[10px] font-medium rounded">
 							👤 {relation.metadata.authorName}
 						</span>
 					)}

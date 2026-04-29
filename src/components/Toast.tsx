@@ -71,12 +71,11 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] pointer-events-none px-4">
           <div
             className={[
-              'min-w-[220px] max-w-[calc(100vw-2rem)] rounded-2xl border px-4 py-3 shadow-2xl',
-              'backdrop-blur-sm text-sm font-medium transition-all duration-200',
+              'min-w-[220px] max-w-[calc(100vw-2rem)] rounded border px-4 py-3 text-sm font-medium transition-all duration-200',
               toast.visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2',
               toast.variant === 'error'
-                ? 'bg-white/95 border-red-200 text-red-600'
-                : 'bg-white/95 border-brand-primary/40 text-gray-800',
+                ? 'bg-white border-red-200 text-red-600'
+                : 'bg-white border-[#c8951e]/40 text-[#2c2c2c]',
             ].join(' ')}
             role="status"
             aria-live="polite"
@@ -85,7 +84,7 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
               <span
                 className={[
                   'inline-block h-2 w-2 rounded-full',
-                  toast.variant === 'error' ? 'bg-red-500' : 'bg-brand-primary',
+                  toast.variant === 'error' ? 'bg-red-500' : 'bg-[#c8951e]',
                 ].join(' ')}
                 aria-hidden="true"
               />

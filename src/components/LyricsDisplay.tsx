@@ -31,37 +31,37 @@ export const LyricsDisplay = ({ lyric, currentTime }: LyricsDisplayProps) => {
   }, [currentTime, lines]);
 
   if (lines.length === 0) {
-    return <p className="text-sm text-gray-400 italic">暂无歌词</p>;
+    return <p className="text-sm text-[#9e968e] italic">暂无歌词</p>;
   }
 
   const hasMetadata = metadata.lyricist || metadata.composer || metadata.arranger;
 
   return (
-    <div className="space-y-4">
+    <div>
       {hasMetadata && (
-        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-[#9e968e] mb-4">
           {metadata.lyricist && (
-            <span>作词：<span className="text-gray-700">{metadata.lyricist}</span></span>
+            <span>作词：<span className="text-[#6b6560]">{metadata.lyricist}</span></span>
           )}
           {metadata.composer && (
-            <span>作曲：<span className="text-gray-700">{metadata.composer}</span></span>
+            <span>作曲：<span className="text-[#6b6560]">{metadata.composer}</span></span>
           )}
           {metadata.arranger && (
-            <span>编曲：<span className="text-gray-700">{metadata.arranger}</span></span>
+            <span>编曲：<span className="text-[#6b6560]">{metadata.arranger}</span></span>
           )}
         </div>
       )}
 
-      <div className="space-y-2 text-sm text-gray-600 leading-relaxed max-h-[380px] overflow-y-auto pr-2">
+      <div className="text-[#6b6560]">
         {lines.map((line, index) => (
           <p
             key={`${line.time}-${index}`}
             className={clsx(
-              'transition-all duration-300 py-1',
+              'transition-all duration-300',
               currentLineIndex === index
-                ? 'text-brand-primary font-bold text-base'
+                ? 'text-[#c8951e] font-semibold'
                 : currentLineIndex > index
-                ? 'text-gray-400'
+                ? 'text-[#9e968e]'
                 : ''
             )}
           >

@@ -1,5 +1,3 @@
-import type { ThemeName } from '../lib/theme';
-
 export interface BirthdayConfig {
   id: string;
   type: string;
@@ -23,7 +21,6 @@ export interface CategoryCardProps {
     desc: string;
     link: string;
   };
-  theme: ThemeName;
 }
 
 export interface HomeFeedResponse {

@@ -41,11 +41,7 @@ export const LocationTagInput = ({
   }, [value]);
 
   const fetchSuggestions = useCallback(async (query: string) => {
-    if (query.length < 1) {
-      setSuggestions([]);
-      return;
-    }
-
+    if (query.length < 1) { setSuggestions([]); return; }
     setLoading(true);
     try {
       const data = await apiGet<{ regions?: RegionSuggestion[] }>(
@@ -65,14 +61,8 @@ export const LocationTagInput = ({
     setInputValue(newValue);
     setShowDropdown(true);
     setSelectedIndex(-1);
-
-    if (debounceRef.current) {
-      window.clearTimeout(debounceRef.current);
-    }
-
-    debounceRef.current = window.setTimeout(() => {
-      fetchSuggestions(newValue);
-    }, 200);
+    if (debounceRef.current) { window.clearTimeout(debounceRef.current); }
+    debounceRef.current = window.setTimeout(() => { fetchSuggestions(newValue); }, 200);
   };
 
   const handleSelect = (region: RegionSuggestion) => {
@@ -94,23 +84,18 @@ export const LocationTagInput = ({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!showDropdown || suggestions.length === 0) return;
-
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex((prev) =>
-          prev < suggestions.length - 1 ? prev + 1 : prev
-        );
+        setSelectedIndex((prev) => prev < suggestions.length - 1 ? prev + 1 : prev);
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1));
+        setSelectedIndex((prev) => prev > 0 ? prev - 1 : -1);
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedIndex >= 0) {
-          handleSelect(suggestions[selectedIndex]);
-        }
+        if (selectedIndex >= 0) { handleSelect(suggestions[selectedIndex]); }
         break;
       case 'Escape':
         setShowDropdown(false);
@@ -125,13 +110,10 @@ export const LocationTagInput = ({
         '/api/regions/resolve',
         { lng: location.lng, lat: location.lat }
       );
-
       if (data.result) {
-        const adcode = data.result.adcode;
-        const fullName = `${data.result.province}${data.result.city}${data.result.district}`.replace(/^(内蒙古自治区 | 宁夏回族自治区 | 广西壮族自治区 | 新疆维吾尔自治区 | 西藏自治区 | 特别行政区)/g, (m: string) => m);
-
+        const fullName = `${data.result.province}${data.result.city}${data.result.district}`;
         setInputValue(fullName);
-        onChange(fullName, adcode);
+        onChange(fullName, data.result.adcode);
       }
     } catch (err) {
       console.error('Failed to resolve location:', err);
@@ -139,30 +121,26 @@ export const LocationTagInput = ({
   };
 
   const handleFocus = () => {
-    if (inputValue && suggestions.length > 0) {
-      setShowDropdown(true);
-    }
+    if (inputValue && suggestions.length > 0) { setShowDropdown(true); }
   };
 
   const handleBlur = () => {
-    setTimeout(() => {
-      setShowDropdown(false);
-    }, 150);
+    setTimeout(() => { setShowDropdown(false); }, 150);
   };
 
   if (value && !inputValue) {
     return (
       <div className="flex items-center gap-1.5">
-        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-          <MapPin className="w-3 h-3" />
+        <span className="px-2 py-0.5 bg-[#fdf5d8] text-[#c8951e] rounded text-[10px] font-medium flex items-center gap-1">
+          <MapPin size={11} />
           {value}
         </span>
         <button
           onClick={handleClear}
-          className="p-0.5 rounded-full hover:bg-gray-200 transition-colors"
+          className="p-0.5 rounded hover:bg-[#f7f5f0] transition-colors"
           type="button"
         >
-          <X className="w-3 h-3 text-gray-400" />
+          <X size={11} className="text-[#9e968e]" />
         </button>
       </div>
     );
@@ -172,7 +150,7 @@ export const LocationTagInput = ({
     <div className="relative">
       <div className="flex items-center gap-1">
         <div className="relative flex-1">
-          <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          <MapPin size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9e968e] pointer-events-none" />
           <input
             ref={inputRef}
             type="text"
@@ -182,52 +160,52 @@ export const LocationTagInput = ({
             onFocus={handleFocus}
             onBlur={handleBlur}
             placeholder="输入或选择地点..."
-            className="w-full pl-8 pr-8 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/50"
+            className="w-full pl-8 pr-8 py-1.5 text-sm rounded border border-[#e0dcd3] bg-[#f7f5f0] focus:border-[#c8951e] focus:outline-none text-[#2c2c2c]"
           />
           {loading && (
-            <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 animate-spin" />
+            <Loader2 size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9e968e] animate-spin" />
           )}
           {!loading && inputValue && (
             <button
               onClick={handleClear}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-200"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-[#f7f5f0]"
               type="button"
             >
-              <X className="w-3.5 h-3.5 text-gray-400" />
+              <X size={13} className="text-[#9e968e]" />
             </button>
           )}
         </div>
         <button
           onClick={() => setMapPickerOpen(true)}
-          className="p-1.5 border rounded-lg hover:bg-gray-50 transition-colors"
+          className="p-1.5 border border-[#e0dcd3] rounded hover:border-[#c8951e] hover:text-[#c8951e] transition-all"
           type="button"
           title="在地图上选择"
         >
-          <MapPin className="w-4 h-4 text-gray-500" />
+          <MapPin size={15} className="text-[#9e968e]" />
         </button>
       </div>
 
       {showDropdown && suggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border z-20 max-h-60 overflow-y-auto"
+          className="absolute top-full left-0 right-0 mt-1 bg-white rounded border border-[#e0dcd3] z-20 max-h-60 overflow-y-auto"
         >
           {suggestions.map((region, index) => (
             <button
               key={region.code}
               onClick={() => handleSelect(region)}
-              className={`w-full px-3 py-2 text-left hover:bg-gray-50 border-b last:border-b-0 transition-colors ${
-                index === selectedIndex ? 'bg-gray-50' : ''
+              className={`w-full px-3 py-2 text-left border-b border-[#e0dcd3] last:border-b-0 transition-colors ${
+                index === selectedIndex ? 'bg-[#f7f5f0]' : 'hover:bg-[#f7f5f0]'
               }`}
             >
               <div className="flex items-center gap-1.5">
-                <MapPin className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                <span className="font-medium text-gray-800">{region.name}</span>
-                <span className="text-[10px] text-gray-400 bg-gray-100 px-1 rounded">
+                <MapPin size={11} className="text-[#c8951e] flex-shrink-0" />
+                <span className="text-sm font-medium text-[#2c2c2c]">{region.name}</span>
+                <span className="text-[10px] text-[#9e968e] bg-[#f7f5f0] px-1 rounded">
                   {region.levelName}
                 </span>
               </div>
-              <div className="text-xs text-gray-500 mt-0.5 pl-4.5">
+              <div className="text-xs text-[#9e968e] mt-0.5 pl-[1.125rem]">
                 {region.fullName}
               </div>
             </button>

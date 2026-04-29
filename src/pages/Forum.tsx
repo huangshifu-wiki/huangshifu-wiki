@@ -8,7 +8,6 @@ import {
 	useNavigate,
 } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useTheme } from "../context/ThemeContext";
 import ReactMarkdown from "react-markdown";
 import {
 	MessageSquare,
@@ -35,13 +34,10 @@ import { uploadMarkdownImage } from "../services/imageService";
 import { apiDelete, apiGet, apiPost, apiPut } from "../lib/apiClient";
 import { useToast } from "../components/Toast";
 import { copyToClipboard, toAbsoluteInternalUrl } from "../lib/copyLink";
-import { withThemeSearch, mergeSearchParamsWithTheme } from "../lib/theme";
-import type { ThemeName } from "../lib/theme";
 import { ContentStatus, getStatusText } from "../lib/contentUtils";
-import { formatDate, toDateValue } from "../lib/dateUtils";
+import { formatDate } from "../lib/dateUtils";
 import { LocationTagInput } from "../components/LocationTagInput";
 import Pagination from "../components/Pagination";
-import { ForumSkeleton } from "../components/ForumSkeleton";
 
 const mdParser = new MarkdownIt({
 	html: true,
@@ -98,73 +94,70 @@ interface PostCardProps {
 	sectionName: string;
 	isAdmin: boolean;
 	pinning: string | null;
-	theme: ThemeName;
 	onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, postId: string) => void;
 	onTogglePin: (postId: string, currentlyPinned: boolean) => void;
 }
 
-const PostCard = React.memo(({ post, sectionName, isAdmin, pinning, theme, onCopyLink, onTogglePin }: PostCardProps) => (
+const PostCard = React.memo(({ post, sectionName, isAdmin, pinning, onCopyLink, onTogglePin }: PostCardProps) => (
 	<div
 		className={clsx(
-			"bg-white p-8 rounded-[32px] border hover:shadow-lg transition-all group relative",
-			post.isPinned
-				? "border-l-4 border-l-brand-primary border-gray-100"
-				: "border-gray-100 hover:border-brand-primary/20",
+			"p-3 bg-white border border-[#e0dcd3] rounded hover:border-[#c8951e] transition-all group relative",
+			post.isPinned && "border-l-[3px] border-l-[#c8951e]",
 		)}
 	>
 		<Link
-			to={withThemeSearch(`/forum/${post.id}`, theme)}
+			to={`/forum/${post.id}`}
 			className="block"
 		>
-			<div className="flex items-center gap-3 mb-4">
+			<div className="flex items-center gap-2 mb-2 flex-wrap">
 				{post.isPinned && (
-					<span className="flex items-center gap-1 px-2 py-1 bg-brand-primary/10 text-brand-primary text-[10px] font-bold uppercase tracking-wider rounded">
+					<span className="flex items-center gap-1 px-2 py-0.5 bg-[#fdf5d8] text-[#c8951e] text-[10px] font-bold uppercase tracking-wider rounded">
 						<Pin size={10} /> 已置顶
 					</span>
 				)}
-				<span className="px-2 py-1 bg-brand-primary/10 text-brand-primary text-[10px] font-bold uppercase tracking-wider rounded">
+				<span className="px-2 py-0.5 bg-[#fdf5d8] text-[#c8951e] text-[10px] font-bold uppercase tracking-wider rounded">
 					{sectionName}
 				</span>
-				<span className="text-gray-300">|</span>
-				<span className="text-gray-400 text-xs flex items-center gap-1">
-					<Clock size={12} />{" "}
+				<span className="text-[#e0dcd3]">|</span>
+				<span className="text-[#9e968e] text-[11px] flex items-center gap-1">
+					<Clock size={11} />{" "}
 					{formatDate(post.updatedAt, "yyyy-MM-dd")}
 				</span>
 				{post.status && post.status !== "published" && (
 					<span
 						className={clsx(
-							"px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+							"px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border",
 							post.status === "pending"
-								? "bg-amber-100 text-amber-700"
+								? "bg-amber-50 text-amber-700 border-amber-200"
 								: post.status === "rejected"
-									? "bg-red-100 text-red-700"
-									: "bg-gray-100 text-gray-600",
+									? "bg-red-50 text-red-700 border-red-200"
+									: "bg-[#f0ece3] text-[#6b6560]",
 						)}
 					>
 						{getStatusText(post.status)}
 					</span>
 				)}
 			</div>
-			<h3 className="text-2xl font-serif font-bold mb-3 group-hover:text-brand-primary transition-colors">
+			<h3 className="text-sm font-medium text-[#2c2c2c] group-hover:text-[#c8951e] transition-colors mb-2">
 				{post.title}
 			</h3>
 			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-6 text-gray-400 text-sm">
-					<span className="flex items-center gap-1.5">
-						<Heart size={16} /> {post.likesCount || 0}
+				<div className="flex items-center gap-4 text-[#9e968e] text-[11px]">
+					<span className="flex items-center gap-1">
+						<Heart size={12} /> {post.likesCount || 0}
 					</span>
-					<span className="flex items-center gap-1.5">
-						<ThumbsDown size={16} /> {post.dislikesCount || 0}
+					<span className="flex items-center gap-1">
+						<ThumbsDown size={12} /> {post.dislikesCount || 0}
 					</span>
-					<span className="flex items-center gap-1.5">
-						<MessageSquare size={16} /> {post.commentsCount || 0}
+					<span className="flex items-center gap-1">
+						<MessageSquare size={12} /> {post.commentsCount || 0}
 					</span>
 				</div>
 				<div className="flex items-center gap-2">
-					<div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden">
-						<UserIcon size={14} className="m-auto text-gray-400" />
+					<div className="w-5 h-5 rounded bg-[#f0ece3] overflow-hidden flex items-center justify-center">
+						<UserIcon size={10} className="text-[#9e968e]" />
 					</div>
-					<span className="text-xs text-gray-500">
+					<span className="text-[11px] text-[#9e968e]">
 						作者 ID: {post.authorUid?.substring(0, 6)}
 					</span>
 				</div>
@@ -173,23 +166,23 @@ const PostCard = React.memo(({ post, sectionName, isAdmin, pinning, theme, onCop
 		<button
 			onClick={(event) => onCopyLink(event, post.id)}
 			className={clsx(
-				"absolute top-4 p-2 rounded-full border border-gray-100 bg-white/90 text-gray-400 hover:text-brand-primary hover:border-brand-primary/30 transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
-				isAdmin ? "right-24" : "right-4",
+				"absolute top-3 p-1.5 rounded border border-[#e0dcd3] bg-white text-[#9e968e] hover:text-[#c8951e] hover:border-[#c8951e] transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
+				isAdmin ? "right-[88px]" : "right-3",
 			)}
 			title="复制内链"
 			aria-label="复制帖子内链"
 		>
-			<Link2 size={16} />
+			<Link2 size={14} />
 		</button>
 		{isAdmin && (
 			<button
 				onClick={() => onTogglePin(post.id, !!post.isPinned)}
 				disabled={pinning === post.id}
 				className={clsx(
-					"absolute top-4 right-4 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+					"absolute top-3 right-3 px-2 py-1 rounded text-[11px] font-medium transition-all border",
 					post.isPinned
-						? "bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20"
-						: "bg-gray-100 text-gray-500 hover:bg-gray-200",
+						? "bg-[#fdf5d8] text-[#c8951e] border-[#e0dcd3] hover:border-[#c8951e]"
+						: "bg-white text-[#9e968e] border-[#e0dcd3] hover:text-[#c8951e] hover:border-[#c8951e]",
 					pinning === post.id && "opacity-50 cursor-not-allowed",
 				)}
 			>
@@ -203,38 +196,11 @@ const PostCard = React.memo(({ post, sectionName, isAdmin, pinning, theme, onCop
 	</div>
 ));
 
-const academyForumLecturers = [
-	{
-		name: "坛务讲师 · 鹿鸣",
-		focus: "问答引导",
-		desc: "整理高频问题并维护提问模板，减少重复讨论成本。",
-	},
-	{
-		name: "值夜讲师 · 玄箫",
-		focus: "版务巡检",
-		desc: "关注夜间热帖与讨论秩序，给出优先阅读建议。",
-	},
-];
-
-const academyForumCopyMappings = [
-	{
-		field: "排序",
-		defaultCopy: "最新 / 热门 / 推荐",
-		academyCopy: "新帖卷 / 议题卷 / 藏卷",
-	},
-	{
-		field: "发帖入口",
-		defaultCopy: "发布帖子",
-		academyCopy: "书院讲义投稿（书院模式默认隐藏）",
-	},
-];
-
 const PostList = () => {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const section = searchParams.get("section") || "all";
 	const sort = searchParams.get("sort") || "latest";
 	const pageParam = Number(searchParams.get("page")) || 1;
-	const { theme, isAcademy } = useTheme();
 	const [posts, setPosts] = useState<PostItem[]>([]);
 	const [sections, setSections] = useState<SectionItem[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -286,7 +252,6 @@ const PostList = () => {
 	const handlePageChange = (newPage: number) => {
 		setPage(newPage);
 		setSearchParams(
-			mergeSearchParamsWithTheme(searchParams, { page: String(newPage) }, theme),
 		);
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	};
@@ -329,166 +294,126 @@ const PostList = () => {
 		show("复制链接失败，请稍后重试", { variant: "error" });
 	};
 
-	if (loading) {
-		return <ForumSkeleton />;
-	}
-
 	return (
-		<div className="max-w-7xl mx-auto px-4 py-12">
-			<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
-				<div>
-					<h1 className="text-5xl font-serif font-bold text-gray-900 mb-2">
-						社区论坛
-					</h1>
-					<p className="text-gray-500 italic">诗扶社区 · 与同好分享你的热爱</p>
+		<div
+			className="min-h-[calc(100vh-60px)]"
+			style={{
+				backgroundColor: "#f7f5f0",
+				fontFamily:
+					"'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+				lineHeight: 1.8,
+			}}
+		>
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+				<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+					<div>
+						<h1 className="text-[1.75rem] font-bold text-[#2c2c2c] tracking-[0.12em]">
+							社区论坛
+						</h1>
+						<p className="text-[#9e968e] italic text-sm mt-1">
+							诗扶社区 · 与同好分享你的热爱
+						</p>
+					</div>
+					<div className="flex items-center gap-3">
+						{user && !isBanned && (
+							<Link
+								to="/forum/new"
+								className="px-5 py-2 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] transition-all flex items-center gap-2"
+							>
+								<Plus size={15} /> 发布帖子
+							</Link>
+						)}
+					</div>
 				</div>
-				{user && !isBanned && !isAcademy && (
+
+				<div className="flex items-end justify-between border-b border-[#e0dcd3] mb-5">
+					<div className="flex gap-5 flex-wrap">
 					<Link
-						to={withThemeSearch("/forum/new", theme)}
-						className="px-6 py-3 bg-brand-primary text-gray-900 rounded-full font-bold hover:scale-105 transition-all flex items-center gap-2 shadow-md"
+						to="/forum?section=all"
+						className={clsx(
+							"text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer",
+							section === "all"
+								? "text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]"
+								: "text-[#9e968e] hover:text-[#c8951e]",
+						)}
 					>
-						<Plus size={18} /> 发布帖子
+						全部板块
 					</Link>
+						{sections.map((sec) => (
+							<Link
+								key={sec.id}
+								to={`/forum?section=${sec.id}`}
+								className={clsx(
+									"text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer",
+									section === sec.id
+										? "text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]"
+										: "text-[#9e968e] hover:text-[#c8951e]",
+								)}
+							>
+								{sec.name}
+							</Link>
+						))}
+					</div>
+
+					<div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-[#9e968e]">
+						{(["latest", "hot", "recommended"] as const).map((s) => (
+							<button
+								key={s}
+								onClick={() => {
+									setSearchParams(
+									);
+								}}
+								className={clsx(
+									"transition-colors",
+									sort === s
+										? "text-[#c8951e] font-medium"
+										: "hover:text-[#c8951e]",
+								)}
+							>
+								{s === "latest" ? "最新" : s === "hot" ? "热门" : "推荐"}
+							</button>
+						))}
+					</div>
+				</div>
+
+				
+
+				{loading ? (
+					<div className="text-center text-[#9e968e] italic py-12">
+						加载中...
+					</div>
+				) : posts.length > 0 ? (
+					<>
+						<div className="space-y-3">
+							{posts.map((post) => (
+								<PostCard
+									key={post.id}
+									post={post}
+									sectionName={sections.find((s) => s.id === post.section)?.name || post.section}
+									isAdmin={isAdmin}
+									pinning={pinning}
+									onCopyLink={handleCopyPostLink}
+									onTogglePin={handleTogglePin}
+								/>
+							))}
+						</div>
+						{totalPages > 1 && (
+							<Pagination
+								page={page}
+								totalPages={totalPages}
+								onPageChange={handlePageChange}
+							/>
+						)}
+					</>
+				) : (
+					<div className="bg-white p-20 rounded border border-[#e0dcd3] text-center">
+						<MessageSquare size={48} className="mx-auto text-[#e0dcd3] mb-6" />
+						<p className="text-[#9e968e] italic">
+							暂无帖子，快来发布第一个讨论吧！
+						</p>
+					</div>
 				)}
 			</div>
-
-			<div className="flex flex-wrap gap-2 mb-6">
-				<Link
-					to={withThemeSearch("/forum?section=all", theme)}
-					className={clsx(
-						"px-6 py-2 rounded-full text-sm font-medium transition-all border capitalize",
-						section === "all"
-							? "bg-brand-primary text-gray-900 border-brand-primary"
-							: "bg-white text-gray-500 border-gray-200 hover:border-brand-primary hover:text-brand-primary",
-					)}
-				>
-					全部板块
-				</Link>
-				{sections.map((sec) => (
-					<Link
-						key={sec.id}
-						to={withThemeSearch(`/forum?section=${sec.id}`, theme)}
-						className={clsx(
-							"px-6 py-2 rounded-full text-sm font-medium transition-all border capitalize",
-							section === sec.id
-								? "bg-brand-primary text-gray-900 border-brand-primary"
-								: "bg-white text-gray-500 border-gray-200 hover:border-brand-primary hover:text-brand-primary",
-						)}
-					>
-						{sec.name}
-					</Link>
-				))}
-			</div>
-
-			<div className="flex items-center gap-2 mb-12 border-b border-gray-100">
-				{(["latest", "hot", "recommended"] as const).map((s) => (
-					<button
-						key={s}
-						onClick={() => {
-							setSearchParams(
-								mergeSearchParamsWithTheme(searchParams, { sort: s }, theme),
-							);
-						}}
-						className={clsx(
-							"px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
-							sort === s
-								? "border-brand-primary text-brand-primary"
-								: "border-transparent text-gray-400 hover:text-gray-600",
-						)}
-					>
-						{s === "latest" ? "最新" : s === "hot" ? "热门" : "推荐"}
-					</button>
-				))}
-			</div>
-
-			{isAcademy && (
-				<section className="theme-surface theme-card p-6 mb-10 space-y-6">
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						{academyForumLecturers.map((lecturer) => (
-							<article
-								key={lecturer.name}
-								className="academy-lecturer-card rounded-xl p-5"
-							>
-								<p className="text-xs uppercase tracking-[0.2em] text-[color:var(--color-theme-muted)] mb-2">
-									{lecturer.focus}
-								</p>
-								<h3 className="text-lg font-serif font-bold text-[color:var(--color-theme-accent-strong)] mb-2">
-									{lecturer.name}
-								</h3>
-								<p className="text-sm text-[color:var(--color-theme-text)]/90 leading-relaxed">
-									{lecturer.desc}
-								</p>
-							</article>
-						))}
-					</div>
-					<div className="overflow-x-auto">
-						<table className="academy-mapping-table w-full border-collapse rounded-lg overflow-hidden text-sm">
-							<thead>
-								<tr>
-									<th className="border px-3 py-2 text-left">映射项</th>
-									<th className="border px-3 py-2 text-left">默认</th>
-									<th className="border px-3 py-2 text-left">书院</th>
-								</tr>
-							</thead>
-							<tbody>
-								{academyForumCopyMappings.map((row) => (
-									<tr key={row.field}>
-										<td className="border px-3 py-2 font-medium">
-											{row.field}
-										</td>
-										<td className="border px-3 py-2 text-[color:var(--color-theme-muted)]">
-											{row.defaultCopy}
-										</td>
-										<td className="border px-3 py-2">{row.academyCopy}</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
-				</section>
-			)}
-
-			{loading ? (
-				<div className="space-y-6">
-					{[1, 2, 3].map((i) => (
-						<div
-							key={i}
-							className="h-32 bg-white rounded-3xl animate-pulse border border-gray-100"
-						></div>
-					))}
-				</div>
-			) : posts.length > 0 ? (
-				<>
-					<div className="space-y-6">
-						{posts.map((post) => (
-							<PostCard
-								key={post.id}
-								post={post}
-								sectionName={sections.find((s) => s.id === post.section)?.name || post.section}
-								isAdmin={isAdmin}
-								pinning={pinning}
-								theme={theme}
-								onCopyLink={handleCopyPostLink}
-								onTogglePin={handleTogglePin}
-							/>
-						))}
-					</div>
-					{totalPages > 1 && (
-						<Pagination
-							page={page}
-							totalPages={totalPages}
-							onPageChange={handlePageChange}
-						/>
-					)}
-				</>
-			) : (
-				<div className="bg-white p-20 rounded-[40px] border border-gray-100 text-center">
-					<MessageSquare size={48} className="mx-auto text-gray-200 mb-6" />
-					<p className="text-gray-400 italic">
-						暂无帖子，快来发布第一个讨论吧！
-					</p>
-				</div>
-			)}
 		</div>
 	);
 };
@@ -510,7 +435,6 @@ const PostDetail = () => {
 	const isAdmin = profile?.role === "admin" || profile?.role === "super_admin";
 	const { show } = useToast();
 	const navigate = useNavigate();
-	const { theme, isAcademy } = useTheme();
 
 	useEffect(() => {
 		const fetchSections = async () => {
@@ -585,13 +509,29 @@ const PostDetail = () => {
 
 	if (loading)
 		return (
-			<div className="max-w-4xl mx-auto px-4 py-20 text-center italic text-gray-400">
+			<div
+				className="min-h-[calc(100vh-60px)] flex items-center justify-center text-[#9e968e] italic"
+				style={{
+					backgroundColor: "#f7f5f0",
+					fontFamily:
+						"'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+					lineHeight: 1.8,
+				}}
+			>
 				加载中...
 			</div>
 		);
 	if (!post)
 		return (
-			<div className="max-w-4xl mx-auto px-4 py-20 text-center italic text-gray-400">
+			<div
+				className="min-h-[calc(100vh-60px)] flex items-center justify-center text-[#9e968e] italic"
+				style={{
+					backgroundColor: "#f7f5f0",
+					fontFamily:
+						"'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+					lineHeight: 1.8,
+				}}
+			>
 				帖子未找到
 			</div>
 		);
@@ -604,11 +544,10 @@ const PostDetail = () => {
 	const canSubmitReview = Boolean(
 		!isBanned &&
 			isOwner &&
-			!isAcademy &&
 			post &&
 			(post.status === "draft" || post.status === "rejected"),
 	);
-	const canEditPost = Boolean(!isBanned && isOwner && !isAcademy);
+	const canEditPost = Boolean(!isBanned && isOwner);
 	const canComment = post.status === "published";
 
 	const handleToggleLike = async () => {
@@ -754,268 +693,159 @@ const PostDetail = () => {
 	};
 
 	return (
-		<div className="max-w-4xl mx-auto px-4 py-12">
-			<button
-				onClick={() => navigate(-1)}
-				className="inline-flex items-center gap-2 text-gray-400 hover:text-brand-primary mb-8 transition-colors"
+		<div
+			className="min-h-[calc(100vh-60px)]"
+			style={{
+				backgroundColor: "#f7f5f0",
+				fontFamily:
+					"'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+				lineHeight: 1.8,
+			}}
+		>
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+			<Link
+				to="/forum"
+				className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors mb-5"
 			>
-				<ArrowLeft size={18} /> 返回
-			</button>
+				<ArrowLeft size={18} /> 返回论坛列表
+			</Link>
 
-			<article className="bg-white rounded-[40px] p-8 sm:p-12 border border-gray-100 shadow-sm mb-8">
-				<header className="mb-8 border-b border-gray-100 pb-8">
-					<div className="flex items-center gap-3 mb-6">
-						<span className="px-3 py-1 bg-brand-primary/10 text-brand-primary text-xs font-bold uppercase tracking-widest rounded-full">
-							{sections.find((s) => s.id === post.section)?.name ||
-								post.section}
-						</span>
-						<span className="text-gray-400 text-sm flex items-center gap-1">
-							<Clock size={14} />{" "}
-							{formatDate(post.createdAt, "yyyy-MM-dd HH:mm")}
-						</span>
-					</div>
-					<h1 className="text-4xl font-serif font-bold text-gray-900 mb-6">
-						{post.title}
-					</h1>
-					<div className="mb-4 flex flex-wrap gap-2">
-						<span
-							className={clsx(
-								"px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-								post.status === "published"
-									? "bg-green-100 text-green-700"
-									: post.status === "pending"
-										? "bg-amber-100 text-amber-700"
-										: post.status === "rejected"
-											? "bg-red-100 text-red-700"
-											: "bg-gray-100 text-gray-600",
-							)}
-						>
-							{getStatusText(post.status)}
-						</span>
-						{post.status === "rejected" && post.reviewNote ? (
-							<span className="text-xs text-red-500">
-								驳回原因：{post.reviewNote}
-							</span>
-						) : null}
-					</div>
-					{post.tags && post.tags.length > 0 && (
-						<div className="flex items-center gap-2 flex-wrap mt-3">
-							<Tag size={14} className="text-gray-400" />
-							{post.tags.map((tag: string) => (
-								<span
-									key={tag}
-									className="px-2 py-0.5 bg-brand-cream/50 rounded-full text-[10px] font-bold uppercase tracking-wider text-gray-600"
-								>
-									#{tag}
+				<div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
+					<div>
+						<header className="mb-5 text-center">
+							<h1 className="text-[1.75rem] font-bold tracking-[0.12em] text-[#2c2c2c]">
+								{post.title}
+							</h1>
+						</header>
+
+						<div className="flex items-end justify-between border-b border-[#e0dcd3] mb-5">
+							<div className="flex gap-4 items-center flex-wrap">
+								<span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]">
+									{sections.find((s) => s.id === post.section)?.name ||
+										post.section}
 								</span>
-							))}
-						</div>
-					)}
-					<div className="flex items-center gap-3 mt-4">
-						<div className="w-10 h-10 rounded-full bg-gray-100 overflow-hidden">
-							<UserIcon size={20} className="m-auto text-gray-400" />
-						</div>
-						<div>
-							<p className="text-sm font-bold text-gray-700">
-								作者 ID: {post.authorUid?.substring(0, 8)}
-							</p>
-							<p className="text-xs text-gray-400">活跃粉丝</p>
-						</div>
-					</div>
-				</header>
-
-				<div className="prose prose-lg prose-stone max-w-none font-sans leading-relaxed text-gray-700 mb-12">
-					<ReactMarkdown>{post.content}</ReactMarkdown>
-				</div>
-
-				<div className="flex items-center gap-6 pt-8 border-t border-gray-100">
-					<button
-						onClick={handleToggleLike}
-						disabled={!user || liking}
-						className={clsx(
-							"flex items-center gap-2 transition-colors",
-							post.likedByMe
-								? "text-red-500"
-								: "text-gray-400 hover:text-red-500",
-							(!user || liking) && "opacity-50 cursor-not-allowed",
-						)}
-					>
-						<Heart size={20} /> {post.likesCount || 0}
-					</button>
-					<button
-						onClick={handleToggleDislike}
-						disabled={!user || disliking}
-						className={clsx(
-							"flex items-center gap-2 transition-colors",
-							post.dislikedByMe
-								? "text-orange-500"
-								: "text-gray-400 hover:text-orange-500",
-							(!user || disliking) && "opacity-50 cursor-not-allowed",
-						)}
-					>
-						<ThumbsDown size={20} /> {post.dislikesCount || 0}
-					</button>
-					<button
-						onClick={handleToggleFavorite}
-						disabled={!user || favoriting}
-						className={clsx(
-							"flex items-center gap-2 transition-colors",
-							post.favoritedByMe
-								? "text-brand-primary"
-								: "text-gray-400 hover:text-brand-primary",
-							(!user || favoriting) && "opacity-50 cursor-not-allowed",
-						)}
-					>
-						<Save size={20} /> {post.favoritedByMe ? "已收藏" : "收藏"}
-					</button>
-					<button
-						onClick={handleShare}
-						className="flex items-center gap-2 text-gray-400 hover:text-brand-primary transition-colors"
-					>
-						<Share2 size={20} /> 分享
-					</button>
-					{canEditPost && (
-						<Link
-							to={withThemeSearch(`/forum/${post.id}/edit`, theme)}
-							className="flex items-center gap-2 text-gray-400 hover:text-brand-primary transition-colors"
-						>
-							<Edit3 size={20} /> 编辑
-						</Link>
-					)}
-					{isAdmin && (
-						<button
-							onClick={handleTogglePin}
-							disabled={pinning}
-							className={clsx(
-								"flex items-center gap-2 transition-colors",
-								post.isPinned
-									? "text-brand-primary"
-									: "text-gray-400 hover:text-brand-primary",
-								pinning && "opacity-50 cursor-not-allowed",
-							)}
-						>
-							<Pin size={20} /> {post.isPinned ? "已置顶" : "置顶"}
-						</button>
-					)}
-					{canSubmitReview && (
-						<button
-							onClick={handleSubmitReview}
-							disabled={submittingReview}
-							className="ml-auto px-4 py-2 rounded-full bg-amber-100 text-amber-800 text-xs font-bold hover:bg-amber-200 disabled:opacity-50"
-						>
-							{submittingReview ? "提交中..." : "提交审核"}
-						</button>
-					)}
-				</div>
-			</article>
-
-			<section className="bg-white rounded-[40px] p-8 sm:p-12 border border-gray-100 shadow-sm">
-				<h3 className="text-2xl font-serif font-bold text-gray-900 mb-8">
-					评论 ({comments.length})
-				</h3>
-
-				{user ? (
-					<form onSubmit={handleAddComment} className="mb-12">
-						{replyTo && (
-							<div className="mb-4 px-4 py-2 bg-brand-primary/10 rounded-xl flex items-center justify-between">
-								<span className="text-xs text-brand-primary">
-									回复 @{replyTo.authorName}
+								<span className="text-[0.8125rem] text-[#9e968e] pb-2 flex items-center gap-1">
+									<Clock size={13} />{" "}
+									{formatDate(post.createdAt, "yyyy-MM-dd HH:mm")}
 								</span>
-								<button
-									onClick={() => setReplyTo(null)}
-									className="text-gray-400 hover:text-red-500"
-								>
-									<X size={14} />
-								</button>
+								{post.status && post.status !== "published" && (
+									<span
+										className={clsx(
+											"px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border mb-2",
+											post.status === "pending"
+												? "bg-amber-50 text-amber-700 border-amber-200"
+												: post.status === "rejected"
+													? "bg-red-50 text-red-700 border-red-200"
+													: "bg-[#f0ece3] text-[#6b6560]",
+										)}
+									>
+										{getStatusText(post.status)}
+									</span>
+								)}
+								{post.status === "rejected" && post.reviewNote ? (
+									<span className="text-[0.8125rem] text-red-500 pb-2">
+										驳回：{post.reviewNote}
+									</span>
+								) : null}
+							</div>
+							<div className="flex items-center gap-2 pb-2">
+								<div className="w-6 h-6 rounded bg-[#f0ece3] overflow-hidden flex items-center justify-center">
+									<UserIcon size={12} className="text-[#9e968e]" />
+								</div>
+								<span className="text-[0.8125rem] text-[#9e968e]">
+									作者 ID: {post.authorUid?.substring(0, 8)}
+								</span>
+							</div>
+						</div>
+
+						{post.tags && post.tags.length > 0 && (
+							<div className="flex items-center gap-2 flex-wrap mb-5">
+								<Tag size={14} className="text-[#9e968e]" />
+								{post.tags.map((tag: string) => (
+									<span
+										key={tag}
+										className="px-2 py-0.5 bg-white border border-[#e0dcd3] rounded text-[10px] font-bold uppercase tracking-wider text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] transition-all cursor-pointer"
+									>
+										#{tag}
+									</span>
+								))}
 							</div>
 						)}
-						<div className="relative">
-							<textarea
-								value={newComment}
-								onChange={(e) => setNewComment(e.target.value)}
-								placeholder={
-									replyTo ? `回复 @${replyTo.authorName}...` : "发表你的看法..."
-								}
-								rows={3}
-								disabled={!canComment || isBanned}
-								className="w-full px-6 py-4 bg-brand-cream rounded-3xl border-none focus:ring-2 focus:ring-brand-primary/20 resize-none"
-							/>
-							<button
-								type="submit"
-								disabled={!canComment || isBanned}
-								className="absolute bottom-4 right-4 p-3 bg-brand-primary text-gray-900 rounded-full hover:scale-105 transition-all shadow-md"
-							>
-								<Send size={18} />
-							</button>
-						</div>
-						{isBanned ? (
-							<p className="mt-3 text-xs text-red-500">
-								账号已被封禁，无法评论
-							</p>
-						) : !canComment ? (
-							<p className="mt-3 text-xs text-amber-600">仅已发布内容可评论</p>
-						) : null}
-					</form>
-				) : (
-					<div className="p-8 bg-brand-cream rounded-3xl text-center mb-12">
-						<p className="text-gray-500 text-sm">请先登录后发表评论</p>
-					</div>
-				)}
 
-				<div className="space-y-8">
-					{rootComments.length > 0 ? (
-						rootComments.map((comment) => (
-							<div key={comment.id} className="space-y-4">
-								<div className="flex gap-4">
-									<div className="w-10 h-10 rounded-full bg-gray-100 flex-shrink-0 overflow-hidden">
-										<img
-											src={
-												comment.authorPhoto ||
-												"https://picsum.photos/seed/user/100/100"
-											}
-											alt=""
-											className="w-full h-full object-cover"
-											referrerPolicy="no-referrer"
-										/>
-									</div>
-									<div className="flex-grow">
-										<div className="flex items-center justify-between mb-1">
-											<span className="text-sm font-bold text-gray-700">
-												{comment.authorName || "匿名用户"}
+						<div className="prose prose-lg prose-stone max-w-none font-body leading-relaxed text-[#2c2c2c]">
+							<ReactMarkdown>{post.content}</ReactMarkdown>
+						</div>
+
+						<section className="mt-12 pt-8 border-t border-[#e0dcd3]">
+							<h3 className="text-[1.25rem] font-bold text-[#2c2c2c] tracking-[0.12em] mb-6">
+								评论 ({comments.length})
+							</h3>
+
+							{user ? (
+								<form onSubmit={handleAddComment} className="mb-8">
+									{replyTo && (
+										<div className="mb-3 px-3 py-2 bg-[#fdf5d8] border border-[#e0dcd3] rounded flex items-center justify-between">
+											<span className="text-xs text-[#c8951e]">
+												回复 @{replyTo.authorName}
 											</span>
-											<span className="text-[10px] text-gray-400">
-												{formatDate(comment.createdAt, "MM-dd HH:mm")}
-											</span>
+											<button
+												type="button"
+												onClick={() => setReplyTo(null)}
+												className="text-[#9e968e] hover:text-red-500 transition-colors"
+											>
+												<X size={14} />
+											</button>
 										</div>
-										<p className="text-gray-600 text-sm leading-relaxed mb-2">
-											{comment.content}
-										</p>
+									)}
+									<div className="relative">
+										<textarea
+											value={newComment}
+											onChange={(e) => setNewComment(e.target.value)}
+											placeholder={
+												replyTo
+													? `回复 @${replyTo.authorName}...`
+													: "发表你的看法..."
+											}
+											rows={3}
+											disabled={!canComment || isBanned}
+											className="w-full px-4 py-3 bg-[#f7f5f0] border border-[#e0dcd3] rounded focus:outline-none focus:border-[#c8951e] resize-none"
+										/>
 										<button
-											onClick={() => {
-												setReplyTo(comment);
-												const form = document.querySelector("form");
-												const top = form?.getBoundingClientRect().top
-													? window.scrollY +
-														form.getBoundingClientRect().top -
-														200
-													: 0;
-												window.scrollTo({ top, behavior: "smooth" });
-											}}
-											className="text-[10px] font-bold text-brand-primary hover:underline"
+											type="submit"
+											disabled={!canComment || isBanned}
+											className="absolute bottom-3 right-3 px-3 py-1.5 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] transition-all disabled:opacity-50 flex items-center gap-1"
 										>
-											回复
+											<Send size={14} />
 										</button>
 									</div>
+									{isBanned ? (
+										<p className="mt-2 text-xs text-red-500">
+											账号已被封禁，无法评论
+										</p>
+									) : !canComment ? (
+										<p className="mt-2 text-xs text-amber-600">
+											仅已发布内容可评论
+										</p>
+									) : null}
+								</form>
+							) : (
+								<div className="p-6 bg-[#f7f5f0] border border-[#e0dcd3] rounded text-center mb-8">
+									<p className="text-[#9e968e] text-sm">请先登录后发表评论</p>
 								</div>
+							)}
 
-								{getReplies(comment.id).length > 0 && (
-									<div className="ml-14 space-y-4 border-l-2 border-brand-primary/20 pl-6">
-										{getReplies(comment.id).map((reply) => (
-											<div key={reply.id} className="flex gap-3">
-												<div className="w-8 h-8 rounded-full bg-gray-100 flex-shrink-0 overflow-hidden">
+							<div>
+								{rootComments.length > 0 ? (
+									rootComments.map((comment) => (
+										<div
+											key={comment.id}
+											className="border-b border-[#e0dcd3] py-5"
+										>
+											<div className="flex gap-3">
+												<div className="w-9 h-9 rounded bg-[#f0ece3] flex-shrink-0 overflow-hidden flex items-center justify-center">
 													<img
 														src={
-															reply.authorPhoto ||
+															comment.authorPhoto ||
 															"https://picsum.photos/seed/user/100/100"
 														}
 														alt=""
@@ -1023,32 +853,174 @@ const PostDetail = () => {
 														referrerPolicy="no-referrer"
 													/>
 												</div>
-												<div className="flex-grow">
+												<div className="flex-grow min-w-0">
 													<div className="flex items-center justify-between mb-1">
-														<span className="text-xs font-bold text-gray-700">
-															{reply.authorName || "匿名用户"}
+														<span className="text-sm font-medium text-[#2c2c2c]">
+															{comment.authorName || "匿名用户"}
 														</span>
-														<span className="text-[10px] text-gray-400">
-															{formatDate(reply.createdAt, "MM-dd HH:mm")}
+														<span className="text-[11px] text-[#9e968e]">
+															{formatDate(comment.createdAt, "MM-dd HH:mm")}
 														</span>
 													</div>
-													<p className="text-gray-600 text-xs leading-relaxed">
-														{reply.content}
+													<p className="text-[#6b6560] text-sm leading-relaxed mb-2">
+														{comment.content}
 													</p>
+													<button
+														type="button"
+														onClick={() => {
+															setReplyTo(comment);
+															const form = document.querySelector("form");
+															const top = form?.getBoundingClientRect().top
+																? window.scrollY +
+																	form.getBoundingClientRect().top -
+																	200
+																: 0;
+															window.scrollTo({ top, behavior: "smooth" });
+														}}
+														className="text-[11px] font-medium text-[#c8951e] hover:underline"
+													>
+														回复
+													</button>
 												</div>
 											</div>
-										))}
-									</div>
+
+											{getReplies(comment.id).length > 0 && (
+												<div className="ml-12 mt-3 space-y-3 border-l-2 border-[#e0dcd3] pl-4">
+													{getReplies(comment.id).map((reply) => (
+														<div key={reply.id} className="flex gap-3">
+															<div className="w-7 h-7 rounded bg-[#f0ece3] flex-shrink-0 overflow-hidden flex items-center justify-center">
+																<img
+																	src={
+																		reply.authorPhoto ||
+																		"https://picsum.photos/seed/user/100/100"
+																	}
+																	alt=""
+																	className="w-full h-full object-cover"
+																	referrerPolicy="no-referrer"
+																/>
+															</div>
+															<div className="flex-grow min-w-0">
+																<div className="flex items-center justify-between mb-1">
+																	<span className="text-xs font-medium text-[#2c2c2c]">
+																		{reply.authorName || "匿名用户"}
+																	</span>
+																	<span className="text-[10px] text-[#9e968e]">
+																		{formatDate(reply.createdAt, "MM-dd HH:mm")}
+																	</span>
+																</div>
+																<p className="text-[#6b6560] text-xs leading-relaxed">
+																	{reply.content}
+																</p>
+															</div>
+														</div>
+													))}
+												</div>
+											)}
+										</div>
+									))
+								) : (
+									<p className="text-center text-[#9e968e] italic py-8">
+										暂无评论，快来抢沙发吧！
+									</p>
 								)}
 							</div>
-						))
-					) : (
-						<p className="text-center text-gray-400 italic py-8">
-							暂无评论，快来抢沙发吧！
-						</p>
-					)}
+						</section>
+					</div>
+
+					<aside className="lg:sticky lg:top-20">
+						<div className="py-5 border-b border-[#e0dcd3]">
+							<h3 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-3.5">
+								互动
+							</h3>
+							<div className="flex flex-wrap gap-2">
+								<button
+									onClick={handleToggleLike}
+									disabled={!user || liking}
+									className={clsx(
+										"flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+										post.likedByMe
+											? "bg-red-500 text-white"
+											: "bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-red-400 hover:text-red-500",
+										(!user || liking) && "opacity-50 cursor-not-allowed",
+									)}
+									title={post.likedByMe ? "取消点赞" : "点赞"}
+								>
+									<Heart size={15} /> {post.likesCount || 0}
+								</button>
+								<button
+									onClick={handleToggleDislike}
+									disabled={!user || disliking}
+									className={clsx(
+										"flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+										post.dislikedByMe
+											? "bg-orange-500 text-white"
+											: "bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-orange-400 hover:text-orange-500",
+										(!user || disliking) && "opacity-50 cursor-not-allowed",
+									)}
+									title={post.dislikedByMe ? "取消踩" : "踩"}
+								>
+									<ThumbsDown size={15} /> {post.dislikesCount || 0}
+								</button>
+							</div>
+							<div className="flex flex-wrap gap-2 mt-2">
+								<button
+									onClick={handleToggleFavorite}
+									disabled={!user || favoriting}
+									className={clsx(
+										"flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+										post.favoritedByMe
+											? "bg-[#c8951e] text-white"
+											: "bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]",
+										(!user || favoriting) && "opacity-50 cursor-not-allowed",
+									)}
+									title={post.favoritedByMe ? "取消收藏" : "收藏"}
+								>
+									<Save size={15} /> {post.favoritedByMe ? "已收藏" : "收藏"}
+								</button>
+								<button
+									onClick={handleShare}
+									className="flex-1 px-3 py-2 rounded text-sm font-medium bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e] transition-all flex items-center justify-center gap-1.5"
+									title="分享"
+								>
+									<Share2 size={15} /> 分享
+								</button>
+							</div>
+							{canEditPost && (
+								<Link
+									to={`/forum/${post.id}/edit`}
+									className="w-full mt-2 px-3 py-2 rounded text-sm font-medium bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e] transition-all flex items-center justify-center gap-1.5"
+								>
+									<Edit3 size={15} /> 编辑
+								</Link>
+							)}
+							{isAdmin && (
+								<button
+									onClick={handleTogglePin}
+									disabled={pinning}
+									className={clsx(
+										"w-full mt-2 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+										post.isPinned
+											? "bg-[#c8951e] text-white"
+											: "bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]",
+										pinning && "opacity-50 cursor-not-allowed",
+									)}
+								>
+									<Pin size={15} /> {post.isPinned ? "已置顶" : "置顶"}
+								</button>
+							)}
+							{canSubmitReview && (
+								<button
+									onClick={handleSubmitReview}
+									disabled={submittingReview}
+									className="w-full mt-2 px-3 py-2 rounded text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
+								>
+									{submittingReview ? "提交中..." : "提交审核"}
+								</button>
+							)}
+						</div>
+					</aside>
 				</div>
-			</section>
+			</div>
 		</div>
 	);
 };
@@ -1075,7 +1047,6 @@ const PostEditor = () => {
 	);
 	const [loadingPost, setLoadingPost] = useState(false);
 	const { show } = useToast();
-	const { theme } = useTheme();
 
 	useEffect(() => {
 		const fetchSections = async () => {
@@ -1116,13 +1087,11 @@ const PostEditor = () => {
 				const data = await apiGet<{ post: PostItem }>(`/api/posts/${postId}`);
 				if (!data.post) {
 					show("帖子不存在或无权编辑", { variant: "error" });
-					navigate(withThemeSearch("/forum", theme));
 					return;
 				}
 
 				if (!user || data.post.authorUid !== user.uid) {
 					show("你无权编辑此帖子", { variant: "error" });
-					navigate(withThemeSearch(`/forum/${postId}`, theme));
 					return;
 				}
 
@@ -1137,14 +1106,13 @@ const PostEditor = () => {
 			} catch (error) {
 				console.error("Error loading editable post:", error);
 				show("加载帖子失败，请稍后重试", { variant: "error" });
-				navigate(withThemeSearch("/forum", theme));
 			} finally {
 				setLoadingPost(false);
 			}
 		};
 
 		fetchEditingPost();
-	}, [authLoading, isEditing, navigate, postId, show, theme, user]);
+	}, [authLoading, isEditing, navigate, postId, show, user]);
 
 	const handleSubmit = async (status: "draft" | "pending") => {
 		if (!user) return;
@@ -1176,7 +1144,6 @@ const PostEditor = () => {
 					? await apiPut<{ post: PostItem }>(`/api/posts/${postId}`, payload)
 					: await apiPost<{ post: PostItem }>("/api/posts", payload);
 
-			navigate(withThemeSearch(`/forum/${data.post.id}`, theme));
 		} catch (error) {
 			console.error("Error creating post:", error);
 			show(
@@ -1192,22 +1159,38 @@ const PostEditor = () => {
 
 	if (loadingPost) {
 		return (
-			<div className="max-w-4xl mx-auto px-4 py-20 text-center italic text-gray-400">
+			<div
+				className="min-h-[calc(100vh-60px)] flex items-center justify-center text-[#9e968e] italic"
+				style={{
+					backgroundColor: "#f7f5f0",
+					fontFamily:
+						"'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+					lineHeight: 1.8,
+				}}
+			>
 				加载中...
 			</div>
 		);
 	}
 
 	return (
-		<div className="max-w-4xl mx-auto px-4 py-12">
-			<div className="bg-white rounded-[40px] p-8 sm:p-12 border border-gray-100 shadow-sm">
-				<div className="flex justify-between items-center mb-12">
-					<h1 className="text-4xl font-serif font-bold text-gray-900">
+		<div
+			className="min-h-[calc(100vh-60px)]"
+			style={{
+				backgroundColor: "#f7f5f0",
+				fontFamily:
+					"'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+				lineHeight: 1.8,
+			}}
+		>
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+				<div className="flex justify-between items-center mb-8">
+					<h1 className="text-[1.75rem] font-bold text-[#2c2c2c] tracking-[0.12em]">
 						{isEditing ? "编辑帖子" : "发布新帖子"}
 					</h1>
 					<button
 						onClick={() => navigate(-1)}
-						className="p-2 text-gray-400 hover:text-red-500"
+						className="p-2 text-[#9e968e] hover:text-red-500 transition-colors"
 					>
 						<X size={24} />
 					</button>
@@ -1218,11 +1201,11 @@ const PostEditor = () => {
 						e.preventDefault();
 						handleSubmit("pending");
 					}}
-					className="space-y-8"
+					className="space-y-6"
 				>
 					<div className="space-y-2">
-						<label className="text-xs font-bold uppercase tracking-widest text-gray-400">
-							标题
+						<label className="text-xs font-bold uppercase tracking-widest text-[#9e968e]">
+							标题 <span className="text-red-500">*</span>
 						</label>
 						<input
 							type="text"
@@ -1232,20 +1215,20 @@ const PostEditor = () => {
 								setFormData({ ...formData, title: e.target.value })
 							}
 							placeholder="输入一个吸引人的标题..."
-							className="w-full px-6 py-4 bg-brand-cream rounded-2xl border-none focus:ring-2 focus:ring-brand-primary/20 font-serif text-xl"
+							className="w-full px-4 py-3 bg-[#f7f5f0] border border-[#e0dcd3] rounded focus:outline-none focus:border-[#c8951e] text-base"
 						/>
 					</div>
 
 					<div className="space-y-2">
-						<label className="text-xs font-bold uppercase tracking-widest text-gray-400">
-							板块
+						<label className="text-xs font-bold uppercase tracking-widest text-[#9e968e]">
+							板块 <span className="text-red-500">*</span>
 						</label>
 						<select
 							value={formData.section}
 							onChange={(e) =>
 								setFormData({ ...formData, section: e.target.value })
 							}
-							className="w-full px-6 py-4 bg-brand-cream rounded-2xl border-none focus:ring-2 focus:ring-brand-primary/20 font-serif text-xl appearance-none"
+							className="w-full px-4 py-3 bg-[#f7f5f0] border border-[#e0dcd3] rounded focus:outline-none focus:border-[#c8951e] text-base appearance-none"
 						>
 							{sections.map((sec) => (
 								<option key={sec.id} value={sec.id}>
@@ -1256,7 +1239,7 @@ const PostEditor = () => {
 					</div>
 
 					<div className="space-y-2">
-						<label className="text-xs font-bold uppercase tracking-widest text-gray-400">
+						<label className="text-xs font-bold uppercase tracking-widest text-[#9e968e]">
 							标签 (逗号分隔)
 						</label>
 						<input
@@ -1266,12 +1249,12 @@ const PostEditor = () => {
 								setFormData({ ...formData, tags: e.target.value })
 							}
 							placeholder="例如：Live, 绝色, 2024"
-							className="w-full px-6 py-4 bg-brand-cream rounded-2xl border-none focus:ring-2 focus:ring-brand-primary/20"
+							className="w-full px-4 py-3 bg-[#f7f5f0] border border-[#e0dcd3] rounded focus:outline-none focus:border-[#c8951e] text-base"
 						/>
 					</div>
 
 					<div className="space-y-2">
-						<label className="text-xs font-bold uppercase tracking-widest text-gray-400">
+						<label className="text-xs font-bold uppercase tracking-widest text-[#9e968e]">
 							地点
 						</label>
 						<LocationTagInput
@@ -1295,10 +1278,10 @@ const PostEditor = () => {
 					</div>
 
 					<div className="space-y-2">
-						<label className="text-xs font-bold uppercase tracking-widest text-gray-400">
-							内容 (Markdown)
+						<label className="text-xs font-bold uppercase tracking-widest text-[#9e968e]">
+							内容 (Markdown) <span className="text-red-500">*</span>
 						</label>
-						<div className="border border-gray-100 rounded-[32px] overflow-hidden">
+						<div className="border border-[#e0dcd3] rounded overflow-hidden bg-white">
 							<MdEditor
 								style={{ height: "400px" }}
 								renderHTML={(text) => mdParser.render(text)}
@@ -1326,22 +1309,22 @@ const PostEditor = () => {
 						</div>
 					</div>
 
-					<div className="pt-8 flex flex-wrap justify-end gap-3">
+					<div className="pt-6 flex flex-wrap justify-end gap-3">
 						<button
 							type="button"
 							onClick={() => handleSubmit("draft")}
 							disabled={Boolean(savingMode)}
-							className="px-8 py-4 bg-gray-100 text-gray-700 rounded-full font-bold hover:bg-gray-200 transition-all flex items-center gap-2 disabled:opacity-50"
+							className="px-6 py-2.5 bg-[#f7f5f0] text-[#6b6560] border border-[#e0dcd3] rounded text-sm font-medium hover:border-[#c8951e] hover:text-[#c8951e] transition-all flex items-center gap-2 disabled:opacity-50"
 						>
-							<Save size={18} />{" "}
+							<Save size={16} />{" "}
 							{savingMode === "draft" ? "保存中..." : "保存草稿"}
 						</button>
 						<button
 							type="submit"
 							disabled={Boolean(savingMode)}
-							className="px-12 py-4 bg-brand-primary text-gray-900 rounded-full font-bold hover:scale-105 transition-all shadow-lg flex items-center gap-2 disabled:opacity-50"
+							className="px-8 py-2.5 bg-[#c8951e] text-white rounded text-sm font-medium hover:bg-[#dca828] transition-all flex items-center gap-2 disabled:opacity-50"
 						>
-							<Send size={20} />{" "}
+							<Send size={16} />{" "}
 							{savingMode === "pending" ? "提交中..." : "提交审核"}
 						</button>
 					</div>
