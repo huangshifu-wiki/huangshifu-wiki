@@ -8,9 +8,11 @@ coverage/
 !.env.example
 
 # local temporary deployment artifacts
-tmp_*.py
-tmp_*.ps1
-pm2_status.txt
-server_check.txt
+tmp_*
+*.backup
 nul
 .trae/
+
+# collaborator planning artifacts (local only)
+.spec/
+.sisyphus/
