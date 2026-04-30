@@ -310,9 +310,6 @@ const PostList = () => {
 						<h1 className="text-[1.75rem] font-bold text-[#2c2c2c] tracking-[0.12em]">
 							社区论坛
 						</h1>
-						<p className="text-[#9e968e] italic text-sm mt-1">
-							诗扶社区 · 与同好分享你的热爱
-						</p>
 					</div>
 					<div className="flex items-center gap-3">
 						{user && !isBanned && (
