@@ -391,6 +391,10 @@ router.post('/:slug/like', requireAuth, requireActiveUser, async (req: Authentic
     }
 
     await prisma.$transaction(async (tx) => {
+      await tx.wikiDislike.deleteMany({
+        where: { pageSlug: slug, userUid: req.authUser!.uid },
+      });
+
       try {
         await tx.wikiLike.create({
           data: {
@@ -399,20 +403,26 @@ router.post('/:slug/like', requireAuth, requireActiveUser, async (req: Authentic
           },
         });
       } catch {
-        return;
+        // already liked
       }
+
+      const [likesCount, dislikesCount] = await Promise.all([
+        tx.wikiLike.count({ where: { pageSlug: slug } }),
+        tx.wikiDislike.count({ where: { pageSlug: slug } }),
+      ]);
 
       await tx.wikiPage.update({
         where: { slug },
-        data: {
-          likesCount: { increment: 1 },
-        },
+        data: { likesCount, dislikesCount },
       });
     });
 
-    const likesCount = await prisma.wikiLike.count({ where: { pageSlug: slug } });
+    const [likesCount, dislikesCount] = await Promise.all([
+      prisma.wikiLike.count({ where: { pageSlug: slug } }),
+      prisma.wikiDislike.count({ where: { pageSlug: slug } }),
+    ]);
 
-    res.json({ liked: true, likesCount });
+    res.json({ liked: true, likesCount, dislikesCount });
   } catch (error) {
     console.error('Like wiki page error:', error);
     res.status(500).json({ error: '点赞失败' });
@@ -470,6 +480,10 @@ router.post('/:slug/dislike', requireAuth, requireActiveUser, async (req: Authen
     }
 
     await prisma.$transaction(async (tx) => {
+      await tx.wikiLike.deleteMany({
+        where: { pageSlug: slug, userUid: req.authUser!.uid },
+      });
+
       try {
         await tx.wikiDislike.create({
           data: {
@@ -478,20 +492,26 @@ router.post('/:slug/dislike', requireAuth, requireActiveUser, async (req: Authen
           },
         });
       } catch {
-        return;
+        // already disliked
       }
+
+      const [likesCount, dislikesCount] = await Promise.all([
+        tx.wikiLike.count({ where: { pageSlug: slug } }),
+        tx.wikiDislike.count({ where: { pageSlug: slug } }),
+      ]);
 
       await tx.wikiPage.update({
         where: { slug },
-        data: {
-          dislikesCount: { increment: 1 },
-        },
+        data: { likesCount, dislikesCount },
       });
     });
 
-    const dislikesCount = await prisma.wikiDislike.count({ where: { pageSlug: slug } });
+    const [likesCount, dislikesCount] = await Promise.all([
+      prisma.wikiLike.count({ where: { pageSlug: slug } }),
+      prisma.wikiDislike.count({ where: { pageSlug: slug } }),
+    ]);
 
-    res.json({ disliked: true, dislikesCount });
+    res.json({ disliked: true, dislikesCount, likesCount });
   } catch (error) {
     console.error('Dislike wiki page error:', error);
     res.status(500).json({ error: '踩失败' });

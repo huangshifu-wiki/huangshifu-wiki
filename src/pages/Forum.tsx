@@ -561,12 +561,20 @@ const PostDetail = () => {
 						: prev,
 				);
 			} else {
-				const data = await apiPost<{ liked: boolean; likesCount: number }>(
-					`/api/posts/${postId}/like`,
-				);
+				const data = await apiPost<{
+					liked: boolean;
+					likesCount: number;
+					dislikesCount: number;
+				}>(`/api/posts/${postId}/like`);
 				setPost((prev) =>
 					prev
-						? { ...prev, likedByMe: data.liked, likesCount: data.likesCount }
+						? {
+								...prev,
+								likedByMe: data.liked,
+								likesCount: data.likesCount,
+								dislikesCount: data.dislikesCount,
+								dislikedByMe: false,
+							}
 						: prev,
 				);
 			}
@@ -600,6 +608,7 @@ const PostDetail = () => {
 				const data = await apiPost<{
 					disliked: boolean;
 					dislikesCount: number;
+					likesCount: number;
 				}>(`/api/posts/${postId}/dislike`);
 				setPost((prev) =>
 					prev
@@ -607,6 +616,8 @@ const PostDetail = () => {
 								...prev,
 								dislikedByMe: data.disliked,
 								dislikesCount: data.dislikesCount,
+								likesCount: data.likesCount,
+								likedByMe: false,
 							}
 						: prev,
 				);

@@ -617,6 +617,10 @@ router.post('/:id/like', requireAuth, requireActiveUser, async (req: Authenticat
     }
 
     await prisma.$transaction(async (tx) => {
+      await tx.postDislike.deleteMany({
+        where: { postId, userUid: req.authUser!.uid },
+      });
+
       try {
         await tx.postLike.create({
           data: {
@@ -625,18 +629,24 @@ router.post('/:id/like', requireAuth, requireActiveUser, async (req: Authenticat
           },
         });
       } catch {
-        return;
+        // already liked
       }
+
+      const [likesCount, dislikesCount] = await Promise.all([
+        tx.postLike.count({ where: { postId } }),
+        tx.postDislike.count({ where: { postId } }),
+      ]);
 
       await tx.post.update({
         where: { id: postId },
-        data: {
-          likesCount: { increment: 1 },
-        },
+        data: { likesCount, dislikesCount },
       });
     });
 
-    const likesCount = await prisma.postLike.count({ where: { postId } });
+    const [likesCount, dislikesCount] = await Promise.all([
+      prisma.postLike.count({ where: { postId } }),
+      prisma.postDislike.count({ where: { postId } }),
+    ]);
 
     const updatedPost = await prisma.post.update({
       where: { id: postId },
@@ -659,7 +669,7 @@ router.post('/:id/like', requireAuth, requireActiveUser, async (req: Authenticat
       });
     }
 
-    res.json({ liked: true, likesCount });
+    res.json({ liked: true, likesCount, dislikesCount });
   } catch (error) {
     console.error('Like post error:', error);
     res.status(500).json({ error: '点赞失败' });
@@ -729,6 +739,10 @@ router.post('/:id/dislike', requireAuth, requireActiveUser, async (req: Authenti
     }
 
     await prisma.$transaction(async (tx) => {
+      await tx.postLike.deleteMany({
+        where: { postId, userUid: req.authUser!.uid },
+      });
+
       try {
         await tx.postDislike.create({
           data: {
@@ -737,18 +751,24 @@ router.post('/:id/dislike', requireAuth, requireActiveUser, async (req: Authenti
           },
         });
       } catch {
-        return;
+        // already disliked
       }
+
+      const [likesCount, dislikesCount] = await Promise.all([
+        tx.postLike.count({ where: { postId } }),
+        tx.postDislike.count({ where: { postId } }),
+      ]);
 
       await tx.post.update({
         where: { id: postId },
-        data: {
-          dislikesCount: { increment: 1 },
-        },
+        data: { likesCount, dislikesCount },
       });
     });
 
-    const dislikesCount = await prisma.postDislike.count({ where: { postId } });
+    const [likesCount, dislikesCount] = await Promise.all([
+      prisma.postLike.count({ where: { postId } }),
+      prisma.postDislike.count({ where: { postId } }),
+    ]);
 
     const updatedPost = await prisma.post.update({
       where: { id: postId },
@@ -763,7 +783,7 @@ router.post('/:id/dislike', requireAuth, requireActiveUser, async (req: Authenti
       data: { hotScore },
     });
 
-    res.json({ disliked: true, dislikesCount });
+    res.json({ disliked: true, dislikesCount, likesCount });
   } catch (error) {
     console.error('Dislike post error:', error);
     res.status(500).json({ error: '踩失败' });

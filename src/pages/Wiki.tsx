@@ -574,15 +574,18 @@ const WikiPageView = () => {
 						: prev,
 				);
 			} else {
-				const data = await apiPost<{ liked: boolean; likesCount: number }>(
-					`/api/wiki/${slug}/like`,
-				);
+				const data = await apiPost<{
+					liked: boolean;
+					likesCount: number;
+					dislikesCount: number;
+				}>(`/api/wiki/${slug}/like`);
 				setPage((prev) =>
 					prev
 						? {
 								...prev,
 								likedByMe: data.liked,
 								likesCount: data.likesCount,
+								dislikesCount: data.dislikesCount,
 								dislikedByMe: false,
 							}
 						: prev,
@@ -617,6 +620,7 @@ const WikiPageView = () => {
 				const data = await apiPost<{
 					disliked: boolean;
 					dislikesCount: number;
+					likesCount: number;
 				}>(`/api/wiki/${slug}/dislike`);
 				setPage((prev) =>
 					prev
@@ -624,6 +628,7 @@ const WikiPageView = () => {
 								...prev,
 								dislikedByMe: data.disliked,
 								dislikesCount: data.dislikesCount,
+								likesCount: data.likesCount,
 								likedByMe: false,
 							}
 						: prev,
