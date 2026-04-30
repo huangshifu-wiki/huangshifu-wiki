@@ -337,6 +337,14 @@ const WikiEditor = () => {
 				editorName: profile?.displayName || user.displayName || "匿名用户",
 			});
 
+			if (isNew) {
+				show("页面创建成功", { variant: "success" });
+				navigate(`/wiki/${pageSlug}`);
+				return;
+			} else {
+				show("页面保存成功", { variant: "success" });
+			}
+
 		} catch (e) {
 			console.error("Error saving wiki page:", e);
 			show("保存失败，请检查网络或权限", { variant: "error" });
