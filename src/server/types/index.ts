@@ -174,6 +174,9 @@ type WikiResponseInput = {
   reviewedAt: Date | null;
   viewCount?: number;
   favoritesCount: number;
+  isPinned: boolean;
+  likesCount: number;
+  dislikesCount: number;
   lastEditorUid: string;
   lastEditorName: string;
   createdAt: Date;
