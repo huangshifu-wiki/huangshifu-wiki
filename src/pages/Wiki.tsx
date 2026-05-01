@@ -27,6 +27,8 @@ import {
 	User as UserIcon,
 	ArrowLeft,
 	Heart,
+	Save,
+	Share2,
 	X,
 	Sparkles,
 	History,
@@ -550,10 +552,10 @@ const WikiPageView = () => {
 			toAbsoluteInternalUrl(`/wiki/${slug}`),
 		);
 		if (copied) {
-			show("百科内链已复制");
+			show("链接已复制，可直接分享给好友");
 			return;
 		}
-		show("复制链接失败，请稍后重试", { variant: "error" });
+		show("复制链接失败，请手动复制地址栏链接", { variant: "error" });
 	};
 
 	const handleToggleLike = async () => {
@@ -947,20 +949,6 @@ const WikiPageView = () => {
 							</h3>
 							<div className="flex flex-wrap gap-2">
 								<button
-									onClick={handleToggleFavorite}
-									disabled={!user || favoriting}
-									className={clsx(
-										"flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
-										page.favoritedByMe
-											? "bg-[#c8951e] text-white border border-transparent"
-											: "bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]",
-										(!user || favoriting) && "opacity-50 cursor-not-allowed",
-									)}
-									title={page.favoritedByMe ? "取消收藏" : "收藏页面"}
-								>
-									<Heart size={15} /> {page.favoritesCount || 0}
-								</button>
-								<button
 									onClick={handleToggleLike}
 									disabled={!user || liking}
 									className={clsx(
@@ -972,7 +960,7 @@ const WikiPageView = () => {
 									)}
 									title={page.likedByMe ? "取消点赞" : "点赞"}
 								>
-									<ThumbsUp size={15} /> {page.likesCount || 0}
+									<Heart size={15} /> {page.likesCount || 0}
 								</button>
 								<button
 									onClick={handleToggleDislike}
@@ -987,6 +975,29 @@ const WikiPageView = () => {
 									title={page.dislikedByMe ? "取消踩" : "踩"}
 								>
 									<ThumbsDown size={15} /> {page.dislikesCount || 0}
+								</button>
+							</div>
+							<div className="flex flex-wrap gap-2 mt-2">
+								<button
+									onClick={handleToggleFavorite}
+									disabled={!user || favoriting}
+									className={clsx(
+										"flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+										page.favoritedByMe
+											? "bg-[#c8951e] text-white border border-transparent"
+											: "bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]",
+										(!user || favoriting) && "opacity-50 cursor-not-allowed",
+									)}
+									title={page.favoritedByMe ? "取消收藏" : "收藏页面"}
+								>
+									<Save size={15} /> {page.favoritedByMe ? "已收藏" : "收藏"}
+								</button>
+								<button
+									onClick={handleCopyPageLink}
+									className="flex-1 px-3 py-2 rounded text-sm font-medium bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e] transition-all flex items-center justify-center gap-1.5"
+									title="分享"
+								>
+									<Share2 size={15} /> 分享
 								</button>
 							</div>
 							{isAdmin && (
