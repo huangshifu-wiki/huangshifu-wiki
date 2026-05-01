@@ -92,13 +92,10 @@ const DEFAULT_PAGE_SIZE = 20;
 interface PostCardProps {
 	post: PostItem;
 	sectionName: string;
-	isAdmin: boolean;
-	pinning: string | null;
 	onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, postId: string) => void;
-	onTogglePin: (postId: string, currentlyPinned: boolean) => void;
 }
 
-const PostCard = React.memo(({ post, sectionName, isAdmin, pinning, onCopyLink, onTogglePin }: PostCardProps) => (
+const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) => (
 	<div
 		className={clsx(
 			"p-3 bg-white border border-[#e0dcd3] rounded hover:border-[#c8951e] transition-all group relative",
@@ -165,34 +162,12 @@ const PostCard = React.memo(({ post, sectionName, isAdmin, pinning, onCopyLink, 
 		</Link>
 		<button
 			onClick={(event) => onCopyLink(event, post.id)}
-			className={clsx(
-				"absolute top-3 p-1.5 rounded border border-[#e0dcd3] bg-white text-[#9e968e] hover:text-[#c8951e] hover:border-[#c8951e] transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
-				isAdmin ? "right-[88px]" : "right-3",
-			)}
+			className="absolute top-3 right-3 p-1.5 rounded border border-[#e0dcd3] bg-white text-[#9e968e] hover:text-[#c8951e] hover:border-[#c8951e] transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
 			title="复制内链"
 			aria-label="复制帖子内链"
 		>
 			<Link2 size={14} />
 		</button>
-		{isAdmin && (
-			<button
-				onClick={() => onTogglePin(post.id, !!post.isPinned)}
-				disabled={pinning === post.id}
-				className={clsx(
-					"absolute top-3 right-3 px-2 py-1 rounded text-[11px] font-medium transition-all border",
-					post.isPinned
-						? "bg-[#fdf5d8] text-[#c8951e] border-[#e0dcd3] hover:border-[#c8951e]"
-						: "bg-white text-[#9e968e] border-[#e0dcd3] hover:text-[#c8951e] hover:border-[#c8951e]",
-					pinning === post.id && "opacity-50 cursor-not-allowed",
-				)}
-			>
-				{pinning === post.id
-					? "处理中..."
-					: post.isPinned
-						? "取消置顶"
-						: "置顶"}
-			</button>
-		)}
 	</div>
 ));
 
@@ -204,11 +179,9 @@ const PostList = () => {
 	const [posts, setPosts] = useState<PostItem[]>([]);
 	const [sections, setSections] = useState<SectionItem[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [pinning, setPinning] = useState<string | null>(null);
 	const [page, setPage] = useState(pageParam);
 	const [totalPages, setTotalPages] = useState(1);
 	const { user, profile, isBanned } = useAuth();
-	const isAdmin = profile?.role === "admin" || profile?.role === "super_admin";
 	const { show } = useToast();
 
 	useEffect(() => {
@@ -254,28 +227,6 @@ const PostList = () => {
 		setSearchParams(
 		);
 		window.scrollTo({ top: 0, behavior: "smooth" });
-	};
-
-	const handleTogglePin = async (postId: string, currentlyPinned: boolean) => {
-		if (!isAdmin || pinning) return;
-		try {
-			setPinning(postId);
-			if (currentlyPinned) {
-				await apiDelete<{ isPinned: boolean }>(`/api/posts/${postId}/pin`);
-				setPosts((prev) =>
-					prev.map((p) => (p.id === postId ? { ...p, isPinned: false } : p)),
-				);
-			} else {
-				await apiPost<{ isPinned: boolean }>(`/api/posts/${postId}/pin`);
-				setPosts((prev) =>
-					prev.map((p) => (p.id === postId ? { ...p, isPinned: true } : p)),
-				);
-			}
-		} catch (error) {
-			console.error("Toggle pin error:", error);
-		} finally {
-			setPinning(null);
-		}
 	};
 
 	const handleCopyPostLink = async (
@@ -387,10 +338,7 @@ const PostList = () => {
 									key={post.id}
 									post={post}
 									sectionName={sections.find((s) => s.id === post.section)?.name || post.section}
-									isAdmin={isAdmin}
-									pinning={pinning}
 									onCopyLink={handleCopyPostLink}
-									onTogglePin={handleTogglePin}
 								/>
 							))}
 						</div>
