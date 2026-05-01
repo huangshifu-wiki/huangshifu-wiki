@@ -38,6 +38,10 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
   const dragStartY = useRef(0);
   const initialTranslateXRef = useRef(0);
   const initialTranslateYRef = useRef(0);
+  const translateXRef = useRef(0);
+  const translateYRef = useRef(0);
+  const pixelScaleRef = useRef(1);
+  const imageRef = useRef<HTMLImageElement>(null);
 
   // Pinch refs
   const isPinching = useRef(false);
@@ -154,33 +158,57 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
     };
   }, []);
 
+  // Keep refs in sync with state (for non-drag updates)
+  useEffect(() => {
+    pixelScaleRef.current = pixelScale;
+  }, [pixelScale]);
+  useEffect(() => {
+    translateXRef.current = translateX;
+    translateYRef.current = translateY;
+  }, [translateX, translateY]);
+
+  // Apply transform to DOM directly (used during drag to avoid re-renders)
+  const applyTransform = useCallback((tx: number, ty: number, ps: number) => {
+    const img = imageRef.current;
+    if (img) {
+      img.style.transform = `scale(${ps}) translate(${tx / ps}px, ${ty / ps}px)`;
+    }
+  }, []);
+
   // Wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     setPixelScale((scale) => computeNextScale(scale, e.deltaY < 0, ZOOM_RATIO, MIN_PIXEL_SCALE, MAX_PIXEL_SCALE));
   }, []);
 
-  // Mouse drag
+  // Mouse drag — use refs + direct DOM to avoid re-renders on every pixel
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     setIsDragging(true);
     dragStartX.current = e.clientX;
     dragStartY.current = e.clientY;
-    initialTranslateXRef.current = translateX;
-    initialTranslateYRef.current = translateY;
-  }, [translateX, translateY]);
+    initialTranslateXRef.current = translateXRef.current;
+    initialTranslateYRef.current = translateYRef.current;
+  }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!isDragging) return;
     e.preventDefault();
-    const deltaX = e.clientX - dragStartX.current;
-    const deltaY = e.clientY - dragStartY.current;
-    setTranslateX(initialTranslateXRef.current + deltaX);
-    setTranslateY(initialTranslateYRef.current + deltaY);
-  }, [isDragging]);
+    const dx = e.clientX - dragStartX.current;
+    const dy = e.clientY - dragStartY.current;
+    const tx = initialTranslateXRef.current + dx;
+    const ty = initialTranslateYRef.current + dy;
+    translateXRef.current = tx;
+    translateYRef.current = ty;
+    applyTransform(tx, ty, pixelScaleRef.current);
+  }, [isDragging, applyTransform]);
 
   const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
+    if (isDragging) {
+      setIsDragging(false);
+      setTranslateX(translateXRef.current);
+      setTranslateY(translateYRef.current);
+    }
+  }, [isDragging]);
 
   // Touch handling
   const getPinchDistance = (touches: React.TouchList) => {
@@ -195,37 +223,45 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
     if (e.touches.length === 2) {
       isPinching.current = true;
       initialPinchDistance.current = getPinchDistance(e.touches);
-      initialPinchScale.current = pixelScale;
+      initialPinchScale.current = pixelScaleRef.current;
     } else if (e.touches.length === 1) {
       const touch = e.touches[0];
       setIsDragging(true);
       dragStartX.current = touch.clientX;
       dragStartY.current = touch.clientY;
-      initialTranslateXRef.current = translateX;
-      initialTranslateYRef.current = translateY;
+      initialTranslateXRef.current = translateXRef.current;
+      initialTranslateYRef.current = translateYRef.current;
     }
-  }, [pixelScale, translateX, translateY]);
+  }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLImageElement>) => {
     if (e.touches.length === 2 && isPinching.current) {
       e.preventDefault();
       const distance = getPinchDistance(e.touches);
       const pinchScale = distance / initialPinchDistance.current;
-      setPixelScale(Math.min(MAX_PIXEL_SCALE, Math.max(MIN_PIXEL_SCALE, initialPinchScale.current * pinchScale)));
+      const newScale = Math.min(MAX_PIXEL_SCALE, Math.max(MIN_PIXEL_SCALE, initialPinchScale.current * pinchScale));
+      setPixelScale(newScale);
     } else if (e.touches.length === 1 && isDragging) {
       e.preventDefault();
       const touch = e.touches[0];
-      const deltaX = touch.clientX - dragStartX.current;
-      const deltaY = touch.clientY - dragStartY.current;
-      setTranslateX(initialTranslateXRef.current + deltaX);
-      setTranslateY(initialTranslateYRef.current + deltaY);
+      const dx = touch.clientX - dragStartX.current;
+      const dy = touch.clientY - dragStartY.current;
+      const tx = initialTranslateXRef.current + dx;
+      const ty = initialTranslateYRef.current + dy;
+      translateXRef.current = tx;
+      translateYRef.current = ty;
+      applyTransform(tx, ty, pixelScaleRef.current);
     }
-  }, [isDragging]);
+  }, [isDragging, applyTransform]);
 
   const handleTouchEnd = useCallback(() => {
     isPinching.current = false;
-    setIsDragging(false);
-  }, []);
+    if (isDragging) {
+      setIsDragging(false);
+      setTranslateX(translateXRef.current);
+      setTranslateY(translateYRef.current);
+    }
+  }, [isDragging]);
 
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
@@ -312,6 +348,7 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
       <div className="relative z-10 flex items-center justify-center pointer-events-none shrink-0">
         {activeImage && (
           <img
+            ref={imageRef}
             key={currentImageUrl}
             src={currentImageUrl}
             alt={activeImage.name || ''}
