@@ -46,6 +46,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
         orderBy,
         take: Math.min(limit, 200),
         skip,
+        include: { author: { select: { displayName: true } } },
       }),
       prisma.post.count({ where }),
     ]);
@@ -198,6 +199,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
   try {
     const post = await prisma.post.findUnique({
       where: { id: req.params.id },
+      include: { author: { select: { displayName: true } } },
     });
 
     if (!post || !canViewPost(post, req.authUser)) {
@@ -208,6 +210,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
     await prisma.$executeRaw`UPDATE "Post" SET "viewCount" = "viewCount" + 1 WHERE "id" = ${req.params.id}`;
     const freshPost = await prisma.post.findUnique({
       where: { id: req.params.id },
+      include: { author: { select: { displayName: true } } },
     });
     if (!freshPost) {
       res.status(404).json({ error: '帖子未找到' });

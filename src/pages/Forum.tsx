@@ -25,6 +25,7 @@ import {
 	Pin,
 	Link2,
 	Tag,
+	MapPin,
 } from "lucide-react";
 import { clsx } from "clsx";
 import MdEditor from "react-markdown-editor-lite";
@@ -54,6 +55,7 @@ type PostItem = {
 	locationCode?: string | null;
 	locationName?: string | null;
 	authorUid: string;
+	authorName?: string | null;
 	status?: ContentStatus;
 	reviewNote?: string | null;
 	reviewedBy?: string | null;
@@ -155,7 +157,7 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
 						<UserIcon size={10} className="text-[#9e968e]" />
 					</div>
 					<span className="text-xs text-[#9e968e]">
-						作者 ID: {post.authorUid?.substring(0, 6)}
+						{post.authorName || post.authorUid?.substring(0, 6)}
 					</span>
 				</div>
 			</div>
@@ -658,76 +660,81 @@ const PostDetail = () => {
 				lineHeight: 1.8,
 			}}
 		>
-			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-			<Link
-				to="/forum"
-				className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors mb-5"
-			>
-				<ArrowLeft size={18} /> 返回论坛列表
-			</Link>
+			<style>{`
+				.wiki-detail-page ::selection {
+					background-color: #fdf5d8;
+					color: #c8951e;
+				}
+				.wiki-detail-page ::-webkit-scrollbar { width: 6px; }
+				.wiki-detail-page ::-webkit-scrollbar-track { background: transparent; }
+				.wiki-detail-page ::-webkit-scrollbar-thumb { background: #e0dcd3; border-radius: 3px; }
+				.wiki-detail-page ::-webkit-scrollbar-thumb:hover { background: #9e968e; }
+			`}</style>
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 wiki-detail-page">
+				<Link
+					to="/forum"
+					className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors mb-5"
+				>
+					<ArrowLeft size={18} /> 返回论坛列表
+				</Link>
 
+				{/* Header */}
+				<header className="mb-7">
+					<div className="flex items-end justify-between flex-wrap gap-3">
+						<h1 className="text-[1.75rem] font-semibold tracking-[0.12em] text-[#2c2c2c]">
+							{post.title}
+						</h1>
+						<div className="flex flex-wrap gap-2">
+							<button
+								onClick={handleShare}
+								className="px-4 py-2 text-[0.9375rem] rounded border border-[#e0dcd3] text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] transition-all flex items-center gap-2"
+							>
+								<Link2 size={16} /> 复制
+							</button>
+							{canEditPost && (
+								<Link
+									to={`/forum/${post.id}/edit`}
+									className="px-4 py-2 text-[0.9375rem] rounded bg-[#c8951e] text-white hover:bg-[#dca828] transition-all flex items-center gap-2"
+								>
+									<Edit3 size={16} /> 编辑
+								</Link>
+							)}
+						</div>
+					</div>
+				</header>
+
+				{/* Info bar */}
+				<div className="flex items-end justify-between border-b border-[#e0dcd3] mb-5">
+					<div className="flex gap-5 items-center">
+						<span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]">
+							{sections.find((s) => s.id === post.section)?.name || post.section}
+						</span>
+						{canSubmitReview && (
+							<button
+								onClick={handleSubmitReview}
+								disabled={submittingReview}
+								className="px-3 py-1 text-[0.8125rem] rounded bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 transition-all self-center mb-1"
+							>
+								{submittingReview ? "提交中..." : "提交审核"}
+							</button>
+						)}
+						{post.status === "rejected" && post.reviewNote ? (
+							<span className="text-[0.8125rem] text-red-500 self-center mb-1">
+								驳回：{post.reviewNote}
+							</span>
+						) : null}
+					</div>
+					<div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-[#9e968e]">
+						<span className="flex items-center gap-1">
+							<Clock size={14} />
+							{formatDate(post.updatedAt, "yyyy-MM-dd HH:mm")}
+						</span>
+					</div>
+				</div>
+
+				{/* Two column layout */}
 				<div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
 					<div>
-						<header className="mb-5 text-center">
-							<h1 className="text-[1.75rem] font-bold tracking-[0.12em] text-[#2c2c2c]">
-								{post.title}
-							</h1>
-						</header>
-
-						<div className="flex items-end justify-between border-b border-[#e0dcd3] mb-5">
-							<div className="flex gap-4 items-center flex-wrap">
-								<span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]">
-									{sections.find((s) => s.id === post.section)?.name ||
-										post.section}
-								</span>
-								<span className="text-[0.8125rem] text-[#9e968e] pb-2 flex items-center gap-1">
-									<Clock size={13} />{" "}
-									{formatDate(post.createdAt, "yyyy-MM-dd HH:mm")}
-								</span>
-								{post.status && post.status !== "published" && (
-									<span
-										className={clsx(
-											"px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border mb-2",
-											post.status === "pending"
-												? "bg-amber-50 text-amber-700 border-amber-200"
-												: post.status === "rejected"
-													? "bg-red-50 text-red-700 border-red-200"
-													: "bg-[#f0ece3] text-[#6b6560]",
-										)}
-									>
-										{getStatusText(post.status)}
-									</span>
-								)}
-								{post.status === "rejected" && post.reviewNote ? (
-									<span className="text-[0.8125rem] text-red-500 pb-2">
-										驳回：{post.reviewNote}
-									</span>
-								) : null}
-							</div>
-							<div className="flex items-center gap-2 pb-2">
-								<div className="w-6 h-6 rounded bg-[#f0ece3] overflow-hidden flex items-center justify-center">
-									<UserIcon size={12} className="text-[#9e968e]" />
-								</div>
-								<span className="text-[0.8125rem] text-[#9e968e]">
-									作者 ID: {post.authorUid?.substring(0, 8)}
-								</span>
-							</div>
-						</div>
-
-						{post.tags && post.tags.length > 0 && (
-							<div className="flex items-center gap-2 flex-wrap mb-5">
-								<Tag size={14} className="text-[#9e968e]" />
-								{post.tags.map((tag: string) => (
-									<span
-										key={tag}
-										className="px-2 py-0.5 bg-white border border-[#e0dcd3] rounded text-[10px] font-bold uppercase tracking-wider text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] transition-all cursor-pointer"
-									>
-										#{tag}
-									</span>
-								))}
-							</div>
-						)}
-
 						<div className="prose prose-lg prose-stone max-w-none font-body leading-relaxed text-[#2c2c2c]">
 							<ReactMarkdown>{post.content}</ReactMarkdown>
 						</div>
@@ -884,6 +891,7 @@ const PostDetail = () => {
 					</div>
 
 					<aside className="lg:sticky lg:top-20">
+						{/* Interactions */}
 						<div className="py-5 border-b border-[#e0dcd3]">
 							<h3 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-3.5">
 								互动
@@ -941,14 +949,6 @@ const PostDetail = () => {
 									<Share2 size={15} /> 分享
 								</button>
 							</div>
-							{canEditPost && (
-								<Link
-									to={`/forum/${post.id}/edit`}
-									className="w-full mt-2 px-3 py-2 rounded text-sm font-medium bg-white border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e] transition-all flex items-center justify-center gap-1.5"
-								>
-									<Edit3 size={15} /> 编辑
-								</Link>
-							)}
 							{isAdmin && (
 								<button
 									onClick={handleTogglePin}
@@ -964,16 +964,77 @@ const PostDetail = () => {
 									<Pin size={15} /> {post.isPinned ? "已置顶" : "置顶"}
 								</button>
 							)}
-							{canSubmitReview && (
-								<button
-									onClick={handleSubmitReview}
-									disabled={submittingReview}
-									className="w-full mt-2 px-3 py-2 rounded text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
-								>
-									{submittingReview ? "提交中..." : "提交审核"}
-								</button>
-							)}
 						</div>
+
+						{/* Status */}
+						<div className="py-5 border-b border-[#e0dcd3]">
+							<h3 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-3.5">
+								状态
+							</h3>
+							<div className="flex flex-col gap-2.5">
+								<div className="flex items-center justify-between text-sm">
+									<span className="text-[#9e968e]">审核</span>
+									<span
+										className={clsx(
+											"px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider",
+											post.status === "published"
+												? "bg-green-50 text-green-700 border border-green-200"
+												: post.status === "pending"
+													? "bg-amber-50 text-amber-700 border border-amber-200"
+													: post.status === "rejected"
+														? "bg-red-50 text-red-700 border border-red-200"
+														: "bg-[#f0ece3] text-[#6b6560]",
+										)}
+									>
+										{getStatusText(post.status)}
+									</span>
+								</div>
+								<div className="flex items-center justify-between text-sm">
+									<span className="text-[#9e968e]">作者</span>
+									<span className="text-[#2c2c2c] font-medium">{post.authorName || post.authorUid?.substring(0, 8) || "匿名"}</span>
+								</div>
+								<div className="flex items-center justify-between text-sm">
+									<span className="text-[#9e968e]">创建</span>
+									<span className="text-[#2c2c2c] font-medium">{formatDate(post.createdAt, "yyyy-MM-dd")}</span>
+								</div>
+								<div className="flex items-center justify-between text-sm">
+									<span className="text-[#9e968e]">更新</span>
+									<span className="text-[#2c2c2c] font-medium">{formatDate(post.updatedAt, "yyyy-MM-dd HH:mm")}</span>
+								</div>
+							</div>
+						</div>
+
+						{/* Tags */}
+						{post.tags && post.tags.length > 0 && (
+							<div className="py-5 border-b border-[#e0dcd3]">
+								<h3 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-3.5">
+									标签
+								</h3>
+								<div className="flex flex-wrap gap-2">
+									{post.tags.map((tag: string) => (
+										<span
+											key={tag}
+											className="px-2 py-1 bg-white border border-[#e0dcd3] text-[#6b6560] text-xs rounded hover:text-[#c8951e] hover:border-[#c8951e] transition-all"
+										>
+											{tag}
+										</span>
+									))}
+								</div>
+							</div>
+						)}
+
+						{/* Location */}
+						{post.locationName && (
+							<div className="py-5">
+								<h3 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-3.5">
+									地点
+								</h3>
+								<div className="flex items-center gap-2 text-sm text-[#6b6560]">
+									<MapPin size={14} className="text-[#c8951e]" />
+									<span>{post.locationName}</span>
+								</div>
+							</div>
+						)}
 					</aside>
 				</div>
 			</div>

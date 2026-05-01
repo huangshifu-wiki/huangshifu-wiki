@@ -983,6 +983,7 @@ function toPostResponse(post: {
   tags: unknown;
   locationCode?: string | null;
   authorUid: string;
+  author?: { displayName: string } | null;
   status: ContentStatus;
   reviewNote: string | null;
   reviewedBy: string | null;
@@ -999,6 +1000,7 @@ function toPostResponse(post: {
 }) {
   return {
     ...post,
+    authorName: post.author?.displayName || null,
     locationCode: post.locationCode || null,
     locationName: post.location?.fullName || null,
     hotScore: post.hotScore ?? 0,
