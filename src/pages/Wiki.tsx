@@ -500,7 +500,7 @@ const WikiPageView = () => {
 	const [relationGraph, setRelationGraph] = useState<RelationGraphData | null>(
 		null,
 	);
-	const [showGraph, setShowGraph] = useState(true);
+	const [showGraph, setShowGraph] = useState(false);
 
 	useEffect(() => {
 		const fetchPage = async () => {
