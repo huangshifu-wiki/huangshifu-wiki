@@ -49,7 +49,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { summarizeWikiContent } from "../services/aiService";
 import { useToast } from "../components/Toast";
 import { copyToClipboard, toAbsoluteInternalUrl } from "../lib/copyLink";
-import { apiDelete, apiGet, apiPost } from "../lib/apiClient";
+import { apiDelete, apiGet, apiPost, invalidateApiCacheByPrefix } from "../lib/apiClient";
 import {
 	ContentStatus,
 	getStatusText,
@@ -1235,6 +1235,7 @@ const WikiBranchWorkspace = () => {
 		try {
 			setCreatingBranch(true);
 			await apiPost<{ branch: WikiBranchItem }>(`/api/wiki/${slug}/branches`);
+			invalidateApiCacheByPrefix(`/api/wiki/${slug}`);
 			await fetchWorkspace();
 		} catch (error) {
 			console.error("Create branch error:", error);
@@ -1259,6 +1260,8 @@ const WikiBranchWorkspace = () => {
 				eventDate: eventDate || null,
 				tags: splitTagsInput(tags),
 			});
+			invalidateApiCacheByPrefix(`/api/wiki/${slug}`);
+			invalidateApiCacheByPrefix(`/api/wiki/branches/${branch.id}`);
 			await fetchWorkspace();
 		} catch (error) {
 			console.error("Save branch revision error:", error);
@@ -1280,6 +1283,8 @@ const WikiBranchWorkspace = () => {
 				title: prTitle.trim(),
 				description: prDescription.trim() || null,
 			});
+			invalidateApiCacheByPrefix(`/api/wiki/${slug}`);
+			invalidateApiCacheByPrefix(`/api/wiki/branches/${branch.id}`);
 			await fetchWorkspace();
 		} catch (error) {
 			console.error("Create wiki PR error:", error);
@@ -1310,6 +1315,8 @@ const WikiBranchWorkspace = () => {
 				eventDate: eventDate || null,
 				tags: splitTagsInput(tags),
 			});
+			invalidateApiCacheByPrefix(`/api/wiki/${slug}`);
+			invalidateApiCacheByPrefix(`/api/wiki/branches/${branch.id}`);
 			await fetchWorkspace();
 		} catch (error) {
 			console.error("Resolve wiki conflict error:", error);

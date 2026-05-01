@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { clsx } from 'clsx';
-import { apiGet, apiPut } from '../../lib/apiClient';
+import { apiGet, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient';
 import { formatDateTime, toDateValue } from '../../lib/dateUtils';
 import { useToast } from '../../components/Toast';
 
@@ -24,16 +24,15 @@ export const AdminReviews = () => {
   const [filter, setFilter] = useState<ReviewFilter>('all');
   const { show } = useToast();
 
-  const fetchQueue = async (skipCache = false) => {
+  const fetchQueue = async () => {
     setLoading(true);
     try {
-      const dedupOptions = skipCache ? { staleTime: 0 } : undefined;
       const requests: Promise<{ type: string; items: any[] }>[] = [];
       if (filter === 'all' || filter === 'wiki') {
-        requests.push(apiGet<{ type: string; items: any[] }>('/api/admin/review-queue', { type: 'wiki', status: 'pending' }, dedupOptions));
+        requests.push(apiGet<{ type: string; items: any[] }>('/api/admin/review-queue', { type: 'wiki', status: 'pending' }));
       }
       if (filter === 'all' || filter === 'posts') {
-        requests.push(apiGet<{ type: string; items: any[] }>('/api/admin/review-queue', { type: 'posts', status: 'pending' }, dedupOptions));
+        requests.push(apiGet<{ type: string; items: any[] }>('/api/admin/review-queue', { type: 'posts', status: 'pending' }));
       }
       const results = await Promise.all(requests);
       const merged = results.flatMap((bucket) =>
@@ -64,7 +63,8 @@ export const AdminReviews = () => {
     const note = window.prompt(action === 'approve' ? '通过备注（可选）' : '驳回原因（可选）', action === 'reject' ? '请按规范完善内容' : '') || '';
     try {
       await apiPut(`/api/admin/review-queue/${item.reviewId}/${action}`, { note, type: item.reviewType });
-      await fetchQueue(true);
+      invalidateApiCacheByPrefix('/api/admin/review-queue');
+      await fetchQueue();
       show(action === 'approve' ? '已通过' : '已驳回', { variant: 'success' });
     } catch (e) {
       show(action === 'approve' ? '审核通过失败' : '驳回失败', { variant: 'error' });
@@ -75,7 +75,7 @@ export const AdminReviews = () => {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-[#2c2c2c] tracking-[0.12em]">审核队列</h1>
-        <button onClick={() => fetchQueue(true)} className="px-4 py-2 border border-[#e0dcd3] text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] rounded text-sm transition-all">
+        <button onClick={() => { invalidateApiCacheByPrefix('/api/admin/review-queue'); fetchQueue(); }} className="px-4 py-2 border border-[#e0dcd3] text-[#6b6560] hover:text-[#c8951e] hover:border-[#c8951e] rounded text-sm transition-all">
           刷新队列
         </button>
       </div>
