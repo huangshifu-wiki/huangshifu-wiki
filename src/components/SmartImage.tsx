@@ -297,6 +297,16 @@ export const SmartImage: React.FC<SmartImageProps> = ({
     onError?.(err);
   }, [onError]);
 
+  // 兜底：浏览器缓存命中时 load 事件可能在 React 挂上 onLoad 监听前就同步触发，
+  // 导致 imageLoaded 一直为 false（opacity:0 → 看起来空白）。
+  // 在 ref 回调里同步检查 complete 状态，命中即标记加载完成。
+  const handleImgRef = useCallback((node: HTMLImageElement | null) => {
+    imageRef.current = node;
+    if (node && node.complete && node.naturalWidth > 0) {
+      setImageLoaded(true);
+    }
+  }, []);
+
   // 计算是否显示占位符
   const showPlaceholder = blurhashDataUrl && !imageLoaded && !imageError;
   const showImage = optimizedUrl && !imageError;
@@ -349,6 +359,8 @@ export const SmartImage: React.FC<SmartImageProps> = ({
   }), [showPlaceholder, imageLoaded, transitionDuration, enableBlurTransition]);
 
   // 图片样式
+  // 仅在存在 blurhash 占位时需要等 imageLoaded 才淡入；否则直接显示，
+  // 避免 React reconcile 后浏览器 load 事件丢失导致 opacity 卡在 0
   const imageStyleFinal: React.CSSProperties = useMemo(() => ({
     position: 'absolute',
     top: 0,
@@ -357,11 +369,11 @@ export const SmartImage: React.FC<SmartImageProps> = ({
     width: '100%',
     height: '100%',
     objectFit: 'cover',
-    transition: enableBlurTransition
+    transition: enableBlurTransition && blurhashDataUrl
       ? `opacity ${transitionDuration}ms ease-in-out`
       : undefined,
-    opacity: imageLoaded ? 1 : 0,
-  }), [imageLoaded, transitionDuration, enableBlurTransition]);
+    opacity: blurhashDataUrl ? (imageLoaded ? 1 : 0) : 1,
+  }), [imageLoaded, transitionDuration, enableBlurTransition, blurhashDataUrl]);
 
   // 无图片状态
   if (!imageInput) {
@@ -406,7 +418,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
       {/* 实际图片 */}
       {showImage && shouldLoadImage && (
         <img
-          ref={imageRef}
+          ref={handleImgRef}
           src={optimizedUrl}
           alt={alt}
           loading={actualLoading}
