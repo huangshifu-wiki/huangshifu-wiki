@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const readMock = vi.hoisted(() => vi.fn());
 const pipelineMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@xenova/transformers', () => ({
+vi.mock('@huggingface/transformers', () => ({
   RawImage: {
     read: readMock,
   },

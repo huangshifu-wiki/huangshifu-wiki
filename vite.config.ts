@@ -105,7 +105,7 @@ export default defineConfig(({ mode }) => {
 						// AI/ML libraries - often large
 						if (
 							pkg === "@google/genai" ||
-							pkg === "@xenova/transformers" ||
+							pkg === "@huggingface/transformers" ||
 							pkg.startsWith("@tensorflow")
 						) {
 							return "ai-vendor";

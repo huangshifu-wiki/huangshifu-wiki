@@ -1,4 +1,4 @@
-import { RawImage, pipeline, CLIPTextModelWithProjection, CLIPTokenizer, env } from '@xenova/transformers';
+import { RawImage, pipeline, CLIPTextModelWithProjection, CLIPTokenizer, env } from '@huggingface/transformers';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
