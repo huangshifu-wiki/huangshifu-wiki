@@ -583,8 +583,8 @@ export const uploadImageWithStrategy = async (
 
 /**
  * 上传头像（支持裁剪和存储策略）
- * 
- * @param blob 裁剪后的头像图片 Blob
+ *
+ * @param blob 裁剪后的头像图片 Blob（注意：从 canvas.toBlob 出来的 Blob.type 已经是正确 MIME）
  * @param options 上传选项
  * @returns 上传后的头像 URL 和完整结果
  */
@@ -592,6 +592,16 @@ export const uploadAvatar = async (
   blob: Blob,
   options?: UploadImageOptions
 ): Promise<UploadImageResult> => {
-  const file = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
+  // 根据 blob.type 选择文件后缀，避免 PNG 被错认成 JPG 导致 server 端校验失败
+  const mime = (blob.type || 'image/jpeg').toLowerCase();
+  const extByMime: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/bmp': 'bmp',
+  };
+  const ext = extByMime[mime] || 'jpg';
+  const file = new File([blob], `avatar.${ext}`, { type: mime || 'image/jpeg' });
   return uploadImageWithStrategy(file, { ...options, type: 'avatar' });
 };

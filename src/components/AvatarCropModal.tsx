@@ -10,6 +10,11 @@ interface AvatarCropModalProps {
   onSuccess: (photoURL: string) => void;
 }
 
+// 限制头像最大输出边长（足以覆盖 2x DPR 的 256 显示），避免超大 canvas 浪费内存
+const MAX_AVATAR_SIZE = 512;
+// 客户端允许的图片 MIME 白名单，与服务端保持一致
+const ALLOWED_AVATAR_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp']);
+
 function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: number): Crop {
   return centerCrop(
     makeAspectCrop({ unit: '%', width: 90 }, aspect, mediaWidth, mediaHeight),
@@ -23,6 +28,8 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
   const [crop, setCrop] = useState<Crop>();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  // 记录原图 MIME，用于决定输出格式（PNG 保留透明，JPG/WEBP 用有损）
+  const [imageMime, setImageMime] = useState<string>('image/jpeg');
   const imgRef = useRef<HTMLImageElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -35,7 +42,12 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
     setError('');
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { setError('请选择图片文件'); return; }
+    const mime = (file.type || '').toLowerCase();
+    if (!ALLOWED_AVATAR_MIME.has(mime)) {
+      setError('仅支持 JPG、PNG、WEBP、GIF、BMP 图片');
+      return;
+    }
+    setImageMime(mime);
     const reader = new FileReader();
     reader.onload = () => setImageSrc(reader.result?.toString() || '');
     reader.readAsDataURL(file);
@@ -45,26 +57,44 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
     return new Promise((resolve) => {
       if (!imgRef.current || !crop) { resolve(null); return; }
       const image = imgRef.current;
+      // 使用原图自然像素而不是 CSS 显示尺寸做裁剪坐标，避免高分辨率原图被压成 256px 模糊头像
+      const naturalW = image.naturalWidth;
+      const naturalH = image.naturalHeight;
+      // crop 单位为百分比时直接乘以原图自然像素
+      const cropX = (crop.x / 100) * naturalW;
+      const cropY = (crop.y / 100) * naturalH;
+      const cropWidth = (crop.width / 100) * naturalW;
+      const cropHeight = (crop.height / 100) * naturalH;
+      // aspect=1 强制 1:1 裁剪，因此 cropWidth === cropHeight
+      const sourceSize = Math.min(cropWidth, cropHeight);
+      // 但仍设置上限以避免过大 canvas
+      const outputSize = Math.min(Math.round(sourceSize), MAX_AVATAR_SIZE);
+      if (outputSize <= 0) { resolve(null); return; }
+
       const canvas = document.createElement('canvas');
-      const scaleX = image.naturalWidth / image.width;
-      const scaleY = image.naturalHeight / image.height;
-      const cropX = (crop.x / 100) * image.width;
-      const cropY = (crop.y / 100) * image.height;
-      const cropWidth = (crop.width / 100) * image.width;
-      const cropHeight = (crop.height / 100) * image.height;
-      const size = Math.min(cropWidth, cropHeight);
-      canvas.width = size;
-      canvas.height = size;
+      canvas.width = outputSize;
+      canvas.height = outputSize;
       const ctx = canvas.getContext('2d');
       if (!ctx) { resolve(null); return; }
+      // 提升缩放质量
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
       ctx.drawImage(
         image,
-        cropX + (cropWidth - size) / 2,
-        cropY + (cropHeight - size) / 2,
-        size, size,
-        0, 0, size, size,
+        cropX,
+        cropY,
+        sourceSize,
+        sourceSize,
+        0,
+        0,
+        outputSize,
+        outputSize,
       );
-      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.9);
+      // PNG 保留透明通道，其它格式用 webp/jpeg 压缩
+      const outputMime = imageMime === 'image/png' ? 'image/png' : 'image/jpeg';
+      const quality = outputMime === 'image/png' ? undefined : 0.9;
+      canvas.toBlob((blob) => resolve(blob), outputMime, quality);
     });
   };
 
@@ -89,6 +119,7 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
     setImageSrc('');
     setCrop(undefined);
     setError('');
+    setImageMime('image/jpeg');
     if (inputRef.current) inputRef.current.value = '';
     onClose();
   };
@@ -118,7 +149,7 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
               <input
                 ref={inputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
                 onChange={handleFileSelect}
                 className="hidden"
                 id="avatar-file-input"
