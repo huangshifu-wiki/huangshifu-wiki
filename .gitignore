@@ -16,3 +16,9 @@ nul
 # collaborator planning artifacts (local only)
 .spec/
 .sisyphus/
+
+# local runtime data (uploads, db snapshots, model cache)
+uploads/
+remote-snapshot/
+models/
+backups/
