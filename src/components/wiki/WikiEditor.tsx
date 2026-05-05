@@ -5,6 +5,7 @@ import { useToast } from "../../components/Toast";
 import { apiGet, apiPost, apiPut } from "../../lib/apiClient";
 import { randomId } from "../../lib/randomId";
 import { splitTagsInput } from "../../lib/contentUtils";
+import { handleMarkdownTextPasteCapture } from "../../lib/markdownEditorPaste";
 import { generateWikiIntro } from "../../services/aiService";
 import { uploadMarkdownImage } from "../../services/imageService";
 import {
@@ -449,7 +450,10 @@ const WikiEditor = () => {
 								{generating ? "生成中..." : "AI 辅助写开头"}
 							</button>
 						</div>
-						<div className="border border-[#e0dcd3] rounded overflow-hidden">
+						<div
+							className="border border-[#e0dcd3] rounded overflow-hidden"
+							onPasteCapture={handleMarkdownTextPasteCapture}
+						>
 							<MdEditor
 								style={{ height: "500px" }}
 								renderHTML={(text) => {
@@ -465,11 +469,14 @@ const WikiEditor = () => {
 								}}
 								value={formData.content}
 								onChange={({ text }) =>
-									setFormData({ ...formData, content: text })
+									setFormData((prev) =>
+										prev.content === text ? prev : { ...prev, content: text },
+									)
 								}
 								onImageUpload={uploadMarkdownImage}
 								placeholder="在这里输入百科内容，支持 Markdown 语法..."
 								config={{
+									onChangeTrigger: "beforeRender",
 									view: {
 										menu: true,
 										md: true,

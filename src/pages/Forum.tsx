@@ -38,6 +38,7 @@ import { copyToClipboard, toAbsoluteInternalUrl } from "../lib/copyLink";
 import { ContentStatus, getStatusText } from "../lib/contentUtils";
 import { formatDate } from "../lib/dateUtils";
 import { DEFAULT_AVATAR, handleAvatarError } from "../lib/defaultAvatar";
+import { handleMarkdownTextPasteCapture } from "../lib/markdownEditorPaste";
 import { LocationTagInput } from "../components/LocationTagInput";
 import Pagination from "../components/Pagination";
 
@@ -1301,17 +1302,23 @@ const PostEditor = () => {
 						<label className="text-xs font-bold uppercase tracking-widest text-[#9e968e]">
 							内容 (Markdown) <span className="text-red-500">*</span>
 						</label>
-						<div className="border border-[#e0dcd3] rounded overflow-hidden bg-white">
+						<div
+							className="border border-[#e0dcd3] rounded overflow-hidden bg-white"
+							onPasteCapture={handleMarkdownTextPasteCapture}
+						>
 							<MdEditor
 								style={{ height: "400px" }}
 								renderHTML={(text) => mdParser.render(text)}
 								value={formData.content}
 								onChange={({ text }) =>
-									setFormData({ ...formData, content: text })
+									setFormData((prev) =>
+										prev.content === text ? prev : { ...prev, content: text },
+									)
 								}
 								onImageUpload={uploadMarkdownImage}
 								placeholder="分享你的想法..."
 								config={{
+									onChangeTrigger: "beforeRender",
 									view: {
 										menu: true,
 										md: true,
