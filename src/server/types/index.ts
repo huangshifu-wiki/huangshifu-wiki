@@ -1,12 +1,12 @@
 import { Request } from 'express';
 import { JwtPayload } from 'jsonwebtoken';
 import { Prisma, UserRole as PrismaUserRole } from '@prisma/client';
+import type { WikiRelationType } from '../../lib/relationConstants';
 
 type UserStatus = 'active' | 'banned';
 type ContentStatus = 'draft' | 'pending' | 'published' | 'rejected';
 type WikiBranchStatus = 'draft' | 'pending_review' | 'merged' | 'rejected' | 'conflict';
 type WikiPullRequestStatus = 'open' | 'merged' | 'rejected';
-type WikiRelationType = 'related_person' | 'work_relation' | 'timeline_relation' | 'custom';
 type FavoriteTargetType = 'wiki' | 'post' | 'music';
 type ModerationTargetType = 'wiki' | 'post';
 type NotificationType = 'reply' | 'like' | 'review_result';

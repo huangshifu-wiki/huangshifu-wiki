@@ -63,6 +63,7 @@ import {
   ALLOWED_IMAGE_EXTENSIONS,
   ALLOWED_IMAGE_MIME_TYPES,
 } from '../types';
+import { RELATION_TYPE_LABELS } from '../../lib/relationConstants';
 import { userToApiUser, isAdminRole } from '../middleware/auth';
 import { prisma } from '../prisma';
 
@@ -90,14 +91,10 @@ const UPLOAD_SESSION_TTL_MINUTES = Math.max(5, Number(process.env.UPLOAD_SESSION
 const PLAY_URL_CACHE_TTL_MS = Math.max(60, Number(process.env.MUSIC_PLAY_URL_CACHE_TTL_SECONDS || 600)) * 1000;
 const playUrlCache = new Map<string, PlayUrlCacheValue>();
 
-const WIKI_RELATION_TYPE_LABELS: Record<WikiRelationType, string> = {
-  related_person: '相关人物',
-  work_relation: '作品关联',
-  timeline_relation: '时间线关联',
-  custom: '自定义关系',
-};
-
 const DEFAULT_MUSIC_PLATFORMS: MusicPlatform[] = ['netease', 'tencent', 'kugou', 'baidu', 'kuwo'];
+const RELATION_LABEL_TO_TYPE: Record<string, WikiRelationType> = Object.fromEntries(
+  Object.entries(RELATION_TYPE_LABELS).map(([type, label]) => [label, type as WikiRelationType])
+);
 
 function parseDate(date: string | Date | null | undefined) {
   if (!date) return null;
@@ -225,10 +222,8 @@ function normalizeWikiRelationType(value: unknown): WikiRelationType | null {
   }
 
   const normalized = value.trim();
-  if (normalized === '相关人物') return 'related_person';
-  if (normalized === '作品关联') return 'work_relation';
-  if (normalized === '时间线关联') return 'timeline_relation';
-  if (normalized === '自定义关系') return 'custom';
+  const mapped = RELATION_LABEL_TO_TYPE[normalized];
+  if (mapped) return mapped;
   return null;
 }
 
@@ -308,7 +303,7 @@ function serializeRelations(value: unknown, sourceSlug?: string) {
 }
 
 function relationTypeLabel(type: WikiRelationType) {
-  return WIKI_RELATION_TYPE_LABELS[type] || '自定义关系';
+  return RELATION_TYPE_LABELS[type] || '自定义关系';
 }
 
 function relationIdentityKey(relation: Pick<WikiRelationRecord, 'type' | 'targetSlug' | 'label'>) {
@@ -2800,7 +2795,6 @@ export {
   prismaAny,
   uploadsDir,
   backupsDir,
-  WIKI_RELATION_TYPE_LABELS,
   DEFAULT_MUSIC_PLATFORMS,
   parseDate,
   parseInteger,

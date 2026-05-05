@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Network, DataSet } from 'vis-network/standalone';
 import { clsx } from 'clsx';
-
-export type WikiRelationType = 'related_person' | 'work_relation' | 'timeline_relation' | 'custom';
+import type { WikiRelationType } from './types';
+import { RELATION_TYPE_LABELS } from './types';
 
 export type RelationGraphNode = {
   slug: string;
@@ -226,22 +226,12 @@ const RelationGraph = ({ graph, currentSlug, onNodeClick }: RelationGraphProps) 
       />
 
       <div className="mt-6 flex flex-wrap gap-4 text-sm">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0] rounded">
-          <span className="inline-block h-3 w-3 rounded bg-[#6B8E23]" />
-          <span className="text-[#6b6560] font-medium">相关人物</span>
-        </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0] rounded">
-          <span className="inline-block h-3 w-3 rounded bg-[#CD853F]" />
-          <span className="text-[#6b6560] font-medium">作品关联</span>
-        </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0] rounded">
-          <span className="inline-block h-3 w-3 rounded bg-[#4682B4]" />
-          <span className="text-[#6b6560] font-medium">时间线关联</span>
-        </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0] rounded">
-          <span className="inline-block h-3 w-3 rounded bg-[#9370DB]" />
-          <span className="text-[#6b6560] font-medium">自定义关系</span>
-        </div>
+        {(Object.entries(RELATION_TYPE_LABELS) as [WikiRelationType, string][]).map(([type, label]) => (
+          <div key={type} className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0] rounded">
+            <span className="inline-block h-3 w-3 rounded" style={{ backgroundColor: NODE_COLORS[type] }} />
+            <span className="text-[#6b6560] font-medium">{label}</span>
+          </div>
+        ))}
         <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f7f5f0]/50 rounded">
           <span className="text-[#9e968e] font-medium">虚线表示反向推断关系</span>
         </div>
