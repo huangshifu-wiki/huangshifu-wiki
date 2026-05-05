@@ -22,7 +22,7 @@ import {
 } from "./lib/miniProgram";
 
 import Home from "./pages/Home";
-import Wiki from "./pages/Wiki";
+import Wiki from "./pages/wiki";
 import Profile from "./pages/Profile";
 import Forum from "./pages/Forum";
 import Music from "./pages/Music";

@@ -1,0 +1,214 @@
+import React, { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Book, Calendar, Plus } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+import { useUserPreferences } from "../../context/UserPreferencesContext";
+import { ViewModeSelector } from "../../components/ViewModeSelector";
+import { VIEW_MODE_CONFIG } from "../../lib/viewModes";
+import { clsx } from "clsx";
+import { useToast } from "../../components/Toast";
+import { copyToClipboard, toAbsoluteInternalUrl } from "../../lib/copyLink";
+import { apiGet } from "../../lib/apiClient";
+import WikiCard from "../../components/wiki/WikiCard";
+import Pagination from "../../components/Pagination";
+import type { WikiItem } from "./types";
+import { DEFAULT_PAGE_SIZE } from "./types";
+
+const WikiList = () => {
+	const [searchParams] = useSearchParams();
+	const category = searchParams.get("category") || "all";
+	const tag = searchParams.get("tag");
+	const [pages, setPages] = useState<WikiItem[]>([]);
+	const [total, setTotal] = useState(0);
+	const [loading, setLoading] = useState(true);
+	const [page, setPage] = useState(1);
+	const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+	const { user, isBanned } = useAuth();
+	const { show } = useToast();
+	const { preferences, setViewMode } = useUserPreferences();
+	const viewMode = preferences.viewMode;
+
+	const totalWikiPages = Math.max(1, Math.ceil(total / pageSize));
+
+	const handlePageChange = (newPage: number) => {
+		setPage(newPage);
+		window.scrollTo({ top: 0, behavior: "smooth" });
+	};
+
+	const handlePageSizeChange = (newSize: number) => {
+		setPageSize(newSize);
+		setPage(1);
+	};
+
+	useEffect(() => {
+		setPage(1);
+	}, [category, tag]);
+
+	useEffect(() => {
+		let cancelled = false;
+		const fetchPages = async () => {
+			setLoading(true);
+			try {
+				const data = await apiGet<{ pages: WikiItem[]; total: number }>("/api/wiki", {
+					category: category !== "all" ? category : undefined,
+					tag: tag || undefined,
+					page,
+					pageSize,
+				});
+				if (cancelled) return;
+				setPages(data.pages || []);
+				setTotal(data.total || 0);
+			} catch (e) {
+				if (cancelled) return;
+				console.error("Error fetching wiki pages:", e);
+			}
+			if (!cancelled) setLoading(false);
+		};
+		fetchPages();
+		return () => { cancelled = true; };
+	}, [category, tag, page, pageSize]);
+
+	const handleCopyWikiLink = async (
+		event: React.MouseEvent<HTMLButtonElement>,
+		slug: string,
+	) => {
+		event.preventDefault();
+		event.stopPropagation();
+		const copied = await copyToClipboard(
+			toAbsoluteInternalUrl(`/wiki/${slug}`),
+		);
+		if (copied) {
+			show("百科内链已复制");
+			return;
+		}
+		show("复制链接失败，请稍后重试", { variant: "error" });
+	};
+
+	return (
+		<div className="min-h-[calc(100vh-60px)]" style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+				<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+					<div>
+					<h1 className="text-[1.75rem] font-bold text-[#2c2c2c] tracking-[0.12em]">
+						百科全书
+					</h1>
+					</div>
+					<div className="flex items-center gap-3">
+						{user && !isBanned && (
+							<Link
+								to={"/wiki/new"}
+								className="px-5 py-2 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] transition-all flex items-center gap-2"
+							>
+								<Plus size={15} /> 创建页面
+							</Link>
+						)}
+					</div>
+				</div>
+
+				<div className="flex items-end justify-between border-b border-[#e0dcd3] mb-5">
+					<div className="flex gap-5">
+						{["all", "biography", "music", "album", "timeline", "event"].map(
+							(cat) => (
+								<Link
+									key={cat}
+									to={`/wiki?category=${cat}`}
+									className={clsx(
+										"text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer",
+										category === cat
+											? "text-[#c8951e] font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#c8951e] after:rounded-[1px]"
+											: "text-[#9e968e] hover:text-[#c8951e]"
+									)}
+								>
+									{cat === "all"
+										? "全部"
+										: cat === "biography"
+											? "人物介绍"
+											: cat === "music"
+												? "音乐作品"
+												: cat === "album"
+													? "专辑一览"
+													: cat === "timeline"
+														? "时间轴"
+														: cat === "event"
+															? "活动记录"
+															: cat}
+								</Link>
+							),
+						)}
+						<Link
+							to={"/wiki/timeline"}
+							className="text-[0.8125rem] text-[#c8951e] font-medium hover:text-[#dca828] transition-colors flex items-center gap-1 self-center mb-1 cursor-pointer"
+						>
+							<Calendar size={14} /> 时间轴
+						</Link>
+					</div>
+
+					<div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-[#9e968e]">
+						<ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
+						<span className="text-[#9e968e]">{pages.length} 个页面</span>
+					</div>
+				</div>
+
+
+
+			{loading ? (
+				<div
+					className={clsx(
+						"grid",
+						VIEW_MODE_CONFIG[viewMode].gridCols,
+						VIEW_MODE_CONFIG[viewMode].gap,
+					)}
+				>
+					{[1, 2, 3, 4, 5, 6].map((i) => (
+						<div
+							key={i}
+							className={clsx(
+								viewMode === "list"
+									? "h-24"
+									: VIEW_MODE_CONFIG[viewMode].cardHeight,
+								"bg-white rounded animate-pulse border border-[#e0dcd3]",
+							)}
+						></div>
+					))}
+				</div>
+			) : pages.length > 0 ? (
+				<>
+					<div
+						className={clsx(
+							"grid",
+							VIEW_MODE_CONFIG[viewMode].gridCols,
+							VIEW_MODE_CONFIG[viewMode].gap,
+						)}
+					>
+						{pages.map((page) => (
+							<WikiCard
+								key={page.id}
+								page={page}
+								viewMode={viewMode}
+								onCopyLink={handleCopyWikiLink}
+							/>
+						))}
+					</div>
+					{(import.meta.env.DEV || totalWikiPages > 1) && (
+						<Pagination
+							page={page}
+							totalPages={totalWikiPages}
+							onPageChange={handlePageChange}
+							pageSize={pageSize}
+							onPageSizeChange={handlePageSizeChange}
+							showPageSizeSelector
+						/>
+					)}
+				</>
+			) : (
+				<div className="bg-white p-20 rounded border border-gray-100 text-center">
+					<Book size={48} className="mx-auto text-gray-200 mb-6" />
+					<p className="text-[#9e968e] italic">暂无相关百科页面</p>
+				</div>
+			)}
+			</div>
+		</div>
+	);
+};
+
+export default WikiList;
