@@ -24,6 +24,7 @@ import type {
   WikiBranchWithPage,
   WikiPullRequestWithRelations,
 } from '../types';
+import { buildWikiBacklinkSearchTerms } from '../../lib/wikiLinkParser';
 
 const router = Router();
 
@@ -332,13 +333,18 @@ router.get('/:slug', async (req: AuthenticatedRequest, res) => {
       await recordBrowsingHistory(req.authUser.uid, 'wiki', req.params.slug);
     }
 
+    const backlinkSearchTerms = buildWikiBacklinkSearchTerms(req.params.slug);
     const backlinks = await prisma.wikiPage.findMany({
       where: {
         ...buildWikiVisibilityWhere(req.authUser),
         slug: { not: req.params.slug },
-        content: {
-          contains: `[[${req.params.slug}]]`,
-        },
+        AND: [
+          {
+            OR: backlinkSearchTerms.map((term) => ({
+              content: { contains: term },
+            })),
+          },
+        ],
       },
       take: 100,
       orderBy: { updatedAt: 'desc' },

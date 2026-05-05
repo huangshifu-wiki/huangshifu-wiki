@@ -43,6 +43,13 @@ export function parseInternalLink(
 }
 
 /**
+ * 生成反向链接查询需要匹配的内部链接片段。
+ */
+export function buildWikiBacklinkSearchTerms(slug: string): string[] {
+	return [`[[${slug}]]`, `|${slug}]]`];
+}
+
+/**
  * 从 Markdown 内容中提取元数据
  * @param content Markdown 内容
  * @param slug 页面 slug

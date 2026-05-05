@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildWikiBacklinkSearchTerms,
   parseInternalLink,
   extractMetadataFromMarkdown,
   type WikiPageMetadata,
@@ -48,6 +49,15 @@ describe('wikiLinkParser', () => {
         slug: 'test-page',
         displayText: '测试 & 示例',
       });
+    });
+  });
+
+  describe('buildWikiBacklinkSearchTerms', () => {
+    it('builds search terms for simple and display-text internal links', () => {
+      expect(buildWikiBacklinkSearchTerms('test-page')).toEqual([
+        '[[test-page]]',
+        '|test-page]]',
+      ]);
     });
   });
 
