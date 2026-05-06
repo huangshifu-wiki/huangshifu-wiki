@@ -26,6 +26,7 @@ import type {
 } from '../types';
 import { buildWikiBacklinkSearchTerms } from '../../lib/wikiLinkParser';
 import { getWikiUniqueConflictMessage, normalizeWikiTitleKey } from '../wiki/wikiTitleKey';
+import { canViewWikiBranchContent } from '../wiki/wikiBranchAccess';
 
 const router = Router();
 
@@ -1204,7 +1205,7 @@ router.get('/branches/:branchId', requireAuth, async (req: AuthenticatedRequest,
       res.status(404).json({ error: '分支未找到' });
       return;
     }
-    if (!isAdminRole(req.authUser!.role) && branch.editorUid !== req.authUser!.uid && branch.status !== 'pending_review' && branch.status !== 'conflict') {
+    if (!canViewWikiBranchContent(branch, req.authUser)) {
       res.status(403).json({ error: '无权访问该分支' });
       return;
     }
@@ -1240,7 +1241,7 @@ router.get('/branches/:branchId/revisions', requireAuth, async (req: Authenticat
       res.status(404).json({ error: '分支未找到' });
       return;
     }
-    if (!isAdminRole(req.authUser!.role) && branch.editorUid !== req.authUser!.uid) {
+    if (!canViewWikiBranchContent(branch, req.authUser)) {
       res.status(403).json({ error: '无权查看修订历史' });
       return;
     }
