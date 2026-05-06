@@ -5,6 +5,7 @@ import type { WikiRelationRecord } from "./types";
 import type { WikiPageMetadata } from "../../lib/wikiLinkParser";
 import type { WikiItem } from "../../types/entities";
 import { RELATION_TYPE_LABELS } from "./types";
+import { getWikiRelationDisplayTitle } from "../../lib/wikiRelationDisplay";
 
 interface RelationPreviewProps {
 	relation: WikiRelationRecord & {
@@ -28,6 +29,16 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
 	isEditing = false,
 }) => {
 	const typeLabel = RELATION_TYPE_LABELS[relation.type];
+	const targetTitle = relation.metadata?.title?.trim() || null;
+	const displayTitle = getWikiRelationDisplayTitle({
+		...relation,
+		targetTitle,
+	});
+	const targetDisplayTitle = targetTitle || relation.targetSlug;
+	const customDisplayName = relation.label?.trim() || "";
+	const hasCustomDisplayName = Boolean(
+		customDisplayName && customDisplayName !== targetDisplayTitle,
+	);
 
 	return (
 		<motion.div
@@ -40,7 +51,7 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
 				<div className="flex-1">
 					<div className="flex items-center gap-2 mb-1">
 						<h4 className="font-semibold text-[#2c2c2c] text-base">
-							{relation.metadata?.title || relation.label || relation.targetSlug}
+							{displayTitle}
 						</h4>
 						{isNew && (
 							<span className="px-2 py-0.5 bg-[#c8951e] text-white text-[10px] font-medium rounded">
@@ -53,7 +64,7 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
 							</span>
 						)}
 					</div>
-					<div className="flex items-center gap-2 text-xs text-[#9e968e]">
+					<div className="flex flex-wrap items-center gap-2 text-xs text-[#9e968e]">
 						<span className="flex items-center gap-1">
 							<Link2 size={12} />
 							{typeLabel}
@@ -62,6 +73,12 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
 							<>
 								<span>/</span>
 								<span className="capitalize">{relation.metadata.category}</span>
+							</>
+						)}
+						{hasCustomDisplayName && (
+							<>
+								<span>/</span>
+								<span>目标：{targetDisplayTitle}</span>
 							</>
 						)}
 					</div>
