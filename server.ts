@@ -108,6 +108,15 @@ app.use(compression({
   threshold: 1024, // 只有大于 1KB 的响应才压缩
 }));
 
+// 生产环境静态资源服务 - 必须在 compression 之后
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(process.cwd(), 'dist');
+  app.use(express.static(distPath, {
+    maxAge: '1y', // 静态资源缓存1年
+    immutable: true, // 文件名带hash，内容不变则永不失效
+  }));
+}
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -178,9 +187,9 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    // SPA fallback - 所有未匹配的路由返回 index.html
     app.get('*', (_req, res) => {
+      const distPath = path.join(process.cwd(), 'dist');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
