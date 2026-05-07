@@ -16,8 +16,9 @@ export const BottomNav = () => {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-[150] border-t border-[#e0dcd3]"
-      style={{ background: 'rgba(255,255,255,0.98)', backdropFilter: 'blur(16px)' }}
+      className="md:hidden fixed bottom-0 left-0 right-0 z-[150] border-t border-border bg-surface/98 backdrop-blur-xl"
+      role="navigation"
+      aria-label="底部导航"
     >
       <div className="flex justify-around items-center" style={{ height: '56px' }}>
         {items.map(({ to, icon: Icon, label }) => (
@@ -25,9 +26,10 @@ export const BottomNav = () => {
             key={to}
             to={to}
             className={({ isActive }) => clsx(
-              'flex flex-col items-center gap-0.5 transition-all',
-              isActive ? 'text-[#c8951e]' : 'text-[#9e968e]'
+              'flex flex-col items-center gap-0.5 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded px-2 py-1',
+              isActive ? 'text-brand-gold' : 'text-text-muted'
             )}
+            aria-label={label}
           >
             <Icon size={22} />
             <span style={{ fontSize: '0.625rem' }}>{label}</span>

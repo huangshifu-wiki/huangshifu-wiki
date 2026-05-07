@@ -310,7 +310,7 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
       <button
         ref={closeButtonRef}
         onClick={close}
-        className="absolute top-4 right-4 z-30 p-2 rounded bg-white/10 text-white hover:bg-white/20 transition-colors"
+        className="absolute top-4 right-4 z-30 p-2 rounded bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
         aria-label="关闭"
       >
         <X size={24} />
@@ -326,14 +326,14 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
         <>
           <button
             onClick={prev}
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded bg-white/10 text-white hover:bg-white/20 transition-colors"
+            className="absolute left-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             aria-label="上一张"
           >
             <ChevronLeft size={28} />
           </button>
           <button
             onClick={next}
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded bg-white/10 text-white hover:bg-white/20 transition-colors"
+            className="absolute right-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             aria-label="下一张"
           >
             <ChevronRight size={28} />
@@ -379,8 +379,9 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/40 rounded px-4 py-2 z-30">
         <button
           onClick={zoomOut}
-          className="text-white/70 hover:text-white w-8 h-8 flex items-center justify-center transition-colors"
+          className="text-white/70 hover:text-white w-8 h-8 flex items-center justify-center transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
           title="缩小"
+          aria-label="缩小"
         >
           <ZoomOut size={20} />
         </button>
@@ -391,8 +392,9 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
 
         <button
           onClick={zoomIn}
-          className="text-white/70 hover:text-white w-8 h-8 flex items-center justify-center transition-colors"
+          className="text-white/70 hover:text-white w-8 h-8 flex items-center justify-center transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
           title="放大"
+          aria-label="放大"
         >
           <ZoomIn size={20} />
         </button>
@@ -401,16 +403,18 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
 
         <button
           onClick={zoomToActual}
-          className="text-white/70 hover:text-white px-2 h-8 flex items-center justify-center transition-colors text-sm font-medium"
+          className="text-white/70 hover:text-white px-2 h-8 flex items-center justify-center transition-colors text-sm font-medium cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
           title="实际大小 (1:1)"
+          aria-label="实际大小"
         >
           1:1
         </button>
 
         <button
           onClick={zoomToFit}
-          className="text-white/70 hover:text-white w-8 h-8 flex items-center justify-center transition-colors"
+          className="text-white/70 hover:text-white w-8 h-8 flex items-center justify-center transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
           title="适应屏幕"
+          aria-label="适应屏幕"
         >
           <Maximize size={18} />
         </button>

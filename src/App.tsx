@@ -52,6 +52,8 @@ const MainLayout = () => {
 					"flex-grow",
 					currentSong ? "pb-36 md:pb-20" : "pb-20 md:pb-0",
 				)}
+				role="main"
+				id="main-content"
 			>
 				<Routes>
 					<Route path="/" element={<Home />} />
@@ -71,6 +73,7 @@ const MainLayout = () => {
 			<BottomNav />
 			<footer
 				className="text-center"
+				role="contentinfo"
 				style={{
 					background: '#f0ece3',
 					padding: '40px 24px',

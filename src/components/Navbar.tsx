@@ -53,8 +53,7 @@ export const Navbar = () => {
 
 	return (
 		<nav
-			className="sticky top-0 z-[100] border-b border-[#e0dcd3]"
-			style={{ background: 'rgba(247, 245, 240, 0.92)', backdropFilter: 'blur(12px)' }}
+			className="sticky top-0 z-[100] border-b border-border bg-bg-primary/92 backdrop-blur-md"
 		>
 			<style>{`
 				.nav-link-gufeng {
@@ -64,13 +63,13 @@ export const Navbar = () => {
 					transition: all 0.3s ease;
 					font-size: 0.9375rem;
 					letter-spacing: 0.08em;
-					color: #6b6560;
+					color: var(--color-text-secondary);
 				}
 				.nav-link-gufeng:hover {
-					color: #c8951e;
+					color: var(--color-brand-gold);
 				}
 				.nav-link-gufeng.active {
-					color: #c8951e;
+					color: var(--color-brand-gold);
 				}
 				.nav-link-gufeng.active::after {
 					content: '';
@@ -80,7 +79,7 @@ export const Navbar = () => {
 					transform: translateX(-50%);
 					width: 16px;
 					height: 2px;
-					background: #c8951e;
+					background: var(--color-brand-gold);
 					border-radius: 1px;
 				}
 			`}</style>
@@ -88,10 +87,10 @@ export const Navbar = () => {
 			<div className="max-w-[1100px] mx-auto px-6" style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 				<div className="flex items-center gap-7">
 					<Link to="/" className="flex items-center gap-2 group" style={{ textDecoration: 'none', color: 'inherit' }}>
-						<div className="w-7 h-7 flex items-center justify-center text-white text-sm" style={{ background: '#c8951e', borderRadius: '4px' }}>
+						<div className="w-7 h-7 flex items-center justify-center text-white text-sm bg-brand-gold rounded">
 							诗
 						</div>
-						<span className="font-semibold text-[#2c2c2c]" style={{ fontSize: '1.25rem', letterSpacing: '0.15em' }}>
+						<span className="font-semibold text-text-primary" style={{ fontSize: '1.25rem', letterSpacing: '0.15em' }}>
 							诗扶小筑
 						</span>
 					</Link>
@@ -115,7 +114,7 @@ export const Navbar = () => {
 									</span>
 									)}
 									{isAdmin && (
-										<Link to="/admin" className="text-[#9e968e] hover:text-[#c8951e] transition-colors">
+										<Link to="/admin" className="text-text-muted hover:text-brand-gold transition-colors">
 											<Shield size={18} />
 										</Link>
 									)}
@@ -127,12 +126,11 @@ export const Navbar = () => {
 											<img
 												src={profile?.photoURL || user.photoURL || DEFAULT_AVATAR}
 												alt=""
-												className="w-8 h-8 object-cover"
-												style={{ borderRadius: '50%', border: '1px solid #e0dcd3' }}
+												className="w-8 h-8 object-cover rounded-full border border-border"
 												referrerPolicy="no-referrer"
 												onError={handleAvatarError}
 											/>
-											<span className="hidden sm:inline text-sm text-[#2c2c2c] group-hover:text-[#c8951e] transition-colors">
+											<span className="hidden sm:inline text-sm text-text-primary group-hover:text-brand-gold transition-colors">
 												{profile?.displayName || user.displayName}
 											</span>
 										</Link>
@@ -141,7 +139,8 @@ export const Navbar = () => {
 										<button
 											type="button"
 											onClick={handleLogout}
-											className="text-[#9e968e] hover:text-red-500 transition-colors"
+											className="text-text-muted hover:text-red-500 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+											aria-label="退出登录"
 										>
 											<LogOut size={18} />
 										</button>
@@ -149,19 +148,19 @@ export const Navbar = () => {
 								</div>
 							) : (
 								(
-									<div className="flex items-center gap-3">
+										<div className="flex items-center gap-3">
 										<button
 											type="button"
 											onClick={() => openAuthModal("register")}
-											className="text-xs text-[#6b6560] hover:text-[#c8951e] transition-colors"
+											className="text-xs text-text-secondary hover:text-brand-gold transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded px-1"
 										>
 											注册
 										</button>
-										<span className="text-[#e0dcd3]">|</span>
+										<span className="text-border">|</span>
 										<button
 											type="button"
 											onClick={() => openAuthModal("login")}
-											className="text-xs text-[#6b6560] hover:text-[#c8951e] transition-colors"
+											className="text-xs text-text-secondary hover:text-brand-gold transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded px-1"
 										>
 											登录
 										</button>
@@ -175,7 +174,8 @@ export const Navbar = () => {
 						<button
 							type="button"
 							onClick={() => setIsMenuOpen(!isMenuOpen)}
-							className="md:hidden p-2 text-[#9e968e] hover:text-[#c8951e] transition-colors"
+							className="md:hidden p-2 text-text-muted hover:text-brand-gold transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+							aria-label={isMenuOpen ? "关闭菜单" : "打开菜单"}
 						>
 							{isMenuOpen ? <X size={24} /> : <Menu size={24} />}
 						</button>
