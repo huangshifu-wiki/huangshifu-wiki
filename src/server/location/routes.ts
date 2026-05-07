@@ -5,7 +5,7 @@ import {
   getProvinces,
   getCitiesByProvince,
   getDistrictsByCity,
-  getFullRegionPath,
+  // getFullRegionPath,  // not used by frontend; path field may be missing from some import records
   fuzzyMatchRegion,
   suggestRegions,
   type RegionSearchResult,
@@ -120,16 +120,16 @@ router.get('/districts/:cityCode', async (req, res) => {
   }
 });
 
-router.get('/path/:code', async (req, res) => {
-  try {
-    const { code } = req.params;
-    const path = await getFullRegionPath(code);
-    res.json({ path });
-  } catch (error) {
-    console.error('Get region path error:', error);
-    res.status(500).json({ error: '获取地区路径失败' });
-  }
-});
+// router.get('/path/:code', async (req, res) => {
+//   try {
+//     const { code } = req.params;
+//     const path = await getFullRegionPath(code);
+//     res.json({ path });
+//   } catch (error) {
+//     console.error('Get region path error:', error);
+//     res.status(500).json({ error: '获取地区路径失败' });
+//   }
+// });
 
 router.get('/resolve', async (req, res) => {
   try {

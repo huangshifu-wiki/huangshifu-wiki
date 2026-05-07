@@ -29,9 +29,9 @@ interface RegionData {
   name: string;
   fullName: string;
   level: number;
-  depth: number;
+  depth: number | null;
   parentCode: string | null;
-  path: string;
+  path: string | null;
   type: string | null;
   year: number;
   sortOrder: number;
@@ -101,9 +101,9 @@ function transformRegion(raw: RawRegion, fullName: string, sortOrder: number): R
     name: raw.name,
     fullName: fullName,
     level: raw.level,
-    depth: raw.depth,
+    depth: raw.depth ?? null,
     parentCode: raw.parent_code,
-    path: raw.path,
+    path: raw.path ?? null,
     type: raw.type || LEVEL_TYPE_MAP[raw.level] || null,
     year: 2026,
     sortOrder,
