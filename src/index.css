@@ -38,6 +38,42 @@
   --color-cta: #22C55E;
   --color-cta-hover: #16A34A;
 
+  /* ===== 设计令牌别名系统 (Design Token Aliases) ===== */
+  /* 将语义化命名映射到项目已有颜色，保持向后兼容 */
+
+  /* 品牌色 (Brand) - 金黄色系 */
+  --color-brand-gold: #FFD700;
+  --color-brand-gold-light: #FFE44D;
+  --color-brand-gold-dark: #D4AF37;
+
+  /* 背景色 (Background) */
+  --color-bg-primary: #FDFDF7;
+  --color-bg-secondary: #FAF7F0;
+  --color-bg-tertiary: #F5F2EB;
+
+  /* 表面色 (Surface) */
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #FAF7F0;
+
+  /* 边框色 (Border) */
+  --color-border: #E5DED1;
+  --color-border-light: #F0EAD8;
+
+  /* 文字色 (Text) */
+  --color-text-primary: #111827;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #6B7280;
+
+  /* 功能色 (Functional) */
+  --color-success: #22C55E;
+  --color-success-hover: #16A34A;
+  --color-warning: #F59E0B;
+  --color-warning-hover: #D97706;
+  --color-error: #EF4444;
+  --color-error-hover: #DC2626;
+  --color-info: #3B82F6;
+  --color-info-hover: #2563EB;
+
   /* Liquid Glass 玻璃质感核心变量 */
   --glass-bg: rgba(255, 255, 255, 0.2);
   --glass-bg-strong: rgba(255, 255, 255, 0.8);
