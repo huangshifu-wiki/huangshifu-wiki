@@ -664,14 +664,14 @@ const WikiPageView = () => {
 						)}
 
 						{/* Location */}
-						{page.locationName && (
+						{(page.locationDetail || page.locationName) && (
 							<div className="py-5">
 								<h3 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-3.5">
 									地点
 								</h3>
 								<div className="flex items-center gap-2 text-sm text-[#6b6560]">
 									<MapPin size={14} className="text-[#c8951e]" />
-									<span>{page.locationName}</span>
+									<span>{page.locationDetail || page.locationName}</span>
 								</div>
 							</div>
 						)}

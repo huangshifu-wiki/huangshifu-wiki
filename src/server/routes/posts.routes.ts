@@ -133,7 +133,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
 // Create post
 router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
-    const { title, section, content, tags, status, musicDocId, albumDocId, locationCode } = req.body as {
+    const { title, section, content, tags, status, musicDocId, albumDocId, locationCode, locationDetail } = req.body as {
       title?: string;
       section?: string;
       content?: string;
@@ -142,6 +142,7 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
       musicDocId?: string;
       albumDocId?: string;
       locationCode?: string;
+      locationDetail?: string;
     };
 
     if (!title || !section || !content) {
@@ -192,6 +193,7 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
         musicDocId: normalizedMusicDocId,
         albumDocId: normalizedAlbumDocId,
         locationCode,
+        locationDetail: locationDetail || null,
       },
     });
 
@@ -323,7 +325,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
 // Update post
 router.put('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
-    const { title, section, content, tags, status, musicDocId, albumDocId, locationCode } = req.body as {
+    const { title, section, content, tags, status, musicDocId, albumDocId, locationCode, locationDetail } = req.body as {
       title?: string;
       section?: string;
       content?: string;
@@ -332,6 +334,7 @@ router.put('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRequ
       musicDocId?: string;
       albumDocId?: string;
       locationCode?: string;
+      locationDetail?: string;
     };
 
     if (!title || !section || !content) {
@@ -411,6 +414,7 @@ router.put('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRequ
         musicDocId: normalizedMusicDocId,
         albumDocId: normalizedAlbumDocId,
         locationCode,
+        locationDetail: locationDetail || null,
       },
     });
 

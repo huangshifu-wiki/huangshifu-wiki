@@ -87,7 +87,7 @@ const WikiEditor = () => {
 						eventDate: data.eventDate || "",
 						relations: (data.relations as WikiRelationRecord[]) || [],
 						locationCode: data.locationCode || "",
-						locationName: data.locationName || "",
+						locationName: data.locationDetail || data.locationName || "",
 					});
 				} catch (error) {
 					console.error("Error fetching wiki page for edit:", error);
@@ -289,6 +289,7 @@ const WikiEditor = () => {
 			eventDate: formData.eventDate,
 			relations: formData.relations,
 			locationCode: formData.locationCode || null,
+			locationDetail: formData.locationName || null,
 			status,
 		};
 

@@ -56,6 +56,7 @@ type PostItem = {
 	tags?: string[];
 	locationCode?: string | null;
 	locationName?: string | null;
+	locationDetail?: string | null;
 	authorUid: string;
 	authorName?: string | null;
 	status?: ContentStatus;
@@ -1028,14 +1029,14 @@ const PostDetail = () => {
 						)}
 
 						{/* Location */}
-						{post.locationName && (
+						{(post.locationDetail || post.locationName) && (
 							<div className="py-5">
 								<h3 className="text-[0.875rem] font-semibold text-[#6b6560] tracking-[0.12em] uppercase mb-3.5">
 									地点
 								</h3>
 								<div className="flex items-center gap-2 text-sm text-[#6b6560]">
 									<MapPin size={14} className="text-[#c8951e]" />
-									<span>{post.locationName}</span>
+									<span>{post.locationDetail || post.locationName}</span>
 								</div>
 							</div>
 						)}
@@ -1121,7 +1122,7 @@ const PostEditor = () => {
 					section: data.post.section,
 					content: data.post.content,
 					tags: (data.post.tags || []).join(", "),
-					locationName: data.post.locationName || null,
+					locationName: data.post.locationDetail || data.post.locationName || null,
 					locationCode: data.post.locationCode || null,
 				});
 			} catch (error) {
@@ -1153,6 +1154,7 @@ const PostEditor = () => {
 					.map((t) => t.trim())
 					.filter(Boolean),
 				locationCode: formData.locationCode,
+				locationDetail: formData.locationName,
 				status,
 			};
 

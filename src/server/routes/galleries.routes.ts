@@ -228,7 +228,7 @@ router.post('/upload', requireAuth, requireActiveUser, async (req: Authenticated
 // POST /api/galleries - Create gallery from existing assets
 router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
-    const { title, description, tags, images, assetIds, uploadSessionId, locationCode } = req.body as {
+    const { title, description, tags, images, assetIds, uploadSessionId, locationCode, locationDetail } = req.body as {
       title?: string;
       description?: string;
       tags?: string[];
@@ -236,6 +236,7 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
       assetIds?: string[];
       uploadSessionId?: string;
       locationCode?: string;
+      locationDetail?: string;
     };
 
     const normalizedAssetIds = parseAssetIdList(assetIds);
@@ -307,6 +308,7 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
           authorName: req.authUser!.displayName,
           tags: finalTags,
           locationCode: locationCode || null,
+          locationDetail: locationDetail || null,
           images: {
             create: orderedAssets.map((asset, index) => ({
               assetId: asset.id,
@@ -403,6 +405,7 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
         authorName: req.authUser!.displayName,
         tags: normalizedTags,
         locationCode: locationCode || null,
+        locationDetail: locationDetail || null,
         images: {
           create: normalizedImages.map((image, index) => ({
             assetId: assetByUrl.get(image.url) || null,
@@ -477,6 +480,7 @@ router.patch('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRe
     const description = typeof req.body?.description === 'string' ? req.body.description.trim() : undefined;
     const tags = req.body?.tags !== undefined ? normalizeTagList(req.body.tags) : undefined;
     const locationCode = req.body?.locationCode !== undefined ? (typeof req.body.locationCode === 'string' && req.body.locationCode.length > 0 ? req.body.locationCode : null) : undefined;
+    const locationDetail = req.body?.locationDetail !== undefined ? (typeof req.body.locationDetail === 'string' && req.body.locationDetail.length > 0 ? req.body.locationDetail : null) : undefined;
     const copyright = req.body?.copyright !== undefined ? (typeof req.body.copyright === 'string' ? req.body.copyright.trim() : null) : undefined;
     const published = req.body?.published !== undefined ? parseBoolean(req.body.published, false) : undefined;
     const imagesRaw = Array.isArray(req.body?.images) ? req.body.images : undefined;
@@ -505,6 +509,7 @@ router.patch('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRe
       description?: string;
       tags?: string[];
       locationCode?: string | null;
+      locationDetail?: string | null;
       copyright?: string | null;
       published?: boolean;
       publishedAt?: Date | null;
@@ -521,6 +526,9 @@ router.patch('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRe
     }
     if (locationCode !== undefined) {
       data.locationCode = locationCode;
+    }
+    if (locationDetail !== undefined) {
+      data.locationDetail = locationDetail;
     }
     if (copyright !== undefined) {
       data.copyright = copyright;

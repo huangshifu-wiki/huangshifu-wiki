@@ -55,6 +55,7 @@ export interface PostItem {
   tags?: string[];
   locationCode?: string | null;
   locationName?: string | null;
+  locationDetail?: string | null;
   authorUid: string;
   status?: ContentStatus;
   reviewNote?: string | null;
@@ -115,6 +116,7 @@ export interface WikiItem {
   lastEditorName: string;
   locationCode?: string | null;
   locationName?: string | null;
+  locationDetail?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -128,6 +130,7 @@ export interface GalleryItem {
   authorUid: string;
   locationCode?: string | null;
   locationName?: string | null;
+  locationDetail?: string | null;
   createdAt: string;
   updatedAt: string;
 }

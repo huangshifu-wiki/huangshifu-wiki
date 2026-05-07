@@ -168,6 +168,7 @@ type WikiResponseInput = {
   relations?: unknown;
   eventDate: string | null;
   locationCode?: string | null;
+  locationDetail?: string | null;
   status: ContentStatus;
   reviewNote: string | null;
   reviewedBy: string | null;

@@ -524,6 +524,7 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
           assetIds: uploadedAssetIds,
           tags: tags.split(',').map(t => t.trim()).filter(t => t),
           locationCode: locationCode,
+          locationDetail: locationName,
         });
 
         if (galleryResponse.gallery?.id) {

@@ -133,9 +133,9 @@ export const LocationTagInput = ({
         { lng: location.lng, lat: location.lat }
       );
       if (data.result) {
-        const fullName = `${data.result.province}${data.result.city}${data.result.district}`;
-        setInputValue(fullName);
-        onChange(fullName, data.result.adcode);
+        const displayName = location.address || `${data.result.province}${data.result.city}${data.result.district}`;
+        setInputValue(displayName);
+        onChange(displayName, data.result.adcode);
       }
     } catch (err) {
       console.error('Failed to resolve location:', err);

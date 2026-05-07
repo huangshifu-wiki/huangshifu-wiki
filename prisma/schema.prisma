@@ -207,6 +207,7 @@ model Post {
   content       String
   tags          Json?
   locationCode  String?
+  locationDetail String?
   authorUid     String
   status        ContentStatus @default(published)
   reviewNote    String?
@@ -270,6 +271,7 @@ model WikiPage {
   relations     Json?
   eventDate     String?
   locationCode  String?
+  locationDetail String?
   status        ContentStatus  @default(published)
   reviewNote    String?
   reviewedBy    String?
@@ -495,6 +497,7 @@ model Gallery {
   authorName String
   tags       Json?
   locationCode  String?
+  locationDetail String?
   copyright  String?
   published  Boolean        @default(false)
   publishedAt DateTime?

@@ -894,6 +894,7 @@ function toWikiResponse(page: WikiResponseInput) {
     eventDate: page.eventDate,
     locationCode: page.locationCode || null,
     locationName: page.location?.fullName || null,
+    locationDetail: page.locationDetail || null,
     status: page.status,
     reviewNote: page.reviewNote,
     reviewedBy: page.reviewedBy,
@@ -980,6 +981,7 @@ function toPostResponse(post: {
   content: string;
   tags: unknown;
   locationCode?: string | null;
+  locationDetail?: string | null;
   authorUid: string;
   author?: { displayName: string } | null;
   status: ContentStatus;
@@ -1001,6 +1003,7 @@ function toPostResponse(post: {
     authorName: post.author?.displayName || null,
     locationCode: post.locationCode || null,
     locationName: post.location?.fullName || null,
+    locationDetail: post.locationDetail || null,
     hotScore: post.hotScore ?? 0,
     viewCount: post.viewCount ?? 0,
     tags: serializeTags(post.tags),
@@ -1048,6 +1051,7 @@ async function toGalleryResponse(gallery: {
   authorName: string;
   tags: unknown;
   locationCode?: string | null;
+  locationDetail?: string | null;
   copyright?: string | null;
   published: boolean;
   publishedAt: Date | null;
@@ -1116,6 +1120,7 @@ async function toGalleryResponse(gallery: {
     tags: serializeTags(gallery.tags),
     locationCode: gallery.locationCode || null,
     locationName: gallery.location?.fullName || null,
+    locationDetail: gallery.locationDetail || null,
     copyright: gallery.copyright || null,
     published: gallery.published,
     publishedAt: gallery.publishedAt ? gallery.publishedAt.toISOString() : null,

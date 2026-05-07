@@ -818,6 +818,7 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
       eventDate,
       status,
       locationCode,
+      locationDetail,
     } = req.body as {
       title?: string;
       slug?: string;
@@ -828,6 +829,7 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
       eventDate?: string;
       status?: ContentStatus;
       locationCode?: string;
+      locationDetail?: string;
     };
 
     const pageSlug = normalizeWikiPageSlug(slug);
@@ -867,6 +869,7 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
         reviewedAt: null,
         lastEditorUid: req.authUser!.uid,
         locationCode: locationCode || null,
+        locationDetail: locationDetail || null,
       },
     });
 
@@ -938,6 +941,7 @@ router.put('/:slug', requireAuth, requireActiveUser, async (req: AuthenticatedRe
       eventDate,
       status,
       locationCode,
+      locationDetail,
     } = req.body as {
       title?: string;
       category?: string;
@@ -947,6 +951,7 @@ router.put('/:slug', requireAuth, requireActiveUser, async (req: AuthenticatedRe
       eventDate?: string;
       status?: ContentStatus;
       locationCode?: string;
+      locationDetail?: string;
     };
 
     const titleKey = typeof title === 'string' ? normalizeWikiTitleKey(title) : '';
@@ -988,6 +993,7 @@ router.put('/:slug', requireAuth, requireActiveUser, async (req: AuthenticatedRe
         reviewedAt: null,
         lastEditorUid: req.authUser!.uid,
         locationCode: locationCode || null,
+        locationDetail: locationDetail || null,
       },
     });
 
