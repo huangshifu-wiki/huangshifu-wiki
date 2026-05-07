@@ -128,6 +128,30 @@
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-theme-serif);
   }
+
+  /* 全局 ::selection 样式 - 古风黄色调 */
+  ::selection {
+    background-color: #fdf5d8;
+    color: #c8951e;
+  }
+
+  /* skip-to-content 无障碍样式 */
+  .skip-to-content {
+    position: absolute;
+    top: -100%;
+    left: 0;
+    z-index: 9999;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-brand-gold);
+    color: white;
+    text-decoration: none;
+    font-weight: 600;
+    transition: top 0.3s ease;
+  }
+
+  .skip-to-content:focus {
+    top: 0;
+  }
 }
 
 
@@ -678,6 +702,88 @@ html {
 
 .table-scroll-wrapper.scroll-hint-animate::after {
   animation: scroll-hint-pulse 2s ease-in-out 3;
+}
+
+/* ========================================
+   BackToTop 组件动画
+   返回顶部按钮的进入/退出动画
+   ======================================== */
+@keyframes back-to-top-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.back-to-top-button {
+  animation: back-to-top-fade-in 0.3s ease forwards;
+}
+
+/* ========================================
+   Music 页面古风动画
+   用于歌曲列表的渐入效果
+   ======================================== */
+@keyframes gufengFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.gufeng-fade-in {
+  animation: gufengFadeIn 0.4s ease forwards;
+}
+
+.gufeng-song-item {
+  animation: gufengFadeIn 0.3s ease forwards;
+}
+
+.gufeng-song-item:nth-child(1) { animation-delay: 0.02s; }
+.gufeng-song-item:nth-child(2) { animation-delay: 0.04s; }
+.gufeng-song-item:nth-child(3) { animation-delay: 0.06s; }
+.gufeng-song-item:nth-child(4) { animation-delay: 0.08s; }
+.gufeng-song-item:nth-child(5) { animation-delay: 0.10s; }
+.gufeng-song-item:nth-child(6) { animation-delay: 0.12s; }
+
+.gufeng-btn { transition: all 0.3s ease; }
+.gufeng-btn:hover { background-color: #f0ece3; color: #c8951e; }
+
+/* ========================================
+   Task 8: 375px Responsive Styles
+   Small screen optimizations for
+   devices with 375px viewport width
+   (iPhone SE 2nd/3rd gen, standard phones).
+   ======================================== */
+@media (max-width: 375px) {
+  /* 防止小屏幕溢出 */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* 字体微调 */
+  h1 {
+    font-size: 1.625rem !important;
+  }
+
+  h2 {
+    font-size: 1.375rem !important;
+  }
+
+  /* 表格横向滚动 */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 容器内边距调整 */
+  .container,
+  [class*="max-w"] {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
 }
 
 /* ========================================

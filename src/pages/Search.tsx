@@ -33,13 +33,6 @@ const Search: React.FC = () => {
         lineHeight: 1.8,
       }}
     >
-      <style>{`
-        .search-page ::selection {
-          background-color: #fdf5d8;
-          color: #c8951e;
-        }
-      `}</style>
-
       <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 search-page">
         {/* Header */}
         <header className="mb-7">

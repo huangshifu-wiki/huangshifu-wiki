@@ -530,13 +530,6 @@ const GalleryDetail = () => {
       onDragLeave={handlePageDragLeave}
       onDrop={handlePageDrop}
     >
-      <style>{`
-        .gallery-detail-page ::selection {
-          background-color: #fdf5d8;
-          color: #c8951e;
-        }
-      `}</style>
-
       {editing && canManage && pageDragDepth > 0 ? (
         <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center bg-[#f7f5f0]/80 px-4">
           <div className="w-full max-w-3xl rounded border-2 border-dashed border-[#c8951e] bg-white/95 px-8 py-12 text-center">

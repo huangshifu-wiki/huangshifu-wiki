@@ -290,17 +290,6 @@ const WikiPageView = () => {
 				lineHeight: 1.8,
 			}}
 		>
-			<style>{`
-				.wiki-detail-page ::selection {
-					background-color: #fdf5d8;
-					color: #c8951e;
-				}
-				.wiki-detail-page ::-webkit-scrollbar { width: 6px; }
-				.wiki-detail-page ::-webkit-scrollbar-track { background: transparent; }
-				.wiki-detail-page ::-webkit-scrollbar-thumb { background: #e0dcd3; border-radius: 3px; }
-				.wiki-detail-page ::-webkit-scrollbar-thumb:hover { background: #9e968e; }
-			`}</style>
-
 			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 wiki-detail-page">
 				{/* Breadcrumb */}
 				<Link

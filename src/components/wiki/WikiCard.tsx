@@ -31,10 +31,11 @@ const getCategoryLabel = (category: string): string => {
 interface WikiCardProps {
 	page: WikiItem;
 	viewMode: string;
+	cardHeight?: string;
 	onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, slug: string) => void;
 }
 
-const WikiCard = React.memo(({ page, viewMode, onCopyLink }: WikiCardProps) => {
+const WikiCard = React.memo(({ page, viewMode, cardHeight, onCopyLink }: WikiCardProps) => {
 
 	return (
 		<div className={clsx("relative group", viewMode === "list" && "flex")}>
@@ -43,7 +44,7 @@ const WikiCard = React.memo(({ page, viewMode, onCopyLink }: WikiCardProps) => {
 				className={clsx(
 					viewMode === "list"
 						? "flex gap-4 p-4 bg-white rounded border border-[#e0dcd3] hover:border-[#c8951e] transition-all w-full"
-						: "block bg-white p-6 rounded border border-[#e0dcd3] hover:border-[#c8951e] transition-all",
+						: clsx("flex flex-col bg-white p-6 rounded border border-[#e0dcd3] hover:border-[#c8951e] transition-all", cardHeight),
 					page.isPinned ? "border-l-[3px] border-l-[#c8951e]" : "",
 				)}
 			>
@@ -87,7 +88,7 @@ const WikiCard = React.memo(({ page, viewMode, onCopyLink }: WikiCardProps) => {
 								<span className="flex items-center gap-1 px-2 py-0.5 bg-[#fdf5d8] text-[#c8951e] text-[10px] font-bold uppercase tracking-wider rounded">
 									<Pin size={8} /> 已置顶
 								</span>
-								)}
+							)}
 							<span className="px-2 py-0.5 bg-[#f0ece3] text-[#6b6560] text-[10px] font-bold uppercase tracking-wider rounded">
 								{getCategoryLabel(page.category)}
 							</span>
@@ -95,10 +96,10 @@ const WikiCard = React.memo(({ page, viewMode, onCopyLink }: WikiCardProps) => {
 						<h3 className="text-lg font-bold text-[#2c2c2c] mb-2 group-hover:text-[#c8951e] transition-colors">
 							{page.title}
 						</h3>
-						<p className="text-[#9e968e] text-sm line-clamp-2 mb-4 leading-relaxed">
+						<p className="text-[#9e968e] text-sm line-clamp-2 mb-4 leading-relaxed flex-1">
 							{page.content.replace(/[#*`]/g, "").substring(0, 100)}...
 						</p>
-						<div className="flex items-center justify-between text-[#9e968e] text-xs">
+						<div className="flex items-center justify-between text-[#9e968e] text-xs mt-auto">
 							<div className="flex items-center gap-3">
 								<span className="flex items-center gap-1">
 									<Clock size={10} />{" "}

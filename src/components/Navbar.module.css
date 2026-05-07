@@ -1,0 +1,31 @@
+/* Navbar.module.css - 古风导航链接样式 */
+
+.navLink {
+	position: relative;
+	text-decoration: none;
+	padding: 4px 0;
+	transition: all 0.3s ease;
+	font-size: 0.9375rem;
+	letter-spacing: 0.08em;
+	color: var(--color-text-secondary);
+}
+
+.navLink:hover {
+	color: var(--color-brand-gold);
+}
+
+.navLink.active {
+	color: var(--color-brand-gold);
+}
+
+.navLink.active::after {
+	content: '';
+	position: absolute;
+	bottom: -4px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 16px;
+	height: 2px;
+	background: var(--color-brand-gold);
+	border-radius: 1px;
+}

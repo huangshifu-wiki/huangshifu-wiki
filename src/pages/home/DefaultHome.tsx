@@ -37,13 +37,6 @@ export const DefaultHome = () => {
         lineHeight: 1.8,
       }}
     >
-      <style>{`
-        .home-page ::selection {
-          background-color: #fdf5d8;
-          color: #c8951e;
-        }
-      `}</style>
-
       <div className="max-w-[1100px] mx-auto px-6 py-12 pb-32 home-page">
         {/* Hero */}
         <header className="mb-16 text-center">

@@ -22,6 +22,7 @@ import { AuthModal } from "./Navbar/AuthModal";
 import type { AuthMode } from "./Navbar/AuthModal";
 import { NotificationPanel } from "./Navbar/NotificationPanel";
 import { MobileMenu } from "./Navbar/MobileMenu";
+import styles from "./Navbar.module.css";
 
 export const Navbar = () => {
 	const { user, profile, isAdmin, isBanned } = useAuth();
@@ -55,35 +56,6 @@ export const Navbar = () => {
 		<nav
 			className="sticky top-0 z-[100] border-b border-border bg-bg-primary/92 backdrop-blur-md"
 		>
-			<style>{`
-				.nav-link-gufeng {
-					position: relative;
-					text-decoration: none;
-					padding: 4px 0;
-					transition: all 0.3s ease;
-					font-size: 0.9375rem;
-					letter-spacing: 0.08em;
-					color: var(--color-text-secondary);
-				}
-				.nav-link-gufeng:hover {
-					color: var(--color-brand-gold);
-				}
-				.nav-link-gufeng.active {
-					color: var(--color-brand-gold);
-				}
-				.nav-link-gufeng.active::after {
-					content: '';
-					position: absolute;
-					bottom: -4px;
-					left: 50%;
-					transform: translateX(-50%);
-					width: 16px;
-					height: 2px;
-					background: var(--color-brand-gold);
-					border-radius: 1px;
-				}
-			`}</style>
-
 			<div className="max-w-[1100px] mx-auto px-6" style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 				<div className="flex items-center gap-7">
 					<Link to="/" className="flex items-center gap-2 group" style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -96,11 +68,11 @@ export const Navbar = () => {
 					</Link>
 
 					<div className="hidden md:flex items-center" style={{ gap: '28px' }}>
-						<NavLink to="/wiki" className="nav-link-gufeng">{t('nav.wiki')}</NavLink>
-						<NavLink to="/forum" className="nav-link-gufeng">{t('nav.forum')}</NavLink>
-						<NavLink to="/gallery" className="nav-link-gufeng">{t('nav.gallery')}</NavLink>
-						<NavLink to="/music" className="nav-link-gufeng">{t('nav.music')}</NavLink>
-						<NavLink to="/search" className="nav-link-gufeng">搜索</NavLink>
+						<NavLink to="/wiki" className={styles.navLink}>{t('nav.wiki')}</NavLink>
+						<NavLink to="/forum" className={styles.navLink}>{t('nav.forum')}</NavLink>
+						<NavLink to="/gallery" className={styles.navLink}>{t('nav.gallery')}</NavLink>
+						<NavLink to="/music" className={styles.navLink}>{t('nav.music')}</NavLink>
+						<NavLink to="/search" className={styles.navLink}>搜索</NavLink>
 					</div>
 				</div>
 

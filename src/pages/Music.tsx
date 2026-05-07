@@ -406,35 +406,6 @@ const Music = () => {
         lineHeight: 1.8,
       }}
     >
-      <style>{`
-        .gufeng-music-page ::selection {
-          background-color: #fdf5d8;
-          color: #c8951e;
-        }
-        .gufeng-music-page ::-webkit-scrollbar { width: 6px; }
-        .gufeng-music-page ::-webkit-scrollbar-track { background: transparent; }
-        .gufeng-music-page ::-webkit-scrollbar-thumb { background: #e0dcd3; border-radius: 3px; }
-        .gufeng-music-page ::-webkit-scrollbar-thumb:hover { background: #9e968e; }
-        @keyframes gufengFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        .gufeng-fade-in {
-          animation: gufengFadeIn 0.4s ease forwards;
-        }
-        .gufeng-song-item {
-          animation: gufengFadeIn 0.3s ease forwards;
-        }
-        .gufeng-song-item:nth-child(1) { animation-delay: 0.02s; }
-        .gufeng-song-item:nth-child(2) { animation-delay: 0.04s; }
-        .gufeng-song-item:nth-child(3) { animation-delay: 0.06s; }
-        .gufeng-song-item:nth-child(4) { animation-delay: 0.08s; }
-        .gufeng-song-item:nth-child(5) { animation-delay: 0.10s; }
-        .gufeng-song-item:nth-child(6) { animation-delay: 0.12s; }
-        .gufeng-btn { transition: all 0.3s ease; }
-        .gufeng-btn:hover { background-color: #f0ece3; color: #c8951e; }
-      `}</style>
-
       <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 md:pb-32">
         {/* Header */}
         <header className="mb-7">
