@@ -8,7 +8,7 @@ describe('viewModes', () => {
     it('provides config for large view mode', () => {
       expect(VIEW_MODE_CONFIG.large).toEqual({
         gridCols: 'grid-cols-2 md:grid-cols-3',
-        cardHeight: 'h-[280px]',
+        cardHeight: 'h-[360px]',
         gap: 'gap-6',
         iconSize: 20,
       });
@@ -17,7 +17,7 @@ describe('viewModes', () => {
     it('provides config for medium view mode', () => {
       expect(VIEW_MODE_CONFIG.medium).toEqual({
         gridCols: 'grid-cols-3 md:grid-cols-4',
-        cardHeight: 'h-[180px]',
+        cardHeight: 'h-[280px]',
         gap: 'gap-4',
         iconSize: 18,
       });
@@ -26,7 +26,7 @@ describe('viewModes', () => {
     it('provides config for small view mode', () => {
       expect(VIEW_MODE_CONFIG.small).toEqual({
         gridCols: 'grid-cols-5 md:grid-cols-6',
-        cardHeight: 'h-[100px]',
+        cardHeight: 'h-[200px]',
         gap: 'gap-3',
         iconSize: 16,
       });
@@ -44,9 +44,9 @@ describe('viewModes', () => {
 
   describe('VIEW_MODE_LABELS', () => {
     it('provides Chinese labels for all view modes', () => {
-      expect(VIEW_MODE_LABELS.large).toBe('大图标');
-      expect(VIEW_MODE_LABELS.medium).toBe('中图标');
-      expect(VIEW_MODE_LABELS.small).toBe('小图标');
+      expect(VIEW_MODE_LABELS.large).toBe('舒适');
+      expect(VIEW_MODE_LABELS.medium).toBe('标准');
+      expect(VIEW_MODE_LABELS.small).toBe('紧凑');
       expect(VIEW_MODE_LABELS.list).toBe('列表');
     });
 
