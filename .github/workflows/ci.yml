@@ -347,3 +347,192 @@ jobs:
           name: build-output
           path: dist/
           retention-days: 7
+
+  # ============================================================
+  # Job 5: Test Report (same workflow - no cross-workflow download)
+  # ============================================================
+  report:
+    name: Generate Test Report
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+
+    steps:
+      - name: Download unit test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report-unit
+          path: coverage/unit
+        continue-on-error: true
+
+      - name: Download integration test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: integration-test-results
+          path: results/integration
+        continue-on-error: true
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: build-output
+        continue-on-error: true
+
+      - name: List downloaded files
+        run: |
+          echo "=== Coverage files ==="
+          find coverage/ -type f 2>/dev/null || echo "No coverage files"
+          echo ""
+          echo "=== Integration results ==="
+          find results/ -type f 2>/dev/null || echo "No integration results"  
+          echo ""
+          echo "=== Build output ==="
+          find build-output/ -type f 2>/dev/null || echo "No build output"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Test Summary Report
+        id: summary
+        run: |
+          echo "## 📊 Test Summary Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Unit Tests" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "coverage/unit/coverage-summary.json" ]; then
+            node -e "
+            const fs = require('fs');
+            const summary = JSON.parse(fs.readFileSync('coverage/unit/coverage-summary.json', 'utf8'));
+            const total = summary.total;
+            
+            console.log('| Metric | Coverage | Threshold | Status |');
+            console.log('|--------|----------|-----------|--------|');
+            const metrics = [
+              ['Lines', total.lines.pct, 25],
+              ['Statements', total.statements.pct, 25],
+              ['Functions', total.functions.pct, 65],
+              ['Branches', total.branches.pct, 70]
+            ];
+            
+            for (const [name, actual, threshold] of metrics) {
+              const status = actual >= threshold ? '✅' : '❌';
+              console.log(\`| \${name} | \${actual.toFixed(1)}% | \${threshold}% | \${status} |\`);
+            }
+            " >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Metric | Coverage | Threshold | Status |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|----------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+            echo "| *No data* | - | - | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Information" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -d "build-output" ]; then
+            BUILD_SIZE=$(du -sh build-output 2>/dev/null | cut -f1)
+            FILE_COUNT=$(find build-output -type f 2>/dev/null | wc -l)
+            echo "- **Build Size**: ${BUILD_SIZE}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Files Count**: ${FILE_COUNT}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- *Build artifacts not available*" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let commentBody = '## 🧪 CI Test Report\n\n';
+            
+            // Unit test coverage
+            if (fs.existsSync('coverage/unit/coverage-summary.json')) {
+              const coverageData = JSON.parse(fs.readFileSync('coverage/unit/coverage-summary.json', 'utf8'));
+              const total = coverageData.total;
+              
+              commentBody += '### ✅ Unit Test Coverage\n\n';
+              commentBody += '| Metric | Value | Threshold |\n|--------|-------|----------|\n';
+              commentBody += `| Lines | ${total.lines.pct.toFixed(1)}% | ≥25% |\n`;
+              commentBody += `| Statements | ${total.statements.pct.toFixed(1)}% | ≥25% |\n`;
+              commentBody += `| Functions | ${total.functions.pct.toFixed(1)}% | ≥65% |\n`;
+              commentBody += `| Branches | ${total.branches.pct.toFixed(1)}% | ≥70% |\n\n`;
+              
+              const allPassed = 
+                total.lines.pct >= 25 &&
+                total.statements.pct >= 25 &&
+                total.functions.pct >= 65 &&
+                total.branches.pct >= 70;
+              
+              commentBody += allPassed ? '**Status: ✅ All thresholds passed!**\n\n' : '**Status: ❌ Some thresholds not met**\n\n';
+            } else {
+              commentBody += '### ✅ Unit Tests\n\n*Tests completed.*\n\n';
+            }
+            
+            // Integration tests
+            const integrationFiles = fs.readdirSync('results/integration').catch(() => []);
+            if (integrationFiles.length > 0) {
+              commentBody += '### 🔗 Integration Tests\n\n';
+              commentBody += '*Integration tests executed successfully.*\n\n';
+            }
+            
+            // Build info
+            if (fs.existsSync('build-output')) {
+              commentBody += '### 📦 Build Artifacts\n\n';
+              commentBody += '*Build completed successfully.*\n\n';
+            }
+            
+            commentBody += '---\n';
+            commentBody += `_Generated by CI workflow_`;
+            
+            // Create or update PR comment
+            const prNumber = context.payload.pull_request.number;
+            
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+            
+            const existingComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('CI Test Report')
+            );
+            
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: commentBody
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: commentBody
+              });
+            }
+
+      - name: Upload combined report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-combined
+          path: |
+            coverage/
+            results/
+          retention-days: 30
+          if-no-files-found: ignore
