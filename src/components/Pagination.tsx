@@ -38,9 +38,17 @@ export const Pagination: React.FC<PaginationProps> = ({
   };
 
   return (
-    <footer className="px-4 md:px-6 py-3 border-t border-[#e0dcd3] flex items-center justify-between flex-wrap gap-3">
+    <footer
+      className="px-4 md:px-6 py-3 border-t border-[#e0dcd3] flex items-center justify-between flex-wrap gap-3"
+      role="navigation"
+      aria-label="分页导航"
+    >
       <div className="flex items-center gap-3">
-        <p className="text-xs text-[#9e968e]">
+        <p
+          className="text-xs text-[#9e968e]"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           第 {Math.min(page, totalPages)} / {totalPages} 页
         </p>
         {showPageSizeSelector && pageSize && onPageSizeChange && (
@@ -49,6 +57,7 @@ export const Pagination: React.FC<PaginationProps> = ({
             <select
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              aria-label="每页显示条数"
               className="text-xs border border-[#e0dcd3] rounded px-2 py-1 text-[#6b6560] bg-white hover:border-[#c8951e] cursor-pointer focus:outline-none"
             >
               {pageSizeOptions.map((size) => (
@@ -64,6 +73,8 @@ export const Pagination: React.FC<PaginationProps> = ({
         <button
           onClick={handlePrev}
           disabled={page <= 1}
+          aria-label="上一页"
+          aria-disabled={page <= 1}
           className={clsx(
             'inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded',
             'border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]',
@@ -75,6 +86,8 @@ export const Pagination: React.FC<PaginationProps> = ({
         <button
           onClick={handleNext}
           disabled={page >= totalPages}
+          aria-label="下一页"
+          aria-disabled={page >= totalPages}
           className={clsx(
             'inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded',
             'border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]',

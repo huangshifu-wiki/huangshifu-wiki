@@ -78,6 +78,8 @@ const SongCard = React.memo(function SongCard({
 				isCurrentSong && !isBatchMode && "bg-[#fdf5d8]/40",
 				isBatchMode && isSelected && "bg-[#fdf5d8]/60"
 			)}
+			role="article"
+			aria-label={`${song.title} - ${song.artist || '未知歌手'}`}
 		>
 			{/* Cover */}
 			<div className="relative w-14 h-14 flex-shrink-0 pointer-events-none">
@@ -123,10 +125,11 @@ const SongCard = React.memo(function SongCard({
 						{/* Desktop actions: hidden by default, show on hover */}
 						<div className="hidden md:flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
 							<button
-								onClick={(e) => { e.stopPropagation(); onPlay(song); }}
-								className="p-2 rounded text-[#9e968e] hover:text-[#c8951e] transition-colors"
-								title={t('music.play')}
-							>
+							onClick={(e) => { e.stopPropagation(); onPlay(song); }}
+							className="p-2 rounded text-[#9e968e] hover:text-[#c8951e] transition-colors"
+							title={t('music.play')}
+							aria-label={`播放 ${song.title}`}
+						>
 								<Play size={15} />
 							</button>
 							<button
@@ -169,10 +172,11 @@ const SongCard = React.memo(function SongCard({
 							</button>
 							{isAdmin && (
 								<button
-									onClick={(e) => { e.stopPropagation(); onDelete(song.docId); }}
-									className="p-2 text-[#9e968e] hover:text-red-500 transition-colors"
-									title={t('music.deleteSong')}
-								>
+								onClick={(e) => { e.stopPropagation(); onDelete(song.docId); }}
+								className="p-2 text-[#9e968e] hover:text-red-500 transition-colors"
+								title={t('music.deleteSong')}
+								aria-label={`删除 ${song.title}`}
+							>
 									<Trash2 size={15} />
 								</button>
 							)}

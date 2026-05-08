@@ -55,6 +55,8 @@ export const Navbar = () => {
 	return (
 		<nav
 			className="sticky top-0 z-[100] border-b border-border bg-bg-primary/92 backdrop-blur-md"
+			role="navigation"
+			aria-label="主导航"
 		>
 			<div className="max-w-[1100px] mx-auto px-6" style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 				<div className="flex items-center gap-7">

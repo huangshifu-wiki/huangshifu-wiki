@@ -38,7 +38,11 @@ interface WikiCardProps {
 const WikiCard = React.memo(({ page, viewMode, cardHeight, onCopyLink }: WikiCardProps) => {
 
 	return (
-		<div className={clsx("relative group", viewMode === "list" && "flex")}>
+		<div
+			className={clsx("relative group", viewMode === "list" && "flex")}
+			role="article"
+			aria-label={`${page.title} - ${getCategoryLabel(page.category)}`}
+		>
 			<Link
 				to={`/wiki/${page.slug}`}
 				className={clsx(

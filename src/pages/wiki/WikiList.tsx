@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Book, Calendar, Plus } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -13,6 +13,7 @@ import WikiCard from "../../components/wiki/WikiCard";
 import Pagination from "../../components/Pagination";
 import type { WikiItem } from "./types";
 import { DEFAULT_PAGE_SIZE } from "./types";
+import { useVirtualGrid } from "../../hooks/useVirtualGrid";
 
 const WikiList = () => {
 	const [searchParams] = useSearchParams();
@@ -28,11 +29,48 @@ const WikiList = () => {
 	const { preferences, setViewMode } = useUserPreferences();
 	const viewMode = preferences.viewMode;
 
+	// 虚拟滚动容器引用
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+	// 从 VIEW_MODE_CONFIG 的 gridCols 字符串中解析实际列数（取响应式断点中最大的值）
+	const parseColumnCount = (gridCols: string): number => {
+		// 匹配 md:grid-cols-X 或 lg:grid-cols-X 等模式，取最大值
+		const matches = gridCols.match(/(?:md:|lg:)grid-cols-(\d+)/g);
+		if (matches && matches.length > 0) {
+			const numbers = matches.map((m) => parseInt(m.split('-').pop() || '1', 10));
+			return Math.max(...numbers);
+		}
+		// 回退到基础 gridCols-X
+		const baseMatch = gridCols.match(/grid-cols-(\d+)/);
+		return baseMatch ? parseInt(baseMatch[1], 10) : 4;
+	};
+
+	// 解析当前视图模式的列数
+	const columnCount = useMemo(() => parseColumnCount(VIEW_MODE_CONFIG[viewMode].gridCols), [viewMode]);
+
+	// 计算预估行高：list 模式 100px，其他模式根据 cardHeight 推断或固定值
+	const estimateSize = useMemo(() => {
+		if (viewMode === 'list') return () => 100;
+		// 从 cardHeight 提取数值（如 h-[280px] -> 280）
+		const heightMatch = VIEW_MODE_CONFIG[viewMode].cardHeight.match(/h-\[(\d+)px\]/);
+		return () => heightMatch ? parseInt(heightMatch[1], 10) : 280;
+	}, [viewMode]);
+
+	// 初始化虚拟网格
+	const { virtualizer, virtualRows, totalHeight, getRowDataRange } = useVirtualGrid({
+		count: pages.length,
+		columnCount,
+		estimateSize,
+		overscan: 5,
+		getScrollElement: () => scrollContainerRef.current,
+	});
+
 	const totalWikiPages = Math.max(1, Math.ceil(total / pageSize));
 
 	const handlePageChange = (newPage: number) => {
 		setPage(newPage);
-		window.scrollTo({ top: 0, behavior: "smooth" });
+		// 使用虚拟化器的 scrollToIndex 滚动到顶部
+		virtualizer.scrollToIndex(0, { behavior: 'instant' });
 	};
 
 	const handlePageSizeChange = (newSize: number) => {
@@ -173,22 +211,42 @@ const WikiList = () => {
 				</div>
 			) : pages.length > 0 ? (
 				<>
-					<div
-						className={clsx(
-							"grid",
-							VIEW_MODE_CONFIG[viewMode].gridCols,
-							VIEW_MODE_CONFIG[viewMode].gap,
-						)}
-					>
-						{pages.map((page) => (
-							<WikiCard
-								key={page.id}
-								page={page}
-								viewMode={viewMode}
-								cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
-								onCopyLink={handleCopyWikiLink}
-							/>
-						))}
+					{/* 虚拟滚动容器 */}
+					<div ref={scrollContainerRef} style={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto' }}>
+						<div style={{ height: totalHeight, position: 'relative' }}>
+							{virtualRows.map((virtualRow) => {
+								const { start: dataStart, end: dataEnd } = getRowDataRange(virtualRow.index);
+								const rowPages = pages.slice(dataStart, dataEnd);
+								return (
+									<div
+										key={virtualRow.key}
+										style={{
+											position: 'absolute',
+											top: 0,
+											left: 0,
+											width: '100%',
+											height: virtualRow.size,
+											transform: `translateY(${virtualRow.start}px)`,
+										}}
+										className={clsx("grid", VIEW_MODE_CONFIG[viewMode].gridCols, VIEW_MODE_CONFIG[viewMode].gap)}
+									>
+										{rowPages.map((page) => (
+											<WikiCard
+												key={page.id}
+												page={page}
+												viewMode={viewMode}
+												cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
+												onCopyLink={handleCopyWikiLink}
+											/>
+										))}
+										{/* 填充空单元格以保持网格对齐 */}
+										{Array.from({ length: columnCount - rowPages.length }).map((_, i) => (
+											<div key={`empty-${i}`} />
+										))}
+									</div>
+								);
+							})}
+						</div>
 					</div>
 					{(import.meta.env.DEV || totalWikiPages > 1) && (
 						<Pagination
