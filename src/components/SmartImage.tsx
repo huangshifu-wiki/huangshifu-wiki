@@ -422,6 +422,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
           src={optimizedUrl}
           alt={alt}
           loading={actualLoading}
+          decoding="async"
           fetchPriority={actualFetchPriority}
           sizes={sizes}
           srcSet={srcSet}
@@ -435,6 +436,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
       {imageError && !blurhashDataUrl && (
         fallback || (
           <div
+            role="alert"
             style={{
               display: 'flex',
               alignItems: 'center',

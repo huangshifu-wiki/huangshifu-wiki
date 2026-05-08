@@ -305,6 +305,9 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`图片查看器 ${activeIndex + 1} / ${images.length}`}
     >
       {/* Close button */}
       <button
@@ -317,7 +320,12 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
       </button>
 
       {/* Image counter */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/60 text-sm z-30">
+      <div
+        className="absolute top-4 left-1/2 -translate-x-1/2 text-white/60 text-sm z-30"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {activeIndex + 1} / {images.length}
       </div>
 
@@ -342,7 +350,7 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
       )}
 
       {/* Backdrop click to close */}
-      <div className="absolute inset-0 z-0" onClick={close} />
+      <div className="absolute inset-0 z-0" onClick={close} role="presentation" />
 
       {/* Image container */}
       <div className="relative z-10 flex items-center justify-center pointer-events-none shrink-0">

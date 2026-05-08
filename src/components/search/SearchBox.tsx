@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search as SearchIcon, Camera, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -27,6 +27,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // 建议列表键盘导航状态
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   useEffect(() => {
     if (!suggestions.length) return;
@@ -72,6 +75,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   };
 
   const handleSuggestionClick = (s: SearchSuggestion) => {
+    setHighlightedIndex(-1);
     if (s.type === "keyword") {
       onSearch(s.text);
     } else {
@@ -87,15 +91,57 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     }
   };
 
+  // 建议列表变化时重置高亮索引
+  useEffect(() => {
+    setHighlightedIndex(-1);
+  }, [suggestions]);
+
+  // 建议列表键盘导航处理
+  const handleListboxKeyDown = (e: React.KeyboardEvent) => {
+    const showSuggestions = suggestions.length > 0;
+    if (!showSuggestions) return;
+
+    switch (e.key) {
+      case 'ArrowDown': {
+        e.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev < suggestions.length - 1 ? prev + 1 : prev
+        );
+        break;
+      }
+      case 'ArrowUp': {
+        e.preventDefault();
+        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1));
+        break;
+      }
+      case 'Enter': {
+        if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
+          e.preventDefault();
+          handleSuggestionClick(suggestions[highlightedIndex]);
+        }
+        break;
+      }
+      case 'Escape': {
+        onDismissSuggestions();
+        setHighlightedIndex(-1);
+        break;
+      }
+    }
+  };
+
   return (
     <div ref={wrapperRef} className="bg-white border border-[#e0dcd3] rounded p-6 mb-6">
-      <form onSubmit={handleSubmit} className="relative group mb-5">
+      <form onSubmit={handleSubmit} className="relative group mb-5" role="search" onKeyDown={handleListboxKeyDown}>
         <input
           type="text"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           onFocus={() => query.length >= 2 && onQueryChange(query)}
           placeholder="搜索百科、帖子、图集、音乐或专辑..."
+          aria-label="搜索百科、帖子、图集、音乐或专辑"
+          autoComplete="off"
+          aria-owns="search-suggestions"
+          aria-expanded={suggestions.length > 0}
           className="w-full px-12 py-4 bg-[#f7f5f0] border border-[#e0dcd3] rounded focus:outline-none focus:border-[#c8951e] transition-all text-base"
         />
         <SearchIcon
@@ -110,13 +156,21 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               className="absolute left-0 right-0 top-full mt-2 bg-white border border-[#e0dcd3] rounded z-50 overflow-hidden"
+              role="listbox"
+              id="search-suggestions"
             >
               {suggestions.map((s, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => handleSuggestionClick(s)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#f7f5f0] transition-colors border-b border-[#f0ece3] last:border-0"
+                  className={clsx(
+                    "w-full text-left px-4 py-2.5 transition-colors border-b border-[#f0ece3] last:border-0",
+                    i === highlightedIndex ? "bg-[#c8951e] text-white" : "hover:bg-[#f7f5f0]"
+                  )}
+                  role="option"
+                  aria-selected={i === highlightedIndex}
+                  id={`suggestion-${i}`}
                 >
                   <div className="flex items-center gap-3">
                     <span className={clsx("px-2 py-0.5 rounded text-[10px] font-medium", getSuggestionTypeClass(s.type))}>
@@ -140,6 +194,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
             disabled={aiSearching}
             className="p-2.5 bg-[#f7f5f0] text-[#9e968e] rounded hover:text-[#c8951e] hover:bg-[#f7f5f0] transition-all"
             title="AI 图片搜索"
+            aria-label="AI 图片搜索"
           >
             {aiSearching ? (
               <Sparkles className="animate-spin" size={18} />
@@ -150,6 +205,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           <button
             type="submit"
             className="px-6 py-2.5 bg-[#c8951e] text-white rounded font-medium hover:bg-[#dca828] transition-all"
+            aria-label="提交搜索"
           >
             搜索
           </button>
