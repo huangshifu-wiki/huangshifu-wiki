@@ -1,0 +1,30 @@
+# 依赖
+node_modules/
+
+# 构建输出
+dist/
+
+# 测试覆盖率
+coverage/
+
+# 包管理
+package.json
+package-lock.json
+
+# Prisma schema (使用 Prisma 自带的格式化)
+prisma/schema.prisma
+
+# 生成的文件
+*.generated.ts
+*.generated.js
+
+# 上传文件
+uploads/
+
+# 备份文件
+backups/
+
+# 环境配置
+.env
+.env.local
+.env.*.local

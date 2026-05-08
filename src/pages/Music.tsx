@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { auth } from '../lib/auth';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +20,7 @@ import { SongCard } from '../components/Music/SongCard';
 import { AlbumCard } from '../components/Music/AlbumCard';
 import { MusicFilters } from '../components/Music/MusicFilters';
 import { BatchActions } from '../components/Music/BatchActions';
+import { VirtualList, type VirtualListHandle } from '../components/VirtualList';
 import type { SongItem, AlbumItem, PostItem } from '../types/entities';
 
 const DEFAULT_PAGE_SIZE = 40;
@@ -115,6 +116,9 @@ const Music = () => {
   };
 
   const [instrumentalTargetDocIds, setInstrumentalTargetDocIds] = useState<Set<string>>(new Set());
+
+  // 虚拟滚动列表引用
+  const virtualListRef = useRef<VirtualListHandle<SongItem>>(null);
 
   useEffect(() => {
     if (activeTab === 'music') {
@@ -592,24 +596,33 @@ const Music = () => {
               <div className="flex flex-col mt-6">
                 {paginatedSongs.length > 0 ? (
                   <>
-                    {paginatedSongs.map((song) => (
-                      <SongCard
-                        key={song.docId}
-                        song={song}
-                        isBatchMode={isBatchMode}
-                        isSelected={selectedSongs.has(song.docId)}
-                        isCurrentSong={currentSong?.docId === song.docId}
-                        isFavoriting={favoriting === song.docId}
-                        isAdmin={isAdmin}
-                        isPostsSelected={selectedSongForPosts?.docId === song.docId}
-                        onPlay={playSong}
-                        onToggleSelect={toggleSelect}
-                        onToggleFavorite={handleToggleFavorite}
-                        onCopyLink={handleCopySongLink}
-                        onDelete={(docId) => setConfirmModal({ show: true, type: 'single', id: docId })}
-                        onShowPosts={handleShowPosts}
-                      />
-                    ))}
+                    {/* 使用虚拟滚动渲染歌曲列表 */}
+                    <VirtualList
+                      ref={virtualListRef}
+                      data={paginatedSongs}
+                      estimateSize={120}
+                      overscan={5}
+                      height="auto"
+                    >
+                      {(song) => (
+                        <SongCard
+                          key={song.docId}
+                          song={song}
+                          isBatchMode={isBatchMode}
+                          isSelected={selectedSongs.has(song.docId)}
+                          isCurrentSong={currentSong?.docId === song.docId}
+                          isFavoriting={favoriting === song.docId}
+                          isAdmin={isAdmin}
+                          isPostsSelected={selectedSongForPosts?.docId === song.docId}
+                          onPlay={playSong}
+                          onToggleSelect={toggleSelect}
+                          onToggleFavorite={handleToggleFavorite}
+                          onCopyLink={handleCopySongLink}
+                          onDelete={(docId) => setConfirmModal({ show: true, type: 'single', id: docId })}
+                          onShowPosts={handleShowPosts}
+                        />
+                      )}
+                    </VirtualList>
 
                     <AnimatePresence>
                       {selectedSongForPosts && (

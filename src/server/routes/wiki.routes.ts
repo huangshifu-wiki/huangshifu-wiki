@@ -68,14 +68,30 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     let total: number;
 
     if (tag) {
-      const allPages = await prisma.wikiPage.findMany({
-        where,
-        orderBy: [{ isPinned: 'desc' }, { updatedAt: 'desc' }],
-        take: 500,
-      });
-      const filtered = allPages.filter((p) => hasTag(p.tags, tag));
-      total = filtered.length;
-      pages = filtered.slice(skip, skip + limit);
+      const visibilityWhereClause = !req.authUser
+        ? `status = 'published'`
+        : isAdminRole(req.authUser.role)
+          ? `1=1`
+          : `(status = 'published' OR "lastEditorUid" = '${req.authUser.uid.replace(/'/g, "''")}')`;
+
+      const [countResult] = await prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*)::bigint as count
+        FROM "WikiPage"
+        WHERE ${Prisma.raw(visibilityWhereClause)}
+          ${category && category !== 'all' ? Prisma.raw(`AND category = '${category.replace(/'/g, "''")}'`) : Prisma.raw('')}
+          AND tags @> ARRAY[${tag}]::text[]
+      `;
+      total = Number(countResult.count);
+
+      pages = await prisma.$queryRaw`
+        SELECT *
+        FROM "WikiPage"
+        WHERE ${Prisma.raw(visibilityWhereClause)}
+          ${category && category !== 'all' ? Prisma.raw(`AND category = '${category.replace(/'/g, "''")}'`) : Prisma.raw('')}
+          AND tags @> ARRAY[${tag}]::text[]
+        ORDER BY "isPinned" DESC, "updatedAt" DESC
+        LIMIT ${limit} OFFSET ${skip}
+      ` as Awaited<ReturnType<typeof prisma.wikiPage.findMany>>;
     } else {
       const [dbPages, count] = await Promise.all([
         prisma.wikiPage.findMany({

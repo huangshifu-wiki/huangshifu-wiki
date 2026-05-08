@@ -46,6 +46,13 @@ const MainLayout = () => {
 	return (
 		<div className="min-h-screen flex flex-col">
 			<AnnouncementBar />
+			{/* 无障碍跳转导航 - 键盘用户可快速跳转到主内容区 */}
+			<a
+				href="#main-content"
+				className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-[#c8951e] focus:text-white focus:rounded focus:text-sm focus:font-medium focus:outline-none focus:ring-2 focus:ring-[#c8951e] focus:ring-offset-2"
+			>
+				跳转到主内容
+			</a>
 			<Navbar />
 			<main
 				className={clsx(

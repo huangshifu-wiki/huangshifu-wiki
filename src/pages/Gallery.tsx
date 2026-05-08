@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Image as ImageIcon, Plus, Folder, X, Upload, Clock, User as UserIcon, Link2, Trash2 } from 'lucide-react';
@@ -17,10 +17,35 @@ import { toDateValue } from '../lib/dateUtils';
 import { LocationTagInput } from '../components/LocationTagInput';
 import Pagination from '../components/Pagination';
 import { extractGpsFromMultipleFiles, findMostFrequentGpsCoordinates } from '../services/exifService';
+import { useVirtualGrid } from '../hooks/useVirtualGrid';
 import type { GalleryItem } from '../types/entities';
 import type { UploadSessionResponse, UploadFileResponse, GalleryCreateResponse } from '../types/api';
 
 const DEFAULT_PAGE_SIZE = 24;
+
+/**
+ * 从 VIEW_MODE_CONFIG 的 gridCols 字符串中解析实际列数
+ * 取响应式断点中最大的值（md: 断点及以上的列数）
+ */
+function parseColumnCount(gridCols: string): number {
+  // 匹配 md:grid-cols-X 或 lg:grid-cols-X 等模式，取最大值
+  const matches = gridCols.match(/(?:md:|lg:)grid-cols-(\d+)/g);
+  if (matches && matches.length > 0) {
+    const numbers = matches.map((m) => parseInt(m.split('-').pop() || '1', 10));
+    return Math.max(...numbers);
+  }
+  // 回退到基础 grid-cols-X
+  const baseMatch = gridCols.match(/grid-cols-(\d+)/);
+  return baseMatch ? parseInt(baseMatch[1], 10) : 4;
+}
+
+/** 虚拟滚动预估尺寸配置（px） */
+const VIRTUAL_ESTIMATE_SIZE: Record<string, number> = {
+  large: 360,
+  medium: 280,
+  small: 200,
+  list: 100,
+};
 
 type LocalPreviewFile = {
   file: File;
@@ -135,15 +160,37 @@ const GalleryList = () => {
   const { preferences, setViewMode } = useUserPreferences();
   const viewMode = preferences.viewMode;
 
+  // 虚拟滚动容器引用
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   const totalGalleryPages = Math.ceil(galleries.length / pageSize);
   const paginatedGalleries = useMemo(() => {
     const start = (page - 1) * pageSize;
     return galleries.slice(start, start + pageSize);
   }, [galleries, page, pageSize]);
 
+  // 虚拟网格配置：根据 viewMode 动态计算列数和预估尺寸
+  const columnCount = useMemo(() => parseColumnCount(VIEW_MODE_CONFIG[viewMode].gridCols), [viewMode]);
+  const estimateSize = useCallback(() => VIRTUAL_ESTIMATE_SIZE[viewMode] ?? 280, [viewMode]);
+
+  // 初始化虚拟网格
+  const {
+    virtualRows,
+    totalHeight,
+    getRowDataRange,
+    scrollToTop: virtualScrollToTop,
+  } = useVirtualGrid({
+    columnCount,
+    estimateSize,
+    overscan: 5,
+    count: paginatedGalleries.length,
+    getScrollElement: () => scrollContainerRef.current,
+  });
+
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // 使用虚拟滚动容器滚动到顶部
+    virtualScrollToTop({ behavior: 'smooth' });
   };
 
   const handlePageSizeChange = (newSize: number) => {
@@ -233,21 +280,54 @@ const GalleryList = () => {
           </div>
         </header>
 
-        {/* Content */}
+        {/* Content - 虚拟滚动网格 */}
         {galleries.length > 0 ? (
           <>
-            <div className={clsx('grid', VIEW_MODE_CONFIG[viewMode].gridCols, 'gap-3')}>
-              {paginatedGalleries.map((gallery) => (
-                <GalleryCard
-                  key={gallery.id}
-                  gallery={gallery}
-                  viewMode={viewMode}
-                  isAdmin={isAdmin}
-                  deletingGalleryId={deletingGalleryId}
-                  onCopyLink={handleCopyGalleryLink}
-                  onRequestDelete={handleRequestDeleteGallery}
-                />
-              ))}
+            <div
+              ref={scrollContainerRef}
+              className="overflow-y-auto"
+              style={{ maxHeight: 'calc(100vh - 220px)' }}
+            >
+              <div
+                className="relative"
+                style={{ height: `${totalHeight}px` }}
+              >
+                {virtualRows.map((virtualRow) => {
+                  const { start, end } = getRowDataRange(virtualRow.index);
+                  const rowItems = paginatedGalleries.slice(start, end);
+
+                  return (
+                    <div
+                      key={virtualRow.key}
+                      className={clsx(
+                        'grid absolute left-0 right-0',
+                        VIEW_MODE_CONFIG[viewMode].gridCols,
+                        'gap-3'
+                      )}
+                      style={{
+                        top: 0,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      {rowItems.map((gallery, colIndex) => (
+                        <GalleryCard
+                          key={`${virtualRow.index}-${colIndex}-${gallery.id}`}
+                          gallery={gallery}
+                          viewMode={viewMode}
+                          isAdmin={isAdmin}
+                          deletingGalleryId={deletingGalleryId}
+                          onCopyLink={handleCopyGalleryLink}
+                          onRequestDelete={handleRequestDeleteGallery}
+                        />
+                      ))}
+                      {/* 填充空列，保持网格对齐 */}
+                      {Array.from({ length: columnCount - rowItems.length }).map((_, fillIndex) => (
+                        <div key={`fill-${virtualRow.index}-${fillIndex}`} />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             {totalGalleryPages > 1 && (
               <div className="mt-8">

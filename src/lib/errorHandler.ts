@@ -70,6 +70,20 @@ export class ServerError extends AppError {
   }
 }
 
+export class VectorSearchError extends AppError {
+  constructor(message: string = '向量搜索服务不可用', public readonly details?: string) {
+    super(message, 'VECTOR_SEARCH_ERROR', 503, true);
+    this.name = 'VectorSearchError';
+  }
+}
+
+export class EmbeddingGenerationError extends AppError {
+  constructor(message: string = '文本嵌入生成失败', public readonly details?: string) {
+    super(message, 'EMBEDDING_GENERATION_ERROR', 500, true);
+    this.name = 'EmbeddingGenerationError';
+  }
+}
+
 type ErrorContext = {
   component?: string;
   action?: string;
