@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiGet, apiUpload } from "../lib/apiClient";
 import type { WikiItem, PostItem, GalleryItem, SongItem, AlbumItem } from "../types/entities";
 import type { MixedSearchResult, SearchSuggestion } from "./useSearch";
+import { useSearchHistory } from "./useSearchHistory";
 
 export interface SearchFilters {
   selectedTags: string[];
@@ -37,6 +38,9 @@ export interface SearchState {
 export function useSearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
+
+  // 搜索历史管理
+  const { addToHistory } = useSearchHistory();
 
   const [state, setState] = useState<SearchState>({
     query: initialQuery,
@@ -129,6 +133,9 @@ export function useSearchPage() {
   const performSearch = async (q: string, filtersOverride?: Partial<SearchFilters>) => {
     const currentQuery = q || state.query;
     if (!currentQuery.trim()) return;
+
+    // 记录搜索历史
+    addToHistory(currentQuery);
 
     if (suggestTimeoutRef.current) {
       clearTimeout(suggestTimeoutRef.current);

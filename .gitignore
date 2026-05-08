@@ -8,6 +8,7 @@ coverage/
 !.env.example
 !.env.test
 
+
 # local temporary deployment artifacts
 tmp_*
 *.backup
@@ -23,3 +24,4 @@ uploads/
 remote-snapshot/
 models/
 backups/
+dependency-audit-report/

@@ -81,6 +81,7 @@ const MainLayout = () => {
 			<footer
 				className="text-center"
 				role="contentinfo"
+				aria-label="页面底部"
 				style={{
 					background: '#f0ece3',
 					padding: '40px 24px',

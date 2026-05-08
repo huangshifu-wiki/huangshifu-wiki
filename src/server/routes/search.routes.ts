@@ -734,6 +734,85 @@ router.get('/suggest', async (req: AuthenticatedRequest, res) => {
   }
 });
 
+/**
+ * 搜索建议接口 - 热门关键词 + 匹配标题（支持大小写不敏感）
+ * GET /api/search/suggestions?q=关键词&limit=8
+ */
+router.get('/suggestions', async (_req, res) => {
+  try {
+    const q = (_req.query.q as string || '').trim();
+
+    if (!q || q.length < 2) {
+      return res.json({ suggestions: [] });
+    }
+
+    const limit = Math.min(Number(_req.query.limit) || 8, 20);
+
+    // 并行查询：热门关键词 + Wiki 标题匹配 + 歌曲标题匹配
+    const [hotKeywords, wikiMatches, songMatches] = await Promise.all([
+      // 热门搜索关键词（按热度排序，支持大小写不敏感）
+      prisma.searchKeyword.findMany({
+        where: {
+          keyword: { contains: q, mode: 'insensitive' },
+        },
+        orderBy: { count: 'desc' },
+        take: limit,
+        select: { keyword: true, count: true },
+      }),
+
+      // Wiki 标题匹配
+      prisma.wikiPage.findMany({
+        where: {
+          status: 'published',
+          title: { contains: q, mode: 'insensitive' },
+        },
+        orderBy: [{ isPinned: 'desc' }, { updatedAt: 'desc' }],
+        take: limit,
+        select: { slug: true, title: true, category: true },
+      }),
+
+      // 歌曲标题匹配
+      prisma.musicTrack.findMany({
+        where: {
+          OR: [
+            { title: { contains: q, mode: 'insensitive' } },
+            { artist: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: limit,
+        select: { docId: true, title: true, artist: true },
+      }),
+    ]);
+
+    // 合并去重并格式化结果
+    const suggestions = [
+      ...hotKeywords.map(k => ({
+        type: 'keyword' as const,
+        text: k.keyword,
+        count: k.count,
+      })),
+      ...wikiMatches.map(w => ({
+        type: 'wiki' as const,
+        text: w.title,
+        slug: w.slug,
+        category: w.category,
+      })),
+      ...songMatches.map(s => ({
+        type: 'music' as const,
+        text: s.title,
+        docId: s.docId,
+        artist: s.artist,
+      })),
+    ].slice(0, limit);
+
+    res.json({ suggestions });
+  } catch (error) {
+    console.error('Search suggestions error:', error);
+    res.json({ suggestions: [] });
+  }
+});
+
 export function registerSearchRoutes(app: Router) {
   app.use('/api/search', router);
 }
