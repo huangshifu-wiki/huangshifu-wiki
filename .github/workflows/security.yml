@@ -111,38 +111,20 @@ jobs:
             echo "No valid audit results, using empty template"
           fi
 
-          cat > /tmp/audit-summary.cjs << 'SCRIPT'
+          node -e "
           const fs = require('fs');
           let data;
-          try {
-            data = JSON.parse(fs.readFileSync('audit-results.json', 'utf8'));
-          } catch(e) {
-            data = { vulnerabilities: {} };
-          }
-
+          try { data = JSON.parse(fs.readFileSync('audit-results.json', 'utf8')); }
+          catch(e) { data = { vulnerabilities: {} }; }
           let summary = { critical: 0, high: 0, moderate: 0, low: 0, info: 0, total: 0 };
-
-          if (data.vulnerabilities) {
-            for (const [pkg, vuln] of Object.entries(data.vulnerabilities)) {
-              summary[vuln.severity] = (summary[vuln.severity] || 0) + 1;
-              summary.total++;
-            }
-          } else if (data.advisories) {
-            for (const advisory of Object.values(data.advisories)) {
-              summary[advisory.severity] = (summary[advisory.severity] || 0) + 1;
-              summary.total++;
-            }
-          }
-
+          if (data.vulnerabilities) { for (const [pkg, vuln] of Object.entries(data.vulnerabilities)) { summary[vuln.severity] = (summary[vuln.severity] || 0) + 1; summary.total++; } }
+          else if (data.advisories) { for (const advisory of Object.values(data.advisories)) { summary[advisory.severity] = (summary[advisory.severity] || 0) + 1; summary.total++; } }
           console.log('=== Vulnerability Summary ===');
           console.log(JSON.stringify(summary));
-
           const fs2 = require('fs');
           fs2.appendFileSync(process.env.GITHUB_OUTPUT, 'summary=' + JSON.stringify(summary) + '\n');
           fs2.appendFileSync(process.env.GITHUB_OUTPUT, 'has_critical_or_high=' + ((summary.critical > 0 || summary.high > 0) ? 'true' : 'false') + '\n');
-          SCRIPT
-
-          node /tmp/audit-summary.cjs
+          "
           exit 0
 
       # ------------------------------------------------------------------
@@ -152,47 +134,21 @@ jobs:
         if: always()
         run: |
           echo "Creating SARIF file..."
-          
-          cat > sarif-npm-audit.json << 'SARIF_EOF'
-          {
-            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
-            "version": "2.1.0",
-            "runs": [
-              {
-                "tool": {
-                  "driver": {
-                    "name": "npm-audit",
-                    "informationUri": "https://docs.npmjs.com/cli/v10/commands/npm-audit",
-                    "rules": []
-                  }
-                },
-                "results": []
-              }
-            ]
-          }
-          SARIF_EOF
-          
+
+          printf '%s\n' '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"npm-audit","informationUri":"https://docs.npmjs.com/cli/v10/commands/npm-audit","rules":[]},"results":[]}]}' > sarif-npm-audit.json
+
           if [ -f audit-results.json ] && [ -s audit-results.json ]; then
             echo "Processing audit results..."
-            cat > /tmp/sarif-convert.cjs << 'EOF'
+            node -e "
             const fs = require('fs');
-            
             let data;
-            try {
-              data = JSON.parse(fs.readFileSync('audit-results.json', 'utf8'));
-            } catch (e) {
-              console.log('Warning: Could not parse audit-results.json');
-              data = { vulnerabilities: {} };
-            }
-            
+            try { data = JSON.parse(fs.readFileSync('audit-results.json', 'utf8')); }
+            catch (e) { console.log('Warning: Could not parse audit-results.json'); data = { vulnerabilities: {} }; }
             const sarif = JSON.parse(fs.readFileSync('sarif-npm-audit.json', 'utf8'));
-            
-            let ruleIndex = {};
-            let results = [];
-            
+            const ruleIndex = {};
+            const results = [];
             function addVulnerability(pkg, vuln, severity) {
               const ruleId = 'npm-' + pkg.replace(/[^a-zA-Z0-9_-]/g, '-');
-              
               if (!ruleIndex[ruleId]) {
                 ruleIndex[ruleId] = sarif.runs[0].tool.driver.rules.length;
                 sarif.runs[0].tool.driver.rules.push({
@@ -200,77 +156,31 @@ jobs:
                   shortDescription: { text: vuln.title || ('Vulnerability in ' + pkg) },
                   fullDescription: { text: vuln.overview || '' },
                   help: {
-                    text: 'Package: ' + pkg + '\n' +
-                          'Severity: ' + severity.toUpperCase() + '\n' +
-                          'Vulnerable: ' + (vuln.via ? vuln.via.join(', ') : 'N/A') + '\n' +
-                          'Fix: ' + (vuln.fixAvailable === false ? 'No fix available' : 
-                                vuln.fixAvailable && vuln.fixAvailable.version ? 
-                                'Update to ' + vuln.fixAvailable.version : 'Run npm audit fix')
+                    text: ['Package:', pkg, 'Severity:', severity.toUpperCase(), 'Fix:', (vuln.fixAvailable === false ? 'No fix available' : vuln.fixAvailable && vuln.fixAvailable.version ? 'Update to ' + vuln.fixAvailable.version : 'Run npm audit fix')].join(' ')
                   },
-                  properties: {
-                    'security-severity': getSeverityScore(severity),
-                    tags: ['dependency', 'vulnerability', severity]
-                  }
+                  properties: { 'security-severity': getSeverityScore(severity), tags: ['dependency', 'vulnerability', severity] }
                 });
               }
-              
               results.push({
-                ruleId: ruleId,
-                level: getLevel(severity),
+                ruleId: ruleId, level: getLevel(severity),
                 message: { text: (vuln.title || 'Dependency vulnerability') + ' [' + severity.toUpperCase() + ']' },
-                locations: [{
-                  physicalLocation: {
-                    artifactLocation: { uri: 'package.json' },
-                    region: { startLine: 1, endLine: 1 }
-                  }
-                }],
-                properties: {
-                  'package': pkg,
-                  'severity': severity,
-                  'vulnerableVersions': vuln.range || 'N/A',
-                  'patchedVersions': vuln.fixAvailable && vuln.fixAvailable.version ?
-                    vuln.fixAvailable.version : 'N/A'
-                }
+                locations: [{ physicalLocation: { artifactLocation: { uri: 'package.json' }, region: { startLine: 1, endLine: 1 } } }],
+                properties: { package: pkg, severity: severity, vulnerableVersions: vuln.range || 'N/A', patchedVersions: vuln.fixAvailable && vuln.fixAvailable.version ? vuln.fixAvailable.version : 'N/A' }
               });
             }
-            
-            function getSeverityScore(sev) {
-              switch(sev.toLowerCase()) {
-                case 'critical': return '9.8';
-                case 'high': return '7.5';
-                case 'moderate': return '5.0';
-                case 'low': return '2.0';
-                default: return '1.0';
-              }
-            }
-            
-            function getLevel(sev) {
-              switch(sev.toLowerCase()) {
-                case 'critical':
-                case 'high': return 'error';
-                case 'moderate': return 'warning';
-                default: return 'note';
-              }
-            }
-            
-            if (data.vulnerabilities) {
-              for (const [pkg, vuln] of Object.entries(data.vulnerabilities)) {
-                addVulnerability(pkg, vuln, vuln.severity);
-              }
-            }
-            
+            function getSeverityScore(sev) { return ({ critical: '9.8', high: '7.5', moderate: '5.0', low: '2.0' })[sev.toLowerCase()] || '1.0'; }
+            function getLevel(sev) { const s = sev.toLowerCase(); return s === 'critical' || s === 'high' ? 'error' : s === 'moderate' ? 'warning' : 'note'; }
+            if (data.vulnerabilities) { for (const [pkg, vuln] of Object.entries(data.vulnerabilities)) addVulnerability(pkg, vuln, vuln.severity); }
             sarif.runs[0].results = results;
             fs.writeFileSync('sarif-npm-audit.json', JSON.stringify(sarif, null, 2));
             console.log('Generated SARIF with ' + results.length + ' findings');
-            EOF
-
-            node /tmp/sarif-convert.cjs
+            "
           else
-            echo "⚠️ No audit results file found or file is empty"
+            echo "No audit results file found or file is empty"
             echo "SARIF file created with empty results (template only)"
           fi
-          
-          echo "✓ SARIF file ready: $(ls -la sarif-npm-audit.json | awk '{print $5}')"
+
+          echo "SARIF file ready: $(ls -la sarif-npm-audit.json | awk '{print $5}')"
 
       - name: Upload npm audit results to GitHub Security tab
         if: always()
@@ -336,144 +246,43 @@ jobs:
               });
             }
 
-      # ------------------------------------------------------------------
-      # 详细漏洞报告输出（使用临时文件避免 shell/JS 语法冲突）
-      # ------------------------------------------------------------------
       - name: Generate detailed vulnerability report
         if: always()
         run: |
-          echo "## 🔒 Dependency Vulnerability Detailed Report" >> $GITHUB_STEP_SUMMARY
+          echo "## Dependency Vulnerability Detailed Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f "audit-results.json" ]; then
-            cat > /tmp/generate-report.cjs << 'ENDOFSCRIPT'
+            node -e "
             const fs = require('fs');
             const data = JSON.parse(fs.readFileSync('audit-results.json', 'utf8'));
-          const vulns = data.vulnerabilities || {};
-          const meta = data.metadata || {};
-
-          const summary = meta.vulnerabilities || {};
-          const totalVulns = summary.total || 0;
-
-          const lines = [];
-
-          lines.push('### 📊 Vulnerability Overview\n');
-          lines.push('| Severity | Count | Action Required |');
-          lines.push('|----------|-------|----------------|');
-          lines.push(`| 🔴 Critical | ${summary.critical || 0} | Immediate Fix |`);
-          lines.push(`| 🟠 High | ${summary.high || 0} | High Priority |`);
-          lines.push(`| 🟡 Moderate | ${summary.moderate || 0} | Schedule Fix |`);
-          lines.push(`| 🟢 Low | ${summary.low || 0} | Optional |`);
-          lines.push(`| ℹ️ Info | ${summary.info || 0} | None |`);
-          lines.push(`| **Total** | **${totalVulns}** | |\n`);
-
-          const critical = [];
-          const high = [];
-          const moderate = [];
-          const low = [];
-
-          for (const [pkg, vuln] of Object.entries(vulns)) {
-            const item = { package: pkg, ...vuln };
-            const severity = vuln.severity?.toLowerCase() || 'unknown';
-
-            if (severity === 'critical') critical.push(item);
-            else if (severity === 'high') high.push(item);
-            else if (severity === 'moderate') moderate.push(item);
-            else if (severity === 'low') low.push(item);
-          }
-
-          if (critical.length > 0) {
-            lines.push('### 🔴 Critical Vulnerabilities (Immediate Action Required)\n');
-            lines.push('These vulnerabilities have CVSS scores ≥ 9.0 and can lead to **arbitrary code execution** or complete system compromise.\n');
-
-            for (const v of critical) {
-              lines.push(`#### ${v.package}${v.isDirect ? ' *(direct dependency)*' : ' *(transitive)*'}`);
-              lines.push(`- **Severity**: 🔴 Critical`);
-              lines.push(`- **Affected Range**: ${v.range}`);
-
-              if (Array.isArray(v.via)) {
-                for (const cve of v.via) {
-                  if (typeof cve === 'object') {
-                    lines.push(`- **CVE**: [${cve.name || 'N/A'}](${cve.url || '#'})`);
-                    lines.push(`  - **Title**: ${cve.title}`);
-                    lines.push(`  - **CWE**: ${(cve.cwe || []).join(', ')}`);
-                    lines.push(`  - **CVSS Score**: ${cve.cvss?.score || 'N/A'} (${cve.cvss?.vectorString || 'N/A'})`);
-                  }
-                }
-              }
-
-              lines.push(`- **Fix Available**: ${v.fixAvailable ? '✅ Yes' : '❌ No'}`);
-              if (v.fixAvailable && v.fixAvailable.version) {
-                lines.push(`  - **Recommended Version**: \`${v.fixAvailable.version}\``);
-              }
-              if (v.effects && v.effects.length > 0) {
-                lines.push(`- **Affects**: ${v.effects.join(', ')}`);
-              }
-              lines.push('');
-            }
-          }
-
-          if (high.length > 0) {
-            lines.push('### 🟠 High Severity Vulnerabilities\n');
-
-            for (const v of high.slice(0, 10)) {
-              const cves = Array.isArray(v.via) ? v.via.filter(c => typeof c === 'object') : [];
-              const topCVE = cves[0];
-
-              lines.push(`**${v.package}**${v.isDirect ? ' *(direct)*' : ' *(transitive)*'}`);
-              if (topCVE) {
-                lines.push(`- \`${topCVE.title?.substring(0, 80) || 'N/A'}\``);
-                lines.push(`- CVSS: ${topCVE.cvss?.score || 'N/A'} | CWE: ${(topCVE.cwe || []).join(',')}`);
-              }
-              lines.push(`- Fix: ${v.fixAvailable?.version || 'Upgrade required'}\n`);
-            }
-
-            if (high.length > 10) {
-              lines.push(`*... and ${high.length - 10} more high severity vulnerabilities*\n`);
-            }
-          }
-
-          lines.push('### 💡 Remediation Recommendations\n');
-          lines.push('#### Priority Actions:\n');
-          lines.push('1. **Critical/High Direct Dependencies**:');
-          lines.push('   - Run `npm update <package-name>` to patch to safe version');
-          lines.push('   - Or specify exact version in package.json (e.g., `"axios": "^1.15.2"`)\n');
-          lines.push('2. **Transitive Dependencies**:');
-          lines.push('   - Use `npm audit fix` to auto-fix where possible');
-          lines.push('   - For complex cases, use `npm ls <package>` to identify the dependency chain\n');
-          lines.push('3. **Monitor & Review**:');
-          lines.push('   - Check GitHub Security tab for this repository');
-          lines.push('   - Subscribe to security advisories for critical packages\n');
-
-          const directCriticalHigh = [...critical, ...high].filter(v => v.isDirect);
-          if (directCriticalHigh.length > 0) {
-            lines.push('#### ⚡ Direct Dependencies Requiring Immediate Attention:\n');
-            lines.push('```bash');
-            for (const v of directCriticalHigh) {
-              const targetVer = v.fixAvailable?.version || 'latest';
-              lines.push(`npm install ${v.package}@${targetVer}`);
-            }
-            lines.push('```\n');
-          }
-
-          const hasCriticalHigh = (summary.critical || 0) > 0 || (summary.high || 0) > 0;
-          if (hasCriticalHigh) {
-            lines.push('---');
-            lines.push('### ❌ Security Check Failed\n');
-            lines.push(`**${totalVulns}** vulnerabilities detected (${summary.critical || 0} critical, ${summary.high || 0} high).\n`);
-            lines.push('Please address these vulnerabilities before merging. Review the full report above for detailed remediation steps.');
-          } else {
-            lines.push('---');
-            lines.push('### ✅ Security Check Passed\n');
-            lines.push('No critical or high severity vulnerabilities found. Moderate/Low issues should be addressed in future updates.');
-          }
-
-          console.log(lines.join('\n'));
-          ENDOFSCRIPT
-
-            node /tmp/generate-report.cjs >> $GITHUB_STEP_SUMMARY
+            const vulns = data.vulnerabilities || {};
+            const meta = data.metadata || {};
+            const summary = meta.vulnerabilities || {};
+            const totalVulns = summary.total || 0;
+            const L = [];
+            L.push('### Vulnerability Overview\n');
+            L.push('| Severity | Count | Action Required |');
+            L.push('|----------|-------|----------------|');
+            L.push('| Critical | ' + (summary.critical || 0) + ' | Immediate Fix |');
+            L.push('| High | ' + (summary.high || 0) + ' | High Priority |');
+            L.push('| Moderate | ' + (summary.moderate || 0) + ' | Schedule Fix |');
+            L.push('| Low | ' + (summary.low || 0) + ' | Optional |');
+            L.push('| Info | ' + (summary.info || 0) + ' | None |');
+            L.push('| **Total** | **' + totalVulns + '**' + ' |\n');
+            const critical=[], high=[];
+            for (const [pkg, v] of Object.entries(vulns)) { const item={package:pkg,...v}, s=(v.severity||'').toLowerCase(); if(s==='critical') critical.push(item); else if(s==='high') high.push(item); }
+            if(critical.length>0){L.push('### Critical Vulnerabilities (Immediate Action Required)\n');for(const v of critical){L.push('#### '+v.package+(v.isDirect?' *(direct)*':' *(transitive)*'));L.push('- **Severity**: Critical');L.push('- **Affected Range**: '+(v.range||'N/A'));if(Array.isArray(v.via))for(const c of v.via){if(typeof c==='object'){L.push('- **CVE**: ['+(c.name||'N/A')+']('+((c.url||'#'))+')');L.push('  - **Title**: '+(c.title||''));L.push('  - **CWE**: '+((c.cwe||[]).join(', ')));}}L.push('- **Fix Available**: '+(v.fixAvailable?'Yes':'No'));if(v.fixAvailable&&v.fixAvailable.version)L.push('  - **Recommended Version**: \`'+v.fixAvailable.version+'\`');L.push('');}}
+            if(high.length>0){L.push('### High Severity Vulnerabilities\n');for(const v of high.slice(0,10)){const cves=Array.isArray(v.via)?v.via.filter(c=>typeof c==='object'):[];const topCVE=cves[0];L.push('**'+v.package+'**'+(v.isDirect?' *(direct)*':' *(transitive)*'));if(topCVE){L.push('- \`'+(topCVE.title||'').substring(0,80)+'\`');L.push('- CVSS: '+(topCVE.cvss?.score||'N/A')+' | CWE: '+((topCVE.cwe||[]).join(',')));}L.push('- Fix: '+(v.fixAvailable?.version||'Upgrade required')+'\n');}if(high.length>10)L.push('*... and '+(high.length-10)+' more high severity vulnerabilities*\n');}
+            L.push('### Remediation Recommendations\n');
+            L.push('#### Priority Actions:\n');
+            L.push('1. Critical/High Direct Dependencies:\n   - Run npm update to patch to safe version\n2. Transitive Dependencies:\n   - Use npm audit fix to auto-fix where possible\n3. Monitor & Review:\n   - Check GitHub Security tab for this repository\n');
+            const hasCriticalHigh=(summary.critical||0)>0||(summary.high||0)>0;
+            if(hasCriticalHigh){L.push('---\n### Security Check Failed\n'+totalVulns+' vulnerabilities detected ('+(summary.critical||0)+' critical, '+(summary.high||0)+' high).\n');}else{L.push('---\n### Security Check Passed\nNo critical or high severity vulnerabilities found.\n');}
+            process.stdout.write(L.join('\n'));
+            " >> $GITHUB_STEP_SUMMARY
           else
-            echo "⚠️ No audit results file found" >> $GITHUB_STEP_SUMMARY
+            echo "No audit results file found" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Check for critical/high vulnerabilities
