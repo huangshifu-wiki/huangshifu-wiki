@@ -22,6 +22,14 @@ export interface BlurhashImageProps {
   transitionDuration?: number;
 }
 
+interface DecodeOptions {
+  width?: number;
+  height?: number;
+  punch?: number;
+}
+
+const defaultDecodeOptions: DecodeOptions = {};
+
 export const BlurhashImage: React.FC<BlurhashImageProps> = ({
   blurhash,
   src,
@@ -35,7 +43,7 @@ export const BlurhashImage: React.FC<BlurhashImageProps> = ({
   loading = 'lazy',
   onLoad,
   onError,
-  decodeOptions = {},
+  decodeOptions = defaultDecodeOptions,
   transitionDuration = 300,
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
