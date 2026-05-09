@@ -21,23 +21,34 @@ export default defineConfig(({ mode }) => {
 				}) as PluginOption,
 		].filter(Boolean),
 		build: {
-			target: "es2020",
-			// Enable CSS code splitting
-			cssCodeSplit: true,
-			// Optimize chunk size warnings threshold (500kb)
-			chunkSizeWarningLimit: 500,
-			// Minification options
-			minify: "terser",
-			terserOptions: {
-				compress: {
-					drop_console: mode === "production",
-					drop_debugger: mode === "production",
-					pure_funcs: mode === "production" ? ["console.log", "console.info"] : [],
+				target: "es2020",
+				// Enable CSS code splitting
+				cssCodeSplit: true,
+				// Optimize chunk size warnings threshold (500kb)
+				chunkSizeWarningLimit: 500,
+				// Minification options
+				minify: "terser",
+				// 强制破坏缓存 - 每次构建都生成新 hash
+				sourcemap: false,
+				terserOptions: {
+					compress: {
+						drop_console: mode === "production",
+						drop_debugger: mode === "production",
+						pure_funcs: mode === "production" ? ["console.log", "console.info"] : [],
+						// 禁用可能导致 TDZ 问题的优化
+						reduce_vars: false,
+						collapse_vars: false,
+					},
+					format: {
+						comments: false,
+						// 使用更安全的输出格式
+						wrap_iife: true,
+					},
+					mangle: {
+						// 保留顶层变量名称以避免初始化顺序问题
+						reserve_top_level: true,
+					},
 				},
-				format: {
-					comments: false,
-				},
-			},
 			rollupOptions: {
 				// Suppress circular chunk warning - this is a known issue with complex dependency graphs
 				// The circular reference is between UI libraries and misc utilities, which is unavoidable
@@ -260,12 +271,44 @@ export default defineConfig(({ mode }) => {
 							return "security-vendor";
 						}
 
+						// Network and HTTP utilities
+						if (
+							pkg === "axios" ||
+							pkg === "node-fetch" ||
+							pkg === "cross-fetch" ||
+							pkg === "whatwg-url"
+						) {
+							return "http-vendor";
+						}
+
+						// Validation libraries
+						if (
+							pkg === "zod" ||
+							pkg === "yup" ||
+							pkg === "joi" ||
+							pkg === "superstruct"
+						) {
+							return "validation-vendor";
+						}
+
+						// Utility libraries (clsx, tailwind-merge, etc.)
+						if (
+							pkg === "clsx" ||
+							pkg === "tailwind-merge" ||
+							pkg === "cheerio" ||
+							pkg === "lodash-es" ||
+							pkg.startsWith("lodash")
+						) {
+							return "util-vendor";
+						}
+
 						// Everything else goes to misc (should be much smaller now)
 						return "vendor-misc";
 					},
 					// Optimized file naming with content hash for better caching
-					entryFileNames: "assets/[name]-[hash].js",
-					chunkFileNames: "assets/[name]-[hash].js",
+					// 添加版本号前缀强制破坏缓存
+					entryFileNames: `assets/v2-[name]-[hash].js`,
+					chunkFileNames: `assets/v2-[name]-[hash].js`,
 					assetFileNames: (assetInfo) => {
 						const info = assetInfo.name || "";
 						// Images
