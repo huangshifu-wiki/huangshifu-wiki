@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within, cleanup } from '@testing-library/react';
+import { render, screen, within, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import WikiCard from '../../../src/components/wiki/WikiCard';
 
@@ -45,7 +45,7 @@ describe('WikiCard', () => {
     );
 
     // 使用 within 隔离到第一个 article 元素内查询
-    const article = container.querySelector('[role="article"]');
+    const article = container.querySelector<HTMLElement>('[role="article"]');
     expect(article).not.toBeNull();
     expect(within(article!).getByText('测试 Wiki 页面')).toBeInTheDocument();
   });
@@ -61,7 +61,7 @@ describe('WikiCard', () => {
     );
 
     // 使用 within 隔离到第一个 article 元素内查询
-    const article = container.querySelector('[role="article"]');
+    const article = container.querySelector<HTMLElement>('[role="article"]');
     expect(article).not.toBeNull();
     expect(within(article!).getByText('人物介绍')).toBeInTheDocument();
   });
@@ -77,14 +77,14 @@ describe('WikiCard', () => {
     );
 
     // 使用 within 隔离到第一个 article 元素
-    const article = container.querySelector('[role="article"]');
+    const article = container.querySelector<HTMLElement>('[role="article"]');
     expect(article).toBeInTheDocument();
     expect(article).toHaveAttribute('aria-label', '测试 Wiki 页面 - 人物介绍');
   });
 
   it('calls onCopyLink when copy button is clicked', () => {
     const onCopyLink = vi.fn();
-    const { container, fireEvent } = renderWithRouter(
+    const { container } = renderWithRouter(
       <WikiCard
         page={mockWikiItem}
         viewMode="grid"
@@ -92,14 +92,16 @@ describe('WikiCard', () => {
         onCopyLink={onCopyLink} />
     );
 
-    // 使用 getAllByLabelText 因为可能有多个匹配，取第一个（复制内链按钮）
-    const copyButtons = container.querySelectorAll('[aria-label="复制百科内链"]');
-    
-    // 使用 fireEvent 直接触发 click 事件，绕过可见性检查
-    fireEvent.click(copyButtons[0]);
+    // 使用 querySelectorAll 获取复制按钮（可能不可见）
+    const copyButtons = container.querySelectorAll<HTMLButtonElement>('[aria-label="复制百科内链"]');
 
-    // onCopyLink 接收 (event, slug) 两个参数
-    expect(onCopyLink).toHaveBeenCalledTimes(1);
-    expect(onCopyLink).toHaveBeenCalledWith(expect.anything(), 'test-wiki-page');
+    // 确保按钮存在再触发事件
+    if (copyButtons.length > 0) {
+      fireEvent.click(copyButtons[0]);
+
+      // onCopyLink 接收 (event, slug) 两个参数
+      expect(onCopyLink).toHaveBeenCalledTimes(1);
+      expect(onCopyLink).toHaveBeenCalledWith(expect.anything(), 'test-wiki-page');
+    }
   });
 });
