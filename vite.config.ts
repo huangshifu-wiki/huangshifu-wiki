@@ -44,7 +44,6 @@ export default defineConfig(({ mode }) => {
 						wrap_iife: true,
 					},
 					mangle: {
-						reserve_top_level: true,
 					},
 				},
 			rollupOptions: {
@@ -303,8 +302,6 @@ export default defineConfig(({ mode }) => {
 						// Everything else goes to misc (should be much smaller now)
 						return "vendor-misc";
 					},
-					// Preserve entry signatures to avoid TDZ issues
-					preserveEntrySignatures: "strict",
 					// Optimized file naming with content hash for better caching
 					// v3 prefix to force cache break
 					entryFileNames: `assets/v3-[name]-[hash].js`,
