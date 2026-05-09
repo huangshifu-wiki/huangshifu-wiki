@@ -55,7 +55,7 @@ fs.mkdirSync(uploadsDir, { recursive: true });
 const backupsDir = path.join(__dirname, 'backups');
 fs.mkdirSync(backupsDir, { recursive: true });
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 3003;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '';
 
 // ============================================================================
