@@ -114,6 +114,20 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(distPath, {
     maxAge: '1y', // 静态资源缓存1年
     immutable: true, // 文件名带hash，内容不变则永不失效
+    setHeaders: (res, filePath) => {
+      // 确保正确的 MIME 类型
+      if (filePath.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      } else if (filePath.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+      } else if (filePath.endsWith('.html')) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      }
+      // 启用跨源资源策略（CORS）用于字体和图标
+      if (filePath.match(/\.(woff2?|ttf|otf|eot|svg)$/)) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+      }
+    },
   }));
 }
 

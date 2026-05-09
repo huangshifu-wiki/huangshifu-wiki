@@ -271,8 +271,11 @@ BEGIN
         RAISE NOTICE 'Constraint Post_albumDocId_fkey already exists, skipping';
     END IF;
 
-    -- Post -> Region
-    IF NOT EXISTS (
+    -- Post -> Region (only if Region table exists - it may be created by seed)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'Region'
+    ) AND NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'Post_locationCode_fkey'
     ) THEN
         ALTER TABLE "Post" ADD CONSTRAINT "Post_locationCode_fkey"
@@ -280,7 +283,7 @@ BEGIN
             ON DELETE SET NULL ON UPDATE CASCADE;
         RAISE NOTICE 'Added constraint Post_locationCode_fkey';
     ELSE
-        RAISE NOTICE 'Constraint Post_locationCode_fkey already exists, skipping';
+        RAISE NOTICE 'Skipped constraint Post_locationCode_fkey (Region table or constraint already exists)';
     END IF;
 
     -- PostComment -> Gallery
@@ -295,8 +298,11 @@ BEGIN
         RAISE NOTICE 'Constraint PostComment_galleryId_fkey already exists, skipping';
     END IF;
 
-    -- WikiPage -> Region
-    IF NOT EXISTS (
+    -- WikiPage -> Region (only if Region table exists - it may be created by seed)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'Region'
+    ) AND NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'WikiPage_locationCode_fkey'
     ) THEN
         ALTER TABLE "WikiPage" ADD CONSTRAINT "WikiPage_locationCode_fkey"
@@ -304,11 +310,14 @@ BEGIN
             ON DELETE SET NULL ON UPDATE CASCADE;
         RAISE NOTICE 'Added constraint WikiPage_locationCode_fkey';
     ELSE
-        RAISE NOTICE 'Constraint WikiPage_locationCode_fkey already exists, skipping';
+        RAISE NOTICE 'Skipped constraint WikiPage_locationCode_fkey (Region table or constraint already exists)';
     END IF;
 
-    -- Gallery -> Region
-    IF NOT EXISTS (
+    -- Gallery -> Region (only if Region table exists - it may be created by seed)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'Region'
+    ) AND NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'Gallery_locationCode_fkey'
     ) THEN
         ALTER TABLE "Gallery" ADD CONSTRAINT "Gallery_locationCode_fkey"
@@ -316,7 +325,7 @@ BEGIN
             ON DELETE SET NULL ON UPDATE CASCADE;
         RAISE NOTICE 'Added constraint Gallery_locationCode_fkey';
     ELSE
-        RAISE NOTICE 'Constraint Gallery_locationCode_fkey already exists, skipping';
+        RAISE NOTICE 'Skipped constraint Gallery_locationCode_fkey (Region table or constraint already exists)';
     END IF;
 
 END $$;

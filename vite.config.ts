@@ -220,9 +220,44 @@ export default defineConfig(({ mode }) => {
 						if (
 							pkg === "@emnapi/runtime" ||
 							pkg === "@emnapi/" ||
-							pkg.startsWith("wasm-")
+							pkg.startsWith("wasm-") ||
+							pkg === "onnxruntime-node" ||
+							pkg.startsWith("onnxruntime")
 						) {
 							return "runtime-vendor";
+						}
+
+						// Sharp and image processing
+						if (
+							pkg === "sharp" ||
+							pkg.startsWith("sharp-") ||
+							pkg === "@img/" ||
+							pkg === "color"
+						) {
+							return "sharp-vendor";
+						}
+
+						// Node.js polyfills and core modules
+						if (
+							pkg === "node-fetch" ||
+							pkg === "data-uri-to-buffer" ||
+							pkg === "fetch-blob" ||
+							pkg === "formdata-polyfill" ||
+							pkg === "node-domexception" ||
+							pkg === "web-streams-polyfill"
+						) {
+							return "polyfill-vendor";
+						}
+
+						// Security and crypto libraries
+						if (
+							pkg === "jsonwebtoken" ||
+							pkg === "bcryptjs" ||
+							pkg === "cookie-parser" ||
+							pkg === "helmet" ||
+							pkg === "cors"
+						) {
+							return "security-vendor";
 						}
 
 						// Everything else goes to misc (should be much smaller now)
