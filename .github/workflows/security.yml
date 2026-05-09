@@ -95,60 +95,55 @@ jobs:
           fi
 
       # ------------------------------------------------------------------
-      # npm audit: 扫描已知依赖漏洞
-      # --audit-level=moderate: 报告 moderate 及以上级别的漏洞
-      # 我们会在后续步骤中自定义严重性过滤逻辑
+      # npm audit: 扫描已知依赖漏洞 (非阻塞 - 始终成功退出)
       # ------------------------------------------------------------------
       - name: Run npm audit
         id: npm-audit
-        continue-on-error: true
         run: |
+          set +e
           echo "=== Running npm vulnerability audit ==="
-          npm audit --json > audit-results.json 2>&1 || true
-          echo "npm audit exit code: $?"
-          
-          if [ -f audit-results.json ]; then
-            cat > /tmp/audit-summary.cjs << 'EOF'
-            const fs = require('fs');
-            const data = JSON.parse(fs.readFileSync('audit-results.json', 'utf8'));
-            
-            let summary = {
-              critical: 0,
-              high: 0,
-              moderate: 0,
-              low: 0,
-              info: 0,
-              total: 0
-            };
-            
-            if (data.vulnerabilities) {
-              for (const [pkg, vuln] of Object.entries(data.vulnerabilities)) {
-                summary[vuln.severity] = (summary[vuln.severity] || 0) + 1;
-                summary.total++;
-              }
-            } else if (data.advisories) {
-              for (const advisory of Object.values(data.advisories)) {
-                summary[advisory.severity] = (summary[advisory.severity] || 0) + 1;
-                summary.total++;
-              }
-            }
-            
-            console.log('=== Vulnerability Summary ===');
-            console.log(JSON.stringify(summary));
+          npm audit --json > audit-results.json 2>&1
+          AUDIT_EXIT_CODE=$?
+          echo "npm audit exit code: $AUDIT_EXIT_CODE"
 
-            const fs2 = require('fs');
-            fs2.appendFileSync(process.env.GITHUB_OUTPUT, `summary=${JSON.stringify(summary)}\n`);
-            
-            const hasCriticalOrHigh = (summary.critical > 0 || summary.high > 0);
-            fs2.appendFileSync(process.env.GITHUB_OUTPUT, `has_critical_or_high=${hasCriticalOrHigh}\n`);
-            EOF
-
-            node /tmp/audit-summary.cjs
-          else
-            echo "No valid audit results found"
-            echo "summary={}" >> $GITHUB_OUTPUT
-            echo "has_critical_or_high=false" >> $GITHUB_OUTPUT
+          if [ ! -f audit-results.json ] || [ ! -s audit-results.json ]; then
+            echo '{"vulnerabilities":{}}' > audit-results.json
+            echo "No valid audit results, using empty template"
           fi
+
+          cat > /tmp/audit-summary.cjs << 'SCRIPT'
+          const fs = require('fs');
+          let data;
+          try {
+            data = JSON.parse(fs.readFileSync('audit-results.json', 'utf8'));
+          } catch(e) {
+            data = { vulnerabilities: {} };
+          }
+
+          let summary = { critical: 0, high: 0, moderate: 0, low: 0, info: 0, total: 0 };
+
+          if (data.vulnerabilities) {
+            for (const [pkg, vuln] of Object.entries(data.vulnerabilities)) {
+              summary[vuln.severity] = (summary[vuln.severity] || 0) + 1;
+              summary.total++;
+            }
+          } else if (data.advisories) {
+            for (const advisory of Object.values(data.advisories)) {
+              summary[advisory.severity] = (summary[advisory.severity] || 0) + 1;
+              summary.total++;
+            }
+          }
+
+          console.log('=== Vulnerability Summary ===');
+          console.log(JSON.stringify(summary));
+
+          const fs2 = require('fs');
+          fs2.appendFileSync(process.env.GITHUB_OUTPUT, 'summary=' + JSON.stringify(summary) + '\n');
+          fs2.appendFileSync(process.env.GITHUB_OUTPUT, 'has_critical_or_high=' + ((summary.critical > 0 || summary.high > 0) ? 'true' : 'false') + '\n');
+          SCRIPT
+
+          node /tmp/audit-summary.cjs
+          exit 0
 
       # ------------------------------------------------------------------
       # 将 npm audit 结果转换为 SARIF 格式并上传
