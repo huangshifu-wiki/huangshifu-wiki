@@ -104,7 +104,9 @@ jobs:
         continue-on-error: true
         run: |
           echo "=== Running npm vulnerability audit ==="
+          set +e
           npm audit --json > audit-results.json 2>&1 || true
+          set -e
           
           if [ -f audit-results.json ]; then
             cat > /tmp/audit-summary.cjs << 'EOF'
