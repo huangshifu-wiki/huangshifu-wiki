@@ -253,13 +253,13 @@ export const SmartImage: React.FC<SmartImageProps> = ({
 
     // 使用 requestIdleCallback 在空闲时解码，避免阻塞主线程
     const decodeBlurhash = () => {
-      const decodeOpts = decodeOptions || {};
-    const dataUrl = decodeBlurhashToDataURL(
-      blurhash,
-      decodeOpts.width || 32,
-      decodeOpts.height || 32,
-      decodeOpts.punch
-    );
+      const opts: { width?: number; height?: number; punch?: number } = decodeOptions || {};
+      const dataUrl = decodeBlurhashToDataURL(
+        blurhash,
+        opts.width || 32,
+        opts.height || 32,
+        opts.punch
+      );
       setBlurhashDataUrl(dataUrl);
     };
 
@@ -271,7 +271,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
       const id = setTimeout(decodeBlurhash, 0);
       return () => clearTimeout(id);
     }
-  }, [blurhash, decodeOptions.width, decodeOptions.height, decodeOptions.punch]);
+  }, [blurhash, JSON.stringify(decodeOptions)]);
 
   // 重置加载状态
   useEffect(() => {

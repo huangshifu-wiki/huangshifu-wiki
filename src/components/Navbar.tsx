@@ -169,7 +169,7 @@ export const Navbar = () => {
 					open={authModalOpen}
 					onClose={() => setAuthModalOpen(false)}
 					onAuthSuccess={() => setIsMenuOpen(false)}
-					initialMode={authInitialMode}
+					initialMode={authInitialMode as AuthMode | undefined}
 				/>
 			)}
 		</nav>
