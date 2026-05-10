@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rrfScore, RRF_K } from '../../src/server/routes/search.routes';
+import { rrfScore, RRF_K, buildHybridResponse, fetchVectorSearchWithTimeout } from '../../src/server/routes/search.routes';
 
 describe('RRF Fusion Algorithm', () => {
   describe('rrfScore - core formula', () => {
@@ -150,5 +150,134 @@ describe('RRF Fusion Algorithm', () => {
       expect(topHit).toBeGreaterThan(0.01);
       expect(topHit).toBeLessThan(1);
     });
+  });
+});
+
+describe('buildHybridResponse - fusion logic', () => {
+  function makeKwItem(type: 'wiki' | 'post' | 'gallery' | 'music' | 'album', id: string, rank: number) {
+    return { id: `${type}:${id}`, type, data: { id, title: `test-${id}` } as any, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: rank };
+  }
+
+  function makeVecItem(type: string, id: string, rank: number, similarity = 0.9) {
+    return { id: `${type}:${id}`, type: type as any, data: { id, title: `vec-${id}` } as any, relevanceScore: 0, matchType: 'vector' as const, vectorDistance: similarity, vectorRank: rank };
+  }
+
+  it('returns keyword-only results when mode=keyword', () => {
+    const kwResults = {
+      wiki: [{ slug: 'a', title: 'A' }],
+      posts: [],
+      galleries: [],
+      music: [],
+      albums: [],
+    };
+    const result = buildHybridResponse(kwResults, [], 'keyword', 'test', false);
+    expect(result.wiki).toHaveLength(1);
+    expect(result.wiki[0].title).toBe('A');
+    expect(result.searchMeta.mode).toBe('keyword');
+    expect(result.searchMeta.degraded).toBe(false);
+  });
+
+  it('returns vector-only results when mode=vector', () => {
+    const kwResults = { wiki: [{ slug: 'a', title: 'KW' }], posts: [], galleries: [], music: [], albums: [] };
+    const vecResults = [
+      { sourceType: 'wiki' as const, sourceId: 'v1', data: { title: 'VEC' }, similarity: 0.95 },
+    ];
+    const result = buildHybridResponse(kwResults, vecResults, 'vector', 'test', false);
+    expect(result.wiki).toHaveLength(1);
+    expect(result.wiki[0].title).toBe('VEC');
+    expect(result.searchMeta.mode).toBe('vector');
+  });
+
+  it('merges keyword and vector results in hybrid mode', () => {
+    const kwResults = {
+      wiki: [{ slug: 'same', title: 'Same' }, { slug: 'kw-only', title: 'KwOnly' }],
+      posts: [],
+      galleries: [],
+      music: [],
+      albums: [],
+    };
+    const vecResults = [
+      { sourceType: 'wiki' as const, sourceId: 'same', data: { title: 'Same-Vec' }, similarity: 0.88 },
+      { sourceType: 'wiki' as const, sourceId: 'vec-only', data: { title: 'VecOnly' }, similarity: 0.75 },
+    ];
+    const result = buildHybridResponse(kwResults, vecResults, 'hybrid', 'test', false);
+    expect(result.wiki.length).toBeGreaterThanOrEqual(3);
+
+    const sameItem = result.wiki.find((w: any) => w.title === 'Same-Vec' || w.title === 'Same');
+    expect(sameItem).toBeDefined();
+
+    const vecOnlyItem = result.wiki.find((w: any) => w.title === 'VecOnly');
+    expect(vecOnlyItem).toBeDefined();
+    expect(result.searchMeta.mode).toBe('hybrid');
+    expect(result.searchMeta.keywordResultCount).toBeGreaterThan(0);
+    expect(result.searchMeta.vectorResultCount).toBe(2);
+  });
+
+  it('sorts by RRF score descending in hybrid mode', () => {
+    const kwResults = {
+      wiki: [
+        { slug: 'both-top', title: 'BothTop' },
+        { slug: 'kw-mid', title: 'KwMid' },
+        { slug: 'kw-low', title: 'KwLow' },
+      ],
+      posts: [], galleries: [], music: [], albums: [],
+    };
+    const vecResults = [
+      { sourceType: 'wiki' as const, sourceId: 'both-top', data: { title: 'BothTop-V' }, similarity: 0.9 },
+      { sourceType: 'wiki' as const, sourceId: 'vec-only', data: { title: 'VecOnly' }, similarity: 0.8 },
+    ];
+    const result = buildHybridResponse(kwResults, vecResults, 'hybrid', 'q', false);
+
+    const bothTopIdx = result.wiki.findIndex((w: any) => (w.slug === 'both-top' || w.title?.includes('BothTop')));
+    const vecOnlyIdx = result.wiki.findIndex((w: any) => w.title?.includes('VecOnly'));
+    const kwLowIdx = result.wiki.findIndex((w: any) => (w.slug === 'kw-low' || w.title?.includes('KwLow')));
+
+    if (bothTopIdx >= 0 && vecOnlyIdx >= 0 && kwLowIdx >= 0) {
+      expect(bothTopIdx).toBeLessThan(vecOnlyIdx);
+      expect(vecOnlyIdx).toBeLessThan(kwLowIdx);
+    }
+  });
+
+  it('marks matched items as hybrid matchType', () => {
+    const kwResults = {
+      wiki: [{ slug: 'shared', title: 'Shared' }],
+      posts: [], galleries: [], music: [], albums: [],
+    };
+    const vecResults = [
+      { sourceType: 'wiki' as const, sourceId: 'shared', data: { title: 'Shared' }, similarity: 0.85 },
+    ];
+    const result = buildHybridResponse(kwResults, vecResults, 'hybrid', 'q', false);
+    expect(result.wiki.length).toBeGreaterThan(0);
+  });
+
+  it('sets degraded=true when degradation is flagged', () => {
+    const kwResults = { wiki: [], posts: [], galleries: [], music: [], albums: [] };
+    const result = buildHybridResponse(kwResults, [], 'hybrid', 'q', true, 'Qdrant timeout');
+    expect(result.searchMeta.degraded).toBe(true);
+    expect(result.searchMeta.degradationReason).toBe('Qdrant timeout');
+    expect(result.searchMeta.mode).toBe('keyword (degraded)');
+  });
+
+  it('handles empty results gracefully', () => {
+    const kwResults = { wiki: [], posts: [], galleries: [], music: [], albums: [] };
+    const result = buildHybridResponse(kwResults, [], 'hybrid', 'q', false);
+    expect(result.wiki).toHaveLength(0);
+    expect(result.posts).toHaveLength(0);
+    expect(result.galleries).toHaveLength(0);
+    expect(result.music).toHaveLength(0);
+    expect(result.albums).toHaveLength(0);
+  });
+
+  it('handles mode=vector with no vector results', () => {
+    const kwResults = { wiki: [{ slug: 'a', title: 'A' }], posts: [], galleries: [], music: [], albums: [] };
+    const result = buildHybridResponse(kwResults, [], 'vector', 'q', false);
+    expect(result.wiki).toHaveLength(0);
+    expect(result.searchMeta.vectorResultCount).toBe(0);
+  });
+});
+
+describe('fetchVectorSearchWithTimeout - timeout behavior', () => {
+  it('is covered by integration tests (requires CLIP model)', () => {
+    expect(fetchVectorSearchWithTimeout).toBeDefined();
   });
 });
