@@ -180,7 +180,7 @@ describe('buildHybridResponse - fusion logic', () => {
   it('returns vector-only results when mode=vector', () => {
     const kwResults = { wiki: [{ slug: 'a', title: 'KW' }], posts: [], galleries: [], music: [], albums: [] };
     const vecResults = [
-      { sourceType: 'wiki' as const, sourceId: 'v1', data: { title: 'VEC' }, similarity: 0.95 },
+      { sourceType: 'wiki' as const, sourceId: 'v1', imageUrl: '', data: { title: 'VEC' }, similarity: 0.95 },
     ];
     const result = buildHybridResponse(kwResults, vecResults, 'vector', 'test', false);
     expect(result.wiki).toHaveLength(1);
@@ -197,8 +197,8 @@ describe('buildHybridResponse - fusion logic', () => {
       albums: [],
     };
     const vecResults = [
-      { sourceType: 'wiki' as const, sourceId: 'same', data: { title: 'Same-Vec' }, similarity: 0.88 },
-      { sourceType: 'wiki' as const, sourceId: 'vec-only', data: { title: 'VecOnly' }, similarity: 0.75 },
+      { sourceType: 'wiki' as const, sourceId: 'same', imageUrl: '', data: { title: 'Same-Vec' }, similarity: 0.88 },
+      { sourceType: 'wiki' as const, sourceId: 'vec-only', imageUrl: '', data: { title: 'VecOnly' }, similarity: 0.75 },
     ];
     const result = buildHybridResponse(kwResults, vecResults, 'hybrid', 'test', false);
     expect(result.wiki.length).toBeGreaterThanOrEqual(3);
@@ -223,8 +223,8 @@ describe('buildHybridResponse - fusion logic', () => {
       posts: [], galleries: [], music: [], albums: [],
     };
     const vecResults = [
-      { sourceType: 'wiki' as const, sourceId: 'both-top', data: { title: 'BothTop-V' }, similarity: 0.9 },
-      { sourceType: 'wiki' as const, sourceId: 'vec-only', data: { title: 'VecOnly' }, similarity: 0.8 },
+      { sourceType: 'wiki' as const, sourceId: 'both-top', imageUrl: '', data: { title: 'BothTop-V' }, similarity: 0.9 },
+      { sourceType: 'wiki' as const, sourceId: 'vec-only', imageUrl: '', data: { title: 'VecOnly' }, similarity: 0.8 },
     ];
     const result = buildHybridResponse(kwResults, vecResults, 'hybrid', 'q', false);
 
@@ -244,7 +244,7 @@ describe('buildHybridResponse - fusion logic', () => {
       posts: [], galleries: [], music: [], albums: [],
     };
     const vecResults = [
-      { sourceType: 'wiki' as const, sourceId: 'shared', data: { title: 'Shared' }, similarity: 0.85 },
+      { sourceType: 'wiki' as const, sourceId: 'shared', imageUrl: '', data: { title: 'Shared' }, similarity: 0.85 },
     ];
     const result = buildHybridResponse(kwResults, vecResults, 'hybrid', 'q', false);
     expect(result.wiki.length).toBeGreaterThan(0);
