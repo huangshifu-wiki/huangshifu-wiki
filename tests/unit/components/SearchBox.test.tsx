@@ -25,9 +25,11 @@ describe('SearchBox', () => {
     query: '',
     suggestions: [] as typeof mockSuggestions,
     aiSearching: false,
+    semanticImageSearch: false,
     onQueryChange: vi.fn(),
     onSearch: vi.fn(),
     onImageSearch: vi.fn(),
+    onToggleSemanticSearch: vi.fn(),
     onDismissSuggestions: vi.fn(),
   };
 
@@ -123,5 +125,49 @@ describe('SearchBox', () => {
     const { container } = renderWithRouter(<SearchBox {...defaultProps} />);
     const inputs = container.querySelectorAll<HTMLInputElement>('[aria-expanded="false"]');
     expect(inputs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders hybrid search toggle switch', () => {
+    const { container } = renderWithRouter(<SearchBox {...defaultProps} />);
+    expect(container.innerHTML).toContain('智能混合搜索');
+    expect(container.innerHTML).toContain('RRF融合算法');
+  });
+
+  it('shows toggle in off state by default', () => {
+    const { container } = renderWithRouter(<SearchBox {...defaultProps} semanticImageSearch={false} />);
+    const toggle = container.querySelector('[role="switch"]') as HTMLButtonElement;
+    expect(toggle).toBeTruthy();
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(container.innerHTML).toContain('关键词模式');
+  });
+
+  it('shows toggle in on state when enabled', () => {
+    const { container } = renderWithRouter(<SearchBox {...defaultProps} semanticImageSearch={true} />);
+    const toggle = container.querySelector('[role="switch"]') as HTMLButtonElement;
+    expect(toggle).toBeTruthy();
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(container.innerHTML).toContain('混合模式已开启');
+  });
+
+  it('calls onToggleSemanticSearch when toggle is clicked', async () => {
+    const user = userEvent.setup();
+    const onToggleSemanticSearch = vi.fn();
+    const { container } = renderWithRouter(
+      <SearchBox {...defaultProps} onToggleSemanticSearch={onToggleSemanticSearch} />
+    );
+
+    const toggle = container.querySelector('[role="switch"]') as HTMLButtonElement;
+    if (toggle) {
+      await user.click(toggle);
+      expect(onToggleSemanticSearch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('toggle has correct accessibility attributes', () => {
+    const { container } = renderWithRouter(<SearchBox {...defaultProps} />);
+    const toggle = container.querySelector('[role="switch"]') as HTMLButtonElement;
+    expect(toggle).toBeTruthy();
+    expect(toggle.getAttribute('aria-label')).toBe('切换智能混合搜索模式');
+    expect(toggle.getAttribute('id')).toBe('hybrid-search-toggle');
   });
 });

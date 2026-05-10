@@ -9,9 +9,11 @@ interface SearchBoxProps {
   query: string;
   suggestions: SearchSuggestion[];
   aiSearching: boolean;
+  semanticImageSearch: boolean;
   onQueryChange: (val: string) => void;
   onSearch: (q: string) => void;
   onImageSearch: (file: File) => void;
+  onToggleSemanticSearch: () => void;
   onDismissSuggestions: () => void;
 }
 
@@ -19,9 +21,11 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   query,
   suggestions,
   aiSearching,
+  semanticImageSearch,
   onQueryChange,
   onSearch,
   onImageSearch,
+  onToggleSemanticSearch,
   onDismissSuggestions,
 }) => {
   const navigate = useNavigate();
@@ -218,6 +222,45 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           className="hidden"
         />
       </form>
+
+      {/* 混合搜索模式切换 */}
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#f0ece3]">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onToggleSemanticSearch}
+            className={clsx(
+              "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#c8951e] focus:ring-offset-2",
+              semanticImageSearch ? "bg-[#c8951e]" : "bg-[#d0ccc5]"
+            )}
+            role="switch"
+            aria-checked={semanticImageSearch}
+            aria-label="切换智能混合搜索模式"
+            id="hybrid-search-toggle"
+          >
+            <span
+              className={clsx(
+                "inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm",
+                semanticImageSearch ? "translate-x-6" : "translate-x-1"
+              )}
+            />
+          </button>
+          <label
+            htmlFor="hybrid-search-toggle"
+            className="text-sm text-[#6b6560] cursor-pointer select-none"
+          >
+            <span className="font-medium">智能混合搜索</span>
+            <span className="ml-1.5 text-xs text-[#9e968e]">(RRF融合算法)</span>
+          </label>
+        </div>
+        <div className="text-xs text-[#9e968e]">
+          {semanticImageSearch ? (
+            <span className="text-[#c8951e] font-medium">● 混合模式已开启</span>
+          ) : (
+            <span>关键词模式</span>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

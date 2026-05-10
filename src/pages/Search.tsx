@@ -49,9 +49,11 @@ const Search: React.FC = () => {
           query={state.query}
           suggestions={state.suggestions}
           aiSearching={state.aiSearching}
+          semanticImageSearch={state.filters.semanticImageSearch}
           onQueryChange={handleQueryChange}
           onSearch={performSearch}
           onImageSearch={handleImageSearch}
+          onToggleSemanticSearch={() => updateFilters({ semanticImageSearch: !state.filters.semanticImageSearch })}
           onDismissSuggestions={dismissSuggestions}
         />
 
