@@ -27,6 +27,35 @@ import { createUploadStorageInfo } from '../uploadPath';
 const router = Router();
 
 const IMAGE_SEARCH_RESULT_LIMIT = Math.max(1, Number(process.env.IMAGE_SEARCH_RESULT_LIMIT || 24));
+const QDRANT_TIMEOUT_MS = Number(process.env.QDRANT_TIMEOUT_MS || 2000);
+export const RRF_K = 60;
+
+interface HybridSearchItem {
+  id: string;
+  type: 'wiki' | 'post' | 'gallery' | 'music' | 'album';
+  data: unknown;
+  relevanceScore: number;
+  matchType: 'keyword' | 'vector' | 'hybrid';
+  vectorDistance?: number;
+  keywordRank?: number;
+  vectorRank?: number;
+}
+
+interface HybridSearchResponse {
+  wiki: Awaited<ReturnType<typeof toWikiResponse>>[];
+  posts: Awaited<ReturnType<typeof toPostResponse>>[];
+  galleries: Awaited<ReturnType<typeof toGalleryResponse>>[];
+  music: Awaited<ReturnType<typeof toMusicResponse>>[];
+  albums: Awaited<ReturnType<typeof toAlbumResponse>>[];
+  searchMeta: {
+    mode: string;
+    query: string;
+    degraded: boolean;
+    degradationReason?: string;
+    keywordResultCount: number;
+    vectorResultCount: number;
+  };
+}
 
 const searchImageUpload = multer({
   storage: multer.diskStorage({
@@ -252,10 +281,113 @@ async function processSemanticSearchResults(
   return results;
 }
 
+export function rrfScore(ranks: Array<number | undefined>): number {
+  return ranks.reduce((sum, rank) => {
+    if (rank === undefined || rank < 0) return sum;
+    return sum + 1 / (RRF_K + rank);
+  }, 0);
+}
+
+async function fetchVectorSearchWithTimeout(
+  q: string,
+  limit: number,
+  minScore: number,
+  timeoutMs: number
+): Promise<{ results: SemanticSearchResult[]; timedOut: boolean }> {
+  const results = await Promise.race([
+    (async (): Promise<{ results: SemanticSearchResult[]; timedOut: boolean }> => {
+      const queryVector = await generateTextEmbedding(q);
+      const matches = await searchImageEmbeddingPoints({
+        vector: queryVector,
+        limit,
+        minScore,
+      });
+      return { results: await processSemanticSearchResults(matches), timedOut: false };
+    })(),
+    new Promise<{ results: SemanticSearchResult[]; timedOut: boolean }>((resolve) =>
+      setTimeout(() => resolve({ results: [], timedOut: true }), timeoutMs)
+    ),
+  ]);
+  return results;
+}
+
+function buildHybridResponse(
+  keywordResults: { wiki: any[]; posts: any[]; galleries: any[]; music: any[]; albums: any[] },
+  vectorResults: SemanticSearchResult[],
+  mode: string,
+  query: string,
+  degraded: boolean,
+  degradationReason?: string
+): HybridSearchResponse {
+  const keywordFlat: HybridSearchItem[] = [
+    ...keywordResults.wiki.map((d, i) => ({ id: d.slug || String(i), type: 'wiki' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
+    ...keywordResults.posts.map((d, i) => ({ id: d.id || String(i), type: 'post' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
+    ...keywordResults.galleries.map((d, i) => ({ id: d.id || String(i), type: 'gallery' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
+    ...keywordResults.music.map((d, i) => ({ id: d.docId || String(i), type: 'music' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
+    ...keywordResults.albums.map((d, i) => ({ id: d.docId || String(i), type: 'album' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
+  ];
+
+  const vectorFlat: HybridSearchItem[] = vectorResults.map((r, i) => ({
+    id: `${r.sourceType}:${r.sourceId}`,
+    type: r.sourceType === 'gallery' ? 'gallery' : r.sourceType === 'wiki' ? 'wiki' : 'post',
+    data: r.data,
+    relevanceScore: 0,
+    matchType: 'vector' as const,
+    vectorDistance: r.similarity,
+    vectorRank: i,
+  }));
+
+  if (mode === 'hybrid' && vectorResults.length > 0 && keywordFlat.length > 0) {
+    const vectorMap = new Map(vectorFlat.map(v => [v.id, v]));
+    for (const kw of keywordFlat) {
+      const vec = vectorMap.get(kw.id);
+      if (vec) {
+        kw.matchType = 'hybrid';
+        kw.vectorDistance = vec.vectorDistance;
+        kw.vectorRank = vec.vectorRank;
+      }
+      kw.relevanceScore = rrfScore([kw.keywordRank, kw.vectorRank]);
+    }
+    for (const v of vectorFlat) {
+      if (!keywordFlat.find(k => k.id === v.id)) {
+        v.relevanceScore = rrfScore([undefined, v.vectorRank]);
+        keywordFlat.push(v);
+      }
+    }
+    keywordFlat.sort((a, b) => b.relevanceScore - a.relevanceScore);
+  } else if (mode === 'vector') {
+    return {
+      wiki: vectorFlat.filter(v => v.type === 'wiki').map(v => v.data as Awaited<ReturnType<typeof toWikiResponse>>),
+      posts: vectorFlat.filter(v => v.type === 'post').map(v => v.data as Awaited<ReturnType<typeof toPostResponse>>),
+      galleries: vectorFlat.filter(v => v.type === 'gallery').map(v => v.data as Awaited<ReturnType<typeof toGalleryResponse>>),
+      music: [],
+      albums: [],
+      searchMeta: { mode: 'vector', query, degraded: false, keywordResultCount: 0, vectorResultCount: vectorResults.length },
+    };
+  }
+
+  return {
+    wiki: keywordFlat.filter(v => v.type === 'wiki').map(v => v.data as Awaited<ReturnType<typeof toWikiResponse>>),
+    posts: keywordFlat.filter(v => v.type === 'post').map(v => v.data as Awaited<ReturnType<typeof toPostResponse>>),
+    galleries: keywordFlat.filter(v => v.type === 'gallery').map(v => v.data as Awaited<ReturnType<typeof toGalleryResponse>>),
+    music: keywordResults.music.map(toMusicResponse),
+    albums: keywordResults.albums.map(toAlbumResponse),
+    searchMeta: {
+      mode: degraded ? 'keyword (degraded)' : mode,
+      query,
+      degraded,
+      ...(degradationReason ? { degradationReason } : {}),
+      keywordResultCount: keywordFlat.length,
+      vectorResultCount: vectorResults.length,
+    },
+  };
+}
+
 router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const type = typeof req.query.type === 'string' ? req.query.type : 'all';
+    const mode = (typeof req.query.mode === 'string' ? req.query.mode : 'keyword') as 'keyword' | 'vector' | 'hybrid';
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
     const startDate = typeof req.query.startDate === 'string' ? parseDate(req.query.startDate) : null;
     const endDate = typeof req.query.endDate === 'string' ? parseDate(req.query.endDate) : null;
@@ -402,12 +534,43 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
 
     const [wiki, posts, galleries, music, albums] = await Promise.all([wikiPromise, postsPromise, galleriesPromise, musicPromise, albumsPromise]);
 
+    if ((mode === 'hybrid' || mode === 'vector') && q) {
+      let vectorResults: SemanticSearchResult[] = [];
+      let degraded = false;
+      let degradationReason: string | undefined;
+
+      try {
+        const vectorResponse = await fetchVectorSearchWithTimeout(q, IMAGE_SEARCH_RESULT_LIMIT, 0.3, QDRANT_TIMEOUT_MS);
+        vectorResults = vectorResponse.results;
+        if (vectorResponse.timedOut) {
+          degraded = true;
+          degradationReason = '向量搜索超时（>' + (QDRANT_TIMEOUT_MS / 1000) + 's），已自动降级为关键词搜索模式';
+        }
+      } catch (error) {
+        degraded = true;
+        degradationReason = '向量搜索不可用：' + (error instanceof Error ? error.message : '未知错误');
+        console.warn('[HybridSearch] Vector search failed, degrading to keyword-only:', error);
+      }
+
+      const keywordRaw = {
+        wiki: wiki.map(toWikiResponse),
+        posts: posts.map(toPostResponse),
+        galleries: await Promise.all(galleries.map(toGalleryResponse)),
+        music: music,
+        albums: albums,
+      };
+
+      const hybridResponse = buildHybridResponse(keywordRaw, vectorResults, mode, q, degraded, degradationReason);
+      return res.json(hybridResponse);
+    }
+
     res.json({
       wiki: wiki.map(toWikiResponse),
       posts: posts.map(toPostResponse),
       galleries: await Promise.all(galleries.map(toGalleryResponse)),
       music: music.map(toMusicResponse),
       albums: albums.map(toAlbumResponse),
+      searchMeta: { mode: 'keyword', query: q, degraded: false, keywordResultCount: wiki.length + posts.length + galleries.length + music.length + albums.length, vectorResultCount: 0 },
     });
   } catch (error) {
     console.error('Search error:', error);

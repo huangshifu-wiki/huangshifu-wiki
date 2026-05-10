@@ -33,6 +33,14 @@ export interface SearchState {
   aiSearching: boolean;
   hotKeywords: string[];
   showFilters: boolean;
+  searchMeta?: {
+    mode: string;
+    query: string;
+    degraded: boolean;
+    degradationReason?: string;
+    keywordResultCount: number;
+    vectorResultCount: number;
+  };
 }
 
 export function useSearchPage() {
@@ -60,6 +68,7 @@ export function useSearchPage() {
     aiSearching: false,
     hotKeywords: [],
     showFilters: false,
+    searchMeta: undefined,
   });
 
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -188,9 +197,18 @@ export function useSearchPage() {
         galleries: GalleryItem[];
         music: SongItem[];
         albums: AlbumItem[];
+        searchMeta?: {
+          mode: string;
+          query: string;
+          degraded: boolean;
+          degradationReason?: string;
+          keywordResultCount: number;
+          vectorResultCount: number;
+        };
       }>("/api/search", {
         q: currentQuery,
         type: apiType,
+        mode: filters.semanticImageSearch ? "hybrid" : "keyword",
         ...(filters.dateRange.start ? { startDate: filters.dateRange.start } : {}),
         ...(filters.dateRange.end ? { endDate: filters.dateRange.end } : {}),
       });
@@ -214,6 +232,7 @@ export function useSearchPage() {
         isMixedSearch: false,
         mixedResults: [],
         loading: false,
+        searchMeta: data.searchMeta,
       }));
     } catch (e) {
       console.error("Search error:", e);
