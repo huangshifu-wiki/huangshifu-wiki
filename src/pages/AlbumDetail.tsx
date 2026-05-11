@@ -7,7 +7,7 @@ import { apiDelete, apiGet, apiPost } from '../lib/apiClient';
 import { useMusic } from '../context/MusicContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
-import { AlbumCoverManager } from '../components/AlbumCoverManager';
+import { CoverManager } from '../components/CoverManager';
 import { SmartImage } from '../components/SmartImage';
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink';
 import { Platform, PlatformIds } from '../types/PlatformIds';
@@ -289,8 +289,9 @@ const AlbumDetail = () => {
               <span className="w-[3px] h-4 bg-[#c8951e] rounded-[1px] opacity-60 inline-block" />
               管理功能
             </h2>
-            <AlbumCoverManager
-              albumDocId={albumId}
+            <CoverManager
+              resourceType="album"
+              resourceId={albumId}
               currentCover={album.cover}
               onCoverUpdated={(newCoverUrl) => setAlbum((prev) => prev ? { ...prev, cover: newCoverUrl } : prev)}
             />

@@ -13,6 +13,7 @@ import type { MixedSearchResult, ImageSourceType } from "../hooks/useSearch";
 import type { GalleryItem, WikiItem, PostItem } from "../types/entities";
 import { format } from "date-fns";
 import { toDateValue } from "../lib/dateUtils";
+import { CARD } from "../styles/cardStyles";
 
 interface MixedSearchResultCardProps {
   result: MixedSearchResult;
@@ -62,27 +63,27 @@ export const MixedSearchResultCard = React.memo(
       return (
         <Link
           to={link}
-          className="flex gap-4 p-3 bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all w-full group"
+          className={clsx(CARD.base, CARD.listLayout)}
         >
-          <div className="w-20 h-20 bg-[#f7f5f0] rounded overflow-hidden flex-shrink-0">
-            <SmartImage src={imageUrl || ""} alt="" className="w-full h-full object-cover" />
+          <div className={CARD.imageWrapperList}>
+            <SmartImage src={imageUrl || ""} alt="" className={CARD.imageFill} />
           </div>
           <div className="flex-1 min-w-0 flex flex-col justify-center">
             <div className="flex items-center gap-2 mb-1">
-              <span className="px-2 py-0.5 bg-[#f7f5f0] text-[#c8951e] text-[10px] font-medium rounded">
+              <span className={CARD.tag}>
                 <SourceIcon size={10} className="inline mr-0.5" />
                 {getSourceTypeLabel(sourceType)}
               </span>
               {showSimilarity && (
-                <span className="px-2 py-0.5 bg-[#f7f5f0] text-[#c8951e] text-[10px] font-medium rounded">
+                <span className={CARD.tag}>
                   {formatSimilarity(similarity)}
                 </span>
               )}
             </div>
-            <h3 className="text-sm font-semibold text-[#2c2c2c] truncate group-hover:text-[#c8951e] transition-colors">
+            <h3 className={CARD.title}>
               {(data as GalleryItem | WikiItem | PostItem).title}
             </h3>
-            <p className="text-xs text-[#9e968e] line-clamp-1 mt-0.5">
+            <p className={clsx("text-xs text-[#9e968e] line-clamp-1 mt-0.5")}>
               {sourceType === "gallery" && (data as GalleryItem).description}
               {sourceType === "wiki" && (data as WikiItem).category}
               {sourceType === "post" && (data as PostItem).section}
@@ -102,10 +103,10 @@ export const MixedSearchResultCard = React.memo(
       return (
         <Link
           to={link}
-          className="flex items-center gap-3 p-3 bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all w-full group"
+          className={clsx(CARD.base, CARD.compactLayout)}
         >
-          <div className="w-10 h-10 bg-[#f7f5f0] rounded overflow-hidden flex-shrink-0">
-            <SmartImage src={imageUrl || ""} alt="" className="w-full h-full object-cover" />
+          <div className={CARD.imageWrapperCompact}>
+            <SmartImage src={imageUrl || ""} alt="" className={CARD.imageFill} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -130,13 +131,13 @@ export const MixedSearchResultCard = React.memo(
     return (
       <Link
         to={link}
-        className={clsx("bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all group flex flex-col", cardHeight)}
+        className={clsx(CARD.base, CARD.gridLayout, cardHeight)}
       >
         <div className="h-36 overflow-hidden relative flex-shrink-0">
           <SmartImage
             src={imageUrl || ""}
             alt=""
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className={clsx(CARD.imageFill, CARD.imageHoverZoom)}
           />
           <div className="absolute top-2 left-2">
             <span className="px-2 py-0.5 bg-white/90 text-[#c8951e] text-[10px] font-medium rounded">
@@ -153,7 +154,7 @@ export const MixedSearchResultCard = React.memo(
           )}
         </div>
         <div className="p-3 flex-1 flex flex-col">
-          <h3 className="text-sm font-semibold text-[#2c2c2c] truncate group-hover:text-[#c8951e] transition-colors mb-1">
+          <h3 className={clsx(CARD.title, "mb-1")}>
             {(data as GalleryItem | WikiItem | PostItem).title}
           </h3>
           <p className="text-xs text-[#9e968e] line-clamp-1 flex-1 mt-1">

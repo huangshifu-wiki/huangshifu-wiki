@@ -10,6 +10,7 @@ import {
 	Pin,
 } from "lucide-react";
 import { formatDate } from "../../lib/dateUtils";
+import { CARD } from "../../styles/cardStyles";
 
 const getCategoryLabel = (category: string): string => {
 	switch (category) {
@@ -47,8 +48,8 @@ const WikiCard = React.memo(({ page, viewMode, cardHeight, onCopyLink }: WikiCar
 				to={`/wiki/${page.slug}`}
 				className={clsx(
 					viewMode === "list"
-						? "flex gap-4 p-4 bg-white rounded border border-[#e0dcd3] hover:border-[#c8951e] transition-all w-full"
-						: clsx("flex flex-col bg-white p-6 rounded border border-[#e0dcd3] hover:border-[#c8951e] transition-all", cardHeight),
+						? clsx(CARD.wikiListLayout, "bg-white rounded border border-[#e0dcd3] hover:border-[#c8951e] transition-all")
+						: clsx(CARD.gridLayout, "bg-white p-6 rounded border border-[#e0dcd3] hover:border-[#c8951e] transition-all", cardHeight),
 					page.isPinned ? "border-l-[3px] border-l-[#c8951e]" : "",
 				)}
 			>
@@ -60,21 +61,21 @@ const WikiCard = React.memo(({ page, viewMode, cardHeight, onCopyLink }: WikiCar
 						<div className="flex-1 min-w-0">
 							<div className="flex items-center gap-2 mb-1">
 								{page.isPinned && (
-									<span className="flex items-center gap-1 px-2 py-0.5 bg-[#fdf5d8] text-[#c8951e] text-[10px] font-bold uppercase tracking-wider rounded">
+									<span className={CARD.pinnedTag}>
 										<Pin size={8} /> 已置顶
 									</span>
 								)}
-								<span className="px-2 py-0.5 bg-[#f0ece3] text-[#6b6560] text-[10px] font-bold uppercase tracking-wider rounded">
+								<span className={CARD.wikiTag}>
 									{getCategoryLabel(page.category)}
 								</span>
 							</div>
-							<h3 className="text-base font-bold text-[#2c2c2c] mb-1 group-hover:text-[#c8951e] transition-colors truncate">
+							<h3 className={CARD.wikiTitleList}>
 								{page.title}
 							</h3>
-							<p className="text-[#9e968e] text-sm line-clamp-2">
+							<p className={CARD.wikiDesc}>
 								{page.content.replace(/[#*`]/g, "").substring(0, 80)}
 							</p>
-							<div className="flex items-center gap-3 text-[#9e968e] text-xs mt-2">
+							<div className={clsx(CARD.meta, "gap-3 mt-2")}>
 								<span className="flex items-center gap-1">
 									<Clock size={10} />{" "}
 									{formatDate(page.updatedAt, "yyyy-MM-dd")}
@@ -88,17 +89,17 @@ const WikiCard = React.memo(({ page, viewMode, cardHeight, onCopyLink }: WikiCar
 				) : (
 					<>
 						<div className="flex items-center gap-2 mb-3">
-							<span className="px-2 py-0.5 bg-[#f0ece3] text-[#6b6560] text-[10px] font-bold uppercase tracking-wider rounded">
+							<span className={CARD.wikiTag}>
 								{getCategoryLabel(page.category)}
 							</span>
 						</div>
-						<h3 className="text-lg font-bold text-[#2c2c2c] mb-2 group-hover:text-[#c8951e] transition-colors">
+						<h3 className={CARD.wikiTitleGrid}>
 							{page.title}
 						</h3>
-						<p className="text-[#9e968e] text-sm line-clamp-2 mb-4 leading-relaxed flex-1">
+						<p className={clsx(CARD.wikiDesc, "mb-4 leading-relaxed flex-1")}>
 							{page.content.replace(/[#*`]/g, "").substring(0, 100)}...
 						</p>
-						<div className="flex items-center justify-between text-[#9e968e] text-xs mt-auto">
+						<div className={clsx(CARD.meta, "justify-between mt-auto")}>
 							<div className="flex items-center gap-3">
 								<span className="flex items-center gap-1">
 									<Clock size={10} />{" "}

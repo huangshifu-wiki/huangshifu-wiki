@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { clsx } from "clsx";
 import { Book, Image as ImageIcon, Music, MessageSquare, Clock } from "lucide-react";
 import { SmartImage } from "../SmartImage";
+import { CARD } from "../../styles/cardStyles";
 
 export type SearchResultType = "wiki" | "gallery" | "music" | "album" | "post";
 
@@ -39,18 +40,18 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(({ c
     <Link
       to={config.link}
       className={clsx(
-        "bg-white border border-[#e0dcd3] rounded overflow-hidden hover:border-[#c8951e] transition-all group",
-        isList ? "flex gap-4 p-3 w-full" : clsx("flex flex-col block", cardHeight)
+        CARD.base,
+        isList ? CARD.listLayout : clsx(CARD.gridLayout, "block", cardHeight)
       )}
     >
       {isList ? (
         <>
           {config.image ? (
-            <div className="w-20 h-20 bg-[#f7f5f0] rounded overflow-hidden flex-shrink-0">
-              <SmartImage src={config.image} alt="" className="w-full h-full object-cover" />
+            <div className={CARD.imageWrapperList}>
+              <SmartImage src={config.image} alt="" className={CARD.imageFill} />
             </div>
           ) : (
-            <div className="w-20 h-20 bg-[#f7f5f0] rounded flex items-center justify-center flex-shrink-0">
+            <div className={clsx(CARD.imageWrapperList, "flex items-center justify-center")}>
               {typeIconMap[config.type]}
             </div>
           )}
@@ -60,18 +61,18 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(({ c
                 {config.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="px-2 py-0.5 bg-[#f7f5f0] text-[#c8951e] text-[10px] font-medium rounded"
+                    className={CARD.tag}
                   >
                     {tag}
                   </span>
                 ))}
               </div>
             )}
-            <h3 className="text-sm font-semibold text-[#2c2c2c] group-hover:text-[#c8951e] transition-colors truncate">
+            <h3 className={CARD.title}>
               {config.title}
             </h3>
             {config.description && (
-              <p className="text-[#9e968e] text-xs line-clamp-2 italic">{config.description}</p>
+              <p className={clsx(CARD.descMuted, "italic")}>{config.description}</p>
             )}
             {config.meta && (
               <p className="text-[#9e968e]/70 text-[10px] mt-1 flex items-center gap-1">
@@ -88,7 +89,7 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(({ c
               <SmartImage
                 src={config.image}
                 alt=""
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                className={clsx(CARD.imageFill, CARD.imageHoverZoom)}
               />
             </div>
           )}
@@ -98,21 +99,21 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(({ c
                 {config.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="px-2 py-0.5 bg-[#f7f5f0] text-[#c8951e] text-[10px] font-medium rounded"
+                    className={CARD.tag}
                   >
                     {tag}
                   </span>
                 ))}
               </div>
             )}
-            <h3 className="text-sm font-semibold text-[#2c2c2c] mb-2 group-hover:text-[#c8951e] transition-colors truncate">
+            <h3 className={clsx(CARD.title, "mb-2")}>
               {config.title}
             </h3>
             {config.subtitle && (
               <p className="text-xs text-[#9e968e] truncate">{config.subtitle}</p>
             )}
             {config.description && !config.image && (
-              <p className="text-[#9e968e] text-xs line-clamp-2 mb-3 italic flex-1">{config.description}</p>
+              <p className={clsx(CARD.descMuted, "mb-3 italic flex-1")}>{config.description}</p>
             )}
             {config.meta && (
               <div className="flex items-center gap-1 text-[10px] text-[#9e968e] mt-auto">

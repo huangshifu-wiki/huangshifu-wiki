@@ -17,13 +17,37 @@ type CoversResponse = {
   covers: CoverItem[];
 };
 
-interface SongCoverManagerProps {
-  songDocId: string;
+type ResourceType = 'song' | 'album';
+
+const RESOURCE_CONFIG: Record<ResourceType, { title: string; subtitle: string; apiPrefix: string }> = {
+  song: {
+    title: '歌曲封面管理',
+    subtitle: '上传、设置默认封面或删除现有封面',
+    apiPrefix: '/api/music',
+  },
+  album: {
+    title: '专辑封面管理',
+    subtitle: '上传、管理专辑封面或将封面同步到歌曲',
+    apiPrefix: '/api/albums',
+  },
+};
+
+interface CoverManagerProps {
+  resourceType: ResourceType;
+  resourceId: string;
   currentCover: string;
   onCoverUpdated?: (newCoverUrl: string) => void;
+  onSyncToSongs?: () => void;
 }
 
-export const SongCoverManager = ({ songDocId, currentCover, onCoverUpdated }: SongCoverManagerProps) => {
+export const CoverManager = ({
+  resourceType,
+  resourceId,
+  currentCover,
+  onCoverUpdated,
+  onSyncToSongs,
+}: CoverManagerProps) => {
+  const config = RESOURCE_CONFIG[resourceType];
   const [covers, setCovers] = useState<CoverItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -36,14 +60,14 @@ export const SongCoverManager = ({ songDocId, currentCover, onCoverUpdated }: So
   const fetchCovers = React.useCallback(async () => {
     setLoading(true);
     try {
-      const response = await apiGet<CoversResponse>(`/api/music/${songDocId}/covers`);
+      const response = await apiGet<CoversResponse>(`${config.apiPrefix}/${resourceId}/covers`);
       setCovers(response.covers || []);
     } catch (error) {
       console.error('Fetch covers failed:', error);
     } finally {
       setLoading(false);
     }
-  }, [songDocId]);
+  }, [config.apiPrefix, resourceId]);
 
   React.useEffect(() => {
     if (isOpen) { fetchCovers(); }
@@ -59,7 +83,7 @@ export const SongCoverManager = ({ songDocId, currentCover, onCoverUpdated }: So
     try {
       const result: UploadImageResult = await uploadImageWithStrategy(file, { type: 'cover' });
       if (!result.assetId) throw new Error('上传失败');
-      await apiPost(`/api/music/${songDocId}/covers`, { assetId: result.assetId });
+      await apiPost(`${config.apiPrefix}/${resourceId}/covers`, { assetId: result.assetId });
       show('封面上传成功');
       fetchCovers();
     } catch (error) {
@@ -74,7 +98,7 @@ export const SongCoverManager = ({ songDocId, currentCover, onCoverUpdated }: So
   const handleSetDefault = async (coverId: string) => {
     setSettingDefault(coverId);
     try {
-      await apiPatch(`/api/music/${songDocId}/covers/${coverId}/default`);
+      await apiPatch(`${config.apiPrefix}/${resourceId}/covers/${coverId}/default`);
       setCovers((prev) => prev.map((c) => ({ ...c, isDefault: c.id === coverId })));
       const newDefaultCover = covers.find((c) => c.id === coverId);
       if (newDefaultCover && onCoverUpdated) { onCoverUpdated(newDefaultCover.url); }
@@ -91,7 +115,7 @@ export const SongCoverManager = ({ songDocId, currentCover, onCoverUpdated }: So
     if (!window.confirm('确定要删除这个封面吗？')) return;
     setDeleting(coverId);
     try {
-      await apiDelete(`/api/music/${songDocId}/covers/${coverId}`);
+      await apiDelete(`${config.apiPrefix}/${resourceId}/covers/${coverId}`);
       setCovers((prev) => prev.filter((c) => c.id !== coverId));
       show('封面已删除');
     } catch (error) {
@@ -99,6 +123,18 @@ export const SongCoverManager = ({ songDocId, currentCover, onCoverUpdated }: So
       show('删除封面失败', { variant: 'error' });
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const handleSyncToSongsInternal = async () => {
+    if (!window.confirm('确定要将此封面同步到专辑内的所有歌曲吗？')) return;
+    try {
+      await apiPost(`${config.apiPrefix}/${resourceId}/sync-covers-to-songs`);
+      show('封面已同步到专辑内歌曲');
+      onSyncToSongs?.();
+    } catch (error) {
+      console.error('Sync covers to songs failed:', error);
+      show('同步封面失败', { variant: 'error' });
     }
   };
 
@@ -118,8 +154,8 @@ export const SongCoverManager = ({ songDocId, currentCover, onCoverUpdated }: So
       <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden bg-white rounded border border-[#e0dcd3] flex flex-col">
         <header className="px-5 py-4 border-b border-[#e0dcd3] flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-[#2c2c2c]">歌曲封面管理</h3>
-            <p className="text-xs text-[#9e968e] mt-0.5">上传、设置默认封面或删除现有封面</p>
+            <h3 className="text-base font-bold text-[#2c2c2c]">{config.title}</h3>
+            <p className="text-xs text-[#9e968e] mt-0.5">{config.subtitle}</p>
           </div>
           <button
             onClick={() => setIsOpen(false)}
@@ -139,14 +175,33 @@ export const SongCoverManager = ({ songDocId, currentCover, onCoverUpdated }: So
             </div>
 
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="w-full px-4 py-2.5 rounded bg-[#c8951e] text-white font-medium hover:bg-[#dca828] disabled:opacity-50 inline-flex items-center justify-center gap-2 text-sm transition-all"
-            >
-              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-              {uploading ? '上传中...' : '上传新封面'}
-            </button>
+            {resourceType === 'album' ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex-1 px-4 py-2.5 rounded bg-[#c8951e] text-white font-medium hover:bg-[#dca828] disabled:opacity-50 inline-flex items-center justify-center gap-2 text-sm transition-all"
+                >
+                  {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                  {uploading ? '上传中...' : '上传新封面'}
+                </button>
+                <button
+                  onClick={handleSyncToSongsInternal}
+                  className="px-4 py-2.5 rounded border border-[#e0dcd3] text-[#6b6560] text-sm hover:border-[#c8951e] hover:text-[#c8951e] transition-all"
+                >
+                  同步到歌曲
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="w-full px-4 py-2.5 rounded bg-[#c8951e] text-white font-medium hover:bg-[#dca828] disabled:opacity-50 inline-flex items-center justify-center gap-2 text-sm transition-all"
+              >
+                {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                {uploading ? '上传中...' : '上传新封面'}
+              </button>
+            )}
           </div>
 
           {loading ? (

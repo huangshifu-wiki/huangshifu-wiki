@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LskyProAPI, LskyProAPIError, type Photo, type PaginatedResponse } from '../lib/lskyClient';
+import { LskyProAPIError, type Photo, type PaginatedResponse } from '../lib/lskyClient';
+import { useLskyGeneric } from './useLskyGeneric';
 
 interface UseLskyPhotosOptions {
   baseUrl?: string;
@@ -24,8 +25,10 @@ export function useLskyPhotos(options: UseLskyPhotosOptions = {}) {
     pagination: null,
   });
 
-  const baseUrl = options.baseUrl || import.meta.env.VITE_LSKY_BASE_URL || '';
-  const api = new LskyProAPI({ baseUrl, token: options.token });
+  const { api, baseUrl, formatError } = useLskyGeneric({
+    baseUrl: options.baseUrl,
+    token: options.token,
+  });
 
   const fetchPhotos = useCallback(async (params?: {
     page?: number;
@@ -55,15 +58,9 @@ export function useLskyPhotos(options: UseLskyPhotosOptions = {}) {
         pagination: result.data.meta.pagination,
       });
     } catch (err) {
-      const errorMessage = err instanceof LskyProAPIError 
-        ? err.message 
-        : err instanceof Error 
-          ? err.message 
-          : '获取图片列表失败';
-
-      setState(prev => ({ ...prev, loading: false, error: errorMessage }));
+      setState(prev => ({ ...prev, loading: false, error: formatError(err, '获取图片列表失败') }));
     }
-  }, [baseUrl, options.initialPage, options.initialPerPage, api]);
+  }, [baseUrl, options.initialPage, options.initialPerPage, api, formatError]);
 
   const deletePhoto = useCallback(async (id: number) => {
     try {
@@ -74,13 +71,10 @@ export function useLskyPhotos(options: UseLskyPhotosOptions = {}) {
       }));
       return true;
     } catch (err) {
-      const errorMessage = err instanceof LskyProAPIError 
-        ? err.message 
-        : '删除失败';
-      setState(prev => ({ ...prev, error: errorMessage }));
+      setState(prev => ({ ...prev, error: formatError(err, '删除失败') }));
       return false;
     }
-  }, [api]);
+  }, [api, formatError]);
 
   const updatePhoto = useCallback(async (id: number, data: {
     album_id?: number | null;
@@ -95,13 +89,10 @@ export function useLskyPhotos(options: UseLskyPhotosOptions = {}) {
       }));
       return result.data;
     } catch (err) {
-      const errorMessage = err instanceof LskyProAPIError 
-        ? err.message 
-        : '更新失败';
-      setState(prev => ({ ...prev, error: errorMessage }));
+      setState(prev => ({ ...prev, error: formatError(err, '更新失败') }));
       return null;
     }
-  }, [api]);
+  }, [api, formatError]);
 
   useEffect(() => {
     if (options.autoFetch !== false) {

@@ -17,7 +17,7 @@ import { toDateValue } from '../lib/dateUtils';
 import { LocationTagInput } from '../components/LocationTagInput';
 import Pagination from '../components/Pagination';
 import { extractGpsFromMultipleFiles, findMostFrequentGpsCoordinates } from '../services/exifService';
-import { useVirtualGrid } from '../hooks/useVirtualGrid';
+import { useVirtualList } from '../hooks/useVirtualList';
 import { usePagination } from '../hooks/usePagination';
 import type { GalleryItem } from '../types/entities';
 import type { UploadSessionResponse, UploadFileResponse, GalleryCreateResponse } from '../types/api';
@@ -168,22 +168,23 @@ const GalleryList = () => {
     defaultPageSize: 24,
   });
 
-  // 虚拟网格配置：根据 viewMode 动态计算列数和预估尺寸
+  // 虚拟网格配置：根据 viewMode 动态计算列数
   const columnCount = useMemo(() => parseColumnCount(VIEW_MODE_CONFIG[viewMode].gridCols), [viewMode]);
-  const estimateSize = useCallback(() => VIRTUAL_ESTIMATE_SIZE[viewMode] ?? 280, [viewMode]);
 
-  // 初始化虚拟网格
+  // 初始化虚拟列表（网格行模式）
   const {
-    virtualRows,
-    totalHeight,
+    virtualItems: virtualRows,
+    totalSize: totalHeight,
     getRowDataRange,
     scrollToTop: virtualScrollToTop,
-  } = useVirtualGrid({
-    columnCount,
-    estimateSize,
+  } = useVirtualList({
+    data: galleries,
+    estimateSize: VIRTUAL_ESTIMATE_SIZE[viewMode] ?? 280,
     overscan: 5,
-    count: galleries.length,
-    getScrollElement: () => scrollContainerRef.current,
+    gridMode: true,
+    columns: columnCount,
+    rowCountMode: true,
+    scrollRef: scrollContainerRef,
   });
 
   // 自定义页面更改处理，包含滚动到顶部

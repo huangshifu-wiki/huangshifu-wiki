@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LskyProAPI, LskyProAPIError, type Album, type PaginatedResponse } from '../lib/lskyClient';
+import { LskyProAPIError, type Album, type PaginatedResponse } from '../lib/lskyClient';
+import { useLskyGeneric } from './useLskyGeneric';
 
 interface UseLskyAlbumsOptions {
   baseUrl?: string;
@@ -26,8 +27,10 @@ export function useLskyAlbums(options: UseLskyAlbumsOptions = {}) {
     currentAlbum: null,
   });
 
-  const baseUrl = options.baseUrl || import.meta.env.VITE_LSKY_BASE_URL || '';
-  const api = new LskyProAPI({ baseUrl, token: options.token });
+  const { api, baseUrl, formatError } = useLskyGeneric({
+    baseUrl: options.baseUrl,
+    token: options.token,
+  });
 
   const fetchAlbums = useCallback(async (params?: {
     page?: number;
@@ -54,35 +57,26 @@ export function useLskyAlbums(options: UseLskyAlbumsOptions = {}) {
         currentAlbum: null,
       });
     } catch (err) {
-      const errorMessage = err instanceof LskyProAPIError 
-        ? err.message 
-        : err instanceof Error 
-          ? err.message 
-          : '获取相册列表失败';
-
-      setState(prev => ({ ...prev, loading: false, error: errorMessage }));
+      setState(prev => ({ ...prev, loading: false, error: formatError(err, '获取相册列表失败') }));
     }
-  }, [baseUrl, options.initialPage, options.initialPerPage, api]);
+  }, [baseUrl, options.initialPage, options.initialPerPage, api, formatError]);
 
   const fetchAlbum = useCallback(async (id: number) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
       const result = await api.albums.get(id);
-      setState(prev => ({ 
-        ...prev, 
-        loading: false, 
-        currentAlbum: result.data 
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        currentAlbum: result.data,
       }));
       return result.data;
     } catch (err) {
-      const errorMessage = err instanceof LskyProAPIError 
-        ? err.message 
-        : '获取相册详情失败';
-      setState(prev => ({ ...prev, loading: false, error: errorMessage }));
+      setState(prev => ({ ...prev, loading: false, error: formatError(err, '获取相册详情失败') }));
       return null;
     }
-  }, [api]);
+  }, [api, formatError]);
 
   const createAlbum = useCallback(async (data: {
     name: string;
@@ -97,13 +91,10 @@ export function useLskyAlbums(options: UseLskyAlbumsOptions = {}) {
       }));
       return result.data;
     } catch (err) {
-      const errorMessage = err instanceof LskyProAPIError 
-        ? err.message 
-        : '创建相册失败';
-      setState(prev => ({ ...prev, error: errorMessage }));
+      setState(prev => ({ ...prev, error: formatError(err, '创建相册失败') }));
       return null;
     }
-  }, [api]);
+  }, [api, formatError]);
 
   const updateAlbum = useCallback(async (id: number, data: Partial<{
     name: string;
@@ -119,13 +110,10 @@ export function useLskyAlbums(options: UseLskyAlbumsOptions = {}) {
       }));
       return result.data;
     } catch (err) {
-      const errorMessage = err instanceof LskyProAPIError 
-        ? err.message 
-        : '更新相册失败';
-      setState(prev => ({ ...prev, error: errorMessage }));
+      setState(prev => ({ ...prev, error: formatError(err, '更新相册失败') }));
       return null;
     }
-  }, [api]);
+  }, [api, formatError]);
 
   const deleteAlbum = useCallback(async (id: number) => {
     try {
@@ -137,13 +125,10 @@ export function useLskyAlbums(options: UseLskyAlbumsOptions = {}) {
       }));
       return true;
     } catch (err) {
-      const errorMessage = err instanceof LskyProAPIError 
-        ? err.message 
-        : '删除相册失败';
-      setState(prev => ({ ...prev, error: errorMessage }));
+      setState(prev => ({ ...prev, error: formatError(err, '删除相册失败') }));
       return false;
     }
-  }, [api]);
+  }, [api, formatError]);
 
   useEffect(() => {
     if (options.autoFetch !== false) {

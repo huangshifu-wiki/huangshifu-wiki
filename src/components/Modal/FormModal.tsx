@@ -8,6 +8,7 @@ interface FormModalProps {
 	open: boolean;
 	onClose: () => void;
 	title: string;
+	subtitle?: string;
 	children: React.ReactNode;
 	onSubmit?: (e: React.FormEvent) => void;
 	submitText?: string;
@@ -20,6 +21,7 @@ export const FormModal = ({
 	open,
 	onClose,
 	title,
+	subtitle,
 	children,
 	onSubmit,
 	submitText = "提交",
@@ -114,9 +116,14 @@ export const FormModal = ({
 						aria-labelledby="form-modal-title"
 					>
 						<header className="px-5 py-4 border-b border-[#e0dcd3] flex items-center justify-between">
-							<h3 id="form-modal-title" className="text-base font-bold text-[#2c2c2c]">
-								{title}
-							</h3>
+							<div>
+								<h3 id="form-modal-title" className="text-base font-bold text-[#2c2c2c]">
+									{title}
+								</h3>
+								{subtitle && (
+									<p className="text-xs text-[#9e968e] mt-0.5">{subtitle}</p>
+								)}
+							</div>
 							<button
 								ref={closeButtonRef}
 								type="button"

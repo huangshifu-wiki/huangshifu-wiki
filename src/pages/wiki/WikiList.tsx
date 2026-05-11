@@ -13,7 +13,7 @@ import WikiCard from "../../components/wiki/WikiCard";
 import Pagination from "../../components/Pagination";
 import type { WikiItem } from "./types";
 import { DEFAULT_PAGE_SIZE } from "./types";
-import { useVirtualGrid } from "../../hooks/useVirtualGrid";
+import { useVirtualList } from "../../hooks/useVirtualList";
 import { usePagination } from "../../hooks/usePagination";
 
 const WikiList = () => {
@@ -48,20 +48,22 @@ const WikiList = () => {
 	const columnCount = useMemo(() => parseColumnCount(VIEW_MODE_CONFIG[viewMode].gridCols), [viewMode]);
 
 	// 计算预估行高：list 模式 100px，其他模式根据 cardHeight 推断或固定值
-	const estimateSize = useMemo(() => {
-		if (viewMode === 'list') return () => 100;
+	const estimateSizeValue = useMemo(() => {
+		if (viewMode === 'list') return 100;
 		// 从 cardHeight 提取数值（如 h-[280px] -> 280）
 		const heightMatch = VIEW_MODE_CONFIG[viewMode].cardHeight.match(/h-\[(\d+)px\]/);
-		return () => heightMatch ? parseInt(heightMatch[1], 10) : 280;
+		return heightMatch ? parseInt(heightMatch[1], 10) : 280;
 	}, [viewMode]);
 
-	// 初始化虚拟网格
-	const { virtualizer, virtualRows, totalHeight, getRowDataRange } = useVirtualGrid({
-		count: pages.length,
-		columnCount,
-		estimateSize,
+	// 初始化虚拟列表（网格行模式）
+	const { virtualizer, virtualItems: virtualRows, totalSize: totalHeight, getRowDataRange } = useVirtualList({
+		data: pages,
+		gridMode: true,
+		columns: columnCount,
+		rowCountMode: true,
+		estimateSize: estimateSizeValue,
 		overscan: 5,
-		getScrollElement: () => scrollContainerRef.current,
+		scrollRef: scrollContainerRef,
 	});
 
 	const pagination = usePagination({

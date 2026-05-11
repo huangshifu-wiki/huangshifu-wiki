@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import { LskyProAPI, LskyProAPIError, type UploadV2Data } from '../lib/lskyClient';
+import { type UploadV2Data } from '../lib/lskyClient';
+import { useLskyGeneric } from './useLskyGeneric';
 
 interface UseLskyUploadOptions {
   baseUrl?: string;
@@ -26,8 +27,10 @@ export function useLskyUpload(options: UseLskyUploadOptions = {}) {
     data: null,
   });
 
-  const baseUrl = options.baseUrl || import.meta.env.VITE_LSKY_BASE_URL || '';
-  const api = new LskyProAPI({ baseUrl, token: options.token });
+  const { api, baseUrl, formatError } = useLskyGeneric({
+    baseUrl: options.baseUrl,
+    token: options.token,
+  });
 
   const upload = useCallback(async (file: File | Blob, uploadOptions?: {
     album_id?: number | string;
@@ -48,34 +51,28 @@ export function useLskyUpload(options: UseLskyUploadOptions = {}) {
       }
 
       setState(prev => ({ ...prev, progress: 30 }));
-      
+
       const result = await api.upload(file, uploadOptions);
-      
-      setState({ 
-        uploading: false, 
-        progress: 100, 
-        error: null, 
-        data: result.data 
+
+      setState({
+        uploading: false,
+        progress: 100,
+        error: null,
+        data: result.data,
       });
 
       return result.data;
     } catch (err) {
-      const errorMessage = err instanceof LskyProAPIError 
-        ? err.message 
-        : err instanceof Error 
-          ? err.message 
-          : '上传失败';
-
-      setState({ 
-        uploading: false, 
-        progress: 0, 
-        error: errorMessage, 
-        data: null 
+      setState({
+        uploading: false,
+        progress: 0,
+        error: formatError(err, '上传失败'),
+        data: null,
       });
 
       return null;
     }
-  }, [baseUrl, options.autoLogin, options.loginCredentials, api]);
+  }, [baseUrl, options.autoLogin, options.loginCredentials, api, formatError]);
 
   const reset = useCallback(() => {
     setState({ uploading: false, progress: 0, error: null, data: null });

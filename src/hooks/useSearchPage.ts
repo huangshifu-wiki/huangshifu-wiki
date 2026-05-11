@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { apiGet, apiUpload } from "../lib/apiClient";
 import type { WikiItem, PostItem, GalleryItem, SongItem, AlbumItem } from "../types/entities";
-import type { MixedSearchResult, SearchSuggestion } from "./useSearch";
+import type {
+  MixedSearchResult,
+  SearchSuggestion,
+  SearchFilters,
+} from "./useSearch";
+import { useMixedSearch, useTraditionalSearch } from "./useSearch";
 import { useSearchHistory } from "./useSearchHistory";
 
-export interface SearchFilters {
-  selectedTags: string[];
-  dateRange: { start: string; end: string };
-  contentType: "all" | "wiki" | "posts" | "galleries" | "music" | "albums";
-  semanticImageSearch: boolean;
-}
+// 向后兼容：re-export SearchFilters，供 SearchFilters 组件使用
+export type { SearchFilters } from "./useSearch";
 
 export interface SearchResults {
   wiki: WikiItem[];
@@ -50,6 +50,10 @@ export function useSearchPage() {
   // 搜索历史管理
   const { addToHistory } = useSearchHistory();
 
+  // --- 原子搜索 hooks（委托层）---
+  const mixedSearch = useMixedSearch();
+  const traditionalSearch = useTraditionalSearch();
+
   const [state, setState] = useState<SearchState>({
     query: initialQuery,
     results: { wiki: [], posts: [], galleries: [], music: [], albums: [] },
@@ -74,22 +78,14 @@ export function useSearchPage() {
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 获取热门关键词
+  // 获取热门关键词 -- 委托给 traditionalSearch.getHotKeywords()
   useEffect(() => {
-    const fetchHotKeywords = async () => {
-      try {
-        const data = await apiGet<{
-          keywords: Array<{ keyword: string; count: number }>;
-        }>("/api/search/hot-keywords");
-        setState((prev) => ({
-          ...prev,
-          hotKeywords: data.keywords?.map((k) => k.keyword) || [],
-        }));
-      } catch (e) {
-        console.error("Fetch hot keywords error:", e);
-      }
+    const loadHotKeywords = async () => {
+      const keywords = await traditionalSearch.getHotKeywords();
+      setState((prev) => ({ ...prev, hotKeywords: keywords }));
     };
-    fetchHotKeywords();
+    loadHotKeywords();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 初始查询
@@ -100,21 +96,15 @@ export function useSearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery]);
 
+  // 搜索建议 -- 委托给 traditionalSearch.getSuggestions()
   const fetchSuggestions = useCallback(async (q: string) => {
     if (!q || q.length < 2) {
       setState((prev) => ({ ...prev, suggestions: [] }));
       return;
     }
-    try {
-      const data = await apiGet<{ suggestions: SearchSuggestion[] }>(
-        "/api/search/suggest",
-        { q }
-      );
-      setState((prev) => ({ ...prev, suggestions: data.suggestions || [] }));
-    } catch (e) {
-      console.error("Suggest error:", e);
-    }
-  }, []);
+    const suggestions = await traditionalSearch.getSuggestions(q);
+    setState((prev) => ({ ...prev, suggestions }));
+  }, [traditionalSearch]);
 
   const handleQueryChange = (val: string) => {
     setState((prev) => ({ ...prev, query: val }));
@@ -122,148 +112,110 @@ export function useSearchPage() {
     suggestTimeoutRef.current = setTimeout(() => fetchSuggestions(val), 300);
   };
 
-  const performMixedSearch = async (q: string, limit = 24) => {
-    try {
-      const data = await apiGet<{
-        mode: string;
-        totalMatches: number;
-        results: MixedSearchResult[];
-      }>("/api/search/semantic-search", {
-        q: q.trim(),
-        limit,
-      });
-      return data.results || [];
-    } catch (err) {
-      console.error("Mixed search error:", err);
-      return [];
-    }
-  };
+  // 混合（语义文字）搜索 -- 委托给 mixedSearch.searchByText()
+  const performMixedSearch = useCallback(
+    async (q: string, limit = 24): Promise<MixedSearchResult[]> => {
+      return mixedSearch.searchByText(q, { limit });
+    },
+    [mixedSearch]
+  );
 
-  const performSearch = async (q: string, filtersOverride?: Partial<SearchFilters>) => {
-    const currentQuery = q || state.query;
-    if (!currentQuery.trim()) return;
+  // 传统搜索 -- 委托给 traditionalSearch.search()
+  // 保留编排逻辑：历史记录、URL 同步、标签过滤、searchMeta
+  const performSearch = useCallback(
+    async (q: string, filtersOverride?: Partial<SearchFilters>) => {
+      const currentQuery = q || state.query;
+      if (!currentQuery.trim()) return;
 
-    // 记录搜索历史
-    addToHistory(currentQuery);
+      // 记录搜索历史
+      addToHistory(currentQuery);
 
-    if (suggestTimeoutRef.current) {
-      clearTimeout(suggestTimeoutRef.current);
-      suggestTimeoutRef.current = null;
-    }
+      if (suggestTimeoutRef.current) {
+        clearTimeout(suggestTimeoutRef.current);
+        suggestTimeoutRef.current = null;
+      }
 
-    setState((prev) => ({
-      ...prev,
-      loading: true,
-      hasSearched: true,
-      query: currentQuery,
-      suggestions: [],
-    }));
+      setState((prev) => ({
+        ...prev,
+        loading: true,
+        hasSearched: true,
+        query: currentQuery,
+        suggestions: [],
+      }));
 
-    // 更新 URL
-    const sp = new URLSearchParams(searchParams);
-    sp.set("q", currentQuery);
-    setSearchParams(sp);
+      // 更新 URL
+      const sp = new URLSearchParams(searchParams);
+      sp.set("q", currentQuery);
+      setSearchParams(sp);
 
-    const filters = { ...state.filters, ...filtersOverride };
+      const filters = { ...state.filters, ...filtersOverride };
 
-    try {
-      const typeMap: Record<string, string> = {
-        wiki: "wiki",
-        posts: "posts",
-        galleries: "galleries",
-        music: "music",
-        albums: "albums",
-      };
-      const apiType =
-        filters.contentType === "all"
-          ? "all"
-          : typeMap[filters.contentType] || "all";
+      try {
+        const data = await traditionalSearch.search(currentQuery, filters);
 
-      const data = await apiGet<{
-        wiki: WikiItem[];
-        posts: PostItem[];
-        galleries: GalleryItem[];
-        music: SongItem[];
-        albums: AlbumItem[];
-        searchMeta?: {
-          mode: string;
-          query: string;
-          degraded: boolean;
-          degradationReason?: string;
-          keywordResultCount: number;
-          vectorResultCount: number;
+        // 客户端标签过滤
+        const filterFn = (item: WikiItem | PostItem | GalleryItem) => {
+          const matchesTags =
+            filters.selectedTags.length === 0 ||
+            filters.selectedTags.every((tag: string) =>
+              (item.tags || []).includes(tag)
+            );
+          return matchesTags;
         };
-      }>("/api/search", {
-        q: currentQuery,
-        type: apiType,
-        mode: filters.semanticImageSearch ? "hybrid" : "keyword",
-        ...(filters.dateRange.start ? { startDate: filters.dateRange.start } : {}),
-        ...(filters.dateRange.end ? { endDate: filters.dateRange.end } : {}),
-      });
 
-      const filterFn = (item: WikiItem | PostItem | GalleryItem) => {
-        const matchesTags =
-          filters.selectedTags.length === 0 ||
-          filters.selectedTags.every((tag: string) => (item.tags || []).includes(tag));
-        return matchesTags;
-      };
+        setState((prev) => ({
+          ...prev,
+          results: {
+            wiki: data.wiki.filter(filterFn) as WikiItem[],
+            posts: data.posts.filter(filterFn) as PostItem[],
+            galleries: data.galleries.filter(filterFn) as GalleryItem[],
+            music: data.music as SongItem[],
+            albums: data.albums as AlbumItem[],
+          },
+          isMixedSearch: false,
+          mixedResults: [],
+          loading: false,
+        }));
+      } catch (e) {
+        console.error("Search error:", e);
+        setState((prev) => ({ ...prev, loading: false }));
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [state.filters, state.query, searchParams, addToHistory, traditionalSearch]
+  );
 
+  // 图片搜索 -- 委托给 mixedSearch.searchByImage()
+  const handleImageSearch = useCallback(
+    async (file: File) => {
       setState((prev) => ({
         ...prev,
-        results: {
-          wiki: (data.wiki || []).filter(filterFn),
-          posts: (data.posts || []).filter(filterFn),
-          galleries: (data.galleries || []).filter(filterFn),
-          music: data.music || [],
-          albums: data.albums || [],
-        },
-        isMixedSearch: false,
-        mixedResults: [],
-        loading: false,
-        searchMeta: data.searchMeta,
+        aiSearching: true,
+        loading: true,
+        hasSearched: true,
       }));
-    } catch (e) {
-      console.error("Search error:", e);
-      setState((prev) => ({ ...prev, loading: false }));
-    }
-  };
-
-  const handleImageSearch = async (file: File) => {
-    setState((prev) => ({
-      ...prev,
-      aiSearching: true,
-      loading: true,
-      hasSearched: true,
-    }));
-    try {
-      const formData = new FormData();
-      formData.append("image", file);
-      formData.append("limit", "24");
-
-      const data = await apiUpload<{
-        mode: string;
-        totalMatches: number;
-        results: MixedSearchResult[];
-      }>("/api/search/by-image", formData);
-
-      setState((prev) => ({
-        ...prev,
-        isMixedSearch: true,
-        mixedResults: data.results || [],
-        activeTab: "semantic",
-        loading: false,
-        aiSearching: false,
-      }));
-    } catch (err) {
-      console.error("Semantic image search error:", err);
-      setState((prev) => ({
-        ...prev,
-        mixedResults: [],
-        loading: false,
-        aiSearching: false,
-      }));
-    }
-  };
+      try {
+        const results = await mixedSearch.searchByImage(file, { limit: 24 });
+        setState((prev) => ({
+          ...prev,
+          isMixedSearch: true,
+          mixedResults: results,
+          activeTab: "semantic",
+          loading: false,
+          aiSearching: false,
+        }));
+      } catch (err) {
+        console.error("Semantic image search error:", err);
+        setState((prev) => ({
+          ...prev,
+          mixedResults: [],
+          loading: false,
+          aiSearching: false,
+        }));
+      }
+    },
+    [mixedSearch]
+  );
 
   const toggleTag = (tag: string) => {
     setState((prev) => ({

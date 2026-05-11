@@ -2,7 +2,7 @@
  * CloudSyncService 单元测试
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 
 // Mock prisma 模块
 vi.mock('../../../src/server/prisma', () => ({
@@ -35,11 +35,12 @@ vi.mock('fs', async (importOriginal) => {
 describe('CloudSyncService - 配置验证', () => {
   let CloudSyncService: any;
 
-  beforeEach(async () => {
-    // 动态导入模块（因为使用了环境变量）
+  beforeAll(async () => {
     const module = await import('../../../src/server/services/cloudSyncService');
     CloudSyncService = module.CloudSyncService;
-    
+  }, 30000);
+
+  beforeEach(() => {
     vi.clearAllMocks();
   });
 
@@ -100,16 +101,19 @@ describe('CloudSyncService - 配置验证', () => {
 
 describe('CloudSyncService - 队列管理', () => {
   let service: any;
+  let CloudSyncService: any;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     process.env.LSKY_BASE_URL = 'https://img.lhl.one';
     process.env.LSKY_TOKEN = 'test_token';
     process.env.CLOUD_SYNC_MAX_CONCURRENT = '2';
 
     const module = await import('../../../src/server/services/cloudSyncService');
-    const CloudSyncService = module.CloudSyncService;
-    service = new CloudSyncService();
+    CloudSyncService = module.CloudSyncService;
+  }, 30000);
 
+  beforeEach(() => {
+    service = new CloudSyncService();
     vi.clearAllMocks();
   });
 
@@ -185,13 +189,17 @@ describe('CloudSyncService - 队列管理', () => {
 
 describe('CloudSyncService - 统计信息', () => {
   let service: any;
+  let CloudSyncService: any;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     process.env.LSKY_BASE_URL = 'https://img.lhl.one';
     process.env.LSKY_TOKEN = 'test_token';
 
     const module = await import('../../../src/server/services/cloudSyncService');
-    const CloudSyncService = module.CloudSyncService;
+    CloudSyncService = module.CloudSyncService;
+  }, 30000);
+
+  beforeEach(() => {
     service = new CloudSyncService();
   });
 

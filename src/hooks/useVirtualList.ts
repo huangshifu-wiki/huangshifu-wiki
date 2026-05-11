@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 /**
@@ -15,6 +15,10 @@ export interface VirtualListOptions<T = unknown> {
   gridMode?: boolean;
   /** 网格模式下的列数，仅在 gridMode 为 true 时生效 */
   columns?: number;
+  /** 是否启用按行虚拟化模式（仅在 gridMode=true 时生效）。
+   *  开启后 virtualizer 按"行"计数（count = ceil(data.length/columns)），
+   *  并提供 getRowDataRange 做二次数据映射。 */
+  rowCountMode?: boolean;
   /** 滚动容器引用 */
   scrollRef?: React.RefObject<HTMLElement | null>;
 }
@@ -35,6 +39,12 @@ export interface VirtualListReturn<T> {
   scrollToTop: () => void;
   /** 滚动容器 ref 回调 */
   setScrollRef: (el: HTMLElement | null) => void;
+  /**
+   * 仅在 gridMode && rowCountMode 时有效。
+   * 根据虚拟行索引获取对应的数据索引范围 { start, end }。
+   * 用于将虚拟行映射到实际数据项（一行包含 columns 个数据项）。
+   */
+  getRowDataRange?: (virtualRowIndex: number) => { start: number; end: number };
 }
 
 /**
@@ -83,6 +93,7 @@ export function useVirtualList<T = unknown>(options: VirtualListOptions<T>): Vir
     overscan = 5,
     gridMode = false,
     columns = 1,
+    rowCountMode = false,
     scrollRef: externalScrollRef,
   } = options;
 
@@ -92,9 +103,13 @@ export function useVirtualList<T = unknown>(options: VirtualListOptions<T>): Vir
   // 选择使用外部传入的 ref 还是内部 ref
   const scrollElement = externalScrollRef?.current ?? internalScrollRef.current;
 
+  // 按行虚拟化模式：count 为行数而非数据条数
+  const isRowMode = gridMode && rowCountMode;
+  const virtualizerCount = isRowMode ? Math.ceil(data.length / columns) : data.length;
+
   // 创建 virtualizer 实例
   const virtualizer = useVirtualizer({
-    count: data.length,
+    count: virtualizerCount,
     getScrollElement: () => scrollElement ?? null,
     estimateSize: useCallback(() => estimateSize, [estimateSize]),
     overscan,
@@ -106,12 +121,27 @@ export function useVirtualList<T = unknown>(options: VirtualListOptions<T>): Vir
   // 总内容高度
   const totalSize = virtualizer.getTotalSize();
 
+  /**
+   * 仅在 rowCountMode 下有效：
+   * 根据虚拟行索引获取对应的数据索引范围
+   */
+  const getRowDataRange = useCallback(
+    (virtualRowIndex: number) => {
+      const start = virtualRowIndex * columns;
+      const end = Math.min(start + columns, data.length);
+      return { start, end };
+    },
+    [columns, data.length]
+  );
+
   // 滚动到指定索引
+  // 在 rowCountMode 下，传入的是数据索引，需要转换为行索引
   const scrollToIndex = useCallback(
     (index: number, options?: ScrollIntoViewOptions) => {
-      virtualizer.scrollToIndex(index, options);
+      const targetIndex = isRowMode ? Math.floor(index / columns) : index;
+      virtualizer.scrollToIndex(targetIndex, options);
     },
-    [virtualizer]
+    [virtualizer, isRowMode, columns]
   );
 
   // 滚动到顶部
@@ -131,6 +161,13 @@ export function useVirtualList<T = unknown>(options: VirtualListOptions<T>): Vir
     [virtualizer]
   );
 
+  // 当列数或数据量变化时重新测量（rowCountMode 专用）
+  useEffect(() => {
+    if (isRowMode) {
+      virtualizer.measure();
+    }
+  }, [isRowMode, columns, data.length, virtualizer]);
+
   return {
     virtualizer,
     virtualItems,
@@ -138,6 +175,7 @@ export function useVirtualList<T = unknown>(options: VirtualListOptions<T>): Vir
     scrollToIndex,
     scrollToTop,
     setScrollRef,
+    ...(isRowMode ? { getRowDataRange } : {}),
   };
 }
 
