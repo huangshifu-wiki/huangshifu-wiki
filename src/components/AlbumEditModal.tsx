@@ -60,16 +60,16 @@ export const AlbumEditModal = ({ open, onClose, onSuccess, album }: AlbumEditMod
         await apiPatch(`/api/albums/${album.docId}`, {
           title: formData.title.trim(),
           artist: formData.artist.trim(),
-          description: formData.description.trim() || null,
-          platformUrl: formData.platformUrl.trim() || null,
+          description: (formData.description ?? '').trim() || null,
+          platformUrl: (formData.platformUrl ?? '').trim() || null,
         });
         show('专辑已更新');
       } else {
         await apiPost('/api/albums', {
           title: formData.title.trim(),
           artist: formData.artist.trim(),
-          description: formData.description.trim() || null,
-          platformUrl: formData.platformUrl.trim() || null,
+          description: (formData.description ?? '').trim() || null,
+          platformUrl: (formData.platformUrl ?? '').trim() || null,
         });
         show('专辑已创建');
       }

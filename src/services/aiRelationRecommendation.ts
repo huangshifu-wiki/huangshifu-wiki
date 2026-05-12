@@ -57,7 +57,7 @@ export const recommendRelations = async (
 
 		// 解析结果
 		const recommendations = parseRecommendations(
-			response.text,
+			response.text ?? '',
 			options.existingRelations,
 		);
 

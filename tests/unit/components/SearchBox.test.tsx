@@ -15,7 +15,7 @@ vi.mock('motion/react', () => ({
 }));
 
 const mockSuggestions = [
-  { text: '测试搜索', type: 'keyword' as const, id: null, subtext: null },
+  { text: '测试搜索', type: 'keyword' as const, id: undefined, subtext: undefined },
   { text: '百科页面', type: 'wiki' as const, id: 'wiki-1', subtext: '百科描述' },
   { text: '音乐专辑', type: 'music' as const, id: 'music-1', subtext: '音乐描述' },
 ];

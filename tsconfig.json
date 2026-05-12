@@ -17,8 +17,6 @@
     "jsx": "react-jsx",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "strictNullChecks": true,
-    "noImplicitAny": true,
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {

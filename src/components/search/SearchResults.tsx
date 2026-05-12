@@ -4,6 +4,7 @@ import { clsx } from "clsx";
 import { motion, AnimatePresence } from "motion/react";
 import { Book, MessageSquare, Image as ImageIcon, Music, Sparkles, Search as SearchIcon, Tag, Clock } from "lucide-react";
 import { VIEW_MODE_CONFIG } from "../../lib/viewModes";
+import type { ViewMode } from "../../types/userPreferences";
 import { toDateValue } from "../../lib/dateUtils";
 import { format } from "date-fns";
 import type { SearchState } from "../../hooks/useSearchPage";
@@ -13,7 +14,7 @@ import { SearchResultCard } from "./SearchResultCard";
 
 interface SearchResultsProps {
   state: SearchState;
-  viewMode: string;
+  viewMode: ViewMode;
   tabItems: Array<{ id: string; label: string; count: number }>;
   onTabChange: (tab: string) => void;
 }

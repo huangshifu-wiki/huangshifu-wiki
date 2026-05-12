@@ -286,7 +286,7 @@ export async function syncImageEmbeddingBatch(
         where: {
           OR: [
             { localUrl: { in: storageKeys.map((k) => `/uploads/${k}`) } },
-            { s3Url: { in: candidates.map((item) => item.galleryImage.asset?.publicUrl).filter(Boolean) } },
+            { s3Url: { in: candidates.map((item) => item.galleryImage.asset?.publicUrl).filter((x): x is string => x !== undefined) } },
           ],
         },
         select: {

@@ -198,7 +198,7 @@ class EnhancedCache {
    * @param ttl 过期时间（秒），默认使用构造时的 stdTTL
    */
   set<T>(key: string, value: T, ttl?: number): boolean {
-    return this.cache.set(key, value, ttl ?? undefined);
+    return ttl !== undefined ? this.cache.set(key, value, ttl) : this.cache.set(key, value);
   }
 
   /**
