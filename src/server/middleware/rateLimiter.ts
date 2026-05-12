@@ -1,4 +1,4 @@
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import rateLimit from 'express-rate-limit';
 import type { AuthenticatedRequest } from './auth';
 
 export const authRateLimiter = rateLimit({
@@ -34,7 +34,7 @@ export const uploadLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req as AuthenticatedRequest).authUser?.uid ?? ipKeyGenerator(req),
+  keyGenerator: (req) => (req as AuthenticatedRequest).authUser?.uid ?? req.ip ?? 'unknown',
   handler: (_req, res) => {
     res.status(429).json({ error: '上传过于频繁，请稍后再试' });
   },

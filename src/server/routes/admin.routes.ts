@@ -5,8 +5,10 @@ import {
   requireAuth,
   requireActiveUser,
   isAdminRole,
-  type AuthenticatedRequest,
 } from '../middleware/auth';
+import type { ApiUser } from '../types';
+
+type AuthenticatedRequest = Request & { authUser?: ApiUser };
 import {
   prisma,
   toWikiResponse,
@@ -53,21 +55,21 @@ const BACKUP_PASSWORD = process.env.BACKUP_PASSWORD || '';
 
 async function handleBackupList(_req: Request, res: Response) {
   try {
-    const files = (await fs.promises.readdir(backupsDir)).filter((f) => f.startsWith('backup_') && f.endsWith('.zip'));
-    const mapped = (await Promise.all(
-      files.map(async (f) => {
-        const filePath = path.join(backupsDir, f);
-        const stat = await fs.promises.stat(filePath);
-        return { filename: f, size: stat.size, sizeFormatted: formatFileSize(stat.size), createdAt: stat.mtime.toISOString() };
-      }),
-    )).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    res.json({ backups: mapped });
+    const allFiles = await fs.promises.readdir(backupsDir);
+    const files = allFiles.filter((f) => f.startsWith('backup_') && f.endsWith('.zip'));
+    const results = [];
+    for (const f of files) {
+      const filePath = path.join(backupsDir, f);
+      const stat = await fs.promises.stat(filePath);
+      results.push({ filename: f, size: stat.size, sizeFormatted: formatFileSize(stat.size), createdAt: stat.mtime.toISOString() });
+    }
+    results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    res.json({ backups: results });
   } catch (error) {
     logger.error({ err: error }, 'List backups error');
     res.status(500).json({ error: '获取备份列表失败' });
   }
-});
+}
 
 async function handleBackupDelete(req: AuthenticatedRequest, res: Response) {
   try {
@@ -209,7 +211,7 @@ router.put('/review-queue/:id/approve', requireAdmin, async (req: AuthenticatedR
     const targetType = normalizeModerationTargetType(req.body.type) || 'wiki';
     const targetId = req.params.id;
     const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
-    const reqAuthUser = req.authUser;
+    const reqAuthUser = req.authUser!;
 
     if (!targetType) {
       res.status(400).json({ error: '无效审核类型' });
@@ -230,7 +232,7 @@ router.put('/review-queue/:id/reject', requireAdmin, async (req: AuthenticatedRe
     const targetType = normalizeModerationTargetType(req.body.type) || 'wiki';
     const targetId = req.params.id;
     const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
-    const reqAuthUser = req.authUser;
+    const reqAuthUser = req.authUser!;
 
     if (!targetType) {
       res.status(400).json({ error: '无效审核类型' });
@@ -263,7 +265,7 @@ router.post('/review/:type/:id/:action', requireAdmin, async (req: Authenticated
       return;
     }
 
-    const result = await handleReviewAction(targetType, id, action, req.authUser, typeof req.body?.note === 'string' ? req.body.note.trim() : '');
+    const result = await handleReviewAction(targetType, id, action, req.authUser!, typeof req.body?.note === 'string' ? req.body.note.trim() : '');
     res.json(result);
   } catch (error) {
     logger.error({ err: error }, 'Review action error');

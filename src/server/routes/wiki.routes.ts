@@ -257,11 +257,10 @@ router.get('/recommended', async (req: AuthenticatedRequest, res) => {
         ...(slug ? { slug: { not: slug } } : {}),
       },
       select: {
-        slug: true,
-        title: true,
-        category: true,
-        coverUrl: true,
-        favoritesCount: true,
+      slug: true,
+      title: true,
+      category: true,
+      favoritesCount: true,
         viewCount: true,
         updatedAt: true,
         eventDate: true,
@@ -313,7 +312,7 @@ router.get('/recommended', async (req: AuthenticatedRequest, res) => {
 
     res.json({
       items: top.map((entry) => ({
-        ...toWikiResponse(entry.item),
+        ...toWikiResponse(entry.item as Parameters<typeof toWikiResponse>[0]),
         score: entry.score,
         favoritedByMe: favoritedWikiSet.has(entry.item.slug),
       })),
@@ -460,8 +459,8 @@ router.post('/:slug/like', requireAuth, requireActiveUser, async (req: Authentic
       return;
     }
 
-    let likesCount: number;
-    let dislikesCount: number;
+    let likesCount = 0;
+    let dislikesCount = 0;
 
     await prisma.$transaction(async (tx) => {
       await tx.wikiDislike.deleteMany({
@@ -549,8 +548,8 @@ router.post('/:slug/dislike', requireAuth, requireActiveUser, async (req: Authen
       return;
     }
 
-    let likesCount: number;
-    let dislikesCount: number;
+    let likesCount = 0;
+    let dislikesCount = 0;
 
     await prisma.$transaction(async (tx) => {
       await tx.wikiLike.deleteMany({
@@ -850,7 +849,7 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
     const page = await prisma.wikiPage.create({
       data: {
         slug: pageSlug,
-        title,
+        title: title!,
         titleKey,
         category,
         content,
@@ -870,8 +869,8 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
     const revision = await prisma.wikiRevision.create({
       data: {
         pageSlug,
-        title,
-        content,
+        title: title!,
+        content: content!,
         slug: pageSlug,
         category,
         tags: normalizedTags,
@@ -1000,8 +999,8 @@ router.put('/:slug', requireAuth, requireActiveUser, async (req: AuthenticatedRe
     await prisma.wikiRevision.create({
       data: {
         pageSlug: req.params.slug,
-        title,
-        content,
+        title: title!,
+        content: content!,
         slug: req.params.slug,
         category,
         tags: normalizedTags,
@@ -1053,8 +1052,8 @@ router.post('/:slug/branches', requireAuth, requireActiveUser, async (req: Authe
         content: page.content,
         slug: page.slug,
         category: page.category,
-        tags: page.tags,
-        relations: page.relations,
+        tags: page.tags as unknown as Parameters<typeof prisma.wikiPage.create>['0']['data']['tags'],
+        relations: page.relations as unknown as Parameters<typeof prisma.wikiPage.create>['0']['data']['relations'],
         eventDate: page.eventDate,
         editorUid: req.authUser!.uid,
         editorName: req.authUser!.displayName,
@@ -1653,7 +1652,7 @@ router.post('/pull-requests/:prId/merge', requireAuth, requireAdmin, async (req:
           reviewedBy: req.authUser!.uid,
           reviewedAt: mergedAt,
           mergedAt,
-          conflictData: null,
+          conflictData: undefined as any,
         },
       }),
       prisma.moderationLog.create({
@@ -1809,7 +1808,7 @@ router.post('/branches/:branchId/resolve-conflict', requireAuth, requireActiveUs
       prisma.wikiPullRequest.update({
         where: { id: openPr.id },
         data: {
-          conflictData: null,
+          conflictData: undefined as any,
           baseRevisionId: currentMainRevision?.id || null,
         },
       }),
