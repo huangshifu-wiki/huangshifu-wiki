@@ -9,6 +9,10 @@ import {
   NotFoundError,
   PermissionError,
   ValidationError,
+  BusinessError,
+  ServerError,
+  VectorSearchError,
+  EmbeddingGenerationError,
 } from '../../src/lib/errorHandler';
 
 describe('errorHandler', () => {
@@ -137,6 +141,65 @@ describe('errorHandler', () => {
 
     it('returns default message for unknown errors', () => {
       expect(getUserMessage(null)).toBe('未知错误，请稍后重试');
+    });
+  });
+
+  describe('BusinessError', () => {
+    it('creates business error with default values', () => {
+      const error = new BusinessError();
+      expect(error.message).toBe('业务错误');
+      expect(error.code).toBe('BUSINESS_ERROR');
+      expect(error.statusCode).toBe(400);
+      expect(error.name).toBe('BusinessError');
+    });
+
+    it('creates business error with custom message', () => {
+      const error = new BusinessError('库存不足');
+      expect(error.message).toBe('库存不足');
+      expect(error.code).toBe('BUSINESS_ERROR');
+    });
+  });
+
+  describe('ServerError', () => {
+    it('creates server error with default values', () => {
+      const error = new ServerError();
+      expect(error.message).toBe('服务器错误');
+      expect(error.code).toBe('SERVER_ERROR');
+      expect(error.statusCode).toBe(500);
+      expect(error.name).toBe('ServerError');
+    });
+
+    it('creates server error with custom message', () => {
+      const error = new ServerError('数据库连接失败');
+      expect(error.message).toBe('数据库连接失败');
+    });
+  });
+
+  describe('VectorSearchError', () => {
+    it('creates vector search error with defaults', () => {
+      const error = new VectorSearchError();
+      expect(error.message).toBe('向量搜索服务不可用');
+      expect(error.code).toBe('VECTOR_SEARCH_ERROR');
+      expect(error.statusCode).toBe(503);
+    });
+
+    it('accepts optional details', () => {
+      const error = new VectorSearchError('Qdrant down', 'connection refused');
+      expect(error.details).toBe('connection refused');
+    });
+  });
+
+  describe('EmbeddingGenerationError', () => {
+    it('creates embedding error with defaults', () => {
+      const error = new EmbeddingGenerationError();
+      expect(error.message).toBe('文本嵌入生成失败');
+      expect(error.code).toBe('EMBEDDING_GENERATION_ERROR');
+      expect(error.statusCode).toBe(500);
+    });
+
+    it('accepts optional details', () => {
+      const error = new EmbeddingGenerationError('model load failed', 'OOM');
+      expect(error.details).toBe('OOM');
     });
   });
 });
