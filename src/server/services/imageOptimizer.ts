@@ -1,6 +1,10 @@
 import sharp from 'sharp';
 import { generateBlurhashFromBuffer } from '../blurhashService';
 
+// L-22: imageOptimizer 当前为单函数导出（optimizeImage / generateVariants），无批量调用入口
+// 如未来新增批量优化入口，建议引入 p-limit(concurrency=3) 控制并发
+// TODO: 当 optimizeImage 被批量调用时，添加 p-limit 并发控制
+
 export interface OptimizeResult {
   success: boolean;
   width: number;

@@ -226,3 +226,14 @@ export async function deleteImageEmbeddingPoint(pointId: number) {
     points: [pointId],
   });
 }
+
+export async function healthCheck(): Promise<{ status: string; latencyMs: number }> {
+  const start = Date.now();
+  try {
+    const client = getQdrantClient();
+    await client.getCollections();
+    return { status: 'ok', latencyMs: Date.now() - start };
+  } catch (error) {
+    return { status: 'error', latencyMs: Date.now() - start };
+  }
+}

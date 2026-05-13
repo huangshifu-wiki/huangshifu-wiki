@@ -253,50 +253,6 @@ export async function apiUpload<T>(path: string, formData: FormData, options?: A
   return parseResponse<T>(response, context);
 }
 
-export function apiUploadWithProgress<T>(
-  path: string,
-  formData: FormData,
-  onProgress: (percent: number) => void,
-  options?: { signal?: AbortSignal }
-): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    });
-
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText));
-        } catch {
-          resolve(xhr.responseText as T);
-        }
-      } else {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          reject(new Error(data.error || `Upload failed: ${xhr.status}`));
-        } catch {
-          reject(new Error(`Upload failed: ${xhr.status}`));
-        }
-      }
-    });
-
-    xhr.addEventListener('error', () => reject(new Error('Network error')));
-    xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
-
-    xhr.open('POST', path);
-    xhr.withCredentials = true;
-    if (options?.signal) {
-      options.signal.addEventListener('abort', () => xhr.abort());
-    }
-    xhr.send(formData);
-  });
-}
-
 export async function apiUploadWithRetry<T>(
   path: string,
   formData: FormData,

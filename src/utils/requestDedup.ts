@@ -30,7 +30,6 @@ export interface DedupOptions {
   swrCooldown?: number;
 }
 
-// 内存缓存存储
 const MAX_CACHE_SIZE = 200;
 const INFLIGHT_TIMEOUT_MS = 30000;
 
@@ -39,6 +38,12 @@ const cache = new Map<string, CacheEntry<unknown>>();
 const inFlightRequests = new Map<string, InFlightRequest<unknown>>();
 
 const swrCooldowns = new Map<string, number>();
+
+function debugLog(message: string, ...args: unknown[]): void {
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug(`[RequestDedup] ${message}`, ...args);
+  }
+}
 
 function evictOldestCacheEntry(): void {
   if (cache.size >= MAX_CACHE_SIZE) {
@@ -147,7 +152,7 @@ export async function dedupedRequest<T>(
   // 1. 检查是否有正在进行的相同请求，直接复用 Promise
   const inFlight = inFlightRequests.get(key) as InFlightRequest<T> | undefined;
   if (inFlight) {
-    console.log(`[RequestDedup] Reusing in-flight request: ${key}`);
+    debugLog(`Reusing in-flight request: ${key}`);
     return inFlight.promise;
   }
 
@@ -155,12 +160,11 @@ export async function dedupedRequest<T>(
   const cached = cache.get(key) as CacheEntry<T> | undefined;
 
   if (cached && isCacheValid(cached, staleTime)) {
-    // 缓存有效，直接返回
-    console.log(`[RequestDedup] Cache hit: ${key}`);
+    debugLog(`Cache hit: ${key}`);
 
     // SWR 策略：在后台重新验证（如果不在冷却期）
     if (swr && !isSwrOnCooldown(key, swrCooldownMs)) {
-      console.log(`[RequestDedup] SWR revalidating in background: ${key}`);
+      debugLog(`SWR revalidating in background: ${key}`);
       swrCooldowns.set(key, Date.now());
 
       // 后台重新验证，不阻塞当前返回
@@ -170,11 +174,11 @@ export async function dedupedRequest<T>(
             evictOldestCacheEntry();
             cache.set(key, { data, timestamp: Date.now(), staleTime });
           }
-          console.log(`[RequestDedup] SWR revalidate success: ${key}`);
+          debugLog(`SWR revalidate success: ${key}`);
           return data;
         })
         .catch((error) => {
-          console.warn(`[RequestDedup] SWR revalidate failed: ${key}`, error);
+          debugLog(`SWR revalidate failed: ${key}`, error);
         })
         .finally(() => {
           inFlightRequests.delete(key);
@@ -191,7 +195,7 @@ export async function dedupedRequest<T>(
 
   // 3. 缓存无效或不存在，发起新请求
   evictOldestCacheEntry();
-  console.log(`[RequestDedup] Cache miss, fetching: ${key}`);
+  debugLog(`Cache miss, fetching: ${key}`);
 
   const promise = requestFn()
     .then((data) => {
@@ -203,9 +207,7 @@ export async function dedupedRequest<T>(
     })
     .catch((error) => {
       if (cached && swr) {
-        console.warn(
-          `[RequestDedup] Request failed, using stale cache: ${key}`
-        );
+        debugLog(`Request failed, using stale cache: ${key}`);
         return cached.data;
       }
       throw error;
@@ -261,7 +263,7 @@ export function preloadCache<T>(
   staleTime: number = 60000
 ): void {
   cache.set(key, { data, timestamp: Date.now(), staleTime });
-  console.log(`[RequestDedup] Preloaded cache: ${key}`);
+  debugLog(`Preloaded cache: ${key}`);
 }
 
 /**
@@ -270,7 +272,7 @@ export function preloadCache<T>(
 export function invalidateCache(key: string): void {
   cache.delete(key);
   swrCooldowns.delete(key);
-  console.log(`[RequestDedup] Invalidated cache: ${key}`);
+  debugLog(`Invalidated cache: ${key}`);
 }
 
 /**
@@ -283,5 +285,5 @@ export function invalidateCacheByPrefix(prefix: string): void {
       swrCooldowns.delete(key);
     }
   }
-  console.log(`[RequestDedup] Invalidated cache by prefix: ${prefix}`);
+  debugLog(`Invalidated cache by prefix: ${prefix}`);
 }

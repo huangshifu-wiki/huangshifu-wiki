@@ -1,5 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 
+// L-25 安全评估: VITE_GEMINI_API_KEY 为 VITE_ 前缀，会被 Vite 打包到前端 JS bundle
+// 风险等级: MEDIUM — 密钥暴露在客户端，任何用户可通过 DevTools 查看
+// 缓解措施:
+//   1. 生产环境使用 Google AI Studio 的 API Key 限制（HTTP Referer/IP 限额）
+//   2. 定期轮换密钥
+//   3. 考虑未来迁移到后端代理模式（通过 /api/ai 端点转发请求）
+// 当前方案可接受范围: 内部 Wiki 项目 + 低流量场景
+
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 

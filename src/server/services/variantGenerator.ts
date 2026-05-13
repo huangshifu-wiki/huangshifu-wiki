@@ -420,6 +420,13 @@ export class VariantGenerator {
   }
 
   /**
+   * 获取当前正在处理的 imageMapId 集合（供 VariantCleanup 互斥使用）
+   */
+  getProcessingIds(): Set<string> {
+    return this.processing;
+  }
+
+  /**
    * 获取最大并发数
    */
   getMaxConcurrent(): number {

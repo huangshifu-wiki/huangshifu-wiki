@@ -427,10 +427,10 @@ jobs:
             console.log('| Metric | Coverage | Threshold | Status |');
             console.log('|--------|----------|-----------|--------|');
             const metrics = [
-              ['Lines', total.lines.pct, 25],
-              ['Statements', total.statements.pct, 25],
-              ['Functions', total.functions.pct, 40],
-              ['Branches', total.branches.pct, 70]
+              ['Lines', total.lines.pct, 30],
+              ['Statements', total.statements.pct, 30],
+              ['Functions', total.functions.pct, 45],
+              ['Branches', total.branches.pct, 72]
             ];
             
             for (const [name, actual, threshold] of metrics) {

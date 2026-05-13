@@ -462,3 +462,16 @@ export async function generateTextEmbedding(text: string): Promise<number[]> {
 
   return vector;
 }
+
+export async function warmup(): Promise<void> {
+  try {
+    const extractor = await getImageExtractor();
+    const tmpPath = path.join(os.tmpdir(), `_warmup_${Date.now()}.tmp`);
+    await fs.promises.writeFile(tmpPath, Buffer.from([255, 0, 0, 255]));
+    const dummyImage = await RawImage.read(tmpPath);
+    await extractor(dummyImage, { pooling: 'mean', normalize: true });
+    await fs.promises.unlink(tmpPath).catch(() => {});
+  } catch (error) {
+    // warmup failure is non-fatal, first real request will load model
+  }
+}

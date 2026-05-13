@@ -10,6 +10,7 @@ import type {
   ALLOWED_IMAGE_MIME_TYPES,
 } from '../types';
 import { getStorageKeyFromFilePath } from '../uploadPath';
+import { logger } from './logger';
 
 import {
   EDIT_LOCK_COLLECTION_ALLOWLIST as editLockAllowlist,
@@ -343,10 +344,10 @@ export async function uploadToSuperbed(
       return { success: false, error: 'Failed to parse Superbed upload response' };
     }
 
-    console.log('[Superbed Upload] Successfully uploaded:', fileName, '->', superbedUrl);
+    logger.info({ fileName, url: superbedUrl }, '[Superbed Upload] Successfully uploaded');
     return { success: true, url: superbedUrl };
   } catch (error) {
-    console.error('[Superbed Upload] Error:', error);
+    logger.error({ err: error, fileName }, '[Superbed Upload] Error');
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Superbed upload failed',
@@ -401,10 +402,10 @@ export async function deleteFromSuperbed(
       };
     }
 
-    console.log('[Superbed Delete] Successfully deleted', imageIds.length, 'image(s)');
+    logger.info({ imageIds }, '[Superbed Delete] Successfully deleted');
     return { success: true };
   } catch (error) {
-    console.error('[Superbed Delete] Error:', error);
+    logger.error({ err: error, imageIds }, '[Superbed Delete] Error');
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Superbed delete failed',

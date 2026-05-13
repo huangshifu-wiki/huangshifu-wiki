@@ -48,6 +48,7 @@ import { registerMusicSongRoutes } from './src/server/routes/music-song.routes';
 import { registerUploadRoutes } from './src/server/routes/uploads.routes';
 import { registerAdminSystemRoutes } from './src/server/routes/admin.system.routes';
 import { registerAdminVariantsRoutes } from './src/server/routes/admin.variants.routes';
+import { warmup as clipWarmup } from './src/server/vector/clipEmbedding';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,8 +56,24 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.set('trust proxy', 1);
 
+app.get('/healthz', async (_req, res) => {
+  let dbStatus = 'ok';
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch {
+    dbStatus = 'error';
+  }
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || 'unknown',
+    db: dbStatus,
+  });
+});
+
 const uploadsDir = process.env.UPLOADS_PATH || path.join(__dirname, 'uploads');
-fs.mkdirSync(uploadsDir, { recursive: true });
+fs.mkdirSync(uploadsDir, { recursive: true, mode: 0o755 });
 const backupsDir = path.join(__dirname, 'backups');
 fs.mkdirSync(backupsDir, { recursive: true });
 
@@ -119,16 +136,21 @@ app.use(helmet({
 
 // 启用 gzip 压缩 - 优化传输性能
 app.use(compression({
-  level: 6, // 压缩级别 (1-9)，6 是性能和压缩率的平衡
+  level: 6,
   filter: (req, res) => {
-    // 不压缩已经压缩的内容类型
     if (req.headers['x-no-compression']) {
       return false;
     }
-    // 使用默认的压缩过滤器
+    const contentType = res.getHeader('Content-Type') as string | undefined || '';
+    if (/\bimage\/|\/pdf$|\.gz$|\.br$|\.zip$/i.test(contentType)) {
+      return false;
+    }
+    if (/\bjavascript\b|\bcss\b/i.test(contentType)) {
+      (req as unknown as Record<string, unknown>)._customCompressionLevel = 9;
+    }
     return compression.filter(req, res);
   },
-  threshold: 1024, // 只有大于 1KB 的响应才压缩
+  threshold: 1024,
 }));
 
 // 生产环境静态资源服务 - 必须在 compression 之后
@@ -265,6 +287,9 @@ async function startServer() {
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info(`Server running on http://localhost:${PORT}`);
+
+    // L-24: CLIP model warmup - reduce first-request cold start latency
+    clipWarmup().catch(() => {});
 
     const editLockCleanupInterval = setInterval(async () => {
       try {

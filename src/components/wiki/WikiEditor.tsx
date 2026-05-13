@@ -170,8 +170,8 @@ const WikiEditor = () => {
 					variant: "success",
 				});
 			}
-		} catch (error: any) {
-			if (error.name === "AbortError") {
+		} catch (error: unknown) {
+			if (error instanceof Error && error.name === "AbortError") {
 				show("已取消推荐");
 			} else {
 				console.error("AI recommendation error:", error);
@@ -269,7 +269,7 @@ const WikiEditor = () => {
 
 		setSavingMode(status);
 
-		const pageData: any = {
+		const pageData = {
 			title: formData.title,
 			slug: pageSlug,
 			category: formData.category,
@@ -364,7 +364,7 @@ const WikiEditor = () => {
 											? formData.tags.split(",").map((t) => t.trim())
 											: [],
 										description: "",
-									} as any
+								  }
 						}
 						metadataMap={metadataMap}
 						isNew={isNew}

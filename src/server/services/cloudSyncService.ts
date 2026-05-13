@@ -13,6 +13,7 @@ import {
   uploadFileToS3,
   uploadsDir,
 } from '../utils';
+import { logger } from '../utils/logger';
 import fs from 'fs';
 import path from 'path';
 
@@ -54,7 +55,7 @@ export class CloudSyncService {
   constructor() {
     this.validateLskyConfig();
     this.startQueueProcessor();
-    console.log(`[CloudSync] ✅ Service initialized (maxConcurrent: ${this.maxConcurrent})`);
+    logger.info({ maxConcurrent: this.maxConcurrent }, '[CloudSync] Service initialized');
   }
 
   /**
@@ -65,12 +66,12 @@ export class CloudSyncService {
     const token = process.env.LSKY_TOKEN?.trim();
 
     if (!baseUrl || !token) {
-      console.warn(
-        `[CloudSync] ⚠️ Lsky Pro+ 未正确配置\n` +
-        `  - LSKY_BASE_URL: ${baseUrl ? '✅ 已配置' : '❌ 未配置'}\n` +
-        `  - LSKY_TOKEN: ${token ? '✅ 已配置 (' + token.substring(0, 8) + '...)' : '❌ 未配置'}\n` +
-        `\n  影响: External 存储策略将不可用\n` +
-        `  解决: 请在 .env 文件中配置以上变量`
+      logger.warn(
+        '[CloudSync] Lsky Pro+ not configured\n' +
+        `  - LSKY_BASE_URL: ${baseUrl ? 'configured' : 'missing'}\n` +
+        `  - LSKY_TOKEN: ${token ? 'configured (' + token.substring(0, 8) + '...)' : 'missing'}\n` +
+        '  Impact: External storage strategy unavailable\n' +
+        '  Fix: Configure above variables in .env'
       );
       this.lskyConfig = null;
       return;
@@ -79,7 +80,7 @@ export class CloudSyncService {
     try {
       new URL(baseUrl);
     } catch {
-      console.error('[CloudSync] ❌ LSKY_BASE_URL 格式无效:', baseUrl);
+      logger.error({ baseUrl }, '[CloudSync] Invalid LSKY_BASE_URL format');
       this.lskyConfig = null;
       return;
     }
@@ -130,7 +131,7 @@ export class CloudSyncService {
       this.queue.push(fullTask);
     }
 
-    console.log(`[CloudSync] 📥 Task enqueued: ${fullTask.imageMapId} (${fullTask.strategy})`);
+    logger.info({ imageMapId: task.imageMapId, strategy: fullTask.strategy }, '[CloudSync] Task enqueued');
     this.processNext();
   }
 
@@ -174,10 +175,7 @@ export class CloudSyncService {
    * 处理单个同步任务
    */
   private async processTask(task: CloudSyncTask): Promise<void> {
-    console.log(
-      `[CloudSync] ⚙️ Processing: ${task.imageMapId} ` +
-      `(strategy=${task.strategy}, retry=${task.retryCount}/${task.maxRetries})`
-    );
+    logger.debug({ imageMapId: task.imageMapId, strategy: task.strategy, retry: `${task.retryCount}/${task.maxRetries}` }, '[CloudSync] Processing');
 
     try {
       if (task.strategy === 'local') {
@@ -195,16 +193,13 @@ export class CloudSyncService {
         await this.syncToLskyPro(task);
       }
 
-      console.log(`[CloudSync] ✅ Completed: ${task.imageMapId}`);
+      logger.info({ imageMapId: task.imageMapId }, '[CloudSync] Completed');
     } catch (error) {
-      console.error(`[CloudSync] ❌ Failed: ${task.imageMapId}:`, error);
+      logger.error({ err: error, imageMapId: task.imageMapId }, '[CloudSync] Failed');
 
       if (task.retryCount < task.maxRetries) {
         const delay = Math.pow(2, task.retryCount) * 1000;
-        console.log(
-          `[CloudSync] 🔄 Retrying in ${delay}ms... ` +
-          `(${task.retryCount + 1}/${task.maxRetries})`
-        );
+        logger.debug({ delay, attempt: task.retryCount + 1, maxRetries: task.maxRetries }, '[CloudSync] Retrying');
 
         task.retryCount++;
         setTimeout(() => {
@@ -304,7 +299,7 @@ export class CloudSyncService {
       },
     });
 
-    console.log(`[CloudSync] ✅ Lsky Pro+ upload completed: ${uploadedUrl}`);
+    logger.info({ uploadedUrl }, '[CloudSync] Lsky Pro+ upload completed');
   }
 
   /**
@@ -326,9 +321,7 @@ export class CloudSyncService {
     }
 
     if (strategy === 'external' && !this.isLskyProAvailable()) {
-      console.warn(
-        '[CloudSync] ⚠️ External 策略已选择但 Lsky Pro+ 未配置，降级为 Local 策略'
-      );
+      logger.warn('[CloudSync] External strategy selected but Lsky Pro+ not configured, downgrading to Local');
       await prisma.imageMap.update({
         where: { id: imageMapId },
         data: { 

@@ -11,7 +11,7 @@ import { enhancedCache, CACHE_KEYS } from './cache';
 import type { MusicPlatform, PlayUrlCacheValue } from '../types';
 
 // axios 默认配置
-axios.defaults.timeout = 5000;
+axios.defaults.timeout = parseInt(process.env.AXIOS_DEFAULT_TIMEOUT || '15000', 10);
 
 // 文件路径常量
 const __filename = fileURLToPath(import.meta.url);

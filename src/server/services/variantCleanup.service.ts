@@ -12,6 +12,8 @@ import { prisma } from '../prisma';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { logger } from '../utils/logger';
+import { variantGenerator } from './variantGenerator';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,6 +60,13 @@ export class VariantCleanupService {
     let totalFreedBytes = 0;
 
     try {
+      // 互斥检查：跳过正在被 VariantGenerator 处理的 ID
+      const processingIds = variantGenerator.getProcessingIds();
+      if (processingIds.has(imageMapId)) {
+        logger.warn(`[Cleanup] Skipping ${imageMapId}: currently being processed by VariantGenerator`);
+        return this.createResult(trigger, [], [], 0, Date.now() - startTime);
+      }
+
       // 1. 查询 ImageMap 获取变体路径
       const imageMap = await prisma.imageMap.findUnique({
         where: { id: imageMapId },
@@ -69,7 +78,7 @@ export class VariantCleanupService {
       });
 
       if (!imageMap) {
-        console.warn(`[Cleanup] ImageMap ${imageMapId} not found, skipping`);
+        logger.warn(`[Cleanup] ImageMap ${imageMapId} not found, skipping`);
         return this.createResult(trigger, [], [], 0, Date.now() - startTime);
       }
 

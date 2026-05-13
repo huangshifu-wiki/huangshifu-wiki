@@ -163,11 +163,18 @@ export function parseContentStatus(value: unknown): ContentStatus | null {
   return null;
 }
 
+/**
+ * 规范化 Wiki 写入状态
+ * 权限审查：管理员角色可直接发布内容，普通用户仅允许 pending/rejected/draft 状态
+ * 安全评估：通过 isAdminRole 进行角色校验，防止未授权状态提升
+ */
 export function normalizeWikiWriteStatus(rawStatus: unknown, authUser: ApiUser) {
   const status = parseContentStatus(rawStatus);
+  // L-12: 权限审查 - 管理员可绕过审核直接发布
   if (isAdminRole(authUser.role)) {
     return 'published';
   }
+  // 非管理员用户的状态限制
   if (status === 'pending') return 'pending';
   if (status === 'rejected') return 'rejected';
   return 'draft';

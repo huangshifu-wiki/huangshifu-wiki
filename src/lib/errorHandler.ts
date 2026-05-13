@@ -119,6 +119,18 @@ export function handleError(error: unknown, context?: ErrorContext): AppError {
   return appError;
 }
 
+const _logger = typeof window === 'undefined'
+  ? (() => { try { return require('../server/utils/logger').logger; } catch { return null; } })()
+  : null;
+
+function _log(level: 'warn' | 'error', ...args: unknown[]): void {
+  if (_logger) {
+    _logger[level](...args);
+  } else {
+    console[level](...args);
+  }
+}
+
 function logError(error: AppError, context?: ErrorContext): void {
   const logData = {
     name: error.name,
@@ -131,9 +143,9 @@ function logError(error: AppError, context?: ErrorContext): void {
   };
 
   if (error.isOperational) {
-    console.warn('[AppError]', logData);
+    _log('warn', '[AppError]', logData);
   } else {
-    console.error('[AppError]', logData, error.stack);
+    _log('error', '[AppError]', logData, error.stack);
   }
 }
 
@@ -224,9 +236,9 @@ export function logApiError(error: Error, context: ApiErrorContext): void {
   };
 
   if (error instanceof AppError && error.isOperational) {
-    console.warn('[API Error]', logData);
+    _log('warn', '[API Error]', logData);
   } else {
-    console.error('[API Error]', logData);
+    _log('error', '[API Error]', logData);
   }
 }
 
