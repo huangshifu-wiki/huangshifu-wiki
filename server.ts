@@ -13,6 +13,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import cors from 'cors';
 import fs from 'fs';
+import net from 'net';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
@@ -77,7 +78,8 @@ fs.mkdirSync(uploadsDir, { recursive: true, mode: 0o755 });
 const backupsDir = path.join(__dirname, 'backups');
 fs.mkdirSync(backupsDir, { recursive: true });
 
-const PORT = Number(process.env.PORT) || 3003;
+const DEFAULT_PORT = Number(process.env.PORT) || 3003;
+const DEFAULT_HMR_PORT = Number(process.env.VITE_HMR_PORT) || 24678;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '';
 
 function parseCorsOrigins(envValue: string): string[] {
@@ -88,6 +90,44 @@ function parseCorsOrigins(envValue: string): string[] {
 }
 
 const CORS_MAX_AGE = 86400;
+
+async function findAvailablePort(preferredPort: number, host = '0.0.0.0'): Promise<number> {
+  const maxAttempts = 20;
+
+  for (let offset = 0; offset < maxAttempts; offset++) {
+    const port = preferredPort + offset;
+    const isAvailable = await new Promise<boolean>((resolve, reject) => {
+      const tester = net.createServer();
+
+      tester.once('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EADDRINUSE') {
+          resolve(false);
+          return;
+        }
+
+        reject(error);
+      });
+
+      tester.once('listening', () => {
+        tester.close((closeError) => {
+          if (closeError) {
+            reject(closeError);
+            return;
+          }
+          resolve(true);
+        });
+      });
+
+      tester.listen(port, host);
+    });
+
+    if (isAvailable) {
+      return port;
+    }
+  }
+
+  throw new Error(`No available port found starting from ${preferredPort}`);
+}
 
 if (CORS_ORIGIN) {
   const origins = parseCorsOrigins(CORS_ORIGIN);
@@ -245,6 +285,21 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 async function startServer() {
   await initSensitiveWords();
 
+  const port = await findAvailablePort(DEFAULT_PORT);
+  const hmrPort = await findAvailablePort(DEFAULT_HMR_PORT, '127.0.0.1');
+  if (port !== DEFAULT_PORT) {
+    logger.warn({
+      requestedPort: DEFAULT_PORT,
+      actualPort: port,
+    }, 'Preferred port is busy, falling back to next available port');
+  }
+  if (hmrPort !== DEFAULT_HMR_PORT) {
+    logger.warn({
+      requestedPort: DEFAULT_HMR_PORT,
+      actualPort: hmrPort,
+    }, 'Preferred Vite HMR port is busy, falling back to next available port');
+  }
+
   app.use((_req, res, next) => {
     const nonce = crypto.randomBytes(16).toString('base64');
     res.locals.nonce = nonce;
@@ -273,7 +328,15 @@ async function startServer() {
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        strictPort: false,
+        hmr: {
+          host: '127.0.0.1',
+          port: hmrPort,
+          clientPort: hmrPort,
+        },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -285,11 +348,13 @@ async function startServer() {
     });
   }
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    logger.info(`Server running on http://localhost:${PORT}`);
+  const server = app.listen(port, '0.0.0.0', () => {
+    logger.info(`Server running on http://localhost:${port}`);
 
-    // L-24: CLIP model warmup - reduce first-request cold start latency
-    clipWarmup().catch(() => {});
+    // Avoid noisy startup failures in development when local model cache is incomplete.
+    if (process.env.NODE_ENV === 'production') {
+      clipWarmup().catch(() => {});
+    }
 
     const editLockCleanupInterval = setInterval(async () => {
       try {

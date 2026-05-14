@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
+import { prisma } from '../../../src/server/prisma';
 
 // 定义 mock 函数（必须在 vi.mock 之前）
 const mockAccess = vi.fn().mockResolvedValue(undefined);
@@ -82,6 +83,19 @@ describe('VariantGenerator - 初始化与配置', () => {
 
     const stats = generator.getQueueStats();
     expect(stats).toBeDefined();
+  });
+
+  it('恢复待处理任务时不应使用非法的 localUrl 空值过滤', async () => {
+    new VariantGenerator();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(prisma.imageMap.findMany).toHaveBeenCalledWith({
+      where: {
+        variantStatus: { in: ['pending', 'processing'] },
+      },
+      take: 100,
+    });
   });
 });
 
