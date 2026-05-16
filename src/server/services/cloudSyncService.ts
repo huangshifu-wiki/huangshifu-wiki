@@ -48,7 +48,7 @@ export class CloudSyncService {
   private queue: CloudSyncTask[] = [];
   private processing = new Set<string>();
   private maxConcurrent = parseInt(process.env.CLOUD_SYNC_MAX_CONCURRENT || '2', 10);
-  
+  private syncInterval: NodeJS.Timeout | null = null;
   private lskyConfig: LskyProConfig | null = null;
   private isProcessing = false;
 
@@ -139,11 +139,18 @@ export class CloudSyncService {
    * 启动队列处理器
    */
   private startQueueProcessor(): void {
-    setInterval(() => {
+    this.syncInterval = setInterval(() => {
       if (!this.isProcessing) {
         this.processNext();
       }
     }, 1000);
+  }
+
+  stop() {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval)
+      this.syncInterval = null
+    }
   }
 
   /**

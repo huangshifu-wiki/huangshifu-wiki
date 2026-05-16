@@ -11,6 +11,7 @@ import {
   canViewPost,
   createNotification,
   parseContentStatus,
+  parsePagination,
 } from '../utils';
 import type { AuthenticatedRequest, ContentStatus } from '../types';
 
@@ -21,10 +22,8 @@ const MUSIC_SECTION_ID = 'music';
 router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
     const section = typeof req.query.section === 'string' ? req.query.section : 'all';
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
-    const page = Math.max(Number(req.query.page) || 1, 1);
+    const { limit, page, offset: skip } = parsePagination(req.query);
     const sort = req.query.sort as string | undefined;
-    const skip = (page - 1) * limit;
     const visibilityWhere = buildPostVisibilityWhere(req.authUser);
     const where = {
       ...(section !== 'all' ? { section } : {}),
@@ -114,11 +113,15 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     }
 
     res.json({
-      posts: posts.map((post) => ({
-        ...toPostResponse(post),
-        likedByMe: likedPostSet.has(post.id),
-        favoritedByMe: favoritedPostSet.has(post.id),
-      })),
+      posts: posts.map((post) => {
+        const { content: _, ...rest } = toPostResponse(post)
+        return {
+          ...rest,
+          excerpt: post.content?.slice(0, 200) || '',
+          likedByMe: likedPostSet.has(post.id),
+          favoritedByMe: favoritedPostSet.has(post.id),
+        }
+      }),
       total,
       page,
       limit,
@@ -472,9 +475,7 @@ router.delete('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedR
 router.get('/:postId/comments', async (req: AuthenticatedRequest, res) => {
   try {
     const postId = req.params.postId;
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
-    const page = Math.max(Number(req.query.page) || 1, 1);
-    const skip = (page - 1) * limit;
+    const { limit, page, offset: skip } = parsePagination(req.query);
 
     const post = await prisma.post.findUnique({
       where: { id: postId },

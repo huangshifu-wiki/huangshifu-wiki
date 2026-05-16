@@ -6,9 +6,8 @@ import {
   requireActiveUser,
   isAdminRole,
 } from '../middleware/auth';
-import type { ApiUser } from '../types';
-
-type AuthenticatedRequest = Request & { authUser?: ApiUser };
+import { asyncHandler } from '../middleware/asyncHandler';
+import type { AuthenticatedRequest } from '../types';
 import {
   prisma,
   toWikiResponse,
@@ -29,6 +28,7 @@ import {
   cleanupOldBackups,
   encryptBuffer,
   decryptBuffer,
+  validateSqlContent,
   logger,
 } from '../utils';
 import multer from 'multer';
@@ -173,7 +173,7 @@ async function handleReviewAction(
  */
 
 // GET /api/admin/review-queue - Get review queue items
-router.get('/review-queue', requireAdmin, async (req, res) => {
+router.get('/review-queue', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const type = normalizeModerationTargetType(req.query.type);
     const status = parseContentStatus(req.query.status) || 'pending';
@@ -203,10 +203,10 @@ router.get('/review-queue', requireAdmin, async (req, res) => {
     logger.error({ err: error }, 'Fetch review queue error');
     res.status(500).json({ error: '获取审核队列失败' });
   }
-});
+}));
 
 // PUT /api/admin/review-queue/:id/approve - Approve a review item
-router.put('/review-queue/:id/approve', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.put('/review-queue/:id/approve', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const targetType = normalizeModerationTargetType(req.body.type) || 'wiki';
     const targetId = req.params.id;
@@ -224,10 +224,10 @@ router.put('/review-queue/:id/approve', requireAdmin, async (req: AuthenticatedR
     logger.error({ err: error }, 'Approve review item error');
     res.status(500).json({ error: '审核通过失败' });
   }
-});
+}));
 
 // PUT /api/admin/review-queue/:id/reject - Reject a review item
-router.put('/review-queue/:id/reject', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.put('/review-queue/:id/reject', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const targetType = normalizeModerationTargetType(req.body.type) || 'wiki';
     const targetId = req.params.id;
@@ -245,11 +245,11 @@ router.put('/review-queue/:id/reject', requireAdmin, async (req: AuthenticatedRe
     logger.error({ err: error }, 'Reject review item error');
     res.status(500).json({ error: '驳回失败' });
   }
-});
+}));
 
 // POST /api/admin/review/:type/:id/:action - Legacy compatible route
 // Redirects to PUT /api/admin/review-queue/:id/:action
-router.post('/review/:type/:id/:action', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.post('/review/:type/:id/:action', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { type, id, action } = req.params;
     const { note } = req.body;
@@ -271,7 +271,7 @@ router.post('/review/:type/:id/:action', requireAdmin, async (req: Authenticated
     logger.error({ err: error }, 'Review action error');
     res.status(500).json({ error: '审核操作失败' });
   }
-});
+}));
 
 /**
  * ==========================
@@ -280,7 +280,7 @@ router.post('/review/:type/:id/:action', requireAdmin, async (req: Authenticated
  */
 
 // GET /api/admin/sensitive-words - Check if a word is sensitive
-router.get('/sensitive-words', requireAdmin, async (req, res) => {
+router.get('/sensitive-words', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { word } = req.query as { word?: string };
     if (!word) {
@@ -293,10 +293,10 @@ router.get('/sensitive-words', requireAdmin, async (req, res) => {
     logger.error({ err: error }, 'Check sensitive word error');
     res.status(500).json({ error: '检查敏感词失败' });
   }
-});
+}));
 
 // POST /api/admin/sensitive-words - Add sensitive word (placeholder - requires file system write)
-router.post('/sensitive-words', requireSuperAdmin, async (req, res) => {
+router.post('/sensitive-words', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { word } = req.body as { word?: string };
     if (!word || typeof word !== 'string') {
@@ -314,10 +314,10 @@ router.post('/sensitive-words', requireSuperAdmin, async (req, res) => {
     logger.error({ err: error }, 'Add sensitive word error');
     res.status(500).json({ error: '添加敏感词失败' });
   }
-});
+}));
 
 // DELETE /api/admin/sensitive-words/:id - Remove sensitive word (placeholder)
-router.delete('/sensitive-words/:id', requireSuperAdmin, async (req, res) => {
+router.delete('/sensitive-words/:id', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const word = req.params.id;
     if (!word) {
@@ -335,7 +335,7 @@ router.delete('/sensitive-words/:id', requireSuperAdmin, async (req, res) => {
     logger.error({ err: error }, 'Remove sensitive word error');
     res.status(500).json({ error: '删除敏感词失败' });
   }
-});
+}));
 
 /**
  * ==========================
@@ -344,7 +344,7 @@ router.delete('/sensitive-words/:id', requireSuperAdmin, async (req, res) => {
  */
 
 // GET /api/admin/locks - Get all edit locks
-router.get('/locks', requireAdmin, async (_req, res) => {
+router.get('/locks', requireAdmin, asyncHandler(async (_req, res) => {
   try {
     const locks = await prisma.editLock.findMany({
       orderBy: {
@@ -358,10 +358,10 @@ router.get('/locks', requireAdmin, async (_req, res) => {
     logger.error({ err: error }, 'Fetch edit locks error');
     res.status(500).json({ error: '获取编辑锁列表失败' });
   }
-});
+}));
 
 // POST /api/admin/locks - Create/edit lock (generic endpoint)
-router.post('/locks', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.post('/locks', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     await prisma.editLock.deleteMany({
       where: {
@@ -442,10 +442,10 @@ router.post('/locks', requireAuth, requireActiveUser, async (req: AuthenticatedR
     logger.error({ err: error }, 'Acquire edit lock error');
     res.status(500).json({ error: '申请编辑锁失败' });
   }
-});
+}));
 
 // DELETE /api/admin/locks/:id - Delete lock by ID
-router.delete('/locks/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.delete('/locks/:id', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const lock = await prisma.editLock.findUnique({ where: { id: req.params.id } });
     if (!lock) {
@@ -465,7 +465,7 @@ router.delete('/locks/:id', requireAuth, requireActiveUser, async (req: Authenti
     logger.error({ err: error }, 'Release edit lock error');
     res.status(500).json({ error: '释放编辑锁失败' });
   }
-});
+}));
 
 /**
  * ==========================
@@ -474,7 +474,7 @@ router.delete('/locks/:id', requireAuth, requireActiveUser, async (req: Authenti
  */
 
 // GET /api/admin/moderation_logs - Get moderation logs
-router.get('/moderation_logs', requireAdmin, async (_req, res) => {
+router.get('/moderation_logs', requireAdmin, asyncHandler(async (_req, res) => {
   try {
     const logs = await prisma.moderationLog.findMany({
       orderBy: { createdAt: 'desc' },
@@ -502,10 +502,10 @@ router.get('/moderation_logs', requireAdmin, async (_req, res) => {
     logger.error({ err: error }, 'Fetch moderation logs error');
     res.status(500).json({ error: '获取操作日志失败' });
   }
-});
+}));
 
 // GET /api/admin/ban_logs - Get ban logs
-router.get('/ban_logs', requireAdmin, async (_req, res) => {
+router.get('/ban_logs', requireAdmin, asyncHandler(async (_req, res) => {
   try {
     const logs = await prisma.userBanLog.findMany({
       orderBy: { createdAt: 'desc' },
@@ -536,7 +536,7 @@ router.get('/ban_logs', requireAdmin, async (_req, res) => {
     logger.error({ err: error }, 'Fetch ban logs error');
     res.status(500).json({ error: '获取封禁日志失败' });
   }
-});
+}));
 
 /**
  * ==========================
@@ -545,7 +545,7 @@ router.get('/ban_logs', requireAdmin, async (_req, res) => {
  */
 
 // POST /api/admin/batch-delete-posts - Batch delete posts
-router.post('/batch-delete-posts', requireAdmin, async (req, res) => {
+router.post('/batch-delete-posts', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const postIds = Array.isArray(req.body?.postIds) ? req.body.postIds : [];
     if (!postIds.length) {
@@ -562,10 +562,10 @@ router.post('/batch-delete-posts', requireAdmin, async (req, res) => {
     logger.error({ err: error }, 'Batch delete posts error');
     res.status(500).json({ error: '批量删除帖子失败' });
   }
-});
+}));
 
 // POST /api/admin/batch-delete-galleries - Batch delete galleries
-router.post('/batch-delete-galleries', requireAdmin, async (req, res) => {
+router.post('/batch-delete-galleries', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const galleryIds = Array.isArray(req.body?.galleryIds) ? req.body.galleryIds : [];
     if (!galleryIds.length) {
@@ -610,10 +610,10 @@ router.post('/batch-delete-galleries', requireAdmin, async (req, res) => {
     logger.error({ err: error }, 'Batch delete galleries error');
     res.status(500).json({ error: '批量删除图集失败' });
   }
-});
+}));
 
 // POST /api/admin/batch-delete-comments - Batch delete comments
-router.post('/batch-delete-comments', requireAdmin, async (req, res) => {
+router.post('/batch-delete-comments', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const commentIds = Array.isArray(req.body?.commentIds) ? req.body.commentIds : [];
     if (!commentIds.length) {
@@ -630,7 +630,7 @@ router.post('/batch-delete-comments', requireAdmin, async (req, res) => {
     logger.error({ err: error }, 'Batch delete comments error');
     res.status(500).json({ error: '批量删除评论失败' });
   }
-});
+}));
 
 /**
  * ==========================
@@ -639,7 +639,7 @@ router.post('/batch-delete-comments', requireAdmin, async (req, res) => {
  */
 
 // GET /api/admin/wiki-links - Get all wiki-links (scan)
-router.get('/wiki-links/scan', requireAuth, requireAdmin, async (_req, res) => {
+router.get('/wiki-links/scan', requireAuth, requireAdmin, asyncHandler(async (_req, res) => {
   try {
     const result = await scanAllWikiLinks();
     res.json(result);
@@ -647,23 +647,22 @@ router.get('/wiki-links/scan', requireAuth, requireAdmin, async (_req, res) => {
     logger.error({ err: error }, 'Scan wiki links error');
     res.status(500).json({ error: '扫描 Wiki 链接失败' });
   }
-});
+}));
 
 // GET /api/admin/wiki-links/:slug - Get wiki page links
-router.get('/wiki-links/:slug', requireAuth, requireAdmin, async (req, res) => {
+router.get('/wiki-links/:slug', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { slug } = req.params;
     const result = await getWikiPageLinks(slug);
     res.json(result);
   } catch (error) {
     logger.error({ err: error }, 'Get wiki page links error');
-    const message = error instanceof Error ? error.message : '获取 Wiki 页面链接失败';
-    res.status(500).json({ error: message });
+    res.status(500).json({ error: '获取 Wiki 页面链接失败' });
   }
-});
+}));
 
 // PUT /api/admin/wiki-links/:id - Update wiki link (preview)
-router.put('/wiki-links/:id', requireAuth, requireAdmin, async (req, res) => {
+router.put('/wiki-links/:id', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { mappings, slugs } = req.body as {
       mappings: Array<{ oldUrl: string; newUrl: string; useRegex?: boolean }>;
@@ -681,10 +680,10 @@ router.put('/wiki-links/:id', requireAuth, requireAdmin, async (req, res) => {
     logger.error({ err: error }, 'Preview link update error');
     res.status(500).json({ error: '预览链接更新失败' });
   }
-});
+}));
 
 // POST /api/admin/wiki-links/update - Batch update wiki links
-router.post('/wiki-links/update', requireAuth, requireAdmin, async (req, res) => {
+router.post('/wiki-links/update', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { mappings, dryRun } = req.body as {
       mappings: Array<{ oldUrl: string; newUrl: string; useRegex?: boolean }>;
@@ -702,10 +701,10 @@ router.post('/wiki-links/update', requireAuth, requireAdmin, async (req, res) =>
     logger.error({ err: error }, 'Batch update wiki links error');
     res.status(500).json({ error: '批量更新链接失败' });
   }
-});
+}));
 
 // POST /api/admin/wiki-links/switch-storage - Switch wiki storage strategy
-router.post('/wiki-links/switch-storage', requireAuth, requireAdmin, async (req, res) => {
+router.post('/wiki-links/switch-storage', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { fromStorage, toStorage, config, dryRun } = req.body as {
       fromStorage: 'local' | 's3' | 'external';
@@ -734,10 +733,10 @@ router.post('/wiki-links/switch-storage', requireAuth, requireAdmin, async (req,
     logger.error({ err: error }, 'Switch wiki storage error');
     res.status(500).json({ error: '切换存储策略失败' });
   }
-});
+}));
 
 // POST /api/admin/wiki-links/sync-with-imagemap - Sync wiki links with ImageMap
-router.post('/wiki-links/sync-with-imagemap', requireAuth, requireAdmin, async (req, res) => {
+router.post('/wiki-links/sync-with-imagemap', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { dryRun } = req.body as { dryRun?: boolean };
 
@@ -766,7 +765,7 @@ router.post('/wiki-links/sync-with-imagemap', requireAuth, requireAdmin, async (
     logger.error({ err: error }, 'Sync wiki links with ImageMap error');
     res.status(500).json({ error: '同步 ImageMap 失败' });
   }
-});
+}));
 
 /**
  * ==========================
@@ -775,7 +774,7 @@ router.post('/wiki-links/sync-with-imagemap', requireAuth, requireAdmin, async (
  */
 
 // POST /api/admin/backup/create - Create backup
-router.post('/backup/create', requireSuperAdmin, async (req, res) => {
+router.post('/backup/create', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { password } = req.body as { password?: string };
     const backupPassword = password || BACKUP_PASSWORD;
@@ -846,12 +845,12 @@ router.post('/backup/create', requireSuperAdmin, async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'Create backup error');
-    res.status(500).json({ error: '创建备份失败：' + (error instanceof Error ? error.message : String(error)) });
+    res.status(500).json({ error: '创建备份失败，请查看服务器日志' });
   }
-});
+}));
 
 // GET /api/admin/backup/list - List backups (frontend compatible)
-router.get('/backup/list', requireSuperAdmin, async (_req, res) => {
+router.get('/backup/list', requireSuperAdmin, asyncHandler(async (_req, res) => {
   try {
     const files = (await fs.promises.readdir(backupsDir))
       .filter((f) => f.startsWith('backup_') && f.endsWith('.zip'));
@@ -873,10 +872,10 @@ router.get('/backup/list', requireSuperAdmin, async (_req, res) => {
   } catch (error) {
     logger.error({ err: error }, 'List backups error');
   }
-});
+}));
 
 // GET /api/admin/backup/:filename/download - Download backup
-router.get('/backup/:filename/download', requireSuperAdmin, async (req, res) => {
+router.get('/backup/:filename/download', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const filename = req.params.filename;
     const normalized = path.normalize(filename);
@@ -886,7 +885,7 @@ router.get('/backup/:filename/download', requireSuperAdmin, async (req, res) => 
       return;
     }
 
-    const filePath = path.join(backupsDir, filename);
+    const filePath = path.join(backupsDir, normalized);
     try {
       await fs.promises.access(filePath);
     } catch {
@@ -902,12 +901,12 @@ router.get('/backup/:filename/download', requireSuperAdmin, async (req, res) => 
     logger.error({ err: error }, 'Download backup error');
     res.status(500).json({ error: '下载备份失败' });
   }
-});
+}));
 
 // POST /api/admin/backup/restore - Restore backup
-router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), async (req, res) => {
+router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
-    const { password } = req.body as { password?: string };
+    const { password, confirm } = req.body as { password?: string; confirm?: boolean };
     const file = req.file;
 
     if (!BACKUP_PASSWORD) {
@@ -917,6 +916,11 @@ router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), a
 
     if (!password || !verifyBackupPassword(password)) {
       res.status(401).json({ error: '备份密码错误' });
+      return;
+    }
+
+    if (!confirm) {
+      res.status(400).json({ error: '恢复操作需要二次确认，请传入 confirm: true' });
       return;
     }
 
@@ -960,6 +964,65 @@ router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), a
       return;
     }
 
+    const validation = validateSqlContent(sqlContentStr);
+    if (!validation.valid) {
+      await fs.promises.unlink(file.path);
+      logger.error({ reason: validation.reason }, 'SQL validation failed during restore');
+      res.status(400).json({ error: validation.reason });
+      return;
+    }
+
+    logger.info('Creating pre-restore backup before database restore')
+    try {
+      const preRestoreTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const preRestoreSqlFilename = `backup_${preRestoreTimestamp}.sql`;
+      const preRestoreSqlFilePath = path.join(backupsDir, preRestoreSqlFilename);
+      const preRestoreZipFilename = `backup_${preRestoreTimestamp}.zip`;
+      const preRestoreZipFilePath = path.join(backupsDir, preRestoreZipFilename);
+
+      const pgDumpArgs = [
+        '-h', dbConfig.host,
+        '-p', dbConfig.port,
+        '-U', dbConfig.user,
+        '-d', dbConfig.database,
+        '--no-owner',
+        '--no-privileges',
+        '--clean',
+        '--if-exists',
+        '--exclude-table-data=ImageEmbedding',
+        '--exclude-table-data=_prisma_migrations',
+        '-f', preRestoreSqlFilePath,
+      ];
+      const pgDumpEnv = { ...process.env, PGPASSWORD: dbConfig.password };
+
+      await execFileAsync('pg_dump', pgDumpArgs, { env: pgDumpEnv, timeout: 300000 });
+
+      const preRestoreSqlContent = await fs.promises.readFile(preRestoreSqlFilePath);
+      await fs.promises.unlink(preRestoreSqlFilePath);
+
+      const preRestoreEncrypted = encryptBuffer(preRestoreSqlContent, BACKUP_PASSWORD);
+
+      await new Promise<void>((resolve, reject) => {
+        const output = fs.createWriteStream(preRestoreZipFilePath);
+        const archive = archiver('zip', { zlib: { level: 9 } });
+
+        output.on('close', () => resolve());
+        archive.on('error', (err) => reject(err));
+
+        archive.pipe(output);
+        archive.append(preRestoreEncrypted, { name: preRestoreSqlFilename });
+        archive.finalize();
+      });
+
+      await cleanupOldBackups();
+      logger.info({ filename: preRestoreZipFilename }, 'Pre-restore backup created successfully');
+    } catch (preBackupError) {
+      logger.error({ err: preBackupError }, 'Pre-restore backup creation failed, aborting restore');
+      await fs.promises.unlink(file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'));
+      res.status(500).json({ error: '预备份创建失败，恢复操作已中止，请查看服务器日志' });
+      return;
+    }
+
     const tempSqlPath = path.join(backupsDir, `restore_${Date.now()}.sql`);
     await fs.promises.writeFile(tempSqlPath, sqlContent);
 
@@ -977,8 +1040,8 @@ router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), a
 
       await execFileAsync('psql', psqlArgs, { env: psqlEnv, timeout: 600000 });
     } finally {
-      await fs.promises.unlink(tempSqlPath).catch(() => {});
-      await fs.promises.unlink(file.path).catch(() => {});
+      await fs.promises.unlink(tempSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'));
+      await fs.promises.unlink(file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'));
     }
 
     res.json({ success: true, message: '数据库恢复成功' });
@@ -986,14 +1049,14 @@ router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), a
     logger.error({ err: error }, 'Restore backup error');
     if (req.file) {
       try { await fs.promises.access(req.file.path); } catch { /* already gone */ }
-      await fs.promises.unlink(req.file.path).catch(() => {});
+      await fs.promises.unlink(req.file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'));
     }
-    res.status(500).json({ error: '恢复数据库失败: ' + (error instanceof Error ? error.message : String(error)) });
+    res.status(500).json({ error: '恢复数据库失败，请查看服务器日志' });
   }
-});
+}));
 
 // GET /api/admin/backups - List backups
-router.get('/backups', requireSuperAdmin, async (_req, res) => {
+router.get('/backups', requireSuperAdmin, asyncHandler(async (_req, res) => {
   try {
     const files = (await fs.promises.readdir(backupsDir))
       .filter((f) => f.startsWith('backup_') && f.endsWith('.zip'));
@@ -1016,10 +1079,10 @@ router.get('/backups', requireSuperAdmin, async (_req, res) => {
     logger.error({ err: error }, 'List backups error');
     res.status(500).json({ error: '获取备份列表失败' });
   }
-});
+}));
 
 // DELETE /api/admin/backup/:filename - Delete backup (legacy compatible)
-router.delete('/backup/:filename', requireSuperAdmin, async (req, res) => {
+router.delete('/backup/:filename', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { password } = req.query as { password?: string };
     const filename = req.params.filename;
@@ -1054,10 +1117,10 @@ router.delete('/backup/:filename', requireSuperAdmin, async (req, res) => {
     logger.error({ err: error }, 'Delete backup error');
     res.status(500).json({ error: '删除备份失败' });
   }
-});
+}));
 
 // DELETE /api/admin/backups/:filename - Delete backup
-router.delete('/backups/:filename', requireSuperAdmin, async (req, res) => {
+router.delete('/backups/:filename', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { password } = req.query as { password?: string };
     const filename = req.params.filename;
@@ -1092,7 +1155,7 @@ router.delete('/backups/:filename', requireSuperAdmin, async (req, res) => {
     logger.error({ err: error }, 'Delete backup error');
     res.status(500).json({ error: '删除备份失败' });
   }
-});
+}));
 
 /**
  * ==========================
@@ -1101,7 +1164,7 @@ router.delete('/backups/:filename', requireSuperAdmin, async (req, res) => {
  */
 
 // GET /api/admin/stats - Get admin panel statistics
-router.get('/stats', requireAdmin, async (_req, res) => {
+router.get('/stats', requireAdmin, asyncHandler(async (_req, res) => {
   try {
     const [
       wikiCount,
@@ -1130,10 +1193,10 @@ router.get('/stats', requireAdmin, async (_req, res) => {
     logger.error({ err: error }, 'Fetch admin stats error');
     res.status(500).json({ error: '获取统计数据失败' });
   }
-});
+}));
 
 // GET /api/admin/:tab - Get admin data by tab
-router.get('/:tab', requireAdmin, async (req, res) => {
+router.get('/:tab', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const tab = req.params.tab;
 
@@ -1244,10 +1307,10 @@ router.get('/:tab', requireAdmin, async (req, res) => {
     logger.error({ err: error }, 'Fetch admin data error');
     res.status(500).json({ error: '获取管理数据失败' });
   }
-});
+}));
 
 // GET /api/admin/:tab/:id - Get admin item by ID
-router.get('/:tab/:id', requireAdmin, async (req, res) => {
+router.get('/:tab/:id', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const tab = req.params.tab;
     const id = req.params.id;
@@ -1333,10 +1396,10 @@ router.get('/:tab/:id', requireAdmin, async (req, res) => {
     logger.error({ err: error }, 'Fetch admin item error');
     res.status(500).json({ error: '获取详情失败' });
   }
-});
+}));
 
 // DELETE /api/admin/:tab/:id - Delete admin item
-router.delete('/:tab/:id', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.delete('/:tab/:id', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const tab = req.params.tab;
     const id = req.params.id;
@@ -1405,7 +1468,7 @@ router.delete('/:tab/:id', requireAdmin, async (req: AuthenticatedRequest, res) 
     logger.error({ err: error }, 'Delete admin data error');
     res.status(500).json({ error: '删除失败' });
   }
-});
+}));
 
 export { registerAdminRoutes };
 

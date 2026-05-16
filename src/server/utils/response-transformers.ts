@@ -212,6 +212,11 @@ export function toWikiResponse(page: WikiResponseInput) {
   };
 }
 
+export function toWikiListResponse(page: WikiResponseInput) {
+  const { content: _, ...rest } = toWikiResponse(page)
+  return rest
+}
+
 export function toWikiBranchResponse(branch: WikiBranchWithPage) {
   return {
     id: branch.id,
@@ -602,12 +607,12 @@ export function toMediaAssetResponse(asset: {
   };
 }
 
-export function toSongResponse(song: MusicTrackWithRelations, options?: { favoritedByMe?: boolean }) {
+export function toSongResponse(song: MusicTrackWithRelations, options?: { favoritedByMe?: boolean; excludeLyric?: boolean }) {
   const displayAlbum = resolveSongDisplayAlbum(song);
   const coverUrl = resolveSongCoverUrl(song);
   const customPlatformLinks = normalizeSongCustomPlatformLinks(song.customPlatformLinks);
 
-  return {
+  const base = {
     docId: song.docId,
     id: song.id,
     title: song.title,
@@ -615,7 +620,6 @@ export function toSongResponse(song: MusicTrackWithRelations, options?: { favori
     album: song.album,
     cover: coverUrl,
     audioUrl: song.audioUrl,
-    lyric: song.lyric,
     primaryPlatform: song.primaryPlatform,
     enabledPlatform: song.enabledPlatform,
     platformIds: {
@@ -649,7 +653,10 @@ export function toSongResponse(song: MusicTrackWithRelations, options?: { favori
     favoritedByMe: Boolean(options?.favoritedByMe),
     createdAt: song.createdAt.toISOString(),
     updatedAt: song.updatedAt.toISOString(),
-  };
+  }
+
+  if (options?.excludeLyric) return base
+  return { ...base, lyric: song.lyric }
 }
 
 export function toAlbumResponse(album: {

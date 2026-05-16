@@ -231,7 +231,7 @@ function UploadPanel() {
         ) : (
           <div>
             <p style={{ fontSize: '18px', marginBottom: '8px' }}>点击或拖拽图片到此处上传</p>
-            <p style={{ color: '#999' }}>支持 JPG, PNG, GIF, WebP 等格式</p>
+            <p className="text-[var(--color-text-placeholder)]">支持 JPG, PNG, GIF, WebP 等格式</p>
           </div>
         )}
       </div>
@@ -296,7 +296,7 @@ function PhotosPanel() {
               <p style={{ fontSize: '14px', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {photo.origin_name}
               </p>
-              <p style={{ fontSize: '12px', color: '#999', margin: 0 }}>
+              <p className="text-xs text-[var(--color-text-placeholder)] m-0">
                 {(photo.size / 1024).toFixed(2)} KB
               </p>
               <div className="lsky-photo-actions">
@@ -383,7 +383,7 @@ function AlbumsPanel() {
       </button>
 
       {showCreate && (
-        <div style={{ padding: '16px', border: '1px solid #f0f0f0', borderRadius: '8px', marginBottom: '16px', background: '#fafafa' }}>
+        <div className="p-4 border border-[var(--color-surface-error)] rounded-lg mb-4 bg-[var(--color-surface-form)]">
           <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', marginBottom: '4px' }}>相册名称 *</label>
             <input
@@ -403,7 +403,7 @@ function AlbumsPanel() {
               placeholder="输入相册描述（可选）"
             />
           </div>
-          <button className="lsky-btn" onClick={handleCreate} style={{ background: '#1890ff', color: 'white', border: 'none' }}>
+          <button className="lsky-btn bg-[var(--color-action-blue)] text-white border-none" onClick={handleCreate}>
             创建相册
           </button>
         </div>

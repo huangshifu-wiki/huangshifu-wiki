@@ -128,7 +128,7 @@ const GalleryCard = React.memo(({ gallery, viewMode, isAdmin, deletingGalleryId,
       <button
         onClick={(event) => onRequestDelete(event, gallery)}
         disabled={deletingGalleryId === gallery.id}
-        className="absolute top-2 left-2 p-1.5 rounded bg-white/90 border border-[#e0dcd3] text-[#9e968e] hover:text-red-500 transition-all disabled:cursor-not-allowed disabled:opacity-60"
+        className="absolute top-2 left-2 p-2.5 rounded bg-white/90 border border-[#e0dcd3] text-[#9e968e] hover:text-red-500 transition-all disabled:cursor-not-allowed disabled:opacity-60"
         title="删除图集"
         aria-label="删除图集"
       >
@@ -138,7 +138,7 @@ const GalleryCard = React.memo(({ gallery, viewMode, isAdmin, deletingGalleryId,
     <button
       onClick={(event) => onCopyLink(event, gallery.id)}
       className={clsx(
-        'p-1.5 rounded bg-white/90 border border-[#e0dcd3] text-[#9e968e] hover:text-[#c8951e] transition-all',
+        'p-2.5 rounded bg-white/90 border border-[#e0dcd3] text-[#9e968e] hover:text-[#c8951e] transition-all',
         viewMode === 'list' ? 'absolute top-2 right-2' : 'absolute bottom-2 right-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
       )}
       title="复制内链"
@@ -279,7 +279,7 @@ const GalleryList = () => {
               {user && !isBanned && (
                 <button
                   onClick={() => setIsUploadModalOpen(true)}
-                  className="px-5 py-2 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] transition-all flex items-center gap-2"
+                  className="px-5 py-2 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] active:scale-[0.98] transition-all flex items-center gap-2"
                 >
                   <Plus size={15} /> 上传图集
                 </button>
@@ -367,7 +367,7 @@ const GalleryList = () => {
         {/* Delete Confirm */}
         <AnimatePresence>
           {galleryToDelete && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/45">
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -382,14 +382,14 @@ const GalleryList = () => {
                   <button
                     onClick={() => setGalleryToDelete(null)}
                     disabled={Boolean(deletingGalleryId)}
-                    className="flex-1 px-6 py-3 bg-[#f0ece3] text-[#6b6560] rounded font-semibold hover:bg-[#e0dcd3] transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex-1 px-6 py-3 bg-[#f0ece3] text-[#6b6560] rounded font-semibold hover:bg-[#e0dcd3] active:scale-[0.98] transition-all disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     取消
                   </button>
                   <button
                     onClick={handleConfirmDeleteGallery}
                     disabled={Boolean(deletingGalleryId)}
-                    className="flex-1 px-6 py-3 bg-red-500 text-white rounded font-semibold hover:bg-red-600 transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex-1 px-6 py-3 bg-red-500 text-white rounded font-semibold hover:bg-red-600 active:scale-[0.98] transition-all disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {deletingGalleryId ? '删除中...' : '确定删除'}
                   </button>
@@ -627,8 +627,7 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/45"
     >
       <motion.div
         initial={{ scale: 0.9, y: 20 }}
@@ -698,7 +697,7 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
             <div className="flex flex-wrap gap-4">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex-1 min-w-[160px] p-6 border-2 border-dashed border-[#e0dcd3] rounded hover:border-[#c8951e] hover:bg-[#f7f5f0] transition-all flex flex-col items-center justify-center gap-2 group"
+                className="flex-1 min-w-[160px] p-6 border-2 border-dashed border-[#e0dcd3] rounded hover:border-[#c8951e] hover:bg-[#f7f5f0] active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-2 group"
               >
                 <Upload size={28} className="text-[#9e968e] group-hover:text-[#c8951e]" />
                 <span className="text-sm text-[#6b6560] group-hover:text-[#c8951e]">选择多张图片</span>
@@ -714,7 +713,7 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
 
               <button
                 onClick={() => folderInputRef.current?.click()}
-                className="flex-1 min-w-[160px] p-6 border-2 border-dashed border-[#e0dcd3] rounded hover:border-[#c8951e] hover:bg-[#f7f5f0] transition-all flex flex-col items-center justify-center gap-2 group"
+                className="flex-1 min-w-[160px] p-6 border-2 border-dashed border-[#e0dcd3] rounded hover:border-[#c8951e] hover:bg-[#f7f5f0] active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-2 group"
               >
                 <Folder size={28} className="text-[#9e968e] group-hover:text-[#c8951e]" />
                 <span className="text-sm text-[#6b6560] group-hover:text-[#c8951e]">上传整个文件夹</span>
@@ -767,7 +766,7 @@ const UploadModal = ({ onClose }: { onClose: () => void }) => {
           <button
             onClick={handleUpload}
             disabled={uploading || files.length === 0}
-            className="px-8 py-3 bg-[#c8951e] text-white rounded font-medium hover:bg-[#dca828] transition-all flex items-center gap-2 disabled:opacity-50"
+            className="px-8 py-3 bg-[#c8951e] text-white rounded font-medium hover:bg-[#dca828] active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50"
           >
             {uploading ? `上传中 ${progress}%` : '开始上传'}
           </button>

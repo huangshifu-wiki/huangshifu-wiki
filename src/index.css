@@ -63,6 +63,18 @@
   --color-text-primary: #111827;
   --color-text-secondary: #4B5563;
   --color-text-muted: #6B7280;
+  --color-text-antique: #2c2c2c;
+  --color-text-antique-muted: #9e968e;
+  --color-text-placeholder: #999;
+
+  /* 古风页面色 (Antique Page) */
+  --color-bg-antique: #f7f5f0;
+  --color-accent-antique: #c8951e;
+
+  /* 占位/错误状态色 (Placeholder & Error State) */
+  --color-surface-error: #f0f0f0;
+  --color-surface-form: #fafafa;
+  --color-action-blue: #1890ff;
 
   /* 功能色 (Functional) */
   --color-success: #22C55E;

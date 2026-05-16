@@ -228,7 +228,7 @@ const WikiBranchWorkspace = () => {
 
 	if (loading) {
 		return (
-			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center italic text-[#9e968e]" style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center italic text-[var(--color-text-antique-muted)]" style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
 				加载分支中...
 			</div>
 		);
@@ -236,7 +236,7 @@ const WikiBranchWorkspace = () => {
 
 	if (!page) {
 		return (
-			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center italic text-[#9e968e]" style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center italic text-[var(--color-text-antique-muted)]" style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
 				页面不存在或不可访问
 			</div>
 		);

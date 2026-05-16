@@ -163,7 +163,7 @@ const Profile = () => {
 
   if (!user) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center" style={{ backgroundColor: '#f7f5f0' }}>
+      <div className="min-h-[60vh] flex items-center justify-center bg-[var(--color-bg-antique)]">
         <p className="text-[#9e968e] italic">请先登录以查看个人资料</p>
       </div>
     );

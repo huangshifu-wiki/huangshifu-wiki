@@ -608,7 +608,7 @@ export async function generateImageEmbedding(imageBuffer: Buffer) {
     console.log(`[CLIP] 图像嵌入生成完成，耗时: ${elapsed}ms`)
     return vector
   } finally {
-    await fs.promises.unlink(tmpPath).catch(() => {});
+    await fs.promises.unlink(tmpPath).catch((err) => { console.debug({ err, path: tmpPath }, 'Failed to delete temp file') });
   }
 }
 
@@ -646,7 +646,7 @@ export async function warmup(): Promise<void> {
     await fs.promises.writeFile(tmpPath, Buffer.from([255, 0, 0, 255]));
     const dummyImage = await RawImage.read(tmpPath);
     await extractor(dummyImage, { pooling: 'mean', normalize: true });
-    await fs.promises.unlink(tmpPath).catch(() => {});
+    await fs.promises.unlink(tmpPath).catch((err) => { console.debug({ err, path: tmpPath }, 'Failed to delete temp file') });
   } catch (error) {
     // warmup failure is non-fatal, first real request will load model
   }

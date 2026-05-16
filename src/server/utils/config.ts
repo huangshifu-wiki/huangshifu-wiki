@@ -36,8 +36,6 @@ export const UPLOAD_SESSION_TTL_MINUTES = Math.max(5, Number(process.env.UPLOAD_
 export const PLAY_URL_CACHE_TTL_MS = Math.max(60, Number(process.env.MUSIC_PLAY_URL_CACHE_TTL_SECONDS || 600)) * 1000;
 
 // Prisma 实例和缓存
-/** @deprecated 即将移除，请使用类型安全的 prisma 实例。局部 any 断言需加 eslint-disable 注释 */
-export const prismaAny = prisma as any;
 export const playUrlCache = new Map<string, PlayUrlCacheValue>();
 
 // 音乐平台默认列表

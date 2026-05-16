@@ -207,7 +207,7 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
               <div className="flex flex-col md:flex-row gap-4 md:items-center md:justify-between">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-14 h-14 rounded overflow-hidden bg-[#f7f5f0] shrink-0 border border-[#e0dcd3]">
-                    {preview.cover && <img src={preview.cover} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
+                    {preview.cover && <img src={preview.cover} alt="封面" className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs text-[#9e968e] font-medium">
@@ -257,7 +257,7 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
                         className="w-4 h-4 accent-[#c8951e]"
                       />
                       <div className="w-10 h-10 rounded overflow-hidden bg-[#f7f5f0] shrink-0 border border-[#e0dcd3]">
-                        {song.cover && <img src={song.cover} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
+                        {song.cover && <img src={song.cover} alt="封面" className="w-full h-full object-cover" referrerPolicy="no-referrer" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-[#2c2c2c] truncate">{song.title}</p>

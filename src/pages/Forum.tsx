@@ -38,12 +38,14 @@ import { DEFAULT_AVATAR, handleAvatarError } from "../lib/defaultAvatar";
 import { LocationTagInput } from "../components/LocationTagInput";
 import Pagination from "../components/Pagination";
 import { usePagination } from "../hooks/usePagination";
+import { PageSkeleton } from "../components/PageSkeleton";
 
 type PostItem = {
 	id: string;
 	title: string;
 	section: string;
-	content: string;
+	content?: string;
+	excerpt?: string;
 	tags?: string[];
 	locationCode?: string | null;
 	locationName?: string | null;
@@ -272,7 +274,7 @@ const PostList = () => {
 						{user && !isBanned && (
 							<Link
 								to="/forum/new"
-								className="px-5 py-2 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] transition-all flex items-center gap-2"
+								className="px-5 py-2 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] active:scale-[0.98] transition-all flex items-center gap-2"
 							>
 								<Plus size={15} /> 发布帖子
 							</Link>
@@ -333,9 +335,7 @@ const PostList = () => {
 				
 
 				{loading ? (
-					<div className="text-center text-[#9e968e] italic py-12">
-						加载中...
-					</div>
+					<PageSkeleton variant="forum" />
 				) : posts.length > 0 ? (
 					<>
 						<div className="space-y-3">
@@ -459,19 +459,7 @@ const PostDetail = () => {
 	};
 
 	if (loading)
-		return (
-			<div
-				className="min-h-[calc(100vh-60px)] flex items-center justify-center text-[#9e968e] italic"
-				style={{
-					backgroundColor: "#f7f5f0",
-					fontFamily:
-						"'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-					lineHeight: 1.8,
-				}}
-			>
-				加载中...
-			</div>
-		);
+		return <PageSkeleton variant="forum" />;
 	if (!post)
 		return (
 			<div
@@ -688,7 +676,7 @@ const PostDetail = () => {
 							{canEditPost && (
 								<Link
 									to={`/forum/${post.id}/edit`}
-									className="px-4 py-2 text-[0.9375rem] rounded bg-[#c8951e] text-white hover:bg-[#dca828] transition-all flex items-center gap-2"
+									className="px-4 py-2 text-[0.9375rem] rounded bg-[#c8951e] text-white hover:bg-[#dca828] active:scale-[0.98] transition-all flex items-center gap-2"
 								>
 									<Edit3 size={16} /> 编辑
 								</Link>
@@ -707,7 +695,7 @@ const PostDetail = () => {
 							<button
 								onClick={handleSubmitReview}
 								disabled={submittingReview}
-								className="px-3 py-1 text-[0.8125rem] rounded bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 transition-all self-center mb-1"
+								className="px-3 py-1 text-[0.8125rem] rounded bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 active:scale-[0.98] disabled:opacity-50 transition-all self-center mb-1"
 							>
 								{submittingReview ? "提交中..." : "提交审核"}
 							</button>
@@ -770,7 +758,7 @@ const PostDetail = () => {
 										<button
 											type="submit"
 											disabled={!canComment || isBanned}
-											className="absolute bottom-3 right-3 px-3 py-1.5 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] transition-all disabled:opacity-50 flex items-center gap-1"
+											className="absolute bottom-3 right-3 px-3 py-1.5 bg-[#c8951e] text-white text-sm rounded hover:bg-[#dca828] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-1"
 										>
 											<Send size={14} />
 										</button>
@@ -1172,19 +1160,7 @@ const PostEditor = () => {
 	};
 
 	if (loadingPost) {
-		return (
-			<div
-				className="min-h-[calc(100vh-60px)] flex items-center justify-center text-[#9e968e] italic"
-				style={{
-					backgroundColor: "#f7f5f0",
-					fontFamily:
-						"'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-					lineHeight: 1.8,
-				}}
-			>
-				加载中...
-			</div>
-		);
+		return <PageSkeleton variant="forum" />;
 	}
 
 	return (
@@ -1324,7 +1300,7 @@ const PostEditor = () => {
 						<button
 							type="submit"
 							disabled={Boolean(savingMode)}
-							className="px-8 py-2.5 bg-[#c8951e] text-white rounded text-sm font-medium hover:bg-[#dca828] transition-all flex items-center gap-2 disabled:opacity-50"
+							className="px-8 py-2.5 bg-[#c8951e] text-white rounded text-sm font-medium hover:bg-[#dca828] active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50"
 						>
 							<Send size={16} />{" "}
 							{savingMode === "pending" ? "提交中..." : "提交审核"}

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { prisma, toNotificationResponse } from '../utils';
+import { prisma, toNotificationResponse, parsePagination } from '../utils';
 import type { AuthenticatedRequest } from '../types';
 
 const router = Router();
@@ -9,9 +9,7 @@ const router = Router();
 router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userUid = req.authUser!.uid;
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
-    const page = Math.max(Number(req.query.page) || 1, 1);
-    const skip = (page - 1) * limit;
+    const { limit, page, offset: skip } = parsePagination(req.query);
     const unreadOnly = req.query.unread === 'true';
     const typeFilter = typeof req.query.type === 'string' && req.query.type ? req.query.type : null;
 

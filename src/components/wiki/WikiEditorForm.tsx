@@ -45,10 +45,11 @@ const WikiEditorForm = React.memo(({
 		<>
 			<div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 				<div className="space-y-2">
-					<label className="text-xs font-medium text-[#9e968e]">
+					<label htmlFor="wiki-title" className="text-xs font-medium text-[#9e968e]">
 						标题
 					</label>
 					<input
+						id="wiki-title"
 						type="text"
 						required
 						value={formData.title}
@@ -60,10 +61,11 @@ const WikiEditorForm = React.memo(({
 					/>
 				</div>
 				<div className="space-y-2">
-					<label className="text-xs font-medium text-[#9e968e]">
+					<label htmlFor="wiki-category" className="text-xs font-medium text-[#9e968e]">
 						分类
 					</label>
 					<select
+						id="wiki-category"
 						value={formData.category}
 						onChange={(e) =>
 							onFormDataChange({ category: e.target.value })
@@ -78,10 +80,11 @@ const WikiEditorForm = React.memo(({
 					</select>
 				</div>
 				<div className="space-y-2">
-					<label className="text-xs font-medium text-[#9e968e]">
+					<label htmlFor="wiki-event-date" className="text-xs font-medium text-[#9e968e]">
 						事件日期 (可选)
 					</label>
 					<input
+						id="wiki-event-date"
 						type="date"
 						value={formData.eventDate}
 						onChange={(e) =>
@@ -94,7 +97,7 @@ const WikiEditorForm = React.memo(({
 
 			<div className="space-y-2">
 				<div className="flex justify-between items-center">
-					<label className="text-xs font-medium text-[#9e968e]">
+					<label htmlFor="wiki-content" className="text-xs font-medium text-[#9e968e]">
 						内容 (Markdown) <span className="text-red-500">*</span>
 					</label>
 					<button
@@ -112,6 +115,7 @@ const WikiEditorForm = React.memo(({
 					</button>
 				</div>
 				<div
+					id="wiki-content"
 					className="border border-[#e0dcd3] rounded overflow-hidden"
 				>
 					<MarkdownEditor
@@ -132,10 +136,11 @@ const WikiEditorForm = React.memo(({
 			</div>
 
 			<div className="space-y-2">
-				<label className="text-xs font-medium text-[#9e968e]">
+				<label htmlFor="wiki-tags" className="text-xs font-medium text-[#9e968e]">
 					标签 (逗号分隔)
 				</label>
 				<input
+					id="wiki-tags"
 					type="text"
 					value={formData.tags}
 					onChange={(e) =>

@@ -99,7 +99,7 @@ export const Navbar = () => {
 										<Link to="/profile" className="flex items-center gap-2 group">
 											<img
 												src={profile?.photoURL || user.photoURL || DEFAULT_AVATAR}
-												alt=""
+												alt={user?.displayName + ' 头像' || ''}
 												className="w-8 h-8 object-cover rounded-full border border-border"
 												referrerPolicy="no-referrer"
 												onError={handleAvatarError}

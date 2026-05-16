@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiGet, apiPut, apiPost } from '../../lib/apiClient';
 
 interface DiskStatus {
   totalSpaceGB: number;
@@ -65,13 +66,7 @@ export const AdminDiskMonitor: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/admin/disk/status');
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const data = await apiGet<{ success: boolean; data: DiskStatus & { config?: DiskMonitorConfig }; error?: string }>('/api/admin/disk/status');
       
       if (data.success) {
         setDiskStatus(data.data);
@@ -170,20 +165,7 @@ export const AdminDiskMonitor: React.FC = () => {
       setSaving(true);
       setValidationErrors([]);
 
-      const response = await fetch('/api/admin/disk/config', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(editingConfig),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `保存失败 (${response.status})`);
-      }
-
-      const result = await response.json();
+      const result = await apiPut<{ success: boolean; data: DiskMonitorConfig; error?: string }>('/api/admin/disk/config', editingConfig);
 
       if (result.success) {
         setConfig(result.data);
@@ -208,16 +190,8 @@ export const AdminDiskMonitor: React.FC = () => {
 
     try {
       setSaving(true);
-      const response = await fetch('/api/admin/disk/config/reset', {
-        method: 'POST',
-      });
+      const result = await apiPost<{ success: boolean; data: DiskMonitorConfig }>('/api/admin/disk/config/reset');
 
-      if (!response.ok) {
-        throw new Error('重置失败');
-      }
-
-      const result = await response.json();
-      
       if (result.success) {
         setConfig(result.data);
         setEditingConfig({});

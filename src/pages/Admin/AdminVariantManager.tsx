@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiGet, apiPost } from '../../lib/apiClient';
 
 interface VariantStats {
   queueLength: number;
@@ -68,17 +69,10 @@ export const AdminVariantManager: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const [statsRes, cleanupRes] = await Promise.all([
-        fetch('/api/admin/variants/stats'),
-        fetch('/api/admin/variants/cleanup/stats'),
+      const [statsData, cleanupData] = await Promise.all([
+        apiGet<{ success: boolean; data: VariantStats }>('/api/admin/variants/stats'),
+        apiGet<{ success: boolean; data: CleanupStats }>('/api/admin/variants/cleanup/stats'),
       ]);
-
-      if (!statsRes.ok || !cleanupRes.ok) {
-        throw new Error('获取统计失败');
-      }
-
-      const statsData = await statsRes.json();
-      const cleanupData = await cleanupRes.json();
 
       if (statsData.success) {
         setVariantStats(statsData.data);
@@ -110,27 +104,17 @@ export const AdminVariantManager: React.FC = () => {
       setRebuilding(true);
       setRebuildResult(null);
 
-      const response = await fetch('/api/admin/images/rebuild-all-variants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scope,
-          batchSize: 100,
-          dryRun: false,
-        }),
+      const result = await apiPost<RebuildResponse>('/api/admin/images/rebuild-all-variants', {
+        scope,
+        batchSize: 100,
+        dryRun: false,
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const result: RebuildResponse = await response.json();
 
       if (result.success) {
         setRebuildResult(result);
         
         setTimeout(() => {
-          fetchStats(); // 刷新统计
+          fetchStats();
         }, 2000);
       } else {
         throw new Error(result.error || '重建失败');
@@ -151,13 +135,7 @@ export const AdminVariantManager: React.FC = () => {
       setCleaning(true);
       setCleanupResult(null);
 
-      const response = await fetch('/api/admin/variants/cleanup/orphaned', {
-        method: 'POST',
-      });
-
-      if (!response.ok) throw new Error('清理失败');
-
-      const data = await response.json();
+      const data = await apiPost<{ success: boolean; data: { freedSpace: number; deletedCount: number; errorsCount: number } }>('/api/admin/variants/cleanup/orphaned');
 
       if (data.success) {
         setCleanupResult({
@@ -184,13 +162,7 @@ export const AdminVariantManager: React.FC = () => {
       setCleaning(true);
       setCleanupResult(null);
 
-      const response = await fetch('/api/admin/variants/cleanup/failed', {
-        method: 'POST',
-      });
-
-      if (!response.ok) throw new Error('清理失败');
-
-      const data = await response.json();
+      const data = await apiPost<{ success: boolean; data: { freedSpace: number; deletedCount: number; errorsCount: number } }>('/api/admin/variants/cleanup/failed');
 
       if (data.success) {
         setCleanupResult({
@@ -217,13 +189,7 @@ export const AdminVariantManager: React.FC = () => {
       setCleaning(true);
       setCleanupResult(null);
 
-      const response = await fetch('/api/admin/variants/cleanup/all', {
-        method: 'POST',
-      });
-
-      if (!response.ok) throw new Error('全量清理失败');
-
-      const data = await response.json();
+      const data = await apiPost<{ success: boolean; data: { totalFreedBytes: number; totalDeletedFiles: number; totalErrors: number } }>('/api/admin/variants/cleanup/all');
 
       if (data.success) {
         setCleanupResult({

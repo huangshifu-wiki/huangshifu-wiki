@@ -490,7 +490,7 @@ const GalleryDetail = () => {
     return (
       <div
         className="min-h-[calc(100vh-60px)]"
-        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+        style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
       >
         <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
           <div className="h-48 bg-[#f0ece3] rounded animate-pulse" />
@@ -503,13 +503,13 @@ const GalleryDetail = () => {
     return (
       <div
         className="min-h-[calc(100vh-60px)]"
-        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+        style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
       >
         <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-          <Link to="/gallery" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors">
+          <Link to="/gallery" className="inline-flex items-center gap-2 text-sm text-[var(--color-text-antique-muted)] hover:text-[var(--color-accent-antique)] transition-colors">
             <ArrowLeft size={16} /> 返回图集列表
           </Link>
-          <div className="mt-6 bg-white rounded border border-[#e0dcd3] p-10 text-center text-[#9e968e] italic tracking-[0.1em]">
+          <div className="mt-6 bg-white rounded border border-[#e0dcd3] p-10 text-center text-[var(--color-text-antique-muted)] italic tracking-[0.1em]">
             图集不存在或已被删除
           </div>
         </div>

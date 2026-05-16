@@ -72,6 +72,7 @@ export class VariantGenerator {
   };
 
   private isProcessing = false;
+  private processInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     this.startQueueProcessor();
@@ -149,11 +150,18 @@ export class VariantGenerator {
    * 启动队列处理器
    */
   private startQueueProcessor(): void {
-    setInterval(() => {
+    this.processInterval = setInterval(() => {
       if (!this.isProcessing) {
         this.processNext();
       }
     }, 500);
+  }
+
+  stop() {
+    if (this.processInterval) {
+      clearInterval(this.processInterval)
+      this.processInterval = null
+    }
   }
 
   /**

@@ -133,7 +133,7 @@ const AlbumDetail = () => {
     return (
       <div
         className="min-h-screen"
-        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+        style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
       >
         <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
           <div className="h-40 bg-[#f0ece3] rounded animate-pulse" />
@@ -146,13 +146,13 @@ const AlbumDetail = () => {
     return (
       <div
         className="min-h-screen"
-        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+        style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
       >
         <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-          <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors">
+          <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[var(--color-text-antique-muted)] hover:text-[var(--color-accent-antique)] transition-colors">
             <ArrowLeft size={16} /> 返回音乐馆
           </Link>
-          <div className="mt-6 bg-white rounded border border-[#e0dcd3] p-10 text-center text-[#9e968e] italic tracking-[0.1em]">
+          <div className="mt-6 bg-white rounded border border-[#e0dcd3] p-10 text-center text-[var(--color-text-antique-muted)] italic tracking-[0.1em]">
             专辑不存在或已被删除
           </div>
         </div>
@@ -163,10 +163,10 @@ const AlbumDetail = () => {
   return (
     <div
       className="min-h-screen"
-      style={{ backgroundColor: '#f7f5f0', color: '#2c2c2c', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif", lineHeight: 1.8 }}
+      style={{ backgroundColor: 'var(--color-bg-antique)', color: 'var(--color-text-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif", lineHeight: 1.8 }}
     >
       <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-        <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors mb-5">
+        <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[var(--color-text-antique-muted)] hover:text-[var(--color-accent-antique)] transition-colors mb-5">
           <ArrowLeft size={16} /> 返回音乐馆
         </Link>
 

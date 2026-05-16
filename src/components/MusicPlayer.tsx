@@ -88,7 +88,7 @@ export const MusicPlayer = ({ songId }: { songId: string }) => {
       <div className="flex items-center gap-3 mb-3">
         <img 
           src={song.cover} 
-          alt="" 
+          alt={song.title + ' 封面'}
           className="w-12 h-12 rounded object-cover bg-[#f0ece3] flex-shrink-0"
           referrerPolicy="no-referrer"
         />
@@ -106,7 +106,7 @@ export const MusicPlayer = ({ songId }: { songId: string }) => {
         onChange={(e) => seekTo(parseFloat(e.target.value))}
         disabled={!duration}
         className="w-full h-1 bg-[#e0dcd3] rounded-full appearance-none cursor-pointer mb-3"
-        style={{ accentColor: '#c8951e' }}
+        style={{ accentColor: 'var(--color-accent-antique)' }}
       />
 
       <div className="flex items-center justify-between">

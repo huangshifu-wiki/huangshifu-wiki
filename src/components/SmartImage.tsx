@@ -110,7 +110,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
   fallback,
   decodeOptions = {},
   transitionDuration = 300,
-  placeholderColor = '#f5f5f5',
+  placeholderColor = 'var(--color-surface-error)',
   enableBlurTransition = true,
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -380,16 +380,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
   if (!imageInput) {
     const noImageContent = fallback || (
       <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '100%',
-          height: '100%',
-          backgroundColor: '#f0f0f0',
-          color: '#999',
-          fontSize: '14px',
-        }}
+        className="flex items-center justify-center w-full h-full bg-[var(--color-surface-error)] text-[var(--color-text-placeholder)] text-sm"
       >
         无图片
       </div>
@@ -443,16 +434,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
         fallback || (
           <div
             role="alert"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '100%',
-              height: '100%',
-              backgroundColor: '#f0f0f0',
-              color: '#999',
-              fontSize: '14px',
-            }}
+            className="flex items-center justify-center w-full h-full bg-[var(--color-surface-error)] text-[var(--color-text-placeholder)] text-sm"
           >
             图片加载失败
           </div>

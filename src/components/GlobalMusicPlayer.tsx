@@ -81,67 +81,58 @@ export const GlobalMusicPlayer = () => {
   }, [currentSong]);
 
   useEffect(() => {
-    if (!audioRef.current) return;
-    audioRef.current.currentTime = 0;
-    seekTo(0);
-    // 重置音频统计
-    setAudioStats({
-      bufferHealth: 0,
-      isStalling: false,
-      stallCount: 0,
-      readyState: 0
-    });
-    // 当resolvedPlayUrl变化（新歌曲URL已解析完成），如果应该是播放状态则开始播放
-    if (isPlaying && resolvedPlayUrl) {
-      const audio = audioRef.current;
-      // 短暂延迟确保音频元素已更新src
-      setTimeout(() => {
-        audio.play().catch(e => {
-          console.error("Playback failed:", e);
-          setIsPlaying(false);
-        });
-      }, 50);
-    }
-  }, [resolvedPlayUrl, seekTo, isPlaying, setIsPlaying]);
+    const audio = audioRef.current
+    if (!audio) return
 
-  useEffect(() => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        // 只有在resolvedPlayUrl已设置的情况下才播放
-        if (!resolvedPlayUrl) {
-          return;
-        }
-        // 检查缓冲是否足够再播放
-        const audio = audioRef.current;
-        const canPlay = audio.readyState >= 3 || // HAVE_FUTURE_DATA
-          (audio.buffered.length > 0 && 
-           audio.buffered.end(audio.buffered.length - 1) - audio.currentTime > 2);
-        
-        if (canPlay) {
-          audio.play().catch(e => {
-            console.error("Playback failed:", e);
-            setIsPlaying(false);
-          });
+    if (resolvedPlayUrl !== audio.src) {
+      audio.currentTime = 0
+      seekTo(0)
+      setAudioStats({
+        bufferHealth: 0,
+        isStalling: false,
+        stallCount: 0,
+        readyState: 0
+      })
+    }
+
+    if (!isPlaying || !resolvedPlayUrl) {
+      audio.pause()
+      return
+    }
+
+    const tryPlay = () => {
+      audio.play().catch((e) => {
+        console.error('Playback failed:', e)
+        setIsPlaying(false)
+      })
+    }
+
+    const canPlay =
+      audio.readyState >= 3 ||
+      (audio.buffered.length > 0 &&
+        audio.buffered.end(audio.buffered.length - 1) - audio.currentTime > 2)
+
+    if (canPlay) {
+      tryPlay()
+    } else {
+      let cancelled = false
+      const checkBuffer = () => {
+        if (cancelled) return
+        if (
+          audio.buffered.length > 0 &&
+          audio.buffered.end(audio.buffered.length - 1) - audio.currentTime > 2
+        ) {
+          tryPlay()
         } else {
-          // 等待缓冲完成
-          const checkBuffer = () => {
-            if (audio.buffered.length > 0 && 
-                audio.buffered.end(audio.buffered.length - 1) - audio.currentTime > 2) {
-              audio.play().catch(e => {
-                console.error("Playback failed:", e);
-                setIsPlaying(false);
-              });
-            } else {
-              setTimeout(checkBuffer, 100);
-            }
-          };
-          checkBuffer();
+          setTimeout(checkBuffer, 100)
         }
-      } else {
-        audioRef.current.pause();
+      }
+      checkBuffer()
+      return () => {
+        cancelled = true
       }
     }
-  }, [isPlaying, setIsPlaying, resolvedPlayUrl]);
+  }, [resolvedPlayUrl, isPlaying, seekTo, setIsPlaying])
 
   useEffect(() => {
     if (audioRef.current) {
@@ -268,10 +259,10 @@ export const GlobalMusicPlayer = () => {
           onChange={handleProgressChange}
           disabled={!contextDuration || resolvingPlayUrl}
           className="absolute top-0 left-0 w-full h-[2px] appearance-none cursor-pointer bg-transparent"
-          style={{ accentColor: '#c8951e' }}
+          style={{ accentColor: 'var(--color-accent-antique)' }}
         />
         <div
-          className="h-full bg-[#c8951e] pointer-events-none"
+          className="h-full bg-[var(--color-accent-antique)] pointer-events-none"
           style={{ width: `${contextDuration > 0 ? (contextCurrentTime / contextDuration) * 100 : 0}%`, transition: 'width 0.3s linear' }}
         />
       </div>
@@ -280,7 +271,7 @@ export const GlobalMusicPlayer = () => {
         {/* Cover */}
         <img
           src={currentSong.cover}
-          alt=""
+          alt={currentSong?.title + ' 封面' || ''}
           className="w-11 h-11 rounded object-cover flex-shrink-0 bg-[#f0ece3]"
           referrerPolicy="no-referrer"
         />
@@ -351,9 +342,9 @@ export const GlobalMusicPlayer = () => {
                   value={contextIsMuted ? 0 : contextVolume}
                   onChange={(e) => contextSetVolume(parseFloat(e.target.value))}
                   className="w-20 h-1 bg-[#ebe8e0] rounded-full appearance-none cursor-pointer"
-                  style={{ accentColor: '#c8951e' }}
+                  style={{ accentColor: 'var(--color-accent-antique)' }}
                 />
-                <span className="text-xs text-[#9e968e] w-6 text-right">
+                <span className="text-xs text-[var(--color-text-antique-muted)] w-6 text-right">
                   {Math.round((contextIsMuted ? 0 : contextVolume) * 100)}
                 </span>
               </motion.div>

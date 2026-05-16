@@ -410,7 +410,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const wikiVisibilityWhere = buildWikiVisibilityWhere(req.authUser);
     const postVisibilityWhere = buildPostVisibilityWhere(req.authUser);
 
-    const cacheKey = `search:${q}:${category || 'all'}:${type}`;
+    const cacheKey = `search:${q}:${category || 'all'}:${type}:${req.authUser?.role || 'anonymous'}`;
     const cached = enhancedCache.get(cacheKey);
     if (cached) return res.json(cached);
 
@@ -654,7 +654,7 @@ router.post('/by-image', searchImageUpload.single('image'), async (req: Authenti
     res.status(500).json({ error: '图片语义搜索失败' });
   } finally {
     if (tempFile?.path) {
-      await fs.promises.unlink(tempFile.path).catch(() => {});
+      await fs.promises.unlink(tempFile.path).catch((err) => logger.debug({ err }, 'Failed to delete temp file'));
     }
   }
 });

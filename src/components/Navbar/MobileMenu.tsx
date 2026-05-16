@@ -92,7 +92,7 @@ export const MobileMenu = ({
 									>
 										<img
 											src={profile?.photoURL || user.photoURL || DEFAULT_AVATAR}
-											alt=""
+											alt={user?.displayName + ' 头像' || ''}
 											className="w-10 h-10 rounded-full border border-[#e0dcd3]"
 											referrerPolicy="no-referrer"
 											onError={handleAvatarError}

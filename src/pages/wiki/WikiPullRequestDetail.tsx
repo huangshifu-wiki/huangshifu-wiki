@@ -95,7 +95,7 @@ const WikiPullRequestDetail = () => {
 
 	if (!user) {
 		return (
-			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center text-[#9e968e] italic" style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center text-[var(--color-text-antique-muted)] italic" style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
 				请先登录查看 PR 详情。
 			</div>
 		);
@@ -103,7 +103,7 @@ const WikiPullRequestDetail = () => {
 
 	if (loading) {
 		return (
-			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center text-[#9e968e] italic" style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center text-[var(--color-text-antique-muted)] italic" style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
 				加载 PR 详情中...
 			</div>
 		);
@@ -111,7 +111,7 @@ const WikiPullRequestDetail = () => {
 
 	if (!pullRequest || (slug && pullRequest.pageSlug !== slug)) {
 		return (
-			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center text-[#9e968e] italic" style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
+			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center text-[var(--color-text-antique-muted)] italic" style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
 				PR 不存在或无权限查看
 			</div>
 		);

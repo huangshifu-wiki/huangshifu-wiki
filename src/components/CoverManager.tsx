@@ -170,7 +170,7 @@ export const CoverManager = ({
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm font-medium text-[#2c2c2c]">当前封面</span>
               <div className="w-14 h-14 rounded overflow-hidden bg-[#f7f5f0] border border-[#e0dcd3]">
-                <img src={currentCover} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={currentCover} alt="封面" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </div>
             </div>
 
@@ -221,7 +221,7 @@ export const CoverManager = ({
                     )}
                   >
                     <div className="aspect-square">
-                      <img src={cover.url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <img src={cover.url} alt="封面" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     </div>
                     {cover.isDefault && (
                       <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-[#c8951e] text-white text-[10px] font-medium rounded flex items-center gap-1">

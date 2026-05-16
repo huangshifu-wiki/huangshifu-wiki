@@ -122,7 +122,7 @@ const WikiList = () => {
 	};
 
 	return (
-		<div className="min-h-[calc(100vh-60px)]" style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
+		<div className="min-h-[calc(100vh-60px)]" style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}>
 			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
 				<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
 					<div>

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { prismaAny, resolveMusicPlayUrl, toSongResponse, normalizeMusicImportTracks } from '../utils';
+import { prisma, resolveMusicPlayUrl, toSongResponse, normalizeMusicImportTracks } from '../utils';
 import {
   getMusicResourcePreview,
   resolveAudioUrl as resolveMetingAudioUrl,
@@ -13,7 +13,7 @@ router.get('/song/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    const existing = await prismaAny.musicTrack.findFirst({
+    const existing = await prisma.musicTrack.findFirst({
       where: {
         OR: [
           { id },

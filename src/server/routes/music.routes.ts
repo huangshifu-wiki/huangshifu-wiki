@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { requireAuth, requireActiveUser, requireAdmin } from '../middleware/auth';
+import { asyncHandler } from '../middleware/asyncHandler';
 import {
   prisma,
-  prismaAny,
   toSongResponse,
   fetchSongsWithRelations,
   fetchSongWithRelationsByDocId,
@@ -34,7 +34,7 @@ import { Prisma } from '@prisma/client';
 const router = Router();
 
 // Music list
-router.get('/', async (req: AuthenticatedRequest, res) => {
+router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const albumDocId = typeof req.query.albumDocId === 'string' ? req.query.albumDocId.trim() : '';
     const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 });
@@ -44,11 +44,11 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
 
     let instrumentalDocIds: string[] = [];
     if (!includeInstrumentals) {
-      const relations = await prismaAny.songInstrumentalRelation.findMany({
+      const relations = await prisma.songInstrumentalRelation.findMany({
         select: { songDocId: true },
         distinct: ['songDocId'],
       });
-      instrumentalDocIds = relations.map((r: any) => r.songDocId);
+      instrumentalDocIds = relations.map((r) => r.songDocId);
     }
 
     const where = albumDocId
@@ -82,7 +82,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     }
 
     res.json({
-      songs: songs.map((song) => toSongResponse(song, { favoritedByMe: favoritedMusicSet.has(song.docId) })),
+      songs: songs.map((song) => toSongResponse(song, { favoritedByMe: favoritedMusicSet.has(song.docId), excludeLyric: true })),
       total,
       page,
       limit,
@@ -92,10 +92,10 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     console.error('Fetch music error:', error);
     res.status(500).json({ error: '获取音乐失败' });
   }
-});
+}));
 
 // Create music
-router.post('/', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.post('/', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const body = (req.body || {}) as Record<string, unknown>;
     const id = typeof body.id === 'string' ? body.id.trim() : '';
@@ -144,10 +144,10 @@ router.post('/', requireAdmin, async (req: AuthenticatedRequest, res) => {
     console.error('Add music error:', error);
     res.status(500).json({ error: '添加歌曲失败' });
   }
-});
+}));
 
 // Parse music URL
-router.post('/parse-url', requireAdmin, async (req, res) => {
+router.post('/parse-url', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const rawUrl = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
     if (!rawUrl) {
@@ -173,10 +173,10 @@ router.post('/parse-url', requireAdmin, async (req, res) => {
     console.error('Parse music url error:', error);
     res.status(500).json({ error: '解析音乐链接失败' });
   }
-});
+}));
 
 // Import music
-router.post('/import', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.post('/import', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const rawUrl = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
     if (!rawUrl) {
@@ -334,7 +334,7 @@ router.post('/import', requireAdmin, async (req: AuthenticatedRequest, res) => {
       }
     }
 
-    const album = await prismaAny.album.findFirst({
+    const album = await prisma.album.findFirst({
       where: {
         platform: preview.platform,
         sourceId: preview.id,
@@ -365,36 +365,36 @@ router.post('/import', requireAdmin, async (req: AuthenticatedRequest, res) => {
     console.error('Import music error:', error);
     res.status(500).json({ error: '导入音乐失败' });
   }
-});
+}));
 
 // Legacy import routes (kept for backward compatibility)
-router.post('/from-netease', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.post('/from-netease', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.status(410).json({ error: '请使用通用导入接口 /api/music/import' });
-});
+}));
 
-router.post('/from-qq', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.post('/from-qq', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.status(410).json({ error: '请使用通用导入接口 /api/music/import' });
-});
+}));
 
-router.post('/from-kugou', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.post('/from-kugou', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.status(410).json({ error: '请使用通用导入接口 /api/music/import' });
-});
+}));
 
-router.post('/from-baidu', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.post('/from-baidu', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.status(410).json({ error: '请使用通用导入接口 /api/music/import' });
-});
+}));
 
-router.post('/from-kuwo', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.post('/from-kuwo', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.status(410).json({ error: '请使用通用导入接口 /api/music/import' });
-});
+}));
 
 // Get play URL
-router.get('/:docId/play-url', async (req, res) => {
+router.get('/:docId/play-url', asyncHandler(async (req, res) => {
   try {
     const { docId } = req.params;
     const platform = typeof req.query.platform === 'string' ? req.query.platform.trim() : '';
 
-    const song = await prismaAny.musicTrack.findUnique({
+    const song = await prisma.musicTrack.findUnique({
       where: { docId },
       select: {
         docId: true,
@@ -441,34 +441,34 @@ router.get('/:docId/play-url', async (req, res) => {
     console.error('Fetch play url error:', error);
     res.status(500).json({ error: '获取播放链接失败' });
   }
-});
+}));
 
 // Get instrumental targets
-router.get('/instrumental-targets', async (req, res) => {
+router.get('/instrumental-targets', asyncHandler(async (req, res) => {
   try {
-    const relations = await prismaAny.songInstrumentalRelation.findMany({
+    const relations = await prisma.songInstrumentalRelation.findMany({
       select: {
         songDocId: true,
       },
       distinct: ['songDocId'],
     });
     res.json({
-      docIds: relations.map((r: any) => r.songDocId),
+      docIds: relations.map((r) => r.songDocId),
     });
   } catch (error) {
     console.error('Fetch instrumental targets error:', error);
     res.status(500).json({ error: '获取伴奏列表失败' });
   }
-});
+}));
 
 // Get music by docId
-router.get('/:docId', async (req: AuthenticatedRequest, res) => {
+router.get('/:docId', asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const identifier = req.params.docId;
     let song = await fetchSongWithRelationsByDocId(identifier);
 
     if (!song) {
-      const matched = await prismaAny.musicTrack.findFirst({
+      const matched = await prisma.musicTrack.findFirst({
         where: {
           OR: [
             { id: identifier },
@@ -509,13 +509,13 @@ router.get('/:docId', async (req: AuthenticatedRequest, res) => {
     console.error('Fetch song detail error:', error);
     res.status(500).json({ error: '获取歌曲详情失败' });
   }
-});
+}));
 
 // Delete music
-router.delete('/:docId', requireAdmin, async (req, res) => {
+router.delete('/:docId', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const docId = req.params.docId;
-    const song = await prismaAny.musicTrack.findUnique({
+    const song = await prisma.musicTrack.findUnique({
       where: { docId },
       include: {
         covers: true,
@@ -527,51 +527,53 @@ router.delete('/:docId', requireAdmin, async (req, res) => {
       return;
     }
 
-    await prismaAny.songInstrumentalRelation.deleteMany({
-      where: {
-        OR: [{ songDocId: docId }, { targetSongDocId: docId }],
-      },
-    });
+    await prisma.$transaction(async (tx) => {
+      await tx.songInstrumentalRelation.deleteMany({
+        where: {
+          OR: [{ songDocId: docId }, { targetSongDocId: docId }],
+        },
+      });
 
-    await prismaAny.songAlbumRelation.deleteMany({ where: { songDocId: docId } });
+      await tx.songAlbumRelation.deleteMany({ where: { songDocId: docId } });
 
-    for (const cover of song.covers || []) {
-      if (cover.assetId) {
-        const [songLinked, albumLinked, galleryLinked] = await Promise.all([
-          prismaAny.songCover.count({ where: { assetId: cover.assetId, id: { not: cover.id } } }),
-          prismaAny.albumCover.count({ where: { assetId: cover.assetId } }),
-          prisma.galleryImage.count({ where: { assetId: cover.assetId } }),
-        ]);
-        if (songLinked + albumLinked + galleryLinked === 0) {
-          const asset = await prisma.mediaAsset.findUnique({ where: { id: cover.assetId } });
-          if (asset) {
-            await safeDeleteUploadFileByStorageKey(asset.storageKey);
-            await prisma.mediaAsset.update({
-              where: { id: asset.id },
-              data: { status: 'deleted' },
-            });
+      for (const cover of song.covers || []) {
+        if (cover.assetId) {
+          const [songLinked, albumLinked, galleryLinked] = await Promise.all([
+            tx.songCover.count({ where: { assetId: cover.assetId, id: { not: cover.id } } }),
+            tx.albumCover.count({ where: { assetId: cover.assetId } }),
+            tx.galleryImage.count({ where: { assetId: cover.assetId } }),
+          ]);
+          if (songLinked + albumLinked + galleryLinked === 0) {
+            const asset = await tx.mediaAsset.findUnique({ where: { id: cover.assetId } });
+            if (asset) {
+              await safeDeleteUploadFileByStorageKey(asset.storageKey);
+              await tx.mediaAsset.update({
+                where: { id: asset.id },
+                data: { status: 'deleted' },
+              });
+            }
           }
+        } else {
+          await safeDeleteUploadFileByUrl(cover.publicUrl);
         }
-      } else {
-        await safeDeleteUploadFileByUrl(cover.url);
       }
-    }
 
-    await prismaAny.songCover.deleteMany({ where: { songDocId: docId } });
-    await prisma.musicTrack.delete({ where: { docId } });
+      await tx.songCover.deleteMany({ where: { songDocId: docId } });
+      await tx.musicTrack.delete({ where: { docId } });
+    });
 
     res.json({ success: true });
   } catch (error) {
     console.error('Delete music error:', error);
     res.status(500).json({ error: '删除歌曲失败' });
   }
-});
+}));
 
 // Update music
-router.patch('/:docId', requireAdmin, async (req, res) => {
+router.patch('/:docId', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const docId = req.params.docId;
-    const existing = await prismaAny.musicTrack.findUnique({ where: { docId } });
+    const existing = await prisma.musicTrack.findUnique({ where: { docId } });
     if (!existing) {
       res.status(404).json({ error: '歌曲不存在' });
       return;
@@ -620,7 +622,7 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
     if (baiduId) updateData.baiduId = baiduId;
     if (kuwoId) updateData.kuwoId = kuwoId;
 
-    const platformIdFields: Array<{ field: string; value: string }> = [];
+    const platformIdFields: Array<{ field: 'neteaseId' | 'tencentId' | 'kugouId' | 'baiduId' | 'kuwoId'; value: string }> = [];
     if (neteaseId) platformIdFields.push({ field: 'neteaseId', value: neteaseId });
     if (tencentId) platformIdFields.push({ field: 'tencentId', value: tencentId });
     if (kugouId) platformIdFields.push({ field: 'kugouId', value: kugouId });
@@ -630,7 +632,7 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
     if (platformIdFields.length > 0) {
       for (const { field, value } of platformIdFields) {
         if (!value) continue;
-        const conflict = await prismaAny.musicTrack.findFirst({
+        const conflict = await prisma.musicTrack.findFirst({
           where: {
             docId: { not: docId },
             [field]: value,
@@ -639,7 +641,7 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
         });
         if (conflict) {
           res.status(409).json({
-            error: `该平台 ID 已被歌曲「${conflict.title}」使用`,
+            error: `该平台ID 已被歌曲「${conflict.title}」使用`,
             conflict: true,
             conflictingSong: {
               docId: conflict.docId,
@@ -652,7 +654,7 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
       }
     }
 
-    await prismaAny.musicTrack.update({
+    await prisma.musicTrack.update({
       where: { docId },
       data: updateData,
     });
@@ -668,10 +670,10 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
     console.error('Update music error:', error);
     res.status(500).json({ error: '更新歌曲失败' });
   }
-});
+}));
 
 // Match suggestions
-router.get('/match-suggestions', async (req: AuthenticatedRequest, res) => {
+router.get('/match-suggestions', asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const platform = typeof req.query.platform === 'string' ? req.query.platform.trim() : '';
     const title = typeof req.query.title === 'string' ? req.query.title.trim() : '';
@@ -689,7 +691,7 @@ router.get('/match-suggestions', async (req: AuthenticatedRequest, res) => {
       return;
     }
 
-    const cleanTitle = title.replace(/[（(].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
+    const cleanTitle = title.replace(/[（].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
     const keyword = `${cleanTitle} ${artist}`.trim();
 
     const searchResults = await searchMusicResources({
@@ -704,7 +706,7 @@ router.get('/match-suggestions', async (req: AuthenticatedRequest, res) => {
 
     const scored = searchResults
       .map((item) => {
-        const itemTitleClean = item.title.replace(/[（(].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
+        const itemTitleClean = item.title.replace(/[（].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
         const itemTitleNorm = itemTitleClean.toLowerCase().replace(/\s+/g, '');
         const itemArtistNorm = item.artist.toLowerCase().replace(/\s+/g, '');
         const titleScore = calculateSimilarity(normalizedTitle, itemTitleNorm);
@@ -723,12 +725,12 @@ router.get('/match-suggestions', async (req: AuthenticatedRequest, res) => {
       autoSelectedIndex = 0;
     }
 
-    const existingSongsByPlatformId = await prismaAny.musicTrack.findMany({
+    const existingSongsByPlatformId = await prisma.musicTrack.findMany({
       where: {
         OR: scored.map((item) => {
           const field = getPlatformSourceField(platform as MusicPlatform);
           return { [field]: item.sourceId };
-        }),
+        }) as Prisma.MusicTrackWhereInput[],
       },
       select: { docId: true, id: true, title: true, artist: true },
     });
@@ -758,12 +760,12 @@ router.get('/match-suggestions', async (req: AuthenticatedRequest, res) => {
     console.error('Match suggestions error:', error);
     res.status(500).json({ error: '搜索匹配歌曲失败' });
   }
-});
+}));
 
 // Get music covers
-router.get('/:docId/covers', async (req, res) => {
+router.get('/:docId/covers', asyncHandler(async (req, res) => {
   try {
-    const song = await prismaAny.musicTrack.findUnique({
+    const song = await prisma.musicTrack.findUnique({
       where: { docId: req.params.docId },
       include: {
         covers: {
@@ -778,7 +780,7 @@ router.get('/:docId/covers', async (req, res) => {
     }
 
     res.json({
-      covers: (song.covers || []).map((cover: any) => ({
+      covers: (song.covers || []).map((cover) => ({
         id: cover.id,
         assetId: cover.assetId,
         storageKey: cover.storageKey,
@@ -791,10 +793,10 @@ router.get('/:docId/covers', async (req, res) => {
     console.error('Fetch song covers error:', error);
     res.status(500).json({ error: '获取歌曲封面失败' });
   }
-});
+}));
 
 // Add music cover
-router.post('/:docId/covers', requireAdmin, async (req, res) => {
+router.post('/:docId/covers', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const songDocId = req.params.docId;
     const assetId = typeof req.body?.assetId === 'string' ? req.body.assetId.trim() : '';
@@ -805,7 +807,7 @@ router.post('/:docId/covers', requireAdmin, async (req, res) => {
       return;
     }
 
-    const song = await prismaAny.musicTrack.findUnique({ where: { docId: songDocId } });
+    const song = await prisma.musicTrack.findUnique({ where: { docId: songDocId } });
     if (!song) {
       res.status(404).json({ error: '歌曲不存在' });
       return;
@@ -813,7 +815,7 @@ router.post('/:docId/covers', requireAdmin, async (req, res) => {
 
     const cover = await addSongCoverFromAsset(songDocId, assetId, isDefault);
     if (isDefault) {
-      await prismaAny.musicTrack.update({
+      await prisma.musicTrack.update({
         where: { docId: songDocId },
         data: {
           cover: cover.publicUrl,
@@ -835,13 +837,13 @@ router.post('/:docId/covers', requireAdmin, async (req, res) => {
     console.error('Create song cover error:', error);
     res.status(500).json({ error: '添加歌曲封面失败' });
   }
-});
+}));
 
 // Delete music cover
-router.delete('/:docId/covers/:coverId', requireAdmin, async (req, res) => {
+router.delete('/:docId/covers/:coverId', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { docId, coverId } = req.params;
-    const cover = await prismaAny.songCover.findFirst({
+    const cover = await prisma.songCover.findFirst({
       where: {
         id: coverId,
         songDocId: docId,
@@ -853,12 +855,12 @@ router.delete('/:docId/covers/:coverId', requireAdmin, async (req, res) => {
       return;
     }
 
-    await prismaAny.songCover.delete({ where: { id: cover.id } });
+    await prisma.songCover.delete({ where: { id: cover.id } });
 
     if (cover.assetId) {
       const [songLinked, albumLinked, galleryLinked] = await Promise.all([
-        prismaAny.songCover.count({ where: { assetId: cover.assetId } }),
-        prismaAny.albumCover.count({ where: { assetId: cover.assetId } }),
+        prisma.songCover.count({ where: { assetId: cover.assetId } }),
+        prisma.albumCover.count({ where: { assetId: cover.assetId } }),
         prisma.galleryImage.count({ where: { assetId: cover.assetId } }),
       ]);
       if (songLinked + albumLinked + galleryLinked === 0) {
@@ -873,13 +875,13 @@ router.delete('/:docId/covers/:coverId', requireAdmin, async (req, res) => {
       }
     }
 
-    const remaining = await prismaAny.songCover.findMany({
+    const remaining = await prisma.songCover.findMany({
       where: { songDocId: docId },
       orderBy: { sortOrder: 'asc' },
     });
 
     if (!remaining.length) {
-      await prismaAny.musicTrack.update({
+      await prisma.musicTrack.update({
         where: { docId },
         data: {
           defaultCoverSource: null,
@@ -887,14 +889,14 @@ router.delete('/:docId/covers/:coverId', requireAdmin, async (req, res) => {
         },
       });
     } else {
-      const hasDefault = remaining.some((item: any) => item.isDefault);
+      const hasDefault = remaining.some((item) => item.isDefault);
       const first = remaining[0];
       if (!hasDefault) {
-        await prismaAny.songCover.update({
+        await prisma.songCover.update({
           where: { id: first.id },
           data: { isDefault: true },
         });
-        await prismaAny.musicTrack.update({
+        await prisma.musicTrack.update({
           where: { docId },
           data: {
             defaultCoverSource: `song_cover:${first.id}`,
@@ -909,13 +911,13 @@ router.delete('/:docId/covers/:coverId', requireAdmin, async (req, res) => {
     console.error('Delete song cover error:', error);
     res.status(500).json({ error: '删除歌曲封面失败' });
   }
-});
+}));
 
 // Set default cover
-router.patch('/:docId/covers/:coverId/default', requireAdmin, async (req, res) => {
+router.patch('/:docId/covers/:coverId/default', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { docId, coverId } = req.params;
-    const cover = await prismaAny.songCover.findFirst({
+    const cover = await prisma.songCover.findFirst({
       where: {
         id: coverId,
         songDocId: docId,
@@ -926,15 +928,15 @@ router.patch('/:docId/covers/:coverId/default', requireAdmin, async (req, res) =
       return;
     }
 
-    await prismaAny.songCover.updateMany({
+    await prisma.songCover.updateMany({
       where: { songDocId: docId },
       data: { isDefault: false },
     });
-    await prismaAny.songCover.update({
+    await prisma.songCover.update({
       where: { id: coverId },
       data: { isDefault: true },
     });
-    await prismaAny.musicTrack.update({
+    await prisma.musicTrack.update({
       where: { docId },
       data: {
         defaultCoverSource: `song_cover:${coverId}`,
@@ -947,13 +949,13 @@ router.patch('/:docId/covers/:coverId/default', requireAdmin, async (req, res) =
     console.error('Set song default cover error:', error);
     res.status(500).json({ error: '设置默认封面失败' });
   }
-});
+}));
 
 // Get music albums
-router.get('/:docId/albums', async (req, res) => {
+router.get('/:docId/albums', asyncHandler(async (req, res) => {
   try {
     const songDocId = req.params.docId;
-    const relationsRaw = await prismaAny.songAlbumRelation.findMany({
+    const relationsRaw = await prisma.songAlbumRelation.findMany({
       where: { songDocId },
       include: {
         album: {
@@ -969,7 +971,7 @@ router.get('/:docId/albums', async (req, res) => {
 
     const relations = ensureDisplayRelation(relationsRaw);
     for (const relation of relations) {
-      await prismaAny.songAlbumRelation.update({
+      await prisma.songAlbumRelation.update({
         where: { id: relation.id },
         data: { isDisplay: relation.isDisplay },
       });
@@ -996,10 +998,10 @@ router.get('/:docId/albums', async (req, res) => {
     console.error('Fetch song albums error:', error);
     res.status(500).json({ error: '获取歌曲关联专辑失败' });
   }
-});
+}));
 
 // Add music to album
-router.post('/:docId/albums', requireAdmin, async (req, res) => {
+router.post('/:docId/albums', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const songDocId = req.params.docId;
     const albumDocId = typeof req.body?.albumDocId === 'string' ? req.body.albumDocId.trim() : '';
@@ -1013,8 +1015,8 @@ router.post('/:docId/albums', requireAdmin, async (req, res) => {
     }
 
     const [song, album] = await Promise.all([
-      prismaAny.musicTrack.findUnique({ where: { docId: songDocId } }),
-      prismaAny.album.findUnique({ where: { docId: albumDocId } }),
+      prisma.musicTrack.findUnique({ where: { docId: songDocId } }),
+      prisma.album.findUnique({ where: { docId: albumDocId } }),
     ]);
 
     if (!song || !album) {
@@ -1022,7 +1024,7 @@ router.post('/:docId/albums', requireAdmin, async (req, res) => {
       return;
     }
 
-    const relation = await prismaAny.songAlbumRelation.upsert({
+    const relation = await prisma.songAlbumRelation.upsert({
       where: {
         songDocId_albumDocId: {
           songDocId,
@@ -1044,7 +1046,7 @@ router.post('/:docId/albums', requireAdmin, async (req, res) => {
     });
 
     if (isDisplay) {
-      await prismaAny.songAlbumRelation.updateMany({
+      await prisma.songAlbumRelation.updateMany({
         where: {
           songDocId,
           id: { not: relation.id },
@@ -1053,7 +1055,7 @@ router.post('/:docId/albums', requireAdmin, async (req, res) => {
       });
     }
 
-    const tracksFromAlbum = await prismaAny.songAlbumRelation.findMany({
+    const tracksFromAlbum = await prisma.songAlbumRelation.findMany({
       where: { albumDocId },
       include: {
         song: {
@@ -1068,7 +1070,7 @@ router.post('/:docId/albums', requireAdmin, async (req, res) => {
       },
       orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
     });
-    await prismaAny.album.update({
+    await prisma.album.update({
       where: { docId: albumDocId },
       data: {
         tracks: buildAlbumTracksPayload(tracksFromAlbum),
@@ -1083,13 +1085,13 @@ router.post('/:docId/albums', requireAdmin, async (req, res) => {
     console.error('Create song album relation error:', error);
     res.status(500).json({ error: '创建歌曲专辑关联失败' });
   }
-});
+}));
 
 // Update music album relation
-router.patch('/:docId/albums/:albumDocId', requireAdmin, async (req, res) => {
+router.patch('/:docId/albums/:albumDocId', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { docId: songDocId, albumDocId } = req.params;
-    const existing = await prismaAny.songAlbumRelation.findUnique({
+    const existing = await prisma.songAlbumRelation.findUnique({
       where: {
         songDocId_albumDocId: {
           songDocId,
@@ -1114,13 +1116,13 @@ router.patch('/:docId/albums/:albumDocId', requireAdmin, async (req, res) => {
       updateData.isDisplay = parseBoolean(req.body.isDisplay, existing.isDisplay);
     }
 
-    const updated = await prismaAny.songAlbumRelation.update({
+    const updated = await prisma.songAlbumRelation.update({
       where: { id: existing.id },
       data: updateData,
     });
 
     if (updated.isDisplay) {
-      await prismaAny.songAlbumRelation.updateMany({
+      await prisma.songAlbumRelation.updateMany({
         where: {
           songDocId,
           id: { not: updated.id },
@@ -1129,7 +1131,7 @@ router.patch('/:docId/albums/:albumDocId', requireAdmin, async (req, res) => {
       });
     }
 
-    const tracksFromAlbum = await prismaAny.songAlbumRelation.findMany({
+    const tracksFromAlbum = await prisma.songAlbumRelation.findMany({
       where: { albumDocId },
       include: {
         song: {
@@ -1144,7 +1146,7 @@ router.patch('/:docId/albums/:albumDocId', requireAdmin, async (req, res) => {
       },
       orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
     });
-    await prismaAny.album.update({
+    await prisma.album.update({
       where: { docId: albumDocId },
       data: {
         tracks: buildAlbumTracksPayload(tracksFromAlbum),
@@ -1157,13 +1159,13 @@ router.patch('/:docId/albums/:albumDocId', requireAdmin, async (req, res) => {
     console.error('Update song album relation error:', error);
     res.status(500).json({ error: '更新歌曲专辑关联失败' });
   }
-});
+}));
 
 // Delete music album relation
-router.delete('/:docId/albums/:albumDocId', requireAdmin, async (req, res) => {
+router.delete('/:docId/albums/:albumDocId', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { docId: songDocId, albumDocId } = req.params;
-    const existing = await prismaAny.songAlbumRelation.findUnique({
+    const existing = await prisma.songAlbumRelation.findUnique({
       where: {
         songDocId_albumDocId: {
           songDocId,
@@ -1177,20 +1179,20 @@ router.delete('/:docId/albums/:albumDocId', requireAdmin, async (req, res) => {
       return;
     }
 
-    await prismaAny.songAlbumRelation.delete({ where: { id: existing.id } });
+    await prisma.songAlbumRelation.delete({ where: { id: existing.id } });
 
-    const remaining = await prismaAny.songAlbumRelation.findMany({
+    const remaining = await prisma.songAlbumRelation.findMany({
       where: { songDocId },
       orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
     });
-    if (remaining.length && !remaining.some((item: any) => item.isDisplay)) {
-      await prismaAny.songAlbumRelation.update({
+    if (remaining.length && !remaining.some((item) => item.isDisplay)) {
+      await prisma.songAlbumRelation.update({
         where: { id: remaining[0].id },
         data: { isDisplay: true },
       });
     }
 
-    const tracksFromAlbum = await prismaAny.songAlbumRelation.findMany({
+    const tracksFromAlbum = await prisma.songAlbumRelation.findMany({
       where: { albumDocId },
       include: {
         song: {
@@ -1205,7 +1207,7 @@ router.delete('/:docId/albums/:albumDocId', requireAdmin, async (req, res) => {
       },
       orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
     });
-    await prismaAny.album.update({
+    await prisma.album.update({
       where: { docId: albumDocId },
       data: {
         tracks: buildAlbumTracksPayload(tracksFromAlbum),
@@ -1218,23 +1220,23 @@ router.delete('/:docId/albums/:albumDocId', requireAdmin, async (req, res) => {
     console.error('Delete song album relation error:', error);
     res.status(500).json({ error: '删除歌曲专辑关联失败' });
   }
-});
+}));
 
 // Get instrumentals
-router.get('/:docId/instrumentals', async (req, res) => {
+router.get('/:docId/instrumentals', asyncHandler(async (req, res) => {
   try {
     const songDocId = req.params.docId;
-    const relations = await prismaAny.songInstrumentalRelation.findMany({
+    const relations = await prisma.songInstrumentalRelation.findMany({
       where: { songDocId },
       include: {
-        instrumentalSong: {
+        targetSong: {
           select: {
             docId: true,
             id: true,
             title: true,
             artist: true,
             cover: true,
-            isInstrumental: true,
+            instrumentalForLinks: { select: { id: true } },
           },
         },
       },
@@ -1242,17 +1244,17 @@ router.get('/:docId/instrumentals', async (req, res) => {
     });
 
     res.json({
-      instrumentals: relations.map((relation: any) => ({
+      instrumentals: relations.map((relation) => ({
         id: relation.id,
         songDocId: relation.songDocId,
-        instrumentalSongDocId: relation.instrumentalSongDocId,
+        instrumentalSongDocId: relation.targetSongDocId,
         instrumentalSong: {
-          docId: relation.instrumentalSong.docId,
-          id: relation.instrumentalSong.id,
-          title: relation.instrumentalSong.title,
-          artist: relation.instrumentalSong.artist,
-          cover: relation.instrumentalSong.cover,
-          isInstrumental: relation.instrumentalSong.isInstrumental,
+          docId: relation.targetSong.docId,
+          id: relation.targetSong.id,
+          title: relation.targetSong.title,
+          artist: relation.targetSong.artist,
+          cover: relation.targetSong.cover,
+          isInstrumental: (relation.targetSong.instrumentalForLinks?.length || 0) > 0,
         },
       })),
     });
@@ -1260,13 +1262,13 @@ router.get('/:docId/instrumentals', async (req, res) => {
     console.error('Fetch song instrumentals error:', error);
     res.status(500).json({ error: '获取歌曲伴奏失败' });
   }
-});
+}));
 
 // Get instrumental for
-router.get('/:docId/instrumental-for', async (req, res) => {
+router.get('/:docId/instrumental-for', asyncHandler(async (req, res) => {
   try {
     const songDocId = req.params.docId;
-    const relations = await prismaAny.songInstrumentalRelation.findMany({
+    const relations = await prisma.songInstrumentalRelation.findMany({
       where: { targetSongDocId: songDocId },
       include: {
         song: {
@@ -1283,7 +1285,7 @@ router.get('/:docId/instrumental-for', async (req, res) => {
     });
 
     res.json({
-      originals: relations.map((relation: any) => ({
+      originals: relations.map((relation) => ({
         id: relation.id,
         songDocId: relation.songDocId,
         targetSongDocId: relation.targetSongDocId,
@@ -1300,10 +1302,10 @@ router.get('/:docId/instrumental-for', async (req, res) => {
     console.error('Fetch song instrumental for error:', error);
     res.status(500).json({ error: '获取歌曲原曲失败' });
   }
-});
+}));
 
 // Add instrumental
-router.post('/:docId/instrumentals', requireAdmin, async (req, res) => {
+router.post('/:docId/instrumentals', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const songDocId = req.params.docId;
     const instrumentalSongDocId = typeof req.body?.instrumentalSongDocId === 'string' ? req.body.instrumentalSongDocId.trim() : '';
@@ -1314,8 +1316,11 @@ router.post('/:docId/instrumentals', requireAdmin, async (req, res) => {
     }
 
     const [song, instrumentalSong] = await Promise.all([
-      prismaAny.musicTrack.findUnique({ where: { docId: songDocId } }),
-      prismaAny.musicTrack.findUnique({ where: { docId: instrumentalSongDocId } }),
+      prisma.musicTrack.findUnique({ where: { docId: songDocId } }),
+      prisma.musicTrack.findUnique({
+        where: { docId: instrumentalSongDocId },
+        include: { instrumentalForLinks: { select: { id: true } } },
+      }),
     ]);
 
     if (!song || !instrumentalSong) {
@@ -1323,15 +1328,15 @@ router.post('/:docId/instrumentals', requireAdmin, async (req, res) => {
       return;
     }
 
-    if (!instrumentalSong.isInstrumental) {
+    if (!(instrumentalSong.instrumentalForLinks?.length)) {
       res.status(400).json({ error: '目标歌曲不是伴奏' });
       return;
     }
 
-    const existing = await prismaAny.songInstrumentalRelation.findFirst({
+    const existing = await prisma.songInstrumentalRelation.findFirst({
       where: {
         songDocId,
-        instrumentalSongDocId,
+        targetSongDocId: instrumentalSongDocId,
       },
     });
 
@@ -1340,11 +1345,10 @@ router.post('/:docId/instrumentals', requireAdmin, async (req, res) => {
       return;
     }
 
-    const relation = await prismaAny.songInstrumentalRelation.create({
+    const relation = await prisma.songInstrumentalRelation.create({
       data: {
         songDocId,
-        instrumentalSongDocId,
-        targetSongDocId: songDocId,
+        targetSongDocId: instrumentalSongDocId,
       },
     });
 
@@ -1352,23 +1356,23 @@ router.post('/:docId/instrumentals', requireAdmin, async (req, res) => {
       relation: {
         id: relation.id,
         songDocId: relation.songDocId,
-        instrumentalSongDocId: relation.instrumentalSongDocId,
+        instrumentalSongDocId: relation.targetSongDocId,
       },
     });
   } catch (error) {
     console.error('Create song instrumental relation error:', error);
     res.status(500).json({ error: '创建歌曲伴奏关联失败' });
   }
-});
+}));
 
 // Delete instrumental
-router.delete('/:docId/instrumentals/:instrumentalSongDocId', requireAdmin, async (req, res) => {
+router.delete('/:docId/instrumentals/:instrumentalSongDocId', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { docId: songDocId, instrumentalSongDocId } = req.params;
-    const existing = await prismaAny.songInstrumentalRelation.findFirst({
+    const existing = await prisma.songInstrumentalRelation.findFirst({
       where: {
         songDocId,
-        instrumentalSongDocId,
+        targetSongDocId: instrumentalSongDocId,
       },
     });
 
@@ -1377,27 +1381,27 @@ router.delete('/:docId/instrumentals/:instrumentalSongDocId', requireAdmin, asyn
       return;
     }
 
-    await prismaAny.songInstrumentalRelation.delete({ where: { id: existing.id } });
+    await prisma.songInstrumentalRelation.delete({ where: { id: existing.id } });
 
     res.json({ success: true });
   } catch (error) {
     console.error('Delete song instrumental relation error:', error);
     res.status(500).json({ error: '删除歌曲伴奏关联失败' });
   }
-});
+}));
 
 // Custom platforms
-router.patch('/:docId/custom-platforms', requireAdmin, async (req, res) => {
+router.patch('/:docId/custom-platforms', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const docId = req.params.docId;
-    const song = await prismaAny.musicTrack.findUnique({ where: { docId } });
+    const song = await prisma.musicTrack.findUnique({ where: { docId } });
     if (!song) {
       res.status(404).json({ error: '歌曲不存在' });
       return;
     }
 
     const customPlatformLinks = normalizeSongCustomPlatformLinks(req.body?.customPlatformLinks);
-    await prismaAny.musicTrack.update({
+    await prisma.musicTrack.update({
       where: { docId },
       data: { customPlatformLinks: customPlatformLinks as unknown as Prisma.InputJsonValue },
     });
@@ -1408,10 +1412,10 @@ router.patch('/:docId/custom-platforms', requireAdmin, async (req, res) => {
     console.error('Update custom platforms error:', error);
     res.status(500).json({ error: '更新自定义平台失败' });
   }
-});
+}));
 
 // Music posts
-router.get('/:docId/posts', async (req: AuthenticatedRequest, res) => {
+router.get('/:docId/posts', asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const docId = req.params.docId;
     const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 });
@@ -1473,7 +1477,7 @@ router.get('/:docId/posts', async (req: AuthenticatedRequest, res) => {
     console.error('Fetch music posts error:', error);
     res.status(500).json({ error: '获取音乐关联帖子失败' });
   }
-});
+}));
 
 // Similarity calculation helper
 function calculateSimilarity(a: string, b: string): number {
@@ -1487,7 +1491,7 @@ function calculateSimilarity(a: string, b: string): number {
   if (na === nb) return 1;
   if (na.includes(nb) || nb.includes(na)) return 0.85;
 
-  const withoutParens = (s: string) => s.replace(/[（(].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
+  const withoutParens = (s: string) => s.replace(/[（].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
   const naClean = withoutParens(na);
   const nbClean = withoutParens(nb);
   if (naClean && nbClean && (naClean.includes(nbClean) || nbClean.includes(naClean))) {

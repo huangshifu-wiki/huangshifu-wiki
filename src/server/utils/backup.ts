@@ -32,6 +32,59 @@ export function sanitizeFilename(name: string): boolean {
   return /^backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip$/.test(name);
 }
 
+const SQL_ALLOWED_PREFIXES = [
+  'CREATE TABLE',
+  'INSERT INTO',
+  'ALTER TABLE',
+  'SET',
+  'SELECT',
+  'COMMENT',
+  'CREATE INDEX',
+  'CREATE SEQUENCE',
+  'ALTER SEQUENCE',
+  'SELECT SETVAL',
+  'CREATE FUNCTION',
+]
+
+const SQL_REJECTED_PREFIXES = [
+  'DROP',
+  'DELETE',
+  'TRUNCATE',
+  'GRANT',
+  'REVOKE',
+  'COPY',
+  'EXECUTE',
+  'DO',
+]
+
+export function validateSqlContent(sqlContent: string): { valid: boolean; reason?: string } {
+  const stripped = sqlContent.replace(/\$\$[\s\S]*?\$\$/g, '$$')
+
+  const statements = stripped
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+
+  for (const stmt of statements) {
+    const firstLine = stmt.split('\n')[0].trim()
+    const upper = firstLine.toUpperCase()
+
+    const isRejected = SQL_REJECTED_PREFIXES.some((prefix) => upper.startsWith(prefix))
+    if (isRejected) {
+      const keyword = SQL_REJECTED_PREFIXES.find((prefix) => upper.startsWith(prefix))!
+      return { valid: false, reason: `SQL 语句包含不允许的操作: ${keyword}` }
+    }
+
+    const isAllowed = SQL_ALLOWED_PREFIXES.some((prefix) => upper.startsWith(prefix))
+    if (!isAllowed) {
+      const keyword = upper.split(/\s+/)[0] || upper
+      return { valid: false, reason: `SQL 语句包含未识别的操作: ${keyword}` }
+    }
+  }
+
+  return { valid: true }
+}
+
 // ─── 格式化 ─────────────────────────────────────────────────────────
 
 export function formatFileSize(bytes: number): string {

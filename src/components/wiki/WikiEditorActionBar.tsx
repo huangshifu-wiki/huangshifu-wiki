@@ -46,7 +46,7 @@ const WikiEditorActionBar = React.memo(({
 				className={`w-full px-4 py-2.5 rounded text-sm font-medium transition-all flex items-center justify-between ${
 					showRecommendations
 						? "bg-[#c8951e] text-white"
-						: "bg-[#f7f5f0] text-[#c8951e] hover:bg-[#e8e4db]"
+						: "bg-[#f7f5f0] text-[#c8951e] hover:bg-[#e8e4db] active:scale-[0.98]"
 				} disabled:opacity-50 disabled:cursor-not-allowed`}
 			>
 				<div className="flex items-center gap-2">
@@ -85,7 +85,7 @@ const WikiEditorActionBar = React.memo(({
 										<button
 											type="button"
 											onClick={onCancelRecommendation}
-											className="px-3 py-1.5 bg-red-50 text-red-600 rounded text-xs font-medium hover:bg-red-100 transition-all"
+											className="px-3 py-1.5 bg-red-50 text-red-600 rounded text-xs font-medium hover:bg-red-100 active:scale-[0.98] transition-all"
 										>
 											取消
 										</button>
@@ -168,7 +168,7 @@ const WikiEditorActionBar = React.memo(({
 													onClick={() =>
 														onAddRecommendation(rec)
 													}
-													className="px-3 py-1.5 bg-[#c8951e] text-white rounded text-xs font-medium hover:bg-[#dca828] transition-all whitespace-nowrap"
+													className="px-3 py-1.5 bg-[#c8951e] text-white rounded text-xs font-medium hover:bg-[#dca828] active:scale-[0.98] transition-all whitespace-nowrap"
 												>
 													添加关联
 												</button>

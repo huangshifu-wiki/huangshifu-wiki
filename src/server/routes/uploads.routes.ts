@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { prisma } from '../prisma';
-import { requireAuth, requireActiveUser, AuthenticatedRequest } from '../middleware/auth';
+import { requireAuth, requireActiveUser } from '../middleware/auth';
+import type { AuthenticatedRequest } from '../types';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { uploadLimiter } from '../middleware/rateLimiter';
 import {
   createUploadSessionExpiresAt,
@@ -13,6 +15,7 @@ import {
   uploadToSuperbed,
   deleteFromSuperbed,
   safeDeleteUploadFileByStorageKey,
+  logger,
 } from '../utils';
 import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService';
 import fs from 'fs';
@@ -68,7 +71,7 @@ const upload = multer({
 /**
  * POST /api/uploads/sessions - 创建上传会话
  */
-router.post('/sessions', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.post('/sessions', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const session = await prisma.uploadSession.create({
       data: {
@@ -91,12 +94,12 @@ router.post('/sessions', requireAuth, requireActiveUser, async (req: Authenticat
     console.error('Create upload session error:', error);
     res.status(500).json({ error: '创建上传会话失败' });
   }
-});
+}));
 
 /**
  * GET /api/uploads/sessions/:sessionId - 获取会话状态
  */
-router.get('/sessions/:sessionId', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.get('/sessions/:sessionId', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { sessionId } = req.params;
 
@@ -137,7 +140,7 @@ router.get('/sessions/:sessionId', requireAuth, requireActiveUser, async (req: A
     console.error('Get upload session error:', error);
     res.status(500).json({ error: '获取上传会话失败' });
   }
-});
+}));
 
 /**
  * POST /api/uploads/sessions/:sessionId/files - 上传文件到会话
@@ -148,7 +151,7 @@ router.post(
   requireActiveUser,
   uploadLimiter,
   upload.single('file'),
-  async (req: AuthenticatedRequest, res) => {
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
       const { sessionId } = req.params;
       const { tripleStorage } = req.query as { tripleStorage?: string };
@@ -372,7 +375,7 @@ router.post(
 
       // 清理上传的文件
       if (req.file) {
-        await safeDeleteUploadFileByStorageKey(req.file.filename).catch(() => {});
+        await safeDeleteUploadFileByStorageKey(req.file.filename).catch((err) => logger.debug({ err }, 'Temp file cleanup failed'));
       }
 
       const message = error instanceof Error ? error.message : '上传文件失败';
@@ -383,12 +386,12 @@ router.post(
       res.status(500).json({ error: '上传文件失败' });
     }
   }
-);
+));
 
 /**
  * POST /api/uploads/sessions/:sessionId/finalize - 完成上传会话
  */
-router.post('/sessions/:sessionId/finalize', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.post('/sessions/:sessionId/finalize', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { sessionId } = req.params;
 
@@ -434,12 +437,12 @@ router.post('/sessions/:sessionId/finalize', requireAuth, requireActiveUser, asy
     console.error('Finalize upload session error:', error);
     res.status(500).json({ error: '完成上传会话失败' });
   }
-});
+}));
 
 /**
  * DELETE /api/uploads/sessions/:sessionId - 删除/取消上传会话
  */
-router.delete('/sessions/:sessionId', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.delete('/sessions/:sessionId', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { sessionId } = req.params;
 
@@ -467,13 +470,13 @@ router.delete('/sessions/:sessionId', requireAuth, requireActiveUser, async (req
     console.error('Delete upload session error:', error);
     res.status(500).json({ error: '删除上传会话失败' });
   }
-});
+}));
 
 /**
  * DELETE /api/uploads/superbed - 从 Superbed 删除图片
  * Body: { imageIds: string[] }
  */
-router.delete('/superbed', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.delete('/superbed', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { imageIds } = req.body as { imageIds?: string[] };
 
@@ -504,7 +507,7 @@ router.delete('/superbed', requireAuth, async (req: AuthenticatedRequest, res) =
     console.error('Delete from Superbed error:', error);
     res.status(500).json({ error: '删除图片失败' });
   }
-});
+}));
 
 export function registerUploadRoutes(app: Router) {
   app.use('/api/uploads', router);

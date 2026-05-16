@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 
 import { apiGet } from '../lib/apiClient';
 import { useAuth } from '../context/AuthContext';
+import { getPlatformExternalUrl } from '../lib/musicPlatformUrls';
 import Pagination from '../components/Pagination';
 import { usePagination } from '../hooks/usePagination';
 import { Platform, PlatformIds } from '../types/PlatformIds';
@@ -31,11 +32,7 @@ const platformInfo: Array<{ key: keyof PlatformIds; label: string; color: string
 ];
 
 function buildPlatformUrl(platform: Platform, id: string): string {
-  if (platform === 'netease') return `https://music.163.com/song?id=${id}`;
-  if (platform === 'tencent') return `https://y.qq.com/n/ryqq/songDetail/${id}`;
-  if (platform === 'kugou') return `https://www.kugou.com/song/#hash=${id}`;
-  if (platform === 'baidu') return `https://music.baidu.com/song/${id}`;
-  return `https://www.kuwo.cn/song_detail/${id}`;
+  return getPlatformExternalUrl(platform, id) || '#'
 }
 
 const MusicLinks = () => {
@@ -125,7 +122,7 @@ const MusicLinks = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center" style={{ backgroundColor: '#f7f5f0' }}>
+      <div className="min-h-[60vh] flex items-center justify-center bg-[var(--color-bg-antique)]">
         <Loader2 size={32} className="animate-spin text-[#c8951e]" />
       </div>
     );

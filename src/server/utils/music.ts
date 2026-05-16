@@ -418,8 +418,6 @@ export type AlbumTrackDiscPayload = Array<{
 }>;
 
 export async function applyAlbumTracksToRelations(albumDocId: string, tracks: AlbumTrackDiscPayload) {
-  await prisma.songAlbumRelation.deleteMany({ where: { albumDocId } });
-
   const createRows: Array<{
     songDocId: string;
     albumDocId: string;
@@ -440,14 +438,12 @@ export async function applyAlbumTracksToRelations(albumDocId: string, tracks: Al
     });
   });
 
-  if (!createRows.length) {
-    return;
-  }
-
-  await prisma.songAlbumRelation.createMany({
-    data: createRows,
-    skipDuplicates: true,
-  });
+  await prisma.$transaction([
+    prisma.songAlbumRelation.deleteMany({ where: { albumDocId } }),
+    ...(createRows.length
+      ? [prisma.songAlbumRelation.createMany({ data: createRows, skipDuplicates: true })]
+      : []),
+  ]);
 }
 
 export async function addSongCoverFromAsset(songDocId: string, assetId: string, markDefault = false) {

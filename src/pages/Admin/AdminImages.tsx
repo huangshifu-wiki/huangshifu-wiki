@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Download, Upload, Edit2, Trash2, CheckCircle, XCircle, FileText, Settings, RefreshCw, Sparkles } from 'lucide-react';
-import { apiGet, apiPatch, apiDelete, apiPost } from '../../lib/apiClient';
+import { apiGet, apiPatch, apiDelete, apiPost, apiDownload } from '../../lib/apiClient';
 import { useToast } from '../../components/Toast';
 import { formatDateTime } from '../../lib/dateUtils';
 import { clsx } from 'clsx';
@@ -87,7 +87,7 @@ const AdminImages: React.FC = () => {
 
   const handleExport = async (format: 'json' | 'csv') => {
     try {
-      const response = await fetch(`/api/image-maps/export?format=${format}`, { credentials: 'include' });
+      const response = await apiDownload(`/api/image-maps/export?format=${format}`);
       if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || '导出失败');
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);

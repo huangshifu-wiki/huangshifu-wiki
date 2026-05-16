@@ -107,7 +107,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           aria-label="首页"
           aria-disabled={page <= 1}
           className={clsx(
-            'inline-flex items-center justify-center px-2.5 py-1 text-xs rounded',
+            'inline-flex items-center justify-center px-2.5 py-1 text-xs rounded min-h-[44px] min-w-[44px]',
             'border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]',
             'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
           )}
@@ -120,7 +120,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           aria-label="上一页"
           aria-disabled={page <= 1}
           className={clsx(
-            'inline-flex items-center justify-center gap-1 px-2.5 py-1 text-xs rounded',
+            'inline-flex items-center justify-center gap-1 px-2.5 py-1 text-xs rounded min-h-[44px] min-w-[44px]',
             'border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]',
             'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
           )}
@@ -144,7 +144,7 @@ export const Pagination: React.FC<PaginationProps> = ({
               aria-label={`第 ${item} 页`}
               aria-current={item === page ? 'page' : undefined}
               className={clsx(
-                'inline-flex items-center justify-center px-2.5 py-1 text-xs rounded border transition-all',
+                'inline-flex items-center justify-center px-2.5 py-1 text-xs rounded border transition-all min-h-[44px] min-w-[44px]',
                 item === page
                   ? 'bg-[#c8951e] text-white border-[#c8951e]'
                   : 'border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]'
@@ -161,7 +161,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           aria-label="下一页"
           aria-disabled={page >= totalPages}
           className={clsx(
-            'inline-flex items-center justify-center gap-1 px-2.5 py-1 text-xs rounded',
+            'inline-flex items-center justify-center gap-1 px-2.5 py-1 text-xs rounded min-h-[44px] min-w-[44px]',
             'border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]',
             'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
           )}
@@ -174,7 +174,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           aria-label="末页"
           aria-disabled={page >= totalPages}
           className={clsx(
-            'inline-flex items-center justify-center px-2.5 py-1 text-xs rounded',
+            'inline-flex items-center justify-center px-2.5 py-1 text-xs rounded min-h-[44px] min-w-[44px]',
             'border border-[#e0dcd3] text-[#6b6560] hover:border-[#c8951e] hover:text-[#c8951e]',
             'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
           )}

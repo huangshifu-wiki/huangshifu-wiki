@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Database, Download, Loader2, RefreshCw, Trash2, Upload, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { clsx } from 'clsx';
-import { apiDelete, apiGet, apiPost, apiUpload } from '../../lib/apiClient';
+import { apiDelete, apiGet, apiPost, apiUpload, apiDownload } from '../../lib/apiClient';
 import { useToast } from '../../components/Toast';
 
 type BackupFile = {
@@ -66,7 +66,7 @@ const AdminBackups = () => {
 
   const handleDownload = async (filename: string) => {
     try {
-      const response = await fetch(`/api/admin/backup/${encodeURIComponent(filename)}/download`, { credentials: 'include' });
+      const response = await apiDownload(`/api/admin/backup/${encodeURIComponent(filename)}/download`);
       if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || '下载失败');
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -91,6 +91,7 @@ const AdminBackups = () => {
       const formData = new FormData();
       formData.append('file', restoreFile);
       formData.append('password', password);
+      formData.append('confirm', 'true');
       await apiUpload<{ success: boolean }>('/api/admin/backup/restore', formData);
       show('数据库恢复成功');
       closeDialog();

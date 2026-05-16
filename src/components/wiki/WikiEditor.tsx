@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../components/Toast";
 import { apiGet, apiPost, apiPut } from "../../lib/apiClient";
-import { randomId } from "../../lib/randomId";
 import { normalizeWikiPageSlug } from "../../lib/wikiSlug";
 import { generateWikiIntro } from "../../services/aiService";
 import {
@@ -291,15 +290,6 @@ const WikiEditor = () => {
 			} else {
 				await apiPut(`/api/wiki/${pageSlug}`, pageData);
 			}
-
-			await apiPost(`/api/wiki/${pageSlug}/revisions`, {
-				id: randomId(),
-				pageSlug,
-				title: formData.title,
-				content: formData.content,
-				editorUid: user.uid,
-				editorName: profile?.displayName || user.displayName || "匿名用户",
-			});
 
 			if (isNew) {
 				show("页面创建成功", { variant: "success" });

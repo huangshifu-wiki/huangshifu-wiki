@@ -17,7 +17,7 @@ import Pagination from '../components/Pagination';
 import { usePagination } from '../hooks/usePagination';
 import { PlatformIds } from '../types/PlatformIds';
 import { useI18n } from '../lib/i18n';
-import { Loader2 } from 'lucide-react';
+import { PageSkeleton } from '../components/PageSkeleton';
 import { SongCard } from '../components/Music/SongCard';
 import { AlbumCard } from '../components/Music/AlbumCard';
 import { MusicFilters } from '../components/Music/MusicFilters';
@@ -378,11 +378,7 @@ const Music = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#f7f5f0' }}>
-        <Loader2 size={32} className="animate-spin text-[#c8951e]" />
-      </div>
-    );
+    return <PageSkeleton variant="music" />;
   }
 
   return (
@@ -522,7 +518,7 @@ const Music = () => {
 
         <AnimatePresence>
           {confirmModal.show && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/45">
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}

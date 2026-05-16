@@ -3,29 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Play, Heart, ExternalLink, MessageSquare, Link2, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useI18n } from '../../lib/i18n';
+import { getPlatformExternalUrl } from '../../lib/musicPlatformUrls';
 import { SmartImage } from '../SmartImage';
 import type { SongItem } from '../../types/entities';
 
 const getSongExternalUrl = (song: SongItem) => {
 	const id = (song.id || '').trim();
-	if (!id) {
-		return '#';
-	}
-
-	const platform = song.primaryPlatform || 'netease';
-	if (platform === 'tencent') {
-		return `https://y.qq.com/n/ryqq/songDetail/${id}`;
-	}
-	if (platform === 'kugou') {
-		return `https://www.kugou.com/song/#hash=${id}`;
-	}
-	if (platform === 'kuwo') {
-		return `https://www.kuwo.cn/play_detail/${id}`;
-	}
-	if (platform === 'baidu') {
-		return `https://music.91q.com/#/song/${id}`;
-	}
-	return `https://music.163.com/song?id=${id}`;
+	if (!id) return '#';
+	return getPlatformExternalUrl(song.primaryPlatform || 'netease', id) || '#';
 };
 
 interface SongCardProps {
@@ -85,7 +70,7 @@ const SongCard = React.memo(function SongCard({
 			<div className="relative w-14 h-14 flex-shrink-0 pointer-events-none">
 				<SmartImage
 					src={song.cover}
-					alt={song.title}
+					alt={song.title + ' 封面'}
 					className="w-full h-full object-cover rounded"
 					lazy={false}
 				/>

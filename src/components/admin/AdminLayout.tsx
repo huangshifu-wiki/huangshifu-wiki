@@ -137,7 +137,7 @@ export const AdminLayout = () => {
 
   if (authLoading || !checked) {
     return (
-      <div className="h-screen flex items-center justify-center" style={{ backgroundColor: '#f7f5f0' }}>
+      <div className="h-screen flex items-center justify-center bg-[var(--color-bg-antique)]">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-[#e0dcd3] border-t-[#c8951e] rounded-full animate-spin mx-auto mb-4" />
           <p className="text-sm text-[#9e968e]">加载中...</p>
@@ -148,7 +148,7 @@ export const AdminLayout = () => {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#f7f5f0' }}>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-antique)]">
         <div className="text-center text-[#9e968e]">访问受限</div>
       </div>
     );
@@ -253,7 +253,7 @@ export const AdminLayout = () => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto" style={{ backgroundColor: '#f7f5f0' }}>
+        <main className="flex-1 overflow-y-auto bg-[var(--color-bg-antique)]">
           <div className="p-4 md:p-6 lg:p-8 min-h-full">
             <Outlet />
           </div>

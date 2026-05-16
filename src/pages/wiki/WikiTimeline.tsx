@@ -98,9 +98,6 @@ const WikiTimeline = () => {
 									<h3 className="text-2xl font-serif font-bold text-[#2c2c2c] group-hover:text-[#c8951e] transition-colors mb-4">
 										{event.title}
 									</h3>
-									<p className="text-[#9e968e] text-sm italic line-clamp-2 leading-relaxed">
-										{event.content.replace(/[#*`]/g, "").substring(0, 150)}...
-									</p>
 									<div className="mt-6 flex items-center gap-2 text-[#c8951e] text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity">
 										查看详情 <ChevronRight size={14} />
 									</div>

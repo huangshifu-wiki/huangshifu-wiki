@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, ExternalLink, Plus, Search, Trash2 } from 'lucide-react';
 
 import { apiGet, apiPatch } from '../lib/apiClient';
+import { getPlatformExternalUrl } from '../lib/musicPlatformUrls';
 import { Platform, PlatformIds } from '../types/PlatformIds';
 import { useToast } from './Toast';
 import { MatchSuggestionModal } from './MatchSuggestionModal';
@@ -66,11 +67,11 @@ interface SongEditModalProps {
 }
 
 const platformFields: Array<{ key: keyof PlatformIds; label: string; urlPattern: (id: string) => string }> = [
-  { key: 'neteaseId', label: '网易云音乐', urlPattern: (id) => `https://music.163.com/song?id=${id}` },
-  { key: 'tencentId', label: 'QQ音乐', urlPattern: (id) => `https://y.qq.com/n/ryqq/songDetail/${id}` },
-  { key: 'kugouId', label: '酷狗音乐', urlPattern: (id) => `https://www.kugou.com/song/#hash=${id}` },
-  { key: 'baiduId', label: '百度音乐', urlPattern: (id) => `https://music.baidu.com/song/${id}` },
-  { key: 'kuwoId', label: '酷我音乐', urlPattern: (id) => `https://www.kuwo.cn/song_detail/${id}` },
+  { key: 'neteaseId', label: '网易云音乐', urlPattern: (id) => getPlatformExternalUrl('netease', id) || '#' },
+  { key: 'tencentId', label: 'QQ音乐', urlPattern: (id) => getPlatformExternalUrl('tencent', id) || '#' },
+  { key: 'kugouId', label: '酷狗音乐', urlPattern: (id) => getPlatformExternalUrl('kugou', id) || '#' },
+  { key: 'baiduId', label: '百度音乐', urlPattern: (id) => getPlatformExternalUrl('baidu', id) || '#' },
+  { key: 'kuwoId', label: '酷我音乐', urlPattern: (id) => getPlatformExternalUrl('kuwo', id) || '#' },
 ];
 
 export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalProps) => {
@@ -462,7 +463,7 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
 
         <div className="rounded border border-[#e0dcd3] bg-[#f7f5f0]/50 p-3">
           <div className="flex items-center gap-3">
-            <img src={song.cover} alt="" className="w-12 h-12 rounded object-cover border border-[#e0dcd3]" referrerPolicy="no-referrer" />
+            <img src={song.cover} alt="封面" className="w-12 h-12 rounded object-cover border border-[#e0dcd3]" referrerPolicy="no-referrer" />
             <div className="min-w-0">
               <p className="text-sm font-medium text-[#2c2c2c] truncate">{song.title}</p>
               <p className="text-xs text-[#9e968e] truncate">{song.artist}</p>

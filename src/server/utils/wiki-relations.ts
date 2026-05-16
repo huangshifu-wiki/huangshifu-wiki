@@ -16,6 +16,7 @@ import { WIKI_RELATION_SCAN_LIMIT } from '../types';
 import { prisma } from './config';
 import { parseBoolean, normalizeWikiSlug } from './parsers';
 import { canViewWikiPage, buildWikiVisibilityWhere } from './authorization';
+import { enhancedCache } from './cache';
 
 // ---------------------------------------------------------------------------
 // 常量
@@ -376,7 +377,15 @@ export async function findWikiRelationCenterPage(slug: string, authUser?: ApiUse
   return centerPage as WikiRelationPageLite;
 }
 
+export function clearWikiRelationCache() {
+  enhancedCache.delete('wiki_relation_bundle')
+}
+
 export async function buildWikiRelationBundle(centerPage: WikiRelationPageLite, authUser?: ApiUser): Promise<WikiRelationBundle> {
+  const cacheKey = 'wiki_relation_bundle'
+  const cached = enhancedCache.get<WikiRelationBundle>(cacheKey)
+  if (cached) return cached
+
   const visibilityWhere = buildWikiVisibilityWhere(authUser);
 
   const relationPages = await prisma.wikiPage.findMany({
@@ -431,9 +440,13 @@ export async function buildWikiRelationBundle(centerPage: WikiRelationPageLite, 
   const relations = buildResolvedWikiRelations(centerPage, pageMap, reverseIndex);
   const graph = buildWikiRelationGraph(centerPage, pageMap, reverseIndex);
 
-  return {
+  const result = {
     centerPage,
     relations,
     graph,
-  };
+  }
+
+  enhancedCache.set(cacheKey, result, 300)
+
+  return result
 }

@@ -176,6 +176,10 @@ export async function apiDelete<T>(path: string) {
   return apiRequest<T>(path, { method: 'DELETE', dedup: false });
 }
 
+export function apiDownload(path: string): Promise<Response> {
+  return fetch(path, { credentials: 'include' })
+}
+
 export interface ApiUploadOptions {
   signal?: AbortSignal;
   onProgress?: (percent: number) => void;

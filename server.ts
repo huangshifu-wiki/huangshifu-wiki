@@ -50,6 +50,8 @@ import { registerUploadRoutes } from './src/server/routes/uploads.routes';
 import { registerAdminSystemRoutes } from './src/server/routes/admin.system.routes';
 import { registerAdminVariantsRoutes } from './src/server/routes/admin.variants.routes';
 import { warmup as clipWarmup } from './src/server/vector/clipEmbedding';
+import { cloudSyncService } from './src/server/services/cloudSyncService';
+import { variantGenerator } from './src/server/services/variantGenerator';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -368,6 +370,9 @@ async function startServer() {
 
     function shutdown(signal: string): void {
       logger.info({ signal }, 'Starting graceful shutdown');
+
+      cloudSyncService.stop()
+      variantGenerator.stop()
 
       server.close(() => {
         logger.info('HTTP server closed');

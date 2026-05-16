@@ -128,7 +128,7 @@ async function authMiddleware(req: AuthenticatedRequest, _res: Response, next: N
   }
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as SessionJwtPayload;
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as SessionJwtPayload;
 
     // 尝试从缓存获取用户
     const cacheKey = getUserCacheKey(payload.uid);

@@ -25,7 +25,7 @@ export const AnnouncementBar = () => {
 		};
 
 		fetchAnnouncement();
-		const intervalId = window.setInterval(fetchAnnouncement, 30000);
+		const intervalId = window.setInterval(fetchAnnouncement, 300000);
 
 		return () => {
 			cancelled = true;

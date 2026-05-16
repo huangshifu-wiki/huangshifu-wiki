@@ -66,6 +66,10 @@ export default defineConfig(({ mode }) => {
 								return "vendor-react";
 							}
 
+							if (pkg === "echarts" || pkg.startsWith("echarts/")) return "vendor-echarts";
+							if (pkg === "vis-network" || pkg.startsWith("vis-network/")) return "vendor-vis";
+							if (pkg === "@uiw/react-md-editor" || pkg.startsWith("@uiw/react-md-editor/")) return "vendor-md-editor";
+
 							return "vendor";
 						}
 

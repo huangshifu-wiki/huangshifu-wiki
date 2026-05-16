@@ -13,6 +13,7 @@ import { SmartImage } from '../components/SmartImage';
 import { SongEditModal } from '../components/SongEditModal';
 import { LyricsDisplay } from '../components/LyricsDisplay';
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink';
+import { getPlatformExternalUrl } from '../lib/musicPlatformUrls';
 import { Platform, PlatformIds } from '../types/PlatformIds';
 
 type CustomPlatformLink = {
@@ -59,24 +60,8 @@ type PostItem = {
 
 const getSongExternalUrl = (song: SongItem) => {
   const id = (song.id || '').trim();
-  if (!id) {
-    return '#';
-  }
-
-  const platform = song.primaryPlatform || 'netease';
-  if (platform === 'tencent') {
-    return `https://y.qq.com/n/ryqq/songDetail/${id}`;
-  }
-  if (platform === 'kugou') {
-    return `https://www.kugou.com/song/#hash=${id}`;
-  }
-  if (platform === 'kuwo') {
-    return `https://www.kuwo.cn/play_detail/${id}`;
-  }
-  if (platform === 'baidu') {
-    return `https://music.91q.com/#/song/${id}`;
-  }
-  return `https://music.163.com/song?id=${id}`;
+  if (!id) return '#';
+  return getPlatformExternalUrl(song.primaryPlatform || 'netease', id) || '#';
 };
 
 const formatDate = (value: string | null | undefined) => {
@@ -195,7 +180,7 @@ const MusicDetail = () => {
     return (
       <div
         className="min-h-screen"
-        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+        style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
       >
         <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
           <div className="h-48 bg-[#f0ece3] rounded animate-pulse" />
@@ -208,13 +193,13 @@ const MusicDetail = () => {
     return (
       <div
         className="min-h-screen"
-        style={{ backgroundColor: '#f7f5f0', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
+        style={{ backgroundColor: 'var(--color-bg-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif" }}
       >
         <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-          <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors">
+          <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[var(--color-text-antique-muted)] hover:text-[var(--color-accent-antique)] transition-colors">
             <ArrowLeft size={16} /> 返回音乐馆
           </Link>
-          <div className="mt-6 bg-white rounded border border-[#e0dcd3] p-10 text-center text-[#9e968e] italic tracking-[0.1em]">
+          <div className="mt-6 bg-white rounded border border-[#e0dcd3] p-10 text-center text-[var(--color-text-antique-muted)] italic tracking-[0.1em]">
             歌曲不存在或已被删除
           </div>
         </div>
@@ -225,10 +210,10 @@ const MusicDetail = () => {
   return (
     <div
       className="min-h-screen"
-      style={{ backgroundColor: '#f7f5f0', color: '#2c2c2c', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif", lineHeight: 1.8 }}
+      style={{ backgroundColor: 'var(--color-bg-antique)', color: 'var(--color-text-antique)', fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif", lineHeight: 1.8 }}
     >
       <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-        <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[#9e968e] hover:text-[#c8951e] transition-colors mb-5">
+        <Link to="/music" className="inline-flex items-center gap-2 text-sm text-[var(--color-text-antique-muted)] hover:text-[var(--color-accent-antique)] transition-colors mb-5">
           <ArrowLeft size={16} /> 返回音乐馆
         </Link>
 
@@ -426,8 +411,7 @@ const MusicDetail = () => {
                           href={url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all hover:text-[#c8951e] border-b border-transparent hover:border-[#c8951e]"
-                          style={{ color: '#9e968e' }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all hover:text-[var(--color-accent-antique)] border-b border-transparent hover:border-[var(--color-accent-antique)] text-[var(--color-text-antique-muted)]"
                         >
                           {platform.label}
                           <ExternalLink size={12} />

@@ -1,6 +1,9 @@
 import React from "react";
 import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
+import { customSchema } from "../lib/htmlSanitizer";
 import { handleMarkdownTextPasteCapture } from "../lib/markdownEditorPaste";
 
 interface MarkdownEditorProps {
@@ -44,6 +47,9 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 				onChange={(val) => onChange(val || "")}
 				height={parseInt(height)}
 				preview="live"
+				previewOptions={{
+					rehypePlugins: [rehypeRaw, [rehypeSanitize, customSchema]],
+				}}
 				textareaProps={{
 					placeholder,
 				}}

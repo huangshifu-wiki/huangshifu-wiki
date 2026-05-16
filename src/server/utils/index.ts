@@ -4,7 +4,6 @@
 // === 基础配置 ===
 export {
   prisma,
-  prismaAny,
   uploadsDir,
   backupsDir,
   DEFAULT_MUSIC_PLATFORMS,
@@ -46,6 +45,7 @@ export {
   parseModerationTargetType,
   normalizeModerationTargetType,
   parsePostSort,
+  parsePagination,
 } from './parsers';
 
 // === Wiki 关系引擎 ===
@@ -63,6 +63,7 @@ export {
   buildWikiRelationGraph,
   findWikiRelationCenterPage,
   buildWikiRelationBundle,
+  clearWikiRelationCache,
 } from './wiki-relations';
 
 // === 权限与可见性 ===
@@ -79,6 +80,7 @@ export {
 // === API 响应转换器 ===
 export {
   toWikiResponse,
+  toWikiListResponse,
   toWikiBranchResponse,
   toWikiPullRequestResponse,
   toPostResponse,
@@ -169,6 +171,7 @@ export {
   cleanupOldBackups,
   encryptBuffer,
   decryptBuffer,
+  validateSqlContent,
 } from './backup';
 
 // === 日志 ===

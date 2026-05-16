@@ -36,6 +36,7 @@ vi.mock('../../src/server/middleware/auth', () => ({
 vi.mock('../../src/server/utils', () => ({
   prisma: mockPrisma,
   toWikiResponse: vi.fn((page) => page),
+  toWikiListResponse: vi.fn((page) => page),
   buildWikiVisibilityWhere: vi.fn(() => ({})),
   canViewWikiPage: vi.fn(() => true),
   serializeRelations: vi.fn(() => []),
@@ -47,6 +48,7 @@ vi.mock('../../src/server/utils', () => ({
   toWikiPullRequestResponse: vi.fn((pullRequest) => pullRequest),
   hasTag: vi.fn(() => false),
   buildWikiRelationBundle: vi.fn(),
+  clearWikiRelationCache: vi.fn(),
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 

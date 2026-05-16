@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { UserRole as PrismaUserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { requireAuth, requireActiveUser, requireAdmin, requireSuperAdmin, userToApiUser, clearUserCache } from '../middleware/auth';
+import { asyncHandler } from '../middleware/asyncHandler';
 import {
   prisma,
   toUserResponse,
@@ -9,6 +10,8 @@ import {
   toPostResponse,
   toCommentResponse,
   safeDeleteUploadFileByUrl,
+  parsePagination,
+  logger,
 } from '../utils';
 import type { AuthenticatedRequest, UserStatus } from '../types';
 
@@ -48,7 +51,7 @@ function normalizePhotoUrl(value: unknown): string | null {
 }
 
 // User self-management routes
-router.get('/status', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.get('/status', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { uid: req.authUser!.uid },
@@ -79,10 +82,10 @@ router.get('/status', requireAuth, async (req: AuthenticatedRequest, res) => {
     console.error('Fetch current user status error:', error);
     res.status(500).json({ error: '获取用户状态失败' });
   }
-});
+}));
 
 // 管理员修改用户状态 - 需要超级管理员权限
-router.put('/:userId/status', requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
+router.put('/:userId/status', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const targetUid = req.params.userId;
     if (!targetUid) {
@@ -145,9 +148,9 @@ router.put('/:userId/status', requireSuperAdmin, async (req: AuthenticatedReques
     console.error('Update user status error:', error);
     res.status(500).json({ error: '更新用户状态失败' });
   }
-});
+}));
 
-router.put('/name', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.put('/name', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { displayName } = req.body as { displayName?: string };
 
@@ -181,9 +184,9 @@ router.put('/name', requireAuth, requireActiveUser, async (req: AuthenticatedReq
     console.error('Update user name error:', error);
     res.status(500).json({ error: '更新昵称失败' });
   }
-});
+}));
 
-router.put('/phone', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.put('/phone', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { phone } = req.body as { phone?: string };
 
@@ -198,9 +201,9 @@ router.put('/phone', requireAuth, requireActiveUser, async (req: AuthenticatedRe
     console.error('Update user phone error:', error);
     res.status(500).json({ error: '更新手机号失败' });
   }
-});
+}));
 
-router.put('/password', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.put('/password', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { currentPassword, newPassword } = req.body as {
       currentPassword?: string;
@@ -209,6 +212,11 @@ router.put('/password', requireAuth, requireActiveUser, async (req: Authenticate
 
     if (!currentPassword || !newPassword) {
       res.status(400).json({ error: '密码不能为空' });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: '新密码至少8个字符' });
       return;
     }
 
@@ -239,14 +247,14 @@ router.put('/password', requireAuth, requireActiveUser, async (req: Authenticate
     console.error('Update user password error:', error);
     res.status(500).json({ error: '更新密码失败' });
   }
-});
+}));
 
 // 注：头像上传走 POST /api/uploads/sessions/:id/files 通用上传接口，
 // 客户端拿到文件 URL 后通过 PATCH /api/users/me { photoURL } 写入。
 // 此处不再保留独立的 POST /avatar 占位路由。
 
 // GET /api/users/me - Get current user info
-router.get('/me', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.get('/me', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { uid: req.authUser!.uid },
@@ -277,9 +285,9 @@ router.get('/me', requireAuth, requireActiveUser, async (req: AuthenticatedReque
     console.error('Get current user error:', error);
     res.status(500).json({ error: '获取用户信息失败' });
   }
-});
+}));
 
-router.patch('/me', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.patch('/me', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { displayName, bio, preferences, photoURL } = req.body;
     const updateData: Record<string, unknown> = {};
@@ -321,7 +329,7 @@ router.patch('/me', requireAuth, requireActiveUser, async (req: AuthenticatedReq
     // 替换头像后，旧的本地上传文件不再被引用，安全删除
     if (photoURL !== undefined && oldPhotoURL !== normalizedPhotoUrl) {
       if (oldPhotoURL && oldPhotoURL.startsWith('/uploads/') && oldPhotoURL !== normalizedPhotoUrl) {
-        await safeDeleteUploadFileByUrl(oldPhotoURL).catch(() => {});
+        await safeDeleteUploadFileByUrl(oldPhotoURL).catch((err) => logger.debug({ err }, 'Operation cleanup failed'));
       }
     }
     // 注：评论的作者昵称/头像现在通过 author 关系实时 JOIN 获取，
@@ -332,9 +340,9 @@ router.patch('/me', requireAuth, requireActiveUser, async (req: AuthenticatedReq
     console.error('Update user profile error:', error);
     res.status(500).json({ error: '更新用户资料失败' });
   }
-});
+}));
 
-router.delete('/account', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.delete('/account', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     // 获取旧头像 URL，用于注销后清理本地文件
     const existing = await prisma.user.findUnique({
@@ -361,7 +369,7 @@ router.delete('/account', requireAuth, requireActiveUser, async (req: Authentica
 
     // 物理删除旧头像文件，防止留下孤儿文件
     if (existing?.photoURL && existing.photoURL.startsWith('/uploads/')) {
-      await safeDeleteUploadFileByUrl(existing.photoURL).catch(() => {});
+      await safeDeleteUploadFileByUrl(existing.photoURL).catch((err) => logger.debug({ err }, 'Operation cleanup failed'));
     }
 
     res.json({ success: true });
@@ -369,10 +377,10 @@ router.delete('/account', requireAuth, requireActiveUser, async (req: Authentica
     console.error('Delete account error:', error);
     res.status(500).json({ error: '注销账户失败' });
   }
-});
+}));
 
 // Admin user management routes
-router.get('/', requireAdmin, async (_req, res) => {
+router.get('/', requireAdmin, asyncHandler(async (_req, res) => {
   try {
     const users = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
@@ -397,9 +405,9 @@ router.get('/', requireAdmin, async (_req, res) => {
     console.error('Fetch users error:', error);
     res.status(500).json({ error: '获取用户列表失败' });
   }
-});
+}));
 
-router.put('/:userId/role', requireSuperAdmin, async (req, res) => {
+router.put('/:userId/role', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { role } = req.body as { role?: PrismaUserRole };
     if (!role || !['user', 'admin', 'super_admin'].includes(role)) {
@@ -432,9 +440,9 @@ router.put('/:userId/role', requireSuperAdmin, async (req, res) => {
     console.error('Update user role error:', error);
     res.status(500).json({ error: '更新角色失败' });
   }
-});
+}));
 
-router.put('/:userId/ban', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.put('/:userId/ban', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const targetUid = req.params.userId;
     if (!targetUid) {
@@ -489,9 +497,9 @@ router.put('/:userId/ban', requireAdmin, async (req: AuthenticatedRequest, res) 
     console.error('Ban user error:', error);
     res.status(500).json({ error: '封禁用户失败' });
   }
-});
+}));
 
-router.put('/:userId/unban', requireAdmin, async (req: AuthenticatedRequest, res) => {
+router.put('/:userId/unban', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const targetUid = req.params.userId;
     if (!targetUid) {
@@ -539,15 +547,13 @@ router.put('/:userId/unban', requireAdmin, async (req: AuthenticatedRequest, res
     console.error('Unban user error:', error);
     res.status(500).json({ error: '解封用户失败' });
   }
-});
+}));
 
 // User detail routes
-router.get('/:userId/posts', async (req: AuthenticatedRequest, res) => {
+router.get('/:userId/posts', asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const uid = req.params.userId;
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
-    const page = Math.max(Number(req.query.page) || 1, 1);
-    const skip = (page - 1) * limit;
+    const { limit, page, offset: skip } = parsePagination(req.query);
 
     const visibilityWhere = buildPostVisibilityWhere(req.authUser);
 
@@ -636,14 +642,12 @@ router.get('/:userId/posts', async (req: AuthenticatedRequest, res) => {
     console.error('Fetch user posts error:', error);
     res.status(500).json({ error: '获取用户帖子失败' });
   }
-});
+}));
 
-router.get('/:userId/comments', async (req: AuthenticatedRequest, res) => {
+router.get('/:userId/comments', asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const uid = req.params.userId;
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
-    const page = Math.max(Number(req.query.page) || 1, 1);
-    const skip = (page - 1) * limit;
+    const { limit, page, offset: skip } = parsePagination(req.query);
 
     const visibilityWhere = buildPostVisibilityWhere(req.authUser);
 
@@ -694,14 +698,12 @@ router.get('/:userId/comments', async (req: AuthenticatedRequest, res) => {
     console.error('Fetch user comments error:', error);
     res.status(500).json({ error: '获取用户评论失败' });
   }
-});
+}));
 
-router.get('/:userId/likes', requireAuth, async (req: AuthenticatedRequest, res) => {
+router.get('/:userId/likes', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const uid = req.params.userId;
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
-    const page = Math.max(Number(req.query.page) || 1, 1);
-    const skip = (page - 1) * limit;
+    const { limit, page, offset: skip } = parsePagination(req.query);
 
     // Users can only see their own likes unless they're admin
     if (req.authUser?.uid !== uid && req.authUser?.role === 'user') {
@@ -771,10 +773,10 @@ router.get('/:userId/likes', requireAuth, async (req: AuthenticatedRequest, res)
     console.error('Fetch user likes error:', error);
     res.status(500).json({ error: '获取用户点赞失败' });
   }
-});
+}));
 
 // User browsing history route
-router.get('/me/history', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.get('/me/history', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { type, limit = '20', offset = '0' } = req.query;
     const userId = req.authUser!.uid;
@@ -819,7 +821,7 @@ router.get('/me/history', requireAuth, requireActiveUser, async (req: Authentica
     console.error('Get user history error:', error);
     res.status(500).json({ error: '获取历史记录失败' });
   }
-});
+}));
 
 export function registerUsersRoutes(app: Router) {
   app.use('/api/users', router);
