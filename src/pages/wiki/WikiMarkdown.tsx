@@ -9,7 +9,11 @@ import WikiLinkPreview from "../../components/WikiLinkPreview";
 
 const WikiMarkdown = ({ content }: { content: string }) => {
 	const processedContent = useMemo(() => {
-		return (content || '').replace(
+		const raw = content || '';
+		if (typeof window !== 'undefined' && raw.length === 0) {
+			console.warn('[WikiMarkdown] content is empty:', { content, type: typeof content });
+		}
+		return raw.replace(
 			/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,
 			(_match, p1, p2) => {
 				const display = p1.trim();

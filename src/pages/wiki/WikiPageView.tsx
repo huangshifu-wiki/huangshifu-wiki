@@ -76,6 +76,15 @@ const WikiPageView = () => {
 				setBacklinks(data.backlinks || []);
 				setResolvedRelations((data.relations || []).filter((relation) => !relation.inferred));
 				setRelationGraph(data.relationGraph || null);
+				if (!data.page.content) {
+					console.warn('[WikiPageView] API returned empty content:', {
+						slug,
+						hasContent: !!data.page.content,
+						contentType: typeof data.page.content,
+						contentLength: data.page.content?.length,
+						pageKeys: Object.keys(data.page),
+					});
+				}
 			} catch (e) {
 				console.error("Error fetching page:", e);
 			}
