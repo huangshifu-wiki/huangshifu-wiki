@@ -25,7 +25,7 @@ function wikiToConfig(page: WikiItem): import("./SearchResultCard").SearchResult
   return {
     id: page.id,
     title: page.title,
-    description: page.content.replace(/[#*`]/g, "").substring(0, 80),
+    description: (page.content || '').replace(/[#*`]/g, "").substring(0, 80),
     link: `/wiki/${page.slug}`,
     tags: [page.category],
     meta: toDateValue(page.updatedAt) ? format(toDateValue(page.updatedAt)!, "yyyy-MM-dd") : "刚刚",

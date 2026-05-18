@@ -91,7 +91,7 @@ export default function WikiLinkPreview({ slug, children }: WikiLinkPreviewProps
   }, []);
 
   const getExcerpt = (content: string, maxLength = 150) => {
-    const cleaned = content.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, p1, p2) => p2 || p1);
+    const cleaned = (content || '').replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, p1, p2) => p2 || p1);
     if (cleaned.length <= maxLength) return cleaned;
     return cleaned.slice(0, maxLength).trim() + '...';
   };

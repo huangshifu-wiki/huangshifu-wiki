@@ -97,7 +97,7 @@ const WikiCard = React.memo(({ page, viewMode, cardHeight, onCopyLink }: WikiCar
 							{page.title}
 						</h3>
 						<p className={clsx(CARD.wikiDesc, "mb-4 leading-relaxed flex-1")}>
-							{page.content.replace(/[#*`]/g, "").substring(0, 100)}...
+							{(page.content || '').replace(/[#*`]/g, "").substring(0, 100)}...
 						</p>
 						<div className={clsx(CARD.meta, "justify-between mt-auto")}>
 							<div className="flex items-center gap-3">
