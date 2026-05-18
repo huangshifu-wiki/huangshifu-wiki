@@ -20,6 +20,11 @@
 - 微信登录：微信小程序 `code2session`（支持 mock 联调）
 - 容器编排：Docker Compose
 
+> **版本信息**：
+> - 应用默认端口：**3003**（非 3000）
+> - Node.js 要求：**>=22.0.0**（Dockerfile 使用 `node:22-alpine`）
+> - 图片嵌入模型：**OFA-Sys/chinese-clip-vit-base-patch16**（中文 CLIP 模型）
+
 ---
 
 ## 1. 部署前准备
@@ -70,73 +75,110 @@ cd /root/huangshifu-wiki
 
 ```bash
 cat > /root/huangshifu-wiki/.env <<'EOF'
+# Axios 默认超时时间（毫秒），默认 15000 (15秒)
+AXIOS_DEFAULT_TIMEOUT="15000"
+
+# Gemini
 VITE_GEMINI_API_KEY=""
+
+# Amap (高德地图) - Frontend JS API key
+VITE_AMAP_JS_API_KEY=""
+# Amap JS API 安全密钥
+VITE_AMAP_SECURITY_JS_CODE=""
+
+# Amap (高德地图) - Backend Web Service API key
+AMAP_API_KEY=""
+
+# Local backend（注意：Docker 部署使用 postgres 服务名）
 DATABASE_URL="postgresql://hsf_wiki:请替换为强密码@postgres:5432/huangshifu_wiki"
 JWT_SECRET="请替换为至少32位随机字符串"
+
+# Admin seed account
 SEED_SUPER_ADMIN_EMAIL="admin@example.com"
 SEED_SUPER_ADMIN_PASSWORD="请替换为强密码"
-SEED_SUPER_ADMIN_NAME="管理员"
+SEED_SUPER_ADMIN_NAME="诗扶小筑管理员"
+
+# Optional
 CORS_ORIGIN="https://你的域名"
-WECHAT_MP_APPID=""
-WECHAT_MP_APP_SECRET=""
-WECHAT_LOGIN_MOCK="false"
 UPLOAD_SESSION_TTL_MINUTES="45"
+UPLOADS_PATH=""
+
+# Database backup
+BACKUP_PASSWORD="请替换为备份加密密码"
+BACKUP_RETAIN_COUNT="20"
+
+# Vector search (Qdrant + CLIP)
 QDRANT_URL="http://qdrant:6333"
 QDRANT_API_KEY=""
 QDRANT_COLLECTION="hsf_image_embeddings"
-IMAGE_EMBEDDING_MODEL="Xenova/clip-vit-base-patch32"
+IMAGE_EMBEDDING_MODEL="OFA-Sys/chinese-clip-vit-base-patch16"
 IMAGE_EMBEDDING_VECTOR_SIZE="512"
 IMAGE_EMBEDDING_BATCH_SIZE="100"
+IMAGE_EMBEDDING_DTYPE="q8"
 IMAGE_SEARCH_RESULT_LIMIT="24"
-MUSIC_PLAY_URL_CACHE_TTL_SECONDS="600"
 
-# ============================================
-# S3 对象存储配置（可选，用于图片主图床）
-# ============================================
-# 参考文档：docs/S3_SETUP_GUIDE.md
+# 文本嵌入配置
+TEXT_EMBEDDING_ENABLED="true"
+# TEXT_EMBEDDING_MAX_CHUNK_TOKENS="512"
+# TEXT_EMBEDDING_CHUNK_OVERLAP_TOKENS="50"
+# QDRANT_TEXT_COLLECTION="hsf_text_embeddings"
+# TEXT_SEARCH_MIN_SCORE="0.3"
 
-# 是否启用 S3（false=仅使用本地存储，true=启用 S3 图床）
+# Transformers 模型配置
+TRANSFORMERS_CACHE=""
+TRANSFORMERS_OFFLINE="false"
+HF_PROBE_TIMEOUT_MS="5000"
+SKIP_NETWORK_PROBE="false"
+
+# WeChat mini-program auth
+WECHAT_MP_APPID=""
+WECHAT_MP_APP_SECRET=""
+WECHAT_LOGIN_MOCK="false"
+
+# S3 对象存储配置
 S3_ENABLED="false"
-
-# S3 兼容端点（Bitiful 使用 https://s3.bitiful.net）
+S3_READ_ACCESS_KEY_ID=""
+S3_READ_SECRET_ACCESS_KEY=""
+S3_WRITE_ACCESS_KEY_ID=""
+S3_WRITE_SECRET_ACCESS_KEY=""
+S3_PUBLIC_BUCKET_NAME="your-public-bucket"
+S3_PUBLIC_BUCKET_REGION="auto"
+S3_PUBLIC_BUCKET_PREFIX="public/"
 S3_ENDPOINT_URL="https://s3.bitiful.net"
-S3_REGION="cn-east-1"
 S3_FORCE_PATH_STYLE="true"
 S3_SSL_ENABLED="true"
 S3_SIGNATURE_VERSION="v4"
-
-# ============================================
-# 写入凭证（机密 - 仅后端使用）
-# ============================================
-# 权限：上传、删除、列出
-# 建议：创建专用子账户，仅授予 PutObject、DeleteObject、ListBucket 权限
-S3_WRITE_ACCESS_KEY_ID=""
-S3_WRITE_SECRET_ACCESS_KEY=""
-
-# ============================================
-# 读取凭证（可用于前端）
-# ============================================
-# 权限：读取、列出（无写入、删除）
-# 用于生成下载签名，前端可使用
-S3_READ_ACCESS_KEY_ID=""
-S3_READ_SECRET_ACCESS_KEY=""
-
-# 存储桶名称（私有桶，用于存储图片）
-S3_PUBLIC_BUCKET_NAME="your-bucket-name"
-S3_PUBLIC_BUCKET_REGION="auto"
-S3_PUBLIC_BUCKET_PREFIX="wiki/"
-
-# 自定义域名（可选，用于公开访问）
-# 如果配置了 CDN 或自定义域名，填在这里
 S3_PUBLIC_DOMAIN=""
 
-# 安全配置
-S3_MAX_FILE_SIZE="10485760"  # 10MB
-S3_ALLOWED_CONTENT_TYPES="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,image/bmp"
-S3_ENABLE_MD5_VERIFICATION="true"
+# Superbed 图床配置
+SUPERBED_API_TOKEN=""
 
-# 预签名 URL 过期时间（秒）
-S3_EXPIRES_IN="3600"
+# Lsky Pro+ 图床配置
+LSKY_BASE_URL="https://your-lsky-pro-domain.com"
+# LSKY_TOKEN=""
+LSKY_STRATEGY_ID=""
+
+# 前端环境变量
+VITE_LSKY_BASE_URL="https://your-lsky-pro-domain.com"
+
+# 图片变体生成器配置 (v2.1)
+VARIANT_MAX_CONCURRENT="3"
+VARIANT_TASK_TIMEOUT_MS="30000"
+VARIANT_QUEUE_MAX_WAIT_MS="300000"
+VARIANT_SHARP_MEMORY_LIMIT_MB="512"
+VARIANT_MAX_RETRIES="3"
+
+# 云端同步服务配置 (v2.1)
+CLOUD_SYNC_MAX_CONCURRENT="2"
+CLOUD_SYNC_MAX_RETRIES="3"
+
+# 磁盘空间监控配置 (v2.1)
+DISK_WARNING_THRESHOLD_GB="50"
+DISK_CRITICAL_THRESHOLD_GB="20"
+DISK_CHECK_INTERVAL_MS="300000"
+UPLOAD_MIN_FREE_SPACE_MB="500"
+
+MUSIC_PLAY_URL_CACHE_TTL_SECONDS="600"
 EOF
 ```
 
@@ -152,7 +194,7 @@ EOF
 - Cookie 的 `Secure` 标记在 HTTP 部署时会自动关闭（由 `trust proxy` + `X-Forwarded-Proto` 判断），HTTPS 部署时自动启用。如需强制覆盖，可设置 `COOKIE_SECURE=true` 或 `COOKIE_SECURE=false`。
 - `UPLOAD_SESSION_TTL_MINUTES` 控制图集上传会话有效期（分钟，默认 45）。
 - `QDRANT_URL` 指向 Docker 内部服务名 `qdrant`（Docker Compose 服务名）。
-- `IMAGE_EMBEDDING_MODEL` 当前实现默认 `Xenova/clip-vit-base-patch32`（CPU 友好）。
+- `IMAGE_EMBEDDING_MODEL` 当前实现默认使用 **`OFA-Sys/chinese-clip-vit-base-patch16`**（中文 CLIP 模型，更适合中文图片语义搜索）。
 - `MUSIC_PLAY_URL_CACHE_TTL_SECONDS` 控制音乐实时播放链接缓存时长（秒，默认 600，最小 60）。
 
 ### 3.1 S3 对象存储配置（可选）
@@ -176,7 +218,27 @@ EOF
 
 详细配置指南请参考：`docs/S3_SETUP_GUIDE.md`
 
-### 3.2 自定义上传目录（可选）
+### 3.2 Superbed 图床配置（可选）
+
+如需使用 Superbed 作为外部图床：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `SUPERBED_API_TOKEN` | Superbed API Token | 空 |
+
+### 3.3 Lsky Pro+ 图床配置（可选）
+
+如需使用 Lsky Pro+ 作为外部图床：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `LSKY_BASE_URL` | Lsky Pro+ 实例地址 | 空 |
+| `LSKY_TOKEN` | Lsky API Token（已注释，按需取消注释） | 空 |
+| `LSKY_STRATEGY_ID` | Lsky 上传策略 ID | 空 |
+| `LSKY_TIMEOUT` | Lsky 请求超时（毫秒） | `15000` |
+| `VITE_LSKY_BASE_URL` | 前端 Lsky 地址（用于直链展示） | 空 |
+
+### 3.4 自定义上传目录（可选）
 
 用于将上传文件存储到非容器内部目录（如解决 `/root` 权限问题）：
 
@@ -198,7 +260,7 @@ services:
       - /var/www/huangshifu-wiki/uploads:/app/uploads
 ```
 
-### 3.3 Blurhash 哈希占位配置（可选）
+### 3.5 Blurhash 哈希占位配置（可选）
 
 ```bash
 BLURHASH_ENABLED="true"
@@ -213,6 +275,38 @@ BLURHASH_COMPONENTS_Y="3"
 | `BLURHASH_AUTO_GENERATE` | true | 上传时自动生成 |
 | `BLURHASH_COMPONENTS_X` | 4 | blurhash X 分量 |
 | `BLURHASH_COMPONENTS_Y` | 3 | blurhash Y 分量 |
+
+### 3.6 图片变体生成器配置（可选，v2.1）
+
+图片变体生成器用于自动生成不同尺寸/格式的图片缩略图：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `VARIANT_MAX_CONCURRENT` | `3` | 最大并发处理数 |
+| `VARIANT_TASK_TIMEOUT_MS` | `30000` | 单个任务超时（毫秒） |
+| `VARIANT_QUEUE_MAX_WAIT_MS` | `300000` | 队列最大等待时间（毫秒） |
+| `VARIANT_SHARP_MEMORY_LIMIT_MB` | `512` | Sharp 内存限制（MB） |
+| `VARIANT_MAX_RETRIES` | `3` | 最大重试次数 |
+
+### 3.7 云端同步服务配置（适用场景，v2.1）
+
+云端同步服务用于将本地图片同步到 S3 或其他云存储：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `CLOUD_SYNC_MAX_CONCURRENT` | `2` | 最大并发同步数 |
+| `CLOUD_SYNC_MAX_RETRIES` | `3` | 最大重试次数 |
+
+### 3.8 磁盘空间监控配置（v2.1）
+
+磁盘空间监控用于在磁盘空间不足时发出告警并限制上传：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `DISK_WARNING_THRESHOLD_GB` | `50` | 磁盘警告阈值（GB） |
+| `DISK_CRITICAL_THRESHOLD_GB` | `20` | 磁盘严重警告阈值（GB） |
+| `DISK_CHECK_INTERVAL_MS` | `300000` | 检查间隔（毫秒） |
+| `UPLOAD_MIN_FREE_SPACE_MB` | `500` | 最小可用空间要求（MB），低于此值禁止上传 |
 
 ---
 
@@ -240,7 +334,7 @@ SKIP_SEED=1 DB_PASSWORD=你的密码 ./scripts/deploy-docker.sh
 ```
 
 部署完成后访问：
-- 应用：`http://127.0.0.1:3000`
+- 应用：`http://127.0.0.1:3003`
 - Qdrant：`http://127.0.0.1:6333`
 
 查看日志：`docker compose logs -f`
@@ -291,7 +385,7 @@ services:
     container_name: hsf-app
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3003:3003"
     environment:
       NODE_ENV: production
     env_file:
@@ -304,7 +398,7 @@ services:
       qdrant:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3003/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -324,7 +418,7 @@ EOF
 
 ```bash
 cat > /root/huangshifu-wiki/Dockerfile <<'EOF'
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 FROM base AS deps
 WORKDIR /app
@@ -353,13 +447,16 @@ COPY --from=builder --chown=appuser:nodejs /app/server.ts ./
 RUN mkdir -p /app/uploads && chown -R appuser:nodejs /app/uploads
 
 USER appuser
-EXPOSE 3000
+EXPOSE 3003
 
 CMD ["node", "dist/server.js"]
 EOF
 ```
 
-> **注意**：生产构建使用 `dist/server.js`（由 `npm run build` 生成），而非开发模式的 `npx tsx server.ts`。
+> **注意**：
+> - 生产构建使用 `dist/server.js`（由 `npm run build` 生成），而非开发模式的 `npx tsx server.ts`。
+> - Node.js 版本使用 **22-alpine**（项目 `package.json` engines 字段要求 `>=22.0.0`）。
+> - 暴露端口为 **3003**。
 
 ---
 
@@ -479,7 +576,7 @@ docker compose ps
 验证健康检查：
 
 ```bash
-curl http://127.0.0.1:3000/api/health
+curl http://127.0.0.1:3003/api/health
 ```
 
 应返回 `{"status":"ok"}`。
@@ -516,7 +613,7 @@ server {
     client_max_body_size 50m;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:3003;
         proxy_http_version 1.1;
 
         proxy_set_header Host $host;
@@ -538,7 +635,7 @@ nginx -t
 systemctl restart nginx
 ```
 
-建议关闭 3000 对公网暴露，仅保留 80/443。
+建议关闭 3003 对公网暴露，仅保留 80/443。
 
 ---
 
@@ -628,7 +725,7 @@ docker exec -it hsf-postgres psql -U hsf_wiki -d huangshifu_wiki -c "ALTER DEFAU
 docker exec -it hsf-postgres psql -U hsf_wiki -d huangshifu_wiki -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO hsf_wiki;"
 ```
 
-### 13.4 `listen EADDRINUSE: address already in use 0.0.0.0:3000`
+### 13.4 `listen EADDRINUSE: address already in use 0.0.0.0:3003`
 
 ```bash
 docker compose down
@@ -647,7 +744,7 @@ curl http://127.0.0.1:6333/healthz
 - 检查向量是否已生成：
 
 ```bash
-curl http://127.0.0.1:3000/api/embeddings/status
+curl http://127.0.0.1:3003/api/embeddings/status
 ```
 
 ### 13.6 前端页面 404（访问根路径）
@@ -680,7 +777,7 @@ npm run db:generate
 ### 14.1 数据库备份
 
 ```bash
-docker exec -it hsf-postgres pg_dump -U hsf_wiki huangshifu_wiki > /root/backup/huangshifu_wiki_$(date +%F).sql
+docker exec -it hsf-postgres pg_dump -U hsf_wiki huangshifu_wiki > /root/backup/huangshifu-wiki_$(date +%F).sql
 ```
 
 ### 14.2 上传文件备份
@@ -717,7 +814,7 @@ DB_PASSWORD=你的密码 ./scripts/deploy-docker.sh
 - `PULL_LATEST=1` - 拉取最新代码
 - `SKIP_DB_INIT=1` - 跳过数据库初始化
 - `SKIP_SEED=1` - 跳过 seed
-- `APP_PORT` - 应用端口（默认 3000）
+- `APP_PORT` - 应用端口（默认 3003）
 
 **deploy.sh（通用部署脚本）**：
 
@@ -799,27 +896,163 @@ docker compose ps
 
 ## 17. 环境变量参考
 
+### 核心基础设施
+
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| `VITE_GEMINI_API_KEY` | Gemini API Key | 空 |
+| `PORT` | 应用监听端口 | `3003` |
+| `NODE_ENV` | 运行环境 | `production` |
 | `DATABASE_URL` | PostgreSQL 连接地址 | `postgresql://...` |
-| `JWT_SECRET` | JWT 签名密钥 | - |
+| `JWT_SECRET` | JWT 签名密钥（必须设置） | - |
+| `CORS_ORIGIN` | 允许的跨域来源 | - |
+| `AXIOS_DEFAULT_TIMEOUT` | Axios 默认超时（毫秒） | `15000` |
+| `COOKIE_SECURE` | Cookie Secure 标记（HTTP 自动关闭，HTTPS 自动开启） | 自动判断 |
+
+### 认证与种子账号
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
 | `SEED_SUPER_ADMIN_EMAIL` | 初始管理员邮箱 | `admin@example.com` |
 | `SEED_SUPER_ADMIN_PASSWORD` | 初始管理员密码 | - |
-| `CORS_ORIGIN` | 允许的请求来源 | - |
+| `SEED_SUPER_ADMIN_NAME` | 初始管理员显示名称 | `诗扶小筑管理员` |
+
+### 微信小程序
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
 | `WECHAT_MP_APPID` | 微信小程序 AppID | 空 |
 | `WECHAT_MP_APP_SECRET` | 微信小程序 AppSecret | 空 |
-| `WECHAT_LOGIN_MOCK` | 微信登录 Mock 模式 | `false` |
+| `WECHAT_LOGIN_MOCK` | 微信登录 Mock 模式（联调用） | `false` |
+
+### Qdrant 向量检索
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
 | `QDRANT_URL` | Qdrant 服务地址 | `http://qdrant:6333` |
 | `QDRANT_API_KEY` | Qdrant API Key | 空 |
-| `VITE_AMAP_JS_API_KEY` | 高德地图 JS API Key | 空 |
-| `AMAP_API_KEY` | 高德地图 Web Service Key | 空 |
-| `UPLOADS_PATH` | 自定义上传目录 | 项目根目录/uploads |
-| `BLURHASH_ENABLED` | 是否启用 blurhash | `true` |
-| `BLURHASH_AUTO_GENERATE` | 上传时自动生成 blurhash | `true` |
-| `BLURHASH_COMPONENTS_X` | blurhash X 分量 | `4` |
-| `BLURHASH_COMPONENTS_Y` | blurhash Y 分量 | `3` |
+| `QDRANT_COLLECTION` | 图片向量集合名称 | `hsf_image_embeddings` |
+| `IMAGE_EMBEDDING_MODEL` | CLIP 嵌入模型 | `OFA-Sys/chinese-clip-vit-base-patch16` |
+| `IMAGE_EMBEDDING_VECTOR_SIZE` | 向量维度 | `512` |
+| `IMAGE_EMBEDDING_BATCH_SIZE` | 批处理大小 | `100` |
+| `IMAGE_EMBEDDING_DTYPE` | 量化类型 | `q8` |
+| `IMAGE_SEARCH_RESULT_LIMIT` | 图片搜索结果上限 | `24` |
+
+### 文本嵌入
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `TEXT_EMBEDDING_ENABLED` | 是否启用文本嵌入 | `true` |
+| `TEXT_EMBEDDING_MAX_CHUNK_TOKENS` | 文本分块最大 token 数 | `512` |
+| `TEXT_EMBEDDING_CHUNK_OVERLAP_TOKENS` | 分块重叠 token 数 | `50` |
+| `QDRANT_TEXT_COLLECTION` | 文本向量集合名称 | `hsf_text_embeddings` |
+| `TEXT_SEARCH_MIN_SCORE` | 文本搜索最低相似度 | `0.3` |
+
+### Transformers 模型
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `TRANSFORMERS_CACHE` | 模型缓存路径（留空则使用默认） | 空 |
+| `TRANSFORMERS_OFFLINE` | 是否离线模式（跳过网络探测） | `false` |
+| `HF_PROBE_TIMEOUT_MS` | HuggingFace 探测超时（毫秒） | `5000` |
+| `SKIP_NETWORK_PROBE` | 是否跳过网络连通性探测 | `false` |
+
+### AI 与地图
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `VITE_GEMINI_API_KEY` | Gemini API Key（前端） | 空 |
+| `VITE_AMAP_JS_API_KEY` | 高德地图 JS API Key（前端） | 空 |
+| `VITE_AMAP_SECURITY_JS_CODE` | 高德 JS API 安全密钥（前端） | 空 |
+| `AMAP_API_KEY` | 高德 Web Service Key（后端） | 空 |
+
+### 文件上传
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `UPLOADS_PATH` | 自定义上传目录（留空则用项目内 uploads） | 项目根目录/uploads |
+| `UPLOAD_SESSION_TTL_MINUTES` | 图集上传会话有效期（分钟） | `45` |
+| `UPLOAD_MIN_FREE_SPACE_MB` | 最小可用空间要求（MB） | `500` |
+| `BLURHASH_ENABLED` | 是否启用 Blurhash | `true` |
+| `BLURHASH_AUTO_GENERATE` | 上传时自动生成 Blurhash | `true` |
+| `BLURHASH_COMPONENTS_X` | Blurhash X 分量 | `4` |
+| `BLURHASH_COMPONENTS_Y` | Blurhash Y 分量 | `3` |
+
+### S3 对象存储
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
 | `S3_ENABLED` | 是否启用 S3 存储 | `false` |
+| `S3_ENDPOINT_URL` | S3 兼容端点 URL | - |
+| `S3_FORCE_PATH_STYLE` | 是否强制路径风格 | `true` |
+| `S3_SSL_ENABLED` | 是否启用 SSL | `true` |
+| `S3_SIGNATURE_VERSION` | 签名版本 | `v4` |
+| `S3_WRITE_ACCESS_KEY_ID` | 写入 AccessKey（机密） | 空 |
+| `S3_WRITE_SECRET_ACCESS_KEY` | 写入 SecretKey（机密） | 空 |
+| `S3_READ_ACCESS_KEY_ID` | 读取 AccessKey | 空 |
+| `S3_READ_SECRET_ACCESS_KEY` | 读取 SecretKey | 空 |
+| `S3_PUBLIC_BUCKET_NAME` | 公开存储桶名称 | - |
+| `S3_PUBLIC_BUCKET_REGION` | 存储桶区域 | `auto` |
+| `S3_PUBLIC_BUCKET_PREFIX` | 存储桶前缀路径 | `public/` |
+| `S3_PUBLIC_DOMAIN` | 自定义公开访问域名 | 空 |
+| `S3_MAX_FILE_SIZE` | 最大文件大小（字节） | `10485760` |
+| `S3_ALLOWED_CONTENT_TYPES` | 允许的 Content-Type | `image/jpeg,image/png,...` |
+| `S3_ENABLE_MD5_VERIFICATION` | MD5 校验 | `true` |
+| `S3_EXPIRES_IN` | 预签名 URL 过期时间（秒） | `3600` |
+
+### Superbed 图床
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `SUPERBED_API_TOKEN` | Superbed API Token | 空 |
+
+### Lsky Pro+ 图床
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `LSKY_BASE_URL` | Lsky Pro+ 实例地址 | 空 |
+| `LSKY_TOKEN` | Lsky API Token | 空 |
+| `LSKY_TIMEOUT` | Lsky 请求超时（毫秒） | `15000` |
+| `LSKY_STRATEGY_ID` | Lsky 上传策略 ID | 空 |
+| `VITE_LSKY_BASE_URL` | 前端 Lsky 地址（直链展示） | 空 |
+
+### 图片变体生成器（v2.1）
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `VARIANT_MAX_CONCURRENT` | 最大并发数 | `3` |
+| `VARIANT_TASK_TIMEOUT_MS` | 单任务超时（毫秒） | `30000` |
+| `VARIANT_QUEUE_MAX_WAIT_MS` | 队列最大等待（毫秒） | `300000` |
+| `VARIANT_SHARP_MEMORY_LIMIT_MB` | Sharp 内存限制（MB） | `512` |
+| `VARIANT_MAX_RETRIES` | 最大重试次数 | `3` |
+
+### 云端同步服务（v2.1）
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `CLOUD_SYNC_MAX_CONCURRENT` | 最大并发同步数 | `2` |
+| `CLOUD_SYNC_MAX_RETRIES` | 最大重试次数 | `3` |
+
+### 磁盘空间监控（v2.1）
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `DISK_WARNING_THRESHOLD_GB` | 磁盘警告阈值（GB） | `50` |
+| `DISK_CRITICAL_THRESHOLD_GB` | 磁盘严重警告阈值（GB） | `20` |
+| `DISK_CHECK_INTERVAL_MS` | 检查间隔（毫秒） | `300000` |
+| `UPLOAD_MIN_FREE_SPACE_MB` | 最小可用空间（MB），低于此值禁止上传 | `500` |
+
+### 备份
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `BACKUP_PASSWORD` | 数据库备份加密密码 | - |
+| `BACKUP_RETAIN_COUNT` | 备份保留数量 | `20` |
+
+### 音乐
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `MUSIC_PLAY_URL_CACHE_TTL_SECONDS` | 音乐播放链接缓存时长（秒） | `600` |
 
 ---
 
@@ -849,7 +1082,7 @@ docker compose ps
 
 ### 存储策略
 
-通过 Admin 后台 → 图片管理 → 设置 配置：
+通过 Admin 后台 -> 图片管理 -> 设置 配置：
 - 默认存储：local / s3 / external
 - 启用回退：true / false
 

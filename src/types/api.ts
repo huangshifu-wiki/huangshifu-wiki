@@ -327,13 +327,35 @@ export interface AdminReviewQueueResponse {
 // 文本语义搜索类型
 // ============================================================================
 
-export interface TextSearchResult {
-  sourceType: 'wiki' | 'post' | 'music' | 'album'
-  sourceId: string
-  score: number
-  chunkPreview: string
-  entity: Record<string, unknown>
-}
+export type TextSearchResult =
+  | {
+      sourceType: 'wiki'
+      sourceId: string
+      score: number
+      chunkPreview: string
+      entity: { slug: string; title?: string; [key: string]: unknown }
+    }
+  | {
+      sourceType: 'post'
+      sourceId: string
+      score: number
+      chunkPreview: string
+      entity: { id: string; title?: string; [key: string]: unknown }
+    }
+  | {
+      sourceType: 'music'
+      sourceId: string
+      score: number
+      chunkPreview: string
+      entity: { id: string; title?: string; artist?: string; [key: string]: unknown }
+    }
+  | {
+      sourceType: 'album'
+      sourceId: string
+      score: number
+      chunkPreview: string
+      entity: { id: string; title?: string; artist?: string; [key: string]: unknown }
+    }
 
 export interface TextSearchResponse {
   results: TextSearchResult[]

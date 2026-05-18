@@ -67,6 +67,21 @@ export function buildPostVisibilityWhere(authUser?: ApiUser) {
   };
 }
 
+export function buildGalleryVisibilityWhere(authUser?: ApiUser) {
+  if (!authUser) {
+    return { published: true };
+  }
+  if (isAdminRole(authUser.role)) {
+    return {};
+  }
+  return {
+    OR: [
+      { published: true },
+      { authorUid: authUser.uid },
+    ],
+  };
+}
+
 export function canManageWikiPullRequest(pr: { createdByUid: string }, authUser: ApiUser) {
   if (isAdminRole(authUser.role)) return true;
   return pr.createdByUid === authUser.uid;

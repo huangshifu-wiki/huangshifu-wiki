@@ -130,7 +130,7 @@ describe('SearchBox', () => {
   it('renders hybrid search toggle switch', () => {
     const { container } = renderWithRouter(<SearchBox {...defaultProps} />);
     expect(container.innerHTML).toContain('智能混合搜索');
-    expect(container.innerHTML).toContain('关键词+图片+文本三路融合');
+    expect(container.innerHTML).toContain('关键词+语义向量融合搜索');
   });
 
   it('shows toggle in off state by default', () => {

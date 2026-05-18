@@ -7,6 +7,11 @@ vi.mock('../../src/server/vector/clipEmbedding', () => ({
   getEmbeddingVectorSize: vi.fn(() => 512),
 }));
 
+vi.mock('../../src/server/vector/qdrantService', () => ({
+  upsertImageEmbeddingPoint: vi.fn(),
+  deleteImageEmbeddingPointsBySource: vi.fn(() => Promise.resolve(0)),
+}));
+
 import {
   extractWikiImages,
   extractPostImages,
@@ -68,6 +73,30 @@ describe('wikiPostEmbedding', () => {
       const result = extractWikiImages(content);
       expect(result).toEqual(['/uploads/image%20with%20spaces.jpg', 'https://example.com/img?v=123&t=abc']);
     });
+
+    it('should extract images from HTML img tags', () => {
+      const content = '<img src="/uploads/html-img.jpg" alt="test"> and <img src="https://cdn.example.com/img.png" class="photo">';
+      const result = extractWikiImages(content);
+      expect(result).toEqual(['/uploads/html-img.jpg', 'https://cdn.example.com/img.png']);
+    });
+
+    it('should extract images from both Markdown and HTML img tags', () => {
+      const content = '![md](/uploads/md.jpg) <img src="/uploads/html.jpg"> ![md2](/uploads/md2.jpg)';
+      const result = extractWikiImages(content);
+      expect(result).toEqual(['/uploads/md.jpg', '/uploads/md2.jpg', '/uploads/html.jpg']);
+    });
+
+    it('should deduplicate image URLs from Markdown and HTML', () => {
+      const content = '![img](/uploads/same.jpg) <img src="/uploads/same.jpg">';
+      const result = extractWikiImages(content);
+      expect(result).toEqual(['/uploads/same.jpg']);
+    });
+
+    it('should handle HTML img tags with single quotes', () => {
+      const content = "<img src='/uploads/single-quote.jpg' alt='test'>";
+      const result = extractWikiImages(content);
+      expect(result).toEqual(['/uploads/single-quote.jpg']);
+    });
   });
 
   describe('extractPostImages', () => {
@@ -86,6 +115,7 @@ describe('wikiPostEmbedding', () => {
         findMany: vi.fn(),
       },
       wikiImageEmbedding: {
+        deleteMany: vi.fn(),
         upsert: vi.fn(),
       },
     };
@@ -121,7 +151,7 @@ describe('wikiPostEmbedding', () => {
       await enqueueWikiImageEmbeddings(mockPrisma as unknown as PrismaClient, ['page1', 'page1', ' page1 ']);
 
       expect(mockPrisma.wikiPage.findMany).toHaveBeenCalledWith({
-        where: { slug: { in: ['page1'] } },
+        where: { slug: { in: ['page1'] }, status: 'published' },
         select: { slug: true, content: true },
       });
     });
@@ -173,6 +203,7 @@ describe('wikiPostEmbedding', () => {
         findMany: vi.fn(),
       },
       postImageEmbedding: {
+        deleteMany: vi.fn(),
         upsert: vi.fn(),
       },
     };
@@ -300,6 +331,7 @@ describe('wikiPostEmbedding', () => {
       await enqueueMissingWikiImageEmbeddings(mockPrisma as unknown as PrismaClient, 5);
 
       expect(mockPrisma.wikiPage.findMany).toHaveBeenCalledWith({
+        where: { status: 'published' },
         select: { slug: true, content: true },
         take: 5,
         orderBy: { updatedAt: 'asc' },

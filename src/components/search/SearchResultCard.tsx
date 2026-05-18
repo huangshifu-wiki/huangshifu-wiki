@@ -35,6 +35,18 @@ const typeIconMap: Record<SearchResultType, React.ReactNode> = {
   post: <MessageSquare size={24} className="text-[#c8951e]/40" />,
 };
 
+const MATCH_SOURCE_LABELS: Record<string, string> = {
+  keyword: '关键词',
+  semantic: '语义',
+  hybrid: '混合',
+}
+
+const MATCH_SOURCE_STYLES: Record<string, string> = {
+  keyword: 'bg-[#f0ece3] text-[#6b6560]',
+  semantic: 'bg-amber-50 text-amber-600',
+  hybrid: 'bg-[#f7f5f0] text-[#c8951e]',
+}
+
 export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(({ config, viewMode, cardHeight }) => {
   const isList = viewMode === "list";
 
@@ -58,21 +70,29 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(({ c
             </div>
           )}
           <div className="flex-1 min-w-0">
-            {config.tags && config.tags.length > 0 && (
-              <div className="flex items-center gap-2 mb-1">
-                {config.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className={CARD.tag}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center gap-2 mb-1">
+              {config.tags && config.tags.length > 0 && config.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className={CARD.tag}
+                >
+                  {tag}
+                </span>
+              ))}
+              {config.matchSource && (
+                <span className={clsx('px-1.5 py-0.5 rounded text-[10px] font-medium', MATCH_SOURCE_STYLES[config.matchSource])}>
+                  {MATCH_SOURCE_LABELS[config.matchSource]}
+                </span>
+              )}
+            </div>
             <h3 className={CARD.title}>
               {config.title}
             </h3>
+            {config.chunkPreview && (
+              <p className="text-xs text-amber-600/70 mt-0.5 line-clamp-2 leading-relaxed">
+                {config.chunkPreview}
+              </p>
+            )}
             {config.description && (
               <p className={clsx(CARD.descMuted, "italic")}>{config.description}</p>
             )}
@@ -96,21 +116,29 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(({ c
             </div>
           )}
           <div className={clsx("p-4", !config.image && "flex-1 flex flex-col")}>
-            {config.tags && config.tags.length > 0 && (
-              <div className="flex items-center gap-2 mb-2">
-                {config.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className={CARD.tag}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center gap-2 mb-2">
+              {config.tags && config.tags.length > 0 && config.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className={CARD.tag}
+                >
+                  {tag}
+                </span>
+              ))}
+              {config.matchSource && (
+                <span className={clsx('px-1.5 py-0.5 rounded text-[10px] font-medium', MATCH_SOURCE_STYLES[config.matchSource])}>
+                  {MATCH_SOURCE_LABELS[config.matchSource]}
+                </span>
+              )}
+            </div>
             <h3 className={clsx(CARD.title, "mb-2")}>
               {config.title}
             </h3>
+            {config.chunkPreview && (
+              <p className="text-xs text-amber-600/70 mb-2 line-clamp-2 leading-relaxed">
+                {config.chunkPreview}
+              </p>
+            )}
             {config.subtitle && (
               <p className="text-xs text-[#9e968e] truncate">{config.subtitle}</p>
             )}

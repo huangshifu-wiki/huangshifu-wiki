@@ -14,6 +14,7 @@ import {
   increaseSearchKeywordCount,
   buildWikiVisibilityWhere,
   buildPostVisibilityWhere,
+  buildGalleryVisibilityWhere,
   toWikiResponse,
   toPostResponse,
   toGalleryResponse,
@@ -31,6 +32,7 @@ import { createUploadStorageInfo } from '../uploadPath';
 const router = Router();
 
 const IMAGE_SEARCH_RESULT_LIMIT = Math.max(1, Number(process.env.IMAGE_SEARCH_RESULT_LIMIT || 24));
+const VECTOR_SEARCH_CANDIDATE_LIMIT = 200;
 const QDRANT_TIMEOUT_MS = Number(process.env.QDRANT_TIMEOUT_MS || 2000);
 export const RRF_K = 60;
 
@@ -116,7 +118,7 @@ type TextSearchResult = {
 /**
  * 获取 Gallery 数据
  */
-async function fetchGalleryData(galleryIds: string[]): Promise<Map<string, Awaited<ReturnType<typeof toGalleryResponse>>>> {
+async function fetchGalleryData(galleryIds: string[], authUser?: ApiUser): Promise<Map<string, Awaited<ReturnType<typeof toGalleryResponse>>>> {
   if (!galleryIds.length) {
     return new Map();
   }
@@ -124,6 +126,7 @@ async function fetchGalleryData(galleryIds: string[]): Promise<Map<string, Await
   const galleryRows = await prisma.gallery.findMany({
     where: {
       id: { in: galleryIds },
+      ...buildGalleryVisibilityWhere(authUser),
     },
     include: {
       images: {
@@ -238,7 +241,7 @@ async function processSemanticSearchResults(
 
   // 并行获取各类数据
   const [galleryData, wikiData, postData] = await Promise.all([
-    fetchGalleryData(galleryIds),
+    fetchGalleryData(galleryIds, authUser),
     fetchWikiData(wikiSlugs, authUser),
     fetchPostData(postIds, authUser),
   ]);
@@ -370,7 +373,9 @@ async function processTextSearchResults(
   const albumDocIds: string[] = []
 
   for (const [key] of entityMap) {
-    const [sourceType, sourceId] = key.split(':')
+    const colonIdx = key.indexOf(':')
+    const sourceType = key.slice(0, colonIdx)
+    const sourceId = key.slice(colonIdx + 1)
     if (sourceType === 'wiki' && !wikiSlugs.includes(sourceId)) wikiSlugs.push(sourceId)
     else if (sourceType === 'post' && !postIds.includes(sourceId)) postIds.push(sourceId)
     else if (sourceType === 'music' && !musicDocIds.includes(sourceId)) musicDocIds.push(sourceId)
@@ -385,10 +390,10 @@ async function processTextSearchResults(
       ? prisma.post.findMany({ where: { id: { in: postIds }, ...buildPostVisibilityWhere(authUser) }, include: { location: true } })
       : Promise.resolve([]),
     musicDocIds.length
-      ? prisma.musicTrack.findMany({ where: { docId: { in: musicDocIds } } })
+      ? prisma.musicTrack.findMany({ where: { docId: { in: musicDocIds } } }) // MusicTrack model has no visibility field — all tracks are publicly searchable
       : Promise.resolve([]),
     albumDocIds.length
-      ? prisma.album.findMany({ where: { docId: { in: albumDocIds } } })
+      ? prisma.album.findMany({ where: { docId: { in: albumDocIds } } }) // Album model has no visibility field — all albums are publicly searchable
       : Promise.resolve([]),
   ])
 
@@ -400,7 +405,9 @@ async function processTextSearchResults(
   const results: TextSearchResult[] = []
 
   for (const [key, meta] of entityMap) {
-    const [sourceType, sourceId] = key.split(':')
+    const colonIdx = key.indexOf(':')
+    const sourceType = key.slice(0, colonIdx)
+    const sourceId = key.slice(colonIdx + 1)
     let entity: any = null
 
     if (sourceType === 'wiki') entity = wikiBySlug.get(sourceId)
@@ -462,6 +469,7 @@ export function buildHybridResponse(
   const hasVectorResults = vectorResults.length > 0
   const hasTextResults = (textResults || []).length > 0
   const hasKeywordResults = keywordFlat.length > 0
+  const keywordResultCount = keywordFlat.length
 
   if (mode === 'hybrid' && (hasVectorResults || hasTextResults) && hasKeywordResults) {
     const vectorMap = new Map(vectorFlat.map(v => [v.id, v]))
@@ -520,7 +528,7 @@ export function buildHybridResponse(
       query,
       degraded,
       ...(degradationReason ? { degradationReason } : {}),
-      keywordResultCount: keywordFlat.length,
+      keywordResultCount: keywordResultCount,
       vectorResultCount: vectorResults.length,
       textVectorResultCount: (textResults || []).length,
     },
@@ -550,8 +558,9 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
 
     const wikiVisibilityWhere = buildWikiVisibilityWhere(req.authUser);
     const postVisibilityWhere = buildPostVisibilityWhere(req.authUser);
+    const galleryVisibilityWhere = buildGalleryVisibilityWhere(req.authUser);
 
-    const cacheKey = `search:${q}:${category || 'all'}:${type}:${req.authUser?.role || 'anonymous'}`;
+    const cacheKey = `search:${q}:${category || 'all'}:${type}:${mode}:${req.authUser?.role || 'anonymous'}`;
     const cached = enhancedCache.get(cacheKey);
     if (cached) return res.json(cached);
 
@@ -613,6 +622,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const galleriesPromise = wantsGalleries
       ? prisma.gallery.findMany({
           where: {
+            ...galleryVisibilityWhere,
             ...(q
               ? {
                   OR: [
@@ -638,6 +648,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const musicPromise = wantsMusic
       ? prisma.musicTrack.findMany({
           where: {
+            // MusicTrack model has no visibility field — all tracks are publicly searchable
             ...(q
               ? {
                   OR: [
@@ -657,6 +668,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const albumsPromise = wantsAlbums
       ? prisma.album.findMany({
           where: {
+            // Album model has no visibility field — all albums are publicly searchable
             ...(q
               ? {
                   OR: [
@@ -681,13 +693,13 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
       let degradationReason: string | undefined;
 
       const [vectorResponse, textResponse] = await Promise.all([
-        fetchVectorSearchWithTimeout(q, IMAGE_SEARCH_RESULT_LIMIT, 0.25, QDRANT_TIMEOUT_MS, req.authUser).catch((error) => {
+        fetchVectorSearchWithTimeout(q, VECTOR_SEARCH_CANDIDATE_LIMIT, 0.25, QDRANT_TIMEOUT_MS, req.authUser).catch((error) => {
           degraded = true;
           degradationReason = '向量搜索不可用：' + (error instanceof Error ? error.message : '未知错误');
           logger.warn({ err: error }, 'Vector search failed, degrading to keyword-only');
           return { results: [] as SemanticSearchResult[], timedOut: false };
         }),
-        fetchTextVectorSearchWithTimeout(q, IMAGE_SEARCH_RESULT_LIMIT, 0.25, QDRANT_TIMEOUT_MS, req.authUser).catch((error) => {
+        fetchTextVectorSearchWithTimeout(q, VECTOR_SEARCH_CANDIDATE_LIMIT, 0.25, QDRANT_TIMEOUT_MS, req.authUser).catch((error) => {
           logger.warn({ err: error }, 'Text vector search failed');
           return { results: [] as TextSearchResult[], timedOut: false };
         }),
@@ -777,7 +789,7 @@ router.get('/hot-keywords', async (_req, res) => {
   }
 });
 
-router.post('/by-image', searchImageUpload.single('image'), async (req: AuthenticatedRequest, res) => {
+router.post('/by-image', searchLimiter, searchImageUpload.single('image'), async (req: AuthenticatedRequest, res) => {
   const tempFile = req.file;
   try {
     const requestedLimit = parseInteger(req.body?.limit, IMAGE_SEARCH_RESULT_LIMIT, {
@@ -839,7 +851,7 @@ router.post('/by-image', searchImageUpload.single('image'), async (req: Authenti
 /**
  * 新的语义搜索接口 - 支持混合结果
  */
-router.get('/semantic-search', async (req: AuthenticatedRequest, res) => {
+router.get('/semantic-search', searchLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const requestedLimit = parseInteger(req.query.limit as string, IMAGE_SEARCH_RESULT_LIMIT, {
@@ -878,7 +890,7 @@ router.get('/semantic-search', async (req: AuthenticatedRequest, res) => {
  * 旧的语义搜索接口 - 保持向后兼容
  * @deprecated 请使用 /semantic-search
  */
-router.get('/semantic-galleries', async (req: AuthenticatedRequest, res) => {
+router.get('/semantic-galleries', searchLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const requestedLimit = parseInteger(req.query.limit as string, IMAGE_SEARCH_RESULT_LIMIT, {
@@ -944,6 +956,7 @@ router.get('/semantic-galleries', async (req: AuthenticatedRequest, res) => {
     const galleryRows = await prisma.gallery.findMany({
       where: {
         id: { in: galleryIds },
+        ...buildGalleryVisibilityWhere(req.authUser),
       },
       include: {
         images: {
@@ -1001,7 +1014,7 @@ router.get('/suggest', searchLimiter, async (req: AuthenticatedRequest, res) => 
       }),
       prisma.wikiPage.findMany({
         where: {
-          status: 'published',
+          ...buildWikiVisibilityWhere(req.authUser),
           OR: [
             { title: { contains: q } },
             { slug: { contains: q } },

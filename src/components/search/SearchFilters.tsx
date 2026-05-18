@@ -166,11 +166,11 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                     )}
                   >
                     <Sparkles size={12} />
-                    语义搜图
+                    智能混合搜索
                   </button>
                 </div>
                 <p className="text-[10px] text-[#9e968e]">
-                  开启后，文字搜索将同时对图集进行语义匹配
+                  关键词+语义向量融合搜索
                 </p>
               </div>
             </div>

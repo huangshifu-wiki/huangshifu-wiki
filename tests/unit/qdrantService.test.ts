@@ -8,6 +8,7 @@ const qdrantClientInstanceMock = {
   createPayloadIndex: vi.fn(),
   upsert: vi.fn(),
   search: vi.fn(),
+  scroll: vi.fn(),
   delete: vi.fn(),
 };
 
@@ -18,11 +19,17 @@ vi.mock('@qdrant/js-client-rest', () => ({
 describe('qdrantService', () => {
   beforeEach(() => {
     vi.resetModules();
-    vi.clearAllMocks();
+    Object.values(qdrantClientInstanceMock).forEach((fn) => {
+      if (typeof fn === 'function' && 'mockReset' in fn) {
+        (fn as ReturnType<typeof vi.fn>).mockReset();
+      }
+    });
     qdrantClientInstanceMock.getCollections.mockResolvedValue({ collections: [] });
     qdrantClientInstanceMock.createCollection.mockResolvedValue({ result: true });
+    qdrantClientInstanceMock.createPayloadIndex.mockResolvedValue({ result: true });
     qdrantClientInstanceMock.upsert.mockResolvedValue({ result: true });
     qdrantClientInstanceMock.search.mockResolvedValue([]);
+    qdrantClientInstanceMock.scroll.mockResolvedValue({ points: [], next_offset: null });
     qdrantClientInstanceMock.delete.mockResolvedValue({ result: true });
     delete process.env.QDRANT_COLLECTION;
     delete process.env.QDRANT_URL;
@@ -77,12 +84,127 @@ describe('qdrantService', () => {
     expect(qdrantClientInstanceMock.createCollection).not.toHaveBeenCalled();
   });
 
+  it('creates sourceId index when image collection already exists', async () => {
+    qdrantClientInstanceMock.getCollections.mockResolvedValueOnce({
+      collections: [{ name: 'hsf_image_embeddings' }],
+    });
+    qdrantClientInstanceMock.getCollection.mockResolvedValueOnce({
+      config: { params: { vectors: { size: 512 } } },
+    });
+
+    const { ensureQdrantCollection } = await import('../../src/server/vector/qdrantService');
+    await ensureQdrantCollection();
+
+    expect(qdrantClientInstanceMock.createPayloadIndex).toHaveBeenCalledWith(
+      'hsf_image_embeddings',
+      expect.objectContaining({
+        field_name: 'sourceId',
+        field_schema: 'keyword',
+        wait: true,
+      }),
+    );
+  });
+
+  it('creates sourceType and sourceId indexes for new image collection', async () => {
+    qdrantClientInstanceMock.getCollections.mockResolvedValueOnce({ collections: [] });
+
+    const { ensureQdrantCollection } = await import('../../src/server/vector/qdrantService');
+    await ensureQdrantCollection();
+
+    expect(qdrantClientInstanceMock.createPayloadIndex).toHaveBeenCalledWith(
+      'hsf_image_embeddings',
+      expect.objectContaining({
+        field_name: 'sourceType',
+        field_schema: 'keyword',
+        wait: true,
+      }),
+    );
+    expect(qdrantClientInstanceMock.createPayloadIndex).toHaveBeenCalledWith(
+      'hsf_image_embeddings',
+      expect.objectContaining({
+        field_name: 'sourceId',
+        field_schema: 'keyword',
+        wait: true,
+      }),
+    );
+  });
+
+  describe('ensureTextQdrantCollection', () => {
+    it('creates sourceType and sourceId indexes for new text collection', async () => {
+      qdrantClientInstanceMock.getCollections.mockResolvedValueOnce({ collections: [] });
+
+      const { ensureTextQdrantCollection } = await import('../../src/server/vector/qdrantService');
+      await ensureTextQdrantCollection();
+
+      expect(qdrantClientInstanceMock.createPayloadIndex).toHaveBeenCalledWith(
+        'hsf_text_embeddings',
+        expect.objectContaining({
+          field_name: 'sourceType',
+          field_schema: 'keyword',
+          wait: true,
+        }),
+      );
+      expect(qdrantClientInstanceMock.createPayloadIndex).toHaveBeenCalledWith(
+        'hsf_text_embeddings',
+        expect.objectContaining({
+          field_name: 'sourceId',
+          field_schema: 'keyword',
+          wait: true,
+        }),
+      );
+    });
+
+    it('creates sourceType and sourceId indexes when text collection already exists', async () => {
+      qdrantClientInstanceMock.getCollections.mockResolvedValueOnce({
+        collections: [{ name: 'hsf_text_embeddings' }],
+      });
+      qdrantClientInstanceMock.getCollection.mockResolvedValueOnce({
+        config: { params: { vectors: { size: 512 } } },
+      });
+
+      const { ensureTextQdrantCollection } = await import('../../src/server/vector/qdrantService');
+      await ensureTextQdrantCollection();
+
+      expect(qdrantClientInstanceMock.createCollection).not.toHaveBeenCalled();
+      expect(qdrantClientInstanceMock.createPayloadIndex).toHaveBeenCalledWith(
+        'hsf_text_embeddings',
+        expect.objectContaining({
+          field_name: 'sourceType',
+          field_schema: 'keyword',
+          wait: true,
+        }),
+      );
+      expect(qdrantClientInstanceMock.createPayloadIndex).toHaveBeenCalledWith(
+        'hsf_text_embeddings',
+        expect.objectContaining({
+          field_name: 'sourceId',
+          field_schema: 'keyword',
+          wait: true,
+        }),
+      );
+    });
+
+    it('handles already existing indexes gracefully for text collection', async () => {
+      qdrantClientInstanceMock.getCollections.mockResolvedValueOnce({
+        collections: [{ name: 'hsf_text_embeddings' }],
+      });
+      qdrantClientInstanceMock.getCollection.mockResolvedValueOnce({
+        config: { params: { vectors: { size: 512 } } },
+      });
+      qdrantClientInstanceMock.createPayloadIndex.mockRejectedValueOnce(new Error('already exists'));
+      qdrantClientInstanceMock.createPayloadIndex.mockRejectedValueOnce(new Error('already exists'));
+
+      const { ensureTextQdrantCollection } = await import('../../src/server/vector/qdrantService');
+      await expect(ensureTextQdrantCollection()).resolves.toBeUndefined();
+    });
+  });
+
   describe('upsertImageEmbeddingPoint', () => {
     it('upserts gallery type embedding point', async () => {
       const { upsertImageEmbeddingPoint } = await import('../../src/server/vector/qdrantService');
 
       await upsertImageEmbeddingPoint({
-        pointId: 1,
+        pointId: 'point-1',
         vector: [0.1, 0.2],
         sourceType: 'gallery',
         sourceId: 'img_1',
@@ -100,7 +222,7 @@ describe('qdrantService', () => {
           wait: true,
           points: expect.arrayContaining([
             expect.objectContaining({
-              id: 1,
+              id: 'point-1',
               vector: [0.1, 0.2],
               payload: expect.objectContaining({
                 sourceType: 'gallery',
@@ -120,7 +242,7 @@ describe('qdrantService', () => {
       const { upsertImageEmbeddingPoint } = await import('../../src/server/vector/qdrantService');
 
       await upsertImageEmbeddingPoint({
-        pointId: 2,
+        pointId: 'point-2',
         vector: [0.3, 0.4],
         sourceType: 'wiki',
         sourceId: 'page-slug',
@@ -135,7 +257,7 @@ describe('qdrantService', () => {
           wait: true,
           points: expect.arrayContaining([
             expect.objectContaining({
-              id: 2,
+              id: 'point-2',
               payload: expect.objectContaining({
                 sourceType: 'wiki',
                 sourceId: 'page-slug',
@@ -151,7 +273,7 @@ describe('qdrantService', () => {
       const { upsertImageEmbeddingPoint } = await import('../../src/server/vector/qdrantService');
 
       await upsertImageEmbeddingPoint({
-        pointId: 3,
+        pointId: 'point-3',
         vector: [0.5, 0.6],
         sourceType: 'post',
         sourceId: 'post_123',
@@ -166,7 +288,7 @@ describe('qdrantService', () => {
           wait: true,
           points: expect.arrayContaining([
             expect.objectContaining({
-              id: 3,
+              id: 'point-3',
               payload: expect.objectContaining({
                 sourceType: 'post',
                 sourceId: 'post_123',
@@ -237,6 +359,34 @@ describe('qdrantService', () => {
       expect(results[0].payload?.sourceId).toBe('old_img_1');
       expect(results[0].payload?.galleryImageId).toBe('old_img_1');
     });
+
+    it('applies sourceType filter when provided', async () => {
+      qdrantClientInstanceMock.search.mockResolvedValueOnce([]);
+
+      const { searchImageEmbeddingPoints } = await import('../../src/server/vector/qdrantService');
+      await searchImageEmbeddingPoints({ vector: [0.1, 0.2], limit: 5, sourceType: 'gallery' });
+
+      expect(qdrantClientInstanceMock.search).toHaveBeenCalledWith(
+        'hsf_image_embeddings',
+        expect.objectContaining({
+          vector: [0.1, 0.2],
+          limit: 5,
+          filter: {
+            must: [{ key: 'sourceType', match: { value: 'gallery' } }],
+          },
+        }),
+      );
+    });
+
+    it('omits filter when sourceType is not provided', async () => {
+      qdrantClientInstanceMock.search.mockResolvedValueOnce([]);
+
+      const { searchImageEmbeddingPoints } = await import('../../src/server/vector/qdrantService');
+      await searchImageEmbeddingPoints({ vector: [0.1, 0.2], limit: 5 });
+
+      const callArgs = qdrantClientInstanceMock.search.mock.calls[0][1];
+      expect(callArgs.filter).toBeUndefined();
+    });
   });
 
   describe('toEmbeddingPayload', () => {
@@ -278,15 +428,96 @@ describe('qdrantService', () => {
     it('deletes embedding point by id', async () => {
       const { deleteImageEmbeddingPoint } = await import('../../src/server/vector/qdrantService');
 
-      await deleteImageEmbeddingPoint(123);
+      await deleteImageEmbeddingPoint('point-123');
 
       expect(qdrantClientInstanceMock.delete).toHaveBeenCalledWith(
         'hsf_image_embeddings',
         expect.objectContaining({
           wait: true,
-          points: [123],
+          points: ['point-123'],
         }),
       );
+    });
+  });
+
+  describe('deleteTextEmbeddingPointsBySource', () => {
+    it('deletes all points matching source with single page', async () => {
+      qdrantClientInstanceMock.scroll.mockResolvedValueOnce({
+        points: [{ id: 'p1' }, { id: 'p2' }],
+        next_offset: null,
+      });
+
+      const { deleteTextEmbeddingPointsBySource } = await import('../../src/server/vector/qdrantService');
+      const count = await deleteTextEmbeddingPointsBySource('wiki', 'page-1');
+
+      expect(count).toBe(2);
+      expect(qdrantClientInstanceMock.scroll).toHaveBeenCalledWith(
+        'hsf_text_embeddings',
+        expect.objectContaining({
+          filter: {
+            must: [
+              { key: 'sourceType', match: { value: 'wiki' } },
+              { key: 'sourceId', match: { value: 'page-1' } },
+            ],
+          },
+          with_payload: false,
+          with_vector: false,
+          limit: 1000,
+          offset: undefined,
+        }),
+      );
+      expect(qdrantClientInstanceMock.delete).toHaveBeenCalledWith(
+        'hsf_text_embeddings',
+        expect.objectContaining({
+          wait: true,
+          points: ['p1', 'p2'],
+        }),
+      );
+    });
+
+    it('paginates through multiple pages of results', async () => {
+      qdrantClientInstanceMock.scroll
+        .mockResolvedValueOnce({
+          points: [{ id: 'p1' }, { id: 'p2' }],
+          next_offset: 'offset-1',
+        })
+        .mockResolvedValueOnce({
+          points: [{ id: 'p3' }],
+          next_offset: null,
+        });
+
+      const { deleteTextEmbeddingPointsBySource } = await import('../../src/server/vector/qdrantService');
+      const count = await deleteTextEmbeddingPointsBySource('post', 'post-1');
+
+      expect(count).toBe(3);
+      expect(qdrantClientInstanceMock.scroll).toHaveBeenCalledTimes(2);
+      expect(qdrantClientInstanceMock.scroll).toHaveBeenNthCalledWith(
+        2,
+        'hsf_text_embeddings',
+        expect.objectContaining({
+          offset: 'offset-1',
+        }),
+      );
+      expect(qdrantClientInstanceMock.delete).toHaveBeenCalledWith(
+        'hsf_text_embeddings',
+        expect.objectContaining({
+          wait: true,
+          points: ['p1', 'p2', 'p3'],
+        }),
+      );
+    });
+
+    it('returns 0 when no points match', async () => {
+      qdrantClientInstanceMock.scroll.mockResolvedValueOnce({
+        points: [],
+        next_offset: null,
+      });
+
+      const { deleteTextEmbeddingPointsBySource } = await import('../../src/server/vector/qdrantService');
+      const count = await deleteTextEmbeddingPointsBySource('wiki', 'nonexistent');
+
+      expect(count).toBe(0);
+      expect(qdrantClientInstanceMock.delete).not.toHaveBeenCalled();
     });
   });
 

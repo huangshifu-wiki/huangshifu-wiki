@@ -259,6 +259,7 @@ export function useTraditionalSearch() {
         ...(filters?.dateRange?.end
           ? { endDate: filters.dateRange.end }
           : {}),
+        ...(filters?.selectedTags?.length ? { tags: filters.selectedTags.join(',') } : {}),
       })
 
       const normalizedResults = {

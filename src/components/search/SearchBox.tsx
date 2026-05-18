@@ -34,6 +34,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
   // 建议列表键盘导航状态
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [isComposing, setIsComposing] = useState(false);
 
   useEffect(() => {
     if (!suggestions.length) return;
@@ -48,6 +49,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isComposing) return
     onSearch(query);
   };
 
@@ -119,6 +121,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
         break;
       }
       case 'Enter': {
+        if (e.nativeEvent.isComposing) return
         if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
           e.preventDefault();
           handleSuggestionClick(suggestions[highlightedIndex]);
@@ -250,7 +253,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
             className="text-sm text-[#6b6560] cursor-pointer select-none"
           >
             <span className="font-medium">智能混合搜索</span>
-            <span className="ml-1.5 text-xs text-[#9e968e]">(关键词+图片+文本三路融合)</span>
+            <span className="ml-1.5 text-xs text-[#9e968e]">(关键词+语义向量融合搜索)</span>
           </label>
         </div>
         <div className="text-xs text-[#9e968e]">

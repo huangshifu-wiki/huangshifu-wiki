@@ -144,36 +144,39 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
   return executeRequest<T>(path, options);
 }
 
-export async function apiGet<T>(path: string, query?: RequestOptions['query'], dedupOptions?: DedupOptions) {
-  return apiRequest<T>(path, { method: 'GET', query, dedup: true, dedupOptions });
+export async function apiGet<T>(path: string, query?: RequestOptions['query'], dedupOptions?: DedupOptions, signal?: AbortSignal) {
+  return apiRequest<T>(path, { method: 'GET', query, dedup: true, dedupOptions, signal });
 }
 
-export async function apiPost<T>(path: string, body?: unknown) {
+export async function apiPost<T>(path: string, body?: unknown, signal?: AbortSignal) {
   return apiRequest<T>(path, {
     method: 'POST',
     body: body === undefined ? undefined : JSON.stringify(body),
-    dedup: false, // POST 请求默认不去重
+    dedup: false,
+    signal,
   });
 }
 
-export async function apiPut<T>(path: string, body?: unknown) {
+export async function apiPut<T>(path: string, body?: unknown, signal?: AbortSignal) {
   return apiRequest<T>(path, {
     method: 'PUT',
     body: body === undefined ? undefined : JSON.stringify(body),
     dedup: false,
+    signal,
   });
 }
 
-export async function apiPatch<T>(path: string, body?: unknown) {
+export async function apiPatch<T>(path: string, body?: unknown, signal?: AbortSignal) {
   return apiRequest<T>(path, {
     method: 'PATCH',
     body: body === undefined ? undefined : JSON.stringify(body),
     dedup: false,
+    signal,
   });
 }
 
-export async function apiDelete<T>(path: string) {
-  return apiRequest<T>(path, { method: 'DELETE', dedup: false });
+export async function apiDelete<T>(path: string, signal?: AbortSignal) {
+  return apiRequest<T>(path, { method: 'DELETE', dedup: false, signal });
 }
 
 export function apiDownload(path: string): Promise<Response> {

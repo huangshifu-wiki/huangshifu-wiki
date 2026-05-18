@@ -74,6 +74,7 @@ export {
   canManageGallery,
   buildWikiVisibilityWhere,
   buildPostVisibilityWhere,
+  buildGalleryVisibilityWhere,
   canManageWikiPullRequest,
 } from './authorization';
 

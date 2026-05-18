@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import fs from 'fs';
 import path from 'path';
 
@@ -34,9 +35,6 @@ type GalleryImageRecord = {
   } | null;
 };
 
-const FNV64_OFFSET_BASIS = 0xcbf29ce484222325n;
-const FNV64_PRIME = 0x100000001b3n;
-const MAX_SAFE_POINT_ID = BigInt(Number.MAX_SAFE_INTEGER);
 
 function toUniqueIds(ids: string[] | undefined) {
   if (!ids || ids.length === 0) return [];
@@ -147,19 +145,8 @@ function resolveLocalImagePath(
   return null;
 }
 
-export function buildQdrantPointId(galleryImageId: string) {
-  const bytes = Buffer.from(galleryImageId, 'utf8');
-  let hash = FNV64_OFFSET_BASIS;
-
-  for (const value of bytes) {
-    hash ^= BigInt(value);
-    hash *= FNV64_PRIME;
-    hash &= 0xffffffffffffffffn;
-  }
-
-  const reduced = hash % MAX_SAFE_POINT_ID;
-  const pointId = Number(reduced);
-  return pointId > 0 ? pointId : 1;
+export function buildQdrantPointId(_galleryImageId: string): string {
+  return crypto.randomUUID()
 }
 
 export async function enqueueGalleryImageEmbeddings(prisma: PrismaClient, galleryImageIds: string[]) {
@@ -230,6 +217,18 @@ export async function syncImageEmbeddingBatch(
 ): Promise<SyncResult> {
   const limit = Math.max(1, options.limit);
   const galleryImageIds = toUniqueIds(options.galleryImageIds);
+
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
+  await prisma.imageEmbedding.updateMany({
+    where: {
+      status: 'processing',
+      updatedAt: { lt: thirtyMinutesAgo },
+    },
+    data: {
+      status: 'pending',
+      lastError: null,
+    },
+  })
 
   if (galleryImageIds.length > 0) {
     await enqueueGalleryImageEmbeddings(prisma, galleryImageIds);

@@ -434,9 +434,9 @@ router.post('/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res
 
     const uploadsDir = process.env.UPLOADS_PATH || 'uploads'
     const result: {
-      gallery?: { resetCount: number } & Awaited<ReturnType<typeof syncImageEmbeddingBatch>>
-      wiki?: { resetCount: number } & Awaited<ReturnType<typeof syncWikiImageEmbeddingBatch>>
-      post?: { resetCount: number } & Awaited<ReturnType<typeof syncPostImageEmbeddingBatch>>
+      gallery?: { resetCount: number; processedCount: number } & Awaited<ReturnType<typeof syncImageEmbeddingBatch>>
+      wiki?: { resetCount: number; processedCount: number } & Awaited<ReturnType<typeof syncWikiImageEmbeddingBatch>>
+      post?: { resetCount: number; processedCount: number } & Awaited<ReturnType<typeof syncPostImageEmbeddingBatch>>
       limit: number
       type: EmbeddingType
     } = {
@@ -445,10 +445,13 @@ router.post('/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res
     }
 
     if (type === 'all' || type === 'gallery') {
+      const failedIds = await prisma.imageEmbedding.findMany({
+        where: { status: 'failed' },
+        select: { id: true },
+        take: limit,
+      })
       const galleryUpdated = await prisma.imageEmbedding.updateMany({
-        where: {
-          status: 'failed',
-        },
+        where: { id: { in: failedIds.map((r) => r.id) } },
         data: {
           status: 'pending',
           lastError: null,
@@ -463,15 +466,19 @@ router.post('/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res
 
       result.gallery = {
         resetCount: galleryUpdated.count,
+        processedCount: gallerySyncResult.ready + gallerySyncResult.failed,
         ...gallerySyncResult,
       }
     }
 
     if (type === 'all' || type === 'wiki') {
+      const failedIds = await prisma.wikiImageEmbedding.findMany({
+        where: { status: 'failed' },
+        select: { id: true },
+        take: limit,
+      })
       const wikiUpdated = await prisma.wikiImageEmbedding.updateMany({
-        where: {
-          status: 'failed',
-        },
+        where: { id: { in: failedIds.map((r) => r.id) } },
         data: {
           status: 'pending',
           lastError: null,
@@ -485,15 +492,19 @@ router.post('/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res
 
       result.wiki = {
         resetCount: wikiUpdated.count,
+        processedCount: wikiSyncResult.ready + wikiSyncResult.failed,
         ...wikiSyncResult,
       }
     }
 
     if (type === 'all' || type === 'post') {
+      const failedIds = await prisma.postImageEmbedding.findMany({
+        where: { status: 'failed' },
+        select: { id: true },
+        take: limit,
+      })
       const postUpdated = await prisma.postImageEmbedding.updateMany({
-        where: {
-          status: 'failed',
-        },
+        where: { id: { in: failedIds.map((r) => r.id) } },
         data: {
           status: 'pending',
           lastError: null,
@@ -507,6 +518,7 @@ router.post('/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res
 
       result.post = {
         resetCount: postUpdated.count,
+        processedCount: postSyncResult.ready + postSyncResult.failed,
         ...postSyncResult,
       }
     }
@@ -549,7 +561,6 @@ router.post('/rebuild-all', requireAdmin, async (req: AuthenticatedRequest, res)
       const gallerySyncResult = await syncImageEmbeddingBatch(prisma, uploadsDir, {
         limit,
         includeFailed: true,
-        forceRebuild: true,
       })
 
       result.gallery = {

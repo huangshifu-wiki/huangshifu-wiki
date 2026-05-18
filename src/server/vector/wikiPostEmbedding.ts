@@ -5,7 +5,7 @@ import { EmbeddingStatus, PrismaClient } from '@prisma/client'
 
 import { generateImageEmbedding, getEmbeddingModelName, getEmbeddingVectorSize } from './clipEmbedding'
 import { buildQdrantPointId } from './embeddingSync'
-import { upsertImageEmbeddingPoint } from './qdrantService'
+import { upsertImageEmbeddingPoint, deleteImageEmbeddingPointsBySource } from './qdrantService'
 
 /**
  * 从 Markdown 内容中提取图片 URL
@@ -17,7 +17,6 @@ function extractImagesFromMarkdown(content: string): string[] {
   }
 
   const imageUrls: string[] = [];
-  // Markdown 图片语法: ![alt](url)
   const markdownImageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
   let match;
@@ -28,7 +27,15 @@ function extractImagesFromMarkdown(content: string): string[] {
     }
   }
 
-  return imageUrls;
+  const htmlImgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  while ((match = htmlImgRegex.exec(content)) !== null) {
+    const url = match[1]?.trim();
+    if (url) {
+      imageUrls.push(url);
+    }
+  }
+
+  return Array.from(new Set(imageUrls));
 }
 
 /**
@@ -71,6 +78,7 @@ export async function enqueueWikiImageEmbeddings(
   const wikiPages = await prisma.wikiPage.findMany({
     where: {
       slug: { in: uniqueSlugs },
+      status: 'published',
     },
     select: {
       slug: true,
@@ -83,6 +91,11 @@ export async function enqueueWikiImageEmbeddings(
   const vectorSize = getEmbeddingVectorSize();
 
   for (const page of wikiPages) {
+    await prisma.wikiImageEmbedding.deleteMany({
+      where: { wikiPageSlug: page.slug },
+    })
+    await deleteImageEmbeddingPointsBySource('wiki', page.slug)
+
     const imageUrls = extractWikiImages(page.content);
 
     for (const imageUrl of imageUrls) {
@@ -132,6 +145,7 @@ export async function enqueuePostImageEmbeddings(
   const posts = await prisma.post.findMany({
     where: {
       id: { in: uniqueIds },
+      status: 'published',
     },
     select: {
       id: true,
@@ -144,6 +158,11 @@ export async function enqueuePostImageEmbeddings(
   const vectorSize = getEmbeddingVectorSize();
 
   for (const post of posts) {
+    await prisma.postImageEmbedding.deleteMany({
+      where: { postId: post.id },
+    })
+    await deleteImageEmbeddingPointsBySource('post', post.id)
+
     const imageUrls = extractPostImages(post.content);
 
     for (const imageUrl of imageUrls) {
@@ -186,6 +205,9 @@ export async function enqueueMissingWikiImageEmbeddings(
 ): Promise<{ requested: number; queued: number }> {
   // 获取所有 Wiki 页面
   const wikiPages = await prisma.wikiPage.findMany({
+    where: {
+      status: 'published',
+    },
     select: {
       slug: true,
       content: true,
@@ -279,6 +301,9 @@ export async function enqueueMissingPostImageEmbeddings(
 ): Promise<{ requested: number; queued: number }> {
   // 获取所有 Post
   const posts = await prisma.post.findMany({
+    where: {
+      status: 'published',
+    },
     select: {
       id: true,
       content: true,

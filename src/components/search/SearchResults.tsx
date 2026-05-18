@@ -83,10 +83,9 @@ const TEXT_SEMANTIC_SOURCE_ICONS: Record<string, React.ReactNode> = {
 }
 
 function getTextSemanticLink(result: TextSearchResult): string {
-  const entity = result.entity as Record<string, unknown>
   switch (result.sourceType) {
     case 'wiki':
-      return `/wiki/${entity.slug || result.sourceId}`
+      return `/wiki/${result.entity.slug || result.sourceId}`
     case 'post':
       return `/forum/${result.sourceId}`
     case 'music':
@@ -99,8 +98,18 @@ function getTextSemanticLink(result: TextSearchResult): string {
 }
 
 function getTextSemanticTitle(result: TextSearchResult): string {
-  const entity = result.entity as Record<string, unknown>
-  return (entity.title || entity.name || result.sourceId) as string
+  switch (result.sourceType) {
+    case 'wiki':
+      return result.entity.title || result.sourceId
+    case 'post':
+      return result.entity.title || result.sourceId
+    case 'music':
+      return result.entity.title || result.entity.artist || result.sourceId
+    case 'album':
+      return result.entity.title || result.entity.artist || result.sourceId
+    default:
+      return ''
+  }
 }
 
 export const SearchResults: React.FC<SearchResultsProps> = ({
@@ -155,9 +164,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     results.posts.length +
     results.galleries.length +
     results.music.length +
-    results.albums.length;
+    results.albums.length +
+    (textSemanticResults?.length ?? 0);
 
-  if (!isMixedSearch && totalResults === 0) {
+  if (!isMixedSearch && totalResults === 0 && (textSemanticResults?.length ?? 0) === 0) {
     return (
       <div className="bg-white border border-[#e0dcd3] rounded p-20 text-center">
         <SearchIcon size={48} className="mx-auto text-[#e0dcd3] mb-6" />
@@ -202,6 +212,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
         </div>
       </div>
 
+      {state.searchMeta?.degraded && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-sm text-amber-700 dark:text-amber-300">
+          语义搜索暂时不可用，已降级为关键词搜索
+        </div>
+      )}
+
       <div className="space-y-8">
         <AnimatePresence mode="wait">
           {isMixedSearch && mixedResults.length > 0 && (
@@ -216,14 +232,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 style={{ contain: 'strict' }}
               >
                 <div
-                  className={clsx(
-                    "grid",
-                    VIEW_MODE_CONFIG[viewMode].gridCols,
-                    VIEW_MODE_CONFIG[viewMode].gap
-                  )}
                   style={{
                     height: `${mixedVirtualizer.getTotalSize()}px`,
                     position: 'relative',
+                    width: '100%',
                   }}
                 >
                   {mixedVirtualizer.getVirtualItems().map((virtualItem) => {
@@ -245,7 +257,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                       >
                         <MixedSearchResultCard
                           result={result}
-                          viewMode={viewMode}
+                          viewMode="list"
                           cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                           showSimilarity={true}
                         />
@@ -334,14 +346,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                       style={{ contain: 'strict' }}
                     >
                       <div
-                        className={clsx(
-                          "grid",
-                          VIEW_MODE_CONFIG[viewMode].gridCols,
-                          VIEW_MODE_CONFIG[viewMode].gap
-                        )}
                         style={{
                           height: `${wikiVirtualizer.getTotalSize()}px`,
                           position: 'relative',
+                          width: '100%',
                         }}
                       >
                         {wikiVirtualizer.getVirtualItems().map((virtualItem) => {
@@ -360,7 +368,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                             >
                               <SearchResultCard
                                 config={wikiToConfig(page)}
-                                viewMode={viewMode}
+                                viewMode="list"
                                 cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                               />
                             </div>

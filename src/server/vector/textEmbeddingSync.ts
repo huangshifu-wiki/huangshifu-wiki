@@ -3,12 +3,12 @@ import { EmbeddingStatus, PrismaClient } from '@prisma/client'
 import { generateTextEmbedding, getEmbeddingModelName, getEmbeddingVectorSize } from './clipEmbedding'
 import { upsertTextEmbeddingPoint, deleteTextEmbeddingPoint, deleteTextEmbeddingPointsBySource } from './qdrantService'
 
-export function chunkText(text: string, maxTokens: number = 512, overlapTokens: number = 50): string[] {
+export function chunkText(text: string, maxChars: number = 150, overlapChars: number = 30): string[] {
   if (!text || text.trim().length === 0) {
     return []
   }
 
-  if (text.length <= maxTokens) {
+  if (text.length <= maxChars) {
     return [text]
   }
 
@@ -17,7 +17,7 @@ export function chunkText(text: string, maxTokens: number = 512, overlapTokens: 
   let currentChunk = ''
 
   for (const paragraph of paragraphs) {
-    if (paragraph.length > maxTokens) {
+    if (paragraph.length > maxChars) {
       if (currentChunk) {
         chunks.push(currentChunk)
         currentChunk = ''
@@ -33,15 +33,15 @@ export function chunkText(text: string, maxTokens: number = 512, overlapTokens: 
         sentenceChunk += part
 
         if (/[。！？；]/.test(part) || i === sentences.length - 1) {
-          if (sentenceChunk.length > maxTokens) {
+          if (sentenceChunk.length > maxChars) {
             if (sentenceChunk.length > 0) {
               chunks.push(sentenceChunk)
-              const overlapText = sentenceChunk.slice(-overlapTokens)
+              const overlapText = sentenceChunk.slice(-overlapChars)
               sentenceChunk = overlapText
             }
-          } else if ((sentenceChunk + (sentences.slice(i + 1).join('') || '')).length > maxTokens) {
+          } else if ((sentenceChunk + (sentences.slice(i + 1).join('') || '')).length > maxChars) {
             chunks.push(sentenceChunk)
-            const overlapText = sentenceChunk.slice(-overlapTokens)
+            const overlapText = sentenceChunk.slice(-overlapChars)
             sentenceChunk = overlapText
           }
         }
@@ -54,10 +54,10 @@ export function chunkText(text: string, maxTokens: number = 512, overlapTokens: 
       continue
     }
 
-    if (currentChunk.length + paragraph.length + 2 > maxTokens) {
+    if (currentChunk.length + paragraph.length + 2 > maxChars) {
       if (currentChunk) {
         chunks.push(currentChunk)
-        const overlapText = currentChunk.slice(-overlapTokens)
+        const overlapText = currentChunk.slice(-overlapChars)
         currentChunk = overlapText
       }
       currentChunk += (currentChunk ? '\n\n' : '') + paragraph
@@ -70,7 +70,31 @@ export function chunkText(text: string, maxTokens: number = 512, overlapTokens: 
     chunks.push(currentChunk)
   }
 
-  return chunks
+  const finalChunks: string[] = []
+  for (const chunk of chunks) {
+    if (chunk.length > maxChars) {
+      for (let i = 0; i < chunk.length; i += maxChars - overlapChars) {
+        finalChunks.push(chunk.slice(i, i + maxChars))
+      }
+    } else {
+      finalChunks.push(chunk)
+    }
+  }
+
+  return finalChunks
+}
+
+export function stripMarkdown(text: string): string {
+  if (!text || typeof text !== 'string') return ''
+  let result = text
+  result = result.replace(/!\[([^\]]*)\]\([^)]+\)/gi, '')
+  result = result.replace(/\[([^\]]+)\]\([^)]+\)/gi, '$1')
+  result = result.replace(/#{1,6}\s+/g, '')
+  result = result.replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
+  result = result.replace(/<[^>]+>/g, '')
+  result = result.replace(/^(-{3,}|\*{3,})$/gm, '')
+  result = result.replace(/\s+/g, ' ')
+  return result.trim()
 }
 
 export function prepareEntityText(
@@ -79,9 +103,9 @@ export function prepareEntityText(
 ): string {
   switch (sourceType) {
     case 'wiki':
-      return `${entity.title || ''}\n\n${entity.content || ''}`
+      return stripMarkdown(`${entity.title || ''}\n\n${entity.content || ''}`)
     case 'post':
-      return `${entity.title || ''}\n\n${entity.content || ''}`
+      return stripMarkdown(`${entity.title || ''}\n\n${entity.content || ''}`)
     case 'music': {
       const parts = [`${entity.title || ''} - ${entity.artist || ''} | ${entity.album || ''}`]
       const lyric = entity.lyric as string | null | undefined
@@ -113,7 +137,7 @@ export async function enqueueWikiTextEmbeddings(
   }
 
   const wikiPages = await prisma.wikiPage.findMany({
-    where: { slug: { in: uniqueSlugs } },
+    where: { slug: { in: uniqueSlugs }, status: 'published' },
     select: { slug: true, title: true, content: true },
   })
 
@@ -122,6 +146,11 @@ export async function enqueueWikiTextEmbeddings(
   const vectorSize = getEmbeddingVectorSize()
 
   for (const page of wikiPages) {
+    await prisma.textEmbeddingChunk.deleteMany({
+      where: { sourceType: 'wiki', sourceId: page.slug },
+    })
+    await deleteTextEmbeddingPointsBySource('wiki', page.slug)
+
     const text = prepareEntityText(page as unknown as Record<string, unknown>, 'wiki')
     const chunks = chunkText(text)
 
@@ -168,7 +197,7 @@ export async function enqueuePostTextEmbeddings(
   }
 
   const posts = await prisma.post.findMany({
-    where: { id: { in: uniqueIds } },
+    where: { id: { in: uniqueIds }, status: 'published' },
     select: { id: true, title: true, content: true },
   })
 
@@ -177,6 +206,11 @@ export async function enqueuePostTextEmbeddings(
   const vectorSize = getEmbeddingVectorSize()
 
   for (const post of posts) {
+    await prisma.textEmbeddingChunk.deleteMany({
+      where: { sourceType: 'post', sourceId: post.id },
+    })
+    await deleteTextEmbeddingPointsBySource('post', post.id)
+
     const text = prepareEntityText(post as unknown as Record<string, unknown>, 'post')
     const chunks = chunkText(text)
 
@@ -347,7 +381,7 @@ export async function enqueueMissingTextEmbeddings(
     switch (type) {
       case 'wiki': {
         const missing = await prisma.wikiPage.findMany({
-          where: { slug: { notIn: existingSourceIds } },
+          where: { slug: { notIn: existingSourceIds }, status: 'published' },
           select: { slug: true },
           take: remaining,
           orderBy: { updatedAt: 'asc' },
@@ -359,7 +393,7 @@ export async function enqueueMissingTextEmbeddings(
       }
       case 'post': {
         const missing = await prisma.post.findMany({
-          where: { id: { notIn: existingSourceIds } },
+          where: { id: { notIn: existingSourceIds }, status: 'published' },
           select: { id: true },
           take: remaining,
           orderBy: { updatedAt: 'asc' },
@@ -407,6 +441,18 @@ export async function syncTextEmbeddingBatch(
 ): Promise<{ processed: number; succeeded: number; failed: number }> {
   const limit = Math.max(1, options.limit ?? 100)
 
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
+  await prisma.textEmbeddingChunk.updateMany({
+    where: {
+      status: EmbeddingStatus.processing,
+      updatedAt: { lt: thirtyMinutesAgo },
+    },
+    data: {
+      status: EmbeddingStatus.pending,
+      lastError: null,
+    },
+  })
+
   const acceptedStatuses: EmbeddingStatus[] = [EmbeddingStatus.pending]
   if (options.includeFailed) {
     acceptedStatuses.push(EmbeddingStatus.failed)
@@ -435,6 +481,10 @@ export async function syncTextEmbeddingBatch(
 
   for (const chunk of candidates) {
     try {
+      if (chunk.qdrantPointId) {
+        await deleteTextEmbeddingPoint(chunk.qdrantPointId).catch(() => {})
+      }
+
       const vector = await generateTextEmbedding(chunk.chunkText)
       const qdrantPointId = crypto.randomUUID()
 
@@ -507,23 +557,29 @@ export async function deleteTextEmbeddingsForSource(
 export async function retryFailedTextEmbeddings(
   prisma: PrismaClient,
   options: { limit?: number; sourceType?: 'wiki' | 'post' | 'music' | 'album' } = {},
-): Promise<{ resetCount: number } & Awaited<ReturnType<typeof syncTextEmbeddingBatch>>> {
+): Promise<{ resetCount: number; processedCount: number } & Awaited<ReturnType<typeof syncTextEmbeddingBatch>>> {
+  const limit = options.limit ?? 100
   const where: { status: EmbeddingStatus; sourceType?: string } = { status: EmbeddingStatus.failed }
   if (options.sourceType) {
     where.sourceType = options.sourceType
   }
 
-  const updated = await prisma.textEmbeddingChunk.updateMany({
+  const failedIds = await prisma.textEmbeddingChunk.findMany({
     where,
+    select: { id: true },
+    take: limit,
+  })
+  const updated = await prisma.textEmbeddingChunk.updateMany({
+    where: { id: { in: failedIds.map((r) => r.id) } },
     data: { status: EmbeddingStatus.pending, lastError: null },
   })
 
   const syncResult = await syncTextEmbeddingBatch(prisma, {
-    limit: options.limit ?? 100,
+    limit,
     includeFailed: true,
   })
 
-  return { resetCount: updated.count, ...syncResult }
+  return { resetCount: updated.count, processedCount: syncResult.processed, ...syncResult }
 }
 
 export async function rebuildAllTextEmbeddings(

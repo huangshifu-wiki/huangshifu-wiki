@@ -3,7 +3,7 @@ import type { DataType } from '@huggingface/transformers'
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 
 const DEFAULT_MODEL_NAME = 'OFA-Sys/chinese-clip-vit-base-patch16'
 const DEFAULT_VECTOR_SIZE = 512
@@ -56,7 +56,7 @@ function parseInteger(value: string | undefined, fallback: number) {
 function normalizeVector(vector: number[]) {
   const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
   if (!Number.isFinite(magnitude) || magnitude <= 0) {
-    return vector;
+    throw new Error('Zero vector detected, cannot normalize');
   }
   return vector.map((value) => value / magnitude);
 }
@@ -191,12 +191,12 @@ async function quantizeModelIfNeeded(onnxModelPath: string): Promise<string> {
   try {
     const pythonScript = [
       'import sys, os',
-      'sys.path.insert(0, os.path.join("' + process.cwd().replace(/\\/g, '/') + '", "node_modules"))',
+      'sys.path.insert(0, os.path.join(sys.argv[3], "node_modules"))',
       'try:',
       '    from onnxruntime.quantization import quantize_dynamic, QuantType',
       '    quantize_dynamic(',
-      "      r'" + onnxModelPath.replace(/\\/g, '/') + "',",
-      "      r'" + q8Path.replace(/\\/g, '/') + "',",
+      '      sys.argv[1],',
+      '      sys.argv[2],',
       '      weight_type=QuantType.QUInt8)',
       '    )',
       '    print("OK")',
@@ -206,12 +206,20 @@ async function quantizeModelIfNeeded(onnxModelPath: string): Promise<string> {
       '    print(f"ERROR:{e}")',
     ].join('\n');
 
-    const result = execSync(`python -c "${pythonScript.replace(/"/g, '\\"')}"`, {
-      timeout: 120000,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: process.cwd(),
-    });
+    const tempScriptPath = path.join(os.tmpdir(), `quantize_${Date.now()}_${Math.random().toString(36).slice(2)}.py`);
+    await fs.promises.writeFile(tempScriptPath, pythonScript, 'utf-8');
+
+    let result: string;
+    try {
+      result = execFileSync('python', [tempScriptPath, onnxModelPath, q8Path, process.cwd()], {
+        timeout: 120000,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: process.cwd(),
+      });
+    } finally {
+      await fs.promises.unlink(tempScriptPath).catch(() => {});
+    }
 
     if (result.includes('OK') && fs.existsSync(q8Path)) {
       const stats = fs.statSync(q8Path);
@@ -656,10 +664,36 @@ export async function generateTextEmbedding(text: string): Promise<number[]> {
   const tokenizer = await getTextTokenizer();
 
   const outputs = await model.forward(tokenizer(text));
-  const vectorData = outputs.text_embeds.data;
 
-  if (!vectorData) {
-    throw new Error('未获取到文本向量数据');
+  const modelName = getEmbeddingModelName()
+  const modelType = await detectModelType(modelName)
+
+  let vectorData: ArrayLike<number> | undefined
+
+  if (modelType === 'chinese_clip') {
+    vectorData = outputs.text_embeds?.data
+    if (!vectorData) {
+      const hiddenState = outputs.last_hidden_state?.data
+      if (hiddenState) {
+        const expectedSize = getEmbeddingVectorSize()
+        const seqLen = outputs.last_hidden_state.dims[1]
+        const hiddenDim = outputs.last_hidden_state.dims[2]
+        if (hiddenDim === expectedSize && seqLen > 0) {
+          const clsEmbedding = Array.from(hiddenState).slice(0, hiddenDim)
+          vectorData = clsEmbedding as unknown as ArrayLike<number>
+        }
+      }
+    }
+    if (!vectorData) {
+      console.error(`[CLIP] ChineseCLIP 模型输出缺少 text_embeds 和 last_hidden_state, 可用字段: ${Object.keys(outputs).join(', ')}`)
+      throw new Error('ChineseCLIP 模型输出缺少 text_embeds 和 last_hidden_state 字段，无法提取文本向量')
+    }
+  } else {
+    vectorData = outputs.text_embeds?.data
+    if (!vectorData) {
+      console.error(`[CLIP] CLIP 模型输出缺少 text_embeds, 可用字段: ${Object.keys(outputs).join(', ')}`)
+      throw new Error('CLIP 模型输出缺少 text_embeds 字段，无法提取文本向量')
+    }
   }
 
   const vector = normalizeVector(Array.from(vectorData))
