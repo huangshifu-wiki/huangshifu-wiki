@@ -7,6 +7,7 @@ import {
   isAdminRole,
 } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { validateBody, backupRestoreSchema } from '../schemas';
 import type { AuthenticatedRequest } from '../types';
 import {
   prisma,
@@ -53,6 +54,10 @@ fs.mkdirSync(backupsDir, { recursive: true });
 
 const BACKUP_PASSWORD = process.env.BACKUP_PASSWORD || '';
 
+if (!BACKUP_PASSWORD) {
+  logger.warn('BACKUP_PASSWORD 未配置或为空 — 备份操作将要求请求体提供密码，未加密备份被禁止');
+}
+
 async function handleBackupList(_req: Request, res: Response) {
   try {
     const allFiles = await fs.promises.readdir(backupsDir);
@@ -73,7 +78,7 @@ async function handleBackupList(_req: Request, res: Response) {
 
 async function handleBackupDelete(req: AuthenticatedRequest, res: Response) {
   try {
-    const { password } = req.query as { password?: string };
+    const { password } = req.body as { password?: string };
     const filename = req.params.filename;
     const normalized = path.normalize(filename);
 
@@ -92,7 +97,7 @@ async function handleBackupDelete(req: AuthenticatedRequest, res: Response) {
       return;
     }
 
-    const filePath = path.join(backupsDir, filename);
+    const filePath = path.join(backupsDir, normalized);
     try {
       await fs.promises.access(filePath);
     } catch {
@@ -874,11 +879,23 @@ router.get('/backup/list', requireSuperAdmin, asyncHandler(async (_req, res) => 
   }
 }));
 
-// GET /api/admin/backup/:filename/download - Download backup
-router.get('/backup/:filename/download', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+// POST /api/admin/backup/:filename/download - Download backup
+router.post('/backup/:filename/download', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
+    const { password } = req.body as { password?: string };
     const filename = req.params.filename;
     const normalized = path.normalize(filename);
+
+    const backupPassword = password || BACKUP_PASSWORD;
+    if (!backupPassword) {
+      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
+      return;
+    }
+
+    if (!password || !verifyBackupPassword(password)) {
+      res.status(401).json({ error: '备份密码错误' });
+      return;
+    }
 
     if (normalized.includes('..') || !sanitizeFilename(filename)) {
       res.status(400).json({ error: '无效的文件名' });
@@ -896,6 +913,14 @@ router.get('/backup/:filename/download', requireSuperAdmin, asyncHandler(async (
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     const fileStream = fs.createReadStream(filePath);
+    fileStream.on('error', (err) => {
+      logger.error({ err }, 'Backup download stream error');
+      if (!res.headersSent) {
+        res.status(500).json({ error: '下载备份失败' });
+      } else {
+        res.end();
+      }
+    });
     fileStream.pipe(res);
   } catch (error) {
     logger.error({ err: error }, 'Download backup error');
@@ -904,13 +929,14 @@ router.get('/backup/:filename/download', requireSuperAdmin, asyncHandler(async (
 }));
 
 // POST /api/admin/backup/restore - Restore backup
-router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), validateBody(backupRestoreSchema), asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { password, confirm } = req.body as { password?: string; confirm?: boolean };
     const file = req.file;
 
-    if (!BACKUP_PASSWORD) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量' });
+    const backupPassword = password || BACKUP_PASSWORD;
+    if (!backupPassword) {
+      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
       return;
     }
 
@@ -1082,14 +1108,15 @@ router.get('/backups', requireSuperAdmin, asyncHandler(async (_req, res) => {
 }));
 
 // DELETE /api/admin/backup/:filename - Delete backup (legacy compatible)
-router.delete('/backup/:filename', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/backup/:filename/delete', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
-    const { password } = req.query as { password?: string };
+    const { password } = req.body as { password?: string };
     const filename = req.params.filename;
     const normalized = path.normalize(filename);
 
-    if (!BACKUP_PASSWORD) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量' });
+    const backupPassword = password || BACKUP_PASSWORD;
+    if (!backupPassword) {
+      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
       return;
     }
 
@@ -1103,7 +1130,7 @@ router.delete('/backup/:filename', requireSuperAdmin, asyncHandler(async (req: A
       return;
     }
 
-    const filePath = path.join(backupsDir, filename);
+    const filePath = path.join(backupsDir, normalized);
     try {
       await fs.promises.access(filePath);
     } catch {
@@ -1120,14 +1147,15 @@ router.delete('/backup/:filename', requireSuperAdmin, asyncHandler(async (req: A
 }));
 
 // DELETE /api/admin/backups/:filename - Delete backup
-router.delete('/backups/:filename', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/backups/:filename/delete', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
-    const { password } = req.query as { password?: string };
+    const { password } = req.body as { password?: string };
     const filename = req.params.filename;
     const normalized = path.normalize(filename);
 
-    if (!BACKUP_PASSWORD) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量' });
+    const backupPassword = password || BACKUP_PASSWORD;
+    if (!backupPassword) {
+      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
       return;
     }
 
@@ -1141,7 +1169,7 @@ router.delete('/backups/:filename', requireSuperAdmin, asyncHandler(async (req: 
       return;
     }
 
-    const filePath = path.join(backupsDir, filename);
+    const filePath = path.join(backupsDir, normalized);
     try {
       await fs.promises.access(filePath);
     } catch {

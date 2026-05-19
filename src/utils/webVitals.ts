@@ -280,7 +280,9 @@ const reportMetrics = (
         body: data,
         headers: { 'Content-Type': 'application/json' },
         keepalive: true,
-      }).catch(() => {});
+      }).catch((e) => {
+        console.warn('[webVitals] Failed to send metrics:', String(e))
+      });
     }
   }
 };

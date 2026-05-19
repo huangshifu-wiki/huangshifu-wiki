@@ -87,6 +87,7 @@ export {
   toPostResponse,
   toCommentResponse,
   toGalleryResponse,
+  toGalleryListResponse,
   toMusicResponse,
   toEditLockResponse,
   toUserResponse,

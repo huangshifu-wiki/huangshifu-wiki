@@ -218,7 +218,9 @@ async function quantizeModelIfNeeded(onnxModelPath: string): Promise<string> {
         cwd: process.cwd(),
       });
     } finally {
-      await fs.promises.unlink(tempScriptPath).catch(() => {});
+      await fs.promises.unlink(tempScriptPath).catch((e) => {
+        console.debug('[clipEmbedding] Failed to unlink temp script:', tempScriptPath, String(e))
+      });
     }
 
     if (result.includes('OK') && fs.existsSync(q8Path)) {

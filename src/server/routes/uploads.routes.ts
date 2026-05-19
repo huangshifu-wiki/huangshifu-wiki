@@ -229,7 +229,8 @@ router.post(
 
       // 始终创建 ImageMap 记录，用于统一图片管理
       const imageId = `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-      const imageMd5 = crypto.createHash('md5').update(fs.readFileSync(file.path)).digest('hex');
+      const fileBuffer = await fs.promises.readFile(file.path);
+      const imageMd5 = crypto.createHash('md5').update(fileBuffer).digest('hex');
       await prisma.imageMap.create({
         data: {
           id: imageId,

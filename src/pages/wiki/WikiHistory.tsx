@@ -14,6 +14,7 @@ const WikiHistory = () => {
 	const [revisions, setRevisions] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [selectedRevision, setSelectedRevision] = useState<any>(null);
+	const [loadingRevision, setLoadingRevision] = useState(false);
 	const navigate = useNavigate();
 	const { show } = useToast();
 
@@ -31,6 +32,20 @@ const WikiHistory = () => {
 		};
 		fetchHistory();
 	}, [slug]);
+
+	const handlePreviewRevision = async (rev: any) => {
+		setLoadingRevision(true);
+		try {
+			const data = await apiGet<{ revision: any }>(
+				`/api/wiki/${slug}/revisions/${rev.id}`,
+			);
+			setSelectedRevision(data.revision);
+		} catch (e) {
+			console.error("Error fetching revision:", e);
+			show("加载修订版本失败", { variant: "error" });
+		}
+		setLoadingRevision(false);
+	};
 
 	const handleRollback = async (revision: any) => {
 		if (
@@ -98,10 +113,11 @@ const WikiHistory = () => {
 								</div>
 								<div className="flex items-center gap-2">
 									<button
-										onClick={() => setSelectedRevision(rev)}
-										className="px-4 py-2 bg-white text-[#c8951e] text-xs font-bold rounded border border-[#c8951e]/20 hover:bg-[#c8951e] hover:text-white transition-all opacity-0 group-hover:opacity-100"
+										onClick={() => handlePreviewRevision(rev)}
+										disabled={loadingRevision}
+										className="px-4 py-2 bg-white text-[#c8951e] text-xs font-bold rounded border border-[#c8951e]/20 hover:bg-[#c8951e] hover:text-white transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
 									>
-										预览内容
+										{loadingRevision ? "加载中..." : "预览内容"}
 									</button>
 									<button
 										onClick={() => handleRollback(rev)}

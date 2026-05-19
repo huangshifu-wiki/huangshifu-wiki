@@ -482,7 +482,9 @@ export async function syncTextEmbeddingBatch(
   for (const chunk of candidates) {
     try {
       if (chunk.qdrantPointId) {
-        await deleteTextEmbeddingPoint(chunk.qdrantPointId).catch(() => {})
+        await deleteTextEmbeddingPoint(chunk.qdrantPointId).catch((e) => {
+          console.debug('[textEmbeddingSync] Failed to delete qdrant point:', chunk.qdrantPointId, String(e))
+        })
       }
 
       const vector = await generateTextEmbedding(chunk.chunkText)

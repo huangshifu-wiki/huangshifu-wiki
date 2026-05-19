@@ -23,6 +23,7 @@ import { initSensitiveWords } from './src/lib/sensitiveWordFilter';
 import { prisma } from './src/server/prisma';
 import { logger } from './src/server/utils/logger';
 import { authMiddleware } from './src/server/middleware/auth';
+import { csrfMiddleware } from './src/server/middleware/csrf';
 import { requestLoggerMiddleware } from './src/server/middleware/requestLogger';
 import { globalLimiter } from './src/server/middleware/rateLimiter';
 import { registerRegionRoutes } from './src/server/location/routes';
@@ -233,6 +234,7 @@ app.use((_req, res, next) => {
 });
 
 app.use(authMiddleware);
+app.use(csrfMiddleware);
 app.use(requestLoggerMiddleware);
 
 // 静态文件服务 - 必须在路由注册之前
@@ -311,7 +313,7 @@ async function startServer() {
     const directives: string[] = [
       "default-src 'self'",
       isProduction
-        ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' 'unsafe-inline' https://*.amap.com`
+        ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://*.amap.com`
         : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.amap.com`,
       isProduction
         ? `style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com`
@@ -343,10 +345,22 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // SPA fallback - 所有未匹配的路由返回 index.html
-    app.get('*', (_req, res) => {
+    // SPA fallback - 所有未匹配的路由返回 index.html（注入 CSP nonce）
+    app.get('*', (req, res) => {
       const distPath = path.join(process.cwd(), 'dist');
-      res.sendFile(path.join(distPath, 'index.html'));
+      const htmlPath = path.join(distPath, 'index.html');
+      fs.readFile(htmlPath, 'utf-8', (err, html) => {
+        if (err) {
+          res.status(500).send('Internal Server Error');
+          return;
+        }
+        const nonce = res.locals.nonce;
+        if (nonce) {
+          html = html.replace(/<script/g, `<script nonce="${nonce}"`);
+        }
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(html);
+      });
     });
   }
 

@@ -65,6 +65,12 @@ class EnhancedCache {
     return this.cache.del(key);
   }
 
+  invalidateByPrefix(prefix: string): number {
+    const keys = this.cache.keys().filter((k) => k.startsWith(prefix));
+    if (keys.length === 0) return 0;
+    return this.cache.del(keys);
+  }
+
   clear(): void {
     this.cache.flushAll();
     this.hits = 0;

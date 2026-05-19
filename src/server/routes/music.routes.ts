@@ -25,6 +25,7 @@ import {
   toPostResponse,
   canViewPost,
   applyAlbumTracksToRelations,
+  enhancedCache,
 } from '../utils';
 import { parseMusicUrl } from '../music/musicUrlParser';
 import { getMusicResourcePreview, searchMusicResources, type MusicResourcePreview } from '../music/metingService';
@@ -41,6 +42,15 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
     const page = parseInteger(req.query.page, 1, { min: 1 });
     const skip = (page - 1) * limit;
     const includeInstrumentals = parseBoolean(req.query.includeInstrumentals, true);
+
+    if (!req.authUser && !albumDocId) {
+      const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}`;
+      const cached = enhancedCache.get(cacheKey);
+      if (cached) {
+        res.json(cached);
+        return;
+      }
+    }
 
     let instrumentalDocIds: string[] = [];
     if (!includeInstrumentals) {
@@ -81,13 +91,20 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
       favorites.forEach((item) => favoritedMusicSet.add(item.targetId));
     }
 
-    res.json({
+    const result = {
       songs: songs.map((song) => toSongResponse(song, { favoritedByMe: favoritedMusicSet.has(song.docId), excludeLyric: true })),
       total,
       page,
       limit,
       hasMore: page * limit < total,
-    });
+    };
+
+    if (!req.authUser && !albumDocId) {
+      const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}`;
+      enhancedCache.set(cacheKey, result, 120);
+    }
+
+    res.json(result);
   } catch (error) {
     console.error('Fetch music error:', error);
     res.status(500).json({ error: '获取音乐失败' });
@@ -140,6 +157,7 @@ router.post('/', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, re
     res.status(201).json({
       song: hydrated ? toSongResponse(hydrated) : song,
     });
+    enhancedCache.invalidateByPrefix('music_list:');
   } catch (error) {
     console.error('Add music error:', error);
     res.status(500).json({ error: '添加歌曲失败' });
@@ -563,6 +581,7 @@ router.delete('/:docId', requireAdmin, asyncHandler(async (req: AuthenticatedReq
     });
 
     res.json({ success: true });
+    enhancedCache.invalidateByPrefix('music_list:');
   } catch (error) {
     console.error('Delete music error:', error);
     res.status(500).json({ error: '删除歌曲失败' });
@@ -666,6 +685,7 @@ router.patch('/:docId', requireAdmin, asyncHandler(async (req: AuthenticatedRequ
     }
 
     res.json({ song: toSongResponse(song) });
+    enhancedCache.invalidateByPrefix('music_list:');
   } catch (error) {
     console.error('Update music error:', error);
     res.status(500).json({ error: '更新歌曲失败' });
@@ -1484,23 +1504,30 @@ function calculateSimilarity(a: string, b: string): number {
   if (a === b) return 1;
   if (a.length === 0 || b.length === 0) return 0;
 
+  const cacheKey = `music:sim:${a}::${b}`;
+  const cached = enhancedCache.get<number>(cacheKey);
+  if (cached !== undefined) return cached;
+
   const normalize = (s: string) => s.toLowerCase().replace(/[^\w\s\u4e00-\u9fa5]/g, '').replace(/\s+/g, ' ');
   const na = normalize(a);
   const nb = normalize(b);
 
-  if (na === nb) return 1;
-  if (na.includes(nb) || nb.includes(na)) return 0.85;
+  if (na === nb) { enhancedCache.set(cacheKey, 1, 300); return 1; }
+  if (na.includes(nb) || nb.includes(na)) { enhancedCache.set(cacheKey, 0.85, 300); return 0.85; }
 
   const withoutParens = (s: string) => s.replace(/[（].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
   const naClean = withoutParens(na);
   const nbClean = withoutParens(nb);
   if (naClean && nbClean && (naClean.includes(nbClean) || nbClean.includes(naClean))) {
+    enhancedCache.set(cacheKey, 0.9, 300);
     return 0.9;
   }
 
   const maxLen = Math.max(na.length, nb.length);
   if (maxLen > 50) {
-    return na.includes(nb) || nb.includes(na) ? 0.85 : 0;
+    const result = na.includes(nb) || nb.includes(na) ? 0.85 : 0;
+    enhancedCache.set(cacheKey, result, 300);
+    return result;
   }
 
   const d = Math.max(na.length, nb.length);
@@ -1518,6 +1545,7 @@ function calculateSimilarity(a: string, b: string): number {
     similarity = Math.max(similarity, 0.85);
   }
 
+  enhancedCache.set(cacheKey, similarity, 300);
   return similarity;
 }
 

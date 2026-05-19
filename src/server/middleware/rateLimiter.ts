@@ -50,3 +50,47 @@ export const uploadLimiter = rateLimit({
     res.status(429).json({ error: '上传过于频繁，请稍后再试' });
   },
 });
+
+export const wikiWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: extractUidOrIp,
+  handler: (_req, res) => {
+    res.status(429).json({ error: 'Wiki 编辑过于频繁，请稍后再试' });
+  },
+});
+
+export const postWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: extractUidOrIp,
+  handler: (_req, res) => {
+    res.status(429).json({ error: '发帖过于频繁，请稍后再试' });
+  },
+});
+
+export const galleryWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: extractUidOrIp,
+  handler: (_req, res) => {
+    res.status(429).json({ error: '图集操作过于频繁，请稍后再试' });
+  },
+});
+
+export const profileLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: extractUidOrIp,
+  handler: (_req, res) => {
+    res.status(429).json({ error: '资料修改过于频繁，请稍后再试' });
+  },
+});

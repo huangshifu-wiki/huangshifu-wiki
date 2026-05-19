@@ -210,7 +210,7 @@ router.delete('/image-sync/:taskId', requireAuth, requireAdmin, async (req, res)
 });
 
 // GET /api/s3/config - Get S3 public config
-router.get('/s3/config', async (_req, res) => {
+router.get('/s3/config', requireAuth, requireAdmin, async (_req, res) => {
   try {
     const config = getPublicConfig();
     res.json(config);

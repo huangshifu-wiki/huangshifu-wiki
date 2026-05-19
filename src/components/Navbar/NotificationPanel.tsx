@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { Bell } from "lucide-react";
 import { clsx } from "clsx";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { apiGet, apiPost } from "../../lib/apiClient";
 import { useAuth } from "../../context/AuthContext";
 import type { NotificationItem } from "../../types/entities";

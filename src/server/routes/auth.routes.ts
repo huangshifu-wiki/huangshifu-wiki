@@ -4,8 +4,10 @@ import { UserRole as PrismaUserRole } from '@prisma/client'
 import { requireAuth, requireActiveUser, userToApiUser, createToken, setAuthCookie, clearAuthCookie, clearUserCache } from '../middleware/auth'
 import { authRateLimiter } from '../middleware/rateLimiter'
 import { asyncHandler } from '../middleware/asyncHandler'
+import { issueXsrfToken } from '../middleware/csrf'
 import { exchangeWechatLoginCode, buildUniqueWechatEmail, logger } from '../utils'
 import { prisma } from '../prisma'
+import { validateBody, registerSchema, loginSchema } from '../schemas'
 import type { AuthenticatedRequest } from '../types'
 
 const router = Router()
@@ -54,7 +56,7 @@ router.get('/me', asyncHandler(async (req: AuthenticatedRequest, res) => {
   })
 }))
 
-router.post('/register', authRateLimiter, asyncHandler(async (req, res) => {
+router.post('/register', authRateLimiter, validateBody(registerSchema), asyncHandler(async (req, res) => {
   try {
     const { email, password, displayName } = req.body as {
       email?: string
@@ -111,6 +113,7 @@ router.post('/register', authRateLimiter, asyncHandler(async (req, res) => {
 
     const token = createToken(apiUser)
     setAuthCookie(req, res, token)
+    issueXsrfToken(res)
 
     logger.info({ uid: user.uid, email: user.email }, 'Register success')
     res.status(201).json({ user: apiUser })
@@ -124,7 +127,7 @@ router.post('/register', authRateLimiter, asyncHandler(async (req, res) => {
   }
 }))
 
-router.post('/login', authRateLimiter, asyncHandler(async (req, res) => {
+router.post('/login', authRateLimiter, validateBody(loginSchema), asyncHandler(async (req, res) => {
   try {
     const { email, password } = req.body as {
       email?: string
@@ -162,6 +165,7 @@ router.post('/login', authRateLimiter, asyncHandler(async (req, res) => {
 
     const token = createToken(apiUser)
     setAuthCookie(req, res, token)
+    issueXsrfToken(res)
 
     logger.info({ uid: user.uid, email: user.email }, 'Login success')
     res.json({ user: apiUser })
@@ -250,6 +254,7 @@ router.post('/wechat/login', authRateLimiter, asyncHandler(async (req, res) => {
     const apiUser = userToApiUser(user)
     const token = createToken(apiUser)
     setAuthCookie(req, res, token)
+    issueXsrfToken(res)
 
     logger.info({ uid: user.uid, openId }, 'WeChat login success')
 
@@ -258,7 +263,7 @@ router.post('/wechat/login', authRateLimiter, asyncHandler(async (req, res) => {
     logger.error({
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
-      body: req.body,
+      body: { code: req.body?.code ? '[REDACTED]' : undefined, displayName: req.body?.displayName },
     }, 'WeChat login error')
     res.status(500).json({ error: '登录服务暂时不可用，请稍后重试' })
   }

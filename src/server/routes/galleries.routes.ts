@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireAuth, requireActiveUser, requireAdmin, isAdminRole } from '../middleware/auth'
 import { asyncHandler } from '../middleware/asyncHandler'
+import { galleryWriteLimiter } from '../middleware/rateLimiter'
 import type { ApiUser, AuthenticatedRequest } from '../types'
 import {
   serializeTags,
@@ -19,6 +20,7 @@ import {
   uploadFileToExternal,
   toCommentResponse,
   toGalleryResponse,
+  toGalleryListResponse,
   enhancedCache,
 } from '../utils'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
@@ -83,7 +85,7 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
     ])
 
     const result = {
-      galleries: await Promise.all(galleries.map(g => toGalleryResponse(g))),
+      galleries: await toGalleryListResponse(galleries),
       total,
       page,
       limit,
@@ -133,7 +135,7 @@ router.get('/:id', asyncHandler(async (req: AuthenticatedRequest, res) => {
   }
 }))
 
-router.post('/upload', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/upload', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const files = req.files as Express.Multer.File[]
   const createdAssetIds: string[] = []
   try {
@@ -238,7 +240,7 @@ router.post('/upload', requireAuth, requireActiveUser, asyncHandler(async (req: 
   }
 }))
 
-router.post('/', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { title, description, tags, images, assetIds, uploadSessionId, locationCode, locationDetail } = req.body as {
       title?: string
@@ -1116,7 +1118,7 @@ router.get('/:id/comments', asyncHandler(async (req: AuthenticatedRequest, res) 
   }
 }))
 
-router.post('/:id/comments', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/:id/comments', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { content, parentId } = req.body as {
       content?: string
@@ -1199,29 +1201,46 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: AuthenticatedReques
       return
     }
 
+    const imagesWithAsset = gallery.images.filter((img) => img.assetId)
+    const imagesWithoutAsset = gallery.images.filter((img) => !img.assetId)
+
     await prisma.gallery.delete({
       where: { id: req.params.id },
     })
 
-    await Promise.all(
-      gallery.images.map(async (image) => {
-        if (image.assetId) {
-          const linked = await prisma.galleryImage.count({ where: { assetId: image.assetId } })
-          if (linked === 0) {
-            const asset = await prisma.mediaAsset.findUnique({ where: { id: image.assetId } })
-            if (asset) {
-              await safeDeleteUploadFileByStorageKey(asset.storageKey)
-              await prisma.mediaAsset.update({
-                where: { id: asset.id },
-                data: { status: 'deleted' },
-              })
-            }
-          }
-        } else {
-          await safeDeleteUploadFileByUrl(image.url)
-        }
-      }),
-    )
+    if (imagesWithAsset.length > 0) {
+      const assetIds = [...new Set(imagesWithAsset.map((img) => img.assetId!))]
+
+      const linkedCounts = await prisma.galleryImage.groupBy({
+        by: ['assetId'],
+        where: { assetId: { in: assetIds } },
+        _count: { assetId: true },
+      })
+      const linkedCountMap = new Map(linkedCounts.map((c) => [c.assetId, c._count.assetId]))
+
+      const orphanAssetIds = assetIds.filter((id) => (linkedCountMap.get(id) ?? 0) === 0)
+
+      if (orphanAssetIds.length > 0) {
+        const orphanAssets = await prisma.mediaAsset.findMany({
+          where: { id: { in: orphanAssetIds } },
+          select: { id: true, storageKey: true },
+        })
+
+        await Promise.all([
+          ...orphanAssets.map((asset) => safeDeleteUploadFileByStorageKey(asset.storageKey)),
+          prisma.mediaAsset.updateMany({
+            where: { id: { in: orphanAssetIds } },
+            data: { status: 'deleted' },
+          }),
+        ])
+      }
+    }
+
+    if (imagesWithoutAsset.length > 0) {
+      await Promise.all(
+        imagesWithoutAsset.map((image) => safeDeleteUploadFileByUrl(image.url)),
+      )
+    }
 
     res.json({ success: true })
   } catch (error) {

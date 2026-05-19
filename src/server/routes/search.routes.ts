@@ -18,6 +18,7 @@ import {
   toWikiResponse,
   toPostResponse,
   toGalleryResponse,
+  toGalleryListResponse,
   toMusicResponse,
   toAlbumResponse,
   parseDate,
@@ -112,7 +113,7 @@ type TextSearchResult = {
   sourceId: string
   score: number
   chunkPreview: string
-  entity: any
+  entity: Record<string, unknown>
 }
 
 /**
@@ -408,7 +409,7 @@ async function processTextSearchResults(
     const colonIdx = key.indexOf(':')
     const sourceType = key.slice(0, colonIdx)
     const sourceId = key.slice(colonIdx + 1)
-    let entity: any = null
+    let entity: Record<string, unknown> | null = null
 
     if (sourceType === 'wiki') entity = wikiBySlug.get(sourceId)
     else if (sourceType === 'post') entity = postById.get(sourceId)
@@ -431,7 +432,7 @@ async function processTextSearchResults(
 }
 
 export function buildHybridResponse(
-  keywordResults: { wiki: any[]; posts: any[]; galleries: any[]; music: any[]; albums: any[] },
+  keywordResults: { wiki: Record<string, unknown>[]; posts: Record<string, unknown>[]; galleries: Record<string, unknown>[]; music: Record<string, unknown>[]; albums: Record<string, unknown>[] },
   vectorResults: SemanticSearchResult[],
   mode: string,
   query: string,
@@ -440,11 +441,11 @@ export function buildHybridResponse(
   textResults?: TextSearchResult[]
 ): HybridSearchResponse {
   const keywordFlat: HybridSearchItem[] = [
-    ...keywordResults.wiki.map((d, i) => ({ id: d.slug || String(i), type: 'wiki' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
-    ...keywordResults.posts.map((d, i) => ({ id: d.id || String(i), type: 'post' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
-    ...keywordResults.galleries.map((d, i) => ({ id: d.id || String(i), type: 'gallery' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
-    ...keywordResults.music.map((d, i) => ({ id: d.docId || String(i), type: 'music' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
-    ...keywordResults.albums.map((d, i) => ({ id: d.docId || String(i), type: 'album' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
+    ...keywordResults.wiki.map((d, i) => ({ id: String(d.slug ?? i), type: 'wiki' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
+    ...keywordResults.posts.map((d, i) => ({ id: String(d.id ?? i), type: 'post' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
+    ...keywordResults.galleries.map((d, i) => ({ id: String(d.id ?? i), type: 'gallery' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
+    ...keywordResults.music.map((d, i) => ({ id: String(d.docId ?? i), type: 'music' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
+    ...keywordResults.albums.map((d, i) => ({ id: String(d.docId ?? i), type: 'album' as const, data: d, relevanceScore: 0, matchType: 'keyword' as const, keywordRank: i })),
   ];
 
   const vectorFlat: HybridSearchItem[] = vectorResults.map((r, i) => ({
@@ -587,6 +588,32 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                 }
               : {}),
           },
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            category: true,
+            content: true,
+            tags: true,
+            relations: true,
+            eventDate: true,
+            locationCode: true,
+            locationDetail: true,
+            status: true,
+            reviewNote: true,
+            reviewedBy: true,
+            reviewedAt: true,
+            viewCount: true,
+            favoritesCount: true,
+            isPinned: true,
+            likesCount: true,
+            dislikesCount: true,
+            lastEditorUid: true,
+            lastEditor: { select: { displayName: true } },
+            createdAt: true,
+            updatedAt: true,
+            location: true,
+          },
           orderBy: { updatedAt: 'desc' },
           take: 100,
         })
@@ -614,6 +641,32 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                 }
               : {}),
           },
+          select: {
+            id: true,
+            title: true,
+            section: true,
+            musicDocId: true,
+            albumDocId: true,
+            content: true,
+            tags: true,
+            locationCode: true,
+            locationDetail: true,
+            authorUid: true,
+            author: { select: { displayName: true } },
+            status: true,
+            reviewNote: true,
+            reviewedBy: true,
+            reviewedAt: true,
+            hotScore: true,
+            viewCount: true,
+            likesCount: true,
+            dislikesCount: true,
+            commentsCount: true,
+            isPinned: true,
+            createdAt: true,
+            updatedAt: true,
+            location: true,
+          },
           orderBy: { updatedAt: 'desc' },
           take: 100,
         })
@@ -640,6 +693,14 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                 }
               : {}),
           },
+          include: {
+            images: {
+              include: {
+                asset: true,
+              },
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
           orderBy: { updatedAt: 'desc' },
           take: 100,
         })
@@ -660,6 +721,51 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                 }
               : {}),
           },
+          select: {
+            docId: true,
+            id: true,
+            title: true,
+            artist: true,
+            album: true,
+            cover: true,
+            audioUrl: true,
+            primaryPlatform: true,
+            enabledPlatform: true,
+            neteaseId: true,
+            tencentId: true,
+            kugouId: true,
+            baiduId: true,
+            kuwoId: true,
+            displayAlbumMode: true,
+            manualAlbumName: true,
+            defaultCoverSource: true,
+            customPlatformLinks: true,
+            addedBy: true,
+            covers: {
+              orderBy: { sortOrder: 'asc' },
+              select: {
+                id: true,
+                publicUrl: true,
+                isDefault: true,
+                sortOrder: true,
+              },
+            },
+            albumRelations: {
+              include: {
+                album: {
+                  select: {
+                    docId: true,
+                    title: true,
+                    artist: true,
+                  },
+                },
+              },
+              orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+            },
+            instrumentalLinks: { select: { id: true } },
+            createdAt: true,
+            updatedAt: true,
+          },
           orderBy: { updatedAt: 'desc' },
           take: 100,
         })
@@ -678,6 +784,45 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                   ],
                 }
               : {}),
+          },
+          select: {
+            docId: true,
+            id: true,
+            resourceType: true,
+            platform: true,
+            sourceId: true,
+            title: true,
+            artist: true,
+            cover: true,
+            description: true,
+            platformUrl: true,
+            tracks: true,
+            defaultCoverSource: true,
+            covers: {
+              orderBy: { sortOrder: 'asc' },
+              select: {
+                id: true,
+                publicUrl: true,
+                isDefault: true,
+                sortOrder: true,
+              },
+            },
+            songRelations: {
+              include: {
+                song: {
+                  select: {
+                    docId: true,
+                    id: true,
+                    title: true,
+                    artist: true,
+                    cover: true,
+                  },
+                },
+              },
+              orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+            },
+            createdAt: true,
+            updatedAt: true,
           },
           orderBy: { updatedAt: 'desc' },
           take: 100,
@@ -716,7 +861,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
       const keywordRaw = {
         wiki: wiki.map(toWikiResponse),
         posts: posts.map(toPostResponse),
-        galleries: await Promise.all(galleries.map(g => toGalleryResponse(g))),
+        galleries: await toGalleryListResponse(galleries),
         music: music,
         albums: albums,
       };
@@ -729,7 +874,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const keywordResult = {
       wiki: wiki.map(toWikiResponse),
       posts: posts.map(toPostResponse),
-      galleries: await Promise.all(galleries.map(g => toGalleryResponse(g))),
+      galleries: await toGalleryListResponse(galleries),
       music: music.map(toMusicResponse),
       albums: albums.map(toAlbumResponse),
       searchMeta: { mode: 'keyword', query: q, degraded: false, keywordResultCount: wiki.length + posts.length + galleries.length + music.length + albums.length, vectorResultCount: 0, textVectorResultCount: 0 },

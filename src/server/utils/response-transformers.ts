@@ -344,7 +344,7 @@ export function toCommentResponse(comment: {
   };
 }
 
-export async function toGalleryResponse(gallery: {
+type GalleryInput = {
   id: string;
   title: string;
   description: string;
@@ -375,8 +375,39 @@ export async function toGalleryResponse(gallery: {
       storageKey: string;
     } | null;
   }[];
-}, storageStrategy?: string,
+};
+
+function resolveImageUrl(
+  image: GalleryInput['images'][number],
+  imageMapByLocalUrl: Map<string, { localUrl: string; externalUrl: string | null; s3Url: string | null }>,
+  storageStrategy: 'local' | 's3' | 'external',
 ) {
+  let url = image.asset?.publicUrl || image.url;
+
+  if (image.asset?.storageKey) {
+    const localUrl = `/uploads/${image.asset.storageKey}`;
+    const imageMap = imageMapByLocalUrl.get(localUrl);
+
+    if (imageMap) {
+      switch (storageStrategy) {
+        case 'external':
+          url = imageMap.externalUrl || imageMap.s3Url || imageMap.localUrl || url;
+          break;
+        case 's3':
+          url = imageMap.s3Url || imageMap.externalUrl || imageMap.localUrl || url;
+          break;
+        case 'local':
+        default:
+          url = imageMap.localUrl || url;
+          break;
+      }
+    }
+  }
+
+  return url;
+}
+
+export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?: string) {
   let resolvedStorageStrategy: 'local' | 's3' | 'external' = 'local';
 
   if (storageStrategy && ['local', 's3', 'external'].includes(storageStrategy)) {
@@ -394,16 +425,14 @@ export async function toGalleryResponse(gallery: {
     }
   }
 
-  const storageKeys: string[] = [];
   const localUrls: string[] = [];
   for (const img of gallery.images) {
     if (img.asset?.storageKey) {
-      storageKeys.push(img.asset.storageKey);
       localUrls.push(`/uploads/${img.asset.storageKey}`);
     }
   }
 
-  const imageMaps = storageKeys.length > 0
+  const imageMaps = localUrls.length > 0
     ? await prisma.imageMap.findMany({
         where: {
           localUrl: { in: localUrls },
@@ -435,39 +464,87 @@ export async function toGalleryResponse(gallery: {
     updatedAt: gallery.updatedAt.toISOString(),
     images: gallery.images
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((image) => {
-        let url = image.asset?.publicUrl || image.url;
-
-        if (image.asset?.storageKey) {
-          const localUrl = `/uploads/${image.asset.storageKey}`;
-          const imageMap = imageMapByLocalUrl.get(localUrl);
-
-          if (imageMap) {
-            switch (resolvedStorageStrategy) {
-              case 'external':
-                url = imageMap.externalUrl || imageMap.s3Url || imageMap.localUrl || url;
-                break;
-              case 's3':
-                url = imageMap.s3Url || imageMap.externalUrl || imageMap.localUrl || url;
-                break;
-              case 'local':
-              default:
-                url = imageMap.localUrl || url;
-                break;
-            }
-          }
-        }
-
-        return {
-          id: image.id,
-          assetId: image.assetId || image.asset?.id || null,
-          url,
-          name: image.asset?.fileName || image.name,
-          mimeType: image.asset?.mimeType || null,
-          sizeBytes: image.asset?.sizeBytes || null,
-        };
-      }),
+      .map((image) => ({
+        id: image.id,
+        assetId: image.assetId || image.asset?.id || null,
+        url: resolveImageUrl(image, imageMapByLocalUrl, resolvedStorageStrategy),
+        name: image.asset?.fileName || image.name,
+        mimeType: image.asset?.mimeType || null,
+        sizeBytes: image.asset?.sizeBytes || null,
+      })),
   };
+}
+
+export async function toGalleryListResponse(galleries: GalleryInput[], storageStrategy?: string) {
+  if (galleries.length === 0) return [];
+
+  let resolvedStorageStrategy: 'local' | 's3' | 'external' = 'local';
+
+  if (storageStrategy && ['local', 's3', 'external'].includes(storageStrategy)) {
+    resolvedStorageStrategy = storageStrategy as 'local' | 's3' | 'external';
+  } else {
+    try {
+      const storageConfig = await prisma.siteConfig.findUnique({
+        where: { key: 'image_preference' },
+        select: { value: true },
+      });
+      const preference = storageConfig?.value as { strategy?: 'local' | 's3' | 'external' } | undefined;
+      resolvedStorageStrategy = preference?.strategy || 'local';
+    } catch (error) {
+      console.warn('Failed to get storage strategy:', error);
+    }
+  }
+
+  const allLocalUrls: string[] = [];
+  for (const gallery of galleries) {
+    for (const img of gallery.images) {
+      if (img.asset?.storageKey) {
+        allLocalUrls.push(`/uploads/${img.asset.storageKey}`);
+      }
+    }
+  }
+
+  const imageMaps = allLocalUrls.length > 0
+    ? await prisma.imageMap.findMany({
+        where: {
+          localUrl: { in: allLocalUrls },
+        },
+        select: {
+          localUrl: true,
+          externalUrl: true,
+          s3Url: true,
+        },
+      })
+    : [];
+
+  const imageMapByLocalUrl = new Map(imageMaps.map(im => [im.localUrl, im]));
+
+  return galleries.map((gallery) => ({
+    id: gallery.id,
+    title: gallery.title,
+    description: gallery.description,
+    authorUid: gallery.authorUid,
+    authorName: gallery.authorName,
+    tags: serializeTags(gallery.tags),
+    locationCode: gallery.locationCode || null,
+    locationName: gallery.location?.fullName || null,
+    locationDetail: gallery.locationDetail || null,
+    copyright: gallery.copyright || null,
+    published: gallery.published,
+    publishedAt: gallery.publishedAt ? gallery.publishedAt.toISOString() : null,
+    createdAt: gallery.createdAt.toISOString(),
+    updatedAt: gallery.updatedAt.toISOString(),
+    images: gallery.images
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((image) => ({
+        id: image.id,
+        assetId: image.assetId || image.asset?.id || null,
+        url: resolveImageUrl(image, imageMapByLocalUrl, resolvedStorageStrategy),
+        name: image.asset?.fileName || image.name,
+        mimeType: image.asset?.mimeType || null,
+        sizeBytes: image.asset?.sizeBytes || null,
+      })),
+  }));
 }
 
 export function toMusicResponse(track: {

@@ -826,7 +826,7 @@ export async function fetchSongWithRelationsByDocId(songDocId: string) {
   return song as unknown as MusicTrackWithRelations | null;
 }
 
-export function ensureDisplayRelation(relations: any[]) {
+export function ensureDisplayRelation<T extends { isDisplay: boolean }>(relations: T[]): T[] {
   const hasDisplay = relations.some((relation) => relation.isDisplay);
   if (hasDisplay || !relations.length) {
     return relations;

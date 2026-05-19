@@ -34,6 +34,12 @@ const API_JSON_HEADERS = {
   'Content-Type': 'application/json',
 };
 
+function getXsrfToken(): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
 /**
  * 默认去重选项
  */
@@ -101,10 +107,14 @@ async function executeRequest<T>(
     requestBody: rest.body,
   };
 
+  const xsrfToken = getXsrfToken();
+  const isWriteMethod = (rest.method || 'GET').toUpperCase() !== 'GET';
+
   const response = await fetch(url, {
     credentials: 'include',
     headers: {
       ...API_JSON_HEADERS,
+      ...(xsrfToken && isWriteMethod ? { 'X-XSRF-TOKEN': xsrfToken } : {}),
       ...(headers || {}),
     },
     ...rest,
@@ -180,7 +190,11 @@ export async function apiDelete<T>(path: string, signal?: AbortSignal) {
 }
 
 export function apiDownload(path: string): Promise<Response> {
-  return fetch(path, { credentials: 'include' })
+  const xsrfToken = getXsrfToken();
+  return fetch(path, {
+    credentials: 'include',
+    headers: xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {},
+  })
 }
 
 export interface ApiUploadOptions {
@@ -242,6 +256,10 @@ export async function apiUpload<T>(path: string, formData: FormData, options?: A
 
       xhr.open('POST', path);
       xhr.withCredentials = true;
+      const xsrfToken = getXsrfToken();
+      if (xsrfToken) {
+        xhr.setRequestHeader('X-XSRF-TOKEN', xsrfToken);
+      }
       if (signal) {
         signal.addEventListener('abort', () => xhr.abort());
       }
@@ -337,3 +355,5 @@ export {
   ValidationError,
   type AppError,
 } from './errorHandler';
+
+export { getXsrfToken };

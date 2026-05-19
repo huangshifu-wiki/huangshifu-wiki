@@ -8,6 +8,7 @@
  * - 记录更新历史
  */
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
 import {
   scanMarkdownLinks,
@@ -72,7 +73,7 @@ export async function batchUpdateWikiLinks(
   const startTime = Date.now();
 
   // 构建查询条件
-  const where: any = {};
+  const where: Prisma.WikiPageWhereInput = {};
   
   if (specificSlugs && specificSlugs.length > 0) {
     where.slug = { in: specificSlugs };
@@ -214,7 +215,7 @@ export async function scanAllWikiLinks(
 }> {
   const { limit, specificSlugs } = options;
 
-  const where: any = {};
+  const where: Prisma.WikiPageWhereInput = {};
   if (specificSlugs && specificSlugs.length > 0) {
     where.slug = { in: specificSlugs };
   }
@@ -301,7 +302,7 @@ export async function previewLinkUpdate(
 > {
   const { limit = 10, specificSlugs } = options;
 
-  const where: any = {};
+  const where: Prisma.WikiPageWhereInput = {};
   if (specificSlugs && specificSlugs.length > 0) {
     where.slug = { in: specificSlugs };
   }

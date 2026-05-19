@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { Router, type Response, json } from 'express';
 import { requireAuth, requireActiveUser, requireAdmin, isAdminRole } from '../middleware/auth';
+import { validateBody, wikiCreateSchema, wikiUpdateSchema } from '../schemas';
 import {
   prisma,
   toWikiResponse,
@@ -35,6 +36,7 @@ import { getWikiUniqueConflictMessage, normalizeWikiTitleKey } from '../wiki/wik
 import { canViewWikiBranchContent } from '../wiki/wikiBranchAccess';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { validateWikiSlugParam } from '../middleware/validateWikiSlugParam';
+import { wikiWriteLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -85,6 +87,7 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
           title: true,
           titleKey: true,
           category: true,
+          content: true,
           tags: true,
           relations: true,
           eventDate: true,
@@ -148,7 +151,7 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
 
     res.json({
       pages: pages.map((p) => ({
-        ...toWikiListResponse(p),
+        ...toWikiResponse(p),
         favoritedByMe: favoritedWikiSet.has(p.slug),
         likedByMe: likedWikiSet.has(p.slug),
         dislikedByMe: dislikedWikiSet.has(p.slug),
@@ -191,6 +194,7 @@ mpWikiRouter.get('/', async (req: AuthenticatedRequest, res) => {
           slug: true,
           title: true,
           category: true,
+          content: true,
           tags: true,
           eventDate: true,
           updatedAt: true,
@@ -205,6 +209,7 @@ mpWikiRouter.get('/', async (req: AuthenticatedRequest, res) => {
         slug: page.slug,
         title: page.title,
         category: page.category,
+        content: page.content,
         tags: serializeTags(page.tags),
         eventDate: page.eventDate,
         favoritesCount: page.favoritesCount,
@@ -445,6 +450,12 @@ router.get('/:slug', validateWikiSlugParam, asyncHandler(async (req: Authenticat
           },
         ],
       },
+      select: {
+        slug: true,
+        title: true,
+        category: true,
+        updatedAt: true,
+      },
       take: 20,
       orderBy: { updatedAt: 'desc' },
     });
@@ -492,7 +503,12 @@ router.get('/:slug', validateWikiSlugParam, asyncHandler(async (req: Authenticat
         likedByMe,
         dislikedByMe,
       },
-      backlinks: backlinks.map(toWikiResponse),
+      backlinks: backlinks.map((bl) => ({
+        slug: bl.slug,
+        title: bl.title,
+        category: bl.category,
+        updatedAt: bl.updatedAt.toISOString(),
+      })),
       relations: relationBundle.relations,
       relationGraph: relationBundle.graph,
     };
@@ -509,7 +525,7 @@ router.get('/:slug', validateWikiSlugParam, asyncHandler(async (req: Authenticat
   }
 }));
 
-router.post('/:slug/like', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/:slug/like', wikiWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const slug = req.params.slug;
     const page = await prisma.wikiPage.findUnique({
@@ -568,7 +584,7 @@ router.post('/:slug/like', requireAuth, requireActiveUser, asyncHandler(async (r
   }
 }));
 
-router.delete('/:slug/like', requireAuth, requireActiveUser, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.delete('/:slug/like', wikiWriteLimiter, requireAuth, requireActiveUser, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const slug = req.params.slug;
 
@@ -601,7 +617,7 @@ router.delete('/:slug/like', requireAuth, requireActiveUser, validateWikiSlugPar
   }
 }));
 
-router.post('/:slug/dislike', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/:slug/dislike', wikiWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const slug = req.params.slug;
     const page = await prisma.wikiPage.findUnique({
@@ -660,7 +676,7 @@ router.post('/:slug/dislike', requireAuth, requireActiveUser, asyncHandler(async
   }
 }));
 
-router.delete('/:slug/dislike', requireAuth, requireActiveUser, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.delete('/:slug/dislike', wikiWriteLimiter, requireAuth, requireActiveUser, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const slug = req.params.slug;
 
@@ -693,7 +709,7 @@ router.delete('/:slug/dislike', requireAuth, requireActiveUser, validateWikiSlug
   }
 }));
 
-router.put('/:slug/pin', requireAdmin, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.put('/:slug/pin', wikiWriteLimiter, requireAdmin, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const slug = req.params.slug;
     const { isPinned } = req.body as { isPinned?: boolean };
@@ -747,6 +763,18 @@ router.get('/:slug/history', asyncHandler(async (req: AuthenticatedRequest, res)
       orderBy: { createdAt: 'desc' },
       take: Math.min(Math.max(Number(req.query.limit) || 50, 1), 200),
       skip: Math.max(Number(req.query.skip) || 0, 0),
+      select: {
+        id: true,
+        pageSlug: true,
+        branchId: true,
+        title: true,
+        slug: true,
+        category: true,
+        editorUid: true,
+        editorName: true,
+        isAutoSave: true,
+        createdAt: true,
+      },
     });
 
     res.json({
@@ -761,7 +789,45 @@ router.get('/:slug/history', asyncHandler(async (req: AuthenticatedRequest, res)
   }
 }));
 
-router.post('/:slug/submit', requireAuth, requireActiveUser, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.get('/:slug/revisions/:revisionId', asyncHandler(async (req: AuthenticatedRequest, res) => {
+  try {
+    const page = await prisma.wikiPage.findUnique({
+      where: { slug: req.params.slug },
+      select: { slug: true, status: true, lastEditorUid: true },
+    });
+
+    if (!page) {
+      res.status(404).json({ error: '页面未找到' });
+      return;
+    }
+
+    if (!canViewWikiPage(page, req.authUser)) {
+      res.status(404).json({ error: '页面未找到' });
+      return;
+    }
+
+    const revision = await prisma.wikiRevision.findUnique({
+      where: { id: req.params.revisionId },
+    });
+
+    if (!revision || revision.pageSlug !== req.params.slug) {
+      res.status(404).json({ error: '修订版本未找到' });
+      return;
+    }
+
+    res.json({
+      revision: {
+        ...revision,
+        createdAt: revision.createdAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Fetch wiki revision error');
+    res.status(500).json({ error: '获取修订版本失败' });
+  }
+}));
+
+router.post('/:slug/submit', wikiWriteLimiter, requireAuth, requireActiveUser, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const slug = req.params.slug;
     const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
@@ -842,7 +908,7 @@ router.post('/:slug/submit', requireAuth, requireActiveUser, validateWikiSlugPar
   }
 }));
 
-router.post('/', requireAuth, requireActiveUser, json({ limit: '2mb' }), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/', wikiWriteLimiter, requireAuth, requireActiveUser, json({ limit: '2mb' }), validateBody(wikiCreateSchema), asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const hasTagsInPayload = Object.prototype.hasOwnProperty.call(req.body, 'tags');
     const hasRelationsInPayload = Object.prototype.hasOwnProperty.call(req.body, 'relations');
@@ -972,7 +1038,7 @@ router.post('/', requireAuth, requireActiveUser, json({ limit: '2mb' }), asyncHa
   }
 }));
 
-router.put('/:slug', requireAuth, requireActiveUser, validateWikiSlugParam, json({ limit: '2mb' }), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.put('/:slug', wikiWriteLimiter, requireAuth, requireActiveUser, validateWikiSlugParam, json({ limit: '2mb' }), validateBody(wikiUpdateSchema), asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const hasTagsInPayload = Object.prototype.hasOwnProperty.call(req.body, 'tags');
     const hasRelationsInPayload = Object.prototype.hasOwnProperty.call(req.body, 'relations');
@@ -1074,7 +1140,7 @@ router.put('/:slug', requireAuth, requireActiveUser, validateWikiSlugParam, json
   }
 }));
 
-router.post('/:slug/branches', requireAuth, requireActiveUser, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/:slug/branches', wikiWriteLimiter, requireAuth, requireActiveUser, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const pageSlug = req.params.slug;
     const page = await prisma.wikiPage.findUnique({ where: { slug: pageSlug } });
@@ -1260,7 +1326,7 @@ router.get('/branches/:branchId/revisions', requireAuth, asyncHandler(async (req
   }
 }));
 
-router.post('/branches/:branchId/revisions', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/branches/:branchId/revisions', wikiWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const branch = await prisma.wikiBranch.findUnique({
       where: { id: req.params.branchId },
@@ -1361,7 +1427,7 @@ router.post('/branches/:branchId/revisions', requireAuth, requireActiveUser, asy
   }
 }));
 
-router.post('/branches/:branchId/pull-request', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/branches/:branchId/pull-request', wikiWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const branch = await prisma.wikiBranch.findUnique({
       where: { id: req.params.branchId },
@@ -1572,7 +1638,7 @@ router.get('/pull-requests/:prId/diff', requireAuth, asyncHandler(async (req: Au
   }
 }));
 
-router.post('/pull-requests/:prId/comments', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/pull-requests/:prId/comments', wikiWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const pr = await prisma.wikiPullRequest.findUnique({ where: { id: req.params.prId } });
     if (!pr) {
@@ -1611,7 +1677,7 @@ router.post('/pull-requests/:prId/comments', requireAuth, requireActiveUser, asy
   }
 }));
 
-router.post('/pull-requests/:prId/merge', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/pull-requests/:prId/merge', wikiWriteLimiter, requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const pr = await prisma.wikiPullRequest.findUnique({
       where: { id: req.params.prId },
@@ -1706,7 +1772,7 @@ router.post('/pull-requests/:prId/merge', requireAuth, requireAdmin, asyncHandle
           reviewedBy: req.authUser!.uid,
           reviewedAt: mergedAt,
           mergedAt,
-          conflictData: undefined as any,
+          conflictData: Prisma.JsonNull,
         },
       }),
       prisma.moderationLog.create({
@@ -1730,7 +1796,7 @@ router.post('/pull-requests/:prId/merge', requireAuth, requireAdmin, asyncHandle
   }
 }));
 
-router.post('/pull-requests/:prId/reject', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/pull-requests/:prId/reject', wikiWriteLimiter, requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const pr = await prisma.wikiPullRequest.findUnique({ where: { id: req.params.prId } });
     if (!pr) {
@@ -1776,7 +1842,7 @@ router.post('/pull-requests/:prId/reject', requireAuth, requireAdmin, asyncHandl
   }
 }));
 
-router.post('/branches/:branchId/resolve-conflict', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/branches/:branchId/resolve-conflict', wikiWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const branch = await prisma.wikiBranch.findUnique({ where: { id: req.params.branchId } });
     if (!branch) {
@@ -1862,7 +1928,7 @@ router.post('/branches/:branchId/resolve-conflict', requireAuth, requireActiveUs
       prisma.wikiPullRequest.update({
         where: { id: openPr.id },
         data: {
-          conflictData: undefined as any,
+          conflictData: Prisma.JsonNull,
           baseRevisionId: currentMainRevision?.id || null,
         },
       }),
@@ -1882,7 +1948,7 @@ router.post('/branches/:branchId/resolve-conflict', requireAuth, requireActiveUs
   }
 }));
 
-router.post('/:slug/rollback/:revisionId', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/:slug/rollback/:revisionId', wikiWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const revision = await prisma.wikiRevision.findUnique({
       where: { id: req.params.revisionId },
@@ -1947,7 +2013,7 @@ router.post('/:slug/rollback/:revisionId', requireAuth, requireActiveUser, async
   }
 }));
 
-router.post('/:slug/revisions', requireAuth, requireActiveUser, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/:slug/revisions', wikiWriteLimiter, requireAuth, requireActiveUser, validateWikiSlugParam, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { title, content } = req.body as {
       title?: string;

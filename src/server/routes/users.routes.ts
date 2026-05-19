@@ -3,6 +3,7 @@ import { UserRole as PrismaUserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { requireAuth, requireActiveUser, requireAdmin, requireSuperAdmin, userToApiUser, clearUserCache } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { profileLimiter } from '../middleware/rateLimiter';
 import {
   prisma,
   toUserResponse,
@@ -287,14 +288,33 @@ router.get('/me', requireAuth, requireActiveUser, asyncHandler(async (req: Authe
   }
 }));
 
-router.patch('/me', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.patch('/me', profileLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { displayName, bio, preferences, photoURL } = req.body;
     const updateData: Record<string, unknown> = {};
 
-    if (displayName !== undefined) updateData.displayName = displayName;
-    if (bio !== undefined) updateData.bio = bio;
-    if (preferences !== undefined) updateData.preferences = preferences;
+    if (displayName !== undefined) {
+      if (typeof displayName === 'string' && displayName.length > 50) {
+        res.status(400).json({ error: '昵称不能超过50个字符' });
+        return;
+      }
+      updateData.displayName = displayName;
+    }
+    if (bio !== undefined) {
+      if (typeof bio === 'string' && bio.length > 500) {
+        res.status(400).json({ error: '个人简介不能超过500个字符' });
+        return;
+      }
+      updateData.bio = bio;
+    }
+    if (preferences !== undefined) {
+      const prefSize = typeof preferences === 'string' ? preferences.length : JSON.stringify(preferences).length;
+      if (prefSize > 2048) {
+        res.status(400).json({ error: '偏好设置不能超过2KB' });
+        return;
+      }
+      updateData.preferences = preferences;
+    }
 
     // 头像处理：校验 URL，并在变更时同步历史评论 / 帖子作者头像快照
     let normalizedPhotoUrl: string | null | undefined;

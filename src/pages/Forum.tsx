@@ -9,6 +9,10 @@ import {
 } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
+import { customSchema } from "../lib/htmlSanitizer";
 import {
 	MessageSquare,
 	Heart,
@@ -718,7 +722,10 @@ const PostDetail = () => {
 				<div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
 					<div>
 						<div className="prose prose-lg prose-stone max-w-none font-body leading-relaxed text-[#2c2c2c]">
-							<ReactMarkdown>{post.content}</ReactMarkdown>
+							<ReactMarkdown
+							remarkPlugins={[remarkGfm]}
+							rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
+						>{post.content}</ReactMarkdown>
 						</div>
 
 						<section className="mt-12 pt-8 border-t border-[#e0dcd3]">

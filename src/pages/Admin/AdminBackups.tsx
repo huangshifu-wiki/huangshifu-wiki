@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Database, Download, Loader2, RefreshCw, Trash2, Upload, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { clsx } from 'clsx';
-import { apiDelete, apiGet, apiPost, apiUpload, apiDownload } from '../../lib/apiClient';
+import { apiGet, apiPost, apiUpload, getXsrfToken } from '../../lib/apiClient';
 import { useToast } from '../../components/Toast';
 
 type BackupFile = {
@@ -65,8 +65,20 @@ const AdminBackups = () => {
   };
 
   const handleDownload = async (filename: string) => {
+    if (!password.trim()) {
+      setDialog('delete');
+      return;
+    }
     try {
-      const response = await apiDownload(`/api/admin/backup/${encodeURIComponent(filename)}/download`);
+      const response = await fetch(`/api/admin/backup/${encodeURIComponent(filename)}/download`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(getXsrfToken() ? { 'X-XSRF-TOKEN': getXsrfToken()! } : {}),
+        },
+        body: JSON.stringify({ password }),
+      });
       if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || '下载失败');
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -105,7 +117,7 @@ const AdminBackups = () => {
     if (!password.trim()) { show('请输入备份密码', { variant: 'error' }); return; }
     setActionLoading('delete');
     try {
-      await apiDelete(`/api/admin/backup/${encodeURIComponent(deleteTarget)}?password=${encodeURIComponent(password)}`);
+      await apiPost(`/api/admin/backup/${encodeURIComponent(deleteTarget)}/delete`, { password });
       show('备份已删除');
       closeDialog();
       fetchBackups();

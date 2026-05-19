@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireAdmin, requireActiveUser, isAdminRole } from '../middleware/auth';
+import { postWriteLimiter } from '../middleware/rateLimiter';
+import { validateBody, postCreateSchema, postCommentSchema } from '../schemas';
 import {
   prisma,
   toPostResponse,
@@ -12,6 +14,7 @@ import {
   createNotification,
   parseContentStatus,
   parsePagination,
+  enhancedCache,
 } from '../utils';
 import type { AuthenticatedRequest, ContentStatus } from '../types';
 
@@ -29,6 +32,15 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
       ...(section !== 'all' ? { section } : {}),
       ...visibilityWhere,
     };
+
+    if (!req.authUser && sort === 'latest') {
+      const cacheKey = `post_list:${section}:${page}:${limit}`;
+      const cached = enhancedCache.get(cacheKey);
+      if (cached) {
+        res.json(cached);
+        return;
+      }
+    }
 
     let orderBy: Array<Record<string, 'asc' | 'desc'>>;
     if (sort === 'hot') {
@@ -49,7 +61,6 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
           id: true,
           title: true,
           section: true,
-          content: true,
           tags: true,
           locationCode: true,
           authorUid: true,
@@ -78,14 +89,16 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
         }))
         .filter((item) => Number.isFinite(item.hotScore));
 
-      await Promise.all(
-        updates.map((item) =>
-          prisma.post.update({
-            where: { id: item.id },
-            data: { hotScore: item.hotScore },
-          }),
-        ),
-      );
+      if (updates.length > 0) {
+        await prisma.$transaction(
+          updates.map((item) =>
+            prisma.post.update({
+              where: { id: item.id },
+              data: { hotScore: item.hotScore },
+            }),
+          ),
+        );
+      }
     }
 
     const likedPostSet = new Set<string>();
@@ -112,21 +125,52 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
       favoritedPosts.forEach((item) => favoritedPostSet.add(item.targetId));
     }
 
-    res.json({
-      posts: posts.map((post) => {
-        const { content: _, ...rest } = toPostResponse(post)
-        return {
-          ...rest,
-          excerpt: post.content?.slice(0, 200) || '',
-          likedByMe: likedPostSet.has(post.id),
-          favoritedByMe: favoritedPostSet.has(post.id),
-        }
-      }),
+    let excerptMap = new Map<string, string>();
+    if (posts.length) {
+      const excerpts = await prisma.$queryRaw<Array<{ id: string; excerpt: string }>>`
+        SELECT id, LEFT(content, 200) as excerpt FROM "Post" WHERE id = ANY(${posts.map((p) => p.id)}::uuid[])
+      `;
+      for (const e of excerpts) {
+        excerptMap.set(e.id, e.excerpt || '');
+      }
+    }
+
+    const result = {
+      posts: posts.map((post) => ({
+        id: post.id,
+        title: post.title,
+        section: post.section,
+        authorUid: post.authorUid,
+        authorName: post.author?.displayName || null,
+        status: post.status,
+        hotScore: post.hotScore ?? 0,
+        viewCount: post.viewCount ?? 0,
+        likesCount: post.likesCount,
+        dislikesCount: post.dislikesCount,
+        commentsCount: post.commentsCount,
+        isPinned: post.isPinned,
+        musicDocId: post.musicDocId || null,
+        albumDocId: post.albumDocId || null,
+        tags: post.tags,
+        locationCode: post.locationCode || null,
+        createdAt: post.createdAt.toISOString(),
+        updatedAt: post.updatedAt.toISOString(),
+        excerpt: excerptMap.get(post.id) || '',
+        likedByMe: likedPostSet.has(post.id),
+        favoritedByMe: favoritedPostSet.has(post.id),
+      })),
       total,
       page,
       limit,
       hasMore: skip + posts.length < total,
-    });
+    };
+
+    if (!req.authUser && sort === 'latest') {
+      const cacheKey = `post_list:${section}:${page}:${limit}`;
+      enhancedCache.set(cacheKey, result, 60);
+    }
+
+    res.json(result);
   } catch (error) {
     console.error('Fetch posts error:', error);
     res.status(500).json({ error: '获取帖子失败' });
@@ -134,7 +178,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
 });
 
 // Create post
-router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.post('/', postWriteLimiter, requireAuth, requireActiveUser, validateBody(postCreateSchema), async (req: AuthenticatedRequest, res) => {
   try {
     const { title, section, content, tags, status, musicDocId, albumDocId, locationCode, locationDetail } = req.body as {
       title?: string;
@@ -213,6 +257,7 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
     }
 
     res.status(201).json({ post: toPostResponse(post) });
+    enhancedCache.invalidateByPrefix('post_list:');
   } catch (error) {
     console.error('Create post error:', error);
     res.status(500).json({ error: '发布帖子失败' });
@@ -232,85 +277,72 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
       return;
     }
 
-    await prisma.$executeRaw`UPDATE "Post" SET "viewCount" = "viewCount" + 1 WHERE "id" = ${req.params.id}`;
-    const freshPost = await prisma.post.findUnique({
-      where: { id: req.params.id },
-      include: { author: { select: { displayName: true } } },
-    });
-    if (!freshPost) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
-    }
+    const hotScore = calculatePostHotScore(post);
 
-    const hotScore = calculatePostHotScore(freshPost);
-    await prisma.post.update({
-      where: { id: req.params.id },
-      data: { hotScore },
-    });
-
-    if (req.authUser) {
-      const existingHistory = await prisma.browsingHistory.findFirst({
-        where: {
-          userUid: req.authUser.uid,
-          targetType: 'post' as const,
-          targetId: req.params.id,
-        },
-      });
-
-      if (existingHistory) {
-        await prisma.browsingHistory.update({
-          where: { id: existingHistory.id },
-          data: { createdAt: new Date() },
-        });
-      } else {
-        await prisma.browsingHistory.create({
-          data: {
-            userUid: req.authUser.uid,
-            targetType: 'post' as const,
-            targetId: req.params.id,
-          },
-        });
-      }
-    }
-
-    const comments = await prisma.postComment.findMany({
-      where: { postId: req.params.id },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        author: {
-          select: { displayName: true, photoURL: true },
-        },
-      },
-    });
-
-    const [likedByMe, favoritedByMe, dislikedByMe] = req.authUser
-      ? await Promise.all([
-          prisma.postLike.count({
+    const browsingPromise = req.authUser
+      ? (async () => {
+          const existing = await prisma.browsingHistory.findFirst({
             where: {
-              postId: req.params.id,
-              userUid: req.authUser.uid,
-            },
-          }).then((count) => count > 0),
-          prisma.favorite.count({
-            where: {
+              userUid: req.authUser!.uid,
               targetType: 'post',
               targetId: req.params.id,
-              userUid: req.authUser.uid,
             },
-          }).then((count) => count > 0),
-          prisma.postDislike.count({
-            where: {
-              postId: req.params.id,
-              userUid: req.authUser.uid,
-            },
-          }).then((count) => count > 0),
-        ])
-      : [false, false, false];
+          });
+          if (existing) {
+            await prisma.browsingHistory.update({
+              where: { id: existing.id },
+              data: { createdAt: new Date() },
+            });
+          } else {
+            await prisma.browsingHistory.create({
+              data: {
+                userUid: req.authUser!.uid,
+                targetType: 'post',
+                targetId: req.params.id,
+              },
+            });
+          }
+        })()
+      : Promise.resolve();
+
+    await Promise.all([
+      prisma.post.update({
+        where: { id: req.params.id },
+        data: { viewCount: { increment: 1 }, hotScore },
+      }),
+      browsingPromise,
+    ]);
+
+    const [comments, likedByMe, favoritedByMe, dislikedByMe] = await Promise.all([
+      prisma.postComment.findMany({
+        where: { postId: req.params.id },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          author: {
+            select: { displayName: true, photoURL: true },
+          },
+        },
+      }),
+      ...(req.authUser
+        ? [
+            prisma.postLike.count({
+              where: { postId: req.params.id, userUid: req.authUser.uid },
+            }).then((c) => c > 0),
+            prisma.favorite.count({
+              where: { targetType: 'post', targetId: req.params.id, userUid: req.authUser.uid },
+            }).then((c) => c > 0),
+            prisma.postDislike.count({
+              where: { postId: req.params.id, userUid: req.authUser.uid },
+            }).then((c) => c > 0),
+          ]
+        : [Promise.resolve(false), Promise.resolve(false), Promise.resolve(false)]),
+    ]);
 
     res.json({
       post: {
         ...toPostResponse({
-          ...freshPost,
+          ...post,
+          viewCount: post.viewCount + 1,
           hotScore,
         }),
         likedByMe,
@@ -326,7 +358,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
 });
 
 // Update post
-router.put('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.put('/:id', postWriteLimiter, requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
     const { title, section, content, tags, status, musicDocId, albumDocId, locationCode, locationDetail } = req.body as {
       title?: string;
@@ -434,6 +466,7 @@ router.put('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRequ
     }
 
     res.json({ post: toPostResponse(post) });
+    enhancedCache.invalidateByPrefix('post_list:');
   } catch (error) {
     console.error('Edit post error:', error);
     res.status(500).json({ error: '编辑帖子失败' });
@@ -465,6 +498,7 @@ router.delete('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedR
     });
 
     res.json({ success: true });
+    enhancedCache.invalidateByPrefix('post_list:');
   } catch (error) {
     console.error('Delete post error:', error);
     res.status(500).json({ error: '删除帖子失败' });
@@ -514,7 +548,7 @@ router.get('/:postId/comments', async (req: AuthenticatedRequest, res) => {
   }
 });
 
-router.post('/:postId/comments', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.post('/:postId/comments', postWriteLimiter, requireAuth, requireActiveUser, validateBody(postCommentSchema), async (req: AuthenticatedRequest, res) => {
   try {
     const { content, parentId } = req.body as {
       content?: string;

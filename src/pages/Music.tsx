@@ -6,7 +6,7 @@ import { useUserPreferences } from '../context/UserPreferencesContext';
 import { useMusic } from '../context/MusicContext';
 import { Search, Plus, List, Sparkles, X, Heart, MessageSquare, Link2 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { MusicPlayer } from '../components/MusicPlayer';
 import { MusicImportModal } from '../components/MusicImportModal';
 import { AlbumEditModal } from '../components/AlbumEditModal';
@@ -179,7 +179,10 @@ const Music = () => {
   const fetchAlbums = async () => {
     setLoadingAlbums(true);
     try {
-      const data = await apiGet<{ albums: AlbumItem[] }>('/api/albums');
+      const data = await apiGet<{ albums: AlbumItem[]; total: number; hasMore?: boolean }>('/api/albums', {
+        limit: 100,
+        page: 1,
+      });
       setAlbums(data.albums || []);
     } catch (error) {
       console.error('Fetch albums error:', error);

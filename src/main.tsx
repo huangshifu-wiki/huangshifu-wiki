@@ -20,7 +20,9 @@ if (globalThis.crypto && typeof globalThis.crypto.randomUUID !== 'function') {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js').catch((e) => {
+      console.warn('[SW] Service worker registration failed:', String(e))
+    });
   });
 }
 

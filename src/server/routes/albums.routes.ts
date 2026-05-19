@@ -15,6 +15,7 @@ import {
   parseInteger,
   parseBoolean,
   applyAlbumTracksToRelations,
+  enhancedCache,
 } from '../utils';
 import type { AuthenticatedRequest } from '../types';
 import type { AlbumCover } from '@prisma/client';
@@ -26,44 +27,96 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
     const platform = parseMusicPlatform(req.query.platform);
     const resourceType = parseMusicCollectionType(req.query.resourceType);
+    const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 });
+    const page = parseInteger(req.query.page, 1, { min: 1 });
+    const skip = (page - 1) * limit;
 
-    const albums = await prisma.album.findMany({
-      where: {
-        ...(platform ? { platform } : {}),
-        ...(resourceType ? { resourceType } : {}),
-      },
-      include: {
-        covers: {
-          orderBy: { sortOrder: 'asc' },
-        },
-        songRelations: {
-          include: {
-            song: {
-              select: {
-                docId: true,
-                id: true,
-                title: true,
-                artist: true,
-                cover: true,
-              },
+    const where = {
+      ...(platform ? { platform } : {}),
+      ...(resourceType ? { resourceType } : {}),
+    };
+
+    if (!req.authUser) {
+      const cacheKey = `album_list:${platform || 'all'}:${resourceType || 'all'}:${page}:${limit}`;
+      const cached = enhancedCache.get(cacheKey);
+      if (cached) {
+        res.json(cached);
+        return;
+      }
+    }
+
+    const [albums, total] = await Promise.all([
+      prisma.album.findMany({
+        where,
+        select: {
+          docId: true,
+          id: true,
+          resourceType: true,
+          platform: true,
+          sourceId: true,
+          title: true,
+          artist: true,
+          cover: true,
+          description: true,
+          platformUrl: true,
+          defaultCoverSource: true,
+          createdAt: true,
+          updatedAt: true,
+          covers: {
+            orderBy: { sortOrder: 'asc' },
+            select: {
+              id: true,
+              publicUrl: true,
+              isDefault: true,
+              sortOrder: true,
             },
           },
-          orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+          _count: {
+            select: { songRelations: true },
+          },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    res.json({
-      albums: albums.map((album) => {
-        const response = toAlbumResponse(album);
-        return {
-          ...response,
-          tracks: response.tracks,
-          trackCount: response.songs.length,
-        };
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip,
       }),
-    });
+      prisma.album.count({ where }),
+    ]);
+
+    const result = {
+      albums: albums.map((album) => ({
+        docId: album.docId,
+        id: album.id,
+        resourceType: album.resourceType,
+        platform: album.platform,
+        sourceId: album.sourceId,
+        title: album.title,
+        artist: album.artist,
+        cover: album.cover,
+        description: album.description,
+        platformUrl: album.platformUrl,
+        defaultCoverSource: album.defaultCoverSource,
+        covers: album.covers.map((cover) => ({
+          id: cover.id,
+          url: cover.publicUrl,
+          isDefault: cover.isDefault,
+          sortOrder: cover.sortOrder,
+        })),
+        trackCount: album._count.songRelations,
+        createdAt: album.createdAt.toISOString(),
+        updatedAt: album.updatedAt.toISOString(),
+      })),
+      total,
+      page,
+      limit,
+      hasMore: page * limit < total,
+    };
+
+    if (!req.authUser) {
+      const cacheKey = `album_list:${platform || 'all'}:${resourceType || 'all'}:${page}:${limit}`;
+      enhancedCache.set(cacheKey, result, 120);
+    }
+
+    res.json(result);
   } catch (error) {
     console.error('Fetch albums error:', error);
     res.status(500).json({ error: '获取专辑失败' });
@@ -310,6 +363,7 @@ router.post('/', requireAdmin, async (req, res) => {
     res.status(201).json({
       album: toAlbumResponse(created),
     });
+    enhancedCache.invalidateByPrefix('album_list:');
   } catch (error) {
     console.error('Create album error:', error);
     res.status(500).json({ error: '创建专辑失败' });
@@ -375,6 +429,7 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
     });
 
     res.json({ album: toAlbumResponse(updated) });
+    enhancedCache.invalidateByPrefix('album_list:');
   } catch (error) {
     console.error('Update album error:', error);
     res.status(500).json({ error: '更新专辑失败' });
@@ -461,6 +516,7 @@ router.delete('/:docId', requireAdmin, async (req, res) => {
     }
 
     res.json({ success: true });
+    enhancedCache.invalidateByPrefix('album_list:');
   } catch (error) {
     console.error('Delete album error:', error);
     res.status(500).json({ error: '删除专辑失败' });

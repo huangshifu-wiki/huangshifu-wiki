@@ -9,7 +9,7 @@ import {
 	Shield,
 	MessageCircle,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../context/AuthContext";
 import { useI18n } from "../../lib/i18n";
 import { DEFAULT_AVATAR, handleAvatarError } from "../../lib/defaultAvatar";
