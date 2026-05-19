@@ -252,6 +252,8 @@ registerMusicRoutes(app);
 registerAlbumsRoutes(app);
 registerSearchRoutes(app);
 registerEmbeddingsRoutes(app);
+registerAdminSystemRoutes(app);
+registerAdminVariantsRoutes(app);
 registerAdminRoutes(app);
 registerNotificationsRoutes(app);
 registerFavoritesRoutes(app);
@@ -263,9 +265,7 @@ registerS3Routes(app);
 registerMusicSongRoutes(app);
 registerUploadRoutes(app);
 
-// v2.1 增强功能路由
-registerAdminSystemRoutes(app);
-registerAdminVariantsRoutes(app);
+
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof multer.MulterError) {
