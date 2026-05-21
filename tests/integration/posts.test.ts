@@ -20,6 +20,31 @@ import { describe, beforeEach, afterEach, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server';
 import { prisma, createTestUser, createTestToken, createTestPost } from './setup';
+import type { CreateTestPostInput } from './setup';
+
+async function cleanupPostTestData() {
+  await prisma.user.deleteMany({
+    where: {
+      email: {
+        startsWith: 'test_',
+      },
+    },
+  });
+
+  // Defensive cleanup for legacy dirty test DBs that still contain orphaned rows
+  // from older versions of this suite.
+  await prisma.post.deleteMany({
+    where: {
+      OR: [
+        { title: { startsWith: 'Test' } },
+        { title: { startsWith: 'Pagination Test' } },
+        { title: { startsWith: 'Sort Test' } },
+        { title: { startsWith: 'New Test Post ' } },
+        { title: { startsWith: 'Long Content Test ' } },
+      ],
+    },
+  });
+}
 
 describe('Posts API - 文章接口测试', () => {
   let testUser: Awaited<ReturnType<typeof createTestUser>>;
@@ -27,25 +52,18 @@ describe('Posts API - 文章接口测试', () => {
   let userToken: string;
   let adminToken: string;
 
+  async function createCurrentUserPost(overrides: Omit<CreateTestPostInput, 'authorUid'>) {
+    return createTestPost({
+      ...overrides,
+      authorUid: testUser.user.uid,
+    });
+  }
+
   /**
    * 每个测试套件前准备测试数据
    */
   beforeEach(async () => {
-    // 清理现有数据
-    await prisma.post.deleteMany({
-      where: {
-        title: {
-          startsWith: 'Test',
-        },
-      },
-    });
-    await prisma.user.deleteMany({
-      where: {
-        email: {
-          startsWith: 'test_',
-        },
-      },
-    });
+    await cleanupPostTestData();
 
     // 创建测试用户
     testUser = await createTestUser({ role: 'user' });
@@ -60,14 +78,7 @@ describe('Posts API - 文章接口测试', () => {
    * 清理测试数据
    */
   afterEach(async () => {
-    // 清理创建的帖子
-    await prisma.post.deleteMany({
-      where: {
-        title: {
-          startsWith: 'Test',
-        },
-      },
-    });
+    await cleanupPostTestData();
   });
 
   // ============================================================================
@@ -90,6 +101,7 @@ describe('Posts API - 文章接口测试', () => {
       expect(response.body).toHaveProperty('total', 0);
       expect(response.body).toHaveProperty('page', 1);
       expect(response.body).toHaveProperty('limit', 20);
+      expect(response.body).toHaveProperty('totalPages', 1);
       expect(response.body).toHaveProperty('hasMore', false);
     });
 
@@ -129,13 +141,13 @@ describe('Posts API - 文章接口测试', () => {
       expect(post).toHaveProperty('title', post1.title);
       expect(post).toHaveProperty('section', post1.section);
       expect(post).toHaveProperty('status');
-      expect(post).toHaveProperty('author');
-      expect(post.author).toHaveProperty('displayName');
+      expect(post).toHaveProperty('authorName', testUser.user.displayName);
       expect(post).toHaveProperty('createdAt');
       expect(post).toHaveProperty('updatedAt');
       expect(post).toHaveProperty('viewCount');
       expect(post).toHaveProperty('likesCount');
       expect(post).toHaveProperty('commentsCount');
+      expect(post).toHaveProperty('excerpt', 'Content of post 1');
 
       // 验证总数
       expect(response.body.total).toBeGreaterThanOrEqual(2);
@@ -164,6 +176,9 @@ describe('Posts API - 文章接口测试', () => {
       expect(response1.body.posts.length).toBe(10);
       expect(response1.body.page).toBe(1);
       expect(response1.body.limit).toBe(10);
+      expect(response1.body.totalPages).toBe(
+        Math.max(1, Math.ceil(response1.body.total / response1.body.limit)),
+      );
       expect(response1.body.hasMore).toBe(true);
 
       // 请求第二页
@@ -174,6 +189,7 @@ describe('Posts API - 文章接口测试', () => {
       expect(response2.status).toBe(200);
       expect(response2.body.posts.length).toBe(10);
       expect(response2.body.page).toBe(2);
+      expect(response2.body.totalPages).toBe(response1.body.totalPages);
 
       // 请求第三页（剩余 5 条）
       const response3 = await request(app)
@@ -181,6 +197,7 @@ describe('Posts API - 文章接口测试', () => {
         .query({ page: 3, limit: 10 });
 
       expect(response3.status).toBe(200);
+      expect(response3.body.totalPages).toBe(response1.body.totalPages);
       expect(response3.body.hasMore).toBe(false);
     });
 
@@ -190,13 +207,13 @@ describe('Posts API - 文章接口测试', () => {
      */
     it('应该支持按版块筛选', async () => {
       // 创建不同版块的文章
-      await createTestPost({
+      await createCurrentUserPost({
         title: 'General Section Post',
         section: 'general',
         status: 'published',
       });
 
-      await createTestPost({
+      await createCurrentUserPost({
         title: 'Discussion Section Post',
         section: 'discussion',
         status: 'published',
@@ -388,7 +405,7 @@ describe('Posts API - 文章接口测试', () => {
      */
     it('每次访问应该增加浏览次数', async () => {
       // 创建测试文章
-      const post = await createTestPost({
+      const post = await createCurrentUserPost({
         title: 'View Count Test Post',
         status: 'published',
       });
@@ -448,7 +465,7 @@ describe('Posts API - 文章接口测试', () => {
      */
     it('未认证用户不能查看草稿状态的文章', async () => {
       // 创建草稿文章
-      const draftPost = await createTestPost({
+      const draftPost = await createCurrentUserPost({
         title: 'Draft Post For Auth Test',
         status: 'draft',
       });
@@ -488,7 +505,7 @@ describe('Posts API - 文章接口测试', () => {
      */
     it('评论应该按时间升序排列', async () => {
       // 创建测试文章
-      const post = await createTestPost({
+      const post = await createCurrentUserPost({
         title: 'Comment Order Test',
         status: 'published',
       });
@@ -774,7 +791,7 @@ describe('Posts API - 文章接口测试', () => {
      * 预期结果：返回 401 认证错误
      */
     it('未认证用户尝试更新应该返回 401 错误', async () => {
-      const post = await createTestPost({
+      const post = await createCurrentUserPost({
         title: 'Unauth Update Test',
         status: 'published',
       });
@@ -889,7 +906,7 @@ describe('Posts API - 文章接口测试', () => {
      * 预期结果：返回 401 认证错误
      */
     it('未认证用户尝试删除应该返回 401 错误', async () => {
-      const post = await createTestPost({
+      const post = await createCurrentUserPost({
         title: 'Unauth Delete Test',
         status: 'published',
       });

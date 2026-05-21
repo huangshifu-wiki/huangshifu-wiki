@@ -157,27 +157,29 @@ export async function createTestToken(userUid: string, role: string = 'user'): P
 /**
  * 创建测试 Wiki 页面辅助函数
  */
-export async function createTestWikiPage(overrides?: {
+export interface CreateTestWikiPageInput {
   slug?: string;
   title?: string;
   category?: string;
   content?: string;
   status?: 'draft' | 'pending' | 'published' | 'rejected';
-  authorUid?: string;
-}) {
-  const slug = overrides?.slug || `test-wiki-${Date.now()}`;
-  const title = overrides?.title || `Test Wiki Page ${Date.now()}`;
+  authorUid: string;
+}
+
+export async function createTestWikiPage(input: CreateTestWikiPageInput) {
+  const slug = input.slug || `test-wiki-${Date.now()}`;
+  const title = input.title || `Test Wiki Page ${Date.now()}`;
 
   const page = await prisma.wikiPage.create({
     data: {
       slug,
       title,
       titleKey: title.toLowerCase(),
-      category: overrides?.category || 'general',
-      content: overrides?.content || '# Test Content\n\nThis is a test wiki page.',
+      category: input.category || 'general',
+      content: input.content || '# Test Content\n\nThis is a test wiki page.',
       tags: ['test'],
-      status: overrides?.status || 'published',
-      lastEditorUid: overrides?.authorUid || 'test-user-uid',
+      status: input.status || 'published',
+      lastEditorUid: input.authorUid,
     },
   });
 
@@ -187,23 +189,25 @@ export async function createTestWikiPage(overrides?: {
 /**
  * 创建测试帖子辅助函数
  */
-export async function createTestPost(overrides?: {
+export interface CreateTestPostInput {
   title?: string;
   section?: string;
   content?: string;
   status?: 'draft' | 'pending' | 'published' | 'rejected';
-  authorUid?: string;
-}) {
-  const title = overrides?.title || `Test Post ${Date.now()}`;
+  authorUid: string;
+}
+
+export async function createTestPost(input: CreateTestPostInput) {
+  const title = input.title || `Test Post ${Date.now()}`;
 
   const post = await prisma.post.create({
     data: {
       title,
-      section: overrides?.section || 'general',
-      content: overrides?.content || 'This is a test post content.',
+      section: input.section || 'general',
+      content: input.content || 'This is a test post content.',
       tags: ['test'],
-      status: overrides?.status || 'published',
-      authorUid: overrides?.authorUid || 'test-user-uid',
+      status: input.status || 'published',
+      authorUid: input.authorUid,
     },
   });
 

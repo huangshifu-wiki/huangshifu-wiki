@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { requireAuth, requireAdmin, requireActiveUser, isAdminRole } from '../middleware/auth';
 import { postWriteLimiter } from '../middleware/rateLimiter';
@@ -125,13 +126,15 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
       favoritedPosts.forEach((item) => favoritedPostSet.add(item.targetId));
     }
 
-    let excerptMap = new Map<string, string>();
+    const excerptMap = new Map<string, string>()
     if (posts.length) {
       const excerpts = await prisma.$queryRaw<Array<{ id: string; excerpt: string }>>`
-        SELECT id, LEFT(content, 200) as excerpt FROM "Post" WHERE id = ANY(${posts.map((p) => p.id)}::uuid[])
-      `;
-      for (const e of excerpts) {
-        excerptMap.set(e.id, e.excerpt || '');
+        SELECT id, LEFT(content, 200) AS excerpt
+        FROM "Post"
+        WHERE id IN (${Prisma.join(posts.map((post) => post.id))})
+      `
+      for (const excerpt of excerpts) {
+        excerptMap.set(excerpt.id, excerpt.excerpt || '')
       }
     }
 
@@ -162,6 +165,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
       total,
       page,
       limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
       hasMore: skip + posts.length < total,
     };
 

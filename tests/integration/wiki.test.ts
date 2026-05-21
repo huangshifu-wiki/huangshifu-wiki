@@ -18,12 +18,22 @@ import { describe, beforeEach, afterEach, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server';
 import { prisma, createTestUser, createTestToken, createTestWikiPage } from './setup';
+import type { CreateTestWikiPageInput } from './setup';
 
 describe('Wiki API - 百科接口测试', () => {
   let testUser: Awaited<ReturnType<typeof createTestUser>>;
   let adminUser: Awaited<ReturnType<typeof createTestUser>>;
   let userToken: string;
   let adminToken: string;
+
+  async function createCurrentUserWikiPage(
+    overrides: Omit<CreateTestWikiPageInput, 'authorUid'>,
+  ) {
+    return createTestWikiPage({
+      ...overrides,
+      authorUid: testUser.user.uid,
+    });
+  }
 
   /**
    * 每个测试套件前准备测试数据
@@ -141,7 +151,7 @@ describe('Wiki API - 百科接口测试', () => {
     it('应该支持分页参数', async () => {
       // 创建多个测试页面
       for (let i = 0; i < 25; i++) {
-        await createTestWikiPage({
+        await createCurrentUserWikiPage({
           slug: `test-pagination-${i}`,
           title: `Pagination Test ${i}`,
           status: 'published',
@@ -183,21 +193,21 @@ describe('Wiki API - 百科接口测试', () => {
      */
     it('应该支持按分类筛选', async () => {
       // 创建不同分类的页面
-      await createTestWikiPage({
+      await createCurrentUserWikiPage({
         slug: 'test-cat-general',
         title: 'General Page',
         category: 'general',
         status: 'published',
       });
 
-      await createTestWikiPage({
+      await createCurrentUserWikiPage({
         slug: 'test-cat-music',
         title: 'Music Page',
         category: 'music',
         status: 'published',
       });
 
-      await createTestWikiPage({
+      await createCurrentUserWikiPage({
         slug: 'test-cat-general-2',
         title: 'Another General Page',
         category: 'general',
@@ -271,7 +281,7 @@ describe('Wiki API - 百科接口测试', () => {
     it('应该正确处理 limit 参数边界值', async () => {
       // 创建一些测试数据
       for (let i = 0; i < 5; i++) {
-        await createTestWikiPage({
+        await createCurrentUserWikiPage({
           slug: `test-limit-${i}`,
           title: `Limit Test ${i}`,
           status: 'published',
@@ -327,7 +337,7 @@ describe('Wiki API - 百科接口测试', () => {
      */
     it('应该返回存在的 Wiki 页面详情', async () => {
       // 创建测试页面
-      const wikiPage = await createTestWikiPage({
+      const wikiPage = await createCurrentUserWikiPage({
         slug: 'test-detail-page',
         title: 'Detail Test Page',
         content: '# Hello World\n\nThis is **detailed** content.',
@@ -371,7 +381,7 @@ describe('Wiki API - 百科接口测试', () => {
      */
     it('每次访问应该增加浏览次数', async () => {
       // 创建测试页面
-      const wikiPage = await createTestWikiPage({
+      const wikiPage = await createCurrentUserWikiPage({
         slug: 'test-view-count',
         title: 'View Count Test',
         status: 'published',
@@ -426,7 +436,7 @@ describe('Wiki API - 百科接口测试', () => {
      */
     it('未认证用户不能查看草稿状态的页面', async () => {
       // 创建草稿页面
-      const draftPage = await createTestWikiPage({
+      const draftPage = await createCurrentUserWikiPage({
         slug: 'test-draft-page',
         title: 'Draft Page',
         status: 'draft',
@@ -470,7 +480,7 @@ describe('Wiki API - 百科接口测试', () => {
       // 测试包含连字符、数字等的 slug
       const specialSlug = 'test-special-123-with-dashes';
 
-      await createTestWikiPage({
+      await createCurrentUserWikiPage({
         slug: specialSlug,
         title: 'Special Slug Test',
         status: 'published',
@@ -574,7 +584,7 @@ describe('Wiki API - 百科接口测试', () => {
      */
     it('使用重复的 slug 创建页面应该返回错误', async () => {
       // 先创建一个页面
-      await createTestWikiPage({
+      await createCurrentUserWikiPage({
         slug: 'test-duplicate-slug',
         title: 'Original Page',
         status: 'published',
@@ -715,7 +725,7 @@ describe('Wiki API - 百科接口测试', () => {
      * 预期结果：返回 401 认证错误
      */
     it('未认证用户尝试更新应该返回 401 错误', async () => {
-      const wikiPage = await createTestWikiPage({
+      const wikiPage = await createCurrentUserWikiPage({
         slug: 'test-unauth-update',
         title: 'Unauth Update Test',
         status: 'published',

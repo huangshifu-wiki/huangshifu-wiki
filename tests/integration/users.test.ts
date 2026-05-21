@@ -19,6 +19,7 @@ import { describe, beforeEach, afterEach, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server';
 import { prisma, createTestUser, createTestToken, createTestPost } from './setup';
+import type { CreateTestPostInput } from './setup';
 
 describe('Users API - 用户接口测试', () => {
   let testUser: Awaited<ReturnType<typeof createTestUser>>;
@@ -27,6 +28,13 @@ describe('Users API - 用户接口测试', () => {
   let userToken: string;
   let adminToken: string;
   let superAdminToken: string;
+
+  async function createCurrentUserPost(overrides: Omit<CreateTestPostInput, 'authorUid'>) {
+    return createTestPost({
+      ...overrides,
+      authorUid: testUser.user.uid,
+    });
+  }
 
   /**
    * 每个测试套件前准备测试数据
@@ -543,7 +551,7 @@ describe('Users API - 用户接口测试', () => {
      */
     it('应该返回指定用户的评论列表', async () => {
       // 创建文章和评论
-      const post = await createTestPost({
+      const post = await createCurrentUserPost({
         title: 'Post With Comments',
         status: 'published',
       });
@@ -618,7 +626,7 @@ describe('Users API - 用户接口测试', () => {
      * 预期结果：正确返回指定页码的评论数据
      */
     it('应该支持分页参数', async () => {
-      const post = await createTestPost({
+      const post = await createCurrentUserPost({
         title: 'Pagination Comments Test',
         status: 'published',
       });
@@ -658,7 +666,7 @@ describe('Users API - 用户接口测试', () => {
      * 预期结果：评论应按时间降序排列（最新的在前）
      */
     it('评论应该按时间降序排列', async () => {
-      const post = await createTestPost({
+      const post = await createCurrentUserPost({
         title: 'Comment Order Test',
         status: 'published',
       });
