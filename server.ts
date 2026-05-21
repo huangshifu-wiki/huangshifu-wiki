@@ -92,6 +92,49 @@ function parseCorsOrigins(envValue: string): string[] {
     .filter(Boolean);
 }
 
+function isDevLocalOrPrivateOrigin(origin: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      return false;
+    }
+
+    const normalizedHostname = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    if (normalizedHostname === 'localhost' || normalizedHostname === '::1') {
+      return true;
+    }
+
+    if (net.isIP(normalizedHostname) === 4) {
+      if (
+        normalizedHostname.startsWith('127.') ||
+        normalizedHostname.startsWith('10.') ||
+        normalizedHostname.startsWith('192.168.')
+      ) {
+        return true;
+      }
+
+      const ipv4_172_match = normalizedHostname.match(/^172\.(\d{1,3})\./);
+      if (ipv4_172_match) {
+        const secondOctet = Number(ipv4_172_match[1]);
+        if (secondOctet >= 16 && secondOctet <= 31) {
+          return true;
+        }
+      }
+    }
+
+    if (
+      net.isIP(normalizedHostname) === 6 &&
+      (normalizedHostname.startsWith('fc') || normalizedHostname.startsWith('fd'))
+    ) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 const CORS_MAX_AGE = 86400;
 
 async function findAvailablePort(preferredPort: number, host = '0.0.0.0'): Promise<number> {
@@ -148,20 +191,17 @@ if (CORS_ORIGIN) {
   }));
 } else {
   const devOriginsEnv = process.env.DEV_CORS_ORIGINS;
-  const allowedOrigins = devOriginsEnv
-    ? parseCorsOrigins(devOriginsEnv)
-    : [
-        'http://localhost:5173',
-        'http://localhost:4173',
-        'http://127.0.0.1:5173',
-        'http://127.0.0.1:4173',
-      ];
+  const allowedOrigins = devOriginsEnv ? parseCorsOrigins(devOriginsEnv) : [];
   app.use(cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        (!devOriginsEnv && isDevLocalOrPrivateOrigin(origin))
+      ) {
         callback(null, true);
       } else {
-        callback(new Error('CORS origin not allowed'));
+        callback(null, false);
       }
     },
     credentials: true,
