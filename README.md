@@ -29,7 +29,6 @@ npm install
 复制 `.env.example` 到 `.env.local` 并填写：
 
 ```env
-VITE_GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
 DATABASE_URL="postgresql://postgres:password@127.0.0.1:5432/huangshifu_wiki"
 JWT_SECRET="replace_with_random_long_secret"
 SEED_SUPER_ADMIN_EMAIL="admin@example.com"

@@ -13,7 +13,6 @@
 | 向量检索  | Qdrant + ChineseCLIP（`OFA-Sys/chinese-clip-vit-base-patch16`） |
 | 进程守护  | PM2                                             |
 | 反向代理  | Nginx                                           |
-| AI 集成 | Gemini（`@google/genai`）                         |
 | ORM   | Prisma（SQLite 用于本地开发，PostgreSQL 用于生产）           |
 
 > 数据访问说明：当前前端业务页面（Wiki/Forum/Gallery/Admin/Music）统一走 REST API（`/api/*`）+ Prisma，`src/lib/firebaseCompat/` 已移除。
@@ -130,9 +129,6 @@ cat > /root/huangshifu-wiki/.env <<'EOF'
 # Axios 默认超时时间（毫秒），默认 15000 (15秒)
 AXIOS_DEFAULT_TIMEOUT="15000"
 
-# Gemini
-VITE_GEMINI_API_KEY=""
-
 # Amap (高德地图) - Frontend JS API key
 VITE_AMAP_JS_API_KEY=""
 # Amap JS API 安全密钥 (必须在 JS API 脚本加载之前设置)
@@ -248,8 +244,6 @@ EOF
 | `NODE_ENV`                  | 运行环境（PM2 启动时设为 `production`）                 |
 | `AXIOS_DEFAULT_TIMEOUT`     | Axios 默认超时时间（毫秒），默认 15000（15秒）           |
 | `COOKIE_SECURE`             | HTTP 部署自动关闭，HTTPS 自动启用                     |
-| `VITE_GEMINI_API_KEY`       | Gemini AI 密钥（空时 AI 功能自动降级）               |
-
 #### 认证与微信小程序
 
 | 变量                              | 说明                                    |
@@ -294,11 +288,10 @@ EOF
 | `HF_PROBE_TIMEOUT_MS`      | HuggingFace 探测超时（毫秒，默认 5000）    |
 | `SKIP_NETWORK_PROBE`       | 是否跳过网络探测（默认 `false`）             |
 
-#### AI 与地图
+#### 地图
 
 | 变量                              | 说明                                     |
 | --------------------------------- | -------------------------------------- |
-| `VITE_GEMINI_API_KEY`           | Gemini AI 密钥（前端变量，会被打包到前端代码）        |
 | `VITE_AMAP_JS_API_KEY`          | 高德地图 JS API Key（Web 平台，前端变量）        |
 | `VITE_AMAP_SECURITY_JS_CODE`    | 高德地图安全密钥（JS API 2.0 必须，前端变量）        |
 | `AMAP_API_KEY`                  | 高德地图 Web 服务 API Key（服务端地理编码用）        |
@@ -690,16 +683,7 @@ USE_PM2=0 ./scripts/deploy.sh         # 不使用 PM2
 
 ## 12. 常见问题排查
 
-### 12.1 `API key should be set when using the Gemini API`
-
-未配置 `VITE_GEMINI_API_KEY`。若不需要 AI 功能可忽略；否则补上后重新构建：
-
-```bash
-npm run build
-pm2 restart huangshifu-wiki --update-env
-```
-
-### 12.2 PostgreSQL 连接失败
+### 12.1 PostgreSQL 连接失败
 
 ```bash
 # 检查服务状态
@@ -1331,4 +1315,3 @@ pm2 restart huangshifu-wiki --update-env
 ### v4.x
 
 - **移动端底部导航新增搜索入口**：移动端视图（`< md`）的底部导航栏（`BottomNav`）已新增「搜索」按钮，与桌面端导航栏的搜索链接保持一致。无需服务器端操作，仅需前端重新构建部署。
-

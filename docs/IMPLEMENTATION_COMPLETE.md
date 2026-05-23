@@ -181,45 +181,15 @@ batchParseLinks({
 
 ---
 
-### 8. AI 推荐服务 ✅
+### 8. 搜索与向量能力 ✅
 
-**文件**: `src/services/aiRelationRecommendation.ts`
+**相关模块**: `src/hooks/useSearch.ts`、`src/server/vector/`
 
-**AI 推荐功能**:
-- ✅ 基于 Gemini AI 分析
-- ✅ 智能推荐相关页面
-- ✅ 生成推荐理由
-- ✅ 置信度评分
-- ✅ 关联类型建议
-
-**降级方案**:
-- ✅ 基于规则的推荐（AI 不可用时）
-- ✅ 关键词匹配
-- ✅ 分类匹配
-- ✅ 置信度计算
-
-**API 设计**:
-```typescript
-recommendRelations({
-  currentTitle: string,
-  currentContent: string,
-  currentCategory: string,
-  existingRelations: WikiRelationRecord[],
-  allPages?: Array<...>,  // 可选的页面列表
-}): Promise<RelationRecommendation[]>
-```
-
-**推荐结果**:
-```typescript
-interface RelationRecommendation {
-  targetSlug: string;
-  targetTitle: string;
-  category: string;
-  reason: string;          // AI 生成的推荐理由
-  confidence: number;      // 置信度 (0-1)
-  suggestedType: WikiRelationType;
-}
-```
+**当前能力**:
+- ✅ 图片向量检索
+- ✅ 文本语义检索
+- ✅ 混合搜索结果编排
+- ✅ 与 Qdrant / CLIP 集成
 
 ---
 
@@ -263,7 +233,6 @@ interface RelationRecommendation {
 - ✅ 拖拽排序（计划中）
 
 ### 智能辅助
-- ✅ AI 推荐关联
 - ✅ 质量改进建议
 - ✅ 自动类型推断
 - ✅ 搜索和筛选
@@ -276,16 +245,14 @@ interface RelationRecommendation {
 1. `src/lib/metadataCache.ts` - 元数据缓存服务
 2. `src/lib/relationQuality.ts` - 质量评分系统
 3. `src/lib/relationSorter.ts` - 排序筛选服务
-4. `src/services/aiRelationRecommendation.ts` - AI 推荐服务
-
 ### UI 组件
-5. `src/components/wiki/RelationPreview.tsx` - 关联预览组件
-6. `src/components/wiki/MiniRelationGraph.tsx` - 轻量级图谱预览
+4. `src/components/wiki/RelationPreview.tsx` - 关联预览组件
+5. `src/components/wiki/MiniRelationGraph.tsx` - 轻量级图谱预览
 
 ### 文档
-7. `docs/WIKI_SMART_RELATIONS.md` - 使用指南
-8. `.trae/documents/wiki-relation-enhancement-plan.md` - 实施计划
-9. `docs/IMPLEMENTATION_COMPLETE.md` - 完成报告（本文件）
+6. `docs/WIKI_SMART_RELATIONS.md` - 使用指南
+7. `.trae/documents/wiki-relation-enhancement-plan.md` - 实施计划
+8. `docs/IMPLEMENTATION_COMPLETE.md` - 完成报告（本文件）
 
 ---
 

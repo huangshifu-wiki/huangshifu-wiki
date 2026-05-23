@@ -1,5 +1,4 @@
 import React from "react";
-import { Sparkles } from "lucide-react";
 import MarkdownEditor from "../../components/MarkdownEditor";
 import { LocationTagInput } from "../../components/LocationTagInput";
 import type { WikiRelationRecord } from "./types";
@@ -18,20 +17,14 @@ type FormData = {
 
 interface WikiEditorFormProps {
 	formData: FormData;
-	generating: boolean;
 	onFormDataChange: (
 		data: Partial<FormData> | ((prev: FormData) => FormData),
 	) => void;
-	onGenerateIntro: () => Promise<void>;
-	showToast: (message: string, options?: { variant?: string }) => void;
 }
 
 const WikiEditorForm = React.memo(({
 	formData,
-	generating,
 	onFormDataChange,
-	onGenerateIntro,
-	showToast,
 }: WikiEditorFormProps) => {
 	const handleLocationChange = (locationName: string, locationCode: string) => {
 		onFormDataChange({ locationName, locationCode });
@@ -96,24 +89,9 @@ const WikiEditorForm = React.memo(({
 			</div>
 
 			<div className="space-y-2">
-				<div className="flex justify-between items-center">
-					<label htmlFor="wiki-content" className="text-xs font-medium text-text-muted">
-						内容 (Markdown) <span className="theme-text-error">*</span>
-					</label>
-					<button
-						type="button"
-						onClick={async () => {
-							if (!formData.title)
-								return showToast("请先输入标题", { variant: "error" });
-							await onGenerateIntro();
-						}}
-						disabled={generating}
-						className="text-xs font-medium text-brand-gold flex items-center gap-1 hover:underline disabled:opacity-50"
-					>
-						<Sparkles size={12} />{" "}
-						{generating ? "生成中..." : "AI 辅助写开头"}
-					</button>
-				</div>
+				<label htmlFor="wiki-content" className="text-xs font-medium text-text-muted">
+					内容 (Markdown) <span className="theme-text-error">*</span>
+				</label>
 				<div
 					id="wiki-content"
 					className="border border-border rounded overflow-hidden"

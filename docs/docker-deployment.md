@@ -78,9 +78,6 @@ cat > /root/huangshifu-wiki/.env <<'EOF'
 # Axios 默认超时时间（毫秒），默认 15000 (15秒)
 AXIOS_DEFAULT_TIMEOUT="15000"
 
-# Gemini
-VITE_GEMINI_API_KEY=""
-
 # Amap (高德地图) - Frontend JS API key
 VITE_AMAP_JS_API_KEY=""
 # Amap JS API 安全密钥
@@ -186,7 +183,6 @@ EOF
 
 说明：
 
-- `VITE_GEMINI_API_KEY` 为空时，AI 功能会自动降级（不报致命错）。
 - 修改任何 `VITE_*` 变量后都需要重新构建前端：`npm run build`。
 - 小程序联调阶段可临时设置 `WECHAT_LOGIN_MOCK="true"`，用 mock code 验证闭环。
 - 正式环境建议固定 `WECHAT_LOGIN_MOCK="false"`，并配置真实 `WECHAT_MP_APPID` / `WECHAT_MP_APP_SECRET`。
@@ -690,12 +686,9 @@ docker exec -it hsf-app npx prisma migrate status
 
 ## 13. 常见问题排查
 
-### 13.1 `API key should be set when using the Gemini API`
+### 13.1 修改前端环境变量后页面未生效
 
-表示未配置 `VITE_GEMINI_API_KEY`。
-
-- 若不需要 AI，可忽略（功能会降级）。
-- 若需要 AI：补上 key 后重新构建：
+修改任何 `VITE_*` 变量后都需要重新构建前端：
 
 ```bash
 cd /root/huangshifu-wiki
@@ -956,11 +949,10 @@ docker compose ps
 | `HF_PROBE_TIMEOUT_MS` | HuggingFace 探测超时（毫秒） | `5000` |
 | `SKIP_NETWORK_PROBE` | 是否跳过网络连通性探测 | `false` |
 
-### AI 与地图
+### 地图
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| `VITE_GEMINI_API_KEY` | Gemini API Key（前端） | 空 |
 | `VITE_AMAP_JS_API_KEY` | 高德地图 JS API Key（前端） | 空 |
 | `VITE_AMAP_SECURITY_JS_CODE` | 高德 JS API 安全密钥（前端） | 空 |
 | `AMAP_API_KEY` | 高德 Web Service Key（后端） | 空 |

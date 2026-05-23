@@ -4,17 +4,10 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../components/Toast";
 import { apiGet, apiPost, apiPut } from "../../lib/apiClient";
 import { normalizeWikiPageSlug } from "../../lib/wikiSlug";
-import { generateWikiIntro } from "../../services/aiService";
-import {
-	recommendRelations,
-	recommendRelationsByRules,
-	type RelationRecommendation,
-} from "../../services/aiRelationRecommendation";
 import { metadataCache } from "../../lib/metadataCache";
 import { X } from "lucide-react";
 import WikiEditorForm from "./WikiEditorForm";
 import WikiEditorRelationPanel from "./WikiEditorRelationPanel";
-import WikiEditorActionBar from "./WikiEditorActionBar";
 import WikiEditorMetaSidebar from "./WikiEditorMetaSidebar";
 import type { WikiItemWithRelations, WikiRelationRecord } from "./types";
 import type { WikiPageMetadata } from "../../lib/wikiLinkParser";
@@ -23,7 +16,7 @@ const WikiEditor = () => {
 	const { slug } = useParams();
 	const isNew = !slug || slug === "new";
 	const navigate = useNavigate();
-	const { user, profile, isAdmin, isBanned } = useAuth();
+	const { user, isAdmin, isBanned } = useAuth();
 
 	const [formData, setFormData] = useState({
 		title: "",
@@ -39,21 +32,12 @@ const WikiEditor = () => {
 	const [savingMode, setSavingMode] = useState<"draft" | "pending" | null>(
 		null,
 	);
-	const [generating, setGenerating] = useState(false);
 	const { show } = useToast();
 
 	// 图谱预览状态（由子组件内部管理，此处保留 metadataMap）
 	const [metadataMap, setMetadataMap] = useState<Map<string, WikiPageMetadata>>(
 		new Map(),
 	);
-
-	// AI 推荐状态
-	const [isRecommending, setIsRecommending] = useState(false);
-	const [recommendations, setRecommendations] = useState<
-		RelationRecommendation[]
-	>([]);
-	const [abortController, setAbortController] =
-		useState<AbortController | null>(null);
 
 	useEffect(() => {
 		if (!isNew) {
@@ -96,141 +80,6 @@ const WikiEditor = () => {
 	const handleRelationsChange = (relations: WikiRelationRecord[]) => {
 		setFormData({ ...formData, relations });
 	};
-
-	// AI 辅助生成开头
-	const handleGenerateIntro = useCallback(async () => {
-		setGenerating(true);
-		try {
-			const intro = await generateWikiIntro(formData.title);
-			if (intro)
-				setFormData({
-					...formData,
-					content: intro + "\n\n" + formData.content,
-				});
-		} finally {
-			setGenerating(false);
-		}
-	}, [formData.title, formData.content]);
-
-	// AI 推荐处理函数
-	const handleAIRecommend = useCallback(async () => {
-		if (!formData.title || !formData.content) {
-			show("请先填写标题和内容", { variant: "error" });
-			return;
-		}
-
-		setIsRecommending(true);
-
-		const controller = new AbortController();
-		setAbortController(controller);
-
-		try {
-			// 获取所有页面列表用于推荐
-			const allPagesResponse = await apiGet<{
-				pages: Array<{
-					slug: string;
-					title: string;
-					category: string;
-					description?: string;
-				}>;
-			}>("/api/wiki", { category: "all" });
-
-			const allPages = allPagesResponse.pages || [];
-
-			// 调用 AI 推荐
-			const aiRecommendations = await recommendRelations({
-				currentTitle: formData.title,
-				currentContent: formData.content,
-				currentCategory: formData.category,
-				existingRelations: formData.relations,
-				allPages,
-			});
-
-			// 如果 AI 推荐失败，降级到基于规则的推荐
-			if (aiRecommendations.length === 0) {
-				const ruleRecommendations = recommendRelationsByRules({
-					currentTitle: formData.title,
-					currentContent: formData.content,
-					currentCategory: formData.category,
-					allPages,
-					existingRelations: formData.relations,
-				});
-				setRecommendations(ruleRecommendations);
-				if (ruleRecommendations.length === 0) {
-					show("暂无推荐关联");
-				} else {
-					show(`找到 ${ruleRecommendations.length} 个推荐关联（基于规则）`, {
-						variant: "success",
-					});
-				}
-			} else {
-				setRecommendations(aiRecommendations);
-				show(`找到 ${aiRecommendations.length} 个推荐关联`, {
-					variant: "success",
-				});
-			}
-		} catch (error: unknown) {
-			if (error instanceof Error && error.name === "AbortError") {
-				show("已取消推荐");
-			} else {
-				console.error("AI recommendation error:", error);
-				show("推荐失败，请重试", { variant: "error" });
-			}
-			// 降级到基于规则的推荐
-			try {
-				const allPagesResponse = await apiGet<{
-					pages: Array<{
-						slug: string;
-						title: string;
-						category: string;
-						description?: string;
-					}>;
-				}>("/api/wiki", { category: "all" });
-				const ruleRecommendations = recommendRelationsByRules({
-					currentTitle: formData.title,
-					currentContent: formData.content,
-					currentCategory: formData.category,
-					allPages: allPagesResponse.pages || [],
-					existingRelations: formData.relations,
-				});
-				setRecommendations(ruleRecommendations);
-			} catch (ruleError) {
-				console.error("Rule recommendation error:", ruleError);
-			}
-		} finally {
-			setIsRecommending(false);
-			setAbortController(null);
-		}
-	}, [formData.title, formData.content, formData.category, formData.relations, show]);
-
-	const handleCancelRecommendation = useCallback(() => {
-		if (abortController) {
-			abortController.abort();
-			setIsRecommending(false);
-			show("已取消推荐");
-		}
-	}, [abortController, show]);
-
-	// 添加推荐关联
-	const handleAddRecommendation = useCallback(
-		(recommendation: RelationRecommendation) => {
-			const newRelation: WikiRelationRecord = {
-				type: recommendation.suggestedType,
-				targetSlug: recommendation.targetSlug,
-				label: recommendation.targetTitle,
-				bidirectional: false,
-			};
-			setFormData((prev) => ({
-				...prev,
-				relations: [...prev.relations, newRelation],
-			}));
-			setRecommendations((prev) =>
-				prev.filter((r) => r.targetSlug !== recommendation.targetSlug),
-			);
-			show(`已添加关联：${recommendation.targetTitle}`, { variant: "success" });
-		},
-		[show],
-	);
 
 	const handleSubmit = async (status: "draft" | "pending") => {
 		if (!user) return;
@@ -331,12 +180,9 @@ const WikiEditor = () => {
 				>
 					<WikiEditorForm
 						formData={formData}
-						generating={generating}
 						onFormDataChange={(partial) =>
 							setFormData((prev) => ({ ...prev, ...partial }))
 						}
-						onGenerateIntro={handleGenerateIntro}
-						showToast={show}
 					/>
 
 					<WikiEditorRelationPanel
@@ -360,18 +206,6 @@ const WikiEditor = () => {
 						isNew={isNew}
 						slug={slug}
 						formDataTitle={formData.title}
-					/>
-
-					<WikiEditorActionBar
-						isRecommending={isRecommending}
-						recommendations={recommendations}
-						formDataTitle={formData.title}
-						formDataContent={formData.content}
-						onAIRecommend={handleAIRecommend}
-						onCancelRecommendation={handleCancelRecommendation}
-						onAddRecommendation={handleAddRecommendation}
-						abortController={abortController}
-						showToast={show}
 					/>
 
 					<WikiEditorMetaSidebar

@@ -8,8 +8,6 @@ import {
 	Heart,
 	Save,
 	Share2,
-	X,
-	Sparkles,
 	History,
 	Link2,
 	GitBranch,
@@ -22,10 +20,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { useI18n } from "../../lib/i18n";
 import { clsx } from "clsx";
-import { motion } from "motion/react";
-import { summarizeWikiContent } from "../../services/aiService";
 import { useToast } from "../../components/Toast";
-import { useAiSummary } from "../../hooks/useAiSummary";
 import { useToggleInteraction } from "../../hooks/useToggleInteraction";
 import { copyToClipboard, toAbsoluteInternalUrl } from "../../lib/copyLink";
 import { apiGet, apiPost } from "../../lib/apiClient";
@@ -50,11 +45,6 @@ const WikiPageView = () => {
 	const { user, isAdmin, isBanned } = useAuth();
 	const { t } = useI18n();
 	const { show } = useToast();
-	const { summary, summarizing, generateSummary, clearSummary } = useAiSummary({
-		content: page?.content,
-		summarizeFn: summarizeWikiContent,
-		toast: { show },
-	});
 	const [backlinks, setBacklinks] = useState<WikiItem[]>([]);
 	const [submittingReview, setSubmittingReview] = useState(false);
 	const { toggleLike, toggleDislike, toggleFavorite, togglePin, liking, disliking, favoriting, pinning } = useToggleInteraction({
@@ -255,89 +245,61 @@ const WikiPageView = () => {
 				<div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
 					{/* Main Content */}
 					<div>
-									{/* AI Summary */}
-									{summary && (
-										<motion.div
-											initial={{ opacity: 0, height: 0 }}
-											animate={{ opacity: 1, height: "auto" }}
-										className="mb-7 p-5 bg-surface-alt border border-border rounded relative overflow-hidden"
-										>
-											<div className="absolute top-0 left-0 w-1 h-full bg-[var(--color-theme-accent)]"></div>
-											<div className="flex items-center justify-between mb-3">
-												<h4 className="text-sm font-semibold text-brand-gold uppercase tracking-widest flex items-center gap-2">
-													<Sparkles size={14} /> {t('wiki.aiSummary')}
-												</h4>
-												<button
-													onClick={clearSummary}
-													className="p-1.5 hover:bg-bg-tertiary rounded transition-colors"
-												>
-													<X size={16} className="text-text-muted" />
-												</button>
-											</div>
-											<p className="text-text-secondary italic leading-relaxed">{summary}</p>
-										</motion.div>
-									)}
-
 						{/* Markdown Content */}
-								{/* Markdown Content */}
-								<div className="prose prose-lg max-w-none font-body leading-relaxed text-text-primary">
-									<WikiMarkdown content={page.content} />
+						<div className="prose prose-lg max-w-none font-body leading-relaxed text-text-primary">
+							<WikiMarkdown content={page.content} />
+						</div>
+
+						{/* Relation Graph */}
+						{showGraph && relationGraph && (
+							<div className="mt-12 pt-8 border-t border-border">
+								<div className="flex items-center justify-between mb-5">
+									<h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
+										<Network size={14} className="text-brand-gold" /> {t('wiki.relationGraph')}
+									</h4>
+									<span className="text-xs text-text-muted">{t('wiki.graphClickHint')}</span>
 								</div>
+								<RelationGraph
+									graph={relationGraph}
+									currentSlug={slug || ""}
+									onNodeClick={(nodeSlug) => navigate(`/wiki/${nodeSlug}`)}
+								/>
+							</div>
+						)}
 
-								{/* Relation Graph */}
-								{showGraph && relationGraph && (
-									<div className="mt-12 pt-8 border-t border-border">
-										<div className="flex items-center justify-between mb-5">
-											<h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
-												<Network size={14} className="text-brand-gold" /> {t('wiki.relationGraph')}
-											</h4>
-											<span className="text-xs text-text-muted">{t('wiki.graphClickHint')}</span>
-										</div>
-										<RelationGraph
-											graph={relationGraph}
-											currentSlug={slug || ""}
-											onNodeClick={(nodeSlug) =>
-												navigate(`/wiki/${nodeSlug}`)
-											}
-										/>
-									</div>
-								)}
-
-								{/* Relations List */}
-								{displayedRelations.length > 0 && !showGraph && (
-									<div className="mt-12 pt-8 border-t border-border">
-										<h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-5 flex items-center gap-2">
-											<Book size={14} className="text-brand-gold" /> {t('wiki.relatedPages')}
-										</h4>
-										<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-											{displayedRelations.map(
-												(relation, index: number) => (
-													<Link
-														key={`${relation.targetSlug}-${index}`}
-														to={`/wiki/${relation.targetSlug}`}
-														className="p-3 bg-surface border border-border rounded hover:border-brand-gold transition-all group"
-													>
-														<p className="text-xs text-brand-gold font-medium uppercase tracking-wider mb-1">
-															{relation.typeLabel || RELATION_TYPE_LABELS[relation.type] || relation.type}
-														</p>
-														<p className="font-medium text-text-primary group-hover:text-brand-gold group-hover:underline underline-offset-4 transition-colors">
-															{getWikiRelationDisplayTitle(relation)}
-														</p>
-														{relation.bidirectional && (
-															<span className="inline-block mt-1 text-[10px] text-text-muted">
-																{t('wiki.bidirectionalRelation')}
-															</span>
-														)}
-													</Link>
-												),
+						{/* Relations List */}
+						{displayedRelations.length > 0 && !showGraph && (
+							<div className="mt-12 pt-8 border-t border-border">
+								<h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-5 flex items-center gap-2">
+									<Book size={14} className="text-brand-gold" /> {t('wiki.relatedPages')}
+								</h4>
+								<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+									{displayedRelations.map((relation, index: number) => (
+										<Link
+											key={`${relation.targetSlug}-${index}`}
+											to={`/wiki/${relation.targetSlug}`}
+											className="p-3 bg-surface border border-border rounded hover:border-brand-gold transition-all group"
+										>
+											<p className="text-xs text-brand-gold font-medium uppercase tracking-wider mb-1">
+												{relation.typeLabel || RELATION_TYPE_LABELS[relation.type] || relation.type}
+											</p>
+											<p className="font-medium text-text-primary group-hover:text-brand-gold group-hover:underline underline-offset-4 transition-colors">
+												{getWikiRelationDisplayTitle(relation)}
+											</p>
+											{relation.bidirectional && (
+												<span className="inline-block mt-1 text-[10px] text-text-muted">
+													{t('wiki.bidirectionalRelation')}
+												</span>
 											)}
-										</div>
-									</div>
-								)}
+										</Link>
+									))}
+								</div>
+							</div>
+						)}
 
-								{/* Backlinks */}
-								{backlinks.length > 0 && (
-									<div className="mt-12 pt-8 border-t border-border">
+						{/* Backlinks */}
+						{backlinks.length > 0 && (
+							<div className="mt-12 pt-8 border-t border-border">
 										<h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-5 flex items-center gap-2">
 											<ChevronRight size={14} className="text-brand-gold" /> {t('wiki.backlinks')}
 										</h4>
@@ -436,13 +398,6 @@ const WikiPageView = () => {
 									<Pin size={15} /> {page.isPinned ? t('wiki.pinned') : t('wiki.pin')}
 								</button>
 							)}
-							<button
-								onClick={generateSummary}
-								disabled={summarizing}
-								className="w-full mt-2 px-3 py-2 rounded text-sm font-medium bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-							>
-								<Sparkles size={15} /> {summarizing ? t('wiki.generating') : t('wiki.aiSummary')}
-							</button>
 							<button
 								onClick={() => setShowGraph(!showGraph)}
 								className={clsx(
