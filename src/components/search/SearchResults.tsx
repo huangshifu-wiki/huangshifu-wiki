@@ -1,8 +1,7 @@
-import React, { useRef } from "react";
-import { Link } from "react-router-dom";
+import React from "react";
 import { clsx } from "clsx";
 import { motion, AnimatePresence } from "motion/react";
-import { Book, MessageSquare, Image as ImageIcon, Music, Sparkles, Search as SearchIcon, Tag, Clock, FileText } from "lucide-react";
+import { Book, MessageSquare, Image as ImageIcon, Music, Sparkles, Search as SearchIcon, Tag, FileText } from "lucide-react";
 import { VIEW_MODE_CONFIG } from "../../lib/viewModes";
 import type { ViewMode } from "../../types/userPreferences";
 import { toDateValue } from "../../lib/dateUtils";
@@ -12,7 +11,6 @@ import type { WikiItem, PostItem, GalleryItem, SongItem, AlbumItem } from "../..
 import type { TextSearchResult } from "../../types/api";
 import { MixedSearchResultCard } from "../MixedSearchResultCard";
 import { SearchResultCard } from "./SearchResultCard";
-import { useVirtualizer } from "@tanstack/react-virtual";
 
 interface SearchResultsProps {
   state: SearchState;
@@ -68,18 +66,23 @@ function albumToConfig(album: AlbumItem): import("./SearchResultCard").SearchRes
   };
 }
 
+function postToConfig(post: PostItem): import("./SearchResultCard").SearchResultCardConfig {
+  return {
+    id: post.id,
+    title: post.title,
+    description: (post.content || "").replace(/[#*`]/g, "").substring(0, 80),
+    link: `/forum/${post.id}`,
+    tags: [post.section],
+    meta: toDateValue(post.updatedAt) ? format(toDateValue(post.updatedAt)!, "yyyy-MM-dd") : "刚刚",
+    type: "post",
+  };
+}
+
 const TEXT_SEMANTIC_SOURCE_LABELS: Record<string, string> = {
   wiki: '百科',
   post: '帖子',
   music: '音乐',
   album: '专辑',
-}
-
-const TEXT_SEMANTIC_SOURCE_ICONS: Record<string, React.ReactNode> = {
-  wiki: <Book size={12} className="text-brand-gold" />,
-  post: <MessageSquare size={12} className="text-brand-gold" />,
-  music: <Music size={12} className="text-brand-gold" />,
-  album: <Music size={12} className="text-brand-gold" />,
 }
 
 function getTextSemanticLink(result: TextSearchResult): string {
@@ -112,6 +115,24 @@ function getTextSemanticTitle(result: TextSearchResult): string {
   }
 }
 
+function textSemanticToConfig(result: TextSearchResult): import("./SearchResultCard").SearchResultCardConfig {
+  return {
+    id: `${result.sourceType}-${result.sourceId}`,
+    title: getTextSemanticTitle(result),
+    subtitle:
+      result.sourceType === "music" || result.sourceType === "album"
+        ? result.entity.artist
+        : undefined,
+    description: undefined,
+    link: getTextSemanticLink(result),
+    tags: [TEXT_SEMANTIC_SOURCE_LABELS[result.sourceType] || result.sourceType],
+    meta: `相似度 ${(result.score * 100).toFixed(1)}%`,
+    type: result.sourceType,
+    chunkPreview: result.chunkPreview,
+    matchSource: "semantic",
+  };
+}
+
 export const SearchResults: React.FC<SearchResultsProps> = ({
   state,
   viewMode,
@@ -121,25 +142,14 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   const { loading, hasSearched, activeTab, isMixedSearch, mixedResults, results, filters, textSemanticResults } = state;
 
   const hasFilters = filters.selectedTags.length > 0 || filters.dateRange.start || filters.dateRange.end;
-  const mixedParentRef = useRef<HTMLDivElement>(null);
-  const wikiParentRef = useRef<HTMLDivElement>(null);
   const filteredMixedResults = isMixedSearch
     ? mixedResults.filter((result) => activeTab === 'semantic' || result.sourceType === activeTab)
     : [];
-
-  const mixedVirtualizer = useVirtualizer({
-    count: filteredMixedResults.length,
-    getScrollElement: () => mixedParentRef.current,
-    overscan: 5,
-    estimateSize: () => VIEW_MODE_CONFIG[viewMode].cardHeight === 'auto' ? 180 : parseInt(VIEW_MODE_CONFIG[viewMode].cardHeight as string, 10) || 200,
-  });
-
-  const wikiVirtualizer = useVirtualizer({
-    count: (!isMixedSearch && (activeTab === "all" || activeTab === "wiki")) ? results.wiki.length : 0,
-    getScrollElement: () => wikiParentRef.current,
-    overscan: 5,
-    estimateSize: () => VIEW_MODE_CONFIG[viewMode].cardHeight === 'auto' ? 180 : parseInt(VIEW_MODE_CONFIG[viewMode].cardHeight as string, 10) || 200,
-  });
+  const resultGridClassName = clsx(
+    "grid",
+    VIEW_MODE_CONFIG[viewMode].gridCols,
+    VIEW_MODE_CONFIG[viewMode].gap
+  );
 
   if (loading) {
     return (
@@ -227,42 +237,16 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
             >
-              <div
-                ref={mixedParentRef}
-                className="max-h-[70vh] overflow-auto"
-                style={{ contain: 'strict' }}
-              >
-                <div
-                  style={{
-                    height: `${mixedVirtualizer.getTotalSize()}px`,
-                    position: 'relative',
-                    width: '100%',
-                  }}
-                >
-                  {mixedVirtualizer.getVirtualItems().map((virtualItem) => {
-                    const result = filteredMixedResults[virtualItem.index];
-                    if (!result) return null;
-                    return (
-                      <div
-                        key={`${result.sourceType}-${result.sourceId}-${virtualItem.index}`}
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          transform: `translateY(${virtualItem.start}px)`,
-                        }}
-                      >
-                        <MixedSearchResultCard
-                          result={result}
-                          viewMode="list"
-                          cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
-                          showSimilarity={true}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className={resultGridClassName}>
+                {filteredMixedResults.map((result, index) => (
+                  <MixedSearchResultCard
+                    key={`${result.sourceType}-${result.sourceId}-${index}`}
+                    result={result}
+                    viewMode={viewMode}
+                    cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
+                    showSimilarity={true}
+                  />
+                ))}
               </div>
             </motion.section>
           )}
@@ -280,46 +264,14 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                   <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
                     <FileText size={14} className="text-brand-gold" /> 语义匹配
                   </h2>
-                  <div className="space-y-3">
-                    {Object.entries(
-                      textSemanticResults.reduce<Record<string, TextSearchResult[]>>((acc, r) => {
-                        const group = r.sourceType
-                        if (!acc[group]) acc[group] = []
-                        acc[group].push(r)
-                        return acc
-                      }, {})
-                    ).map(([sourceType, items]) => (
-                      <div key={sourceType} className="space-y-2">
-                        <div className="flex items-center gap-1.5 text-xs text-text-muted font-medium">
-                          {TEXT_SEMANTIC_SOURCE_ICONS[sourceType]}
-                          {TEXT_SEMANTIC_SOURCE_LABELS[sourceType] || sourceType}
-                          <span className="text-text-muted/60">({items.length})</span>
-                        </div>
-                        {items.map((result) => (
-                          <Link
-                            key={`${result.sourceType}-${result.sourceId}`}
-                            to={getTextSemanticLink(result)}
-                            className="block theme-panel rounded p-4 hover:border-brand-gold transition-all group"
-                          >
-                            <div className="flex items-center gap-2 mb-1.5">
-                              <span className="px-2 py-0.5 theme-tag text-[10px] font-medium rounded">
-                                {TEXT_SEMANTIC_SOURCE_LABELS[result.sourceType] || result.sourceType}
-                              </span>
-                              <span className="text-[10px] text-text-muted">
-                                相似度 {(result.score * 100).toFixed(1)}%
-                              </span>
-                            </div>
-                            <h3 className="text-sm font-semibold text-text-primary group-hover:text-brand-gold transition-colors">
-                              {getTextSemanticTitle(result)}
-                            </h3>
-                            {result.chunkPreview && (
-                              <p className="text-xs text-text-muted mt-1.5 line-clamp-2 leading-relaxed">
-                                {result.chunkPreview}
-                              </p>
-                            )}
-                          </Link>
-                        ))}
-                      </div>
+                  <div className={resultGridClassName}>
+                    {textSemanticResults.map((result) => (
+                      <SearchResultCard
+                        key={`${result.sourceType}-${result.sourceId}`}
+                        config={textSemanticToConfig(result)}
+                        viewMode={viewMode}
+                        cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
+                      />
                     ))}
                   </div>
                 </motion.section>
@@ -335,63 +287,17 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 >
                   <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
                     <Book size={14} className="text-brand-gold" /> 百科页面
-                    {results.wiki.length > 50 && <span className="text-xs text-text-muted font-normal">（虚拟滚动已启用）</span>}
                   </h2>
-                  {results.wiki.length > 30 ? (
-                    <div
-                      ref={wikiParentRef}
-                      className="max-h-[60vh] overflow-auto"
-                      style={{ contain: 'strict' }}
-                    >
-                      <div
-                        style={{
-                          height: `${wikiVirtualizer.getTotalSize()}px`,
-                          position: 'relative',
-                          width: '100%',
-                        }}
-                      >
-                        {wikiVirtualizer.getVirtualItems().map((virtualItem) => {
-                          const page = results.wiki[virtualItem.index];
-                          if (!page) return null;
-                          return (
-                            <div
-                              key={page.id}
-                              style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '100%',
-                                transform: `translateY(${virtualItem.start}px)`,
-                              }}
-                            >
-                              <SearchResultCard
-                                config={wikiToConfig(page)}
-                                viewMode="list"
-                                cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      className={clsx(
-                        "grid",
-                        VIEW_MODE_CONFIG[viewMode].gridCols,
-                        VIEW_MODE_CONFIG[viewMode].gap
-                      )}
-                    >
-                      {results.wiki.map((page) => (
-                        <SearchResultCard
-                          key={page.id}
-                          config={wikiToConfig(page)}
-                          viewMode={viewMode}
-                          cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  <div className={resultGridClassName}>
+                    {results.wiki.map((page) => (
+                      <SearchResultCard
+                        key={page.id}
+                        config={wikiToConfig(page)}
+                        viewMode={viewMode}
+                        cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
+                      />
+                    ))}
+                  </div>
                 </motion.section>
               )}
 
@@ -406,28 +312,14 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                   <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
                     <MessageSquare size={14} className="text-brand-gold" /> 社区帖子
                   </h2>
-                  <div className="space-y-3">
+                  <div className={resultGridClassName}>
                     {results.posts.map((post) => (
-                      <Link
+                      <SearchResultCard
                         key={post.id}
-                        to={`/forum/${post.id}`}
-                        className="block theme-panel rounded p-4 hover:border-brand-gold transition-all group"
-                      >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="px-2 py-0.5 theme-tag text-[10px] font-medium rounded">
-                            {post.section}
-                          </span>
-                          <span className="text-[10px] text-text-muted flex items-center gap-1">
-                            <Clock size={10} />
-                            {toDateValue(post.updatedAt)
-                              ? format(toDateValue(post.updatedAt)!, "yyyy-MM-dd")
-                              : "刚刚"}
-                          </span>
-                        </div>
-                        <h3 className="text-sm font-semibold text-text-primary group-hover:text-brand-gold transition-colors">
-                          {post.title}
-                        </h3>
-                      </Link>
+                        config={postToConfig(post)}
+                        viewMode={viewMode}
+                        cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
+                      />
                     ))}
                   </div>
                 </motion.section>
@@ -444,13 +336,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                   <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
                     <ImageIcon size={14} className="text-brand-gold" /> 图集馆
                   </h2>
-                  <div
-                    className={clsx(
-                      "grid",
-                      VIEW_MODE_CONFIG[viewMode].gridCols,
-                      VIEW_MODE_CONFIG[viewMode].gap
-                    )}
-                  >
+                  <div className={resultGridClassName}>
                     {results.galleries.map((gallery) => (
                       <SearchResultCard
                         key={gallery.id}
@@ -474,13 +360,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                   <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
                     <Music size={14} className="text-brand-gold" /> 音乐曲目
                   </h2>
-                  <div
-                    className={clsx(
-                      "grid",
-                      VIEW_MODE_CONFIG[viewMode].gridCols,
-                      VIEW_MODE_CONFIG[viewMode].gap
-                    )}
-                  >
+                  <div className={resultGridClassName}>
                     {results.music.map((track) => (
                       <SearchResultCard
                         key={track.docId}
@@ -504,13 +384,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                   <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
                     <Music size={14} className="text-brand-gold" /> 音乐专辑
                   </h2>
-                  <div
-                    className={clsx(
-                      "grid",
-                      VIEW_MODE_CONFIG[viewMode].gridCols,
-                      VIEW_MODE_CONFIG[viewMode].gap
-                    )}
-                  >
+                  <div className={resultGridClassName}>
                     {results.albums.map((album) => (
                       <SearchResultCard
                         key={(album as AlbumItem).docId || (album as AlbumItem).id}
