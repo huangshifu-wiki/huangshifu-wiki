@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ToastProvider } from '../../../src/components/Toast'
 import { AuthModal } from '../../../src/components/Navbar/AuthModal'
+import { register } from '../../../src/lib/auth'
 
 vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -21,12 +22,13 @@ vi.mock('../../../src/lib/i18n', () => ({
         'auth.accountLogin': '账号登录',
         'auth.accountRegister': '账号注册',
         'auth.wechatLogin': '微信登录',
-        'auth.placeholderDisplayName': '昵称',
+        'auth.placeholderDisplayName': '昵称（可选，留空将自动生成）',
         'auth.placeholderWechatDisplayName': '微信昵称',
         'auth.placeholderWechatCode': '微信登录码',
         'auth.placeholderPhotoURL': '头像地址',
         'auth.placeholderEmail': '邮箱',
         'auth.placeholderPassword': '密码',
+        'auth.placeholderRegisterPassword': '密码（至少 8 位）',
         'auth.labelDisplayName': '显示名称',
         'auth.labelWechatCode': '微信码',
         'auth.labelPhotoURL': '头像',
@@ -72,6 +74,7 @@ const renderAuthModal = (
 
 describe('AuthModal', () => {
   beforeEach(() => {
+    cleanup()
     vi.clearAllMocks()
   })
 
@@ -107,5 +110,42 @@ describe('AuthModal', () => {
     )
 
     expect(screen.getByRole('heading', { name: '账号注册' })).toBeInTheDocument()
+  })
+
+  it('only applies the 8-character password constraint in register mode', async () => {
+    const user = userEvent.setup()
+    renderAuthModal(true, 'login')
+
+    const loginPasswordInput = screen.getByLabelText('密码') as HTMLInputElement
+    expect(loginPasswordInput).not.toHaveAttribute('minLength')
+    expect(loginPasswordInput).toHaveAttribute('placeholder', '密码')
+
+    await user.click(screen.getByRole('button', { name: '没有账号，去注册' }))
+
+    const registerPasswordInput = screen.getByLabelText('密码') as HTMLInputElement
+    expect(registerPasswordInput).toHaveAttribute('minLength', '8')
+    expect(registerPasswordInput).toHaveAttribute('placeholder', '密码（至少 8 位）')
+  })
+
+  it('submits register without synthesizing a display name', async () => {
+    const user = userEvent.setup()
+    const registerMock = vi.mocked(register)
+    registerMock.mockResolvedValueOnce(undefined)
+
+    renderAuthModal(true, 'register')
+
+    expect(screen.getByLabelText('显示名称')).toHaveAttribute('placeholder', '昵称（可选，留空将自动生成）')
+
+    fireEvent.change(screen.getByLabelText('邮箱'), {
+      target: { value: 'averylonglocalpart@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('密码'), {
+      target: { value: 'ValidPassword123!' },
+    })
+    fireEvent.submit(screen.getByRole('button', { name: '注册' }).closest('form')!)
+
+    await waitFor(() => {
+      expect(registerMock).toHaveBeenCalledWith('averylonglocalpart@example.com', 'ValidPassword123!', '')
+    })
   })
 })

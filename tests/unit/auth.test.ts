@@ -170,7 +170,10 @@ describe('auth module', () => {
     it('returns 400 when registering with password shorter than 8 characters', async () => {
       const { register } = await loadAuthModule();
       fetchMock.mockResolvedValueOnce(
-        new Response(JSON.stringify({ error: '密码至少8个字符' }), { status: 400 }),
+        new Response(JSON.stringify({
+          error: 'Validation failed',
+          fields: { password: '密码至少8个字符' },
+        }), { status: 400 }),
       );
 
       await expect(register('test@example.com', 'short', '测试用户')).rejects.toThrow('密码至少8个字符');
@@ -182,6 +185,30 @@ describe('auth module', () => {
           body: JSON.stringify({ email: 'test@example.com', password: 'short', displayName: '测试用户' }),
         }),
       );
+    });
+
+    it('prefers field-level validation messages for login requests', async () => {
+      const { login } = await loadAuthModule();
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          error: 'Validation failed',
+          fields: { email: '邮箱不能为空' },
+        }), { status: 400 }),
+      );
+
+      await expect(login('', '')).rejects.toThrow('邮箱不能为空');
+    });
+
+    it('shows the empty-email message for whitespace-only auth inputs', async () => {
+      const { register } = await loadAuthModule();
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          error: 'Validation failed',
+          fields: { email: '邮箱不能为空' },
+        }), { status: 400 }),
+      );
+
+      await expect(register('   ', 'ValidPassword123!', '测试用户')).rejects.toThrow('邮箱不能为空');
     });
   });
 });

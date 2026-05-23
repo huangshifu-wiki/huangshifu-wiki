@@ -25,6 +25,7 @@ export const AuthModal = ({ open, onClose, onAuthSuccess, initialMode = "login" 
 	const [authLoading, setAuthLoading] = useState(false);
 	const { show } = useToast();
 	const { t } = useI18n();
+	const isRegisterMode = authMode === "register"
 
 	const modalRef = useRef<HTMLDivElement>(null)
 	const previousFocusRef = useRef<HTMLElement | null>(null)
@@ -79,11 +80,7 @@ export const AuthModal = ({ open, onClose, onAuthSuccess, initialMode = "login" 
 			if (authMode === "login") {
 				await login(email, password);
 			} else if (authMode === "register") {
-				await register(
-					email,
-					password,
-					displayName || email.split("@")[0] || t('auth.anonymousUser'),
-				);
+				await register(email, password, displayName);
 			} else {
 				await loginWithWeChat(wechatCode, {
 					displayName: displayName || undefined,
@@ -211,11 +208,11 @@ export const AuthModal = ({ open, onClose, onAuthSuccess, initialMode = "login" 
 											id="auth-password"
 											type="password"
 											required
-											minLength={6}
+											minLength={isRegisterMode ? 8 : undefined}
 											autoComplete="current-password"
 											value={password}
 											onChange={(e) => setPassword(e.target.value)}
-											placeholder={t('auth.placeholderPassword')}
+											placeholder={isRegisterMode ? t('auth.placeholderRegisterPassword') : t('auth.placeholderPassword')}
 											className="theme-input w-full px-4 py-2.5 text-sm rounded"
 										/>
 									</div>

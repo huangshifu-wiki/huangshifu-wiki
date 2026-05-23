@@ -18,6 +18,7 @@ import { describe, beforeEach, afterEach, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server';
 import { prisma, createTestUser, createTestToken } from './setup';
+import { AUTH_DISPLAY_NAME_MAX_LENGTH } from '../../src/server/schemas/auth.schema';
 
 describe('Auth API - 认证接口测试', () => {
   /**
@@ -459,6 +460,32 @@ describe('Auth API - 认证接口测试', () => {
       expect(response.status).toBe(201);
       expect(response.body.user.email).toBe('mixedcase@example.com');
       expect(response.body.user.displayName).toBe('mixedcase'); // 默认使用邮箱前缀
+    });
+
+    it('displayName 只有空白字符时应该回退到邮箱前缀', async () => {
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'blank_name@example.com',
+          password: 'ValidPassword123!',
+          displayName: '   ',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.user.displayName).toBe('blank_name');
+    });
+
+    it('邮箱前缀超过 50 个字符时应该截断默认昵称', async () => {
+      const longPrefix = 'a'.repeat(AUTH_DISPLAY_NAME_MAX_LENGTH + 10)
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: `${longPrefix}@example.com`,
+          password: 'ValidPassword123!',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.user.displayName).toBe('a'.repeat(AUTH_DISPLAY_NAME_MAX_LENGTH));
     });
   });
 

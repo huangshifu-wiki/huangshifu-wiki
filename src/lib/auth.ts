@@ -37,13 +37,40 @@ function notifyListeners() {
   }
 }
 
+function getValidationFieldMessage(data: unknown): string | null {
+  if (!data || typeof data !== 'object' || !('fields' in data)) {
+    return null
+  }
+
+  const { fields } = data as { fields?: unknown }
+  if (!fields || typeof fields !== 'object') {
+    return null
+  }
+
+  for (const value of Object.values(fields as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.trim()) {
+      return value
+    }
+  }
+
+  return null
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message =
-      typeof data === 'object' && data && 'error' in data
-        ? String((data as Record<string, unknown>).error)
-        : `Request failed with status ${response.status}`;
+    const message = (() => {
+      if (typeof data !== 'object' || !data || !('error' in data)) {
+        return `Request failed with status ${response.status}`
+      }
+
+      const error = String((data as Record<string, unknown>).error)
+      if (error === 'Validation failed') {
+        return getValidationFieldMessage(data) || error
+      }
+
+      return error
+    })()
     throw new Error(message);
   }
   return data as T;
@@ -123,14 +150,18 @@ export async function login(email: string, password: string) {
   await refreshAuthState();
 }
 
-export async function register(email: string, password: string, displayName: string) {
+export async function register(email: string, password: string, displayName?: string) {
   const response = await fetch('/api/auth/register', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     credentials: 'include',
-    body: JSON.stringify({ email, password, displayName }),
+    body: JSON.stringify({
+      email,
+      password,
+      ...(displayName?.trim() ? { displayName: displayName.trim() } : {}),
+    }),
   });
 
   await parseJsonResponse(response);

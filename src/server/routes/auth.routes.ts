@@ -8,6 +8,7 @@ import { issueXsrfToken } from '../middleware/csrf'
 import { exchangeWechatLoginCode, buildUniqueWechatEmail, logger } from '../utils'
 import { prisma } from '../prisma'
 import { validateBody, registerSchema, loginSchema } from '../schemas'
+import { AUTH_DISPLAY_NAME_MAX_LENGTH } from '../schemas/auth.schema'
 import type { AuthenticatedRequest } from '../types'
 
 const router = Router()
@@ -69,15 +70,12 @@ router.post('/register', authRateLimiter, validateBody(registerSchema), asyncHan
       return
     }
 
-    if (password.length < 8) {
-      res.status(400).json({ error: '密码至少8个字符' })
-      return
-    }
-
     const normalizedEmail = email.toLowerCase().trim()
-    const name = (displayName || normalizedEmail.split('@')[0] || '匿名用户').trim()
-    if (name.length > 50) {
-      res.status(400).json({ error: '显示名称过长，最多50个字符' })
+    const normalizedDisplayName = displayName?.trim()
+    const emailNameFallback = (normalizedEmail.split('@')[0] || '匿名用户').slice(0, AUTH_DISPLAY_NAME_MAX_LENGTH)
+    const name = normalizedDisplayName || emailNameFallback
+    if (name.length > AUTH_DISPLAY_NAME_MAX_LENGTH) {
+      res.status(400).json({ error: `显示名称过长，最多${AUTH_DISPLAY_NAME_MAX_LENGTH}个字符` })
       return
     }
 
