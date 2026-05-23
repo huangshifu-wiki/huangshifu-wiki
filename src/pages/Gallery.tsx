@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Image as ImageIcon, Plus, Folder, X, Upload, Clock, User as UserIcon, Link2, Trash2 } from 'lucide-react';
@@ -17,36 +17,11 @@ import { toDateValue } from '../lib/dateUtils';
 import { LocationTagInput } from '../components/LocationTagInput';
 import Pagination from '../components/Pagination';
 import { extractGpsFromMultipleFiles, findMostFrequentGpsCoordinates } from '../services/exifService';
-import { useVirtualList } from '../hooks/useVirtualList';
 import { usePagination } from '../hooks/usePagination';
 import type { GalleryItem } from '../types/entities';
 import type { UploadSessionResponse, UploadFileResponse, GalleryCreateResponse } from '../types/api';
 
 const DEFAULT_PAGE_SIZE = 24;
-
-/**
- * 从 VIEW_MODE_CONFIG 的 gridCols 字符串中解析实际列数
- * 取响应式断点中最大的值（md: 断点及以上的列数）
- */
-function parseColumnCount(gridCols: string): number {
-  // 匹配 md:grid-cols-X 或 lg:grid-cols-X 等模式，取最大值
-  const matches = gridCols.match(/(?:md:|lg:)grid-cols-(\d+)/g);
-  if (matches && matches.length > 0) {
-    const numbers = matches.map((m) => parseInt(m.split('-').pop() || '1', 10));
-    return Math.max(...numbers);
-  }
-  // 回退到基础 grid-cols-X
-  const baseMatch = gridCols.match(/grid-cols-(\d+)/);
-  return baseMatch ? parseInt(baseMatch[1], 10) : 4;
-}
-
-/** 虚拟滚动预估尺寸配置（px） */
-const VIRTUAL_ESTIMATE_SIZE: Record<string, number> = {
-  large: 360,
-  medium: 280,
-  small: 200,
-  list: 100,
-};
 
 type LocalPreviewFile = {
   file: File;
@@ -99,7 +74,7 @@ const GalleryCard = React.memo(({ gallery, viewMode, isAdmin, deletingGalleryId,
         </>
       ) : (
         <>
-          <div className="relative overflow-hidden aspect-square">
+          <div className={clsx('relative overflow-hidden', VIEW_MODE_CONFIG[viewMode].cardHeight)}>
             <SmartImage
               src={(Array.isArray(gallery.images) && gallery.images[0]?.url) || ''}
               alt={gallery.title}
@@ -160,38 +135,10 @@ const GalleryList = () => {
   const { preferences, setViewMode } = useUserPreferences();
   const viewMode = preferences.viewMode;
 
-  // 虚拟滚动容器引用
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
   const galleryPagination = usePagination({
     totalCount: totalGalleries,
-    defaultPageSize: 24,
+    defaultPageSize: DEFAULT_PAGE_SIZE,
   });
-
-  // 虚拟网格配置：根据 viewMode 动态计算列数
-  const columnCount = useMemo(() => parseColumnCount(VIEW_MODE_CONFIG[viewMode].gridCols), [viewMode]);
-
-  // 初始化虚拟列表（网格行模式）
-  const {
-    virtualItems: virtualRows,
-    totalSize: totalHeight,
-    getRowDataRange,
-    scrollToTop: virtualScrollToTop,
-  } = useVirtualList({
-    data: galleries,
-    estimateSize: VIRTUAL_ESTIMATE_SIZE[viewMode] ?? 280,
-    overscan: 5,
-    gridMode: true,
-    columns: columnCount,
-    rowCountMode: true,
-    scrollRef: scrollContainerRef,
-  });
-
-  // 自定义页面更改处理，包含滚动到顶部
-  const handleGalleryPageChange = useCallback((newPage: number) => {
-    galleryPagination.setPage(newPage);
-    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [galleryPagination]);
 
   useEffect(() => {
     const fetchGalleries = async () => {
@@ -287,61 +234,34 @@ const GalleryList = () => {
           </div>
         </header>
 
-        {/* Content - 虚拟滚动网格 */}
+        {/* Content */}
         {galleries.length > 0 ? (
           <>
             <div
-              ref={scrollContainerRef}
-              className="overflow-y-auto"
-              style={{ maxHeight: 'calc(100vh - 220px)' }}
+              className={clsx(
+                'grid',
+                VIEW_MODE_CONFIG[viewMode].gridCols,
+                VIEW_MODE_CONFIG[viewMode].gap
+              )}
             >
-              <div
-                className="relative"
-                style={{ height: `${totalHeight}px` }}
-              >
-                {virtualRows.map((virtualRow) => {
-                  const { start, end } = getRowDataRange(virtualRow.index);
-                  const rowItems = galleries.slice(start, end);
-
-                  return (
-                    <div
-                      key={virtualRow.key}
-                      className={clsx(
-                        'grid absolute left-0 right-0',
-                        VIEW_MODE_CONFIG[viewMode].gridCols,
-                        'gap-3'
-                      )}
-                      style={{
-                        top: 0,
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}
-                    >
-                      {rowItems.map((gallery, colIndex) => (
-                        <GalleryCard
-                          key={`${virtualRow.index}-${colIndex}-${gallery.id}`}
-                          gallery={gallery}
-                          viewMode={viewMode}
-                          isAdmin={isAdmin}
-                          deletingGalleryId={deletingGalleryId}
-                          onCopyLink={handleCopyGalleryLink}
-                          onRequestDelete={handleRequestDeleteGallery}
-                        />
-                      ))}
-                      {/* 填充空列，保持网格对齐 */}
-                      {Array.from({ length: columnCount - rowItems.length }).map((_, fillIndex) => (
-                        <div key={`fill-${virtualRow.index}-${fillIndex}`} />
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
+              {galleries.map((gallery) => (
+                <GalleryCard
+                  key={gallery.id}
+                  gallery={gallery}
+                  viewMode={viewMode}
+                  isAdmin={isAdmin}
+                  deletingGalleryId={deletingGalleryId}
+                  onCopyLink={handleCopyGalleryLink}
+                  onRequestDelete={handleRequestDeleteGallery}
+                />
+              ))}
             </div>
             {galleryPagination.totalPages > 1 && (
               <div className="mt-8">
                 <Pagination
                   page={galleryPagination.page}
                   totalPages={galleryPagination.totalPages}
-                  onPageChange={handleGalleryPageChange}
+                  onPageChange={galleryPagination.handlePageChange}
                   pageSize={galleryPagination.pageSize}
                   onPageSizeChange={galleryPagination.handlePageSizeChange}
                   showPageSizeSelector
