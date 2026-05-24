@@ -602,6 +602,110 @@ describe('Posts API - 文章接口测试', () => {
       });
       expect(dbComment?.parentId).toBe(parent.id);
     });
+
+    it('回复子评论时应归入根评论并记录实际回复目标', async () => {
+      const post = await createCurrentUserPost({
+        title: 'Reply Nested Comment Test',
+        status: 'published',
+      });
+
+      const parent = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Root comment',
+        },
+      });
+      const child = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Child comment',
+          parentId: parent.id,
+          replyToId: parent.id,
+        },
+      });
+
+      const response = await request(app)
+        .post(`/api/posts/${post.id}/comments`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          content: 'Reply child comment',
+          parentId: child.id,
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.comment.parentId).toBe(parent.id);
+      expect(response.body.comment.replyToId).toBe(child.id);
+      expect(response.body.comment.replyToAuthorUid).toBe(testUser.user.uid);
+
+      const dbComment = await prisma.postComment.findUnique({
+        where: { id: response.body.comment.id },
+      });
+      expect(dbComment?.parentId).toBe(parent.id);
+      expect(dbComment?.replyToId).toBe(child.id);
+    });
+  });
+
+  describe('GET /api/posts/:postId/comments - 获取评论列表', () => {
+    it('分页应在过滤不可见删除评论之后执行', async () => {
+      const post = await createCurrentUserPost({
+        title: 'Comment Pagination Visibility Test',
+        status: 'published',
+      });
+      const root = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Root comment',
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      });
+      const hiddenChild = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Deleted child comment',
+          parentId: root.id,
+          replyToId: root.id,
+          deletedAt: new Date('2026-01-01T00:00:01.000Z'),
+          deletedBy: testUser.user.uid,
+          createdAt: new Date('2026-01-01T00:00:01.000Z'),
+        },
+      });
+      const visibleChild = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Visible child comment',
+          parentId: root.id,
+          replyToId: root.id,
+          createdAt: new Date('2026-01-01T00:00:02.000Z'),
+        },
+      });
+
+      const publicResponse = await request(app)
+        .get(`/api/posts/${post.id}/comments`)
+        .query({ page: 1, limit: 2 });
+      expect(publicResponse.status).toBe(200);
+      expect(publicResponse.body.total).toBe(2);
+      expect(publicResponse.body.comments.map((comment: { id: string }) => comment.id)).toEqual([
+        root.id,
+        visibleChild.id,
+      ]);
+
+      const adminResponse = await request(app)
+        .get(`/api/posts/${post.id}/comments`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .query({ page: 1, limit: 3, includeDeleted: true });
+      expect(adminResponse.status).toBe(200);
+      expect(adminResponse.body.total).toBe(3);
+      expect(adminResponse.body.comments.map((comment: { id: string }) => comment.id)).toEqual([
+        root.id,
+        hiddenChild.id,
+        visibleChild.id,
+      ]);
+    });
   });
 
   // ============================================================================
@@ -662,6 +766,7 @@ describe('Posts API - 文章接口测试', () => {
       expect(publicResponse.body.comments[0].id).toBe(parent.id);
       expect(publicResponse.body.comments[0].content).toBe('评论已删除');
       expect(publicResponse.body.comments[0].isDeleted).toBe(true);
+      expect(publicResponse.body.comments[0].deletedByName).toBeNull();
       expect(publicResponse.body.comments[1].id).toBe(child.id);
       expect(publicResponse.body.comments[1].content).toBe('Child comment content');
 
@@ -669,8 +774,17 @@ describe('Posts API - 文章接口测试', () => {
         .get(`/api/posts/${post.id}`)
         .set('Authorization', `Bearer ${adminToken}`);
       expect(adminResponse.status).toBe(200);
-      expect(adminResponse.body.comments[0].content).toBe('Parent comment content');
+      expect(adminResponse.body.comments[0].content).toBe('评论已删除');
       expect(adminResponse.body.comments[0].isDeleted).toBe(true);
+      expect(adminResponse.body.comments[0].deletedByName).toBeNull();
+
+      const adminWithDeletedResponse = await request(app)
+        .get(`/api/posts/${post.id}?includeDeleted=true`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(adminWithDeletedResponse.status).toBe(200);
+      expect(adminWithDeletedResponse.body.comments[0].content).toBe('Parent comment content');
+      expect(adminWithDeletedResponse.body.comments[0].deletedBy).toBe(testUser.user.uid);
+      expect(adminWithDeletedResponse.body.comments[0].deletedByName).toBe(testUser.user.displayName);
 
       const replyDeletedParentResponse = await request(app)
         .post(`/api/posts/${post.id}/comments`)
@@ -679,16 +793,17 @@ describe('Posts API - 文章接口测试', () => {
           content: 'Reply to deleted parent',
           parentId: parent.id,
         });
-      expect(replyDeletedParentResponse.status).toBe(400);
-      expect(replyDeletedParentResponse.body.error).toBe('回复目标不存在');
+      expect(replyDeletedParentResponse.status).toBe(201);
+      expect(replyDeletedParentResponse.body.comment.parentId).toBe(parent.id);
+      expect(replyDeletedParentResponse.body.comment.replyToId).toBe(parent.id);
 
       const dbPost = await prisma.post.findUnique({
         where: { id: post.id },
       });
-      expect(dbPost?.commentsCount).toBe(2);
+      expect(dbPost?.commentsCount).toBe(3);
     });
 
-    it('不应通过帖子删评接口删除图集评论', async () => {
+    it('应该允许通过通用评论接口删除图集评论', async () => {
       const gallery = await prisma.gallery.create({
         data: {
           title: `Gallery For Comment Delete ${Date.now()}`,
@@ -711,13 +826,198 @@ describe('Posts API - 文章接口测试', () => {
         .delete(`/api/posts/comments/${galleryComment.id}`)
         .set('Authorization', `Bearer ${userToken}`);
 
-      expect(response.status).toBe(404);
-      expect(response.body.error).toBe('评论未找到');
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ success: true });
 
       const dbComment = await prisma.postComment.findUnique({
         where: { id: galleryComment.id },
       });
+      expect(dbComment?.deletedAt).not.toBeNull();
+      expect(dbComment?.deletedBy).toBe(testUser.user.uid);
+    });
+
+    it('删除子评论后普通用户不可见且不能继续回复', async () => {
+      const post = await createCurrentUserPost({
+        title: 'Soft Delete Child Comment Test',
+        status: 'published',
+      });
+      const parent = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Root comment content',
+        },
+      });
+      const child = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Child comment content',
+          parentId: parent.id,
+          replyToId: parent.id,
+        },
+      });
+
+      const deleteResponse = await request(app)
+        .delete(`/api/posts/comments/${child.id}`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(deleteResponse.status).toBe(200);
+
+      const publicResponse = await request(app).get(`/api/posts/${post.id}`);
+      expect(publicResponse.status).toBe(200);
+      expect(publicResponse.body.comments.map((comment: { id: string }) => comment.id)).toEqual([parent.id]);
+
+      const adminWithDeletedResponse = await request(app)
+        .get(`/api/posts/${post.id}?includeDeleted=true`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(adminWithDeletedResponse.status).toBe(200);
+      expect(adminWithDeletedResponse.body.comments.map((comment: { id: string }) => comment.id)).toEqual([
+        parent.id,
+        child.id,
+      ]);
+
+      const replyDeletedChildResponse = await request(app)
+        .post(`/api/posts/${post.id}/comments`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          content: 'Reply to deleted child',
+          parentId: child.id,
+        });
+      expect(replyDeletedChildResponse.status).toBe(400);
+      expect(replyDeletedChildResponse.body.error).toBe('回复目标不存在');
+    });
+
+    it('管理员应该可以恢复已删除评论', async () => {
+      const post = await createCurrentUserPost({
+        title: 'Restore Deleted Comment Test',
+        status: 'published',
+      });
+      const comment = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Restorable comment',
+          deletedAt: new Date(),
+          deletedBy: testUser.user.uid,
+        },
+      });
+
+      const forbiddenResponse = await request(app)
+        .post(`/api/posts/comments/${comment.id}/restore`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(forbiddenResponse.status).toBe(403);
+
+      const response = await request(app)
+        .post(`/api/posts/comments/${comment.id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ success: true });
+
+      const dbComment = await prisma.postComment.findUnique({
+        where: { id: comment.id },
+      });
       expect(dbComment?.deletedAt).toBeNull();
+      expect(dbComment?.deletedBy).toBeNull();
+    });
+  });
+
+  describe('POST/DELETE /api/posts/comments/:id/like - 评论点赞', () => {
+    it('应该持久化评论点赞并防重复', async () => {
+      const post = await createCurrentUserPost({
+        title: 'Comment Like Test',
+        status: 'published',
+      });
+      const comment = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Comment to like',
+        },
+      });
+
+      const likeResponse = await request(app)
+        .post(`/api/posts/comments/${comment.id}/like`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(likeResponse.status).toBe(200);
+      expect(likeResponse.body).toMatchObject({ likedByMe: true, likesCount: 1 });
+
+      const duplicateLikeResponse = await request(app)
+        .post(`/api/posts/comments/${comment.id}/like`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(duplicateLikeResponse.status).toBe(200);
+      expect(duplicateLikeResponse.body).toMatchObject({ likedByMe: true, likesCount: 1 });
+
+      const detailResponse = await request(app)
+        .get(`/api/posts/${post.id}`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(detailResponse.status).toBe(200);
+      expect(detailResponse.body.comments[0]).toMatchObject({
+        id: comment.id,
+        likedByMe: true,
+        likesCount: 1,
+      });
+
+      const unlikeResponse = await request(app)
+        .delete(`/api/posts/comments/${comment.id}/like`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(unlikeResponse.status).toBe(200);
+      expect(unlikeResponse.body).toMatchObject({ likedByMe: false, likesCount: 0 });
+    });
+
+    it('不能点赞或取消点赞当前用户不可见内容下的评论', async () => {
+      const otherUser = await createTestUser({
+        email: `test_other_${Date.now()}@example.com`,
+        role: 'user',
+      });
+      const otherToken = await createTestToken(otherUser.user.uid, otherUser.user.role);
+      const draftPost = await createCurrentUserPost({
+        title: 'Hidden Comment Like Post Test',
+        status: 'draft',
+      });
+      const postComment = await prisma.postComment.create({
+        data: {
+          postId: draftPost.id,
+          authorUid: testUser.user.uid,
+          content: 'Draft post comment',
+        },
+      });
+      const hiddenGallery = await prisma.gallery.create({
+        data: {
+          title: `Hidden Gallery Comment Like Test ${Date.now()}`,
+          description: 'Hidden gallery',
+          authorUid: testUser.user.uid,
+          authorName: testUser.user.displayName,
+          published: false,
+        },
+      });
+      const galleryComment = await prisma.postComment.create({
+        data: {
+          galleryId: hiddenGallery.id,
+          authorUid: testUser.user.uid,
+          content: 'Hidden gallery comment',
+        },
+      });
+
+      const postLikeResponse = await request(app)
+        .post(`/api/posts/comments/${postComment.id}/like`)
+        .set('Authorization', `Bearer ${otherToken}`);
+      expect(postLikeResponse.status).toBe(404);
+
+      const postUnlikeResponse = await request(app)
+        .delete(`/api/posts/comments/${postComment.id}/like`)
+        .set('Authorization', `Bearer ${otherToken}`);
+      expect(postUnlikeResponse.status).toBe(404);
+
+      const galleryLikeResponse = await request(app)
+        .post(`/api/posts/comments/${galleryComment.id}/like`)
+        .set('Authorization', `Bearer ${otherToken}`);
+      expect(galleryLikeResponse.status).toBe(404);
+
+      const ownerLikeResponse = await request(app)
+        .post(`/api/posts/comments/${postComment.id}/like`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(ownerLikeResponse.status).toBe(200);
+      expect(ownerLikeResponse.body).toMatchObject({ likedByMe: true, likesCount: 1 });
     });
   });
 

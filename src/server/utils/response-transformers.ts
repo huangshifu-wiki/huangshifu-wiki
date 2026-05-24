@@ -318,36 +318,60 @@ export function toPostResponse(post: {
 
 const DELETED_COMMENT_PLACEHOLDER = '评论已删除'
 
-export function toCommentResponse(comment: {
+type CommentResponseInput = {
   id: string;
   postId?: string | null;
   galleryId?: string | null;
   authorUid: string;
   content: string;
   parentId: string | null;
+  replyToId?: string | null;
   deletedAt?: Date | null;
   deletedBy?: string | null;
   createdAt: Date;
+  _count?: {
+    likes?: number;
+  };
   // author 关系是可选的——评论查询时如果忘记 include 就回退到 null/匿名，
   // 而不是直接抛 TS 错误。生产路径都应该 include 关系。
   author?: {
     displayName: string;
     photoURL: string | null;
   } | null;
-}, options?: { maskDeletedContent?: boolean }) {
+  replyTo?: {
+    authorUid: string;
+    author?: {
+      displayName: string;
+    } | null;
+  } | null;
+}
+
+export function toCommentResponse(comment: CommentResponseInput, options?: {
+  maskDeletedContent?: boolean;
+  hideDeletedAuthor?: boolean;
+  likedByMe?: boolean;
+  deletedByName?: string | null;
+}) {
   const isDeleted = Boolean(comment.deletedAt)
+  const hideDeletedAuthor = Boolean(options?.hideDeletedAuthor && isDeleted)
   return {
     id: comment.id,
     postId: comment.postId ?? null,
     galleryId: comment.galleryId ?? null,
     authorUid: comment.authorUid,
-    authorName: comment.author?.displayName ?? '匿名用户',
-    authorPhoto: comment.author?.photoURL ?? null,
+    authorName: hideDeletedAuthor ? null : comment.author?.displayName ?? '匿名用户',
+    authorPhoto: hideDeletedAuthor ? null : comment.author?.photoURL ?? null,
     content: options?.maskDeletedContent && isDeleted ? DELETED_COMMENT_PLACEHOLDER : comment.content,
     parentId: comment.parentId,
+    replyToId: comment.replyToId ?? null,
+    replyToAuthorUid: comment.replyTo?.authorUid ?? null,
+    replyToAuthorName: comment.replyTo?.author?.displayName ?? null,
     isDeleted,
     deletedAt: comment.deletedAt ? comment.deletedAt.toISOString() : null,
     deletedBy: comment.deletedBy ?? null,
+    deletedByName: options?.deletedByName ?? null,
+    likesCount: comment._count?.likes ?? 0,
+    likedByMe: Boolean(options?.likedByMe),
     createdAt: comment.createdAt.toISOString(),
   };
 }

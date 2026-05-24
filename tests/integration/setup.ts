@@ -68,6 +68,7 @@ export async function cleanupDatabase() {
 
   // 按照外键依赖顺序删除数据
   const deleteOrder = [
+    'postCommentLike',
     'postLike',
     'postDislike',
     'postComment',

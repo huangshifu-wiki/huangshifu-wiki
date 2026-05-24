@@ -82,9 +82,15 @@ export interface CommentItem {
   authorPhoto: string | null;
   content: string;
   parentId: string | null;
+  replyToId?: string | null;
+  replyToAuthorUid?: string | null;
+  replyToAuthorName?: string | null;
   isDeleted: boolean;
   deletedAt?: string | null;
   deletedBy?: string | null;
+  deletedByName?: string | null;
+  likesCount?: number;
+  likedByMe?: boolean;
   createdAt: string;
   post?: { id: string; title: string; status: string } | null;
 }

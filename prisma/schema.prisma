@@ -152,6 +152,7 @@ model User {
   updatedAt     DateTime       @updatedAt
   posts         Post[]         @relation("UserPosts")
   comments      PostComment[]  @relation("UserComments")
+  postCommentLikes PostCommentLike[]
   wikiEdits     WikiPage[]     @relation("WikiLastEditor")
   revisions     WikiRevision[] @relation("WikiRevisionEditor")
   wikiBranches  WikiBranch[]   @relation("WikiBranchEditor")
@@ -264,18 +265,36 @@ model PostComment {
   authorUid  String
   content    String
   parentId   String?
+  replyToId  String?
   deletedAt  DateTime?
   deletedBy  String?
   createdAt  DateTime @default(now())
   post       Post?    @relation("PostComments", fields: [postId], references: [id], onDelete: Cascade)
   gallery    Gallery? @relation("GalleryComments", fields: [galleryId], references: [id], onDelete: Cascade)
   author     User     @relation("UserComments", fields: [authorUid], references: [uid], onDelete: Cascade)
+  replyTo    PostComment? @relation("PostCommentReplyTarget", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies    PostComment[] @relation("PostCommentReplyTarget")
+  likes      PostCommentLike[]
 
   @@index([postId, createdAt])
   @@index([galleryId, createdAt])
   @@index([parentId])
+  @@index([replyToId])
   @@index([deletedAt])
   @@index([authorUid, createdAt])
+}
+
+model PostCommentLike {
+  id        String      @id @default(cuid())
+  commentId String
+  userUid   String
+  createdAt DateTime    @default(now())
+  comment   PostComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userUid], references: [uid], onDelete: Cascade)
+
+  @@unique([commentId, userUid])
+  @@index([userUid, commentId])
+  @@index([userUid, createdAt])
 }
 
 model WikiPage {

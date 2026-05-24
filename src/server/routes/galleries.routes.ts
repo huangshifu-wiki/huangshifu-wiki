@@ -22,6 +22,8 @@ import {
   toGalleryResponse,
   toGalleryListResponse,
   enhancedCache,
+  fetchGalleryCommentsForResponse,
+  resolveCommentReplyTarget,
 } from '../utils'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
 import { prisma } from '../prisma'
@@ -1082,7 +1084,8 @@ router.patch('/:id/images/reorder', requireAuth, requireActiveUser, asyncHandler
 
 router.get('/:id/comments', asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
-    const isAdmin = isAdminRole(req.authUser?.role)
+    const includeDeletedComments =
+      isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true'
     const gallery = await prisma.gallery.findUnique({
       where: { id: req.params.id },
       select: {
@@ -1102,20 +1105,13 @@ router.get('/:id/comments', asyncHandler(async (req: AuthenticatedRequest, res) 
       return
     }
 
-    const comments = await prisma.postComment.findMany({
-      where: { galleryId: req.params.id },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        author: {
-          select: { displayName: true, photoURL: true },
-        },
-      },
+    const comments = await fetchGalleryCommentsForResponse(req.params.id, {
+      authUserUid: req.authUser?.uid,
+      includeDeleted: includeDeletedComments,
     })
 
     res.json({
-      comments: comments.map((comment) =>
-        toCommentResponse(comment, { maskDeletedContent: !isAdmin })
-      ),
+      comments,
     })
   } catch (error) {
     console.error('Fetch gallery comments error:', error)
@@ -1155,20 +1151,17 @@ router.post('/:id/comments', galleryWriteLimiter, requireAuth, requireActiveUser
     }
 
     let replyTargetUid: string | null = null
+    let rootParentId: string | null = null
+    let replyToId: string | null = null
     if (parentId) {
-      const parent = await prisma.postComment.findUnique({
-        where: { id: parentId },
-        select: {
-          id: true,
-          galleryId: true,
-          authorUid: true,
-        },
-      })
-      if (!parent || parent.galleryId !== req.params.id) {
+      const replyTarget = await resolveCommentReplyTarget(parentId, { galleryId: req.params.id })
+      if (!replyTarget) {
         res.status(400).json({ error: '回复目标不存在' })
         return
       }
-      replyTargetUid = parent.authorUid
+      rootParentId = replyTarget.parentId
+      replyToId = replyTarget.replyToId
+      replyTargetUid = replyTarget.replyTargetUid
     }
 
     const comment = await prisma.postComment.create({
@@ -1176,11 +1169,23 @@ router.post('/:id/comments', galleryWriteLimiter, requireAuth, requireActiveUser
         galleryId: req.params.id,
         authorUid: req.authUser!.uid,
         content,
-        parentId: parentId || null,
+        parentId: rootParentId,
+        replyToId,
       },
       include: {
         author: {
           select: { displayName: true, photoURL: true },
+        },
+        replyTo: {
+          select: {
+            authorUid: true,
+            author: {
+              select: { displayName: true },
+            },
+          },
+        },
+        _count: {
+          select: { likes: true },
         },
       },
     })

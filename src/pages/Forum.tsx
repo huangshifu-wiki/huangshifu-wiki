@@ -31,6 +31,8 @@ import {
 	Tag,
 	MapPin,
 	Trash2,
+	Eye,
+	EyeOff,
 } from "lucide-react";
 import { clsx } from "clsx";
 import MarkdownEditor from "../components/MarkdownEditor";
@@ -47,6 +49,7 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { useI18n } from "../lib/i18n";
 import { useToggleInteraction } from "../hooks/useToggleInteraction";
 import { submitFormOnModifierEnter } from "../lib/formShortcuts";
+import { markCommentDeleted, restoreComment, updateCommentLike } from "../utils/commentState";
 
 type PostItem = {
 	id: string;
@@ -90,9 +93,15 @@ type CommentItem = {
 	authorPhoto: string | null;
 	content: string;
 	parentId: string | null;
+	replyToId: string | null;
+	replyToAuthorUid: string | null;
+	replyToAuthorName: string | null;
 	isDeleted: boolean;
 	deletedAt?: string | null;
 	deletedBy?: string | null;
+	deletedByName?: string | null;
+	likesCount: number;
+	likedByMe: boolean;
 	createdAt: string;
 };
 
@@ -394,6 +403,9 @@ const PostDetail = () => {
 	const [loading, setLoading] = useState(true);
 	const [submittingComment, setSubmittingComment] = useState(false);
 	const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+	const [restoringCommentId, setRestoringCommentId] = useState<string | null>(null);
+	const [likingCommentId, setLikingCommentId] = useState<string | null>(null);
+	const [showDeletedComments, setShowDeletedComments] = useState(false);
 	const [submittingReview, setSubmittingReview] = useState(false);
 	const { user, profile, isBanned } = useAuth();
 	const isAdmin = profile?.role === "admin" || profile?.role === "super_admin";
@@ -432,6 +444,7 @@ const PostDetail = () => {
 				setLoading(true);
 				const data = await apiGet<{ post: PostItem; comments: CommentItem[] }>(
 					`/api/posts/${postId}`,
+					{ includeDeleted: isAdmin && showDeletedComments },
 				);
 				setPost(data.post);
 				setComments(data.comments || []);
@@ -443,7 +456,7 @@ const PostDetail = () => {
 		};
 
 		fetchPost();
-	}, [postId]);
+	}, [postId, isAdmin, showDeletedComments]);
 
 	const handleAddComment = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -496,17 +509,13 @@ const PostDetail = () => {
 			setDeletingCommentId(comment.id);
 			await apiDelete(`/api/posts/comments/${comment.id}`);
 			setComments((prev) =>
-				prev.map((item) =>
-					item.id === comment.id
-						? {
-								...item,
-								content: isAdmin ? item.content : t('forum.deletedComment'),
-								isDeleted: true,
-								deletedAt: new Date().toISOString(),
-								deletedBy: user.uid,
-						  }
-						: item,
-				),
+				markCommentDeleted(prev, {
+					commentId: comment.id,
+					deletedContent: t('forum.deletedComment'),
+					deletedBy: user.uid,
+					deletedByName: profile?.displayName || user.displayName || user.uid,
+					showDeletedComments,
+				}),
 			);
 			if (replyTo?.id === comment.id) {
 				setReplyTo(null);
@@ -517,6 +526,44 @@ const PostDetail = () => {
 			show(t('forum.deleteCommentFailed'), { variant: "error" });
 		} finally {
 			setDeletingCommentId(null);
+		}
+	};
+
+	const handleToggleCommentLike = async (comment: CommentItem) => {
+		if (!user || isBanned || likingCommentId || comment.isDeleted) return;
+
+		try {
+			setLikingCommentId(comment.id);
+			const data = comment.likedByMe
+				? await apiDelete<{ likedByMe: boolean; likesCount: number }>(`/api/posts/comments/${comment.id}/like`)
+				: await apiPost<{ likedByMe: boolean; likesCount: number }>(`/api/posts/comments/${comment.id}/like`);
+
+			setComments((prev) =>
+				updateCommentLike(prev, comment.id, data),
+			);
+		} catch (error) {
+			console.error("Error toggling comment like:", error);
+			show(t('forum.commentLikeFailed'), { variant: "error" });
+		} finally {
+			setLikingCommentId(null);
+		}
+	};
+
+	const handleRestoreComment = async (comment: CommentItem) => {
+		if (!isAdmin || !comment.isDeleted || restoringCommentId) return;
+
+		try {
+			setRestoringCommentId(comment.id);
+			await apiPost(`/api/posts/comments/${comment.id}/restore`);
+			setComments((prev) =>
+				restoreComment(prev, comment.id),
+			);
+			show(t('forum.commentRestored'));
+		} catch (error) {
+			console.error("Error restoring comment:", error);
+			show(t('forum.restoreCommentFailed'), { variant: "error" });
+		} finally {
+			setRestoringCommentId(null);
 		}
 	};
 
@@ -539,6 +586,13 @@ const PostDetail = () => {
 	const rootComments = comments.filter((c) => !c.parentId);
 	const getReplies = (parentId: string) =>
 		comments.filter((c) => c.parentId === parentId);
+	const scrollToCommentForm = () => {
+		const form = document.querySelector("form");
+		const top = form?.getBoundingClientRect().top
+			? window.scrollY + form.getBoundingClientRect().top - 200
+			: 0;
+		window.scrollTo({ top, behavior: "smooth" });
+	};
 
 	const isOwner = Boolean(user && post && post.authorUid === user.uid);
 	const canSubmitReview = Boolean(
@@ -551,6 +605,70 @@ const PostDetail = () => {
 	const canComment = post.status === "published";
 	const canDeleteComment = (comment: CommentItem) =>
 		Boolean(user && !comment.isDeleted && (comment.authorUid === user.uid || isAdmin));
+	const canReplyComment = (comment: CommentItem) =>
+		Boolean(user && !isBanned && canComment && (!comment.isDeleted || !comment.parentId));
+	const getCommentAuthorName = (comment: CommentItem) =>
+		comment.authorName || t('forum.anonymousUser');
+	const renderDeletedMeta = (comment: CommentItem) =>
+		isAdmin && showDeletedComments && comment.isDeleted ? (
+			<span className="text-[11px] text-red-500">
+				{t('forum.deletedBadge')}
+				{comment.deletedByName ? ` · ${t('forum.deletedBy', { name: comment.deletedByName })}` : ""}
+			</span>
+		) : null;
+	const renderCommentActions = (comment: CommentItem, size: "root" | "reply") => (
+		<div className={clsx("flex flex-wrap items-center gap-3", size === "reply" ? "mt-1 text-[10px]" : "text-[11px]")}>
+			<span className="text-text-muted">
+				{formatDate(comment.createdAt, size === "reply" ? "MM-dd HH:mm" : "MM-dd HH:mm")}
+			</span>
+			<button
+				type="button"
+				onClick={() => void handleToggleCommentLike(comment)}
+				disabled={!user || isBanned || likingCommentId === comment.id || comment.isDeleted}
+				className={clsx(
+					"inline-flex items-center gap-1 font-medium disabled:opacity-50 disabled:cursor-not-allowed",
+					comment.likedByMe ? "text-red-500" : "text-text-muted hover:text-red-500",
+				)}
+			>
+				<Heart size={size === "reply" ? 10 : 12} fill={comment.likedByMe ? "currentColor" : "none"} />
+				{comment.likesCount || 0}
+			</button>
+			{canReplyComment(comment) && (
+				<button
+					type="button"
+					onClick={() => {
+						setReplyTo(comment);
+						scrollToCommentForm();
+					}}
+					className="font-medium text-brand-gold hover:underline"
+				>
+					{t('forum.reply')}
+				</button>
+			)}
+			{canDeleteComment(comment) && (
+				<button
+					type="button"
+					onClick={() => void handleDeleteComment(comment)}
+					disabled={deletingCommentId === comment.id}
+					className="font-medium text-text-muted hover:text-red-500 disabled:opacity-50"
+				>
+					<Trash2 size={size === "reply" ? 11 : 12} className="inline mr-1" />
+					{t('forum.deleteComment')}
+				</button>
+			)}
+			{isAdmin && showDeletedComments && comment.isDeleted && (
+				<button
+					type="button"
+					onClick={() => void handleRestoreComment(comment)}
+					disabled={restoringCommentId === comment.id}
+					className="font-medium text-brand-gold hover:underline disabled:opacity-50"
+				>
+					{t('forum.restoreComment')}
+				</button>
+			)}
+			{renderDeletedMeta(comment)}
+		</div>
+	);
 
 	const handleSubmitReview = async () => {
 		if (!post || !postId || !canSubmitReview || submittingReview) return;
@@ -662,17 +780,17 @@ const PostDetail = () => {
 						>{post.content}</ReactMarkdown>
 						</div>
 
-						<section className="mt-12 pt-8 border-t border-border">
-							<h3 className="text-[1.25rem] font-bold text-text-primary tracking-[0.12em] mb-6">
-								{t('forum.comments')} ({comments.length})
-							</h3>
+							<section className="mt-12 pt-8 border-t border-border">
+								<h3 className="text-[1.25rem] font-bold text-text-primary tracking-[0.12em] mb-6">
+									{t('forum.comments')} ({comments.length})
+								</h3>
 
-							{user ? (
+								{user ? (
 								<form onSubmit={handleAddComment} className="mb-8">
 									{replyTo && (
 										<div className="mb-3 px-3 py-2 bg-surface-alt border border-border rounded flex items-center justify-between">
 											<span className="text-xs text-brand-gold">
-												{t('forum.reply')} @{replyTo.authorName}
+												{t('forum.reply')} @{getCommentAuthorName(replyTo)}
 											</span>
 											<button
 												type="button"
@@ -690,7 +808,7 @@ const PostDetail = () => {
 											onKeyDown={submitFormOnModifierEnter}
 											placeholder={
 												replyTo
-													? t('forum.replyToPlaceholder', { name: replyTo.authorName })
+													? t('forum.replyToPlaceholder', { name: getCommentAuthorName(replyTo) })
 													: t('forum.commentPlaceholder')
 											}
 											rows={3}
@@ -724,130 +842,77 @@ const PostDetail = () => {
 								</div>
 							)}
 
-							<div>
-								{rootComments.length > 0 ? (
-									rootComments.map((comment) => (
-										<div
-											key={comment.id}
-											className="border-b border-border py-5"
-										>
-											<div className="flex gap-3">
-												<div className="w-9 h-9 rounded bg-surface-alt flex-shrink-0 overflow-hidden flex items-center justify-center">
-													<img
-														src={
-															comment.authorPhoto ||
-															DEFAULT_AVATAR
-														}
-														alt=""
-														className="w-full h-full object-cover"
-														referrerPolicy="no-referrer"
-														onError={handleAvatarError}
-													/>
-												</div>
-												<div className="flex-grow min-w-0">
-													<div className="flex items-center justify-between mb-1">
-														<span className="text-sm font-medium text-text-primary">
-															{comment.authorName || t('forum.anonymousUser')}
-														</span>
-														<span className="text-[11px] text-text-muted">
-															{formatDate(comment.createdAt, "MM-dd HH:mm")}
-														</span>
-													</div>
-													<p className="text-text-secondary text-sm leading-relaxed mb-2">
-														<span className={comment.isDeleted ? "italic text-text-muted" : undefined}>
-															{comment.content}
-														</span>
-													</p>
-													<div className="flex items-center gap-3">
-														{!comment.isDeleted && (
-															<button
-																type="button"
-																onClick={() => {
-																	setReplyTo(comment);
-																	const form = document.querySelector("form");
-																	const top = form?.getBoundingClientRect().top
-																		? window.scrollY +
-																			form.getBoundingClientRect().top -
-																			200
-																		: 0;
-																	window.scrollTo({ top, behavior: "smooth" });
-																}}
-																className="text-[11px] font-medium text-brand-gold hover:underline"
-															>
-																{t('forum.reply')}
-															</button>
-														)}
-														{canDeleteComment(comment) && (
-															<button
-																type="button"
-																onClick={() => void handleDeleteComment(comment)}
-																disabled={deletingCommentId === comment.id}
-																className="text-[11px] font-medium text-text-muted hover:text-red-500 disabled:opacity-50"
-															>
-																<Trash2 size={12} className="inline mr-1" />
-																{t('forum.deleteComment')}
-															</button>
+								<div>
+									{rootComments.length > 0 ? (
+										rootComments.map((comment) => (
+											<div key={comment.id} className="border-b border-border py-5">
+												<div className="flex gap-3">
+													<div className="w-9 h-9 rounded bg-surface-alt flex-shrink-0 overflow-hidden flex items-center justify-center">
+														{comment.isDeleted && !showDeletedComments ? null : (
+															<img
+																src={comment.authorPhoto || DEFAULT_AVATAR}
+																alt=""
+																className="w-full h-full object-cover"
+																referrerPolicy="no-referrer"
+																onError={handleAvatarError}
+															/>
 														)}
 													</div>
+													<div className="flex-grow min-w-0">
+														{comment.isDeleted && !showDeletedComments ? null : (
+															<div className="mb-1 text-sm font-medium text-text-primary">
+																{getCommentAuthorName(comment)}
+															</div>
+														)}
+														<p className="text-text-secondary text-sm leading-relaxed mb-2">
+															<span className={comment.isDeleted ? "italic text-text-muted" : undefined}>
+																{comment.content}
+															</span>
+														</p>
+														{renderCommentActions(comment, "root")}
+													</div>
 												</div>
-											</div>
 
-											{getReplies(comment.id).length > 0 && (
-												<div className="ml-12 mt-3 space-y-3 border-l-2 border-border pl-4">
-													{getReplies(comment.id).map((reply) => (
-														<div key={reply.id} className="flex gap-3">
-															<div className="w-7 h-7 rounded bg-surface-alt flex-shrink-0 overflow-hidden flex items-center justify-center">
-																<img
-																	src={
-																		reply.authorPhoto ||
-																		DEFAULT_AVATAR
-																	}
-																	alt=""
-																	className="w-full h-full object-cover"
-																	referrerPolicy="no-referrer"
-																	onError={handleAvatarError}
-																/>
-															</div>
-															<div className="flex-grow min-w-0">
-																<div className="flex items-center justify-between mb-1">
-																	<span className="text-xs font-medium text-text-primary">
-																		{reply.authorName || t('forum.anonymousUser')}
-																	</span>
-																	<span className="text-[10px] text-text-muted">
-																		{formatDate(reply.createdAt, "MM-dd HH:mm")}
-																	</span>
+												{getReplies(comment.id).length > 0 && (
+													<div className="ml-12 mt-3 space-y-3 border-l-2 border-border pl-4">
+														{getReplies(comment.id).map((reply) => (
+															<div key={reply.id} className="flex gap-3">
+																<div className="w-7 h-7 rounded bg-surface-alt flex-shrink-0 overflow-hidden flex items-center justify-center">
+																	<img
+																		src={reply.authorPhoto || DEFAULT_AVATAR}
+																		alt=""
+																		className="w-full h-full object-cover"
+																		referrerPolicy="no-referrer"
+																		onError={handleAvatarError}
+																	/>
 																</div>
-																<p className="text-text-secondary text-xs leading-relaxed">
-																	<span className={reply.isDeleted ? "italic text-text-muted" : undefined}>
-																		{reply.content}
-																	</span>
-																</p>
-																<div className="mt-1">
-																	{canDeleteComment(reply) && (
-																		<button
-																			type="button"
-																			onClick={() => void handleDeleteComment(reply)}
-																			disabled={deletingCommentId === reply.id}
-																			className="text-[10px] font-medium text-text-muted hover:text-red-500 disabled:opacity-50"
-																		>
-																			<Trash2 size={11} className="inline mr-1" />
-																			{t('forum.deleteComment')}
-																		</button>
-																	)}
+																<div className="flex-grow min-w-0">
+																	<p className="text-text-secondary text-xs leading-relaxed">
+																		<span className="font-medium text-text-primary">
+																			{getCommentAuthorName(reply)}
+																		</span>
+																		{reply.replyToId && reply.replyToId !== reply.parentId && reply.replyToAuthorName ? (
+																			<>
+																				<span className="text-text-muted"> {t('forum.reply')} @</span>
+																				<span className="font-medium text-text-primary">{reply.replyToAuthorName}</span>
+																			</>
+																		) : null}
+																		<span>：{reply.content}</span>
+																	</p>
+																	{renderCommentActions(reply, "reply")}
 																</div>
 															</div>
-														</div>
-													))}
-												</div>
-											)}
-										</div>
-									))
-								) : (
-									<p className="text-center text-text-muted italic py-8">
-										{t('forum.emptyComments')}
-									</p>
-								)}
-							</div>
+														))}
+													</div>
+												)}
+											</div>
+										))
+									) : (
+										<p className="text-center text-text-muted italic py-8">
+											{t('forum.emptyComments')}
+										</p>
+									)}
+								</div>
 						</section>
 					</div>
 
@@ -910,21 +975,37 @@ const PostDetail = () => {
 									<Share2 size={15} /> {t('forum.share')}
 								</button>
 							</div>
-							{isAdmin && (
-								<button
-									onClick={togglePin}
-									disabled={pinning}
-									className={clsx(
-										"w-full mt-2 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
-										post.isPinned
-											? "bg-[var(--color-theme-accent)] text-white border border-transparent"
-											: "bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold",
-										pinning && "opacity-50 cursor-not-allowed",
-									)}
-								>
-									<Pin size={15} /> {post.isPinned ? t('forum.pinned') : t('forum.pin')}
-								</button>
-							)}
+								{isAdmin && (
+									<div className="mt-2 space-y-2">
+										<button
+											onClick={togglePin}
+											disabled={pinning}
+											className={clsx(
+												"w-full px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+												post.isPinned
+													? "bg-[var(--color-theme-accent)] text-white border border-transparent"
+													: "bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold",
+												pinning && "opacity-50 cursor-not-allowed",
+											)}
+										>
+											<Pin size={15} /> {post.isPinned ? t('forum.pinned') : t('forum.pin')}
+										</button>
+										<button
+											type="button"
+											onClick={() => setShowDeletedComments((prev) => !prev)}
+											className={clsx(
+												"w-full px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+												showDeletedComments
+													? "bg-[var(--color-theme-accent)] text-white border border-transparent"
+													: "bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold",
+											)}
+												aria-pressed={showDeletedComments}
+											>
+												{showDeletedComments ? <EyeOff size={15} /> : <Eye size={15} />}
+												{t('forum.showDeletedComments')}
+											</button>
+									</div>
+								)}
 						</div>
 
 						{/* Status */}

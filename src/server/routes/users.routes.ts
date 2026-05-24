@@ -761,12 +761,23 @@ router.get('/:userId/comments', asyncHandler(async (req: AuthenticatedRequest, r
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip,
-        include: {
-          author: {
-            select: { displayName: true, photoURL: true },
+	        include: {
+	          author: {
+	            select: { displayName: true, photoURL: true },
+	          },
+          replyTo: {
+            select: {
+              authorUid: true,
+              author: {
+                select: { displayName: true },
+              },
+            },
           },
-        },
-      }),
+          _count: {
+            select: { likes: true },
+          },
+	        },
+	      }),
       prisma.postComment.count({ where: { authorUid: uid } }),
     ]);
 

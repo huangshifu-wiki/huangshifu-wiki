@@ -16,6 +16,11 @@ import {
   parseContentStatus,
   parsePagination,
   enhancedCache,
+  fetchPostCommentsForResponse,
+  fetchPostCommentsPageForResponse,
+  resolveCommentReplyTarget,
+  createCommentLike,
+  deleteCommentLike,
 } from '../utils';
 import type { AuthenticatedRequest, ContentStatus } from '../types';
 
@@ -317,15 +322,13 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
       browsingPromise,
     ]);
 
+    const includeDeletedComments =
+      isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true';
+
     const [comments, likedByMe, favoritedByMe, dislikedByMe] = await Promise.all([
-      prisma.postComment.findMany({
-        where: { postId: req.params.id },
-        orderBy: { createdAt: 'asc' },
-        include: {
-          author: {
-            select: { displayName: true, photoURL: true },
-          },
-        },
+      fetchPostCommentsForResponse(req.params.id, {
+        authUserUid: req.authUser?.uid,
+        includeDeleted: includeDeletedComments,
       }),
       ...(req.authUser
         ? [
@@ -353,9 +356,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
         favoritedByMe,
         dislikedByMe,
       },
-      comments: comments.map((comment) =>
-        toCommentResponse(comment, { maskDeletedContent: !isAdminRole(req.authUser?.role) })
-      ),
+      comments,
     });
   } catch (error) {
     console.error('Fetch post detail error:', error);
@@ -516,7 +517,8 @@ router.get('/:postId/comments', async (req: AuthenticatedRequest, res) => {
   try {
     const postId = req.params.postId;
     const { limit, page, offset: skip } = parsePagination(req.query);
-    const isAdmin = isAdminRole(req.authUser?.role);
+    const includeDeletedComments =
+      isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true';
 
     const post = await prisma.post.findUnique({
       where: { id: postId },
@@ -528,25 +530,15 @@ router.get('/:postId/comments', async (req: AuthenticatedRequest, res) => {
       return;
     }
 
-    const [comments, total] = await Promise.all([
-      prisma.postComment.findMany({
-        where: { postId },
-        orderBy: { createdAt: 'asc' },
-        take: limit,
-        skip,
-        include: {
-          author: {
-            select: { displayName: true, photoURL: true },
-          },
-        },
-      }),
-      prisma.postComment.count({ where: { postId } }),
-    ]);
+    const { comments, total } = await fetchPostCommentsPageForResponse(postId, {
+      authUserUid: req.authUser?.uid,
+      includeDeleted: includeDeletedComments,
+      take: limit,
+      skip,
+    });
 
     res.json({
-      comments: comments.map((comment) =>
-        toCommentResponse(comment, { maskDeletedContent: !isAdmin })
-      ),
+      comments,
       total,
       page,
       limit,
@@ -589,21 +581,17 @@ router.post('/:postId/comments', postWriteLimiter, requireAuth, requireActiveUse
     }
 
     let replyTargetUid: string | null = null;
+    let rootParentId: string | null = null;
+    let replyToId: string | null = null;
     if (parentId) {
-      const parent = await prisma.postComment.findUnique({
-        where: { id: parentId },
-        select: {
-          id: true,
-          postId: true,
-          authorUid: true,
-          deletedAt: true,
-        },
-      });
-      if (!parent || parent.postId !== req.params.postId || parent.deletedAt) {
+      const replyTarget = await resolveCommentReplyTarget(parentId, { postId: req.params.postId });
+      if (!replyTarget) {
         res.status(400).json({ error: '回复目标不存在' });
         return;
       }
-      replyTargetUid = parent.authorUid;
+      rootParentId = replyTarget.parentId;
+      replyToId = replyTarget.replyToId;
+      replyTargetUid = replyTarget.replyTargetUid;
     }
 
     const comment = await prisma.postComment.create({
@@ -611,11 +599,23 @@ router.post('/:postId/comments', postWriteLimiter, requireAuth, requireActiveUse
         postId: req.params.postId,
         authorUid: req.authUser!.uid,
         content,
-        parentId: parentId || null,
+        parentId: rootParentId,
+        replyToId,
       },
       include: {
         author: {
           select: { displayName: true, photoURL: true },
+        },
+        replyTo: {
+          select: {
+            authorUid: true,
+            author: {
+              select: { displayName: true },
+            },
+          },
+        },
+        _count: {
+          select: { likes: true },
         },
       },
     });
@@ -649,10 +649,10 @@ router.delete('/comments/:id', requireAuth, requireActiveUser, async (req: Authe
   try {
     const comment = await prisma.postComment.findUnique({
       where: { id: req.params.id },
-      select: { authorUid: true, postId: true, deletedAt: true },
+      select: { authorUid: true, postId: true, galleryId: true, deletedAt: true },
     });
 
-    if (!comment || !comment.postId) {
+    if (!comment || (!comment.postId && !comment.galleryId)) {
       res.status(404).json({ error: '评论未找到' });
       return;
     }
@@ -678,6 +678,65 @@ router.delete('/comments/:id', requireAuth, requireActiveUser, async (req: Authe
   } catch (error) {
     console.error('Delete comment error:', error);
     res.status(500).json({ error: '删除评论失败' });
+  }
+});
+
+router.post('/comments/:id/restore', requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const comment = await prisma.postComment.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, postId: true, galleryId: true, deletedAt: true },
+    });
+
+    if (!comment || (!comment.postId && !comment.galleryId)) {
+      res.status(404).json({ error: '评论未找到' });
+      return;
+    }
+
+    if (comment.deletedAt) {
+      await prisma.postComment.update({
+        where: { id: req.params.id },
+        data: {
+          deletedAt: null,
+          deletedBy: null,
+        },
+      });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Restore comment error:', error);
+    res.status(500).json({ error: '恢复评论失败' });
+  }
+});
+
+router.post('/comments/:id/like', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+  try {
+    const result = await createCommentLike(req.params.id, req.authUser!);
+    if (!result) {
+      res.status(404).json({ error: '评论未找到' });
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Like comment error:', error);
+    res.status(500).json({ error: '点赞失败' });
+  }
+});
+
+router.delete('/comments/:id/like', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+  try {
+    const result = await deleteCommentLike(req.params.id, req.authUser!);
+    if (!result) {
+      res.status(404).json({ error: '评论未找到' });
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Unlike comment error:', error);
+    res.status(500).json({ error: '取消点赞失败' });
   }
 });
 

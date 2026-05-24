@@ -97,6 +97,16 @@ export {
   toAlbumResponse,
 } from './response-transformers';
 
+export {
+  buildCommentResponses,
+  fetchPostCommentsForResponse,
+  fetchPostCommentsPageForResponse,
+  fetchGalleryCommentsForResponse,
+  resolveCommentReplyTarget,
+  createCommentLike,
+  deleteCommentLike,
+} from './comments';
+
 // === 音乐全链路 ===
 export {
   resolveSongDisplayAlbum,

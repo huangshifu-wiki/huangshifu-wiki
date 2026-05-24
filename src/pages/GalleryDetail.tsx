@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Link2,
+  Heart,
   Plus,
   Save,
   Trash2,
@@ -24,6 +25,7 @@ import { formatDateTime, toDateValue } from '../lib/dateUtils';
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar';
 import { getImagePreference } from '../services/imageService';
 import { submitFormOnModifierEnter } from '../lib/formShortcuts';
+import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState';
 
 type GalleryImage = {
   id: string;
@@ -84,9 +86,15 @@ type CommentItem = {
   authorPhoto: string | null;
   content: string;
   parentId: string | null;
+  replyToId: string | null;
+  replyToAuthorUid: string | null;
+  replyToAuthorName: string | null;
   isDeleted: boolean;
   deletedAt?: string | null;
   deletedBy?: string | null;
+  deletedByName?: string | null;
+  likesCount: number;
+  likedByMe: boolean;
   createdAt: string;
 };
 
@@ -150,6 +158,11 @@ const GalleryDetail = () => {
   const [newComment, setNewComment] = useState('');
   const [replyTo, setReplyTo] = useState<CommentItem | null>(null);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  const [restoringCommentId, setRestoringCommentId] = useState<string | null>(null);
+  const [likingCommentId, setLikingCommentId] = useState<string | null>(null);
+  const [showDeletedComments, setShowDeletedComments] = useState(false);
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   const addImagesInputRef = useRef<HTMLInputElement>(null);
   const draftRef = useRef<GalleryDraft | null>(null);
@@ -191,7 +204,9 @@ const GalleryDetail = () => {
   const fetchComments = async () => {
     if (!galleryId) return;
     try {
-      const data = await apiGet<{ comments: CommentItem[] }>(`/api/galleries/${galleryId}/comments`);
+      const data = await apiGet<{ comments: CommentItem[] }>(`/api/galleries/${galleryId}/comments`, {
+        includeDeleted: isAdmin && showDeletedComments,
+      });
       setComments(data.comments || []);
     } catch (error) {
       console.error('Fetch gallery comments error:', error);
@@ -202,7 +217,7 @@ const GalleryDetail = () => {
     if (gallery?.published && galleryId) {
       fetchComments();
     }
-  }, [gallery?.published, galleryId]);
+  }, [gallery?.published, galleryId, isAdmin, showDeletedComments]);
 
   useEffect(() => () => {
     if (draftRef.current) {
@@ -215,8 +230,80 @@ const GalleryDetail = () => {
     [draft?.images, editing, gallery?.images],
   );
 
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const canManage = Boolean(user && gallery && !isBanned && (gallery.authorUid === user.uid || isAdmin));
+  const rootComments = comments.filter((comment) => !comment.parentId);
+  const getReplies = (parentId: string) => comments.filter((comment) => comment.parentId === parentId);
+  const getCommentAuthorName = (comment: CommentItem) =>
+    comment.authorName || t('gallery.anonymousUser');
+  const canDeleteComment = (comment: CommentItem) =>
+    Boolean(user && !comment.isDeleted && (comment.authorUid === user.uid || isAdmin));
+  const canReplyComment = (comment: CommentItem) =>
+    Boolean(user && !isBanned && gallery?.published && (!comment.isDeleted || !comment.parentId));
+  const scrollToCommentForm = () => {
+    const form = document.querySelector('form');
+    const top = form?.getBoundingClientRect().top
+      ? window.scrollY + form.getBoundingClientRect().top - 200
+      : document.body.scrollHeight;
+    window.scrollTo({ top, behavior: 'smooth' });
+  };
+  const renderDeletedMeta = (comment: CommentItem) =>
+    isAdmin && showDeletedComments && comment.isDeleted ? (
+      <span className="text-[10px] text-red-500">
+        {t('gallery.deletedBadge')}
+        {comment.deletedByName ? ` · ${t('gallery.deletedBy', { name: comment.deletedByName })}` : ''}
+      </span>
+    ) : null;
+  const renderCommentActions = (comment: CommentItem, size: 'root' | 'reply') => (
+    <div className={clsx('flex flex-wrap items-center gap-3', size === 'reply' ? 'mt-1 text-[10px]' : 'text-[10px]')}>
+      <span className="text-text-muted">{formatDateTime(comment.createdAt)}</span>
+      <button
+        type="button"
+        onClick={() => void handleToggleCommentLike(comment)}
+        disabled={!user || isBanned || likingCommentId === comment.id || comment.isDeleted}
+        className={clsx(
+          'inline-flex items-center gap-1 font-medium disabled:opacity-50 disabled:cursor-not-allowed',
+          comment.likedByMe ? 'text-red-500' : 'text-text-muted hover:text-red-500'
+        )}
+      >
+        <Heart size={size === 'reply' ? 10 : 12} fill={comment.likedByMe ? 'currentColor' : 'none'} />
+        {comment.likesCount || 0}
+      </button>
+      {canReplyComment(comment) && (
+        <button
+          type="button"
+          onClick={() => {
+            setReplyTo(comment);
+            scrollToCommentForm();
+          }}
+          className="font-medium text-brand-gold hover:underline"
+        >
+          {t('gallery.reply')}
+        </button>
+      )}
+      {canDeleteComment(comment) && (
+        <button
+          type="button"
+          onClick={() => void handleDeleteComment(comment)}
+          disabled={deletingCommentId === comment.id}
+          className="font-medium text-text-muted hover:text-red-500 disabled:opacity-50"
+        >
+          <Trash2 size={size === 'reply' ? 11 : 12} className="inline mr-1" />
+          {t('gallery.deleteComment')}
+        </button>
+      )}
+      {isAdmin && showDeletedComments && comment.isDeleted && (
+        <button
+          type="button"
+          onClick={() => void handleRestoreComment(comment)}
+          disabled={restoringCommentId === comment.id}
+          className="font-medium text-brand-gold hover:underline disabled:opacity-50"
+        >
+          {t('gallery.restoreComment')}
+        </button>
+      )}
+      {renderDeletedMeta(comment)}
+    </div>
+  );
 
   const handleOpenLightbox = (index: number) => {
     setLightboxIndex(index);
@@ -350,6 +437,74 @@ const GalleryDetail = () => {
       show(t('gallery.commentFailed'), { variant: 'error' });
     } finally {
       setSubmittingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (comment: CommentItem) => {
+    if (!user || deletingCommentId) return;
+    const canDeleteComment = comment.authorUid === user.uid || isAdmin;
+    if (!canDeleteComment || comment.isDeleted) return;
+    if (!window.confirm(t('gallery.deleteCommentConfirm'))) return;
+
+    try {
+      setDeletingCommentId(comment.id);
+      await apiDelete(`/api/posts/comments/${comment.id}`);
+      setComments((prev) =>
+        markCommentDeleted(prev, {
+          commentId: comment.id,
+          deletedContent: t('gallery.deletedComment'),
+          deletedBy: user.uid,
+          deletedByName: profile?.displayName || user.displayName || user.uid,
+          showDeletedComments,
+        })
+      );
+      if (replyTo?.id === comment.id) {
+        setReplyTo(null);
+      }
+      show(t('gallery.commentDeleted'));
+    } catch (error) {
+      console.error('Error deleting gallery comment:', error);
+      show(t('gallery.deleteCommentFailed'), { variant: 'error' });
+    } finally {
+      setDeletingCommentId(null);
+    }
+  };
+
+  const handleToggleCommentLike = async (comment: CommentItem) => {
+    if (!user || isBanned || likingCommentId || comment.isDeleted) return;
+
+    try {
+      setLikingCommentId(comment.id);
+      const data = comment.likedByMe
+        ? await apiDelete<{ likedByMe: boolean; likesCount: number }>(`/api/posts/comments/${comment.id}/like`)
+        : await apiPost<{ likedByMe: boolean; likesCount: number }>(`/api/posts/comments/${comment.id}/like`);
+
+      setComments((prev) =>
+        updateCommentLike(prev, comment.id, data)
+      );
+    } catch (error) {
+      console.error('Error toggling gallery comment like:', error);
+      show(t('gallery.commentLikeFailed'), { variant: 'error' });
+    } finally {
+      setLikingCommentId(null);
+    }
+  };
+
+  const handleRestoreComment = async (comment: CommentItem) => {
+    if (!isAdmin || !comment.isDeleted || restoringCommentId) return;
+
+    try {
+      setRestoringCommentId(comment.id);
+      await apiPost(`/api/posts/comments/${comment.id}/restore`);
+      setComments((prev) =>
+        restoreComment(prev, comment.id)
+      );
+      show(t('gallery.commentRestored'));
+    } catch (error) {
+      console.error('Error restoring gallery comment:', error);
+      show(t('gallery.restoreCommentFailed'), { variant: 'error' });
+    } finally {
+      setRestoringCommentId(null);
     }
   };
 
@@ -799,12 +954,23 @@ const GalleryDetail = () => {
               <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
               {t('gallery.comments')}
             </h2>
+            {isAdmin && (
+              <label className="mb-5 flex items-center gap-2 text-xs text-text-muted">
+                <input
+                  type="checkbox"
+                  checked={showDeletedComments}
+                  onChange={(event) => setShowDeletedComments(event.target.checked)}
+                  className="accent-brand-gold"
+                />
+                {t('gallery.showDeletedComments')}
+              </label>
+            )}
 
             {user && !isBanned && (
               <form onSubmit={handleAddComment} className="mb-8">
                 {replyTo && (
                   <div className="flex items-center gap-2 mb-2 text-xs text-text-muted">
-                    <span>{t('gallery.replyTo', { name: replyTo.authorName })}</span>
+                    <span>{t('gallery.replyTo', { name: getCommentAuthorName(replyTo) })}</span>
                     <button
                       type="button"
                       onClick={() => setReplyTo(null)}
@@ -857,41 +1023,38 @@ const GalleryDetail = () => {
             )}
 
             <div className="space-y-6">
-              {comments.length > 0 ? comments.filter((c) => !c.parentId).map((comment) => (
+              {rootComments.length > 0 ? rootComments.map((comment) => (
                 <div key={comment.id} className="space-y-4">
                   <div className="flex gap-3">
                     <div className="w-10 h-10 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
-                      <img
-                        src={comment.authorPhoto || DEFAULT_AVATAR}
-                        alt=""
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                        onError={handleAvatarError}
-                      />
+                      {comment.isDeleted && !showDeletedComments ? null : (
+                        <img
+                          src={comment.authorPhoto || DEFAULT_AVATAR}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          onError={handleAvatarError}
+                        />
+                      )}
                     </div>
                     <div className="flex-grow">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-semibold text-text-primary">{comment.authorName || t('gallery.anonymousUser')}</span>
-                        <span className="text-[10px] text-text-muted">{formatDateTime(comment.createdAt)}</span>
-                      </div>
-                      <p className="text-text-secondary text-sm leading-relaxed mb-2">{comment.content}</p>
-                      {user && !isBanned && (
-                        <button
-                          onClick={() => {
-                            setReplyTo(comment);
-                            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                          }}
-                          className="text-[10px] font-medium text-brand-gold hover:underline"
-                        >
-                          {t('gallery.reply')}
-                        </button>
+                      {comment.isDeleted && !showDeletedComments ? null : (
+                        <div className="mb-1 text-sm font-semibold text-text-primary">
+                          {getCommentAuthorName(comment)}
+                        </div>
                       )}
+                      <p className="text-text-secondary text-sm leading-relaxed mb-2">
+                        <span className={comment.isDeleted ? 'italic text-text-muted' : undefined}>
+                          {comment.content}
+                        </span>
+                      </p>
+                      {renderCommentActions(comment, 'root')}
                     </div>
                   </div>
 
-                  {comments.filter((c) => c.parentId === comment.id).length > 0 && (
+                  {getReplies(comment.id).length > 0 && (
                     <div className="ml-14 space-y-4 border-l-2 border-border pl-6">
-                      {comments.filter((c) => c.parentId === comment.id).map((reply) => (
+                      {getReplies(comment.id).map((reply) => (
                         <div key={reply.id} className="flex gap-3">
                           <div className="w-8 h-8 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
                             <img
@@ -903,11 +1066,17 @@ const GalleryDetail = () => {
                             />
                           </div>
                           <div className="flex-grow">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-semibold text-text-primary">{reply.authorName || t('gallery.anonymousUser')}</span>
-                              <span className="text-[10px] text-text-muted">{formatDateTime(reply.createdAt)}</span>
-                            </div>
-                            <p className="text-text-secondary text-xs leading-relaxed">{reply.content}</p>
+                            <p className="text-text-secondary text-xs leading-relaxed">
+                              <span className="font-semibold text-text-primary">{getCommentAuthorName(reply)}</span>
+                              {reply.replyToId && reply.replyToId !== reply.parentId && reply.replyToAuthorName ? (
+                                <>
+                                  <span className="text-text-muted"> {t('gallery.reply')} @</span>
+                                  <span className="font-semibold text-text-primary">{reply.replyToAuthorName}</span>
+                                </>
+                              ) : null}
+                              <span>：{reply.content}</span>
+                            </p>
+                            {renderCommentActions(reply, 'reply')}
                           </div>
                         </div>
                       ))}
