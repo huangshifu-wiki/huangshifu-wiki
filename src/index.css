@@ -17,6 +17,7 @@
   --color-theme-surface-alt: #f0ece3;
   --color-theme-border: #e0dcd3;
   --color-theme-accent: #8a6313;
+  --color-theme-accent-hover: #b07b17;
   --color-theme-accent-strong: #6f4f0f;
   --color-theme-accent-soft: #f3e7c4;
   --color-theme-accent-contrast: #fffdf8;
@@ -145,6 +146,7 @@
   --color-theme-surface-alt: #342c25;
   --color-theme-border: #51453a;
   --color-theme-accent: #b07b17;
+  --color-theme-accent-hover: #d4a843;
   --color-theme-accent-strong: #d4a843;
   --color-theme-accent-soft: rgba(212, 168, 67, 0.18);
   --color-theme-accent-contrast: #fff8eb;
@@ -318,7 +320,7 @@
 }
 
 .theme-button-primary:hover {
-  background: var(--color-brand-gold);
+  background: var(--color-theme-accent-hover);
   box-shadow: var(--shadow-brand-hover);
 }
 
