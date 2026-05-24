@@ -539,6 +539,72 @@ describe('Posts API - 文章接口测试', () => {
   });
 
   // ============================================================================
+  // 发表评论接口测试（需要认证）
+  // ============================================================================
+  describe('POST /api/posts/:postId/comments - 发表评论', () => {
+    it('应该允许顶级评论显式传入 null parentId', async () => {
+      const post = await createCurrentUserPost({
+        title: 'Top Level Comment Test',
+        status: 'published',
+      });
+
+      const response = await request(app)
+        .post(`/api/posts/${post.id}/comments`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          content: 'Top level comment',
+          parentId: null,
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body).toHaveProperty('comment');
+      expect(response.body.comment.content).toBe('Top level comment');
+      expect(response.body.comment.parentId).toBeNull();
+
+      const dbComment = await prisma.postComment.findUnique({
+        where: { id: response.body.comment.id },
+      });
+      expect(dbComment?.parentId).toBeNull();
+
+      const dbPost = await prisma.post.findUnique({
+        where: { id: post.id },
+      });
+      expect(dbPost?.commentsCount).toBe(1);
+    });
+
+    it('应该允许回复已有评论', async () => {
+      const post = await createCurrentUserPost({
+        title: 'Reply Comment Test',
+        status: 'published',
+      });
+
+      const parent = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Parent comment',
+        },
+      });
+
+      const response = await request(app)
+        .post(`/api/posts/${post.id}/comments`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          content: 'Reply comment',
+          parentId: parent.id,
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.comment.parentId).toBe(parent.id);
+
+      const dbComment = await prisma.postComment.findUnique({
+        where: { id: response.body.comment.id },
+      });
+      expect(dbComment?.parentId).toBe(parent.id);
+    });
+  });
+
+  // ============================================================================
   // 创建文章接口测试（需要认证）
   // ============================================================================
   describe('POST /api/posts - 创建文章', () => {

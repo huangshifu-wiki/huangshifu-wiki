@@ -14,5 +14,5 @@ export const postCreateSchema = z.object({
 
 export const postCommentSchema = z.object({
   content: z.string().min(1).max(5000),
-  parentId: z.string().optional(),
+  parentId: z.string().nullable().optional(),
 })
