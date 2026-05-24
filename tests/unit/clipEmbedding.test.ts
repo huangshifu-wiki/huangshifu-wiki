@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const readMock = vi.hoisted(() => vi.fn());
 const pipelineMock = vi.hoisted(() => vi.fn());
+const fetchMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@huggingface/transformers', () => ({
   RawImage: {
@@ -19,9 +20,17 @@ describe('clipEmbedding', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+    } as Response);
     delete process.env.IMAGE_EMBEDDING_MODEL;
     delete process.env.IMAGE_EMBEDDING_VECTOR_SIZE;
     delete process.env.IMAGE_EMBEDDING_DTYPE;
+    delete process.env.TRANSFORMERS_OFFLINE;
+    delete process.env.SKIP_NETWORK_PROBE;
+    delete process.env.HF_PROBE_TIMEOUT_MS;
   });
 
   it('returns default model and vector size', async () => {
