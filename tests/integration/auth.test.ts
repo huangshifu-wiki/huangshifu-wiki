@@ -199,6 +199,30 @@ describe('Auth API - 认证接口测试', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('user', null);
     });
+
+    it('密码变更后旧 token 应该失效', async () => {
+      const { user } = await createTestUser({
+        email: 'test_stale_session@example.com',
+        password: 'OriginalPassword123!',
+      });
+      const token = await createTestToken(user.uid, user.role);
+      const bcrypt = (await import('bcryptjs')).default;
+      const nextPasswordHash = await bcrypt.hash('UpdatedPassword123!', 12);
+
+      await prisma.user.update({
+        where: { uid: user.uid },
+        data: {
+          passwordHash: nextPasswordHash,
+        },
+      });
+
+      const response = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('user', null);
+    });
   });
 
   // ============================================================================

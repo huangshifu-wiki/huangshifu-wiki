@@ -1,10 +1,9 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { UserRole as PrismaUserRole } from '@prisma/client'
-import { requireAuth, requireActiveUser, userToApiUser, createToken, setAuthCookie, clearAuthCookie, clearUserCache } from '../middleware/auth'
+import { requireAuth, requireActiveUser, userToApiUser, issueUserSession, clearAuthCookie, clearUserCache } from '../middleware/auth'
 import { authRateLimiter } from '../middleware/rateLimiter'
 import { asyncHandler } from '../middleware/asyncHandler'
-import { issueXsrfToken } from '../middleware/csrf'
 import { exchangeWechatLoginCode, buildUniqueWechatEmail, logger } from '../utils'
 import { prisma } from '../prisma'
 import { validateBody, registerSchema, loginSchema } from '../schemas'
@@ -109,9 +108,7 @@ router.post('/register', authRateLimiter, validateBody(registerSchema), asyncHan
     const apiUser = userToApiUser(user)
     logger.info({ uid: user.uid }, 'Creating token for user')
 
-    const token = createToken(apiUser)
-    setAuthCookie(req, res, token)
-    issueXsrfToken(res)
+    issueUserSession(req, res, user)
 
     logger.info({ uid: user.uid, email: user.email }, 'Register success')
     res.status(201).json({ user: apiUser })
@@ -161,9 +158,7 @@ router.post('/login', authRateLimiter, validateBody(loginSchema), asyncHandler(a
     const apiUser = userToApiUser(user)
     logger.info({ uid: user.uid }, 'Creating token for login')
 
-    const token = createToken(apiUser)
-    setAuthCookie(req, res, token)
-    issueXsrfToken(res)
+    issueUserSession(req, res, user)
 
     logger.info({ uid: user.uid, email: user.email }, 'Login success')
     res.json({ user: apiUser })
@@ -250,9 +245,7 @@ router.post('/wechat/login', authRateLimiter, asyncHandler(async (req, res) => {
     }
 
     const apiUser = userToApiUser(user)
-    const token = createToken(apiUser)
-    setAuthCookie(req, res, token)
-    issueXsrfToken(res)
+    issueUserSession(req, res, user)
 
     logger.info({ uid: user.uid, openId }, 'WeChat login success')
 

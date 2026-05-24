@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { UserRole as PrismaUserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { requireAuth, requireActiveUser, requireAdmin, requireSuperAdmin, userToApiUser, clearUserCache } from '../middleware/auth';
+import { requireAuth, requireActiveUser, requireAdmin, requireSuperAdmin, userToApiUser, clearUserCache, issueUserSession, isBearerAuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { profileLimiter } from '../middleware/rateLimiter';
+import { validateBody, adminResetUserPasswordSchema, passwordSchema } from '../schemas';
 import {
   prisma,
   toUserResponse,
@@ -17,6 +18,11 @@ import {
 import type { AuthenticatedRequest, UserStatus } from '../types';
 
 const router = Router();
+
+type PasswordUpdateResponse = {
+  success: true;
+  token?: string;
+}
 
 /**
  * 校验前端传入的 photoURL：
@@ -216,8 +222,9 @@ router.put('/password', requireAuth, requireActiveUser, asyncHandler(async (req:
       return;
     }
 
-    if (newPassword.length < 8) {
-      res.status(400).json({ error: '新密码至少8个字符' });
+    const passwordValidation = passwordSchema.safeParse(newPassword)
+    if (!passwordValidation.success) {
+      res.status(400).json({ error: passwordValidation.error.issues[0]?.message || '新密码格式无效' });
       return;
     }
 
@@ -238,12 +245,35 @@ router.put('/password', requireAuth, requireActiveUser, asyncHandler(async (req:
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { uid: req.authUser!.uid },
       data: { passwordHash },
+      select: {
+        uid: true,
+        email: true,
+        displayName: true,
+        photoURL: true,
+        wechatOpenId: true,
+        role: true,
+        status: true,
+        banReason: true,
+        bannedAt: true,
+        level: true,
+        bio: true,
+      },
+    });
+    clearUserCache(req.authUser!.uid);
+    const { token } = issueUserSession(req, res, {
+      ...updatedUser,
+      passwordHash,
     });
 
-    res.json({ success: true });
+    const response: PasswordUpdateResponse = { success: true };
+    if (isBearerAuthRequest(req)) {
+      response.token = token;
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('Update user password error:', error);
     res.status(500).json({ error: '更新密码失败' });
@@ -465,6 +495,53 @@ const updateUserRoleHandler = asyncHandler(async (req: AuthenticatedRequest, res
 router.route('/:userId/role')
   .put(requireSuperAdmin, updateUserRoleHandler)
   .patch(requireSuperAdmin, updateUserRoleHandler)
+
+router.put('/:userId/reset-password', requireAdmin, validateBody(adminResetUserPasswordSchema), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  try {
+    const targetUid = req.params.userId;
+    if (!targetUid) {
+      res.status(400).json({ error: '无效用户' });
+      return;
+    }
+
+    if (req.authUser?.uid === targetUid) {
+      res.status(400).json({ error: '不能重置自己的密码' });
+      return;
+    }
+
+    const { newPassword } = req.body as { newPassword: string };
+
+    const targetUser = await prisma.user.findUnique({
+      where: { uid: targetUid },
+      select: {
+        uid: true,
+        role: true,
+      },
+    });
+
+    if (!targetUser) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
+    }
+
+    if (req.authUser?.role !== 'super_admin' && targetUser.role !== 'user') {
+      res.status(403).json({ error: '只能重置普通用户的密码' });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({
+      where: { uid: targetUid },
+      data: { passwordHash },
+    });
+    clearUserCache(targetUid);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin reset user password error:', error);
+    res.status(500).json({ error: '重置密码失败' });
+  }
+}));
 
 router.put('/:userId/ban', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {

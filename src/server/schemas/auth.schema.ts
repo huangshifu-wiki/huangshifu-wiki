@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/passwordRules'
 
 export const AUTH_DISPLAY_NAME_MAX_LENGTH = 50
 
@@ -41,8 +42,8 @@ export const registerSchema = z.object({
   email: authEmailSchema,
   password: z
     .string({ error: '密码不能为空' })
-    .min(8, '密码至少8个字符')
-    .max(128, '密码最多128个字符'),
+    .min(PASSWORD_MIN_LENGTH, `密码至少${PASSWORD_MIN_LENGTH}个字符`)
+    .max(PASSWORD_MAX_LENGTH, `密码最多${PASSWORD_MAX_LENGTH}个字符`),
   displayName: optionalDisplayNameSchema,
 })
 
@@ -52,3 +53,8 @@ export const loginSchema = z.object({
     .string({ error: '密码不能为空' })
     .min(1, '密码不能为空'),
 })
+
+export const passwordSchema = z
+  .string({ error: '密码不能为空' })
+  .min(PASSWORD_MIN_LENGTH, `密码至少${PASSWORD_MIN_LENGTH}个字符`)
+  .max(PASSWORD_MAX_LENGTH, `密码最多${PASSWORD_MAX_LENGTH}个字符`)

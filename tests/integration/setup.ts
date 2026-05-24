@@ -141,11 +141,21 @@ export async function createTestUser(overrides?: {
 export async function createTestToken(userUid: string, role: string = 'user'): Promise<string> {
   const jwt = (await import('jsonwebtoken')).default;
   const JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_replace_with_random_string';
+  const { createSessionVersion } = await import('../../src/server/utils/auth-session');
+  const user = await prisma.user.findUnique({
+    where: { uid: userUid },
+    select: { passwordHash: true },
+  });
+
+  if (!user) {
+    throw new Error(`Test user not found: ${userUid}`);
+  }
 
   const token = jwt.sign(
     {
       uid: userUid,
       role,
+      sessionVersion: createSessionVersion(user.passwordHash),
     },
     JWT_SECRET,
     { expiresIn: '7d' },

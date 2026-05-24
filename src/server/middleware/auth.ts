@@ -6,11 +6,33 @@ import type { ApiUser, SessionJwtPayload, UserStatus, AuthenticatedRequest } fro
 import { prisma } from '../prisma';
 import { enhancedCache, CACHE_KEYS, CACHE_TTL_SEC } from '../utils/cache';
 import { logger } from '../utils/logger';
+import { createSessionVersion } from '../utils/auth-session';
+import { issueXsrfToken } from './csrf';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const AUTH_COOKIE_NAME = 'hsf_token';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const IS_PROD = process.env.NODE_ENV === 'production';
+
+type CachedAuthUser = {
+  apiUser: ApiUser;
+  sessionVersion: string;
+}
+
+type SessionUser = {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: string | null;
+  wechatOpenId?: string | null;
+  role: PrismaUserRole;
+  status: UserStatus;
+  banReason: string | null;
+  bannedAt: Date | null;
+  level: number;
+  bio: string;
+  passwordHash: string;
+}
 
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   throw new Error(
@@ -51,15 +73,24 @@ function isAdminRole(role: PrismaUserRole | undefined) {
   return role === 'admin' || role === 'super_admin';
 }
 
-function createToken(user: ApiUser) {
+function createToken(user: ApiUser, passwordHash: string) {
   return jwt.sign(
     {
       uid: user.uid,
       role: user.role,
+      sessionVersion: createSessionVersion(passwordHash),
     },
     JWT_SECRET,
     { expiresIn: '7d' },
   );
+}
+
+function issueUserSession(req: Request, res: Response, user: SessionUser) {
+  const apiUser = userToApiUser(user);
+  const token = createToken(apiUser, user.passwordHash);
+  setAuthCookie(req, res, token);
+  issueXsrfToken(res);
+  return { apiUser, token };
 }
 
 function shouldUseSecureCookie(req: Request) {
@@ -106,6 +137,13 @@ function getTokenFromRequest(req: Request) {
   return token;
 }
 
+function isBearerAuthRequest(req: Request) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return false;
+  const [scheme, token] = authHeader.split(' ');
+  return scheme === 'Bearer' && Boolean(token);
+}
+
 /**
  * 获取用户缓存键
  */
@@ -120,7 +158,7 @@ function clearUserCache(uid: string): void {
   enhancedCache.delete(getUserCacheKey(uid));
 }
 
-async function authMiddleware(req: AuthenticatedRequest, _res: Response, next: NextFunction) {
+async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const token = getTokenFromRequest(req);
   if (!token) {
     next();
@@ -132,7 +170,10 @@ async function authMiddleware(req: AuthenticatedRequest, _res: Response, next: N
 
     // 尝试从缓存获取用户
     const cacheKey = getUserCacheKey(payload.uid);
-    let apiUser = enhancedCache.get<ApiUser>(cacheKey);
+    const cachedAuthUser = enhancedCache.get<CachedAuthUser>(cacheKey);
+    let apiUser = cachedAuthUser?.sessionVersion === payload.sessionVersion
+      ? cachedAuthUser.apiUser
+      : undefined;
 
     if (!apiUser) {
       // 缓存未命中，从数据库获取
@@ -141,9 +182,20 @@ async function authMiddleware(req: AuthenticatedRequest, _res: Response, next: N
       });
 
       if (user) {
+        const currentSessionVersion = createSessionVersion(user.passwordHash);
+        if (payload.sessionVersion !== currentSessionVersion) {
+          logger.info({ uid: user.uid }, 'Rejecting token with stale session version');
+          clearAuthCookie(req, res);
+          next();
+          return;
+        }
+
         apiUser = userToApiUser(user);
         // 缓存用户数据
-        enhancedCache.set(cacheKey, apiUser, CACHE_TTL_SEC.AUTH_USER);
+        enhancedCache.set(cacheKey, {
+          apiUser,
+          sessionVersion: currentSessionVersion,
+        }, CACHE_TTL_SEC.AUTH_USER);
       }
     }
 
@@ -152,6 +204,7 @@ async function authMiddleware(req: AuthenticatedRequest, _res: Response, next: N
     }
   } catch (error) {
     logger.warn({ err: error }, 'Invalid auth token');
+    clearAuthCookie(req, res);
   }
 
   next();
@@ -215,11 +268,14 @@ export {
   bcrypt,
   userToApiUser,
   isAdminRole,
+  createSessionVersion,
   createToken,
+  issueUserSession,
   shouldUseSecureCookie,
   setAuthCookie,
   clearAuthCookie,
   getTokenFromRequest,
+  isBearerAuthRequest,
   authMiddleware,
   requireAuth,
   requireActiveUser,

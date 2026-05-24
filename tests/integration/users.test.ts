@@ -36,6 +36,16 @@ describe('Users API - 用户接口测试', () => {
     });
   }
 
+  function findCookieValue(setCookieHeader: string | string[] | undefined, cookieName: string) {
+    const cookies = Array.isArray(setCookieHeader)
+      ? setCookieHeader
+      : setCookieHeader
+        ? [setCookieHeader]
+        : [];
+    const targetCookie = cookies.find((cookie) => cookie?.startsWith(`${cookieName}=`));
+    return targetCookie?.split(';')[0].split('=')[1];
+  }
+
   /**
    * 每个测试套件前准备测试数据
    */
@@ -179,6 +189,61 @@ describe('Users API - 用户接口测试', () => {
           expect(current).toBeGreaterThanOrEqual(next);
         }
       }
+    });
+  });
+
+  describe('PUT /api/users/:userId/reset-password - 管理员重置密码', () => {
+    it('管理员重置密码后，目标用户旧 token 应该失效', async () => {
+      const oldToken = await createTestToken(testUser.user.uid, testUser.user.role);
+
+      const resetResponse = await request(app)
+        .put(`/api/users/${testUser.user.uid}/reset-password`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ newPassword: 'ResetPassword123!' });
+
+      expect(resetResponse.status).toBe(200);
+      expect(resetResponse.body).toEqual({ success: true });
+
+      const staleSessionResponse = await request(app)
+        .get('/api/users/me')
+        .set('Authorization', `Bearer ${oldToken}`);
+
+      expect(staleSessionResponse.status).toBe(401);
+      expect(staleSessionResponse.body.error).toBe('请先登录');
+    });
+  });
+
+  describe('PUT /api/users/password - 用户自助改密', () => {
+    it('改密成功后当前 cookie 会话应被续签，不应立即掉线', async () => {
+      const agent = request.agent(app);
+
+      const loginResponse = await agent
+        .post('/api/auth/login')
+        .send({
+          email: testUser.user.email,
+          password: testUser.plainPassword,
+        });
+
+      expect(loginResponse.status).toBe(200);
+      const xsrfToken = findCookieValue(loginResponse.headers['set-cookie'], 'XSRF-TOKEN');
+      expect(xsrfToken).toBeTruthy();
+
+      const passwordResponse = await agent
+        .put('/api/users/password')
+        .set('X-XSRF-TOKEN', xsrfToken!)
+        .send({
+          currentPassword: testUser.plainPassword,
+          newPassword: 'UpdatedPassword123!',
+        });
+
+      expect(passwordResponse.status).toBe(200);
+      expect(passwordResponse.body).toEqual({ success: true });
+
+      expect(findCookieValue(passwordResponse.headers['set-cookie'], 'hsf_token')).toBeTruthy();
+
+      const meResponse = await agent.get('/api/users/me');
+      expect(meResponse.status).toBe(200);
+      expect(meResponse.body.user.uid).toBe(testUser.user.uid);
     });
   });
 

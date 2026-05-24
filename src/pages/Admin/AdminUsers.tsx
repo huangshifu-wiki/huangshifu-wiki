@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2, CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Trash2, CheckCircle, XCircle, AlertTriangle, RefreshCw, KeyRound, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { apiDelete, apiGet, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient';
 import { useToast } from '../../components/Toast';
@@ -7,6 +7,8 @@ import { SmartImage } from '../../components/SmartImage';
 import { useAuth } from '../../context/AuthContext';
 import { DEFAULT_AVATAR } from '../../lib/defaultAvatar';
 import { formatAdminRole } from '../../lib/formatUtils';
+import { FormModal } from '../../components/Modal';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/passwordRules';
 import type { AdminDataItem } from '../../types/entities';
 
 const ADMIN_USERS_API_PREFIX = '/api/admin/users'
@@ -16,9 +18,13 @@ export const AdminUsers = () => {
   const isSuperAdmin = profile?.role === 'super_admin';
   const [data, setData] = useState<AdminDataItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [resetTarget, setResetTarget] = useState<AdminDataItem | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
   const { show } = useToast();
 
   const invalidateAdminUsersCache = () => invalidateApiCacheByPrefix(ADMIN_USERS_API_PREFIX)
+  const isCurrentUser = (uid?: string) => Boolean(uid && uid === currentUser?.uid)
 
   const getNextRole = (role?: string) => (role === 'admin' ? 'user' : 'admin')
   const getRoleToggleTitle = (role?: string) => (getNextRole(role) === 'admin' ? '设为管理员' : '设为普通用户')
@@ -77,6 +83,64 @@ export const AdminUsers = () => {
     }
   };
 
+  const canResetPassword = (target: AdminDataItem) => {
+    if (!target.uid || isCurrentUser(target.uid)) {
+      return false;
+    }
+
+    if (isSuperAdmin) {
+      return true;
+    }
+
+    return target.role === 'user';
+  }
+
+  const closeResetModal = () => {
+    if (resetLoading) {
+      return;
+    }
+
+    setResetTarget(null);
+    setNewPassword('');
+  }
+
+  const openResetModal = (target: AdminDataItem) => {
+    if (!canResetPassword(target)) {
+      show('当前权限不能重置该用户密码', { variant: 'error' });
+      return;
+    }
+
+    setResetTarget(target);
+    setNewPassword('');
+  }
+
+  const handleResetPassword = async () => {
+    if (!resetTarget?.uid) {
+      return;
+    }
+
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+      show(`新密码至少${PASSWORD_MIN_LENGTH}个字符`, { variant: 'error' });
+      return;
+    }
+    if (newPassword.length > PASSWORD_MAX_LENGTH) {
+      show(`新密码最多${PASSWORD_MAX_LENGTH}个字符`, { variant: 'error' });
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await apiPut<{ success: boolean }>(`/api/users/${resetTarget.uid}/reset-password`, { newPassword });
+      setResetTarget(null);
+      setNewPassword('');
+      show(`已重置 ${resetTarget.displayName || resetTarget.uid} 的密码`, { variant: 'success' });
+    } catch (error) {
+      show(error instanceof Error ? error.message : '重置密码失败', { variant: 'error' });
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -127,27 +191,38 @@ export const AdminUsers = () => {
                     </td>
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {isSuperAdmin && item.uid !== currentUser?.uid && (
+                        {canResetPassword(item) && (
+                          <button
+                            onClick={() => openResetModal(item)}
+                            className="p-1.5 text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded transition-all"
+                            title="重置密码"
+                          >
+                            <KeyRound size={16} />
+                          </button>
+                        )}
+                        {isSuperAdmin && !isCurrentUser(item.uid) && (
                           <button onClick={() => toggleRole(item)} className="p-1.5 text-brand-gold hover:bg-surface-alt rounded transition-all" title={getRoleToggleTitle(item.role)}>
                             {getNextRole(item.role) === 'admin' ? <CheckCircle size={16} /> : <XCircle size={16} />}
                           </button>
                         )}
-                        {item.uid !== currentUser?.uid && (
+                        {!isCurrentUser(item.uid) && (
                           <button onClick={() => toggleBan(item)} className={clsx('p-1.5 rounded transition-all', item.status === 'banned' ? 'theme-text-success hover:bg-surface-alt' : 'theme-icon-button-warning hover:bg-surface-alt')} title={item.status === 'banned' ? '解封' : '封禁'}>
                             {item.status === 'banned' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
                           </button>
                         )}
-                        <button onClick={() => {
-                          if (window.confirm('确定删除此用户吗？')) {
-                            apiDelete(`/api/admin/users/${item.uid}`).then(() => {
-                              invalidateAdminUsersCache();
-                              setData((prev) => prev.filter((d) => d.uid !== item.uid));
-                              show('已删除', { variant: 'success' });
-                            }).catch(() => show('删除失败', { variant: 'error' }));
-                          }
-                        }} className="p-1.5 theme-icon-button-danger hover:bg-surface-alt rounded transition-all" title="删除">
-                          <Trash2 size={16} />
-                        </button>
+                        {!isCurrentUser(item.uid) && (
+                          <button onClick={() => {
+                            if (window.confirm('确定删除此用户吗？')) {
+                              apiDelete(`/api/admin/users/${item.uid}`).then(() => {
+                                invalidateAdminUsersCache();
+                                setData((prev) => prev.filter((d) => d.uid !== item.uid));
+                                show('已删除', { variant: 'success' });
+                              }).catch(() => show('删除失败', { variant: 'error' }));
+                            }
+                          }} className="p-1.5 theme-icon-button-danger hover:bg-surface-alt rounded transition-all" title="删除">
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -159,6 +234,43 @@ export const AdminUsers = () => {
           </table>
         </div>
       </div>
+
+      <FormModal
+        open={Boolean(resetTarget)}
+        onClose={closeResetModal}
+        title="重置用户密码"
+        subtitle={resetTarget ? `为 ${resetTarget.displayName || resetTarget.uid} 设置新的登录密码` : undefined}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void handleResetPassword()
+        }}
+        submitText="确认重置"
+        loading={resetLoading}
+      >
+        <div className="space-y-4">
+          <div className="rounded border border-border bg-surface-alt px-4 py-3 text-sm text-text-secondary leading-6">
+            新密码将立即生效。普通管理员只能重置普通用户密码；超级管理员可重置除自己外的所有账号密码。
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="admin-reset-password" className="block text-sm font-medium text-text-secondary">
+              新密码
+            </label>
+            <div className="relative">
+              <input
+                id="admin-reset-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder={`请输入 ${PASSWORD_MIN_LENGTH} 到 ${PASSWORD_MAX_LENGTH} 位的新密码`}
+                autoComplete="new-password"
+                className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 pr-10 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              />
+              {resetLoading && <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-text-muted" />}
+            </div>
+            <p className="text-xs text-text-muted">密码长度需为 {PASSWORD_MIN_LENGTH} 到 {PASSWORD_MAX_LENGTH} 个字符。</p>
+          </div>
+        </div>
+      </FormModal>
     </div>
   );
 };

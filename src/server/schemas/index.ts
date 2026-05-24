@@ -1,5 +1,5 @@
 export { validateBody } from './validate'
-export { registerSchema, loginSchema } from './auth.schema'
+export { registerSchema, loginSchema, passwordSchema } from './auth.schema'
 export { wikiCreateSchema, wikiUpdateSchema } from './wiki.schema'
 export { postCreateSchema, postCommentSchema } from './post.schema'
-export { backupRestoreSchema } from './admin.schema'
+export { backupRestoreSchema, adminResetUserPasswordSchema } from './admin.schema'

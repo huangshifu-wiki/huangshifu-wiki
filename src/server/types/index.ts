@@ -130,6 +130,7 @@ type SongCustomPlatformLink = {
 interface SessionJwtPayload extends JwtPayload {
   uid: string;
   role: PrismaUserRole;
+  sessionVersion: string;
 }
 
 interface WechatCodeSessionResponse {
