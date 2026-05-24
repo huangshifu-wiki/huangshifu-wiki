@@ -178,6 +178,7 @@ export {
 
 // === 日志 ===
 export { logger } from './logger';
+export { doesPublicTableExist, isPrismaTableMissingError } from './prisma-schema';
 
 // === 已有独立模块（保持原导出方式）===
 export * from './cache';

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAdmin, type AuthenticatedRequest } from '../middleware/auth';
-import { parseInteger, parseBoolean } from '../utils';
+import { parseInteger, parseBoolean, doesPublicTableExist, isPrismaTableMissingError } from '../utils';
 import { prisma } from '../prisma';
 import { getEmbeddingModelName, getEmbeddingVectorSize, getModelCacheDir, isImageModelLoaded, isTextModelLoaded, isTokenizerLoaded, getModelLoadError, isModelScopeActive, getActualDtype } from '../vector/clipEmbedding';
 import { getQdrantCollectionName, getTextCollectionName } from '../vector/qdrantService';
@@ -29,6 +29,194 @@ const router = Router();
 const IMAGE_EMBEDDING_BATCH_SIZE = Math.max(1, Number(process.env.IMAGE_EMBEDDING_BATCH_SIZE || 100));
 
 type EmbeddingType = 'gallery' | 'wiki' | 'post' | 'all';
+type EmbeddingStatusKey = 'pending' | 'processing' | 'ready' | 'failed'
+type EmbeddingSummary = { pending: number; processing: number; ready: number; failed: number; total: number }
+type ImageSummaryKey = 'gallery' | 'wiki' | 'post'
+type ImageSummary = Record<ImageSummaryKey, EmbeddingSummary>
+type ImageSourceAvailability = Record<ImageSummaryKey, boolean>
+type TextSummarySourceType = 'wiki' | 'post' | 'music' | 'album'
+type TextSummary = Record<TextSummarySourceType, EmbeddingSummary>
+
+const EMBEDDING_STATUSES: EmbeddingStatusKey[] = ['pending', 'processing', 'ready', 'failed']
+const TEXT_SOURCE_TYPES: TextSummarySourceType[] = ['wiki', 'post', 'music', 'album']
+const EMPTY_SUMMARY: EmbeddingSummary = { pending: 0, processing: 0, ready: 0, failed: 0, total: 0 }
+
+function createEmptySummary(): EmbeddingSummary {
+  return { ...EMPTY_SUMMARY }
+}
+
+function createEmptyTextSummary(): TextSummary {
+  return {
+    wiki: createEmptySummary(),
+    post: createEmptySummary(),
+    music: createEmptySummary(),
+    album: createEmptySummary(),
+  }
+}
+
+function createEmptyImageSummary(): ImageSummary {
+  return {
+    gallery: createEmptySummary(),
+    wiki: createEmptySummary(),
+    post: createEmptySummary(),
+  }
+}
+
+function createDefaultImageSourceAvailability(): ImageSourceAvailability {
+  return {
+    gallery: false,
+    wiki: false,
+    post: false,
+  }
+}
+
+async function getEmbeddingSummary(
+  countByStatus: (status: EmbeddingStatusKey) => Promise<number>
+) {
+  const [pending, processing, ready, failed] = await Promise.all(
+    EMBEDDING_STATUSES.map((status) => countByStatus(status))
+  )
+
+  return {
+    pending,
+    processing,
+    ready,
+    failed,
+    total: pending + processing + ready + failed,
+  }
+}
+
+async function getTextSummary() {
+  try {
+    const tableExists = await doesPublicTableExist(prisma, 'TextEmbeddingChunk')
+    if (!tableExists) {
+      return {
+        textSummary: createEmptyTextSummary(),
+        textEmbeddingReady: false,
+        textEmbeddingTableMissing: true,
+        textEmbeddingWarning: 'TextEmbeddingChunk 表不存在，请执行数据库迁移后再使用文本向量功能。',
+      }
+    }
+
+    const textSummary = createEmptyTextSummary()
+
+    const entries = await Promise.all(
+      TEXT_SOURCE_TYPES.map(async (sourceType) => {
+        const summary = await getEmbeddingSummary((status) =>
+          prisma.textEmbeddingChunk.count({
+            where: { sourceType, status },
+          })
+        )
+
+        return [sourceType, summary] as const
+      })
+    )
+
+    for (const [sourceType, summary] of entries) {
+      textSummary[sourceType] = summary
+    }
+
+    return {
+      textSummary,
+      textEmbeddingReady: true,
+      textEmbeddingTableMissing: false,
+      textEmbeddingWarning: null,
+    }
+  } catch (error) {
+    if (!isPrismaTableMissingError(error, 'TextEmbeddingChunk')) {
+      throw error
+    }
+
+    return {
+      textSummary: createEmptyTextSummary(),
+      textEmbeddingReady: false,
+      textEmbeddingTableMissing: true,
+      textEmbeddingWarning: 'TextEmbeddingChunk 表不存在，请执行数据库迁移后再使用文本向量功能。',
+    }
+  }
+}
+
+async function getImageSummary() {
+  const missingImageTables: string[] = []
+  const imageSummary = createEmptyImageSummary()
+  const imageSourceAvailability = createDefaultImageSourceAvailability()
+
+  const tableChecks = await Promise.all([
+    doesPublicTableExist(prisma, 'ImageEmbedding'),
+    doesPublicTableExist(prisma, 'WikiImageEmbedding'),
+    doesPublicTableExist(prisma, 'PostImageEmbedding'),
+  ])
+
+  const imageConfigs: Array<{
+    key: ImageSummaryKey
+    tableName: string
+    exists: boolean
+    countByStatus: (status: EmbeddingStatusKey) => Promise<number>
+  }> = [
+    {
+      key: 'gallery',
+      tableName: 'ImageEmbedding',
+      exists: tableChecks[0],
+      countByStatus: (status) =>
+        prisma.imageEmbedding.count({
+          where: { status },
+        }),
+    },
+    {
+      key: 'wiki',
+      tableName: 'WikiImageEmbedding',
+      exists: tableChecks[1],
+      countByStatus: (status) =>
+        prisma.wikiImageEmbedding.count({
+          where: { status },
+        }),
+    },
+    {
+      key: 'post',
+      tableName: 'PostImageEmbedding',
+      exists: tableChecks[2],
+      countByStatus: (status) =>
+        prisma.postImageEmbedding.count({
+          where: { status },
+        }),
+    },
+  ]
+
+  for (const config of imageConfigs) {
+    if (!config.exists) {
+      missingImageTables.push(config.tableName)
+      continue
+    }
+
+    imageSourceAvailability[config.key] = true
+    imageSummary[config.key] = await getEmbeddingSummary(config.countByStatus)
+  }
+
+  return {
+    summary: imageSummary,
+    imageSourceAvailability,
+    imageEmbeddingReady: missingImageTables.length === 0,
+    imageEmbeddingTableMissing: missingImageTables.length > 0,
+    imageEmbeddingWarning:
+      missingImageTables.length > 0
+        ? `${missingImageTables.join('、')} 表不存在，请执行数据库迁移后再使用对应图片向量功能。`
+        : null,
+  }
+}
+
+async function getImageSourceAvailability() {
+  const [gallery, wiki, post] = await Promise.all([
+    doesPublicTableExist(prisma, 'ImageEmbedding'),
+    doesPublicTableExist(prisma, 'WikiImageEmbedding'),
+    doesPublicTableExist(prisma, 'PostImageEmbedding'),
+  ])
+
+  return {
+    gallery,
+    wiki,
+    post,
+  } satisfies ImageSourceAvailability
+}
 
 function parseType(type: unknown): EmbeddingType {
   if (type === 'gallery' || type === 'wiki' || type === 'post' || type === 'all') {
@@ -39,82 +227,23 @@ function parseType(type: unknown): EmbeddingType {
 
 router.get('/status', requireAdmin, async (_req: AuthenticatedRequest, res) => {
   try {
-    // Gallery (ImageEmbedding) 状态统计
-    const [galleryPending, galleryProcessing, galleryReady, galleryFailed] = await Promise.all([
-      prisma.imageEmbedding.count({ where: { status: 'pending' } }),
-      prisma.imageEmbedding.count({ where: { status: 'processing' } }),
-      prisma.imageEmbedding.count({ where: { status: 'ready' } }),
-      prisma.imageEmbedding.count({ where: { status: 'failed' } }),
-    ]);
-
-    // Wiki (WikiImageEmbedding) 状态统计
-    const [wikiPending, wikiProcessing, wikiReady, wikiFailed] = await Promise.all([
-      prisma.wikiImageEmbedding.count({ where: { status: 'pending' } }),
-      prisma.wikiImageEmbedding.count({ where: { status: 'processing' } }),
-      prisma.wikiImageEmbedding.count({ where: { status: 'ready' } }),
-      prisma.wikiImageEmbedding.count({ where: { status: 'failed' } }),
-    ]);
-
-    // Post (PostImageEmbedding) 状态统计
-    const [postPending, postProcessing, postReady, postFailed] = await Promise.all([
-      prisma.postImageEmbedding.count({ where: { status: 'pending' } }),
-      prisma.postImageEmbedding.count({ where: { status: 'processing' } }),
-      prisma.postImageEmbedding.count({ where: { status: 'ready' } }),
-      prisma.postImageEmbedding.count({ where: { status: 'failed' } }),
-    ]);
-
-    const textSourceTypes = ['wiki', 'post', 'music', 'album'] as const
-
-    const textCounts = await Promise.all(
-      textSourceTypes.flatMap((sourceType) =>
-        (['pending', 'processing', 'ready', 'failed'] as const).map(
-          (status) =>
-            prisma.textEmbeddingChunk.count({
-              where: { sourceType, status },
-            }) as Promise<number>,
-        ),
-      ),
-    )
-
-    const textSummary: Record<string, { pending: number; processing: number; ready: number; failed: number; total: number }> = {}
-    let textIdx = 0
-    for (const sourceType of textSourceTypes) {
-      const pending = textCounts[textIdx++]
-      const processing = textCounts[textIdx++]
-      const ready = textCounts[textIdx++]
-      const failed = textCounts[textIdx++]
-      textSummary[sourceType] = {
-        pending,
-        processing,
-        ready,
-        failed,
-        total: pending + processing + ready + failed,
-      }
-    }
-
-    const summary = {
-      gallery: {
-        pending: galleryPending,
-        processing: galleryProcessing,
-        ready: galleryReady,
-        failed: galleryFailed,
-        total: galleryPending + galleryProcessing + galleryReady + galleryFailed,
-      },
-      wiki: {
-        pending: wikiPending,
-        processing: wikiProcessing,
-        ready: wikiReady,
-        failed: wikiFailed,
-        total: wikiPending + wikiProcessing + wikiReady + wikiFailed,
-      },
-      post: {
-        pending: postPending,
-        processing: postProcessing,
-        ready: postReady,
-        failed: postFailed,
-        total: postPending + postProcessing + postReady + postFailed,
-      },
-    };
+    const {
+      summary,
+      imageSourceAvailability,
+      imageEmbeddingReady,
+      imageEmbeddingTableMissing,
+      imageEmbeddingWarning,
+      textSummary,
+      textEmbeddingReady,
+      textEmbeddingTableMissing,
+      textEmbeddingWarning,
+    } = await Promise.all([
+      getImageSummary(),
+      getTextSummary(),
+    ]).then(([imageState, textState]) => ({
+      ...imageState,
+      ...textState,
+    }))
 
     // 获取模型加载状态
     const modelLoaded = isImageModelLoaded();
@@ -140,7 +269,14 @@ router.get('/status', requireAdmin, async (_req: AuthenticatedRequest, res) => {
       usingModelScope,
       actualDtype,
       summary,
+      imageSourceAvailability,
+      imageEmbeddingReady,
+      imageEmbeddingTableMissing,
+      imageEmbeddingWarning,
       textSummary,
+      textEmbeddingReady,
+      textEmbeddingTableMissing,
+      textEmbeddingWarning,
     });
   } catch (error) {
     console.error('Fetch embeddings status error:', error);
@@ -263,6 +399,15 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
       min: 1,
       max: 200,
     });
+    const imageSourceAvailability = await getImageSourceAvailability()
+    const requestedTypes = type === 'all'
+      ? (['gallery', 'wiki', 'post'] as const)
+      : [type]
+    const unavailableRequestedTypes = requestedTypes.filter((sourceType) => {
+      if (sourceType === 'gallery') return !imageSourceAvailability.gallery
+      if (sourceType === 'wiki') return !imageSourceAvailability.wiki
+      return !imageSourceAvailability.post
+    })
 
     const errors: Array<{
       id: string;
@@ -285,8 +430,18 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
       gallery?: { id: string; title: string } | null;
     }> = [];
 
+    const warnings: string[] = []
+    if (unavailableRequestedTypes.length > 0) {
+      const labels = unavailableRequestedTypes.map((sourceType) => {
+        if (sourceType === 'gallery') return 'ImageEmbedding'
+        if (sourceType === 'wiki') return 'WikiImageEmbedding'
+        return 'PostImageEmbedding'
+      })
+      warnings.push(`${labels.join('、')} 表不存在，已跳过对应错误记录查询。`)
+    }
+
     // Gallery errors
-    if (type === 'all' || type === 'gallery') {
+    if ((type === 'all' || type === 'gallery') && imageSourceAvailability.gallery) {
       const galleryFailed = await prisma.imageEmbedding.findMany({
         where: {
           status: 'failed',
@@ -342,7 +497,7 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
     }
 
     // Wiki errors
-    if (type === 'all' || type === 'wiki') {
+    if ((type === 'all' || type === 'wiki') && imageSourceAvailability.wiki) {
       const wikiFailed = await prisma.wikiImageEmbedding.findMany({
         where: {
           status: 'failed',
@@ -376,7 +531,7 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
     }
 
     // Post errors
-    if (type === 'all' || type === 'post') {
+    if ((type === 'all' || type === 'post') && imageSourceAvailability.post) {
       const postFailed = await prisma.postImageEmbedding.findMany({
         where: {
           status: 'failed',
@@ -417,6 +572,8 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
       errors: limitedErrors,
       total: limitedErrors.length,
       type,
+      warnings,
+      imageSourceAvailability,
     });
   } catch (error) {
     console.error('Fetch embedding errors error:', error);
@@ -685,42 +842,23 @@ function parseTextSourceType(type: unknown): TextSourceType {
 
 router.get('/text/status', requireAdmin, async (_req: AuthenticatedRequest, res) => {
   try {
-    const sourceTypes = ['wiki', 'post', 'music', 'album'] as const
-
-    const counts = await Promise.all(
-      sourceTypes.flatMap((sourceType) =>
-        (['pending', 'processing', 'ready', 'failed'] as const).map(
-          (status) =>
-            prisma.textEmbeddingChunk.count({
-              where: { sourceType, status },
-            }) as Promise<number> & { _sourceType: typeof sourceType; _status: typeof status },
-        ),
-      ),
-    )
-
-    const summary: Record<string, { pending: number; processing: number; ready: number; failed: number; total: number }> = {}
-    let idx = 0
-    for (const sourceType of sourceTypes) {
-      const pending = counts[idx++]
-      const processing = counts[idx++]
-      const ready = counts[idx++]
-      const failed = counts[idx++]
-      summary[sourceType] = {
-        pending,
-        processing,
-        ready,
-        failed,
-        total: pending + processing + ready + failed,
-      }
-    }
+    const {
+      textSummary,
+      textEmbeddingReady,
+      textEmbeddingTableMissing,
+      textEmbeddingWarning,
+    } = await getTextSummary()
 
     res.json({
-      summary,
+      summary: textSummary,
       modelName: getEmbeddingModelName(),
       vectorSize: getEmbeddingVectorSize(),
       textCollection: getTextCollectionName(),
       textModelLoaded: isTextModelLoaded(),
       tokenizerLoaded: isTokenizerLoaded(),
+      textEmbeddingReady,
+      textEmbeddingTableMissing,
+      textEmbeddingWarning,
     })
   } catch (error) {
     console.error('Fetch text embeddings status error:', error)

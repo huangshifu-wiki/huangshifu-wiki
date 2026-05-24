@@ -9,6 +9,7 @@ import { ConfirmModal } from '../../components/Modal'
 type Summary = { pending: number; processing: number; ready: number; failed: number; total: number }
 
 type TextSummary = Record<'wiki' | 'post' | 'music' | 'album', Summary>
+type ImageSourceAvailability = Record<'gallery' | 'wiki' | 'post', boolean>
 
 type EmbeddingsStatus = {
   modelName: string
@@ -22,7 +23,14 @@ type EmbeddingsStatus = {
   usingModelScope: boolean
   actualDtype: string
   summary: Summary | { gallery: Summary; wiki: Summary; post: Summary }
+  imageSourceAvailability: ImageSourceAvailability
+  imageEmbeddingReady: boolean
+  imageEmbeddingTableMissing: boolean
+  imageEmbeddingWarning: string | null
   textSummary: TextSummary
+  textEmbeddingReady: boolean
+  textEmbeddingTableMissing: boolean
+  textEmbeddingWarning: string | null
 }
 
 type EmbeddingsError = {
@@ -39,6 +47,12 @@ type EmbeddingsError = {
   retryCount: number
   createdAt: string
   updatedAt: string
+}
+
+type ImageErrorResponse = {
+  errors: EmbeddingsError[]
+  total: number
+  warnings?: string[]
 }
 
 function normalizeSummary(summary: EmbeddingsStatus['summary']) {
@@ -165,7 +179,7 @@ const AdminEmbeddings = () => {
   const fetchErrors = async () => {
     setLoadingErrors(true)
     try {
-      const response = await apiGet<{ errors: EmbeddingsError[]; total: number }>('/api/embeddings/errors', { limit: 50, type: selectedType })
+      const response = await apiGet<ImageErrorResponse>('/api/embeddings/errors', { limit: 50, type: selectedType })
       setErrors(response.errors || [])
     } catch (error) {
       console.error(error)
@@ -305,6 +319,20 @@ const AdminEmbeddings = () => {
   const textFailedTotal = status?.textSummary
     ? status.textSummary.wiki.failed + status.textSummary.post.failed + status.textSummary.music.failed + status.textSummary.album.failed
     : 0
+  const selectedImageTypes = selectedType === 'all'
+    ? (['gallery', 'wiki', 'post'] as const)
+    : ([selectedType] as const)
+  const isImageTypeSelectable = (type: typeof selectedType) => {
+    if (!status) return true
+    const targetTypes = type === 'all'
+      ? (['gallery', 'wiki', 'post'] as const)
+      : ([type] as const)
+    return targetTypes.every((item) => status.imageSourceAvailability[item])
+  }
+  const imageEmbeddingsUnavailable = status
+    ? selectedImageTypes.some((type) => !status.imageSourceAvailability[type])
+    : false
+  const textEmbeddingsUnavailable = status?.textEmbeddingReady === false
 
   return (
     <div className="space-y-5">
@@ -333,6 +361,12 @@ const AdminEmbeddings = () => {
             </div>
           ))}
 
+          {status.imageEmbeddingWarning && (
+            <div className="rounded border border-amber-300/50 bg-amber-100/70 px-4 py-3 text-sm text-amber-900">
+              {status.imageEmbeddingWarning}
+            </div>
+          )}
+
           {status.textSummary && (
             <div className="bg-surface border border-border rounded p-5">
               <div className="flex items-center gap-3 mb-4">
@@ -357,6 +391,11 @@ const AdminEmbeddings = () => {
                   )}
                 </div>
               </div>
+              {status.textEmbeddingWarning && (
+                <div className="mb-4 rounded border border-amber-300/50 bg-amber-100/70 px-4 py-3 text-sm text-amber-900">
+                  {status.textEmbeddingWarning}
+                </div>
+              )}
               <div className="space-y-3">
                 {([
                   { title: '百科文本', key: 'wiki' as const },
@@ -441,9 +480,16 @@ const AdminEmbeddings = () => {
                 ].map((opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => setSelectedType(opt.value as typeof selectedType)}
+                    onClick={() => {
+                      const nextType = opt.value as typeof selectedType
+                      if (!isImageTypeSelectable(nextType)) {
+                        return
+                      }
+                      setSelectedType(nextType)
+                    }}
+                    disabled={!isImageTypeSelectable(opt.value as typeof selectedType)}
                     className={clsx(
-                      'px-3 py-1.5 rounded text-xs font-medium transition-all',
+                      'px-3 py-1.5 rounded text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed',
                       selectedType === opt.value
                         ? 'bg-brand-gold-dark text-white'
                         : 'bg-surface-alt text-text-secondary hover:text-brand-gold'
@@ -465,21 +511,22 @@ const AdminEmbeddings = () => {
                   }}
                   className="w-24 px-3 py-2 rounded border border-border text-sm focus:outline-none focus:border-brand-gold"
                   min={1} max={2000}
+                  disabled={imageEmbeddingsUnavailable}
                 />
-                <button onClick={handleEnqueueMissing} disabled={actionLoading !== null} className="px-4 py-2 rounded bg-brand-gold-dark text-white text-sm font-medium hover:bg-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
+                <button onClick={handleEnqueueMissing} disabled={actionLoading !== null || imageEmbeddingsUnavailable} className="px-4 py-2 rounded bg-brand-gold-dark text-white text-sm font-medium hover:bg-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
                   {actionLoading === 'enqueue' ? <Loader2 size={14} className="animate-spin" /> : null} 补齐缺失
                 </button>
               </div>
-              <button onClick={() => openConfirm('warning', '批量同步确认', '确定要批量同步向量吗？这可能需要一些时间。', handleSyncBatch)} disabled={actionLoading !== null} className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
+              <button onClick={() => openConfirm('warning', '批量同步确认', '确定要批量同步向量吗？这可能需要一些时间。', handleSyncBatch)} disabled={actionLoading !== null || imageEmbeddingsUnavailable} className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
                 {actionLoading === 'sync' ? <Loader2 size={14} className="animate-spin" /> : null} 批量同步
               </button>
-              <button onClick={() => setShowErrors(!showErrors)} disabled={actionLoading !== null} className={clsx('px-4 py-2 rounded border text-sm font-medium inline-flex items-center gap-2 transition-all', showErrors ? 'border-border theme-status-error' : 'border-border text-text-secondary hover:bg-surface-alt', actionLoading !== null && 'opacity-50')}>
+              <button onClick={() => setShowErrors(!showErrors)} disabled={actionLoading !== null || imageEmbeddingsUnavailable} className={clsx('px-4 py-2 rounded border text-sm font-medium inline-flex items-center gap-2 transition-all', showErrors ? 'border-border theme-status-error' : 'border-border text-text-secondary hover:bg-surface-alt', (actionLoading !== null || imageEmbeddingsUnavailable) && 'opacity-50')}>
                 <AlertTriangle size={14} /> 查看错误 ({imageFailedTotal})
               </button>
-              <button onClick={() => openConfirm('warning', '重试确认', '确定要重试所有失败的向量任务吗？', handleRetryFailed)} disabled={actionLoading !== null || imageFailedTotal === 0} className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
+              <button onClick={() => openConfirm('warning', '重试确认', '确定要重试所有失败的向量任务吗？', handleRetryFailed)} disabled={actionLoading !== null || imageFailedTotal === 0 || imageEmbeddingsUnavailable} className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
                 {actionLoading === 'retry' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} 重试失败
               </button>
-              <button onClick={() => openConfirm('danger', '重建全部确认', '确定要重建所有向量吗？这将删除现有向量并重新生成，耗时较长。此操作不可逆。', handleRebuildAll)} disabled={actionLoading !== null} className="px-4 py-2 rounded border border-border theme-status-error text-sm font-medium hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2 transition-all">
+              <button onClick={() => openConfirm('danger', '重建全部确认', '确定要重建所有向量吗？这将删除现有向量并重新生成，耗时较长。此操作不可逆。', handleRebuildAll)} disabled={actionLoading !== null || imageEmbeddingsUnavailable} className="px-4 py-2 rounded border border-border theme-status-error text-sm font-medium hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2 transition-all">
                 {actionLoading === 'rebuild' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} 重建全部
               </button>
             </div>
@@ -522,18 +569,19 @@ const AdminEmbeddings = () => {
                   }}
                   className="w-24 px-3 py-2 rounded border border-border text-sm focus:outline-none focus:border-brand-gold"
                   min={1} max={2000}
+                  disabled={textEmbeddingsUnavailable}
                 />
-                <button onClick={handleTextEnqueue} disabled={textActionLoading !== null} className="px-4 py-2 rounded bg-brand-gold-dark text-white text-sm font-medium hover:bg-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
+                <button onClick={handleTextEnqueue} disabled={textActionLoading !== null || textEmbeddingsUnavailable} className="px-4 py-2 rounded bg-brand-gold-dark text-white text-sm font-medium hover:bg-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
                   {textActionLoading === 'enqueue' ? <Loader2 size={14} className="animate-spin" /> : null} 补齐缺失
                 </button>
               </div>
-              <button onClick={() => openConfirm('warning', '批量同步确认', '确定要批量同步文本向量吗？这可能需要一些时间。', handleTextSync)} disabled={textActionLoading !== null} className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
+              <button onClick={() => openConfirm('warning', '批量同步确认', '确定要批量同步文本向量吗？这可能需要一些时间。', handleTextSync)} disabled={textActionLoading !== null || textEmbeddingsUnavailable} className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
                 {textActionLoading === 'sync' ? <Loader2 size={14} className="animate-spin" /> : null} 批量同步
               </button>
-              <button onClick={() => openConfirm('warning', '重试确认', '确定要重试所有失败的文本向量任务吗？', handleTextRetryFailed)} disabled={textActionLoading !== null || textFailedTotal === 0} className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
+              <button onClick={() => openConfirm('warning', '重试确认', '确定要重试所有失败的文本向量任务吗？', handleTextRetryFailed)} disabled={textActionLoading !== null || textFailedTotal === 0 || textEmbeddingsUnavailable} className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all">
                 {textActionLoading === 'retry' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} 重试失败
               </button>
-              <button onClick={() => openConfirm('danger', '重建全部确认', '确定要重建所有文本向量吗？这将删除现有向量并重新生成，耗时较长。此操作不可逆。', handleTextRebuildAll)} disabled={textActionLoading !== null} className="px-4 py-2 rounded border border-border theme-status-error text-sm font-medium hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2 transition-all">
+              <button onClick={() => openConfirm('danger', '重建全部确认', '确定要重建所有文本向量吗？这将删除现有向量并重新生成，耗时较长。此操作不可逆。', handleTextRebuildAll)} disabled={textActionLoading !== null || textEmbeddingsUnavailable} className="px-4 py-2 rounded border border-border theme-status-error text-sm font-medium hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2 transition-all">
                 {textActionLoading === 'rebuild' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} 重建全部
               </button>
             </div>
