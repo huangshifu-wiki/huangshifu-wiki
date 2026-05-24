@@ -13,7 +13,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/integration/**/*.test.ts'],
-    globalSetup: './tests/integration/setup.ts',
+    setupFiles: ['./tests/integration/setup.ts'],
     teardownTimeout: 10000,
     testTimeout: 30000,
     hookTimeout: 30000,
