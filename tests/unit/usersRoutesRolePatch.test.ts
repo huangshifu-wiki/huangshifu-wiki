@@ -48,6 +48,7 @@ vi.mock('../../src/server/utils', () => ({
   toCommentResponse: vi.fn((comment) => comment),
   safeDeleteUploadFileByUrl: vi.fn(),
   parsePagination: vi.fn(() => ({ limit: 20, offset: 0 })),
+  getPasswordSaltRounds: vi.fn(() => 12),
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }))
 

@@ -19,6 +19,7 @@ import request from 'supertest';
 import { app } from '../../server';
 import { prisma, createTestUser, createTestToken } from './setup';
 import { AUTH_DISPLAY_NAME_MAX_LENGTH } from '../../src/server/schemas/auth.schema';
+import { getPasswordSaltRounds } from '../../src/server/utils/password';
 
 const AUTH_TEST_EMAILS = [
   'login_test@example.com',
@@ -33,6 +34,7 @@ const AUTH_TEST_EMAILS = [
   'special@example.com',
   'test_stale_session@example.com',
 ];
+const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds();
 
 async function cleanupAuthTestData() {
   await prisma.user.deleteMany({
@@ -234,7 +236,7 @@ describe('Auth API - 认证接口测试', () => {
       });
       const token = await createTestToken(user.uid, user.role);
       const bcrypt = (await import('bcryptjs')).default;
-      const nextPasswordHash = await bcrypt.hash('UpdatedPassword123!', 12);
+      const nextPasswordHash = await bcrypt.hash('UpdatedPassword123!', PASSWORD_SALT_ROUNDS);
 
       await prisma.user.update({
         where: { uid: user.uid },

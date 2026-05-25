@@ -4,7 +4,7 @@ import { UserRole as PrismaUserRole } from '@prisma/client'
 import { requireAuth, requireActiveUser, userToApiUser, issueUserSession, clearAuthCookie, clearUserCache } from '../middleware/auth'
 import { authRateLimiter } from '../middleware/rateLimiter'
 import { asyncHandler } from '../middleware/asyncHandler'
-import { exchangeWechatLoginCode, buildUniqueWechatEmail, logger } from '../utils'
+import { exchangeWechatLoginCode, buildUniqueWechatEmail, logger, getPasswordSaltRounds } from '../utils'
 import { prisma } from '../prisma'
 import { validateBody, registerSchema, loginSchema } from '../schemas'
 import { AUTH_DISPLAY_NAME_MAX_LENGTH } from '../schemas/auth.schema'
@@ -13,6 +13,7 @@ import type { AuthenticatedRequest } from '../types'
 const router = Router()
 
 const SUPER_ADMIN_EMAIL = process.env.SEED_SUPER_ADMIN_EMAIL || ''
+const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds()
 
 function sanitizeWechatPhotoUrl(value: string): string | null {
   if (!value) return null
@@ -90,7 +91,7 @@ router.post('/register', authRateLimiter, validateBody(registerSchema), asyncHan
       return
     }
 
-    const passwordHash = await bcrypt.hash(password, 12)
+    const passwordHash = await bcrypt.hash(password, PASSWORD_SALT_ROUNDS)
     const role = SUPER_ADMIN_EMAIL && normalizedEmail === SUPER_ADMIN_EMAIL ? PrismaUserRole.super_admin : PrismaUserRole.user
 
     logger.info({ email: normalizedEmail, role }, 'Creating user')
@@ -206,7 +207,7 @@ router.post('/wechat/login', authRateLimiter, asyncHandler(async (req, res) => {
     if (!user) {
       const generatedEmail = await buildUniqueWechatEmail(openId)
       const generatedPassword = `wx_${openId}_${Date.now()}`
-      const passwordHash = await bcrypt.hash(generatedPassword, 12)
+      const passwordHash = await bcrypt.hash(generatedPassword, PASSWORD_SALT_ROUNDS)
       const fallbackName = displayNameRaw || `微信用户${openId.slice(-6)}`
 
       logger.info({ generatedEmail, fallbackName }, 'Creating new WeChat user')

@@ -14,10 +14,12 @@ import {
   safeDeleteUploadFileByUrl,
   parsePagination,
   logger,
+  getPasswordSaltRounds,
 } from '../utils';
 import type { AuthenticatedRequest, UserStatus } from '../types';
 
 const router = Router();
+const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds();
 
 type PasswordUpdateResponse = {
   success: true;
@@ -244,7 +246,7 @@ router.put('/password', requireAuth, requireActiveUser, asyncHandler(async (req:
       return;
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const passwordHash = await bcrypt.hash(newPassword, PASSWORD_SALT_ROUNDS);
     const updatedUser = await prisma.user.update({
       where: { uid: req.authUser!.uid },
       data: { passwordHash },
@@ -529,7 +531,7 @@ router.put('/:userId/reset-password', requireAdmin, validateBody(adminResetUserP
       return;
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const passwordHash = await bcrypt.hash(newPassword, PASSWORD_SALT_ROUNDS);
     await prisma.user.update({
       where: { uid: targetUid },
       data: { passwordHash },
