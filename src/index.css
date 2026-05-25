@@ -1321,3 +1321,12 @@ html {
 [data-theme="dark"] .w-md-editor-toolbar button:hover {
   background-color: var(--color-editor-toolbar-hover) !important;
 }
+
+.w-md-editor-content,
+.w-md-editor-input,
+.w-md-editor-input .w-md-editor-area,
+.w-md-editor-input .w-md-editor-text,
+.w-md-editor-input .w-md-editor-text-input,
+.w-md-editor-input .w-md-editor-text-pre {
+  height: 100%;
+}
