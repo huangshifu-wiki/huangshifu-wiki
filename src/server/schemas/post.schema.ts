@@ -5,11 +5,11 @@ export const postCreateSchema = z.object({
   section: z.string().min(1),
   content: z.string().min(1),
   tags: z.array(z.string()).optional(),
-  status: z.enum(['draft', 'published']).optional(),
+  status: z.enum(['draft', 'pending', 'published']).optional(),
   musicDocId: z.string().optional(),
   albumDocId: z.string().optional(),
-  locationCode: z.string().optional(),
-  locationDetail: z.string().optional(),
+  locationCode: z.string().nullable().optional(),
+  locationDetail: z.string().nullable().optional(),
 })
 
 export const postCommentSchema = z.object({

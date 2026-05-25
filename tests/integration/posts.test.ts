@@ -1208,6 +1208,39 @@ describe('Posts API - 文章接口测试', () => {
       expect(dbPost?.title).toBe(newPostData.title);
     });
 
+    it('应该允许提交待审核状态并接受空位置信息', async () => {
+      const newPostData = {
+        title: `New Test Post Pending ${Date.now()}`,
+        section: 'discussion',
+        content: 'Pending review content.',
+        tags: [],
+        status: 'pending',
+        locationCode: null,
+        locationDetail: null,
+      };
+
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+      const response = await agent
+        .post('/api/posts')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send(newPostData);
+
+      expect(response.status).toBe(201);
+      expect(response.body.post.status).toBe('pending');
+      expect(response.body.post.locationCode).toBeNull();
+      expect(response.body.post.locationDetail).toBeNull();
+
+      const dbPost = await prisma.post.findUnique({
+        where: { id: response.body.post.id },
+      });
+      expect(dbPost?.status).toBe('pending');
+      expect(dbPost?.locationCode ?? null).toBeNull();
+      expect(dbPost?.locationDetail ?? null).toBeNull();
+    });
+
     /**
      * 测试目的：验证未认证用户无法创建文章
      * 预期结果：返回 401 认证错误
