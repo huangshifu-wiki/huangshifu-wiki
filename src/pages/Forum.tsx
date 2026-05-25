@@ -39,7 +39,11 @@ import MarkdownEditor from "../components/MarkdownEditor";
 import { apiDelete, apiGet, apiPost, apiPut } from "../lib/apiClient";
 import { useToast } from "../components/Toast";
 import { copyToClipboard, toAbsoluteInternalUrl } from "../lib/copyLink";
-import { ContentStatus, getStatusText } from "../lib/contentUtils";
+import {
+	ContentStatus,
+	getStatusClassName,
+	getStatusText,
+} from "../lib/contentUtils";
 import { formatDate } from "../lib/dateUtils";
 import { DEFAULT_AVATAR, handleAvatarError } from "../lib/defaultAvatar";
 import { LocationTagInput } from "../components/LocationTagInput";
@@ -144,11 +148,7 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
 					<span
 						className={clsx(
 							"px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border",
-							post.status === "pending"
-								? "theme-status-warning"
-								: post.status === "rejected"
-									? "theme-status-error"
-									: "bg-surface-alt text-text-secondary",
+							getStatusClassName(post.status),
 						)}
 					>
 						{getStatusText(post.status)}
@@ -1030,13 +1030,7 @@ const PostDetail = () => {
 									<span
 										className={clsx(
 											"px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider",
-											post.status === "published"
-												? "theme-status-success"
-												: post.status === "pending"
-													? "theme-status-warning"
-													: post.status === "rejected"
-														? "theme-status-error"
-														: "bg-surface-alt text-text-secondary",
+											getStatusClassName(post.status),
 										)}
 									>
 										{getStatusText(post.status)}

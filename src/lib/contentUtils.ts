@@ -1,5 +1,12 @@
 export type ContentStatus = 'draft' | 'pending' | 'published' | 'rejected';
 
+export const getStatusClassName = (status?: ContentStatus): string => {
+  if (status === 'published') return 'theme-status-success';
+  if (status === 'pending') return 'theme-status-warning';
+  if (status === 'rejected') return 'theme-status-error';
+  return 'bg-surface-alt text-text-muted';
+};
+
 export const splitTagsInput = (value: string): string[] =>
   value
     .split(',')

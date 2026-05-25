@@ -24,7 +24,7 @@ import { useToast } from "../../components/Toast";
 import { useToggleInteraction } from "../../hooks/useToggleInteraction";
 import { copyToClipboard, toAbsoluteInternalUrl } from "../../lib/copyLink";
 import { apiGet, apiPost } from "../../lib/apiClient";
-import { getStatusText } from "../../lib/contentUtils";
+import { getStatusClassName, getStatusText } from "../../lib/contentUtils";
 import { formatDate } from "../../lib/dateUtils";
 import { getWikiRelationDisplayTitle } from "../../lib/wikiRelationDisplay";
 import WikiMarkdown from "./WikiMarkdown";
@@ -422,13 +422,7 @@ const WikiPageView = () => {
 									<span
 										className={clsx(
 											"px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider",
-											page.status === "published"
-												? "theme-status-success"
-												: page.status === "pending"
-													? "theme-status-warning"
-													: page.status === "rejected"
-														? "theme-status-error"
-														: "bg-surface-alt text-text-secondary",
+											getStatusClassName(page.status),
 										)}
 									>
 										{getStatusText(page.status)}

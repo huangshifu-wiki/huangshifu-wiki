@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { AvatarCropModal } from '../components/AvatarCropModal';
 import { useToast } from '../components/Toast';
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar';
+import { getStatusClassName, getStatusText } from '../lib/contentUtils';
 import { formatAdminRole } from '../lib/formatUtils';
 import type { FavoriteItem, HistoryItem } from '../types/entities';
 
@@ -398,13 +399,9 @@ const Profile = () => {
                         <div className="flex items-center gap-2 mb-1">
                           <span className={clsx(
                             'px-2 py-0.5 rounded text-[10px] font-medium',
-                            post.status === 'published'
-                              ? 'theme-status-success'
-                              : post.status === 'pending'
-                                ? 'theme-status-warning'
-                                : 'bg-surface-alt text-text-muted',
+                            getStatusClassName(post.status as 'draft' | 'pending' | 'published' | 'rejected'),
                           )}>
-                            {post.status === 'published' ? '已发布' : post.status === 'pending' ? '待审核' : post.status}
+                            {getStatusText(post.status as 'draft' | 'pending' | 'published' | 'rejected')}
                           </span>
                           <span className="text-xs text-text-muted">{post.section}</span>
                         </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getStatusText, splitTagsInput } from '../../src/lib/contentUtils';
+import { getStatusClassName, getStatusText, splitTagsInput } from '../../src/lib/contentUtils';
 
 describe('contentUtils', () => {
   describe('splitTagsInput', () => {
@@ -44,6 +44,28 @@ describe('contentUtils', () => {
 
     it('returns "已发布" for undefined status', () => {
       expect(getStatusText(undefined)).toBe('已发布');
+    });
+  });
+
+  describe('getStatusClassName', () => {
+    it('returns success class for published status', () => {
+      expect(getStatusClassName('published')).toBe('theme-status-success');
+    });
+
+    it('returns warning class for pending status', () => {
+      expect(getStatusClassName('pending')).toBe('theme-status-warning');
+    });
+
+    it('returns error class for rejected status', () => {
+      expect(getStatusClassName('rejected')).toBe('theme-status-error');
+    });
+
+    it('returns fallback class for draft status', () => {
+      expect(getStatusClassName('draft')).toBe('bg-surface-alt text-text-muted');
+    });
+
+    it('returns fallback class for undefined status', () => {
+      expect(getStatusClassName(undefined)).toBe('bg-surface-alt text-text-muted');
     });
   });
 });
