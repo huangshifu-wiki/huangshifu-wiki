@@ -95,7 +95,7 @@ const MainLayout = () => {
 			<GlobalMusicPlayer />
 			<BottomNav />
 			<footer
-				className="text-center border-t border-border bg-surface-alt py-10 px-6 text-text-muted text-[0.8125rem] tracking-[0.08em]"
+				className="hidden md:block text-center border-t border-border bg-surface-alt py-10 px-6 text-text-muted text-[0.8125rem] tracking-[0.08em]"
 				role="contentinfo"
 				aria-label="页面底部"
 				style={{ marginBottom: currentSong ? '80px' : '0' }}

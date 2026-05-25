@@ -5,8 +5,14 @@
 ;(function () {
   var shown = false
   var staticFooter = document.getElementById('static-footer')
+  var desktopMedia = window.matchMedia('(min-width: 768px)')
+
+  function shouldShowFooter() {
+    return desktopMedia.matches
+  }
+
   var timer = setTimeout(function () {
-    if (!window.__REACT_MOUNTED__ && staticFooter && !shown) {
+    if (!window.__REACT_MOUNTED__ && staticFooter && !shown && shouldShowFooter()) {
       shown = true
       staticFooter.style.display = 'block'
     }
