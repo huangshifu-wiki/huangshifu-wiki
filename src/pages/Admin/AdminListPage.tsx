@@ -52,7 +52,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       setData((prev) => prev.filter((item) => (item.docId || item.id || item.uid) !== id));
       show('已删除', { variant: 'success' });
     } catch (e) {
-      show('删除失败', { variant: 'error' });
+      show(e instanceof Error ? e.message : '删除失败', { variant: 'error' });
     }
   };
 

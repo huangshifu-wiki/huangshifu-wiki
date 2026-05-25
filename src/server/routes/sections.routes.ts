@@ -55,8 +55,28 @@ router.post('/', requireAdmin, async (req, res) => {
 
 router.delete('/:id', requireAdmin, async (req, res) => {
   try {
+    const sectionId = req.params.id;
+    const section = await prisma.section.findUnique({
+      where: { id: sectionId },
+      select: { id: true },
+    });
+
+    if (!section) {
+      res.status(404).json({ error: '版块不存在' });
+      return;
+    }
+
+    const postCount = await prisma.post.count({
+      where: { section: sectionId },
+    });
+
+    if (postCount > 0) {
+      res.status(400).json({ error: `该版块下还有 ${postCount} 篇帖子，请先处理帖子后再删除版块` });
+      return;
+    }
+
     await prisma.section.delete({
-      where: { id: req.params.id },
+      where: { id: sectionId },
     });
     res.json({ success: true });
   } catch (error) {

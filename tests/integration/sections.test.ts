@@ -1,7 +1,7 @@
 import { describe, beforeEach, afterEach, it, expect } from 'vitest'
 import request from 'supertest'
 import { app } from '../../server'
-import { prisma, createTestUser } from './setup'
+import { prisma, createTestUser, createTestPost } from './setup'
 
 describe('Sections API - 版块接口测试', () => {
   let adminUser: Awaited<ReturnType<typeof createTestUser>>
@@ -131,6 +131,40 @@ describe('Sections API - 版块接口测试', () => {
 
     const existingSection = await prisma.section.findUnique({
       where: { id: 'test-section-101' },
+    })
+    expect(existingSection).not.toBeNull()
+  })
+
+  it('版块下仍有帖子时应拒绝删除并返回明确错误', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    await prisma.section.create({
+      data: {
+        id: 'test-section-102',
+        name: 'Test Section 102',
+        description: 'has posts',
+        order: 2,
+      },
+    })
+
+    await createTestPost({
+      title: 'Test Section 102 Post',
+      section: 'test-section-102',
+      authorUid: adminUser.user.uid,
+    })
+
+    const response = await agent
+      .delete('/api/sections/test-section-102')
+      .set('X-XSRF-TOKEN', xsrfToken)
+
+    expect(response.status).toBe(400)
+    expect(response.body.error).toContain('请先处理帖子后再删除版块')
+
+    const existingSection = await prisma.section.findUnique({
+      where: { id: 'test-section-102' },
     })
     expect(existingSection).not.toBeNull()
   })
