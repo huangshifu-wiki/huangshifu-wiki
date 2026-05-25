@@ -340,12 +340,7 @@
 
 ### 交付前强制执行
 
-```bash
-npm run lint
-npm run test:unit
-npm run test:integration
-npm run build
-```
+请在任务完成前执行 `npm run verify`。这包含 `lint`, `test:unit`, `test:integration` 和 `build`。
 
 ### 当前测试结构
 
