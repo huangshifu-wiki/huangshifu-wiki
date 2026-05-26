@@ -2,7 +2,7 @@
  * 变体生成器 - v2.1 增强版（带超时保护）
  * 
  * 功能：
- * 1. 异步生成单一 WebP 变体 (1080px)
+ * 1. 异步生成单一 WebP 变体 (height=1080, width auto)
  * 2. 任务超时保护（防止单个任务卡死）
  * 3. 队列等待时间限制
  * 4. Sharp 内存限制（防止 OOM）
@@ -62,7 +62,7 @@ export class VariantGenerator {
   };
 
   private variantSpecs = [
-    { name: '1080', maxWidth: 1080, maxHeight: 1080, quality: 85 },
+    { name: '1080h', maxWidth: null, maxHeight: 1080, quality: 85 },
   ];
 
   private stats = {
@@ -326,7 +326,7 @@ export class VariantGenerator {
         const outputPath = path.join(outputDir, `${spec.name}.webp`);
 
         const result = await sharp(task.localFilePath)
-          .resize(spec.maxWidth, spec.maxHeight, {
+          .resize(spec.maxWidth ?? undefined, spec.maxHeight ?? undefined, {
             fit: 'inside',
             withoutEnlargement: true,
           })
@@ -372,14 +372,12 @@ export class VariantGenerator {
     imageMapId: string,
     variants: Map<string, VariantMetadata>
   ): Promise<void> {
-    const variant = variants.get('1080');
+    const variant = variants.get('1080h');
 
     await prisma.imageMap.update({
       where: { id: imageMapId },
       data: {
         thumbnailUrl: variant?.path || null,
-        mediumUrl: null,
-        largeUrl: null,
         variantStatus: 'completed',
       },
     });

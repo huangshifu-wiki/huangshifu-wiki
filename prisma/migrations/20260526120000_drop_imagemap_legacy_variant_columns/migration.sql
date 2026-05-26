@@ -1,0 +1,3 @@
+ALTER TABLE "ImageMap"
+  DROP COLUMN IF EXISTS "mediumUrl",
+  DROP COLUMN IF EXISTS "largeUrl";

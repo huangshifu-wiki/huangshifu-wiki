@@ -72,8 +72,6 @@ export class VariantCleanupService {
         where: { id: imageMapId },
         select: {
           thumbnailUrl: true,
-          mediumUrl: true,
-          largeUrl: true,
         },
       });
 
@@ -85,8 +83,6 @@ export class VariantCleanupService {
       // 2. 收集所有变体文件路径
       const variantPaths = [
         imageMap.thumbnailUrl,
-        imageMap.mediumUrl,
-        imageMap.largeUrl,
       ].filter((url): url is string => url !== null && url !== undefined);
 
       // 3. 逐个删除文件

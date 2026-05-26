@@ -823,8 +823,6 @@ model ImageMap {
   blurhash      String?
   thumbhash     String?
   thumbnailUrl  String?
-  mediumUrl     String?
-  largeUrl      String?
   variantStatus VariantStatus @default(pending)
   cloudSyncStatus CloudSyncStatus @default(pending)
   createdAt     DateTime      @default(now())
