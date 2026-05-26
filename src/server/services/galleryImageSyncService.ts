@@ -6,6 +6,7 @@
 import { prisma } from '../prisma';
 import { calculateFileMD5 } from '../utils/hash';
 import { uploadsDir } from '../utils';
+import { variantGenerator } from './variantGenerator';
 import path from 'path';
 import fs from 'fs';
 
@@ -73,7 +74,10 @@ function publicUrlToAbsoluteFile(publicUrl: string): string | null {
  */
 export async function syncGalleryImageToImageMap(
   publicUrl: string,
-  storageKey: string
+  storageKey: string,
+  options: {
+    enqueueVariant?: boolean;
+  } = {}
 ): Promise<string | null> {
   try {
     // 获取文件路径
@@ -127,11 +131,39 @@ export async function syncGalleryImageToImageMap(
     });
 
     console.log('[GalleryImageSync] 成功创建 ImageMap 记录:', imageMap.id);
+
+    if (options.enqueueVariant) {
+      const filePath = storageKeyToAbsoluteFile(storageKey) || publicUrlToAbsoluteFile(publicUrl);
+
+      if (filePath) {
+        try {
+          await variantGenerator.enqueue({
+            imageMapId: imageMap.id,
+            localFilePath: filePath,
+            priority: 'normal',
+          });
+          console.log('[GalleryImageSync] 已入队缩略图生成任务:', imageMap.id);
+        } catch (error) {
+          console.error('[GalleryImageSync] 缩略图任务入队失败:', error);
+        }
+      }
+    }
+
     return imageMap.id;
   } catch (error) {
     console.error('[GalleryImageSync] 同步失败:', error);
     return null;
   }
+}
+
+/**
+ * 同步单个图集图片到 ImageMap，并立即入队缩略图生成任务
+ */
+export function syncGalleryImageToImageMapWithVariant(
+  publicUrl: string,
+  storageKey: string
+): Promise<string | null> {
+  return syncGalleryImageToImageMap(publicUrl, storageKey, { enqueueVariant: true });
 }
 
 /**

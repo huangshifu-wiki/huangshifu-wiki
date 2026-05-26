@@ -28,7 +28,7 @@ import {
 } from '../utils'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
 import { prisma } from '../prisma'
-import { syncGalleryImageToImageMap } from '../services/galleryImageSyncService'
+import { syncGalleryImageToImageMap, syncGalleryImageToImageMapWithVariant } from '../services/galleryImageSyncService'
 
 function canViewGallery(gallery: { published: boolean; authorUid: string }, authUser?: ApiUser) {
   if (gallery.published) return true
@@ -227,7 +227,7 @@ router.post('/upload', galleryWriteLimiter, requireAuth, requireActiveUser, asyn
 
     try {
       for (const entry of validatedFiles) {
-        await syncGalleryImageToImageMap(entry.asset.publicUrl, entry.asset.storageKey)
+        await syncGalleryImageToImageMapWithVariant(entry.asset.publicUrl, entry.asset.storageKey)
       }
     } catch (error) {
       console.error('Sync gallery images to ImageMap error:', error)
@@ -372,9 +372,9 @@ router.post('/', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandl
       }
 
       try {
-        for (const asset of orderedAssets) {
-          await syncGalleryImageToImageMap(asset.publicUrl, asset.storageKey)
-        }
+      for (const asset of orderedAssets) {
+        await syncGalleryImageToImageMapWithVariant(asset.publicUrl, asset.storageKey)
+      }
       } catch (error) {
         console.error('Sync gallery images to ImageMap error:', error)
       }
@@ -473,7 +473,7 @@ router.post('/', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandl
           where: { id: asset.id },
         })
         if (assetRecord) {
-          await syncGalleryImageToImageMap(assetRecord.publicUrl, assetRecord.storageKey)
+          await syncGalleryImageToImageMapWithVariant(assetRecord.publicUrl, assetRecord.storageKey)
         }
       }
     } catch (error) {
@@ -920,9 +920,9 @@ router.post('/:id/images', requireAuth, requireActiveUser, asyncHandler(async (r
       }
 
       try {
-        for (const asset of orderedAssets) {
-          await syncGalleryImageToImageMap(asset.publicUrl, asset.storageKey)
-        }
+      for (const asset of orderedAssets) {
+        await syncGalleryImageToImageMapWithVariant(asset.publicUrl, asset.storageKey)
+      }
       } catch (error) {
         console.error('Sync gallery images to ImageMap error:', error)
       }

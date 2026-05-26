@@ -17,6 +17,7 @@ import {
   safeDeleteUploadFileByStorageKey,
   logger,
 } from '../utils';
+import { variantGenerator } from '../services/variantGenerator';
 import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService';
 import fs from 'fs';
 import path from 'path';
@@ -369,6 +370,16 @@ router.post(
           s3Url,
           externalUrl,
         };
+      }
+
+      try {
+        await variantGenerator.enqueue({
+          imageMapId: imageId,
+          localFilePath: file.path,
+          priority: 'normal',
+        });
+      } catch (error) {
+        console.error('[Upload] Failed to enqueue variant generation:', error);
       }
 
       res.status(201).json(response);
