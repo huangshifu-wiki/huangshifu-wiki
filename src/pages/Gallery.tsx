@@ -20,7 +20,7 @@ import Pagination from '../components/Pagination';
 import { extractGpsFromMultipleFiles, findMostFrequentGpsCoordinates } from '../services/exifService';
 import { usePagination } from '../hooks/usePagination';
 import type { GalleryItem } from '../types/entities';
-import type { UploadSessionResponse, UploadFileResponse, GalleryCreateResponse } from '../types/api';
+import type { GalleryCreateResponse, GalleryListResponse, UploadFileResponse, UploadSessionResponse } from '../types/api';
 
 const DEFAULT_PAGE_SIZE = 24;
 
@@ -146,7 +146,7 @@ const GalleryList = () => {
   useEffect(() => {
     const fetchGalleries = async () => {
       try {
-        const data = await apiGet<{ galleries: GalleryItem[]; total: number }>('/api/galleries', {
+        const data = await apiGet<GalleryListResponse>('/api/galleries', {
           page: galleryPagination.page,
           limit: galleryPagination.pageSize,
         });

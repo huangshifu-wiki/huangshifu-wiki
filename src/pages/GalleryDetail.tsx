@@ -27,32 +27,10 @@ import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/up
 import { getImagePreference } from '../services/imageService';
 import { submitFormOnModifierEnter } from '../lib/formShortcuts';
 import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState';
+import type { GalleryDetailResponse } from '../types/api';
+import type { GalleryImageItem, GalleryItem } from '../types/entities';
 
-type GalleryImage = {
-  id: string;
-  assetId: string | null;
-  url: string;
-  name: string;
-  mimeType: string | null;
-  sizeBytes: number | null;
-};
-
-type GalleryItem = {
-  id: string;
-  title: string;
-  description: string;
-  authorUid: string;
-  authorName: string;
-  tags: string[];
-  copyright?: string | null;
-  published: boolean;
-  publishedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  images: GalleryImage[];
-};
-
-type EditableGalleryImage = GalleryImage & {
+type EditableGalleryImage = GalleryImageItem & {
   clientId: string;
   pendingFile?: File;
   isPending?: boolean;
@@ -99,7 +77,7 @@ type CommentItem = {
   createdAt: string;
 };
 
-const toEditableImage = (image: GalleryImage): EditableGalleryImage => ({
+const toEditableImage = (image: GalleryImageItem): EditableGalleryImage => ({
   ...image,
   clientId: image.id,
 });
@@ -127,7 +105,7 @@ const releasePendingImageUrls = (images: EditableGalleryImage[]) => {
 const createDraftFromGallery = (item: GalleryItem): GalleryDraft => ({
   title: item.title || '',
   description: item.description || '',
-  tagsText: (item.tags || []).join(', '),
+  tagsText: item.tags.join(', '),
   copyrightText: item.copyright || '',
   published: item.published,
   images: item.images.map(toEditableImage),
@@ -184,7 +162,7 @@ const GalleryDetail = () => {
     if (!galleryId) return;
     try {
       setLoading(true);
-      const data = await apiGet<{ gallery: GalleryItem }>(`/api/galleries/${galleryId}`);
+      const data = await apiGet<GalleryDetailResponse>(`/api/galleries/${galleryId}`);
       setGallery(data.gallery);
       applyDraft((prev) => {
         if (prev) {
@@ -401,7 +379,7 @@ const GalleryDetail = () => {
         await apiPost(`/api/uploads/sessions/${sessionId}/finalize`);
       }
 
-      const result = await apiPatch<{ gallery: GalleryItem }>(`/api/galleries/${gallery.id}`, {
+      const result = await apiPatch<GalleryDetailResponse>(`/api/galleries/${gallery.id}`, {
         title: currentDraft.title,
         description: currentDraft.description,
         tags: splitTagsInput(currentDraft.tagsText),

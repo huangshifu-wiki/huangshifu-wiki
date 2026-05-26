@@ -133,22 +133,28 @@ export interface WikiItem {
 export interface GalleryItem {
   id: string;
   title: string;
-  description?: string | null;
-  tags?: string[];
-  images: GalleryImage[];
+  description: string;
   authorUid: string;
-  locationCode?: string | null;
-  locationName?: string | null;
-  locationDetail?: string | null;
+  authorName: string;
+  tags: string[];
+  locationCode: string | null;
+  locationName: string | null;
+  locationDetail: string | null;
+  copyright: string | null;
+  published: boolean;
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  images: GalleryImageItem[];
 }
 
-export interface GalleryImage {
+export interface GalleryImageItem {
   id: string;
+  assetId: string | null;
   url: string;
-  name?: string;
-  blurhash?: string;
+  name: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
 }
 
 export interface AnnouncementItem {

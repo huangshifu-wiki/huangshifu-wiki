@@ -8,6 +8,7 @@ import {
   authMeResponseSchema,
   createPaginatedResponseSchema,
   galleryDetailResponseSchema,
+  galleryListResponseSchema,
   gallerySchema,
   galleryUploadResponseSchema,
   musicDetailResponseSchema,
@@ -413,12 +414,28 @@ describe('apiTypes', () => {
     const validGallery = {
       id: 'gallery-1',
       title: '测试画廊',
-      coverUrl: 'https://example.com/cover.png',
-      imageCount: 10,
-      likes: 5,
-      views: 100,
+      description: '画廊描述',
+      authorUid: 'user-1',
+      authorName: '用户',
+      tags: ['现场'],
+      locationCode: null,
+      locationName: null,
+      locationDetail: null,
+      copyright: null,
+      published: true,
+      publishedAt: '2024-01-01T00:00:00.000Z',
       createdAt: '2024-01-01',
       updatedAt: '2024-01-02',
+      images: [
+        {
+          id: 'image-1',
+          assetId: 'asset-1',
+          url: 'https://example.com/image.png',
+          name: 'image.png',
+          mimeType: 'image/png',
+          sizeBytes: 1024,
+        },
+      ],
     };
 
     it('should parse valid gallery with required fields', () => {
@@ -426,26 +443,16 @@ describe('apiTypes', () => {
       expect(result).toEqual(validGallery);
     });
 
-    it('should parse valid gallery with optional description', () => {
-      const galleryWithDesc = { ...validGallery, description: '画廊描述' };
-      const result = gallerySchema.parse(galleryWithDesc);
-      expect(result.description).toBe('画廊描述');
-    });
-
-    it('should parse valid gallery with optional author', () => {
-      const galleryWithAuthor = {
+    it('should parse valid gallery with different nullability and empty image set', () => {
+      const galleryWithNulls = {
         ...validGallery,
-        author: {
-          uid: 'user-1',
-          nickname: '用户',
-          role: 'user',
-          status: 'active',
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01',
-        },
+        description: '',
+        publishedAt: null,
+        images: [],
       };
-      const result = gallerySchema.parse(galleryWithAuthor);
-      expect(result.author?.uid).toBe('user-1');
+      const result = gallerySchema.parse(galleryWithNulls);
+      expect(result.publishedAt).toBeNull();
+      expect(result.images).toHaveLength(0);
     });
   });
 
@@ -455,16 +462,56 @@ describe('apiTypes', () => {
         gallery: {
           id: 'gallery-1',
           title: '画廊',
-          coverUrl: 'https://example.com/cover.png',
-          imageCount: 5,
-          likes: 0,
-          views: 0,
+          description: '画廊描述',
+          authorUid: 'user-1',
+          authorName: '用户',
+          tags: [],
+          locationCode: null,
+          locationName: null,
+          locationDetail: null,
+          copyright: null,
+          published: false,
+          publishedAt: null,
           createdAt: '2024-01-01',
           updatedAt: '2024-01-01',
+          images: [],
         },
       };
       const result = galleryDetailResponseSchema.parse(data);
       expect(result.gallery.title).toBe('画廊');
+    });
+  });
+
+  describe('galleryListResponseSchema', () => {
+    it('should parse valid gallery list response', () => {
+      const data = {
+        galleries: [
+          {
+            id: 'gallery-1',
+            title: '画廊',
+            description: '描述',
+            authorUid: 'user-1',
+            authorName: '用户',
+            tags: [],
+            locationCode: null,
+            locationName: null,
+            locationDetail: null,
+            copyright: null,
+            published: true,
+            publishedAt: '2024-01-01T00:00:00.000Z',
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+            images: [],
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 20,
+        hasMore: false,
+      };
+      const result = galleryListResponseSchema.parse(data);
+      expect(result.galleries).toHaveLength(1);
+      expect(result.hasMore).toBe(false);
     });
   });
 

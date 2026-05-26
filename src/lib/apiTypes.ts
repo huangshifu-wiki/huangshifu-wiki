@@ -124,21 +124,43 @@ export const musicPlayUrlResponseSchema = z.object({
 // 画廊相关 Schema
 // ============================================================================
 
+export const galleryImageItemSchema = z.object({
+  id: z.string(),
+  assetId: z.string().nullable(),
+  url: z.string(),
+  name: z.string(),
+  mimeType: z.string().nullable(),
+  sizeBytes: z.number().nullable(),
+});
+
 export const gallerySchema = z.object({
   id: z.string(),
   title: z.string(),
-  description: z.string().optional(),
-  coverUrl: z.string(),
-  imageCount: z.number(),
-  likes: z.number(),
-  views: z.number(),
+  description: z.string(),
+  authorUid: z.string(),
+  authorName: z.string(),
+  tags: z.array(z.string()),
+  locationCode: z.string().nullable(),
+  locationName: z.string().nullable(),
+  locationDetail: z.string().nullable(),
+  copyright: z.string().nullable(),
+  published: z.boolean(),
+  publishedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  author: userSchema.optional(),
+  images: z.array(galleryImageItemSchema),
 });
 
 export const galleryDetailResponseSchema = z.object({
   gallery: gallerySchema,
+});
+
+export const galleryListResponseSchema = z.object({
+  galleries: z.array(gallerySchema),
+  total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+  hasMore: z.boolean(),
 });
 
 export const galleryUploadResponseSchema = z.object({

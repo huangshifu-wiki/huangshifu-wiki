@@ -1,3 +1,5 @@
+import type { GalleryItem } from './entities';
+
 export interface ApiResponse<T> {
   data: T;
 }
@@ -276,21 +278,16 @@ export interface MusicPlayUrlResponse {
 // ============================================================================
 
 export interface GalleryDetailResponse {
-  gallery: {
-    id: string;
-    title: string;
-    description?: string;
-    coverUrl: string;
-    imageCount: number;
-    likes: number;
-    views: number;
-    createdAt: string;
-    updatedAt: string;
-    author?: UserResponse['user'];
-  };
+  gallery: GalleryItem;
 }
 
-export interface GalleryListResponse extends PaginatedResponse<GalleryDetailResponse['gallery']> {}
+export interface GalleryListResponse {
+  galleries: GalleryItem[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
 
 export interface GalleryUploadResponse {
   urls: string[];
