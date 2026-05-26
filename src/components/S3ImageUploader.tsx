@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Upload, Image as ImageIcon, CheckCircle, AlertCircle, RefreshCw, X } from 'lucide-react';
 import { useS3Upload } from '../hooks/useS3Upload';
 import { apiGet } from '../lib/apiClient';
+import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimit } from '../lib/uploadLimits';
 
 export interface S3ImageUploaderProps {
   onUpload?: (url: string, key: string, md5?: string) => void;
@@ -18,7 +19,7 @@ interface ValidationResult {
   error?: string;
 }
 
-const DEFAULT_MAX_SIZE = 10 * 1024 * 1024;
+const DEFAULT_MAX_SIZE = UPLOAD_MAX_FILE_SIZE_BYTES;
 const DEFAULT_ACCEPT = 'image/*';
 
 export const S3ImageUploader: React.FC<S3ImageUploaderProps> = ({
@@ -51,8 +52,7 @@ export const S3ImageUploader: React.FC<S3ImageUploaderProps> = ({
         if (!isAccepted) return { valid: false, error: `不支持的文件类型，请上传 ${accept} 格式的图片` };
       }
       if (file.size > maxSize) {
-        const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(1);
-        return { valid: false, error: `文件大小超过限制，最大支持 ${maxSizeMB}MB` };
+        return { valid: false, error: `文件大小超过限制，${formatUploadLimit(maxSize)}` };
       }
       return { valid: true };
     },
@@ -185,7 +185,7 @@ export const S3ImageUploader: React.FC<S3ImageUploaderProps> = ({
                 拖拽图片到此处，或 <span className="text-brand-gold font-medium">点击选择</span>
               </p>
               <p className="text-xs text-text-muted mt-1">
-                支持 {accept === 'image/*' ? '图片' : accept}，最大 {(maxSize / (1024 * 1024)).toFixed(0)}MB
+                支持 {accept === 'image/*' ? '图片' : accept}，{formatUploadLimit(maxSize)}
               </p>
             </div>
           </div>

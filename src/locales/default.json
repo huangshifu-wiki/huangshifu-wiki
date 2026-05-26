@@ -141,7 +141,7 @@
     "onlyPublishedCanComment": "仅已发布内容可评论",
     "commentFailed": "发表评论失败，请稍后重试",
     "unsupportedFileType": "不支持的文件类型",
-    "fileTooLarge": "文件过大，最大 100MB",
+    "fileTooLarge": "文件过大，{{maxSize}}",
     "filesCannotAdd": "以下文件无法加入：",
     "imagesAdded": "已加入 {{count}} 张待上传图片",
     "cannotDeleteImage": "无法删除该图片",

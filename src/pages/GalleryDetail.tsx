@@ -23,6 +23,7 @@ import { splitTagsInput } from '../lib/contentUtils';
 import { useI18n } from '../lib/i18n';
 import { formatDateTime, toDateValue } from '../lib/dateUtils';
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar';
+import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/uploadLimits';
 import { getImagePreference } from '../services/imageService';
 import { submitFormOnModifierEnter } from '../lib/formShortcuts';
 import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState';
@@ -557,7 +558,6 @@ const GalleryDetail = () => {
   const appendPendingFiles = (fileList: FileList | File[]) => {
     if (!editing || !draftRef.current || !canManage || uploading) return;
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
-    const maxSize = 10 * 1024 * 1024;
     const files = Array.from(fileList);
     const invalidFiles: string[] = [];
     const validImages: EditableGalleryImage[] = [];
@@ -567,8 +567,8 @@ const GalleryDetail = () => {
         invalidFiles.push(`${file.name} (${t('gallery.unsupportedFileType')})`);
         return;
       }
-      if (file.size > maxSize) {
-        invalidFiles.push(`${file.name} (${t('gallery.fileTooLarge')})`);
+      if (file.size > UPLOAD_MAX_FILE_SIZE_BYTES) {
+        invalidFiles.push(`${file.name} (${t('gallery.fileTooLarge', { maxSize: formatUploadLimitWithSize() })})`);
         return;
       }
       validImages.push(createPendingImage(file));

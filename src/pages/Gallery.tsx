@@ -12,7 +12,7 @@ import { SmartImage } from '../components/SmartImage';
 import { useToast } from '../components/Toast';
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink';
 import { apiDelete, apiGet, apiPost, apiUpload } from '../lib/apiClient';
-import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../lib/uploadLimits';
+import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/uploadLimits';
 import { getImagePreference } from '../services/imageService';
 import { toDateValue } from '../lib/dateUtils';
 import { LocationTagInput } from '../components/LocationTagInput';
@@ -428,7 +428,7 @@ const UploadModal = ({
         if (!allowedTypes.includes(file.type)) {
           invalidFiles.push(`${file.name} (不支持的文件类型)`);
         } else if (file.size > maxSize) {
-          invalidFiles.push(`${file.name} (文件过大，最大 100MB)`);
+          invalidFiles.push(`${file.name} (文件过大，${formatUploadLimitWithSize(maxSize)})`);
         } else {
           validFiles.push({
             file,

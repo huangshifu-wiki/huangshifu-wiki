@@ -5,7 +5,7 @@ import { clsx } from 'clsx';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/apiClient';
 import { useToast } from './Toast';
 import { uploadImageWithStrategy, type UploadImageResult } from '../services/imageService';
-import { UPLOAD_MAX_FILE_SIZE_BYTES, UPLOAD_MAX_FILE_SIZE_MB } from '../lib/uploadLimits';
+import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/uploadLimits';
 
 type CoverItem = {
   id: string;
@@ -78,7 +78,7 @@ export const CoverManager = ({
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { show('请选择图片文件', { variant: 'error' }); return; }
-    if (file.size > UPLOAD_MAX_FILE_SIZE_BYTES) { show(`图片大小不能超过 ${UPLOAD_MAX_FILE_SIZE_MB}MB`, { variant: 'error' }); return; }
+    if (file.size > UPLOAD_MAX_FILE_SIZE_BYTES) { show(`图片大小不能超过 ${formatUploadLimitWithSize()}`, { variant: 'error' }); return; }
 
     setUploading(true);
     try {
