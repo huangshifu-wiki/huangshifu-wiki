@@ -3,6 +3,7 @@ import { requireAuth, requireAdmin, requireActiveUser } from '../middleware/auth
 import { prisma, uploadsDir } from '../utils';
 import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService';
 import { getS3BaseUrl, getPublicConfig } from '../s3/s3Service';
+import { variantCleanup, CleanupTrigger } from '../services/variantCleanup.service';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -458,9 +459,31 @@ router.patch('/:id', requireAuth, requireAdmin, async (req, res) => {
 // DELETE /api/image-maps/:id - Delete image map
 router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    await prisma.imageMap.delete({
+    const existing = await prisma.imageMap.findUnique({
       where: { id: req.params.id },
+      select: { id: true },
     });
+
+    if (!existing) {
+      res.status(404).json({ error: '图片映射不存在' });
+      return;
+    }
+
+    await variantCleanup.cleanupByImageMapId(req.params.id, CleanupTrigger.ON_DELETE);
+
+    try {
+      await prisma.imageMap.delete({
+        where: { id: req.params.id },
+      });
+    } catch (deleteError) {
+      const prismaError = deleteError as { code?: string };
+      if (prismaError.code === 'P2025') {
+        res.json({ success: true });
+        return;
+      }
+      throw deleteError;
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Delete image map error:', error);
