@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Image as ImageIcon, Plus, Folder, X, Upload, Clock, User as UserIcon, Link2, Trash2 } from 'lucide-react';
@@ -12,7 +12,7 @@ import { SmartImage } from '../components/SmartImage';
 import { useToast } from '../components/Toast';
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink';
 import { apiDelete, apiGet, apiPost, apiUpload } from '../lib/apiClient';
-import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/uploadLimits';
+import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimit, formatUploadLimitWithSize } from '../lib/uploadLimits';
 import { getImagePreference } from '../services/imageService';
 import { toDateValue } from '../lib/dateUtils';
 import { LocationTagInput } from '../components/LocationTagInput';
@@ -23,11 +23,17 @@ import type { GalleryItem } from '../types/entities';
 import type { GalleryCreateResponse, GalleryListResponse, UploadFileResponse, UploadSessionResponse } from '../types/api';
 
 const DEFAULT_PAGE_SIZE = 24;
+const GALLERY_UPLOAD_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,image/bmp';
+const GALLERY_UPLOAD_ALLOWED_TYPES = new Set(GALLERY_UPLOAD_ACCEPT.split(','));
+const GALLERY_UPLOAD_TYPE_LABEL = 'JPG、PNG、GIF、WebP、BMP';
 
 type LocalPreviewFile = {
   file: File;
   previewUrl: string;
 };
+
+const hasDraggedFiles = (event: Pick<React.DragEvent<HTMLElement>, 'dataTransfer'>) =>
+  Array.from(event.dataTransfer?.types || []).includes('Files');
 
 interface GalleryCardProps {
   gallery: GalleryItem;
@@ -362,6 +368,7 @@ const UploadModal = ({
   const [files, setFiles] = useState<LocalPreviewFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [dragDepth, setDragDepth] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<LocalPreviewFile[]>([]);
@@ -417,43 +424,76 @@ const UploadModal = ({
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-      const maxSize = UPLOAD_MAX_FILE_SIZE_BYTES;
+  const appendFiles = (fileList: FileList | File[]) => {
+    if (uploading) return;
 
-      const validFiles: { file: File; previewUrl: string }[] = [];
-      const invalidFiles: string[] = [];
+    const maxSize = UPLOAD_MAX_FILE_SIZE_BYTES;
+    const validFiles: { file: File; previewUrl: string }[] = [];
+    const invalidFiles: string[] = [];
 
-      Array.from(e.target.files!).forEach((file: File) => {
-        if (!allowedTypes.includes(file.type)) {
-          invalidFiles.push(`${file.name} (不支持的文件类型)`);
-        } else if (file.size > maxSize) {
-          invalidFiles.push(`${file.name} (文件过大，${formatUploadLimitWithSize(maxSize)})`);
-        } else {
-          validFiles.push({
-            file,
-            previewUrl: URL.createObjectURL(file),
-          });
-        }
-      });
-
-      if (invalidFiles.length > 0) {
-        show(`以下文件无法上传：${invalidFiles.slice(0, 3).join(', ')}${invalidFiles.length > 3 ? '...' : ''}`, { variant: 'error' });
+    Array.from(fileList).forEach((file: File) => {
+      if (!GALLERY_UPLOAD_ALLOWED_TYPES.has(file.type)) {
+        invalidFiles.push(`${file.name} (不支持的文件类型)`);
+      } else if (file.size > maxSize) {
+        invalidFiles.push(`${file.name} (文件过大，${formatUploadLimitWithSize(maxSize)})`);
+      } else {
+        validFiles.push({
+          file,
+          previewUrl: URL.createObjectURL(file),
+        });
       }
+    });
 
-      if (validFiles.length > 0) {
-        setFiles((prev) => [...prev, ...validFiles]);
-
-        if (!title && validFiles[0]?.file && (validFiles[0].file as any).webkitRelativePath) {
-          const path = (validFiles[0].file as any).webkitRelativePath;
-          const folderName = path.split('/')[0];
-          if (folderName) setTitle(folderName);
-        }
-
-        extractLocationFromImages(validFiles.map(f => f.file));
-      }
+    if (invalidFiles.length > 0) {
+      show(`以下文件无法上传：${invalidFiles.slice(0, 3).join(', ')}${invalidFiles.length > 3 ? '...' : ''}`, { variant: 'error' });
     }
+
+    if (validFiles.length === 0) return;
+
+    setFiles((prev) => [...prev, ...validFiles]);
+
+    if (!title && validFiles[0]?.file && (validFiles[0].file as any).webkitRelativePath) {
+      const path = (validFiles[0].file as any).webkitRelativePath;
+      const folderName = path.split('/')[0];
+      if (folderName) setTitle(folderName);
+    }
+
+    extractLocationFromImages(validFiles.map((file) => file.file));
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    e.target.value = '';
+
+    if (!fileList?.length) return;
+    appendFiles(fileList);
+  };
+
+  const handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    if (uploading || !hasDraggedFiles(event)) return;
+    event.preventDefault();
+    setDragDepth((prev) => prev + 1);
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (uploading || !hasDraggedFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    if (uploading || !hasDraggedFiles(event)) return;
+    event.preventDefault();
+    setDragDepth((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    if (uploading || !hasDraggedFiles(event)) return;
+    event.preventDefault();
+    setDragDepth(0);
+
+    if (!event.dataTransfer.files?.length) return;
+    appendFiles(event.dataTransfer.files);
   };
 
   const removeFile = (index: number) => {
@@ -582,8 +622,23 @@ const UploadModal = ({
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
-        className="bg-surface rounded w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col border border-border"
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={clsx(
+          'relative bg-surface rounded w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col border transition-colors',
+          dragDepth > 0 ? 'border-brand-gold' : 'border-border'
+        )}
       >
+        {dragDepth > 0 ? (
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-bg-primary/80 px-4">
+            <div className="w-full max-w-2xl rounded border-2 border-dashed border-brand-gold bg-surface/95 px-8 py-12 text-center">
+              <p className="text-lg font-bold text-text-primary">松开鼠标上传图片</p>
+              <p className="mt-2 text-sm text-text-muted">支持 {GALLERY_UPLOAD_TYPE_LABEL}，单张不超过 {formatUploadLimit()}</p>
+            </div>
+          </div>
+        ) : null}
         <div className="p-6 border-b border-border flex justify-between items-center">
           <h2 className="text-[1.5rem] font-bold text-text-primary tracking-[0.12em]">上传新图集</h2>
           <button onClick={handleClose} className="p-2 text-text-muted theme-icon-button-danger transition-colors">
@@ -646,14 +701,15 @@ const UploadModal = ({
             <div className="flex flex-wrap gap-4">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex-1 min-w-[160px] p-6 border-2 border-dashed border-border rounded hover:border-brand-gold hover:bg-surface-alt active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-2 group"
+                disabled={uploading}
+                className="flex-1 min-w-[160px] p-6 border-2 border-dashed border-border rounded hover:border-brand-gold hover:bg-surface-alt active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-2 group disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Upload size={28} className="text-text-muted group-hover:text-brand-gold" />
                 <span className="text-sm text-text-secondary group-hover:text-brand-gold">选择多张图片</span>
                 <input
                   type="file"
                   multiple
-                  accept="image/*"
+                  accept={GALLERY_UPLOAD_ACCEPT}
                   className="hidden"
                   ref={fileInputRef}
                   onChange={handleFileChange}
@@ -662,7 +718,8 @@ const UploadModal = ({
 
               <button
                 onClick={() => folderInputRef.current?.click()}
-                className="flex-1 min-w-[160px] p-6 border-2 border-dashed border-border rounded hover:border-brand-gold hover:bg-surface-alt active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-2 group"
+                disabled={uploading}
+                className="flex-1 min-w-[160px] p-6 border-2 border-dashed border-border rounded hover:border-brand-gold hover:bg-surface-alt active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-2 group disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Folder size={28} className="text-text-muted group-hover:text-brand-gold" />
                 <span className="text-sm text-text-secondary group-hover:text-brand-gold">上传整个文件夹</span>
