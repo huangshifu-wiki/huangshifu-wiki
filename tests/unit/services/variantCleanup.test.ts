@@ -22,6 +22,8 @@ const mockFindUnique = vi.fn().mockResolvedValue(null);
 const mockFindMany = vi.fn().mockResolvedValue([]);
 const mockCount = vi.fn().mockResolvedValue(0);
 const mockUpdate = vi.fn().mockResolvedValue({});
+const mockDelete = vi.fn().mockResolvedValue({});
+const mockMediaAssetCount = vi.fn().mockResolvedValue(0);
 const mockGetProcessingIds = vi.fn(() => new Set<string>());
 
 // Mock prisma 模块
@@ -30,8 +32,12 @@ vi.mock('../../../src/server/prisma', () => ({
     imageMap: {
       findUnique: mockFindUnique,
       update: mockUpdate,
+      delete: mockDelete,
       count: mockCount,
       findMany: mockFindMany,
+    },
+    mediaAsset: {
+      count: mockMediaAssetCount,
     },
   },
 }));
@@ -80,6 +86,8 @@ beforeEach(() => {
   mockFindMany.mockResolvedValue([]);
   mockCount.mockResolvedValue(0);
   mockUpdate.mockResolvedValue({});
+  mockDelete.mockResolvedValue({});
+  mockMediaAssetCount.mockResolvedValue(0);
   mockGetProcessingIds.mockReturnValue(new Set<string>());
 });
 
@@ -161,14 +169,36 @@ describe('VariantCleanupService - 孤儿文件检测', () => {
       { name: 'orphan-id', isDirectory: () => true },
     ]);
 
-    mockCount
-      .mockResolvedValueOnce(1)
-      .mockResolvedValueOnce(0);
+    mockFindUnique
+      .mockResolvedValueOnce({ id: 'valid-id', localUrl: '/uploads/valid.jpg' })
+      .mockResolvedValueOnce(null);
 
     const result = await service.cleanupOrphanedVariants();
 
     expect(result.trigger).toBe('scheduled');
     expect(result.deletedFiles.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('cleanupOrphanedVariants 应该清理源图已删除的 ImageMap 残留', async () => {
+    mockReaddir.mockImplementation(async (dirPath: string) => {
+      if (String(dirPath).endsWith('/variants')) {
+        return [{ name: 'deleted-source-id', isDirectory: () => true }];
+      }
+
+      return [{ name: '1080h.webp', isFile: () => true }];
+    });
+    mockFindUnique.mockResolvedValue({
+      id: 'deleted-source-id',
+      localUrl: '/uploads/deleted.jpg',
+    });
+    mockMediaAssetCount.mockResolvedValue(0);
+    mockAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+
+    const result = await service.cleanupOrphanedVariants();
+
+    expect(result.trigger).toBe('scheduled');
+    expect(mockUnlink).toHaveBeenCalled();
+    expect(mockDelete).toHaveBeenCalledWith({ where: { id: 'deleted-source-id' } });
   });
 
   it('cleanupOrphanedVariants 应该跳过正在生成的孤儿目录', async () => {

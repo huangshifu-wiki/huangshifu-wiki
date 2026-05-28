@@ -188,11 +188,15 @@ export class VariantCleanupService {
           continue;
         }
 
-        const existsInDB = await prisma.imageMap.count({
+        const imageMap = await prisma.imageMap.findUnique({
           where: { id: imageMapId },
+          select: {
+            id: true,
+            localUrl: true,
+          },
         });
 
-        if (existsInDB === 0) {
+        if (!imageMap) {
           console.log(`[Cleanup] 🗑️ Found orphaned directory: ${imageMapId}`);
           
           try {
@@ -201,6 +205,27 @@ export class VariantCleanupService {
             allDeletedFiles.push(...result.deletedFiles);
             allErrors.push(...result.errors);
             totalFreedBytes += result.totalFreedBytes;
+          } catch (error) {
+            allErrors.push({
+              path: imageMapId,
+              error: (error as Error).message,
+            });
+          }
+          continue;
+        }
+
+        const isDeletedSourceVariant = await this.isDeletedSourceVariant(imageMap.localUrl);
+        if (isDeletedSourceVariant) {
+          console.log(`[Cleanup] 🗑️ Found deleted-source variant: ${imageMapId}`);
+
+          try {
+            const result = await this.removeVariantDirectory(imageMapId);
+
+            allDeletedFiles.push(...result.deletedFiles);
+            allErrors.push(...result.errors);
+            totalFreedBytes += result.totalFreedBytes;
+
+            await prisma.imageMap.delete({ where: { id: imageMapId } });
           } catch (error) {
             allErrors.push({
               path: imageMapId,
@@ -349,6 +374,26 @@ export class VariantCleanupService {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  private async isDeletedSourceVariant(localUrl: string | null): Promise<boolean> {
+    if (!localUrl) return false;
+
+    const linkedAssets = await prisma.mediaAsset.count({
+      where: {
+        publicUrl: localUrl,
+        status: { not: 'deleted' },
+      },
+    });
+    if (linkedAssets > 0) return false;
+
+    const filePath = this.urlToFilePath(localUrl);
+    try {
+      await fs.promises.access(filePath, fs.constants.R_OK);
+      return false;
+    } catch {
+      return true;
+    }
   }
 
   private async removeVariantDirectory(imageMapId: string): Promise<{
