@@ -109,7 +109,7 @@
     "supertest": "^7.2.2",
     "tailwindcss": "^4.1.14",
     "terser": "^5.46.0",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.3",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vitest": "^3.2.4"
