@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Settings, Bookmark, FileText, MessageSquare, History, Loader2 } from 'lucide-react';
+import {
+  Mail,
+  Settings,
+  Bookmark,
+  FileText,
+  MessageSquare,
+  History,
+  Loader2,
+  ShieldCheck,
+} from 'lucide-react';
 import { apiGet } from '../lib/apiClient';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { clsx } from 'clsx';
@@ -58,6 +67,34 @@ const PROFILE_TABS: Array<{ id: ActiveTab; label: string; icon: React.ReactNode 
   { id: 'favorites', label: '我的收藏', icon: <Bookmark size={14} /> },
 ];
 
+function renderRoleIcon(role?: string | null) {
+  if (role === 'super_admin') {
+    return (
+      <span
+        className="inline-flex shrink-0 items-center justify-center text-brand-gold drop-shadow-[0_2px_6px_color-mix(in_srgb,var(--color-brand-gold)_30%,transparent)]"
+        title="超级管理员"
+        aria-label="超级管理员"
+      >
+        <ShieldCheck size={18} strokeWidth={2.4} />
+      </span>
+    );
+  }
+
+  if (role === 'admin') {
+    return (
+      <span
+        className="inline-flex shrink-0 items-center justify-center text-[color-mix(in_srgb,var(--color-info-hover)_86%,var(--color-text-primary))]"
+        title="管理员"
+        aria-label="管理员"
+      >
+        <ShieldCheck size={18} strokeWidth={2.3} />
+      </span>
+    );
+  }
+
+  return null;
+}
+
 const Profile = () => {
   const { user, profile } = useAuth();
   const { tab } = useParams<{ tab?: string }>();
@@ -71,6 +108,7 @@ const Profile = () => {
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const activeTab = resolveProfileTab(tab)
+  const currentRole = profile?.role ?? user?.role
 
   useEffect(() => {
     if (!user || activeTab !== 'favorites') return;
@@ -201,7 +239,10 @@ const Profile = () => {
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
                 <div className="min-w-0">
-                  <h1 className="text-2xl font-bold text-text-primary">{profile?.displayName || user.displayName}</h1>
+                  <h1 className="flex min-w-0 items-center gap-2 text-2xl font-bold text-text-primary">
+                    <span className="truncate">{profile?.displayName || user.displayName}</span>
+                    {renderRoleIcon(currentRole)}
+                  </h1>
                   <p className="text-sm text-text-muted flex items-center gap-1.5 mt-1">
                     <Mail size={13} /> {user.email}
                   </p>
@@ -223,7 +264,7 @@ const Profile = () => {
                 </div>
                 <div className="theme-panel-soft rounded p-3">
                   <p className="text-xs text-text-muted mb-0.5">身份</p>
-                  <p className="text-lg font-semibold text-text-primary">{formatAdminRole(profile?.role ?? user?.role)}</p>
+                  <p className="text-lg font-semibold text-text-primary">{formatAdminRole(currentRole)}</p>
                 </div>
                 <div className="theme-panel-soft rounded p-3">
                   <p className="text-xs text-text-muted mb-0.5">状态</p>
