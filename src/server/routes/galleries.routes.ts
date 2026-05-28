@@ -14,7 +14,6 @@ import {
   buildUploadPublicUrl,
   getUploadFileStorageKey,
   safeDeleteUploadFileByStorageKey,
-  safeDeleteUploadFileByUrl,
   validateUploadedImage,
   uploadFileToS3,
   uploadFileToExternal,
@@ -29,6 +28,10 @@ import {
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
 import { prisma } from '../prisma'
 import { syncGalleryImageToImageMap, syncGalleryImageToImageMapWithVariant } from '../services/galleryImageSyncService'
+import {
+  cleanupUnusedMediaAssetById,
+  cleanupUntrackedUploadImageByUrl,
+} from '../services/mediaAssetCleanupService'
 
 function canViewGallery(gallery: { published: boolean; authorUid: string }, authUser?: ApiUser) {
   if (gallery.published) return true
@@ -51,6 +54,10 @@ function canCreateGallery(authUser?: ApiUser) {
 }
 
 const router = Router()
+
+function isString(value: string | null): value is string {
+  return typeof value === 'string'
+}
 
 router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
@@ -773,19 +780,9 @@ router.patch('/:id', requireAuth, requireActiveUser, asyncHandler(async (req: Au
       await Promise.all(
         removedImages.map(async (item) => {
           if (item.assetId) {
-            const linked = await prisma.galleryImage.count({ where: { assetId: item.assetId } })
-            if (linked === 0) {
-              const asset = await prisma.mediaAsset.findUnique({ where: { id: item.assetId } })
-              if (asset) {
-                await safeDeleteUploadFileByStorageKey(asset.storageKey)
-                await prisma.mediaAsset.update({
-                  where: { id: asset.id },
-                  data: { status: 'deleted' },
-                })
-              }
-            }
+            await cleanupUnusedMediaAssetById(item.assetId)
           } else {
-            await safeDeleteUploadFileByUrl(item.url)
+            await cleanupUntrackedUploadImageByUrl(item.url)
           }
         }),
       )
@@ -1040,19 +1037,9 @@ router.delete('/:id/images/:imageId', requireAuth, requireActiveUser, asyncHandl
     await prisma.galleryImage.delete({ where: { id: image.id } })
 
     if (image.assetId) {
-      const linked = await prisma.galleryImage.count({ where: { assetId: image.assetId } })
-      if (linked === 0) {
-        const asset = await prisma.mediaAsset.findUnique({ where: { id: image.assetId } })
-        if (asset) {
-          await safeDeleteUploadFileByStorageKey(asset.storageKey)
-          await prisma.mediaAsset.update({
-            where: { id: asset.id },
-            data: { status: 'deleted' },
-          })
-        }
-      }
+      await cleanupUnusedMediaAssetById(image.assetId)
     } else {
-      await safeDeleteUploadFileByUrl(image.url)
+      await cleanupUntrackedUploadImageByUrl(image.url)
     }
 
     const remaining = await prisma.galleryImage.findMany({
@@ -1307,44 +1294,20 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: AuthenticatedReques
       return
     }
 
-    const imagesWithAsset = gallery.images.filter((img) => img.assetId)
+    const assetIds = [...new Set(gallery.images.map((img) => img.assetId).filter(isString))]
     const imagesWithoutAsset = gallery.images.filter((img) => !img.assetId)
 
     await prisma.gallery.delete({
       where: { id: req.params.id },
     })
 
-    if (imagesWithAsset.length > 0) {
-      const assetIds = [...new Set(imagesWithAsset.map((img) => img.assetId!))]
-
-      const linkedCounts = await prisma.galleryImage.groupBy({
-        by: ['assetId'],
-        where: { assetId: { in: assetIds } },
-        _count: { assetId: true },
-      })
-      const linkedCountMap = new Map(linkedCounts.map((c) => [c.assetId, c._count.assetId]))
-
-      const orphanAssetIds = assetIds.filter((id) => (linkedCountMap.get(id) ?? 0) === 0)
-
-      if (orphanAssetIds.length > 0) {
-        const orphanAssets = await prisma.mediaAsset.findMany({
-          where: { id: { in: orphanAssetIds } },
-          select: { id: true, storageKey: true },
-        })
-
-        await Promise.all([
-          ...orphanAssets.map((asset) => safeDeleteUploadFileByStorageKey(asset.storageKey)),
-          prisma.mediaAsset.updateMany({
-            where: { id: { in: orphanAssetIds } },
-            data: { status: 'deleted' },
-          }),
-        ])
-      }
+    if (assetIds.length > 0) {
+      await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
     }
 
     if (imagesWithoutAsset.length > 0) {
       await Promise.all(
-        imagesWithoutAsset.map((image) => safeDeleteUploadFileByUrl(image.url)),
+        imagesWithoutAsset.map((image) => cleanupUntrackedUploadImageByUrl(image.url)),
       )
     }
 

@@ -20,8 +20,6 @@ import {
   parseContentStatus,
   normalizeModerationTargetType,
   createNotification,
-  safeDeleteUploadFileByStorageKey,
-  safeDeleteUploadFileByUrl,
   parseDatabaseUrl,
   verifyBackupPassword,
   sanitizeFilename,
@@ -32,6 +30,10 @@ import {
   validateSqlContent,
   logger,
 } from '../utils';
+import {
+  cleanupUnusedMediaAssetById,
+  cleanupUntrackedUploadImageByUrl,
+} from '../services/mediaAssetCleanupService';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
@@ -49,6 +51,10 @@ const __dirname = path.dirname(__filename);
 const router = Router();
 
 const execFileAsync = promisify(execFile);
+
+function isString(value: string | null): value is string {
+  return typeof value === 'string';
+}
 
 const backupsDir = path.join(__dirname, '..', '..', '..', 'backups');
 fs.mkdirSync(backupsDir, { recursive: true });
@@ -590,26 +596,16 @@ router.post('/batch-delete-galleries', requireAdmin, asyncHandler(async (req: Au
       });
       if (!gallery) continue;
 
+      const assetIds = [...new Set(gallery.images.map((image) => image.assetId).filter(isString))];
+      const imagesWithoutAsset = gallery.images.filter((image) => !image.assetId);
+
       await prisma.gallery.delete({ where: { id: galleryId } });
 
       await Promise.all(
-        gallery.images.map(async (image) => {
-          if (image.assetId) {
-            const linked = await prisma.galleryImage.count({ where: { assetId: image.assetId } });
-            if (linked === 0) {
-              const asset = await prisma.mediaAsset.findUnique({ where: { id: image.assetId } });
-              if (asset) {
-                await safeDeleteUploadFileByStorageKey(asset.storageKey);
-                await prisma.mediaAsset.update({
-                  where: { id: asset.id },
-                  data: { status: 'deleted' },
-                });
-              }
-            }
-          } else {
-            await safeDeleteUploadFileByUrl(image.url);
-          }
-        }),
+        assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)),
+      );
+      await Promise.all(
+        imagesWithoutAsset.map((image) => cleanupUntrackedUploadImageByUrl(image.url)),
       );
       deleted++;
     }
@@ -1462,26 +1458,16 @@ router.delete('/:tab/:id', requireAdmin, asyncHandler(async (req: AuthenticatedR
         res.status(404).json({ error: '图集不存在' });
         return;
       }
+      const assetIds = [...new Set(gallery.images.map((image) => image.assetId).filter(isString))];
+      const imagesWithoutAsset = gallery.images.filter((image) => !image.assetId);
+
       await prisma.gallery.delete({ where: { id } });
 
       await Promise.all(
-        gallery.images.map(async (image) => {
-          if (image.assetId) {
-            const linked = await prisma.galleryImage.count({ where: { assetId: image.assetId } });
-            if (linked === 0) {
-              const asset = await prisma.mediaAsset.findUnique({ where: { id: image.assetId } });
-              if (asset) {
-                await safeDeleteUploadFileByStorageKey(asset.storageKey);
-                await prisma.mediaAsset.update({
-                  where: { id: asset.id },
-                  data: { status: 'deleted' },
-                });
-              }
-            }
-          } else {
-            await safeDeleteUploadFileByUrl(image.url);
-          }
-        }),
+        assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)),
+      );
+      await Promise.all(
+        imagesWithoutAsset.map((image) => cleanupUntrackedUploadImageByUrl(image.url)),
       );
       res.json({ success: true });
       return;

@@ -22,6 +22,7 @@ const mockFindUnique = vi.fn().mockResolvedValue(null);
 const mockFindMany = vi.fn().mockResolvedValue([]);
 const mockCount = vi.fn().mockResolvedValue(0);
 const mockUpdate = vi.fn().mockResolvedValue({});
+const mockGetProcessingIds = vi.fn(() => new Set<string>());
 
 // Mock prisma 模块
 vi.mock('../../../src/server/prisma', () => ({
@@ -32,6 +33,12 @@ vi.mock('../../../src/server/prisma', () => ({
       count: mockCount,
       findMany: mockFindMany,
     },
+  },
+}));
+
+vi.mock('../../../src/server/services/variantGenerator', () => ({
+  variantGenerator: {
+    getProcessingIds: mockGetProcessingIds,
   },
 }));
 
@@ -73,6 +80,7 @@ beforeEach(() => {
   mockFindMany.mockResolvedValue([]);
   mockCount.mockResolvedValue(0);
   mockUpdate.mockResolvedValue({});
+  mockGetProcessingIds.mockReturnValue(new Set<string>());
 });
 
 describe('VariantCleanupService - 清理变体', () => {
@@ -115,6 +123,16 @@ describe('VariantCleanupService - 清理变体', () => {
     expect(result.totalFreedBytes).toBe(0);
   });
 
+  it('ImageMap 正在生成变体时应该跳过清理', async () => {
+    mockGetProcessingIds.mockReturnValue(new Set(['processing-id']));
+
+    const result = await service.cleanupByImageMapId('processing-id', 'on_delete');
+
+    expect(result.skipped).toBe(true);
+    expect(result.skippedReason).toBe('processing');
+    expect(mockUnlink).not.toHaveBeenCalled();
+  });
+
   it('应该处理已删除的文件（ENOENT 错误）', async () => {
     mockFindUnique.mockResolvedValue({
       thumbnailUrl: '/uploads/variants/test-2/thumbnail.webp',
@@ -151,6 +169,19 @@ describe('VariantCleanupService - 孤儿文件检测', () => {
 
     expect(result.trigger).toBe('scheduled');
     expect(result.deletedFiles.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('cleanupOrphanedVariants 应该跳过正在生成的孤儿目录', async () => {
+    mockGetProcessingIds.mockReturnValue(new Set(['orphan-id']));
+    mockReaddir.mockResolvedValue([
+      { name: 'orphan-id', isDirectory: () => true },
+    ]);
+
+    const result = await service.cleanupOrphanedVariants();
+
+    expect(result.trigger).toBe('scheduled');
+    expect(mockCount).not.toHaveBeenCalled();
+    expect(mockUnlink).not.toHaveBeenCalled();
   });
 
   it('variants 目录不存在时应该正常返回', async () => {

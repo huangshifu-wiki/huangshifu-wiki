@@ -30,6 +30,8 @@ export enum CleanupTrigger {
 export interface CleanupResult {
   success: boolean;
   trigger: CleanupTrigger;
+  skipped: boolean;
+  skippedReason?: 'processing';
   deletedFiles: Array<{
     path: string;
     sizeBytes: number;
@@ -64,7 +66,10 @@ export class VariantCleanupService {
       const processingIds = variantGenerator.getProcessingIds();
       if (processingIds.has(imageMapId)) {
         logger.warn(`[Cleanup] Skipping ${imageMapId}: currently being processed by VariantGenerator`);
-        return this.createResult(trigger, [], [], 0, Date.now() - startTime);
+        return this.createResult(trigger, [], [], 0, Date.now() - startTime, {
+          skipped: true,
+          skippedReason: 'processing',
+        });
       }
 
       // 1. 查询 ImageMap 获取变体路径
@@ -76,6 +81,17 @@ export class VariantCleanupService {
       });
 
       if (!imageMap) {
+        if (trigger === CleanupTrigger.ON_DELETE || trigger === CleanupTrigger.SCHEDULED) {
+          const directoryResult = await this.removeVariantDirectory(imageMapId);
+          return this.createResult(
+            trigger,
+            directoryResult.deletedFiles,
+            directoryResult.errors,
+            directoryResult.totalFreedBytes,
+            Date.now() - startTime
+          );
+        }
+
         logger.warn(`[Cleanup] ImageMap ${imageMapId} not found, skipping`);
         return this.createResult(trigger, [], [], 0, Date.now() - startTime);
       }
@@ -119,8 +135,10 @@ export class VariantCleanupService {
 
       // 4. 如果是 on_delete 触发器，删除整个 variants/{imageMapId}/ 目录
       if (trigger === CleanupTrigger.ON_DELETE) {
-        const variantDir = path.join(uploadsDir, 'variants', imageMapId);
-        await this.removeDirectoryIfEmpty(variantDir);
+        const directoryResult = await this.removeVariantDirectory(imageMapId);
+        deletedFiles.push(...directoryResult.deletedFiles);
+        errors.push(...directoryResult.errors);
+        totalFreedBytes += directoryResult.totalFreedBytes;
       }
 
       const executionTime = Date.now() - startTime;
@@ -163,7 +181,13 @@ export class VariantCleanupService {
 
       console.log(`[Cleanup] 🔍 Scanning ${subDirs.length} variant directories...`);
 
+      const processingIds = variantGenerator.getProcessingIds();
       for (const imageMapId of subDirs) {
+        if (processingIds.has(imageMapId)) {
+          logger.warn(`[Cleanup] Skipping orphaned directory ${imageMapId}: currently being processed`);
+          continue;
+        }
+
         const existsInDB = await prisma.imageMap.count({
           where: { id: imageMapId },
         });
@@ -172,10 +196,7 @@ export class VariantCleanupService {
           console.log(`[Cleanup] 🗑️ Found orphaned directory: ${imageMapId}`);
           
           try {
-            const result = await this.cleanupByImageMapId(
-              imageMapId, 
-              CleanupTrigger.SCHEDULED
-            );
+            const result = await this.removeVariantDirectory(imageMapId);
             
             allDeletedFiles.push(...result.deletedFiles);
             allErrors.push(...result.errors);
@@ -302,11 +323,14 @@ export class VariantCleanupService {
     deletedFiles: CleanupResult['deletedFiles'],
     errors: CleanupResult['errors'],
     totalFreedBytes: number,
-    executionTimeMs: number
+    executionTimeMs: number,
+    options: { skipped?: boolean; skippedReason?: CleanupResult['skippedReason'] } = {}
   ): CleanupResult {
     return {
-      success: errors.length === 0,
+      success: errors.length === 0 && !options.skipped,
       trigger,
+      skipped: options.skipped ?? false,
+      skippedReason: options.skippedReason,
       deletedFiles,
       errors,
       totalFreedBytes,
@@ -325,6 +349,60 @@ export class VariantCleanupService {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  private async removeVariantDirectory(imageMapId: string): Promise<{
+    deletedFiles: CleanupResult['deletedFiles'];
+    errors: CleanupResult['errors'];
+    totalFreedBytes: number;
+  }> {
+    const deletedFiles: CleanupResult['deletedFiles'] = [];
+    const errors: CleanupResult['errors'] = [];
+    let totalFreedBytes = 0;
+    const variantDir = path.join(uploadsDir, 'variants', imageMapId);
+
+    try {
+      const entries = await fs.promises.readdir(variantDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const filePath = path.join(variantDir, entry.name);
+
+        if (!entry.isFile()) {
+          continue;
+        }
+
+        try {
+          const stat = await fs.promises.stat(filePath);
+          await fs.promises.unlink(filePath);
+          deletedFiles.push({
+            path: filePath,
+            sizeBytes: stat.size,
+            sizeFormatted: this.formatBytes(stat.size),
+          });
+          totalFreedBytes += stat.size;
+        } catch (error) {
+          const err = error as NodeJS.ErrnoException;
+          if (err.code !== 'ENOENT') {
+            errors.push({
+              path: filePath,
+              error: (error as Error).message,
+            });
+          }
+        }
+      }
+
+      await this.removeDirectoryIfEmpty(variantDir);
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        errors.push({
+          path: variantDir,
+          error: (error as Error).message,
+        });
+      }
+    }
+
+    return { deletedFiles, errors, totalFreedBytes };
   }
 
   private async removeDirectoryIfEmpty(dirPath: string): Promise<void> {
