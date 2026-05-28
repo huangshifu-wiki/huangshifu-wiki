@@ -10,6 +10,7 @@ import {
 	LogIn,
 	LogOut,
 	Shield,
+	Settings,
 	MessageCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -147,6 +148,14 @@ export const MobileMenu = ({
 											<span>我的收藏</span>
 										</NavLink>
 									</div>
+									<Link
+										to="/settings/profile"
+										onClick={onClose}
+										className={accountMenuStyles.menuAction}
+									>
+										<Settings size={16} />
+										<span>设置</span>
+									</Link>
 									{isAdmin && (
 										<Link
 											to="/admin"

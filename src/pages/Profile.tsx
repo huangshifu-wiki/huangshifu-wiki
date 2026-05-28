@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Edit3, Save, X, Camera, Bookmark, FileText, MessageSquare, History, Loader2 } from 'lucide-react';
-import { apiGet, apiPatch } from '../lib/apiClient';
+import { Mail, Settings, Bookmark, FileText, MessageSquare, History, Loader2 } from 'lucide-react';
+import { apiGet } from '../lib/apiClient';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
-import { AvatarCropModal } from '../components/AvatarCropModal';
-import { useToast } from '../components/Toast';
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar';
 import { getStatusClassName, getStatusText } from '../lib/contentUtils';
 import { formatAdminRole } from '../lib/formatUtils';
@@ -61,9 +59,8 @@ const PROFILE_TABS: Array<{ id: ActiveTab; label: string; icon: React.ReactNode 
 ];
 
 const Profile = () => {
-  const { user, profile, refreshAuth } = useAuth();
+  const { user, profile } = useAuth();
   const { tab } = useParams<{ tab?: string }>();
-  const [isEditing, setIsEditing] = useState(false);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [favoriteFilter, setFavoriteFilter] = useState<'all' | FavoriteTargetType>('all');
@@ -73,24 +70,7 @@ const Profile = () => {
   const [postsLoading, setPostsLoading] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    displayName: profile?.displayName || user?.displayName || '',
-    bio: profile?.bio || '',
-    photoURL: profile?.photoURL || user?.photoURL || '',
-  });
-  const [loading, setLoading] = useState(false);
-  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
-  const { show } = useToast();
   const activeTab = resolveProfileTab(tab)
-
-  useEffect(() => {
-    if (!user) return;
-    setFormData({
-      displayName: profile?.displayName || user.displayName || '',
-      bio: profile?.bio || '',
-      photoURL: profile?.photoURL || user.photoURL || '',
-    });
-  }, [profile?.displayName, profile?.bio, profile?.photoURL, user?.displayName, user?.photoURL, user?.uid]);
 
   useEffect(() => {
     if (!user || activeTab !== 'favorites') return;
@@ -197,37 +177,6 @@ const Profile = () => {
     );
   }
 
-  const handleAvatarSuccess = async (photoURL: string) => {
-    setFormData((prev) => ({ ...prev, photoURL }));
-    // 立即将新头像持久化到数据库，避免刷新后丢失
-    try {
-      await apiPatch('/api/users/me', { photoURL });
-      await refreshAuth();
-      show('头像更新成功');
-    } catch (e) {
-      console.error('Error saving avatar:', e);
-      show('头像保存失败，请稍后重试', { variant: 'error' });
-    }
-  };
-
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      await apiPatch('/api/users/me', {
-        displayName: formData.displayName,
-        bio: formData.bio,
-        photoURL: formData.photoURL,
-      });
-      await refreshAuth();
-      setIsEditing(false);
-      show('保存成功');
-    } catch (e) {
-      console.error('Error updating profile:', e);
-      show('保存失败，请稍后重试', { variant: 'error' });
-    }
-    setLoading(false);
-  };
-
   return (
     <div
       className="min-h-[calc(100vh-60px)] bg-bg-primary"
@@ -242,79 +191,28 @@ const Profile = () => {
           <div className="flex flex-col sm:flex-row items-start gap-6">
             <div className="relative shrink-0 group">
               <img
-                src={formData.photoURL || DEFAULT_AVATAR}
+                src={profile?.photoURL || user.photoURL || DEFAULT_AVATAR}
                 alt=""
                 className="w-24 h-24 rounded-full border-2 border-border object-cover"
                 referrerPolicy="no-referrer"
                 onError={handleAvatarError}
               />
-              {isEditing && (
-                <button
-                  onClick={() => setAvatarModalOpen(true)}
-                  className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                >
-                  <Camera className="text-white" size={20} />
-                </button>
-              )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
                 <div className="min-w-0">
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={formData.displayName}
-                      onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                      className="theme-input text-2xl font-bold px-3 py-1 rounded w-full max-w-sm"
-                      placeholder="输入昵称..."
-                    />
-                  ) : (
-                    <h1 className="text-2xl font-bold text-text-primary">{profile?.displayName || user.displayName}</h1>
-                  )}
+                  <h1 className="text-2xl font-bold text-text-primary">{profile?.displayName || user.displayName}</h1>
                   <p className="text-sm text-text-muted flex items-center gap-1.5 mt-1">
                     <Mail size={13} /> {user.email}
                   </p>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  {isEditing ? (
-                    <>
-                      <button
-                        onClick={() => {
-                          // 取消编辑时回滚 formData，避免 UI 上保留未保存的头像/昵称/简介
-                          setFormData({
-                            displayName: profile?.displayName || user.displayName || '',
-                            bio: profile?.bio || '',
-                            photoURL: profile?.photoURL || user.photoURL || '',
-                          });
-                          setIsEditing(false);
-                        }}
-                        className="theme-button-secondary px-3 py-1.5 rounded text-sm transition-all flex items-center gap-1"
-                      >
-                        <X size={14} /> 取消
-                      </button>
-                      <button
-                        onClick={handleSave}
-                        disabled={loading}
-                        className="theme-button-primary px-3 py-1.5 rounded text-sm transition-all flex items-center gap-1 disabled:opacity-50"
-                      >
-                        <Save size={14} /> {loading ? '保存中...' : '保存'}
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setFormData({
-                          displayName: profile?.displayName || user.displayName || '',
-                          bio: profile?.bio || '',
-                          photoURL: profile?.photoURL || user.photoURL || '',
-                        });
-                        setIsEditing(true);
-                      }}
-                      className="theme-button-secondary px-3 py-1.5 rounded text-sm transition-all flex items-center gap-1"
-                    >
-                      <Edit3 size={14} /> 编辑资料
-                    </button>
-                  )}
+                  <Link
+                    to="/settings/profile"
+                    className="theme-button-secondary px-3 py-1.5 rounded text-sm transition-all flex items-center gap-1"
+                  >
+                    <Settings size={14} /> 设置
+                  </Link>
                 </div>
               </div>
 
@@ -338,19 +236,9 @@ const Profile = () => {
                 </div>
               </div>
 
-              {isEditing ? (
-                <textarea
-                  value={formData.bio}
-                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                  rows={3}
-                  className="theme-input w-full px-4 py-3 rounded text-sm text-text-secondary resize-none"
-                  placeholder="写点什么介绍一下自己吧..."
-                />
-              ) : (
-                <p className="text-sm text-text-secondary italic">
-                  {profile?.bio || '这位粉丝很神秘，还没有写下任何简介...'}
-                </p>
-              )}
+              <p className="text-sm text-text-secondary italic">
+                {profile?.bio || '这位粉丝很神秘，还没有写下任何简介...'}
+              </p>
             </div>
           </div>
         </div>
@@ -382,19 +270,9 @@ const Profile = () => {
           {activeTab === 'profile' ? (
             <div className="theme-panel rounded p-6">
               <h3 className="text-base font-semibold text-text-primary mb-4 pb-2 border-b border-border">个人简介</h3>
-              {isEditing ? (
-                <textarea
-                  value={formData.bio}
-                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                  rows={4}
-                  className="theme-input w-full px-4 py-3 rounded text-sm text-text-secondary resize-none"
-                  placeholder="写点什么介绍一下自己吧..."
-                />
-              ) : (
-                <p className="text-sm text-text-secondary leading-relaxed">
-                  {profile?.bio || '这位粉丝很神秘，还没有写下任何简介...'}
-                </p>
-              )}
+              <p className="text-sm text-text-secondary leading-relaxed">
+                {profile?.bio || '这位粉丝很神秘，还没有写下任何简介...'}
+              </p>
             </div>
           ) : activeTab === 'posts' ? (
             <div className="space-y-3">
@@ -570,12 +448,6 @@ const Profile = () => {
           )}
         </div>
       </div>
-
-      <AvatarCropModal
-        open={avatarModalOpen}
-        onClose={() => setAvatarModalOpen(false)}
-        onSuccess={handleAvatarSuccess}
-      />
     </div>
   );
 };

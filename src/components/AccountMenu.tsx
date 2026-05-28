@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FocusEvent, type MouseEvent } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Bookmark, FileText, History, LogOut, MessageSquare, Server, UserRound } from 'lucide-react'
+import { Bookmark, FileText, History, LogOut, MessageSquare, Server, Settings, UserRound } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import { ThemeToggle } from './ThemeToggle'
@@ -162,6 +162,11 @@ export const AccountMenu = ({ onLogout, onOpenAuth }: AccountMenuProps) => {
                   <span>我的收藏</span>
                 </Link>
               </div>
+
+              <Link to="/settings/profile" className={styles.menuAction} onClick={closeAccountMenu}>
+                <Settings size={16} />
+                <span>设置</span>
+              </Link>
 
               {isBanned && (
                 <div className={styles.statusNotice}>

@@ -100,4 +100,20 @@ describe('Profile posts status', () => {
 
     view.unmount()
   })
+
+  it('links profile editing entry to settings', () => {
+    mockApiGet.mockResolvedValue({ favorites: [], comments: [], history: [], total: 0 })
+
+    render(
+      <MemoryRouter initialEntries={['/profile']}>
+        <Routes>
+          <Route path="/profile/:tab?" element={<Profile />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    const settingsLink = screen.getByRole('link', { name: /设置/ })
+    expect(settingsLink).toHaveAttribute('href', '/settings/profile')
+    expect(screen.queryByRole('button', { name: /编辑资料/ })).not.toBeInTheDocument()
+  })
 })
