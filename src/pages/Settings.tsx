@@ -168,6 +168,12 @@ const Settings = () => {
 
   const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    if (!emailForm.currentPassword.trim()) {
+      show('当前密码不能为空', { variant: 'error' })
+      return
+    }
+
     setSavingEmail(true)
     try {
       await apiPut('/api/users/email', {
@@ -206,6 +212,11 @@ const Settings = () => {
 
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    if (!passwordForm.currentPassword.trim()) {
+      show('当前密码不能为空', { variant: 'error' })
+      return
+    }
 
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       show('两次输入的新密码不一致', { variant: 'error' })

@@ -159,6 +159,19 @@ describe('Settings', () => {
     })
   })
 
+  it('shows a chinese validation message when current password is empty', async () => {
+    const user = userEvent.setup()
+    renderSettings('/settings/account')
+
+    await user.click(screen.getByRole('button', { name: /修改邮箱/ }))
+    await user.click(screen.getByRole('button', { name: /保存邮箱/ }))
+    expect(mockShow).toHaveBeenCalledWith('当前密码不能为空', { variant: 'error' })
+
+    await user.click(screen.getByRole('button', { name: /修改密码/ }))
+    await user.click(screen.getByRole('button', { name: /保存密码/ }))
+    expect(mockShow).toHaveBeenCalledWith('当前密码不能为空', { variant: 'error' })
+  })
+
   it('shows theme controls in appearance section', async () => {
     renderSettings('/settings/appearance')
 
