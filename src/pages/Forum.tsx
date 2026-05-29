@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import MarkdownEditor from '../components/MarkdownEditor'
-import { apiDelete, apiGet, apiPost, apiPut } from '../lib/apiClient'
+import { apiDelete, apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../lib/apiClient'
 import { useToast } from '../components/Toast'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { ContentStatus, getStatusClassName, getStatusText } from '../lib/contentUtils'
@@ -1172,6 +1172,7 @@ const PostEditor = () => {
       return
     }
     setSavingMode(status)
+    let redirectTarget: string | null = null
 
     try {
       const payload: Record<string, unknown> = {
@@ -1195,13 +1196,32 @@ const PostEditor = () => {
         isEditing && postId
           ? await apiPut<{ post: PostItem }>(`/api/posts/${postId}`, payload)
           : await apiPost<{ post: PostItem }>('/api/posts', payload)
+
+      const savedPost = data.post
+
+      if (savedPost.status === 'pending') {
+        show(t('forum.reviewSubmitted'))
+      } else if (savedPost.status === 'draft') {
+        show(t('forum.draftSaved'))
+      } else if (isEditing) {
+        show(t('forum.postUpdated'))
+      }
+
+      if (isEditing || savedPost.status === 'pending') {
+        invalidateApiCacheByPrefix('/api/posts')
+        redirectTarget = `/forum/${savedPost.id}`
+      }
     } catch (error) {
-      console.error('Error creating post:', error)
+      console.error('Error saving post:', error)
       show(status === 'draft' ? t('forum.saveDraftFailed') : t('forum.submitReviewFailed'), {
         variant: 'error',
       })
     } finally {
       setSavingMode(null)
+    }
+
+    if (redirectTarget) {
+      navigate(redirectTarget)
     }
   }
 

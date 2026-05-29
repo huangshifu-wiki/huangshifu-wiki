@@ -337,6 +337,8 @@
     "loadPostFailed": "加载帖子失败，请稍后重试",
     "bannedCannotPost": "账号已被封禁，无法发帖",
     "saveDraftFailed": "保存失败，请稍后重试",
+    "draftSaved": "草稿已保存",
+    "postUpdated": "帖子已保存",
     "editPost": "编辑帖子",
     "createPost": "发布新帖子",
     "titleLabel": "标题",
