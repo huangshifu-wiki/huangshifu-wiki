@@ -183,7 +183,8 @@ export function normalizeWikiWriteStatus(rawStatus: unknown, authUser: ApiUser) 
 export function normalizePostWriteStatus(rawStatus: unknown, authUser: ApiUser) {
   const status = parseContentStatus(rawStatus);
   if (isAdminRole(authUser.role)) {
-    return status || 'published';
+    if (status === 'draft') return 'draft';
+    return 'published';
   }
   if (status === 'pending') return 'pending';
   if (status === 'rejected') return 'rejected';

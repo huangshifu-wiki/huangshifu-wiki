@@ -59,6 +59,8 @@ async function cleanupPostTestData() {
         { title: { startsWith: 'To Be Deleted By Admin' } },
         { title: { startsWith: 'Unauth Delete Test' } },
         { title: { startsWith: 'New Test Post ' } },
+        { title: { startsWith: 'Admin Direct Publish Test ' } },
+        { title: { startsWith: 'Admin Preserve Pending Test ' } },
         { title: { startsWith: 'Long Content Test ' } },
       ],
     },
@@ -1272,6 +1274,33 @@ describe('Posts API - 文章接口测试', () => {
       expect(dbPost?.locationDetail ?? null).toBeNull();
     });
 
+    it('管理员提交待审核状态时应该直接发布', async () => {
+      const newPostData = {
+        title: `Admin Direct Publish Test ${Date.now()}`,
+        section: 'discussion',
+        content: 'Admin post should skip review.',
+        tags: [],
+        status: 'pending',
+      };
+
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+      const response = await agent
+        .post('/api/posts')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send(newPostData);
+
+      expect(response.status).toBe(201);
+      expect(response.body.post.status).toBe('published');
+
+      const dbPost = await prisma.post.findUnique({
+        where: { id: response.body.post.id },
+      });
+      expect(dbPost?.status).toBe('published');
+    });
+
     /**
      * 测试目的：验证未认证用户无法创建文章
      * 预期结果：返回 401 认证错误
@@ -1493,6 +1522,35 @@ describe('Posts API - 文章接口测试', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.post.title).toBe('Admin Updated Title');
+    });
+
+    it('管理员更新待审核文章但未传状态时应该保留原状态', async () => {
+      const post = await createTestPost({
+        title: `Admin Preserve Pending Test ${Date.now()}`,
+        authorUid: testUser.user.uid,
+        status: 'pending',
+      });
+
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+      const response = await agent
+        .put(`/api/posts/${post.id}`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({
+          title: 'Admin Preserve Pending Test Updated',
+          content: 'Admin updated content without reviewing.',
+          section: 'general',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.post.status).toBe('pending');
+
+      const dbPost = await prisma.post.findUnique({
+        where: { id: post.id },
+      });
+      expect(dbPost?.status).toBe('pending');
     });
 
     /**

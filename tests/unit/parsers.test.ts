@@ -384,8 +384,10 @@ describe('parsers', () => {
     const postAdmin = makeUser('admin');
     const postNormal = makeUser('user');
 
-    it('admin preserves or defaults to published', () => {
-      expect(normalizePostWriteStatus('pending', postAdmin)).toBe('pending');
+    it('admin skips review unless saving draft', () => {
+      expect(normalizePostWriteStatus('pending', postAdmin)).toBe('published');
+      expect(normalizePostWriteStatus('published', postAdmin)).toBe('published');
+      expect(normalizePostWriteStatus('draft', postAdmin)).toBe('draft');
       expect(normalizePostWriteStatus(null, postAdmin)).toBe('published');
     });
 

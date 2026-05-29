@@ -13,7 +13,6 @@ import {
   normalizeOptionalDocId,
   canViewPost,
   createNotification,
-  parseContentStatus,
   parsePagination,
   enhancedCache,
   fetchPostCommentsForResponse,
@@ -435,7 +434,9 @@ router.put('/:id', postWriteLimiter, requireAuth, requireActiveUser, async (req:
 
     let nextStatus: ContentStatus;
     if (isAdmin) {
-      nextStatus = parseContentStatus(status) || existingPost.status;
+      nextStatus = status === undefined
+        ? existingPost.status
+        : normalizePostWriteStatus(status, req.authUser!);
     } else if (existingPost.status === 'published') {
       nextStatus = 'pending';
     } else {

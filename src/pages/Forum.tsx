@@ -1082,7 +1082,7 @@ const PostEditor = () => {
   const { postId } = useParams()
   const isEditing = Boolean(postId)
   const navigate = useNavigate()
-  const { user, isBanned, loading: authLoading } = useAuth()
+  const { user, isAdmin, isBanned, loading: authLoading } = useAuth()
   const [searchParams] = useSearchParams()
   const musicDocIdParam = searchParams.get('musicDocId')
   const musicTitleParam = searchParams.get('musicTitle')
@@ -1199,23 +1199,28 @@ const PostEditor = () => {
 
       const savedPost = data.post
 
-      if (savedPost.status === 'pending') {
+      if (savedPost.status === 'published') {
+        show(isEditing ? t('forum.postUpdated') : t('forum.postPublished'))
+      } else if (savedPost.status === 'pending') {
         show(t('forum.reviewSubmitted'))
       } else if (savedPost.status === 'draft') {
         show(t('forum.draftSaved'))
-      } else if (isEditing) {
-        show(t('forum.postUpdated'))
       }
 
-      if (isEditing || savedPost.status === 'pending') {
+      if (isEditing || savedPost.status === 'pending' || savedPost.status === 'published') {
         invalidateApiCacheByPrefix('/api/posts')
         redirectTarget = `/forum/${savedPost.id}`
       }
     } catch (error) {
       console.error('Error saving post:', error)
-      show(status === 'draft' ? t('forum.saveDraftFailed') : t('forum.submitReviewFailed'), {
-        variant: 'error',
-      })
+      show(
+        status === 'draft'
+          ? t('forum.saveDraftFailed')
+          : t(isAdmin ? 'forum.publishFailed' : 'forum.submitReviewFailed'),
+        {
+          variant: 'error',
+        }
+      )
     } finally {
       setSavingMode(null)
     }
@@ -1224,6 +1229,11 @@ const PostEditor = () => {
       navigate(redirectTarget)
     }
   }
+
+  const submitButtonText =
+    savingMode === 'pending'
+      ? t(isAdmin ? 'forum.publishing' : 'forum.submitting')
+      : t(isAdmin ? 'forum.publishPost' : 'forum.submitReview')
 
   if (loadingPost) {
     return <PageSkeleton variant="forum" />
@@ -1355,8 +1365,7 @@ const PostEditor = () => {
               disabled={Boolean(savingMode)}
               className="px-8 py-2.5 theme-button-primary rounded text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send size={16} />{' '}
-              {savingMode === 'pending' ? t('forum.submitting') : t('forum.submitReview')}
+              <Send size={16} /> {submitButtonText}
             </button>
           </div>
         </form>
