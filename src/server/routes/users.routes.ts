@@ -26,6 +26,27 @@ type PasswordUpdateResponse = {
   token?: string;
 }
 
+const ADMIN_USER_SELECT = {
+  uid: true,
+  email: true,
+  displayName: true,
+  photoURL: true,
+  role: true,
+  status: true,
+  banReason: true,
+  bannedAt: true,
+  level: true,
+  bio: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+function canManageTargetUserRole(operatorRole: PrismaUserRole | undefined, targetRole: PrismaUserRole) {
+  if (operatorRole === 'super_admin') return true;
+  if (operatorRole === 'admin') return targetRole === 'user';
+  return false;
+}
+
 /**
  * 校验前端传入的 photoURL：
  * - 允许空字符串/null（清除头像）
@@ -562,6 +583,21 @@ router.put('/:userId/ban', requireAdmin, asyncHandler(async (req: AuthenticatedR
     const reasonRaw = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
     const finalReason = reasonRaw || noteRaw || '违反社区规范';
 
+    const targetUser = await prisma.user.findUnique({
+      where: { uid: targetUid },
+      select: { uid: true, role: true },
+    });
+
+    if (!targetUser) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
+    }
+
+    if (!canManageTargetUserRole(req.authUser?.role, targetUser.role)) {
+      res.status(403).json({ error: '只能封禁普通用户' });
+      return;
+    }
+
     const user = await prisma.user.update({
       where: { uid: targetUid },
       data: {
@@ -569,20 +605,7 @@ router.put('/:userId/ban', requireAdmin, asyncHandler(async (req: AuthenticatedR
         banReason: finalReason,
         bannedAt: new Date(),
       },
-      select: {
-        uid: true,
-        email: true,
-        displayName: true,
-        photoURL: true,
-        role: true,
-        status: true,
-        banReason: true,
-        bannedAt: true,
-        level: true,
-        bio: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: ADMIN_USER_SELECT,
     });
     clearUserCache(targetUid);
 
@@ -612,6 +635,21 @@ router.put('/:userId/unban', requireAdmin, asyncHandler(async (req: Authenticate
 
     const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
 
+    const targetUser = await prisma.user.findUnique({
+      where: { uid: targetUid },
+      select: { uid: true, role: true },
+    });
+
+    if (!targetUser) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
+    }
+
+    if (!canManageTargetUserRole(req.authUser?.role, targetUser.role)) {
+      res.status(403).json({ error: '只能解封普通用户' });
+      return;
+    }
+
     const user = await prisma.user.update({
       where: { uid: targetUid },
       data: {
@@ -619,20 +657,7 @@ router.put('/:userId/unban', requireAdmin, asyncHandler(async (req: Authenticate
         banReason: null,
         bannedAt: null,
       },
-      select: {
-        uid: true,
-        email: true,
-        displayName: true,
-        photoURL: true,
-        role: true,
-        status: true,
-        banReason: true,
-        bannedAt: true,
-        level: true,
-        bio: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: ADMIN_USER_SELECT,
     });
     clearUserCache(targetUid);
 

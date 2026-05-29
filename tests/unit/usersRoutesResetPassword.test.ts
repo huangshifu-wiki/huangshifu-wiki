@@ -7,6 +7,9 @@ const mockPrisma = vi.hoisted(() => ({
     findUnique: vi.fn(),
     update: vi.fn(),
   },
+  userBanLog: {
+    create: vi.fn(),
+  },
 }))
 
 const mockClearUserCache = vi.hoisted(() => vi.fn())
@@ -195,5 +198,74 @@ describe('users routes reset password', () => {
     expect(response.status).toBe(400)
     expect(response.body.error).toBe('不能重置自己的密码')
     expect(mockPrisma.user.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('blocks admin from banning another admin', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      uid: 'target-admin',
+      role: 'admin',
+    })
+
+    const app = await createApp({ uid: 'admin-1', role: 'admin' })
+    const response = await request(app)
+      .put('/api/users/target-admin/ban')
+      .send({ reason: '测试封禁' })
+
+    expect(response.status).toBe(403)
+    expect(response.body.error).toBe('只能封禁普通用户')
+    expect(mockPrisma.user.update).not.toHaveBeenCalled()
+    expect(mockPrisma.userBanLog.create).not.toHaveBeenCalled()
+  })
+
+  it('blocks admin from unbanning another admin', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      uid: 'target-admin',
+      role: 'admin',
+    })
+
+    const app = await createApp({ uid: 'admin-1', role: 'admin' })
+    const response = await request(app)
+      .put('/api/users/target-admin/unban')
+      .send({ note: '测试解封' })
+
+    expect(response.status).toBe(403)
+    expect(response.body.error).toBe('只能解封普通用户')
+    expect(mockPrisma.user.update).not.toHaveBeenCalled()
+    expect(mockPrisma.userBanLog.create).not.toHaveBeenCalled()
+  })
+
+  it('allows admin to ban a regular user', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      uid: 'target-user',
+      role: 'user',
+    })
+    mockPrisma.user.update.mockResolvedValue({
+      uid: 'target-user',
+      role: 'user',
+      status: 'banned',
+      banReason: '测试封禁',
+    })
+
+    const app = await createApp({ uid: 'admin-1', role: 'admin' })
+    const response = await request(app)
+      .put('/api/users/target-user/ban')
+      .send({ reason: '测试封禁' })
+
+    expect(response.status).toBe(200)
+    expect(mockPrisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { uid: 'target-user' },
+      data: expect.objectContaining({
+        status: 'banned',
+        banReason: '测试封禁',
+      }),
+    }))
+    expect(mockPrisma.userBanLog.create).toHaveBeenCalledWith({
+      data: {
+        targetUid: 'target-user',
+        operatorUid: 'admin-1',
+        action: 'ban',
+        note: '测试封禁',
+      },
+    })
   })
 })

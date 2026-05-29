@@ -29,6 +29,18 @@ export const AdminUsers = () => {
   const getNextRole = (role?: string) => (role === 'admin' ? 'user' : 'admin')
   const getRoleToggleTitle = (role?: string) => (getNextRole(role) === 'admin' ? '设为管理员' : '设为普通用户')
 
+  const canManageUser = (target: AdminDataItem) => {
+    if (!target.uid || isCurrentUser(target.uid)) {
+      return false;
+    }
+
+    if (isSuperAdmin) {
+      return true;
+    }
+
+    return target.role === 'user';
+  }
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -47,7 +59,11 @@ export const AdminUsers = () => {
   }, []);
 
   const toggleBan = async (target: AdminDataItem) => {
-    if (!target.uid || target.uid === currentUser?.uid) return;
+    if (!canManageUser(target)) {
+      show('当前权限不能管理该用户', { variant: 'error' });
+      return;
+    }
+
     const shouldUnban = target.status === 'banned';
     if (!window.confirm(`确定要${shouldUnban ? '解封' : '封禁'} ${target.displayName || target.uid} 吗？`)) return;
     const note = window.prompt(shouldUnban ? '解封备注（可选）' : '封禁原因', shouldUnban ? '' : '违反社区规范') || '';
@@ -84,15 +100,27 @@ export const AdminUsers = () => {
   };
 
   const canResetPassword = (target: AdminDataItem) => {
-    if (!target.uid || isCurrentUser(target.uid)) {
-      return false;
+    return canManageUser(target);
+  }
+
+  const handleDeleteUser = async (target: AdminDataItem) => {
+    if (!canManageUser(target)) {
+      show('当前权限不能删除该用户', { variant: 'error' });
+      return;
     }
 
-    if (isSuperAdmin) {
-      return true;
+    if (!window.confirm('确定删除此用户吗？')) {
+      return;
     }
 
-    return target.role === 'user';
+    try {
+      await apiDelete(`/api/admin/users/${target.uid}`);
+      invalidateAdminUsersCache();
+      setData((prev) => prev.filter((item) => item.uid !== target.uid));
+      show('已删除', { variant: 'success' });
+    } catch (error) {
+      show(error instanceof Error ? error.message : '删除失败', { variant: 'error' });
+    }
   }
 
   const closeResetModal = () => {
@@ -205,21 +233,13 @@ export const AdminUsers = () => {
                             {getNextRole(item.role) === 'admin' ? <CheckCircle size={16} /> : <XCircle size={16} />}
                           </button>
                         )}
-                        {!isCurrentUser(item.uid) && (
+                        {canManageUser(item) && (
                           <button onClick={() => toggleBan(item)} className={clsx('p-1.5 rounded transition-all', item.status === 'banned' ? 'theme-text-success hover:bg-surface-alt' : 'theme-icon-button-warning hover:bg-surface-alt')} title={item.status === 'banned' ? '解封' : '封禁'}>
                             {item.status === 'banned' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
                           </button>
                         )}
-                        {!isCurrentUser(item.uid) && (
-                          <button onClick={() => {
-                            if (window.confirm('确定删除此用户吗？')) {
-                              apiDelete(`/api/admin/users/${item.uid}`).then(() => {
-                                invalidateAdminUsersCache();
-                                setData((prev) => prev.filter((d) => d.uid !== item.uid));
-                                show('已删除', { variant: 'success' });
-                              }).catch(() => show('删除失败', { variant: 'error' }));
-                            }
-                          }} className="p-1.5 theme-icon-button-danger hover:bg-surface-alt rounded transition-all" title="删除">
+                        {canManageUser(item) && (
+                          <button onClick={() => void handleDeleteUser(item)} className="p-1.5 theme-icon-button-danger hover:bg-surface-alt rounded transition-all" title="删除">
                             <Trash2 size={16} />
                           </button>
                         )}

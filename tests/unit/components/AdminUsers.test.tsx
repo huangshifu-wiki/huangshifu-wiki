@@ -100,6 +100,14 @@ describe('AdminUsers', () => {
           role: 'admin',
           status: 'active',
         },
+        {
+          uid: 'super-admin-1',
+          displayName: '超级管理员',
+          email: 'super@example.com',
+          photoURL: null,
+          role: 'super_admin',
+          status: 'active',
+        },
       ],
     })
   })
@@ -140,5 +148,33 @@ describe('AdminUsers', () => {
 
     expect(screen.getAllByTitle('重置密码')).toHaveLength(1)
     expect(screen.queryByText('为 管理员 设置新的登录密码')).not.toBeInTheDocument()
+  })
+
+  it('hides ban and delete actions for admin targets when current user is not super admin', async () => {
+    render(<AdminUsers />)
+
+    await waitFor(() => {
+      expect(screen.getByText('admin2@example.com')).toBeInTheDocument()
+    })
+
+    expect(screen.getAllByTitle('封禁')).toHaveLength(1)
+    expect(screen.getAllByTitle('删除')).toHaveLength(1)
+  })
+
+  it('allows super admin to manage admin targets except themselves', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { uid: 'super-admin-1' },
+      profile: { role: 'super_admin' },
+    })
+
+    render(<AdminUsers />)
+
+    await waitFor(() => {
+      expect(screen.getByText('super@example.com')).toBeInTheDocument()
+    })
+
+    expect(screen.getAllByTitle('重置密码')).toHaveLength(2)
+    expect(screen.getAllByTitle('封禁')).toHaveLength(2)
+    expect(screen.getAllByTitle('删除')).toHaveLength(2)
   })
 })

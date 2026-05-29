@@ -50,6 +50,15 @@ const __dirname = path.dirname(__filename);
 
 const router = Router();
 
+function canManageTargetUserRole(
+  operatorRole: AuthenticatedRequest['authUser']['role'] | undefined,
+  targetRole: AuthenticatedRequest['authUser']['role'],
+) {
+  if (operatorRole === 'super_admin') return true;
+  if (operatorRole === 'admin') return targetRole === 'user';
+  return false;
+}
+
 const execFileAsync = promisify(execFile);
 
 function isString(value: string | null): value is string {
@@ -1478,6 +1487,22 @@ router.delete('/:tab/:id', requireAdmin, asyncHandler(async (req: AuthenticatedR
         res.status(400).json({ error: '不能删除自己' });
         return;
       }
+
+      const targetUser = await prisma.user.findUnique({
+        where: { uid: id },
+        select: { uid: true, role: true },
+      });
+
+      if (!targetUser) {
+        res.status(404).json({ error: '用户不存在' });
+        return;
+      }
+
+      if (!canManageTargetUserRole(currentUser?.role, targetUser.role)) {
+        res.status(403).json({ error: '只能删除普通用户' });
+        return;
+      }
+
       await prisma.user.delete({ where: { uid: id } });
       res.json({ success: true });
       return;
