@@ -88,7 +88,7 @@ describe('Profile posts status', () => {
       </MemoryRouter>
     )
 
-    fireEvent.click(screen.getByRole('link', { name: '我的帖子' }))
+    fireEvent.click(screen.getAllByRole('link', { name: '我的帖子' })[0])
 
     const statusBadge = await screen.findByText('已驳回')
     await screen.findByText('被驳回的帖子')

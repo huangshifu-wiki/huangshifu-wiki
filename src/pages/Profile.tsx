@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   Mail,
@@ -8,7 +8,6 @@ import {
   MessageSquare,
   History,
   Loader2,
-  ShieldCheck,
 } from 'lucide-react';
 import { apiGet } from '../lib/apiClient';
 import { Link, Navigate, useParams } from 'react-router-dom';
@@ -16,7 +15,6 @@ import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar';
 import { getStatusClassName, getStatusText } from '../lib/contentUtils';
-import { formatAdminRole } from '../lib/formatUtils';
 import type { FavoriteItem, HistoryItem } from '../types/entities';
 
 type FavoriteTargetType = 'wiki' | 'post' | 'music';
@@ -67,32 +65,14 @@ const PROFILE_TABS: Array<{ id: ActiveTab; label: string; icon: React.ReactNode 
   { id: 'favorites', label: '我的收藏', icon: <Bookmark size={14} /> },
 ];
 
-function renderRoleIcon(role?: string | null) {
-  if (role === 'super_admin') {
-    return (
-      <span
-        className="inline-flex shrink-0 items-center justify-center text-brand-gold drop-shadow-[0_2px_6px_color-mix(in_srgb,var(--color-brand-gold)_30%,transparent)]"
-        title="超级管理员"
-        aria-label="超级管理员"
-      >
-        <ShieldCheck size={18} strokeWidth={2.4} />
-      </span>
-    );
-  }
+const TAB_PANEL_CLASS = 'pt-2';
 
-  if (role === 'admin') {
-    return (
-      <span
-        className="inline-flex shrink-0 items-center justify-center text-[color-mix(in_srgb,var(--color-info-hover)_86%,var(--color-text-primary))]"
-        title="管理员"
-        aria-label="管理员"
-      >
-        <ShieldCheck size={18} strokeWidth={2.3} />
-      </span>
-    );
-  }
-
-  return null;
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="py-8 text-center text-sm text-text-muted italic">
+      {message}
+    </div>
+  );
 }
 
 const Profile = () => {
@@ -107,8 +87,11 @@ const Profile = () => {
   const [postsLoading, setPostsLoading] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const activeTab = resolveProfileTab(tab)
-  const currentRole = profile?.role ?? user?.role
+  const activeTab = resolveProfileTab(tab);
+  const displayName = profile?.displayName || user.displayName;
+  const avatarSrc = profile?.photoURL || user.photoURL || DEFAULT_AVATAR;
+  const bio = profile?.bio?.trim() || '';
+  const isBanned = profile?.status === 'banned';
 
   useEffect(() => {
     if (!user || activeTab !== 'favorites') return;
@@ -223,270 +206,297 @@ const Profile = () => {
         lineHeight: 1.8,
       }}
     >
-      <div className="max-w-[900px] mx-auto px-6 py-12">
-        {/* Profile Header */}
-        <div className="theme-panel rounded p-8 mb-6">
-          <div className="flex flex-col sm:flex-row items-start gap-6">
-            <div className="relative shrink-0 group">
+      <div className="max-w-[900px] mx-auto px-5 py-7 sm:px-6 sm:py-9">
+        {isBanned && (
+          <div className="mb-8 border border-[color-mix(in_srgb,var(--color-error)_26%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_10%,var(--color-surface))] px-4 py-3 text-sm text-[color-mix(in_srgb,var(--color-error-hover)_82%,var(--color-text-primary))]">
+            <p className="font-semibold">账号被封禁</p>
+            <p className="mt-1 leading-7">
+              {profile?.banReason ? `原因：${profile.banReason}` : '当前账号已被限制访问部分功能。'}
+              {profile?.bannedAt ? ` 封禁时间：${format(new Date(profile.bannedAt), 'yyyy-MM-dd HH:mm')}` : ''}
+            </p>
+          </div>
+        )}
+
+        <section className="pb-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-4">
               <img
-                src={profile?.photoURL || user.photoURL || DEFAULT_AVATAR}
+                src={avatarSrc}
                 alt=""
-                className="w-24 h-24 rounded-full border-2 border-border object-cover"
+                className="h-20 w-20 shrink-0 rounded-full border border-border object-cover sm:h-24 sm:w-24"
                 referrerPolicy="no-referrer"
                 onError={handleAvatarError}
               />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
-                <div className="min-w-0">
-                  <h1 className="flex min-w-0 items-center gap-2 text-2xl font-bold text-text-primary">
-                    <span className="truncate">{profile?.displayName || user.displayName}</span>
-                    {renderRoleIcon(currentRole)}
-                  </h1>
-                  <p className="text-sm text-text-muted flex items-center gap-1.5 mt-1">
+              <div className="min-w-0">
+                <h1 className="truncate text-3xl font-semibold text-text-primary">
+                  {displayName}
+                </h1>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-text-muted">
+                  <span className="inline-flex items-center gap-1.5">
                     <Mail size={13} /> {user.email}
-                  </p>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <Link
-                    to="/settings/profile"
-                    className="theme-button-secondary px-3 py-1.5 rounded text-sm transition-all flex items-center gap-1"
-                  >
-                    <Settings size={14} /> 设置
-                  </Link>
+                  </span>
                 </div>
               </div>
+            </div>
 
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="theme-panel-soft rounded p-3">
-                  <p className="text-xs text-text-muted mb-0.5">等级</p>
-                  <p className="text-lg font-semibold text-text-primary">Lv.{profile?.level || 1}</p>
-                </div>
-                <div className="theme-panel-soft rounded p-3">
-                  <p className="text-xs text-text-muted mb-0.5">身份</p>
-                  <p className="text-lg font-semibold text-text-primary">{formatAdminRole(currentRole)}</p>
-                </div>
-                <div className="theme-panel-soft rounded p-3">
-                  <p className="text-xs text-text-muted mb-0.5">状态</p>
-                  <p className={clsx(
-                    'text-lg font-semibold',
-                    profile?.status === 'banned' ? 'theme-text-error' : 'text-text-primary',
-                  )}>
-                    {profile?.status === 'banned' ? '已封禁' : '正常'}
+            <Link
+              to="/settings/profile"
+              className="theme-button-secondary inline-flex items-center gap-1.5 self-start px-3 py-1.5 text-sm transition-all"
+            >
+              <Settings size={14} /> 设置
+            </Link>
+          </div>
+
+          <p className="mt-4 max-w-[68ch] text-sm leading-7 text-text-secondary">
+            {bio || '这位粉丝很神秘，还没有写下任何简介...'}
+          </p>
+        </section>
+
+        <div className="mt-4">
+          <div className="min-w-0">
+            <nav className="flex flex-wrap items-center gap-1 border-b border-border">
+              {PROFILE_TABS.map((profileTab) => (
+                <Link
+                  key={profileTab.id}
+                  to={profileTab.id === 'profile' ? '/profile' : `/profile/${profileTab.id}`}
+                  className={clsx(
+                    'relative inline-flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm transition-colors whitespace-nowrap',
+                    activeTab === profileTab.id
+                      ? 'text-brand-gold'
+                      : 'text-text-secondary hover:text-brand-gold',
+                  )}
+                >
+                  {profileTab.icon}
+                  {profileTab.label}
+                  {activeTab === profileTab.id && (
+                    <span className="absolute bottom-[-1px] left-3 right-3 h-px bg-[var(--color-theme-accent)]" />
+                  )}
+                </Link>
+              ))}
+            </nav>
+
+            <div className="pt-2">
+              {activeTab === 'profile' ? (
+                <section className={TAB_PANEL_CLASS}>
+                  <p className="max-w-[72ch] text-sm leading-8 text-text-secondary">
+                    {bio || '这位粉丝很神秘，还没有写下任何简介...'}
                   </p>
-                </div>
-              </div>
+                </section>
+              ) : activeTab === 'posts' ? (
+                <section className={TAB_PANEL_CLASS}>
+                  {postsLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 size={24} className="animate-spin text-brand-gold" />
+                    </div>
+                  ) : myPosts.length > 0 ? (
+                    <ul>
+                      {myPosts.map((post) => (
+                        <li key={post.id} className="border-b border-border last:border-b-0">
+                          <Link
+                            to={`/forum/${post.id}`}
+                            className="group block py-3 transition-colors hover:text-brand-gold"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.16em]">
+                                  <span
+                                    className={clsx(
+                                      'px-2 py-0.5 rounded border',
+                                      getStatusClassName(
+                                        post.status as 'draft' | 'pending' | 'published' | 'rejected',
+                                      ),
+                                    )}
+                                  >
+                                    {getStatusText(post.status as 'draft' | 'pending' | 'published' | 'rejected')}
+                                  </span>
+                                  <span className="text-text-muted">{post.section}</span>
+                                </div>
+                                <p className="mt-2 truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                                  {post.title}
+                                </p>
+                              </div>
+                              <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
+                                {format(new Date(post.createdAt), 'MM-dd HH:mm')}
+                              </p>
+                            </div>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <EmptyState message="暂无帖子" />
+                  )}
+                </section>
+              ) : activeTab === 'comments' ? (
+                <section className={TAB_PANEL_CLASS}>
+                  {commentsLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 size={24} className="animate-spin text-brand-gold" />
+                    </div>
+                  ) : myComments.length > 0 ? (
+                    <ul>
+                      {myComments.map((comment) => (
+                        <li key={comment.id} className="border-b border-border last:border-b-0 py-3">
+                          <div className="flex flex-col gap-3">
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                              <span>回复了</span>
+                              {comment.post ? (
+                                <Link to={`/forum/${comment.post.id}`} className="text-brand-gold hover:underline">
+                                  {comment.post.title}
+                                </Link>
+                              ) : (
+                                <span>原帖子已删除</span>
+                              )}
+                            </div>
+                            <p className="max-w-[72ch] text-sm leading-7 text-text-secondary">
+                              {comment.content}
+                            </p>
+                            <p className="text-xs text-text-muted">
+                              {format(new Date(comment.createdAt), 'MM-dd HH:mm')}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <EmptyState message="暂无评论" />
+                  )}
+                </section>
+              ) : activeTab === 'history' ? (
+                <section className={TAB_PANEL_CLASS}>
+                  {historyLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 size={24} className="animate-spin text-brand-gold" />
+                    </div>
+                  ) : myHistory.length > 0 ? (
+                    <ul>
+                      {myHistory.map((item) => (
+                        <li key={item.id} className="border-b border-border last:border-b-0">
+                          <Link
+                            to={
+                              item.targetType === 'wiki'
+                                ? `/wiki/${item.target?.slug || item.targetId}`
+                                : item.targetType === 'post'
+                                  ? `/forum/${item.target?.id || item.targetId}`
+                                  : '/music'
+                            }
+                            className="group block py-3 transition-colors hover:text-brand-gold"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em]">
+                                  <span
+                                    className={clsx(
+                                      'px-2 py-0.5 rounded border',
+                                      item.targetType === 'wiki'
+                                        ? 'theme-tag'
+                                        : item.targetType === 'post'
+                                          ? 'theme-tag'
+                                          : 'bg-surface-alt text-text-muted',
+                                    )}
+                                  >
+                                    {item.targetType === 'wiki'
+                                      ? '百科'
+                                      : item.targetType === 'post'
+                                        ? '帖子'
+                                        : '音乐'}
+                                  </span>
+                                </div>
+                                <p className="mt-2 truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                                  {item.target?.title || item.targetId}
+                                </p>
+                                <p className="mt-1 truncate text-xs text-text-muted">
+                                  {item.target?.category || (item.targetType === 'post' ? '社区帖子' : '')}
+                                </p>
+                              </div>
+                              <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
+                                {format(new Date(item.createdAt), 'MM-dd HH:mm')}
+                              </p>
+                            </div>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <EmptyState message="暂无浏览历史" />
+                  )}
+                </section>
+              ) : (
+                <section className={TAB_PANEL_CLASS}>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: 'all', label: '全部' },
+                      { id: 'wiki', label: '百科' },
+                      { id: 'post', label: '帖子' },
+                      { id: 'music', label: '音乐' },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => setFavoriteFilter(item.id as 'all' | FavoriteTargetType)}
+                        className={clsx(
+                          'px-3 py-1.5 text-xs transition-colors border',
+                          favoriteFilter === item.id
+                            ? 'theme-button-primary border-brand-gold'
+                            : 'theme-button-secondary',
+                        )}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
 
-              <p className="text-sm text-text-secondary italic">
-                {profile?.bio || '这位粉丝很神秘，还没有写下任何简介...'}
-              </p>
+                  {favoritesLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 size={24} className="animate-spin text-brand-gold" />
+                    </div>
+                  ) : groupedFavorites.length > 0 ? (
+                    <ul className="mt-4">
+                      {groupedFavorites.map((item) => (
+                        <li key={item.id} className="border-b border-border last:border-b-0">
+                          <Link
+                            to={item.href}
+                            className="group block py-3 transition-colors hover:text-brand-gold"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em]">
+                                  <span
+                                    className={clsx(
+                                      'px-2 py-0.5 rounded border',
+                                      item.targetType === 'wiki'
+                                        ? 'theme-tag'
+                                        : item.targetType === 'post'
+                                          ? 'theme-tag'
+                                          : 'bg-surface-alt text-text-muted',
+                                    )}
+                                  >
+                                    {item.targetType === 'wiki'
+                                      ? '百科'
+                                      : item.targetType === 'post'
+                                        ? '帖子'
+                                        : '音乐'}
+                                  </span>
+                                </div>
+                                <p className="mt-2 truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                                  {item.title}
+                                </p>
+                                <p className="mt-1 truncate text-xs text-text-muted">{item.subtitle}</p>
+                              </div>
+                              <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
+                                {item.createdAt?.slice(0, 10)}
+                              </p>
+                            </div>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <EmptyState message="暂无收藏内容" />
+                  )}
+                </section>
+              )}
             </div>
           </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-border mb-6 overflow-x-auto">
-          {PROFILE_TABS.map((tab) => (
-            <Link
-              key={tab.id}
-              to={tab.id === 'profile' ? '/profile' : `/profile/${tab.id}`}
-              className={clsx(
-                'px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 relative',
-                activeTab === tab.id
-                  ? 'text-brand-gold'
-                  : 'text-text-secondary hover:text-brand-gold',
-              )}
-            >
-              {tab.icon}
-              {tab.label}
-              {activeTab === tab.id && (
-                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--color-theme-accent)] rounded-[1px]" />
-              )}
-            </Link>
-          ))}
-        </div>
-
-        {/* Tab Content */}
-        <div>
-          {activeTab === 'profile' ? (
-            <div className="theme-panel rounded p-6">
-              <h3 className="text-base font-semibold text-text-primary mb-4 pb-2 border-b border-border">个人简介</h3>
-              <p className="text-sm text-text-secondary leading-relaxed">
-                {profile?.bio || '这位粉丝很神秘，还没有写下任何简介...'}
-              </p>
-            </div>
-          ) : activeTab === 'posts' ? (
-            <div className="space-y-3">
-              {postsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 size={24} className="animate-spin text-brand-gold" />
-                </div>
-              ) : myPosts.length > 0 ? (
-                myPosts.map((post) => (
-                  <Link
-                    key={post.id}
-                    to={`/forum/${post.id}`}
-                    className="block p-4 theme-panel rounded hover:border-brand-gold transition-all"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={clsx(
-                            'px-2 py-0.5 rounded text-[10px] font-medium',
-                            getStatusClassName(post.status as 'draft' | 'pending' | 'published' | 'rejected'),
-                          )}>
-                            {getStatusText(post.status as 'draft' | 'pending' | 'published' | 'rejected')}
-                          </span>
-                          <span className="text-xs text-text-muted">{post.section}</span>
-                        </div>
-                        <p className="text-sm font-medium text-text-primary truncate">{post.title}</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs text-text-muted">{format(new Date(post.createdAt), 'MM-dd HH:mm')}</p>
-                      </div>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <div className="text-center py-12 bg-surface border border-dashed border-border rounded">
-                  <p className="text-sm text-text-muted">暂无帖子</p>
-                </div>
-              )}
-            </div>
-          ) : activeTab === 'comments' ? (
-            <div className="space-y-3">
-              {commentsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 size={24} className="animate-spin text-brand-gold" />
-                </div>
-              ) : myComments.length > 0 ? (
-                myComments.map((comment) => (
-                  <div key={comment.id} className="p-4 theme-panel rounded">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs text-text-muted">回复了</span>
-                      {comment.post ? (
-                        <Link to={`/forum/${comment.post.id}`} className="text-xs text-brand-gold hover:underline">
-                          {comment.post.title}
-                        </Link>
-                      ) : (
-                        <span className="text-xs text-text-muted">原帖子已删除</span>
-                      )}
-                    </div>
-                    <p className="text-sm text-text-secondary line-clamp-2">{comment.content}</p>
-                    <p className="text-xs text-text-muted mt-2">{format(new Date(comment.createdAt), 'MM-dd HH:mm')}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-12 bg-surface border border-dashed border-border rounded">
-                  <p className="text-sm text-text-muted">暂无评论</p>
-                </div>
-              )}
-            </div>
-          ) : activeTab === 'history' ? (
-            <div className="space-y-3">
-              {historyLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 size={24} className="animate-spin text-brand-gold" />
-                </div>
-              ) : myHistory.length > 0 ? (
-                myHistory.map((item) => (
-                  <Link
-                    key={item.id}
-                    to={item.targetType === 'wiki' ? `/wiki/${item.target?.slug || item.targetId}` : item.targetType === 'post' ? `/forum/${item.target?.id || item.targetId}` : '/music'}
-                    className="block p-4 theme-panel rounded hover:border-brand-gold transition-all"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={clsx(
-                            'px-2 py-0.5 rounded text-[10px] font-medium',
-                            item.targetType === 'wiki'
-                              ? 'theme-tag'
-                              : item.targetType === 'post'
-                                ? 'theme-tag'
-                                : 'bg-surface-alt text-text-muted',
-                          )}>
-                            {item.targetType === 'wiki' ? '百科' : item.targetType === 'post' ? '帖子' : '音乐'}
-                          </span>
-                        </div>
-                        <p className="text-sm font-medium text-text-primary truncate">{item.target?.title || item.targetId}</p>
-                        <p className="text-xs text-text-muted truncate">{item.target?.category || (item.targetType === 'post' ? '社区帖子' : '')}</p>
-                      </div>
-                      <p className="text-xs text-text-muted whitespace-nowrap">{format(new Date(item.createdAt), 'MM-dd HH:mm')}</p>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <div className="text-center py-12 bg-surface border border-dashed border-border rounded">
-                  <p className="text-sm text-text-muted">暂无浏览历史</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: 'all', label: '全部' },
-                  { id: 'wiki', label: '百科' },
-                  { id: 'post', label: '帖子' },
-                  { id: 'music', label: '音乐' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setFavoriteFilter(item.id as 'all' | FavoriteTargetType)}
-                    className={clsx(
-                      'px-3 py-1.5 text-xs rounded transition-all border',
-                      favoriteFilter === item.id
-                        ? 'theme-button-primary border-brand-gold'
-                        : 'theme-button-secondary',
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
-              {favoritesLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 size={24} className="animate-spin text-brand-gold" />
-                </div>
-              ) : groupedFavorites.length > 0 ? (
-                <div className="space-y-3">
-                  {groupedFavorites.map((item) => (
-                    <Link
-                      key={item.id}
-                      to={item.href}
-                      className="block p-4 theme-panel rounded hover:border-brand-gold transition-all"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={clsx(
-                              'px-2 py-0.5 rounded text-[10px] font-medium',
-                              item.targetType === 'wiki'
-                                ? 'theme-tag'
-                                : item.targetType === 'post'
-                                  ? 'theme-tag'
-                                  : 'bg-surface-alt text-text-muted',
-                            )}>
-                              {item.targetType === 'wiki' ? '百科' : item.targetType === 'post' ? '帖子' : '音乐'}
-                            </span>
-                          </div>
-                          <p className="text-sm font-medium text-text-primary truncate">{item.title}</p>
-                          <p className="text-xs text-text-muted truncate">{item.subtitle}</p>
-                        </div>
-                        <p className="text-[10px] text-text-muted whitespace-nowrap">{item.createdAt?.slice(0, 10)}</p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 bg-surface border border-dashed border-border rounded">
-                  <p className="text-sm text-text-muted">暂无收藏内容</p>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </div>
