@@ -274,3 +274,28 @@ export async function createTestPost(input: CreateTestPostInput) {
 
   return post;
 }
+
+export interface CreateTestGalleryInput {
+  title?: string;
+  description?: string;
+  authorUid: string;
+  authorName?: string;
+  published?: boolean;
+}
+
+export async function createTestGallery(input: CreateTestGalleryInput) {
+  const title = input.title || `Test Gallery ${Date.now()}`;
+  const description = input.description || 'Test gallery';
+  const authorName = input.authorName || 'Test Gallery Author';
+  const published = input.published ?? true;
+
+  return prisma.gallery.create({
+    data: {
+      title,
+      description,
+      authorUid: input.authorUid,
+      authorName,
+      published,
+    },
+  });
+}

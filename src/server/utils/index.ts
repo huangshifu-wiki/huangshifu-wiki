@@ -137,6 +137,7 @@ export {
 export {
   toNotificationResponse,
   createNotification,
+  notifyCommentReply,
   recordBrowsingHistory,
   increaseSearchKeywordCount,
 } from './notifications';

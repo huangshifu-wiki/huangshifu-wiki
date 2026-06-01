@@ -23,6 +23,7 @@ import {
   enhancedCache,
   fetchGalleryCommentsForResponse,
   resolveCommentReplyTarget,
+  notifyCommentReply,
   GALLERY_ADMIN_ONLY,
 } from '../utils'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
@@ -1271,6 +1272,17 @@ router.post('/:id/comments', galleryWriteLimiter, requireAuth, requireActiveUser
           select: { likes: true },
         },
       },
+    })
+
+    await notifyCommentReply({
+      ownerUid: gallery.authorUid,
+      replyTargetUid,
+      actorUid: req.authUser!.uid,
+      actorName: req.authUser!.displayName,
+      commentId: comment.id,
+      content: comment.content,
+      parentId: comment.parentId,
+      target: { type: 'gallery', id: req.params.id },
     })
 
     res.status(201).json({ comment: toCommentResponse(comment) })

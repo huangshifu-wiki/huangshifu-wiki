@@ -13,6 +13,7 @@ import {
   normalizeOptionalDocId,
   canViewPost,
   createNotification,
+  notifyCommentReply,
   parsePagination,
   enhancedCache,
   fetchPostCommentsForResponse,
@@ -629,16 +630,16 @@ router.post('/:postId/comments', postWriteLimiter, requireAuth, requireActiveUse
       },
     });
 
-    const notifyUid = replyTargetUid || currentPost.authorUid;
-    if (notifyUid && notifyUid !== req.authUser!.uid) {
-      await createNotification(notifyUid, 'reply', {
-        postId: req.params.postId,
-        commentId: comment.id,
-        actorUid: req.authUser!.uid,
-        actorName: req.authUser!.displayName,
-        preview: comment.content.slice(0, 120),
-      });
-    }
+    await notifyCommentReply({
+      ownerUid: currentPost.authorUid,
+      replyTargetUid,
+      actorUid: req.authUser!.uid,
+      actorName: req.authUser!.displayName,
+      commentId: comment.id,
+      content: comment.content,
+      parentId: comment.parentId,
+      target: { type: 'post', id: req.params.postId },
+    });
 
     res.status(201).json({ comment: toCommentResponse(comment) });
   } catch (error) {

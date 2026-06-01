@@ -19,7 +19,7 @@
 import { describe, beforeEach, afterEach, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server';
-import { prisma, createTestUser, createTestToken, createTestPost } from './setup';
+import { prisma, createTestUser, createTestToken, createTestPost, createTestGallery } from './setup';
 import type { CreateTestPostInput } from './setup';
 
 async function cleanupPostTestData() {
@@ -90,8 +90,8 @@ async function cleanupPostTestData() {
   await prisma.gallery.deleteMany({
     where: {
       OR: [
-        { title: { startsWith: 'Gallery For Comment Delete' } },
-        { title: { startsWith: 'Hidden Gallery Comment Like Test' } },
+        { title: { startsWith: 'Test Gallery ' } },
+        { title: { startsWith: 'Gallery Comment Notification Test' } },
       ],
     },
   });
@@ -956,15 +956,7 @@ describe('Posts API - 文章接口测试', () => {
     });
 
     it('应该允许通过通用评论接口删除图集评论', async () => {
-      const gallery = await prisma.gallery.create({
-        data: {
-          title: `Gallery For Comment Delete ${Date.now()}`,
-          description: 'Test gallery',
-          authorUid: testUser.user.uid,
-          authorName: testUser.user.displayName,
-          published: true,
-        },
-      });
+      const gallery = await createTestGallery({ authorUid: testUser.user.uid, authorName: testUser.user.displayName });
 
       const galleryComment = await prisma.postComment.create({
         data: {
@@ -1161,15 +1153,7 @@ describe('Posts API - 文章接口测试', () => {
           content: 'Draft post comment',
         },
       });
-      const hiddenGallery = await prisma.gallery.create({
-        data: {
-          title: `Hidden Gallery Comment Like Test ${Date.now()}`,
-          description: 'Hidden gallery',
-          authorUid: testUser.user.uid,
-          authorName: testUser.user.displayName,
-          published: false,
-        },
-      });
+      const hiddenGallery = await createTestGallery({ authorUid: testUser.user.uid, authorName: testUser.user.displayName, published: false });
       const galleryComment = await prisma.postComment.create({
         data: {
           galleryId: hiddenGallery.id,
@@ -1837,6 +1821,94 @@ describe('Posts API - 文章接口测试', () => {
         .send('');
 
       expect(response.status).toBe(400);
+    });
+  });
+
+  describe('POST /api/galleries/:id/comments - 图集评论通知', () => {
+    it('顶层评论应通知图集作者，且通知 payload 带 galleryId 而非 postId', async () => {
+      const gallery = await createTestGallery({ authorUid: testUser.user.uid, authorName: testUser.user.displayName });
+
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+      const response = await agent
+        .post(`/api/galleries/${gallery.id}/comments`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ content: 'Gallery comment content for notification' });
+
+      expect(response.status).toBe(201);
+
+      const notifications = await prisma.notification.findMany({
+        where: { userUid: testUser.user.uid, type: 'reply' },
+      });
+      expect(notifications).toHaveLength(1);
+
+      const payload = notifications[0].payload as Record<string, unknown>;
+      expect(payload.targetType).toBe('gallery');
+      expect(payload.galleryId).toBe(gallery.id);
+      expect(payload.postId).toBeUndefined();
+      expect(payload.parentId).toBeNull();
+      expect(payload.actorUid).toBe(adminUser.user.uid);
+      expect(payload.commentId).toBe(response.body.comment.id);
+    });
+
+    it('回复评论应通知被回复者', async () => {
+      const gallery = await createTestGallery({ authorUid: testUser.user.uid, authorName: testUser.user.displayName });
+
+      const adminSession = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+      const rootResponse = await adminSession.agent
+        .post(`/api/galleries/${gallery.id}/comments`)
+        .set('X-XSRF-TOKEN', adminSession.xsrfToken)
+        .send({ content: 'Gallery comment content root' });
+      expect(rootResponse.status).toBe(201);
+
+      const ownerSession = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+      const replyResponse = await ownerSession.agent
+        .post(`/api/galleries/${gallery.id}/comments`)
+        .set('X-XSRF-TOKEN', ownerSession.xsrfToken)
+        .send({
+          content: 'Gallery comment content reply',
+          parentId: rootResponse.body.comment.id,
+        });
+      expect(replyResponse.status).toBe(201);
+
+      const adminNotifications = await prisma.notification.findMany({
+        where: { userUid: adminUser.user.uid, type: 'reply' },
+      });
+      expect(adminNotifications).toHaveLength(1);
+
+      const payload = adminNotifications[0].payload as Record<string, unknown>;
+      expect(payload.targetType).toBe('gallery');
+      expect(payload.galleryId).toBe(gallery.id);
+      expect(payload.parentId).toBe(rootResponse.body.comment.id);
+      expect(payload.actorUid).toBe(testUser.user.uid);
+    });
+
+    it('对自己的图集评论不应给自己发通知', async () => {
+      const gallery = await createTestGallery({ authorUid: testUser.user.uid, authorName: testUser.user.displayName });
+
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+      const response = await agent
+        .post(`/api/galleries/${gallery.id}/comments`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ content: 'Gallery comment content self' });
+
+      expect(response.status).toBe(201);
+
+      const notifications = await prisma.notification.findMany({
+        where: { userUid: testUser.user.uid },
+      });
+      expect(notifications).toHaveLength(0);
     });
   });
 });

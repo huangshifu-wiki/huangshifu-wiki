@@ -8,10 +8,26 @@ interface ReviewNotificationPayload {
   note?: string | null
 }
 
+type ReplyTarget = { kind: 'post' | 'gallery'; id: string }
+
+// reply/like 通知的目标：优先读显式 targetType，旧 payload 回退到 id 字段是否存在。
+// 单一来源，供文案与链接共用，避免两处判定不一致。
+function resolveReplyTarget(payload: NotificationItem['payload']): ReplyTarget | null {
+  const galleryId = typeof payload.galleryId === 'string' ? payload.galleryId : null
+  const postId = typeof payload.postId === 'string' ? payload.postId : null
+  if (payload.targetType === 'gallery' || (!payload.targetType && galleryId)) {
+    return galleryId ? { kind: 'gallery', id: galleryId } : null
+  }
+  return postId ? { kind: 'post', id: postId } : null
+}
+
 export function getNotificationText(notif: NotificationItem) {
   switch (notif.type) {
-    case 'reply':
-      return '回复了你的' + (notif.payload.parentId ? '评论' : '帖子')
+    case 'reply': {
+      const target = resolveReplyTarget(notif.payload)
+      const noun = target?.kind === 'gallery' ? '图集' : '帖子'
+      return '回复了你的' + (notif.payload.parentId ? '评论' : noun)
+    }
     case 'like':
       return '赞了你的帖子'
     case 'review_result': {
@@ -45,8 +61,9 @@ export function getNotificationText(notif: NotificationItem) {
 
 export function getNotificationLink(notif: NotificationItem) {
   if (notif.type === 'reply' || notif.type === 'like') {
-    const postId = typeof notif.payload.postId === 'string' ? notif.payload.postId : null
-    return postId ? `/forum/${postId}` : null
+    const target = resolveReplyTarget(notif.payload)
+    if (!target) return null
+    return target.kind === 'gallery' ? `/gallery/${target.id}` : `/forum/${target.id}`
   }
 
   if (notif.type === 'review_result') {
