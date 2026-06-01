@@ -202,8 +202,8 @@ const SongCard = React.memo(function SongCard({
 					renderBatchButton()
 				) : (
 					<>
-						{/* Desktop actions: hidden by default, show on hover */}
-						<div className="hidden md:flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+						{/* Desktop actions */}
+						<div className="hidden md:flex items-center gap-0.5">
 							{renderFavoriteButton()}
 						</div>
 
