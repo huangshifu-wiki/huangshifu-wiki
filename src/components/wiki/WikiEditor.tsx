@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../components/Toast";
-import { apiGet, apiPost, apiPut } from "../../lib/apiClient";
+import { apiGet, apiPost, apiPut, invalidateApiCache } from "../../lib/apiClient";
 import { normalizeWikiPageSlug } from "../../lib/wikiSlug";
 import { metadataCache } from "../../lib/metadataCache";
 import { X } from "lucide-react";
@@ -158,7 +158,9 @@ const WikiEditor = () => {
 				navigate(`/wiki/${pageSlug}`);
 				return;
 			} else {
+				invalidateApiCache(`GET|/api/wiki/${pageSlug}|`);
 				show("页面保存成功", { variant: "success" });
+				navigate(`/wiki/${pageSlug}`);
 			}
 
 		} catch (e) {
