@@ -1,7 +1,8 @@
 import { z } from 'zod'
+import { PROFILE_DISPLAY_NAME_MAX_LENGTH } from '../../lib/contentLimits'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/passwordRules'
 
-export const AUTH_DISPLAY_NAME_MAX_LENGTH = 50
+export const AUTH_DISPLAY_NAME_MAX_LENGTH = PROFILE_DISPLAY_NAME_MAX_LENGTH
 
 const authEmailSchema = z
   .string({ error: '邮箱不能为空' })

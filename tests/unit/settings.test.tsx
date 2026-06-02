@@ -5,7 +5,12 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Settings from '../../src/pages/Settings'
-import { WIKI_MAX_CONTENT_SIZE } from '../../src/lib/contentLimits'
+import {
+  PROFILE_DISPLAY_NAME_MAX_LENGTH,
+  PROFILE_SIGNATURE_MAX_LENGTH,
+  WIKI_MAX_CONTENT_SIZE,
+} from '../../src/lib/contentLimits'
+import { PASSWORD_MAX_LENGTH } from '../../src/lib/passwordRules'
 
 const {
   mockApiPatch,
@@ -96,17 +101,26 @@ describe('Settings', () => {
     renderSettings('/settings/profile')
 
     const displayNameInput = await screen.findByLabelText('昵称')
+    expect(displayNameInput).toHaveAttribute('maxlength', String(PROFILE_DISPLAY_NAME_MAX_LENGTH))
+    expect(screen.getByText(`4 / ${PROFILE_DISPLAY_NAME_MAX_LENGTH} 字符`)).toBeInTheDocument()
     await user.clear(displayNameInput)
     await user.type(displayNameInput, '新昵称')
 
     const bioInput = screen.getByLabelText('个人简介（支持 Markdown）')
     expect(bioInput).toHaveAttribute('maxlength', String(WIKI_MAX_CONTENT_SIZE))
+    expect(screen.getByText(`3 / ${WIKI_MAX_CONTENT_SIZE} 字符`)).toBeInTheDocument()
     await user.clear(bioInput)
     await user.type(bioInput, '新简介')
 
     const signatureInput = screen.getByLabelText('签名')
+    expect(signatureInput).toHaveAttribute('maxlength', String(PROFILE_SIGNATURE_MAX_LENGTH))
+    expect(screen.getByText(`3 / ${PROFILE_SIGNATURE_MAX_LENGTH} 字符`)).toBeInTheDocument()
     await user.clear(signatureInput)
     await user.type(signatureInput, '新签名')
+
+    expect(screen.getByText(`3 / ${PROFILE_DISPLAY_NAME_MAX_LENGTH} 字符`)).toBeInTheDocument()
+    expect(screen.getByText(`3 / ${WIKI_MAX_CONTENT_SIZE} 字符`)).toBeInTheDocument()
+    expect(screen.getByText(`3 / ${PROFILE_SIGNATURE_MAX_LENGTH} 字符`)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /保存公开资料/ }))
 
@@ -147,6 +161,7 @@ describe('Settings', () => {
 
     expect(screen.queryByLabelText('新密码')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /修改密码/ }))
+    expect(screen.getAllByText(`0 / ${PASSWORD_MAX_LENGTH} 字符`)).toHaveLength(2)
 
     fireEvent.change(screen.getByLabelText('当前密码'), {
       target: { value: 'CurrentPassword123!' },
@@ -157,6 +172,7 @@ describe('Settings', () => {
     fireEvent.change(screen.getByLabelText('确认新密码'), {
       target: { value: 'UpdatedPassword123!' },
     })
+    expect(screen.getAllByText(`19 / ${PASSWORD_MAX_LENGTH} 字符`)).toHaveLength(2)
     fireEvent.click(screen.getByRole('button', { name: /保存密码/ }))
 
     await waitFor(() => {

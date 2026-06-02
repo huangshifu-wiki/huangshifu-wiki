@@ -5,7 +5,11 @@ import { requireAuth, requireActiveUser, requireAdmin, requireSuperAdmin, userTo
 import { asyncHandler } from '../middleware/asyncHandler';
 import { profileLimiter } from '../middleware/rateLimiter';
 import { validateBody, adminResetUserPasswordSchema, passwordSchema } from '../schemas';
-import { WIKI_MAX_CONTENT_SIZE } from '../../lib/contentLimits';
+import {
+  PROFILE_DISPLAY_NAME_MAX_LENGTH,
+  PROFILE_SIGNATURE_MAX_LENGTH,
+  WIKI_MAX_CONTENT_SIZE,
+} from '../../lib/contentLimits';
 import {
   prisma,
   toUserResponse,
@@ -354,15 +358,15 @@ router.patch('/me', profileLimiter, requireAuth, requireActiveUser, asyncHandler
     const updateData: Record<string, unknown> = {};
 
     if (displayName !== undefined) {
-      if (typeof displayName === 'string' && displayName.length > 50) {
-        res.status(400).json({ error: '昵称不能超过50个字符' });
+      if (typeof displayName === 'string' && displayName.length > PROFILE_DISPLAY_NAME_MAX_LENGTH) {
+        res.status(400).json({ error: `昵称不能超过${PROFILE_DISPLAY_NAME_MAX_LENGTH}个字符` });
         return;
       }
       updateData.displayName = displayName;
     }
     if (signature !== undefined) {
-      if (typeof signature === 'string' && signature.length > 120) {
-        res.status(400).json({ error: '签名不能超过120个字符' });
+      if (typeof signature === 'string' && signature.length > PROFILE_SIGNATURE_MAX_LENGTH) {
+        res.status(400).json({ error: `签名不能超过${PROFILE_SIGNATURE_MAX_LENGTH}个字符` });
         return;
       }
       updateData.signature = signature;

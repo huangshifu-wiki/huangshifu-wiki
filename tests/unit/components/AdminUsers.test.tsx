@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import AdminUsers from '../../../src/pages/Admin/AdminUsers'
+import { PASSWORD_MAX_LENGTH } from '../../../src/lib/passwordRules'
 
 const mockApiGet = vi.hoisted(() => vi.fn())
 const mockApiPut = vi.hoisted(() => vi.fn())
@@ -126,9 +127,12 @@ describe('AdminUsers', () => {
     fireEvent.click(screen.getByTitle('重置密码'))
 
     expect(screen.getByRole('dialog', { name: '重置用户密码' })).toBeInTheDocument()
+    expect(screen.getByLabelText('新密码')).toHaveAttribute('maxlength', String(PASSWORD_MAX_LENGTH))
+    expect(screen.getByText(`0 / ${PASSWORD_MAX_LENGTH} 字符`)).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('新密码'), {
       target: { value: 'NewPassword123!' },
     })
+    expect(screen.getByText(`15 / ${PASSWORD_MAX_LENGTH} 字符`)).toBeInTheDocument()
     fireEvent.click(screen.getByText('确认重置'))
 
     await waitFor(() => {

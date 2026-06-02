@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { login, loginWithWeChat, register } from '../lib/auth'
+import { PROFILE_DISPLAY_NAME_MAX_LENGTH } from '../lib/contentLimits'
 import { useI18n } from '../lib/i18n'
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
+import { CharacterCount } from './CharacterCount'
 import { useToast } from './Toast'
 import type { AuthMode } from './Navbar/types'
 
@@ -91,8 +94,14 @@ export const AuthForm = ({
                   : t('auth.placeholderDisplayName')
               }
               autoFocus={autoFocus}
+              maxLength={isRegisterMode ? PROFILE_DISPLAY_NAME_MAX_LENGTH : undefined}
               className="theme-input w-full rounded px-4 py-2.5 text-sm"
             />
+            {isRegisterMode && (
+              <div className="mt-1 flex justify-end">
+                <CharacterCount current={displayName.length} max={PROFILE_DISPLAY_NAME_MAX_LENGTH} />
+              </div>
+            )}
           </div>
         )}
         {authMode === 'wechat' ? (
@@ -153,7 +162,8 @@ export const AuthForm = ({
                 id="auth-password"
                 type="password"
                 required
-                minLength={isRegisterMode ? 8 : undefined}
+                minLength={isRegisterMode ? PASSWORD_MIN_LENGTH : undefined}
+                maxLength={isRegisterMode ? PASSWORD_MAX_LENGTH : undefined}
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -164,6 +174,11 @@ export const AuthForm = ({
                 }
                 className="theme-input w-full rounded px-4 py-2.5 text-sm"
               />
+              {isRegisterMode && (
+                <div className="mt-1 flex justify-end">
+                  <CharacterCount current={password.length} max={PASSWORD_MAX_LENGTH} />
+                </div>
+              )}
             </div>
           </>
         )}

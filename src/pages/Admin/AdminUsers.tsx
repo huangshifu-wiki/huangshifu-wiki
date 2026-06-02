@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Trash2, CheckCircle, XCircle, AlertTriangle, RefreshCw, KeyRound, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { CharacterCount } from '../../components/CharacterCount';
 import { apiDelete, apiGet, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient';
 import { useToast } from '../../components/Toast';
 import { SmartImage } from '../../components/SmartImage';
@@ -283,11 +284,16 @@ export const AdminUsers = () => {
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder={`请输入 ${PASSWORD_MIN_LENGTH} 到 ${PASSWORD_MAX_LENGTH} 位的新密码`}
                 autoComplete="new-password"
+                minLength={PASSWORD_MIN_LENGTH}
+                maxLength={PASSWORD_MAX_LENGTH}
                 className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 pr-10 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
               />
               {resetLoading && <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-text-muted" />}
             </div>
-            <p className="text-xs text-text-muted">密码长度需为 {PASSWORD_MIN_LENGTH} 到 {PASSWORD_MAX_LENGTH} 个字符。</p>
+            <div className="flex items-center justify-between gap-3 text-xs text-text-muted">
+              <span>密码长度需为 {PASSWORD_MIN_LENGTH} 到 {PASSWORD_MAX_LENGTH} 个字符。</span>
+              <CharacterCount current={newPassword.length} max={PASSWORD_MAX_LENGTH} />
+            </div>
           </div>
         </div>
       </FormModal>

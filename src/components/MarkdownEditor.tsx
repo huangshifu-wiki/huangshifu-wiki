@@ -57,13 +57,13 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 				previewOptions={{
 					rehypePlugins: [rehypeRaw, [rehypeSanitize, customSchema]],
 				}}
-					textareaProps={{
-						placeholder,
-						'aria-label': ariaLabel,
-						maxLength,
-					}}
-					visibleDragbar={false}
-				/>
+				textareaProps={{
+					placeholder,
+					'aria-label': ariaLabel,
+					maxLength,
+				}}
+				visibleDragbar={false}
+			/>
 		</div>
 	);
 };

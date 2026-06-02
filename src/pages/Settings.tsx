@@ -14,13 +14,19 @@ import {
 import { Link, Navigate, useParams } from 'react-router-dom'
 
 import { AvatarCropModal } from '../components/AvatarCropModal'
+import { CharacterCount } from '../components/CharacterCount'
 import MarkdownEditor from '../components/MarkdownEditor'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
-import { WIKI_MAX_CONTENT_SIZE } from '../lib/contentLimits'
+import {
+  PROFILE_DISPLAY_NAME_MAX_LENGTH,
+  PROFILE_SIGNATURE_MAX_LENGTH,
+  WIKI_MAX_CONTENT_SIZE,
+} from '../lib/contentLimits'
 import { apiPatch, apiPut } from '../lib/apiClient'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
 
 type PublicProfileForm = {
   displayName: string
@@ -320,9 +326,21 @@ const Settings = () => {
                     </div>
 
                     <div className="grid flex-1 gap-4">
-                      <label className="block">
-                        <span className="mb-1 block text-sm font-medium text-text-secondary">昵称</span>
+                      <div className="block">
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <label
+                            htmlFor="settings-display-name"
+                            className="text-sm font-medium text-text-secondary"
+                          >
+                            昵称
+                          </label>
+                          <CharacterCount
+                            current={profileForm.displayName.length}
+                            max={PROFILE_DISPLAY_NAME_MAX_LENGTH}
+                          />
+                        </div>
                         <input
+                          id="settings-display-name"
                           type="text"
                           value={profileForm.displayName}
                           onChange={(event) =>
@@ -331,14 +349,26 @@ const Settings = () => {
                               displayName: event.target.value,
                             }))
                           }
-                          maxLength={50}
+                          maxLength={PROFILE_DISPLAY_NAME_MAX_LENGTH}
                           className="theme-input w-full rounded px-4 py-2.5 text-sm"
                         />
-                      </label>
+                      </div>
 
-                      <label className="block">
-                        <span className="mb-1 block text-sm font-medium text-text-secondary">签名</span>
+                      <div className="block">
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <label
+                            htmlFor="settings-signature"
+                            className="text-sm font-medium text-text-secondary"
+                          >
+                            签名
+                          </label>
+                          <CharacterCount
+                            current={profileForm.signature.length}
+                            max={PROFILE_SIGNATURE_MAX_LENGTH}
+                          />
+                        </div>
                         <textarea
+                          id="settings-signature"
                           value={profileForm.signature}
                           onChange={(event) =>
                             setProfileForm((current) => ({
@@ -347,15 +377,18 @@ const Settings = () => {
                             }))
                           }
                           rows={2}
-                          maxLength={120}
+                          maxLength={PROFILE_SIGNATURE_MAX_LENGTH}
                           className="theme-input w-full resize-none rounded px-4 py-3 text-sm"
                         />
-                      </label>
+                      </div>
 
                       <div className="block">
-                        <span className="mb-1 block text-sm font-medium text-text-secondary">
-                          个人简介（支持 Markdown）
-                        </span>
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span className="text-sm font-medium text-text-secondary">
+                            个人简介（支持 Markdown）
+                          </span>
+                          <CharacterCount current={profileForm.bio.length} max={WIKI_MAX_CONTENT_SIZE} />
+                        </div>
                         <MarkdownEditor
                           value={profileForm.bio}
                           onChange={(bio) =>
@@ -511,9 +544,15 @@ const Settings = () => {
                             className="theme-input w-full rounded px-4 py-2.5 text-sm"
                           />
                         </label>
-                        <label className="block">
-                          <span className="mb-1 block text-xs font-medium text-text-muted">新密码</span>
+                        <div className="block">
+                          <div className="mb-1 flex items-center justify-between gap-3">
+                            <label htmlFor="settings-new-password" className="text-xs font-medium text-text-muted">
+                              新密码
+                            </label>
+                            <CharacterCount current={passwordForm.newPassword.length} max={PASSWORD_MAX_LENGTH} />
+                          </div>
                           <input
+                            id="settings-new-password"
                             type="password"
                             value={passwordForm.newPassword}
                             onChange={(event) =>
@@ -523,14 +562,23 @@ const Settings = () => {
                               }))
                             }
                             autoComplete="new-password"
-                            minLength={8}
-                            maxLength={128}
+                            minLength={PASSWORD_MIN_LENGTH}
+                            maxLength={PASSWORD_MAX_LENGTH}
                             className="theme-input w-full rounded px-4 py-2.5 text-sm"
                           />
-                        </label>
-                        <label className="block">
-                          <span className="mb-1 block text-xs font-medium text-text-muted">确认新密码</span>
+                        </div>
+                        <div className="block">
+                          <div className="mb-1 flex items-center justify-between gap-3">
+                            <label
+                              htmlFor="settings-confirm-password"
+                              className="text-xs font-medium text-text-muted"
+                            >
+                              确认新密码
+                            </label>
+                            <CharacterCount current={passwordForm.confirmPassword.length} max={PASSWORD_MAX_LENGTH} />
+                          </div>
                           <input
+                            id="settings-confirm-password"
                             type="password"
                             value={passwordForm.confirmPassword}
                             onChange={(event) =>
@@ -540,11 +588,11 @@ const Settings = () => {
                               }))
                             }
                             autoComplete="new-password"
-                            minLength={8}
-                            maxLength={128}
+                            minLength={PASSWORD_MIN_LENGTH}
+                            maxLength={PASSWORD_MAX_LENGTH}
                             className="theme-input w-full rounded px-4 py-2.5 text-sm"
                           />
-                        </label>
+                        </div>
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"

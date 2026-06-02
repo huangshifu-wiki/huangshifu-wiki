@@ -1,6 +1,8 @@
 import React from "react";
+import { CharacterCount } from "../../components/CharacterCount";
 import MarkdownEditor from "../../components/MarkdownEditor";
 import { LocationTagInput } from "../../components/LocationTagInput";
+import { WIKI_MAX_CONTENT_SIZE } from "../../lib/contentLimits";
 import type { WikiRelationRecord } from "./types";
 
 type FormData = {
@@ -89,9 +91,12 @@ const WikiEditorForm = React.memo(({
 			</div>
 
 			<div className="space-y-2">
-				<label htmlFor="wiki-content" className="text-xs font-medium text-text-muted">
-					内容 (Markdown) <span className="theme-text-error">*</span>
-				</label>
+				<div className="flex items-center justify-between gap-3">
+					<label htmlFor="wiki-content" className="text-xs font-medium text-text-muted">
+						内容 (Markdown) <span className="theme-text-error">*</span>
+					</label>
+					<CharacterCount current={formData.content.length} max={WIKI_MAX_CONTENT_SIZE} />
+				</div>
 				<div
 					id="wiki-content"
 					className="border border-border rounded overflow-hidden"
@@ -108,6 +113,7 @@ const WikiEditorForm = React.memo(({
 						}
 						height="500px"
 						placeholder="在这里输入百科内容，支持 Markdown 语法..."
+						ariaLabel="内容 (Markdown)"
 						enableWikiLinks={true}
 					/>
 				</div>
