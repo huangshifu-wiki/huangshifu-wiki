@@ -3,8 +3,10 @@ import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
+import type { PluggableList } from "unified";
 import { customSchema } from "../lib/htmlSanitizer";
 import { handleMarkdownTextPasteCapture } from "../lib/markdownEditorPaste";
+import { processWikiLinksForPreview } from "../lib/markdownWikiLinks";
 import { useUserPreferences } from "../context/UserPreferencesContext";
 
 interface MarkdownEditorProps {
@@ -27,20 +29,10 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 	maxLength,
 }) => {
 	const { resolvedTheme } = useUserPreferences();
-	const processPreviewText = (text: string): string => {
-		if (!enableWikiLinks) return text;
-
-		return text.replace(
-			/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,
-			(_match, p1, p2) => {
-				const display = p1.trim();
-				const slug = p2 ? p2.trim() : p1.trim();
-				return `[${display}](/wiki/${slug})`;
-			},
-		);
+	const rehypePlugins: PluggableList = [rehypeRaw, [rehypeSanitize, customSchema]];
+	const previewOptions = {
+		rehypePlugins,
 	};
-
-	const processedValue = enableWikiLinks ? processPreviewText(value) : value;
 
 	return (
 		<div
@@ -49,14 +41,24 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 			data-color-mode={resolvedTheme === 'dark' ? 'dark' : 'light'}
 		>
 			<MDEditor
-				value={processedValue}
+				value={value}
 				onChange={(val) => onChange(val || "")}
 				height={parseInt(height)}
 				highlightEnable={resolvedTheme !== 'dark'}
 				preview="live"
-				previewOptions={{
-					rehypePlugins: [rehypeRaw, [rehypeSanitize, customSchema]],
-				}}
+				previewOptions={previewOptions}
+				components={
+					enableWikiLinks
+						? {
+								preview: (source) => (
+									<MDEditor.Markdown
+										{...previewOptions}
+										source={processWikiLinksForPreview(source)}
+									/>
+								),
+							}
+						: undefined
+				}
 				textareaProps={{
 					placeholder,
 					'aria-label': ariaLabel,
