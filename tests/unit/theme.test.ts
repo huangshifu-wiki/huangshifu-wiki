@@ -63,11 +63,13 @@ describe('theme helpers', () => {
       normalizeStoredPreferences({
         viewMode: 'large',
         theme: 'dark',
+        showCharacterCount: true,
         extra: 'ignored',
       } as Record<string, unknown>)
     ).toEqual({
       viewMode: 'large',
       theme: 'dark',
+      showCharacterCount: true,
     })
   })
 
@@ -76,6 +78,7 @@ describe('theme helpers', () => {
     expect(hasStoredPreferenceValues({})).toBe(false)
     expect(hasStoredPreferenceValues({ theme: 'dark' })).toBe(true)
     expect(hasStoredPreferenceValues({ viewMode: 'small' })).toBe(true)
+    expect(hasStoredPreferenceValues({ showCharacterCount: false })).toBe(true)
     expect(hasStoredPreferenceValues({ theme: 'sepia' })).toBe(false)
   })
 
@@ -85,6 +88,7 @@ describe('theme helpers', () => {
         {
           viewMode: 'small',
           theme: 'dark',
+          showCharacterCount: true,
         },
         {
           theme: 'default',
@@ -93,6 +97,7 @@ describe('theme helpers', () => {
     ).toEqual({
       viewMode: 'small',
       theme: 'default',
+      showCharacterCount: true,
     })
   })
 
@@ -100,12 +105,14 @@ describe('theme helpers', () => {
     writeStoredPreferences({
       viewMode: 'small',
       theme: 'dark',
+      showCharacterCount: true,
     })
 
     expect(JSON.parse(window.localStorage.getItem(THEME_STORAGE_KEY) || '{}')).toEqual({
       guest: {
         viewMode: 'small',
         theme: 'dark',
+        showCharacterCount: true,
       },
       users: {},
     })
@@ -116,6 +123,7 @@ describe('theme helpers', () => {
       {
         viewMode: 'list',
         theme: 'default',
+        showCharacterCount: true,
       },
       'user-1'
     )
@@ -124,12 +132,14 @@ describe('theme helpers', () => {
     expect(readStoredPreferences('user-1')).toEqual({
       viewMode: 'list',
       theme: 'default',
+      showCharacterCount: true,
     })
     expect(JSON.parse(window.localStorage.getItem(THEME_STORAGE_KEY) || '{}')).toEqual({
       users: {
         'user-1': {
           viewMode: 'list',
           theme: 'default',
+          showCharacterCount: true,
         },
       },
     })
@@ -147,6 +157,7 @@ describe('theme helpers', () => {
     expect(readStoredPreferences()).toEqual({
       viewMode: 'small',
       theme: 'dark',
+      showCharacterCount: false,
     })
   })
 
@@ -162,6 +173,7 @@ describe('theme helpers', () => {
     expect(readStoredPreferences('user-1', { includeLegacyFallback: true })).toEqual({
       viewMode: 'small',
       theme: 'dark',
+      showCharacterCount: false,
     })
     expect(readStoredPreferences('user-1')).toEqual(DEFAULT_PREFERENCES)
   })

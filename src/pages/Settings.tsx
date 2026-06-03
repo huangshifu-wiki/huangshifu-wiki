@@ -19,6 +19,7 @@ import MarkdownEditor from '../components/MarkdownEditor'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
+import { useUserPreferences } from '../context/UserPreferencesContext'
 import {
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   PROFILE_SIGNATURE_MAX_LENGTH,
@@ -70,6 +71,7 @@ function resolveSettingsSection(section?: string): SettingsSection | null {
 
 const Settings = () => {
   const { user, profile, refreshAuth } = useAuth()
+  const { preferences, updatePreferences } = useUserPreferences()
   const { section } = useParams<{ section?: string }>()
   const { show } = useToast()
   const activeSection = resolveSettingsSection(section)
@@ -628,6 +630,35 @@ const Settings = () => {
 
                 <div className="max-w-3xl">
                   <ThemeToggle compact />
+                </div>
+
+                <div className="flex max-w-3xl items-center justify-between gap-4 border-t border-border pt-6">
+                  <label
+                    htmlFor="settings-character-count-toggle"
+                    className="text-sm font-medium text-text-primary"
+                  >
+                    展示字数限制
+                  </label>
+                  <button
+                    type="button"
+                    id="settings-character-count-toggle"
+                    role="switch"
+                    aria-checked={preferences.showCharacterCount}
+                    onClick={() =>
+                      void updatePreferences({
+                        showCharacterCount: !preferences.showCharacterCount,
+                      })
+                    }
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold focus:ring-offset-2 ${
+                      preferences.showCharacterCount ? 'bg-[var(--color-theme-accent)]' : 'bg-border'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                        preferences.showCharacterCount ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
                 </div>
               </section>
             )}

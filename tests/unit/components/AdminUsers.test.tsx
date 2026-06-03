@@ -28,6 +28,14 @@ vi.mock('../../../src/context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
+vi.mock('../../../src/context/UserPreferencesContext', () => ({
+  useUserPreferences: () => ({
+    preferences: {
+      showCharacterCount: true,
+    },
+  }),
+}))
+
 vi.mock('../../../src/components/SmartImage', () => ({
   SmartImage: ({ src, alt, className }: { src?: string; alt?: string; className?: string }) => (
     <img src={src} alt={alt || ''} className={className} />

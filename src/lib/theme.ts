@@ -41,6 +41,10 @@ export function normalizeViewMode(value: unknown): ViewMode {
   return DEFAULT_PREFERENCES.viewMode
 }
 
+export function isBooleanPreference(value: unknown): value is boolean {
+  return typeof value === 'boolean'
+}
+
 export function normalizeStoredPreferences(
   value?: Partial<UserPreferences> | Record<string, unknown> | null
 ): UserPreferences {
@@ -48,6 +52,9 @@ export function normalizeStoredPreferences(
     ...DEFAULT_PREFERENCES,
     viewMode: normalizeViewMode(value?.viewMode),
     theme: normalizeThemeMode(value?.theme),
+    showCharacterCount: isBooleanPreference(value?.showCharacterCount)
+      ? value.showCharacterCount
+      : DEFAULT_PREFERENCES.showCharacterCount,
   }
 }
 
@@ -58,7 +65,11 @@ export function hasStoredPreferenceValues(
     return false
   }
 
-  return isViewMode(value.viewMode) || isThemeMode(value.theme)
+  return (
+    isViewMode(value.viewMode) ||
+    isThemeMode(value.theme) ||
+    isBooleanPreference(value.showCharacterCount)
+  )
 }
 
 export function mergeStoredPreferences(
@@ -72,6 +83,9 @@ export function mergeStoredPreferences(
   return {
     viewMode: isViewMode(value.viewMode) ? value.viewMode : base.viewMode,
     theme: isThemeMode(value.theme) ? value.theme : base.theme,
+    showCharacterCount: isBooleanPreference(value.showCharacterCount)
+      ? value.showCharacterCount
+      : base.showCharacterCount,
   }
 }
 

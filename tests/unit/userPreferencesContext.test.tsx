@@ -205,10 +205,12 @@ describe('UserPreferencesProvider', () => {
     expect(readStoredPreferences('user-2')).toEqual({
       viewMode: 'medium',
       theme: 'system',
+      showCharacterCount: false,
     })
     expect(readStoredPreferences()).toEqual({
       viewMode: 'small',
       theme: 'dark',
+      showCharacterCount: false,
     })
   })
 
@@ -249,10 +251,12 @@ describe('UserPreferencesProvider', () => {
     expect(readStoredPreferences('user-3')).toEqual({
       viewMode: 'small',
       theme: 'dark',
+      showCharacterCount: false,
     })
     expect(readStoredPreferences()).toEqual({
       viewMode: 'small',
       theme: 'dark',
+      showCharacterCount: false,
     })
   })
 })
