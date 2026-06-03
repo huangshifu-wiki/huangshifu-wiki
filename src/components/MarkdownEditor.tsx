@@ -1,13 +1,9 @@
 import React from "react";
 import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize from "rehype-sanitize";
-import type { PluggableList } from "unified";
-import { customSchema } from "../lib/htmlSanitizer";
 import { handleMarkdownTextPasteCapture } from "../lib/markdownEditorPaste";
-import { processWikiLinksForPreview } from "../lib/markdownWikiLinks";
 import { useUserPreferences } from "../context/UserPreferencesContext";
+import MarkdownRenderer from "./MarkdownRenderer";
 
 interface MarkdownEditorProps {
 	value: string;
@@ -29,10 +25,6 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 	maxLength,
 }) => {
 	const { resolvedTheme } = useUserPreferences();
-	const rehypePlugins: PluggableList = [rehypeRaw, [rehypeSanitize, customSchema]];
-	const previewOptions = {
-		rehypePlugins,
-	};
 
 	return (
 		<div
@@ -46,18 +38,14 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 				height={parseInt(height)}
 				highlightEnable={resolvedTheme !== 'dark'}
 				preview="live"
-				previewOptions={previewOptions}
 				components={
-					enableWikiLinks
-						? {
-								preview: (source) => (
-									<MDEditor.Markdown
-										{...previewOptions}
-										source={processWikiLinksForPreview(source)}
-									/>
-								),
-							}
-						: undefined
+					{
+						preview: (source) => (
+							<div className="prose max-w-none font-body leading-relaxed text-text-primary">
+								<MarkdownRenderer content={source} enableWikiLinks={enableWikiLinks} />
+							</div>
+						),
+					}
 				}
 				textareaProps={{
 					placeholder,

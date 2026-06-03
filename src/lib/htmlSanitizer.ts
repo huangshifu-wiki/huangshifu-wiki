@@ -1,5 +1,7 @@
 import { defaultSchema, type Options as Schema } from 'rehype-sanitize';
 
+type AttributeDefinition = NonNullable<Schema['attributes']>[string][number];
+
 const IFRAME_WHITELIST = [
   'player.bilibili.com',
   'music.163.com',
@@ -15,13 +17,32 @@ const IFRAME_WHITELIST = [
   'player.vimeo.com',
 ];
 
+const withoutAttribute = (attributes: AttributeDefinition[] | undefined, name: string) =>
+  (attributes ?? []).filter((attribute) => (typeof attribute === 'string' ? attribute : attribute[0]) !== name);
+
 export const customSchema: Schema = {
   ...defaultSchema,
-  tagNames: [...defaultSchema.tagNames, 'iframe'],
+  tagNames: [...defaultSchema.tagNames, 'iframe', 'svg', 'path'],
   attributes: {
     ...(defaultSchema.attributes ?? {}),
+    a: [
+      ...withoutAttribute(defaultSchema.attributes?.a, 'className'),
+      ['className', 'data-footnote-backref', 'markdown-heading-anchor'],
+      'ariaHidden',
+    ],
+    code: [
+      ...((defaultSchema.attributes?.code ?? []) as NonNullable<Schema['attributes']>[string]),
+      'dataMeta',
+      'metastring',
+    ],
     div: ['className'],
+    p: [
+      ...((defaultSchema.attributes?.p ?? []) as NonNullable<Schema['attributes']>[string]),
+      ['className', 'markdown-alert-title'],
+    ],
+    path: ['d'],
     span: ['className'],
+    svg: ['ariaHidden', 'className', 'height', 'viewBox', 'width'],
     iframe: [
       'src',
       'allow',

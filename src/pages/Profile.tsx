@@ -13,14 +13,10 @@ import { apiGet } from '../lib/apiClient';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
-import ReactMarkdown from 'react-markdown';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize from 'rehype-sanitize';
-import remarkGfm from 'remark-gfm';
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar';
-import { customSchema } from '../lib/htmlSanitizer';
 import { getStatusClassName, getStatusText } from '../lib/contentUtils';
 import type { FavoriteItem, HistoryItem } from '../types/entities';
+import MarkdownRenderer from '../components/MarkdownRenderer';
 
 type FavoriteTargetType = 'wiki' | 'post' | 'music';
 
@@ -286,12 +282,7 @@ const Profile = () => {
                 <section className={TAB_PANEL_CLASS}>
                   {bio ? (
                     <div className="prose max-w-none text-sm leading-8 text-text-secondary">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
-                      >
-                        {bio}
-                      </ReactMarkdown>
+                      <MarkdownRenderer content={bio} />
                     </div>
                   ) : (
                     <p className="max-w-[72ch] text-sm leading-8 text-text-secondary">

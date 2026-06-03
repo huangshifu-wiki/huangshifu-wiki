@@ -2,8 +2,10 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 
 import { isTrustedIframeDomain } from '../../src/lib/htmlSanitizer';
+import MarkdownRenderer from '../../src/components/MarkdownRenderer';
 import WikiMarkdown from '../../src/pages/wiki/WikiMarkdown';
 
 describe('htmlSanitizer', () => {
@@ -114,6 +116,108 @@ describe('htmlSanitizer', () => {
       expect(output).toContain('rel="noopener noreferrer"');
       expect(output).not.toContain('target="_self"');
       expect(output).not.toContain('rel="opener"');
+    });
+  });
+
+  describe('MarkdownRenderer', () => {
+    const renderMarkdown = (content: string, enableWikiLinks = false) =>
+      renderToStaticMarkup(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(MarkdownRenderer, { content, enableWikiLinks }),
+        ),
+      );
+
+    it('renders GitHub alerts and safe heading anchors in the shared renderer', () => {
+      const output = renderMarkdown(`
+# location
+
+> [!NOTE]
+> 这是一条提示
+`);
+
+      expect(output).toContain('id="user-content-location"');
+      expect(output).toContain('href="#user-content-location"');
+      expect(output).not.toContain('id="location"');
+      expect(output).toContain('markdown-heading-anchor');
+      expect(output).toContain('markdown-alert markdown-alert-note');
+      expect(output).toContain('markdown-alert-title');
+      expect(output).toContain('<svg');
+      expect(output).toContain('<path');
+    });
+
+    it('only converts wiki links when wiki mode is enabled', () => {
+      expect(renderMarkdown('[[页面标题]]')).toContain('[[页面标题]]');
+      expect(renderMarkdown('[[页面标题]]', true)).toContain(
+        'href="/wiki/%E9%A1%B5%E9%9D%A2%E6%A0%87%E9%A2%98"',
+      );
+    });
+
+    it('uses the shared iframe whitelist for all renderer consumers', () => {
+      const output = renderMarkdown(`
+<iframe src="https://player.bilibili.com/video/BV1"></iframe>
+<iframe src="https://evil.com/embed"></iframe>
+<svg onload="alert(1)"><path d="M0 0" onclick="alert(1)"></path></svg>
+`);
+
+      expect(output).toContain('https://player.bilibili.com/video/BV1');
+      expect(output).not.toContain('https://evil.com/embed');
+      expect(output).toContain('<svg');
+      expect(output).toContain('<path d="M0 0"');
+      expect(output).not.toContain('onload');
+      expect(output).not.toContain('onclick');
+    });
+
+    it('keeps GFM footnote links connected after sanitizing ids', () => {
+      const output = renderMarkdown(`
+脚注引用[^1]
+
+[^1]: 脚注内容
+`);
+
+      expect(output).toContain('id="user-content-user-content-fnref-1"');
+      expect(output).toContain('href="#user-content-user-content-fn-1"');
+      expect(output).toContain('id="user-content-user-content-fn-1"');
+      expect(output).toContain('href="#user-content-user-content-fnref-1"');
+    });
+
+    it('renders common markdown structures with preserved GFM attributes', () => {
+      const output = renderMarkdown(`
+正文 **加粗** *斜体* ~~删除~~
+
+- [x] 已完成
+- [ ] 未完成
+
+| 左 | 右 | 中 |
+| :- | -: | :-: |
+| a | b | c |
+`);
+
+      expect(output).toContain('<strong>加粗</strong>');
+      expect(output).toContain('<em>斜体</em>');
+      expect(output).toContain('<del>删除</del>');
+      expect(output).toContain('class="contains-task-list"');
+      expect(output).toContain('type="checkbox"');
+      expect(output).toContain('checked=""');
+      expect(output).toContain('style="text-align:left"');
+      expect(output).toContain('style="text-align:right"');
+      expect(output).toContain('style="text-align:center"');
+    });
+
+    it('renders code highlighting, line numbers and highlighted lines from code meta', () => {
+      const output = renderMarkdown(`
+\`\`\`js showLineNumbers {1}
+const x = 1
+const y = 2
+\`\`\`
+`);
+
+      expect(output).toContain('class="language-js code-highlight"');
+      expect(output).toContain('token keyword');
+      expect(output).toContain('code-line line-number highlight-line');
+      expect(output).toContain('line="1"');
+      expect(output).not.toContain('metastring=');
     });
   });
 });

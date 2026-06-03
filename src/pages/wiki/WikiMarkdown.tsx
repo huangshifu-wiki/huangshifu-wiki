@@ -1,107 +1,11 @@
-import React, { useMemo } from "react";
-import { Link } from "react-router-dom";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize from "rehype-sanitize";
-import { customSchema, isTrustedIframeDomain } from "../../lib/htmlSanitizer";
-import WikiLinkPreview from "../../components/WikiLinkPreview";
+import MarkdownRenderer from '../../components/MarkdownRenderer';
 
 const WikiMarkdown = ({ content }: { content: string }) => {
-	const processedContent = useMemo(() => {
-		const raw = content || '';
-		if (typeof window !== 'undefined' && raw.length === 0) {
-			console.warn('[WikiMarkdown] content is empty:', { content, type: typeof content });
-		}
-		return raw.replace(
-			/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,
-			(_match, p1, p2) => {
-				const display = p1.trim();
-				const slug = p2 ? p2.trim() : p1.trim();
-				return `[${display}](${`/wiki/${slug}`})`;
-			},
-		);
-	}, [content]);
+  if (typeof window !== 'undefined' && !content) {
+    console.warn('[WikiMarkdown] content is empty:', { content, type: typeof content });
+  }
 
-	return (
-		<ReactMarkdown
-			remarkPlugins={[remarkGfm]}
-			rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
-			components={{
-				iframe: ({
-					src,
-					width,
-					height,
-					...props
-				}: React.IframeHTMLAttributes<HTMLIFrameElement>) => {
-					if (!isTrustedIframeDomain(src)) {
-						return null;
-					}
-					return (
-						<iframe
-							src={src}
-							width={width || "100%"}
-							height={height || "400px"}
-							{...props}
-						/>
-					);
-				},
-				a: ({ href, children, ...props }) => {
-					if (href?.startsWith("/wiki/")) {
-						const rawSlug = href.replace("/wiki/", "");
-						const slug = rawSlug.split("?")[0];
-						return (
-							<WikiLinkPreview slug={slug}>
-								<Link
-									{...props}
-									to={href}
-									className="text-brand-gold font-bold hover:underline decoration-brand-gold/30 underline-offset-4"
-								>
-									{children}
-								</Link>
-							</WikiLinkPreview>
-						);
-					}
-					return (
-						<a
-							{...props}
-							href={href}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="text-brand-gold hover:underline"
-						>
-							{children}
-						</a>
-					);
-				},
-				table: ({ children }) => (
-					<div className="overflow-x-auto my-8">
-						<table className="w-full border-collapse border border-border rounded overflow-hidden">
-							{children}
-						</table>
-					</div>
-				),
-				thead: ({ children }) => (
-					<thead className="bg-surface-alt text-brand-gold">
-						{children}
-					</thead>
-				),
-				th: ({ children }) => (
-					<th className="border border-border px-4 py-3 text-left font-bold">
-						{children}
-					</th>
-				),
-				td: ({ children }) => (
-					<td className="border border-border px-4 py-3">{children}</td>
-				),
-				tr: ({ children }) => (
-					<tr className="hover:bg-surface-alt transition-colors">{children}</tr>
-				),
-			}}
-		>
-			{processedContent}
-		</ReactMarkdown>
-	);
+  return <MarkdownRenderer content={content} enableWikiLinks />;
 };
 
 export default WikiMarkdown;

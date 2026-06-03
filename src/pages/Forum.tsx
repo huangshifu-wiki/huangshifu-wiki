@@ -1,11 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Routes, Route, Link, useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
-import rehypeSanitize from 'rehype-sanitize'
-import { customSchema } from '../lib/htmlSanitizer'
 import {
   MessageSquare,
   Heart,
@@ -46,6 +41,7 @@ import { useToggleInteraction } from '../hooks/useToggleInteraction'
 import { submitFormOnModifierEnter } from '../lib/formShortcuts'
 import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
+import MarkdownRenderer from '../components/MarkdownRenderer'
 
 type PostItem = {
   id: string
@@ -761,12 +757,7 @@ const PostDetail = () => {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
           <div>
             <div className="prose prose-lg max-w-none font-body leading-relaxed text-text-primary">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
-              >
-                {post.content}
-              </ReactMarkdown>
+              <MarkdownRenderer content={post.content || ''} />
             </div>
 
             <section className="mt-12 pt-8 border-t border-border">
