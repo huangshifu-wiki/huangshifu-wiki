@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   Settings,
@@ -8,14 +8,16 @@ import {
   History,
   Loader2,
 } from 'lucide-react';
-import { apiGet } from '../lib/apiClient';
+import { apiGet, apiPatch } from '../lib/apiClient';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar';
 import { getStatusClassName, getStatusText } from '../lib/contentUtils';
+import { PROFILE_SIGNATURE_MAX_LENGTH } from '../lib/contentLimits';
 import type { FavoriteItem, HistoryItem } from '../types/entities';
 import MarkdownRenderer from '../components/MarkdownRenderer';
+import { useToast } from '../components/Toast';
 
 type FavoriteTargetType = 'wiki' | 'post' | 'music';
 
@@ -46,6 +48,10 @@ type CommentItem = {
 };
 
 type ActiveTab = 'profile' | 'favorites' | 'posts' | 'comments' | 'history';
+type CaretDocument = Document & {
+  caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  caretRangeFromPoint?: (x: number, y: number) => Range | null;
+};
 
 const PROFILE_TAB_SET = new Set<ActiveTab>(['profile', 'favorites', 'posts', 'comments', 'history']);
 
@@ -66,6 +72,13 @@ const PROFILE_TABS: Array<{ id: ActiveTab; label: string; icon: React.ReactNode 
 ];
 
 const TAB_PANEL_CLASS = 'pt-2';
+const SIGNATURE_PLACEHOLDER = '这位粉丝很神秘，还没有写下任何签名...';
+const SIGNATURE_TEXT_CLASS =
+  'relative mt-3 block w-full max-w-[68ch] whitespace-pre-wrap break-words rounded-sm border-0 bg-transparent p-0 text-left font-[inherit] text-sm leading-7 text-text-muted';
+const SIGNATURE_HOVER_FRAME_CLASS =
+  'before:pointer-events-none before:absolute before:-inset-1 before:rounded-sm before:border before:border-dashed before:border-border before:opacity-0 before:transition-opacity before:duration-200 hover:before:opacity-100 focus-visible:before:opacity-100';
+const SIGNATURE_VISIBLE_FRAME_CLASS =
+  'before:pointer-events-none before:absolute before:-inset-1 before:rounded-sm before:border before:border-dashed before:border-border before:opacity-100';
 
 function EmptyState({ message }: { message: string }) {
   return (
@@ -76,7 +89,8 @@ function EmptyState({ message }: { message: string }) {
 }
 
 const Profile = () => {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshAuth } = useAuth();
+  const toast = useToast();
   const { tab } = useParams<{ tab?: string }>();
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
@@ -87,12 +101,132 @@ const Profile = () => {
   const [postsLoading, setPostsLoading] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [signatureDraft, setSignatureDraft] = useState('');
+  const [signatureEditing, setSignatureEditing] = useState(false);
+  const [signatureSaving, setSignatureSaving] = useState(false);
+  const signatureInputRef = useRef<HTMLDivElement | null>(null);
+  const signatureComposingRef = useRef(false);
+  const signatureClickPointRef = useRef<{ x: number; y: number } | null>(null);
   const activeTab = resolveProfileTab(tab);
   const displayName = profile?.displayName || user.displayName;
   const avatarSrc = profile?.photoURL || user.photoURL || DEFAULT_AVATAR;
-  const signature = profile?.signature?.trim() || '';
+  const signature = profile?.signature || '';
+  const displaySignature = signature.trim();
   const bio = profile?.bio?.trim() || '';
   const isBanned = profile?.status === 'banned';
+
+  useEffect(() => {
+    if (!signatureEditing) {
+      setSignatureDraft(signature);
+    }
+  }, [signature, signatureEditing]);
+
+  const setSignatureCaretToEnd = (input: HTMLDivElement) => {
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    range.collapse(false);
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  };
+
+  const setSignatureCaretFromPoint = (input: HTMLDivElement, point: { x: number; y: number }) => {
+    input.focus();
+    const caretDocument = document as CaretDocument;
+
+    const range = (() => {
+      if (caretDocument.caretPositionFromPoint) {
+        const position = caretDocument.caretPositionFromPoint(point.x, point.y);
+        if (!position) return null;
+
+        const nextRange = document.createRange();
+        nextRange.setStart(position.offsetNode, position.offset);
+        nextRange.collapse(true);
+        return nextRange;
+      }
+
+      if (caretDocument.caretRangeFromPoint) {
+        return caretDocument.caretRangeFromPoint(point.x, point.y);
+      }
+
+      return null;
+    })();
+
+    if (!range || !input.contains(range.startContainer)) {
+      setSignatureCaretToEnd(input);
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
+
+  useEffect(() => {
+    if (!signatureEditing) return;
+
+    const input = signatureInputRef.current;
+    if (!input) return;
+
+    const clickPoint = signatureClickPointRef.current;
+    input.textContent = signatureDraft;
+    input.focus();
+
+    if (clickPoint) {
+      setSignatureCaretFromPoint(input, clickPoint);
+      signatureClickPointRef.current = null;
+    } else {
+      setSignatureCaretToEnd(input);
+    }
+    // 只在进入编辑时同步 DOM 文本，避免输入过程中重置光标位置。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signatureEditing]);
+
+  const handleSignatureInput = () => {
+    const input = signatureInputRef.current;
+    if (!input) return;
+
+    const nextValue = input.innerText.replace(/\n+$/g, '').slice(0, PROFILE_SIGNATURE_MAX_LENGTH);
+    if (nextValue !== input.innerText) {
+      input.textContent = nextValue;
+      const range = document.createRange();
+      range.selectNodeContents(input);
+      range.collapse(false);
+      const selection = window.getSelection();
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    setSignatureDraft(nextValue);
+  };
+
+  const saveSignature = async () => {
+    if (signatureSaving) return;
+
+    const nextSignature = signatureDraft;
+    setSignatureEditing(false);
+
+    if (nextSignature === signature) {
+      return;
+    }
+
+    setSignatureSaving(true);
+    try {
+      await apiPatch('/api/users/me', { signature: nextSignature });
+      await refreshAuth();
+      toast.show('签名已保存');
+    } catch (error) {
+      console.error('Error updating signature:', error);
+      setSignatureDraft(signature);
+      toast.show(error instanceof Error ? error.message : '签名保存失败', { variant: 'error' });
+    } finally {
+      setSignatureSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!user || activeTab !== 'favorites') return;
@@ -232,9 +366,58 @@ const Profile = () => {
                 <h1 className="truncate text-3xl font-semibold text-text-primary">
                   {displayName}
                 </h1>
-                <p className="mt-3 max-w-[68ch] whitespace-pre-wrap break-words text-sm leading-7 text-text-muted">
-                  {signature || '这位粉丝很神秘，还没有写下任何签名...'}
-                </p>
+                {signatureEditing ? (
+                  <div
+                    ref={signatureInputRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    aria-label="编辑签名"
+                    role="textbox"
+                    className={clsx(
+                      SIGNATURE_TEXT_CLASS,
+                      SIGNATURE_VISIBLE_FRAME_CLASS,
+                      'min-h-[1.75rem] cursor-text outline-none'
+                    )}
+                    data-placeholder={SIGNATURE_PLACEHOLDER}
+                    onInput={handleSignatureInput}
+                    onBlur={() => {
+                      void saveSignature();
+                    }}
+                    onCompositionStart={() => {
+                      signatureComposingRef.current = true;
+                    }}
+                    onCompositionEnd={() => {
+                      signatureComposingRef.current = false;
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' || signatureComposingRef.current) {
+                        return;
+                      }
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className={clsx(
+                      SIGNATURE_TEXT_CLASS,
+                      SIGNATURE_HOVER_FRAME_CLASS,
+                      'cursor-text outline-none'
+                    )}
+                    onClick={(event) => {
+                      if (!signatureSaving) {
+                        signatureClickPointRef.current = {
+                          x: event.clientX,
+                          y: event.clientY,
+                        };
+                        setSignatureEditing(true);
+                      }
+                    }}
+                  >
+                    {displaySignature || SIGNATURE_PLACEHOLDER}
+                  </button>
+                )}
               </div>
             </div>
 
