@@ -2,6 +2,7 @@ import type { NotificationItem } from '../types/entities'
 
 interface ReviewNotificationPayload {
   approved?: boolean
+  action?: 'deleted'
   targetType?: 'wiki' | 'post'
   targetId?: string
   title?: string
@@ -33,21 +34,17 @@ export function getNotificationText(notif: NotificationItem) {
     case 'review_result': {
       const payload = notif.payload as ReviewNotificationPayload
       const target =
-        payload.targetType === 'wiki'
-          ? '百科'
-          : payload.targetType === 'post'
-            ? '帖子'
-            : '内容'
+        payload.targetType === 'wiki' ? '百科' : payload.targetType === 'post' ? '帖子' : '内容'
       const title =
-        typeof payload.title === 'string' && payload.title.trim()
-          ? `《${payload.title}》`
-          : ''
+        typeof payload.title === 'string' && payload.title.trim() ? `《${payload.title}》` : ''
       const base =
-        payload.approved === true
-          ? `已通过你的${target}编辑审核`
-          : `已驳回你的${target}编辑审核`
+        payload.action === 'deleted'
+          ? `你的${target}已被删除`
+          : payload.approved === true
+            ? `已通过你的${target}编辑审核`
+            : `已驳回你的${target}编辑审核`
 
-      if (payload.approved === true) {
+      if (payload.approved === true && payload.action !== 'deleted') {
         return `${base}${title ? `：${title}` : ''}`
       }
 

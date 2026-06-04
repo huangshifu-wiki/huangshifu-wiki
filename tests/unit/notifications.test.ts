@@ -23,9 +23,9 @@ describe('getNotificationLink', () => {
   })
 
   it('routes a post reply/like (targetType=post) to the forum detail page', () => {
-    expect(getNotificationLink(makeNotification('reply', { targetType: 'post', postId: 'p1' }))).toBe(
-      '/forum/p1'
-    )
+    expect(
+      getNotificationLink(makeNotification('reply', { targetType: 'post', postId: 'p1' }))
+    ).toBe('/forum/p1')
     expect(getNotificationLink(makeNotification('like', { postId: 'p1' }))).toBe('/forum/p1')
   })
 
@@ -90,7 +90,9 @@ describe('getNotificationText', () => {
   })
 
   it('falls back to id-key presence for legacy payloads without targetType', () => {
-    expect(getNotificationText(makeNotification('reply', { galleryId: 'g1' }))).toBe('回复了你的图集')
+    expect(getNotificationText(makeNotification('reply', { galleryId: 'g1' }))).toBe(
+      '回复了你的图集'
+    )
     expect(getNotificationText(makeNotification('reply', { postId: 'p1' }))).toBe('回复了你的帖子')
   })
 
@@ -101,5 +103,28 @@ describe('getNotificationText', () => {
         makeNotification('review_result', { targetType: 'wiki', approved: true, title: '测试条目' })
       )
     ).toContain('已通过你的百科编辑审核')
+  })
+
+  it('renders wiki deletion review_result text with optional reason', () => {
+    expect(
+      getNotificationText(
+        makeNotification('review_result', {
+          targetType: 'wiki',
+          action: 'deleted',
+          title: '测试条目',
+          note: '重复内容',
+        })
+      )
+    ).toBe('你的百科已被删除：《测试条目》（原因：重复内容）')
+
+    expect(
+      getNotificationText(
+        makeNotification('review_result', {
+          targetType: 'wiki',
+          action: 'deleted',
+          title: '测试条目',
+        })
+      )
+    ).toBe('你的百科已被删除：《测试条目》')
   })
 })
