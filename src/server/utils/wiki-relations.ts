@@ -17,7 +17,7 @@ import { WIKI_RELATION_SCAN_LIMIT } from '../types';
 import { prisma } from './config';
 import { parseBoolean, normalizeWikiSlug } from './parsers';
 import { canViewWikiPage, buildWikiVisibilityWhere } from './authorization';
-import { enhancedCache } from './cache';
+import { EnhancedCache, enhancedCache } from './cache';
 
 // ---------------------------------------------------------------------------
 // 常量
@@ -380,11 +380,16 @@ export async function findWikiRelationCenterPage(slug: string, authUser?: ApiUse
 }
 
 export function clearWikiRelationCache() {
-  enhancedCache.delete('wiki_relation_bundle')
+  enhancedCache.invalidateByPrefix('wiki_relation_bundle:')
 }
 
 export async function buildWikiRelationBundle(centerPage: WikiRelationPageLite, authUser?: ApiUser): Promise<WikiRelationBundle> {
-  const cacheKey = 'wiki_relation_bundle'
+  const visibilityKey = authUser ? `user:${authUser.uid}:${authUser.role}:${authUser.status}` : 'public'
+  const cacheKey = EnhancedCache.generateKey(
+    'wiki_relation_bundle',
+    centerPage.slug,
+    visibilityKey
+  )
   const cached = enhancedCache.get<WikiRelationBundle>(cacheKey)
   if (cached) return cached
 

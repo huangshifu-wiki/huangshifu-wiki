@@ -1,8 +1,24 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
+  buildWikiRelationBundle,
+  clearWikiRelationCache,
   normalizeWikiRelationList,
   normalizeWikiRelationListForWrite,
 } from '../../src/server/utils/wiki-relations';
+import type { WikiRelationPageLite } from '../../src/server/types';
+import { prisma } from '../../src/server/utils/config';
+
+vi.mock('../../src/server/utils/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/server/utils/config')>();
+  return {
+    ...actual,
+    prisma: {
+      wikiPage: {
+        findMany: vi.fn(),
+      },
+    },
+  };
+});
 
 const validRelation = {
   type: 'related_person',
@@ -174,5 +190,62 @@ describe('normalizeWikiRelationList', () => {
     const longLabel = { ...validRelation, label: 'a'.repeat(100) };
     const result = normalizeWikiRelationList([longLabel]);
     expect(result[0].label).toHaveLength(60);
+  });
+});
+
+describe('buildWikiRelationBundle', () => {
+  beforeEach(() => {
+    vi.mocked(prisma.wikiPage.findMany).mockReset();
+    clearWikiRelationCache();
+  });
+
+  it('keeps relation graph cache isolated by center page slug', async () => {
+    const emptyPage: WikiRelationPageLite = {
+      slug: 'empty-page',
+      title: 'Empty Page',
+      category: 'general',
+      status: 'published',
+      lastEditorUid: 'author',
+      relations: [],
+    };
+    const relatedPage: WikiRelationPageLite = {
+      slug: 'related-page',
+      title: 'Related Page',
+      category: 'general',
+      status: 'published',
+      lastEditorUid: 'author',
+      relations: [
+        {
+          type: 'related_person',
+          targetSlug: 'target-page',
+          label: '关联页面',
+          bidirectional: true,
+        },
+      ],
+    };
+    const targetPage: WikiRelationPageLite = {
+      slug: 'target-page',
+      title: 'Target Page',
+      category: 'general',
+      status: 'published',
+      lastEditorUid: 'author',
+      relations: [],
+    };
+
+    vi.mocked(prisma.wikiPage.findMany).mockImplementation((async (args: any) => {
+      const requestedSlugs = args?.where?.slug?.in as string[] | undefined;
+      if (requestedSlugs) {
+        return [relatedPage, targetPage].filter((page) => requestedSlugs.includes(page.slug));
+      }
+      return [emptyPage, relatedPage, targetPage];
+    }) as any);
+
+    const emptyBundle = await buildWikiRelationBundle(emptyPage);
+    const relatedBundle = await buildWikiRelationBundle(relatedPage);
+
+    expect(emptyBundle.graph.edges).toHaveLength(0);
+    expect(relatedBundle.graph.edges).toHaveLength(1);
+    expect(relatedBundle.relations).toHaveLength(1);
+    expect(relatedBundle.graph.nodes.map((node) => node.slug)).toContain('target-page');
   });
 });

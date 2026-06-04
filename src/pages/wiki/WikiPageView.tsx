@@ -26,6 +26,7 @@ import { copyToClipboard, toAbsoluteInternalUrl } from "../../lib/copyLink";
 import { apiGet, apiPost } from "../../lib/apiClient";
 import { getStatusClassName, getStatusText } from "../../lib/contentUtils";
 import { formatDate } from "../../lib/dateUtils";
+import { buildMiniRelationGraphData } from "../../lib/wikiRelationGraph";
 import { getWikiRelationDisplayTitle } from "../../lib/wikiRelationDisplay";
 import { getWikiSubmitButtonText } from "../../lib/wikiWriteText";
 import WikiMarkdown from "./WikiMarkdown";
@@ -44,6 +45,31 @@ const hasExpandableRelationGraph = (
 ) => {
 	if (!graph || graph.edges.length === 0) return false;
 	return graph.nodes.some((node) => node.slug !== currentSlug);
+};
+
+const buildDirectRelationGraph = (
+	page: WikiItem,
+	relations: WikiRelationDisplayItem[],
+): RelationGraphData | null => {
+	if (relations.length === 0) return null;
+
+	const metadata = new Map(
+		relations.map((relation) => [
+			relation.targetSlug,
+			{
+				slug: relation.targetSlug,
+				title: getWikiRelationDisplayTitle(relation),
+				category: relation.targetCategory || "",
+			},
+		]),
+	);
+
+	return buildMiniRelationGraphData({
+		relations,
+		metadata,
+		currentSlug: page.slug,
+		currentTitle: page.title,
+	});
 };
 
 const WikiPageView = () => {
@@ -125,7 +151,11 @@ const WikiPageView = () => {
 	const canEditPage = Boolean(!isBanned && (isOwner || isAdmin));
 	const displayedRelations: WikiRelationDisplayItem[] =
 		resolvedRelations.length > 0 ? resolvedRelations : page.relations || [];
-	const canShowRelationGraph = hasExpandableRelationGraph(relationGraph, slug);
+	const directRelationGraph = buildDirectRelationGraph(page, displayedRelations);
+	const expandableRelationGraph = hasExpandableRelationGraph(relationGraph, slug)
+		? relationGraph
+		: directRelationGraph;
+	const canShowRelationGraph = hasExpandableRelationGraph(expandableRelationGraph, slug);
 	const canSubmitReview = Boolean(
 		!isBanned &&
 			canEditPage &&
@@ -271,7 +301,7 @@ const WikiPageView = () => {
 						</div>
 
 						{/* Relation Graph */}
-						{showGraph && canShowRelationGraph && relationGraph && (
+						{showGraph && canShowRelationGraph && expandableRelationGraph && (
 							<div className="mt-12 pt-8 border-t border-border">
 								<div className="flex items-center justify-between mb-5">
 									<h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
@@ -280,7 +310,7 @@ const WikiPageView = () => {
 									<span className="text-xs text-text-muted">{t('wiki.graphClickHint')}</span>
 								</div>
 								<RelationGraph
-									graph={relationGraph}
+									graph={expandableRelationGraph}
 									currentSlug={slug || ""}
 									onNodeClick={(nodeSlug) => navigate(`/wiki/${nodeSlug}`)}
 								/>
