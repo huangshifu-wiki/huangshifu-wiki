@@ -110,11 +110,12 @@ const WikiPageView = () => {
 		);
 
 	const isOwner = Boolean(user && page?.lastEditorUid === user.uid);
+	const canEditPage = Boolean(!isBanned && (isOwner || isAdmin));
 	const displayedRelations: WikiRelationDisplayItem[] =
 		resolvedRelations.length > 0 ? resolvedRelations : page.relations || [];
 	const canSubmitReview = Boolean(
 		!isBanned &&
-			isOwner &&
+			canEditPage &&
 			page &&
 			(page.status === "draft" || page.status === "rejected"),
 	);
@@ -173,7 +174,7 @@ const WikiPageView = () => {
 							{page.title}
 						</h1>
 						<div className="flex flex-wrap gap-2">
-							{isOwner && (page.category !== "music" || isAdmin) && (
+							{canEditPage && (page.category !== "music" || isAdmin) && (
 								<Link
 									to={`/wiki/${slug}/edit`}
 									className="px-4 py-2 text-[0.9375rem] rounded theme-button-primary transition-all flex items-center gap-2"
@@ -181,7 +182,7 @@ const WikiPageView = () => {
 									<Edit3 size={16} /> {t('wiki.edit')}
 								</Link>
 							)}
-							{isOwner && (page.category !== "music" || isAdmin) && (
+							{canEditPage && (page.category !== "music" || isAdmin) && (
 								<Link
 									to={`/wiki/${slug}/history`}
 									className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"

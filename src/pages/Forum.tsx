@@ -579,7 +579,7 @@ const PostDetail = () => {
   const canSubmitReview = Boolean(
     !isBanned && isOwner && post && (post.status === 'draft' || post.status === 'rejected')
   )
-  const canEditPost = Boolean(!isBanned && isOwner)
+  const canEditPost = Boolean(!isBanned && (isOwner || isAdmin))
   const canComment = post.status === 'published'
   const canDeleteComment = (comment: CommentItem) =>
     Boolean(user && !comment.isDeleted && (comment.authorUid === user.uid || isAdmin))
@@ -1138,7 +1138,7 @@ const PostEditor = () => {
           return
         }
 
-        if (!user || data.post.authorUid !== user.uid) {
+        if (!user || (data.post.authorUid !== user.uid && !isAdmin)) {
           show(t('forum.noEditPermission'), { variant: 'error' })
           return
         }
@@ -1160,7 +1160,7 @@ const PostEditor = () => {
     }
 
     fetchEditingPost()
-  }, [authLoading, isEditing, navigate, postId, show, user])
+  }, [authLoading, isAdmin, isEditing, navigate, postId, show, user])
 
   const handleSubmit = async (status: 'draft' | 'pending') => {
     if (!user) return
