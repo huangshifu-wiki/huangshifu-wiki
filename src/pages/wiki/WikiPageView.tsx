@@ -38,6 +38,14 @@ import type {
 	WikiRelationDisplayItem,
 } from "./types";
 
+const hasExpandableRelationGraph = (
+	graph: RelationGraphData | null,
+	currentSlug?: string,
+) => {
+	if (!graph || graph.edges.length === 0) return false;
+	return graph.nodes.some((node) => node.slug !== currentSlug);
+};
+
 const WikiPageView = () => {
 	const { slug } = useParams();
 	const navigate = useNavigate();
@@ -78,7 +86,11 @@ const WikiPageView = () => {
 				setPage(data.page);
 				setBacklinks(data.backlinks || []);
 				setResolvedRelations((data.relations || []).filter((relation) => !relation.inferred));
-				setRelationGraph(data.relationGraph || null);
+				const nextRelationGraph = data.relationGraph || null;
+				setRelationGraph(nextRelationGraph);
+				if (!hasExpandableRelationGraph(nextRelationGraph, slug)) {
+					setShowGraph(false);
+				}
 				if (!data.page.content) {
 					console.warn('[WikiPageView] API returned empty content:', {
 						slug,
@@ -113,6 +125,7 @@ const WikiPageView = () => {
 	const canEditPage = Boolean(!isBanned && (isOwner || isAdmin));
 	const displayedRelations: WikiRelationDisplayItem[] =
 		resolvedRelations.length > 0 ? resolvedRelations : page.relations || [];
+	const canShowRelationGraph = hasExpandableRelationGraph(relationGraph, slug);
 	const canSubmitReview = Boolean(
 		!isBanned &&
 			canEditPage &&
@@ -258,7 +271,7 @@ const WikiPageView = () => {
 						</div>
 
 						{/* Relation Graph */}
-						{showGraph && relationGraph && (
+						{showGraph && canShowRelationGraph && relationGraph && (
 							<div className="mt-12 pt-8 border-t border-border">
 								<div className="flex items-center justify-between mb-5">
 									<h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
@@ -405,17 +418,19 @@ const WikiPageView = () => {
 									<Pin size={15} /> {page.isPinned ? t('wiki.pinned') : t('wiki.pin')}
 								</button>
 							)}
-							<button
-								onClick={() => setShowGraph(!showGraph)}
-								className={clsx(
-									"w-full mt-2 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
-									showGraph
-										? "bg-[var(--color-theme-accent)] text-white border border-transparent"
-										: "bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold",
-								)}
-							>
-								<Network size={15} /> {showGraph ? t('wiki.collapseGraph') : t('wiki.expandGraph')}
-							</button>
+							{canShowRelationGraph && (
+								<button
+									onClick={() => setShowGraph(!showGraph)}
+									className={clsx(
+										"w-full mt-2 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+										showGraph
+											? "bg-[var(--color-theme-accent)] text-white border border-transparent"
+											: "bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold",
+									)}
+								>
+									<Network size={15} /> {showGraph ? t('wiki.collapseGraph') : t('wiki.expandGraph')}
+								</button>
+							)}
 						</div>
 
 						{/* Status */}
