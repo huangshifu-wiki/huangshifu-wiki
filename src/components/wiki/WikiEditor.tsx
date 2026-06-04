@@ -40,6 +40,7 @@ const WikiEditor = () => {
     locationName: '',
   })
   const [savingMode, setSavingMode] = useState<'draft' | 'pending' | null>(null)
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
   const { show } = useToast()
@@ -258,12 +259,18 @@ const WikiEditor = () => {
             savingMode={savingMode}
             isAdmin={isAdmin}
             onSubmit={handleSubmit}
+            showAdvancedToggle={!isNew && isAdmin}
+            showAdvancedOptions={showAdvancedOptions}
+            onToggleAdvancedOptions={() => setShowAdvancedOptions((value) => !value)}
           />
         </form>
 
-        {!isNew && isAdmin && (
-          <section className="mt-12 border-t border-danger/30 pt-6 text-left">
-            <div className="max-w-[520px]">
+        {!isNew && isAdmin && showAdvancedOptions && (
+          <section className="mt-4 flex justify-start text-left">
+            <div
+              id="wiki-advanced-options"
+              className="max-w-[520px] rounded border border-danger/30 bg-surface/60 p-5"
+            >
               <h2 className="text-base font-bold text-danger tracking-[0.08em]">
                 {t('wiki.deleteZoneTitle')}
               </h2>
@@ -278,7 +285,6 @@ const WikiEditor = () => {
                 id="wiki-delete-reason"
                 value={deleteReason}
                 onChange={(event) => setDeleteReason(event.target.value)}
-                placeholder={t('wiki.deleteReasonPlaceholder')}
                 maxLength={1000}
                 rows={3}
                 className="mt-2 w-full rounded border border-border bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-danger"
