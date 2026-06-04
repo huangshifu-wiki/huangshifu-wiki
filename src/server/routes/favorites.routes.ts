@@ -36,7 +36,13 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
 
     const [wikiPages, posts, songs] = await Promise.all([
       wikiIds.length
-        ? prisma.wikiPage.findMany({ where: { slug: { in: wikiIds } } })
+        ? prisma.wikiPage.findMany({
+            where: { slug: { in: wikiIds } },
+            include: {
+              lastEditor: { select: { displayName: true } },
+              location: true,
+            },
+          })
         : Promise.resolve([]),
       postIds.length
         ? prisma.post.findMany({ where: { id: { in: postIds } } })

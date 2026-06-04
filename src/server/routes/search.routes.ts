@@ -161,6 +161,7 @@ async function fetchWikiData(slugs: string[], authUser?: ApiUser): Promise<Map<s
       ...buildWikiVisibilityWhere(authUser),
     },
     include: {
+      lastEditor: { select: { displayName: true } },
       location: true,
     },
   });

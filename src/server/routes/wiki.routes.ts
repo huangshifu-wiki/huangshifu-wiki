@@ -46,6 +46,11 @@ import { wikiWriteLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
+const wikiPageResponseInclude = {
+  lastEditor: { select: { displayName: true } },
+  location: true,
+} satisfies Prisma.WikiPageInclude;
+
 function sendWikiUniqueConflict(error: unknown, res: Response) {
   const message = getWikiUniqueConflictMessage(error);
   if (!message) {
@@ -442,17 +447,7 @@ router.get('/recommended', asyncHandler(async (req: AuthenticatedRequest, res) =
         ...visibilityWhere,
         ...(slug ? { slug: { not: slug } } : {}),
       },
-      select: {
-      slug: true,
-      title: true,
-      category: true,
-      favoritesCount: true,
-        viewCount: true,
-        updatedAt: true,
-        eventDate: true,
-        status: true,
-        tags: true,
-      },
+      include: wikiPageResponseInclude,
       orderBy: [{ favoritesCount: 'desc' }, { viewCount: 'desc' }, { updatedAt: 'desc' }],
       take: Math.min(limit + 10, 50),
     });
@@ -533,6 +528,7 @@ router.get('/:slug', validateWikiSlugParam, asyncHandler(async (req: Authenticat
 
     const page = await prisma.wikiPage.findUnique({
       where: { slug },
+      include: wikiPageResponseInclude,
     });
 
     if (!page || !canViewWikiPage(page, req.authUser)) {
@@ -969,6 +965,7 @@ router.post('/:slug/submit', wikiWriteLimiter, requireAuth, requireActiveUser, v
       const [published] = await prisma.$transaction([
         prisma.wikiPage.update({
           where: { slug },
+          include: wikiPageResponseInclude,
           data: {
             status: 'published',
             reviewNote: null,
@@ -996,6 +993,7 @@ router.post('/:slug/submit', wikiWriteLimiter, requireAuth, requireActiveUser, v
     const [updated] = await prisma.$transaction([
       prisma.wikiPage.update({
         where: { slug },
+        include: wikiPageResponseInclude,
         data: {
           status: 'pending',
           reviewNote: note || null,
@@ -1079,6 +1077,7 @@ router.post('/', wikiWriteLimiter, requireAuth, requireActiveUser, json({ limit:
 
     const page = await prisma.$transaction(async (tx) => {
       const createdPage = await tx.wikiPage.create({
+        include: wikiPageResponseInclude,
         data: {
           slug: pageSlug,
           title: title!,
@@ -1239,6 +1238,7 @@ router.put('/:slug', wikiWriteLimiter, requireAuth, requireActiveUser, validateW
     const updated = await prisma.$transaction(async (tx) => {
       const updatedPage = await tx.wikiPage.update({
         where: { slug: req.params.slug },
+        include: wikiPageResponseInclude,
         data: {
           title,
           titleKey,
@@ -1962,7 +1962,10 @@ router.post('/pull-requests/:prId/merge', wikiWriteLimiter, requireAuth, require
       }),
     ]);
 
-    const updatedPage = await prisma.wikiPage.findUnique({ where: { slug: pr.pageSlug } });
+    const updatedPage = await prisma.wikiPage.findUnique({
+      where: { slug: pr.pageSlug },
+      include: wikiPageResponseInclude,
+    });
     clearWikiPageCache(pr.pageSlug);
     res.json({ page: updatedPage ? toWikiResponse(updatedPage) : null });
   } catch (error) {
@@ -2170,6 +2173,7 @@ router.post('/:slug/rollback/:revisionId', wikiWriteLimiter, requireAuth, requir
 
     const page = await prisma.wikiPage.update({
       where: { slug: req.params.slug },
+      include: wikiPageResponseInclude,
       data: {
         title: revision.title,
         titleKey: rollbackTitleKey,

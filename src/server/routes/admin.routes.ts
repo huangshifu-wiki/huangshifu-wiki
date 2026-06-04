@@ -159,6 +159,10 @@ async function handleReviewAction(
   if (targetType === 'wiki') {
     const page = await prisma.wikiPage.update({
       where: { slug: targetId },
+      include: {
+        lastEditor: { select: { displayName: true } },
+        location: true,
+      },
       data: {
         status: action === 'approve' ? 'published' : 'rejected',
         reviewNote: action === 'approve' ? (note || null) : rejectNote,
@@ -1375,7 +1379,13 @@ router.get('/:tab/:id', requireAdmin, asyncHandler(async (req: AuthenticatedRequ
     const id = req.params.id;
 
     if (tab === 'wiki') {
-      const item = await prisma.wikiPage.findUnique({ where: { id } });
+      const item = await prisma.wikiPage.findUnique({
+        where: { id },
+        include: {
+          lastEditor: { select: { displayName: true } },
+          location: true,
+        },
+      });
       if (!item) {
         res.status(404).json({ error: '记录不存在' });
         return;
