@@ -15,6 +15,11 @@ const RESTORED_WIKI_LINKABLE_STATUSES = new Set(['draft', 'pending', 'published'
 
 type ReplyTarget = { kind: 'post' | 'gallery'; id: string }
 
+function getPayloadText(payload: NotificationItem['payload'], key: string) {
+  const value = payload[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 // reply/like 通知的目标：优先读显式 targetType，旧 payload 回退到 id 字段是否存在。
 // 单一来源，供文案与链接共用，避免两处判定不一致。
 function resolveReplyTarget(payload: NotificationItem['payload']): ReplyTarget | null {
@@ -31,10 +36,16 @@ export function getNotificationText(notif: NotificationItem) {
     case 'reply': {
       const target = resolveReplyTarget(notif.payload)
       const noun = target?.kind === 'gallery' ? '图集' : '帖子'
-      return '回复了你的' + (notif.payload.parentId ? '评论' : noun)
+      const targetText = notif.payload.parentId ? '评论' : noun
+      const actorName = getPayloadText(notif.payload, 'actorName')
+      const preview = getPayloadText(notif.payload, 'preview')
+      const base = `${actorName ? `${actorName} ` : ''}回复了你的${targetText}`
+      return preview ? `${base}：${preview}` : base
     }
-    case 'like':
-      return '赞了你的帖子'
+    case 'like': {
+      const actorName = getPayloadText(notif.payload, 'actorName')
+      return `${actorName ? `${actorName} ` : ''}赞了你的帖子`
+    }
     case 'review_result': {
       const payload = notif.payload as ReviewNotificationPayload
       const target =

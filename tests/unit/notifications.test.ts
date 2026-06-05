@@ -156,8 +156,37 @@ describe('getNotificationText', () => {
     expect(getNotificationText(makeNotification('reply', { postId: 'p1' }))).toBe('回复了你的帖子')
   })
 
+  it('renders reply actor and content preview when available', () => {
+    expect(
+      getNotificationText(
+        makeNotification('reply', {
+          targetType: 'post',
+          postId: 'p1',
+          parentId: 'c1',
+          actorName: '黄诗扶',
+          preview: '这是一条回复内容',
+        })
+      )
+    ).toBe('黄诗扶 回复了你的评论：这是一条回复内容')
+
+    expect(
+      getNotificationText(
+        makeNotification('reply', {
+          targetType: 'gallery',
+          galleryId: 'g1',
+          parentId: null,
+          actorName: '黄诗扶',
+          preview: '图集评论内容',
+        })
+      )
+    ).toBe('黄诗扶 回复了你的图集：图集评论内容')
+  })
+
   it('renders like and review_result text', () => {
     expect(getNotificationText(makeNotification('like', { postId: 'p1' }))).toBe('赞了你的帖子')
+    expect(getNotificationText(makeNotification('like', { postId: 'p1', actorName: '黄诗扶' }))).toBe(
+      '黄诗扶 赞了你的帖子'
+    )
     expect(
       getNotificationText(
         makeNotification('review_result', { targetType: 'wiki', approved: true, title: '测试条目' })
