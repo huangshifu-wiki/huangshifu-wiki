@@ -91,6 +91,14 @@ export function getNotificationLink(notif: NotificationItem) {
     }
 
     if (payload.targetType === 'post' && typeof payload.targetId === 'string') {
+      if (payload.action === 'deleted') {
+        return null
+      }
+
+      if (payload.action === 'restored' && typeof payload.linkable === 'boolean') {
+        return payload.linkable ? `/forum/${payload.targetId}` : null
+      }
+
       return `/forum/${payload.targetId}`
     }
   }

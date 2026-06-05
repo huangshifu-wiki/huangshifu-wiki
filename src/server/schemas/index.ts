@@ -7,5 +7,5 @@ export {
   wikiDeleteSchema,
   wikiRevisionSchema,
 } from './wiki.schema'
-export { postCreateSchema, postUpdateSchema, postCommentSchema } from './post.schema'
+export { postCreateSchema, postUpdateSchema, postDeleteSchema, postCommentSchema } from './post.schema'
 export { backupRestoreSchema, adminResetUserPasswordSchema } from './admin.schema'

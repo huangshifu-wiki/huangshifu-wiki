@@ -2,7 +2,13 @@ import { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { requireAuth, requireAdmin, requireActiveUser, isAdminRole } from '../middleware/auth';
 import { postWriteLimiter } from '../middleware/rateLimiter';
-import { validateBody, postCreateSchema, postUpdateSchema, postCommentSchema } from '../schemas';
+import {
+  validateBody,
+  postCreateSchema,
+  postUpdateSchema,
+  postDeleteSchema,
+  postCommentSchema,
+} from '../schemas';
 import {
   prisma,
   toPostResponse,
@@ -485,37 +491,69 @@ router.put('/:id', postWriteLimiter, requireAuth, requireActiveUser, validateBod
 });
 
 // Delete post
-router.delete('/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const post = await prisma.post.findUnique({
-      where: { id: req.params.id },
-      select: { authorUid: true, status: true, deletedAt: true },
-    });
+router.delete(
+  '/:id',
+  requireAuth,
+  requireActiveUser,
+  validateBody(postDeleteSchema),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() || null : null;
+      const post = await prisma.post.findUnique({
+        where: { id: req.params.id },
+        select: { authorUid: true, title: true, status: true, deletedAt: true },
+      });
 
-    if (!post || post.deletedAt) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
+      if (!post || post.deletedAt) {
+        res.status(404).json({ error: '帖子未找到' });
+        return;
+      }
+
+      const isOwner = post.authorUid === req.authUser!.uid;
+      const isAdmin = isAdminRole(req.authUser!.role);
+      if (!isOwner && !isAdmin) {
+        res.status(403).json({ error: '无权删除该帖子' });
+        return;
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.post.update({
+          where: { id: req.params.id },
+          data: softDeleteData(req.authUser!.uid),
+        });
+
+        await tx.moderationLog.create({
+          data: {
+            targetType: 'post',
+            targetId: req.params.id,
+            action: 'delete',
+            operatorUid: req.authUser!.uid,
+            note: reason,
+          },
+        });
+      });
+
+      if (post.authorUid !== req.authUser!.uid) {
+        await createNotification(post.authorUid, 'review_result', {
+          approved: false,
+          action: 'deleted',
+          targetType: 'post',
+          targetId: req.params.id,
+          title: post.title,
+          note: reason,
+          operatorUid: req.authUser!.uid,
+          operatorName: req.authUser!.displayName,
+        });
+      }
+
+      res.json({ success: true });
+      enhancedCache.invalidateByPrefix('post_list:');
+    } catch (error) {
+      console.error('Delete post error:', error);
+      res.status(500).json({ error: '删除帖子失败' });
     }
-
-    const isOwner = post.authorUid === req.authUser!.uid;
-    const isAdmin = isAdminRole(req.authUser!.role);
-    if (!isOwner && !isAdmin) {
-      res.status(403).json({ error: '无权删除该帖子' });
-      return;
-    }
-
-    await prisma.post.update({
-      where: { id: req.params.id },
-      data: softDeleteData(req.authUser!.uid),
-    });
-
-    res.json({ success: true });
-    enhancedCache.invalidateByPrefix('post_list:');
-  } catch (error) {
-    console.error('Delete post error:', error);
-    res.status(500).json({ error: '删除帖子失败' });
   }
-});
+);
 
 // Comment routes
 router.get('/:postId/comments', async (req: AuthenticatedRequest, res) => {

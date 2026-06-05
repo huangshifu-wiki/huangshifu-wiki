@@ -1609,7 +1609,8 @@ describe('Posts API - 文章接口测试', () => {
       );
       const response = await agent
         .delete(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken);
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ reason: '作者自行删除' });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('success', true);
@@ -1618,6 +1619,17 @@ describe('Posts API - 文章接口测试', () => {
       dbPost = await prisma.post.findUnique({ where: { id: post.id } });
       expect(dbPost?.deletedAt).not.toBeNull();
       expect(dbPost?.deletedBy).toBe(testUser.user.uid);
+
+      const moderationLog = await prisma.moderationLog.findFirst({
+        where: {
+          targetType: 'post',
+          targetId: post.id,
+          action: 'delete',
+        },
+      });
+      expect(moderationLog).not.toBeNull();
+      expect(moderationLog?.operatorUid).toBe(testUser.user.uid);
+      expect(moderationLog?.note).toBe('作者自行删除');
     });
 
     /**
@@ -1665,7 +1677,8 @@ describe('Posts API - 文章接口测试', () => {
       );
       const response = await agent
         .delete(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken);
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ reason: '管理员删除违规内容' });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('success', true);
@@ -1674,6 +1687,23 @@ describe('Posts API - 文章接口测试', () => {
       const dbPost = await prisma.post.findUnique({ where: { id: post.id } });
       expect(dbPost?.deletedAt).not.toBeNull();
       expect(dbPost?.deletedBy).toBe(adminUser.user.uid);
+
+      const notification = await prisma.notification.findFirst({
+        where: {
+          userUid: testUser.user.uid,
+          type: 'review_result',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(notification).not.toBeNull();
+      const payload = notification!.payload as Record<string, unknown>;
+      expect(payload.action).toBe('deleted');
+      expect(payload.approved).toBe(false);
+      expect(payload.targetType).toBe('post');
+      expect(payload.targetId).toBe(post.id);
+      expect(payload.title).toBe(post.title);
+      expect(payload.note).toBe('管理员删除违规内容');
+      expect(payload.operatorUid).toBe(adminUser.user.uid);
     });
 
     /**

@@ -21,6 +21,12 @@ export const postCreateSchema = z.object({
 
 export const postUpdateSchema = postCreateSchema
 
+export const postDeleteSchema = z
+  .object({
+    reason: optionalLimitedString('删除理由', CONTENT_LIMITS.post.reviewNote),
+  })
+  .default({})
+
 export const postCommentSchema = z.object({
   content: limitedString('评论内容', CONTENT_LIMITS.post.comment).min(1, '评论内容不能为空'),
   parentId: nullableLimitedString('父评论 ID', CONTENT_LIMITS.admin.editLockRecordId),

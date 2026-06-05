@@ -21,6 +21,7 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  ChevronDown,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import MarkdownEditor from '../components/MarkdownEditor'
@@ -1094,6 +1095,10 @@ const PostEditor = () => {
   })
   const [savingMode, setSavingMode] = useState<'draft' | 'pending' | null>(null)
   const [loadingPost, setLoadingPost] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
+  const [editablePostAuthorUid, setEditablePostAuthorUid] = useState<string | null>(null)
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const { show } = useToast()
 
   useEffect(() => {
@@ -1143,6 +1148,7 @@ const PostEditor = () => {
           return
         }
 
+        setEditablePostAuthorUid(data.post.authorUid)
         setFormData({
           title: data.post.title,
           section: data.post.section,
@@ -1227,10 +1233,38 @@ const PostEditor = () => {
     }
   }
 
+  const handleDelete = async () => {
+    if (!postId || !isEditing || !editablePostAuthorUid || isDeleting) return
+    if (!user || (editablePostAuthorUid !== user.uid && !isAdmin)) return
+
+    if (!window.confirm(t('forum.deletePostConfirm', { title: formData.title || postId }))) {
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      const reason = deleteReason.trim()
+      await apiDelete(`/api/posts/${postId}`, reason ? { reason } : {})
+      invalidateApiCacheByPrefix('/api/posts')
+      show(t('forum.postDeleted'), { variant: 'success' })
+      navigate('/forum')
+    } catch (error) {
+      console.error('Error deleting post:', error)
+      show(error instanceof Error ? error.message : t('forum.deletePostFailed'), {
+        variant: 'error',
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const submitButtonText =
     savingMode === 'pending'
       ? t(isAdmin ? 'forum.publishing' : 'forum.submitting')
       : t(isAdmin ? 'forum.publishPost' : 'forum.submitReview')
+  const canManageEditablePost = Boolean(
+    isEditing && editablePostAuthorUid && user && (editablePostAuthorUid === user.uid || isAdmin)
+  )
 
   if (loadingPost) {
     return <PageSkeleton variant="forum" />
@@ -1363,24 +1397,79 @@ const PostEditor = () => {
             </div>
           </div>
 
-          <div className="pt-6 flex flex-wrap justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => handleSubmit('draft')}
-              disabled={Boolean(savingMode)}
-              className="px-6 py-2.5 bg-surface-alt text-text-secondary border border-border rounded text-sm font-medium hover:border-brand-gold hover:text-brand-gold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save size={16} /> {savingMode === 'draft' ? t('forum.saving') : t('forum.saveDraft')}
-            </button>
-            <button
-              type="submit"
-              disabled={Boolean(savingMode)}
-              className="px-8 py-2.5 theme-button-primary rounded text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Send size={16} /> {submitButtonText}
-            </button>
+          <div className="pt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {canManageEditablePost && (
+              <button
+                type="button"
+                onClick={() => setShowAdvancedOptions((value) => !value)}
+                aria-expanded={showAdvancedOptions}
+                aria-controls="post-advanced-options"
+                className="px-6 py-2.5 bg-surface-alt text-text-secondary border border-border rounded text-sm font-medium hover:border-brand-gold hover:text-brand-gold transition-all flex items-center gap-2 self-start"
+              >
+                <ChevronDown
+                  size={16}
+                  className={`transition-transform ${showAdvancedOptions ? 'rotate-180' : ''}`}
+                />{' '}
+                {t('forum.advancedOptions')}
+              </button>
+            )}
+            <div className="flex flex-wrap justify-start gap-3 sm:justify-end">
+              <button
+                type="button"
+                onClick={() => handleSubmit('draft')}
+                disabled={Boolean(savingMode)}
+                className="px-6 py-2.5 bg-surface-alt text-text-secondary border border-border rounded text-sm font-medium hover:border-brand-gold hover:text-brand-gold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save size={16} />{' '}
+                {savingMode === 'draft' ? t('forum.saving') : t('forum.saveDraft')}
+              </button>
+              <button
+                type="submit"
+                disabled={Boolean(savingMode)}
+                className="px-8 py-2.5 theme-button-primary rounded text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send size={16} /> {submitButtonText}
+              </button>
+            </div>
           </div>
         </form>
+
+        {canManageEditablePost && showAdvancedOptions && (
+          <section className="mt-4 flex justify-start text-left">
+            <div
+              id="post-advanced-options"
+              className="max-w-[520px] rounded border border-danger/30 bg-surface/60 p-5"
+            >
+              <h2 className="text-base font-bold text-danger tracking-[0.08em]">
+                {t('forum.deleteZoneTitle')}
+              </h2>
+              <p className="mt-2 text-sm text-text-muted">{t('forum.deleteZoneDescription')}</p>
+              <label
+                htmlFor="post-delete-reason"
+                className="mt-4 block text-sm font-medium text-text-secondary"
+              >
+                {t('forum.deleteReasonLabel')}
+              </label>
+              <textarea
+                id="post-delete-reason"
+                value={deleteReason}
+                onChange={(event) => setDeleteReason(event.target.value)}
+                maxLength={1000}
+                rows={3}
+                className="mt-2 w-full rounded border border-border bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-danger"
+              />
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 size={16} />
+                {isDeleting ? t('forum.deletingPost') : t('forum.deletePost')}
+              </button>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   )

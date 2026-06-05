@@ -59,6 +59,35 @@ describe('getNotificationLink', () => {
     expect(
       getNotificationLink(
         makeNotification('review_result', {
+          targetType: 'post',
+          targetId: 'p1',
+          action: 'deleted',
+        })
+      )
+    ).toBeNull()
+    expect(
+      getNotificationLink(
+        makeNotification('review_result', {
+          targetType: 'post',
+          targetId: 'p1',
+          action: 'restored',
+          linkable: false,
+        })
+      )
+    ).toBeNull()
+    expect(
+      getNotificationLink(
+        makeNotification('review_result', {
+          targetType: 'post',
+          targetId: 'p1',
+          action: 'restored',
+          linkable: true,
+        })
+      )
+    ).toBe('/forum/p1')
+    expect(
+      getNotificationLink(
+        makeNotification('review_result', {
           targetType: 'wiki',
           targetId: 'w1',
           action: 'restored',
@@ -157,6 +186,19 @@ describe('getNotificationText', () => {
         })
       )
     ).toBe('你的百科已被删除：《测试条目》')
+  })
+
+  it('renders post deletion review_result text with optional reason', () => {
+    expect(
+      getNotificationText(
+        makeNotification('review_result', {
+          targetType: 'post',
+          action: 'deleted',
+          title: '测试帖子',
+          note: '违规内容',
+        })
+      )
+    ).toBe('你的帖子已被删除：《测试帖子》（原因：违规内容）')
   })
 
   it('renders restored review_result text', () => {
