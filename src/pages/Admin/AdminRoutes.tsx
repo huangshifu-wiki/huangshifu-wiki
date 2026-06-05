@@ -39,7 +39,14 @@ export const AdminRoutes = () => (
       <Route path="moderation_logs" element={<AdminLogs type="moderation_logs" />} />
       <Route path="ban_logs" element={<AdminLogs type="ban_logs" />} />
       <Route path="embeddings" element={<AdminToolPage type="embeddings" />} />
-      <Route path="backups" element={<AdminToolPage type="backups" />} />
+      <Route
+        path="backups"
+        element={
+          <RouteGuard requireSuperAdmin>
+            <AdminToolPage type="backups" />
+          </RouteGuard>
+        }
+      />
       <Route path="images" element={<AdminToolPage type="images" />} />
       <Route path="sensitive_check" element={<AdminToolPage type="sensitive_check" />} />
       <Route path="markdown_links" element={<AdminToolPage type="markdown_links" />} />

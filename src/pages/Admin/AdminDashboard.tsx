@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Book, Music, MessageSquare, Image as ImageIcon, Users, Layers, Megaphone, Lock, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Book, Music, MessageSquare, Image as ImageIcon, Users, Layers, Megaphone, Lock, RefreshCw } from 'lucide-react';
 import { apiGet } from '../../lib/apiClient';
+import { useAuth } from '../../context/AuthContext';
 
 const cards = [
   { key: 'wiki', label: '百科', path: '/admin/wiki', icon: Book, countKey: 'wiki' },
@@ -15,6 +16,7 @@ const cards = [
 ];
 
 export const AdminDashboard = () => {
+  const { user } = useAuth();
   const [stats, setStats] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,6 +51,7 @@ export const AdminDashboard = () => {
   }, []);
 
   const total = Object.values(stats).reduce<number>((a: number, b: number) => a + b, 0);
+  const isRegularAdmin = user?.role === 'admin';
 
   return (
     <div className="space-y-6">
@@ -93,6 +96,15 @@ export const AdminDashboard = () => {
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {isRegularAdmin && (
+        <div className="flex items-start gap-3 rounded border border-border bg-surface p-4 text-sm text-text-secondary">
+          <AlertTriangle size={18} className="theme-text-warning mt-0.5 shrink-0" />
+          <p>
+            数据库备份功能仅限超级管理员使用。普通管理员无法查看、创建、下载、恢复或删除备份。
+          </p>
         </div>
       )}
     </div>

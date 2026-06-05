@@ -37,6 +37,7 @@ type AdminNavItem = {
   label: string
   path: string
   icon: LucideIcon
+  superAdminOnly?: boolean
 }
 
 const dashboardNavItem: AdminNavItem = {
@@ -64,7 +65,7 @@ const siteNav: AdminNavItem[] = [
   { id: 'moderation_logs', label: '操作日志', path: '/admin/moderation_logs', icon: FileText },
   { id: 'ban_logs', label: '封禁日志', path: '/admin/ban_logs', icon: Shield },
   { id: 'embeddings', label: '向量管理', path: '/admin/embeddings', icon: Cpu },
-  { id: 'backups', label: '数据库备份', path: '/admin/backups', icon: Database },
+  { id: 'backups', label: '数据库备份', path: '/admin/backups', icon: Database, superAdminOnly: true },
   { id: 'images', label: '图片管理', path: '/admin/images', icon: Image },
   { id: 'sensitive_check', label: '敏感词检测', path: '/admin/sensitive_check', icon: ShieldCheck },
   { id: 'markdown_links', label: '链接更新', path: '/admin/markdown_links', icon: LinkIcon },
@@ -160,7 +161,7 @@ const NavGroup = ({
 )
 
 export const AdminLayout = () => {
-  const { isAdmin } = useAuth()
+  const { user, isAdmin } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const { show } = useToast()
@@ -169,6 +170,9 @@ export const AdminLayout = () => {
 
   const currentPath = location.pathname
   const closeMobileMenu = () => setMobileOpen(false)
+  const visibleSiteNav = siteNav.filter(
+    (item) => !item.superAdminOnly || user?.role === 'super_admin'
+  )
 
   const handleLogout = async () => {
     try {
@@ -272,7 +276,7 @@ export const AdminLayout = () => {
 
             <NavGroup
               title="站务管理"
-              items={siteNav}
+              items={visibleSiteNav}
               currentPath={currentPath}
               sidebarCollapsed={sidebarCollapsed}
               mobileOpen={mobileOpen}

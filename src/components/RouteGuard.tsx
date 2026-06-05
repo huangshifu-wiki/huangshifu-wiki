@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 interface RouteGuardProps {
   children: ReactNode
   requireAdmin?: boolean
+  requireSuperAdmin?: boolean
   title?: string
   description?: string
   forbiddenFallback?: ReactNode
@@ -31,6 +32,7 @@ const DefaultForbiddenFallback = () => (
 export const RouteGuard = ({
   children,
   requireAdmin = false,
+  requireSuperAdmin = false,
   title,
   description,
   forbiddenFallback,
@@ -52,6 +54,10 @@ export const RouteGuard = ({
   }
 
   if (requireAdmin && (!isAdmin || isBanned)) {
+    return forbiddenFallback ?? <DefaultForbiddenFallback />
+  }
+
+  if (requireSuperAdmin && (user.role !== 'super_admin' || isBanned)) {
     return forbiddenFallback ?? <DefaultForbiddenFallback />
   }
 
