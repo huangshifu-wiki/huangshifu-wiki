@@ -36,6 +36,7 @@ const MusicDetail = lazy(() => import('./pages/MusicDetail').then((m) => ({ defa
 const MusicLinks = lazy(() => import('./pages/MusicLinks').then((m) => ({ default: m.default })))
 const Search = lazy(() => import('./pages/Search').then((m) => ({ default: m.default })))
 const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.default })))
+const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.default })))
 const AdminRoutes = lazy(() =>
   import('./pages/Admin/AdminRoutes').then((m) => ({ default: m.default }))
 )
@@ -46,8 +47,12 @@ const MainLayout = () => {
   const location = useLocation()
   const path = location.pathname
 
-  if (path.startsWith('/admin')) {
-    return <AdminRoutes />
+  if (path === '/admin' || path.startsWith('/admin/')) {
+    return (
+      <Suspense fallback={<PageSkeleton />}>
+        <AdminRoutes />
+      </Suspense>
+    )
   }
 
   return (
@@ -100,6 +105,7 @@ const MainLayout = () => {
                   </RouteGuard>
                 }
               />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
         </ErrorBoundary>

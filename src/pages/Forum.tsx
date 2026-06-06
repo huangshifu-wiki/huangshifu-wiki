@@ -46,6 +46,7 @@ import { submitFormOnModifierEnter } from '../lib/formShortcuts'
 import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import MarkdownRenderer from '../components/MarkdownRenderer'
+import NotFound from './NotFound'
 
 type PostItem = {
   id: string
@@ -1634,6 +1635,7 @@ const Forum = () => {
         }
       />
       <Route path="/:postId" element={<PostDetail />} />
+      <Route path="*" element={<NotFound homePath="/forum" homeLabel="返回论坛" />} />
     </Routes>
   )
 }

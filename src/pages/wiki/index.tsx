@@ -9,6 +9,7 @@ import WikiBranchWorkspace from './WikiBranchWorkspace'
 import WikiPullRequestList from './WikiPullRequestList'
 import WikiPullRequestDetail from './WikiPullRequestDetail'
 import WikiHistory from './WikiHistory'
+import NotFound from '../NotFound'
 
 const Wiki = () => {
   return (
@@ -72,6 +73,7 @@ const Wiki = () => {
         }
       />
       <Route path="/:slug/history" element={<WikiHistory />} />
+      <Route path="*" element={<NotFound homePath="/wiki" homeLabel="返回百科" />} />
     </Routes>
   )
 }
