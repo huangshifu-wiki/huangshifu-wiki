@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Link2,
@@ -120,10 +120,14 @@ const createDraftFromGallery = (item: GalleryItem): GalleryDraft => ({
 
 const hasDraggedFiles = (event: Pick<React.DragEvent<HTMLElement>, 'dataTransfer'>) =>
   Array.from(event.dataTransfer?.types || []).includes('Files');
+const COMMENT_HIGHLIGHT_DURATION_MS = 3200;
+const HIGHLIGHTED_COMMENT_CLASS =
+  'bg-[color-mix(in_srgb,var(--color-theme-accent)_18%,var(--color-surface))]';
 
 const GalleryDetail = () => {
   const { galleryId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, profile, isBanned } = useAuth();
   const dialog = useDialog();
   const { show } = useToast();
@@ -154,6 +158,7 @@ const GalleryDetail = () => {
   const [likingCommentId, setLikingCommentId] = useState<string | null>(null);
   const [showDeletedComments, setShowDeletedComments] = useState(false);
   const [isGalleryAdminOnly, setIsGalleryAdminOnly] = useState(false);
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   const addImagesInputRef = useRef<HTMLInputElement>(null);
@@ -228,10 +233,42 @@ const GalleryDetail = () => {
   };
 
   useEffect(() => {
+    if (isAdmin && location.hash.startsWith('#comment-') && !showDeletedComments) {
+      setShowDeletedComments(true);
+    }
+  }, [isAdmin, location.hash, showDeletedComments]);
+
+  useEffect(() => {
     if (gallery?.published && galleryId) {
       fetchComments();
     }
   }, [gallery?.published, galleryId, isAdmin, showDeletedComments]);
+
+  useEffect(() => {
+    if (!location.hash.startsWith('#comment-')) {
+      setHighlightedCommentId(null);
+      return;
+    }
+    if (!comments.length) return;
+
+    const nextHighlightedCommentId = decodeURIComponent(location.hash.slice('#comment-'.length));
+    setHighlightedCommentId(nextHighlightedCommentId);
+
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`comment-${nextHighlightedCommentId}`);
+      target?.scrollIntoView({ block: 'start' });
+    });
+    const clearTimer = window.setTimeout(() => {
+      setHighlightedCommentId((current) =>
+        current === nextHighlightedCommentId ? null : current
+      );
+    }, COMMENT_HIGHLIGHT_DURATION_MS);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(clearTimer);
+    };
+  }, [comments, location.hash]);
 
   useEffect(() => () => {
     if (draftRef.current) {
@@ -1213,7 +1250,14 @@ const GalleryDetail = () => {
 
             <div className="space-y-6">
               {rootComments.length > 0 ? rootComments.map((comment) => (
-                <div key={comment.id} className="space-y-4">
+                <div
+                  id={`comment-${comment.id}`}
+                  key={comment.id}
+                  className={clsx(
+                    'scroll-mt-24 space-y-4 px-3 py-2 transition-colors',
+                    highlightedCommentId === comment.id && HIGHLIGHTED_COMMENT_CLASS,
+                  )}
+                >
                   <div className="flex gap-3">
                     <div className="w-10 h-10 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
                       {comment.isDeleted && !showDeletedComments ? null : (
@@ -1244,7 +1288,14 @@ const GalleryDetail = () => {
                   {getReplies(comment.id).length > 0 && (
                     <div className="ml-14 space-y-4 border-l-2 border-border pl-6">
                       {getReplies(comment.id).map((reply) => (
-                        <div key={reply.id} className="flex gap-3">
+                        <div
+                          id={`comment-${reply.id}`}
+                          key={reply.id}
+                          className={clsx(
+                            'flex scroll-mt-24 gap-3 px-3 py-2 transition-colors',
+                            highlightedCommentId === reply.id && HIGHLIGHTED_COMMENT_CLASS,
+                          )}
+                        >
                           <div className="w-8 h-8 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
                             <img
                               src={reply.authorPhoto || DEFAULT_AVATAR}

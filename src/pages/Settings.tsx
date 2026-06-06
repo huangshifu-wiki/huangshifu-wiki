@@ -62,6 +62,7 @@ type UserCommentItem = CommentItem & {
   targetType?: 'post' | 'gallery'
   target?: { id: string; title: string; status?: string; published?: boolean } | null
   gallery?: { id: string; title: string; published: boolean } | null
+  deletionReason?: string | null
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -70,10 +71,12 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 const SECTION_NAV = [
   { id: 'profile', label: '公开资料', icon: UserRound, path: '/settings/profile' },
-  { id: 'content', label: '内容管理', icon: FileText, path: '/settings/content' },
   { id: 'privacy', label: '隐私设置', icon: Eye, path: '/settings/privacy' },
   { id: 'account', label: '账户', icon: Shield, path: '/settings/account' },
   { id: 'appearance', label: '外观', icon: SlidersHorizontal, path: '/settings/appearance' },
+] as const
+const CONTENT_SECTION_NAV = [
+  { id: 'content', label: '内容管理', icon: FileText, path: '/settings/content' },
 ] as const
 
 const SETTINGS_SECTION_SET = new Set<SettingsSection>([
@@ -84,6 +87,37 @@ const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'appearance',
 ])
 const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'galleries', 'comments'])
+const CONTENT_ITEM_LINK_CLASS =
+  'group -mx-3 block px-3 transition-colors hover:bg-surface-alt/70'
+const CONTENT_META_ROW_CLASS = 'flex items-start justify-between gap-3 text-xs text-text-muted'
+const CONTENT_STATUS_BADGE_CLASS = 'rounded border px-1.5 py-0.5 text-[10px]'
+
+function SettingsNavLink({
+  item,
+  isActive,
+}: {
+  item: (typeof SECTION_NAV)[number] | (typeof CONTENT_SECTION_NAV)[number]
+  isActive: boolean
+}) {
+  const Icon = item.icon
+
+  return (
+    <Link
+      to={item.path}
+      className={[
+        'inline-flex items-center gap-2 border-l-2 px-3 py-2 text-sm transition-colors',
+        'whitespace-nowrap lg:w-full lg:justify-start',
+        isActive
+          ? 'border-[var(--color-theme-accent)] bg-surface-alt font-medium text-text-primary'
+          : 'border-transparent text-text-secondary hover:border-border hover:bg-surface-alt/60 hover:text-text-primary',
+      ].join(' ')}
+      aria-current={isActive ? 'page' : undefined}
+    >
+      <Icon size={16} />
+      <span>{item.label}</span>
+    </Link>
+  )
+}
 
 function resolveSettingsSection(section?: string): SettingsSection | null {
   if (!section) {
@@ -145,6 +179,7 @@ const Settings = () => {
   const { show } = useToast()
   const activeSection = resolveSettingsSection(section)
   const activeContentTab = resolveContentTab(searchParams.get('tab'))
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
   const [profileForm, setProfileForm] = useState<PublicProfileForm>({
     displayName: '',
     signature: '',
@@ -385,19 +420,29 @@ const Settings = () => {
         <ul>
           {myPosts.map((post) => (
             <li key={post.id} className="border-b border-border last:border-b-0">
-              <Link to={`/forum/${post.id}`} className="group block py-3">
+              <Link
+                to={`/forum/${post.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={clsx(CONTENT_ITEM_LINK_CLASS, 'py-3')}
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.16em]">
-                      <span
-                        className={clsx(
-                          'rounded border px-2 py-0.5',
-                          getStatusClassName(post.status || 'published')
-                        )}
-                      >
-                        {getStatusText(post.status || 'published')}
-                      </span>
-                      <span className="text-text-muted">{post.section}</span>
+                    <div className={CONTENT_META_ROW_CLASS}>
+                      <span className="min-w-0 text-text-muted">{post.section}</span>
+                      {post.status && post.status !== 'published' ? (
+                        <span
+                          className={clsx(
+                            CONTENT_STATUS_BADGE_CLASS,
+                            getStatusClassName(post.status)
+                          )}
+                        >
+                          {getStatusText(post.status)}
+                          {post.status === 'rejected' && post.reviewNote
+                            ? `（原因：${post.reviewNote}）`
+                            : ''}
+                        </span>
+                      ) : null}
                     </div>
                     <p className="mt-2 truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
                       {post.title}
@@ -421,7 +466,12 @@ const Settings = () => {
         <ul>
           {myGalleries.map((gallery) => (
             <li key={gallery.id} className="border-b border-border last:border-b-0">
-              <Link to={`/gallery/${gallery.id}`} className="group flex gap-3 py-3">
+              <Link
+                to={`/gallery/${gallery.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={clsx(CONTENT_ITEM_LINK_CLASS, 'flex gap-3 py-3')}
+              >
                 <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-surface-alt">
                   {gallery.images?.[0]?.thumbnailUrl ? (
                     <img
@@ -433,16 +483,13 @@ const Settings = () => {
                   ) : null}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.16em]">
-                    <span
-                      className={clsx(
-                        'rounded border px-2 py-0.5',
-                        gallery.published ? 'theme-status-success' : 'theme-status-warning'
-                      )}
-                    >
-                      {gallery.published ? '已发布' : '未发布'}
-                    </span>
-                    <span className="text-text-muted">{gallery.images?.length || 0} 张</span>
+                  <div className={CONTENT_META_ROW_CLASS}>
+                    <span className="min-w-0 text-text-muted">{gallery.images?.length || 0} 张</span>
+                    {!gallery.published ? (
+                      <span className={clsx(CONTENT_STATUS_BADGE_CLASS, 'theme-status-warning')}>
+                        未发布
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-2 truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
                     {gallery.title}
@@ -465,21 +512,60 @@ const Settings = () => {
         {myComments.map((comment) => {
           const target = comment.target || comment.post || comment.gallery || null
           const isGalleryComment = comment.targetType === 'gallery' || Boolean(comment.gallery)
-          const href = target ? (isGalleryComment ? `/gallery/${target.id}` : `/forum/${target.id}`) : '#'
+          const canOpenComment = Boolean(target && (!comment.isDeleted || isAdmin))
+          const sourceHref = target ? (isGalleryComment ? `/gallery/${target.id}` : `/forum/${target.id}`) : '#'
+          const commentHref = canOpenComment ? `${sourceHref}#comment-${comment.id}` : '#'
           return (
-            <li key={comment.id} className="border-b border-border last:border-b-0 py-3">
-              <div className="flex flex-col gap-2">
+            <li
+              key={comment.id}
+              className={clsx(
+                'relative -mx-3 border-b border-border px-3 last:border-b-0 transition-colors',
+                canOpenComment && 'group hover:bg-surface-alt/70'
+              )}
+            >
+              {canOpenComment ? (
+                <Link
+                  to={commentHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`查看评论：${comment.content}`}
+                  className="absolute inset-0 z-0"
+                />
+              ) : null}
+              <div className={clsx('relative z-10 flex flex-col gap-2 py-3', target && 'pointer-events-none')}>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
                   <span>评论了{isGalleryComment ? '图集' : '帖子'}</span>
+                  {comment.isDeleted ? (
+                    <span className={clsx(CONTENT_STATUS_BADGE_CLASS, 'theme-status-error')}>
+                      评论已删除
+                      {comment.deletionReason ? `（原因：${comment.deletionReason}）` : ''}
+                    </span>
+                  ) : null}
                   {target ? (
-                    <Link to={href} className="text-brand-gold hover:underline">
+                    <Link
+                      to={sourceHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="pointer-events-auto text-brand-gold hover:underline"
+                    >
                       {target.title}
                     </Link>
                   ) : (
-                    <span>原内容已删除或不可见</span>
+                    <span className={clsx(
+                      CONTENT_STATUS_BADGE_CLASS,
+                      'border-[color-mix(in_srgb,var(--color-warning)_46%,transparent)] text-[color-mix(in_srgb,var(--color-warning)_78%,var(--color-text-primary))]'
+                    )}>
+                      原内容不可见
+                    </span>
                   )}
                 </div>
-                <p className="max-w-[72ch] text-sm leading-7 text-text-secondary">{comment.content}</p>
+                {canOpenComment ? (
+                  <p className="max-w-[72ch] text-sm leading-7 text-text-secondary group-hover:text-brand-gold">
+                    {comment.content}
+                  </p>
+                ) : (
+                  <p className="max-w-[72ch] text-sm leading-7 text-text-secondary">{comment.content}</p>
+                )}
                 <p className="text-xs text-text-muted">
                   {format(new Date(comment.createdAt), 'MM-dd HH:mm')}
                 </p>
@@ -508,29 +594,25 @@ const Settings = () => {
 
         <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
           <aside className="lg:sticky lg:top-[84px] lg:self-start lg:border-r lg:border-border lg:pr-4">
-            <nav className="flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0" aria-label="设置分类">
-              {SECTION_NAV.map((item) => {
-                const Icon = item.icon
-                const isActive = activeSection === item.id
-
-                return (
-                  <Link
+            <nav className="flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:gap-5 lg:overflow-visible lg:pb-0" aria-label="设置分类">
+              <div className="flex gap-1 lg:flex-col">
+                {SECTION_NAV.map((item) => (
+                  <SettingsNavLink
                     key={item.id}
-                    to={item.path}
-                    className={[
-                      'inline-flex items-center gap-2 border-l-2 px-3 py-2 text-sm transition-colors',
-                      'whitespace-nowrap lg:w-full lg:justify-start',
-                      isActive
-                        ? 'border-[var(--color-theme-accent)] bg-surface-alt font-medium text-text-primary'
-                        : 'border-transparent text-text-secondary hover:border-border hover:bg-surface-alt/60 hover:text-text-primary',
-                    ].join(' ')}
-                    aria-current={isActive ? 'page' : undefined}
-                  >
-                    <Icon size={16} />
-                    <span>{item.label}</span>
-                  </Link>
-                )
-              })}
+                    item={item}
+                    isActive={activeSection === item.id}
+                  />
+                ))}
+              </div>
+              <div className="flex gap-1 lg:flex-col lg:border-t lg:border-border lg:pt-4">
+                {CONTENT_SECTION_NAV.map((item) => (
+                  <SettingsNavLink
+                    key={item.id}
+                    item={item}
+                    isActive={activeSection === item.id}
+                  />
+                ))}
+              </div>
             </nav>
           </aside>
 

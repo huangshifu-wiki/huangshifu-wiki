@@ -90,6 +90,7 @@ export interface CommentItem {
   deletedAt?: string | null;
   deletedBy?: string | null;
   deletedByName?: string | null;
+  deletionReason?: string | null;
   likesCount?: number;
   likedByMe?: boolean;
   createdAt: string;

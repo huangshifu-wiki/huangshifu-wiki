@@ -691,6 +691,59 @@ describe('Users API - 用户接口测试', () => {
         expect(userPost).toHaveProperty('likedByMe', true);
       }
     });
+
+    it('自己查看帖子列表时应返回驳回原因', async () => {
+      const post = await createTestPost({
+        title: 'Rejected Post With Review Note',
+        status: 'rejected',
+        authorUid: testUser.user.uid,
+      });
+      await prisma.post.update({
+        where: { id: post.id },
+        data: { reviewNote: '内容不符合要求' },
+      });
+
+      const response = await request(app)
+        .get(`/api/users/${testUser.user.uid}/posts`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(response.status).toBe(200);
+      const rejectedPost = response.body.posts.find((item: { id: string }) => item.id === post.id);
+      expect(rejectedPost).toBeDefined();
+      expect(rejectedPost.reviewNote).toBe('内容不符合要求');
+      expect(rejectedPost.status).toBe('rejected');
+
+      const publicResponse = await request(app).get(`/api/users/${testUser.user.uid}/posts`);
+      expect(publicResponse.status).toBe(200);
+      const publicRejectedPost = publicResponse.body.posts.find((item: { id: string }) => item.id === post.id);
+      expect(publicRejectedPost).toBeUndefined();
+    });
+
+    it('公开帖子列表不应向访客泄露审核备注', async () => {
+      const post = await createTestPost({
+        title: 'Published Post With Private Review Note',
+        status: 'published',
+        authorUid: testUser.user.uid,
+      });
+      await prisma.post.update({
+        where: { id: post.id },
+        data: { reviewNote: '内部审核备注' },
+      });
+
+      const publicResponse = await request(app).get(`/api/users/${testUser.user.uid}/posts`);
+      expect(publicResponse.status).toBe(200);
+      const publicPost = publicResponse.body.posts.find((item: { id: string }) => item.id === post.id);
+      expect(publicPost).toBeDefined();
+      expect(publicPost.reviewNote).toBeNull();
+
+      const ownerResponse = await request(app)
+        .get(`/api/users/${testUser.user.uid}/posts`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(ownerResponse.status).toBe(200);
+      const ownerPost = ownerResponse.body.posts.find((item: { id: string }) => item.id === post.id);
+      expect(ownerPost).toBeDefined();
+      expect(ownerPost.reviewNote).toBe('内部审核备注');
+    });
   });
 
   describe('GET /api/users/:userId/profile - 获取公开个人资料', () => {
@@ -991,6 +1044,68 @@ describe('Users API - 用户接口测试', () => {
       expect(item.gallery).toBeNull();
       expect(item.post).toBeNull();
       expect(item.content).toBe('Comment on hidden gallery');
+    });
+
+    it('应该返回已删除评论状态和删除原因', async () => {
+      const post = await createTestPost({
+        title: 'Deleted Comment Target Post',
+        status: 'published',
+        authorUid: adminUser.user.uid,
+      });
+
+      const comment = await prisma.postComment.create({
+        data: {
+          postId: post.id,
+          authorUid: testUser.user.uid,
+          content: 'Deleted comment original text',
+        },
+      });
+
+      await prisma.postComment.update({
+        where: { id: comment.id },
+        data: {
+          deletedAt: new Date(),
+          deletedBy: adminUser.user.uid,
+        },
+      });
+      await prisma.moderationLog.create({
+        data: {
+          targetType: 'comment',
+          targetId: comment.id,
+          action: 'delete',
+          operatorUid: adminUser.user.uid,
+          note: '评论违规',
+        },
+      });
+
+      const userResponse = await request(app)
+        .get(`/api/users/${testUser.user.uid}/comments`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(userResponse.status).toBe(200);
+      const userItem = userResponse.body.comments.find((entry: { id: string }) => entry.id === comment.id);
+      expect(userItem).toBeDefined();
+      expect(userItem.isDeleted).toBe(true);
+      expect(userItem.content).toBe('评论已删除');
+      expect(userItem.deletionReason).toBe('评论违规');
+
+      const publicResponse = await request(app).get(`/api/users/${testUser.user.uid}/comments`);
+      expect(publicResponse.status).toBe(200);
+      const publicItem = publicResponse.body.comments.find((entry: { id: string }) => entry.id === comment.id);
+      expect(publicItem).toBeDefined();
+      expect(publicItem.isDeleted).toBe(true);
+      expect(publicItem.content).toBe('评论已删除');
+      expect(publicItem.deletionReason).toBeNull();
+
+      const adminResponse = await request(app)
+        .get(`/api/users/${testUser.user.uid}/comments`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(adminResponse.status).toBe(200);
+      const adminItem = adminResponse.body.comments.find((entry: { id: string }) => entry.id === comment.id);
+      expect(adminItem).toBeDefined();
+      expect(adminItem.isDeleted).toBe(true);
+      expect(adminItem.content).toBe('Deleted comment original text');
+      expect(adminItem.deletionReason).toBe('评论违规');
     });
   });
 

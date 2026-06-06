@@ -1048,6 +1048,8 @@ router.get('/:userId/posts', asyncHandler(async (req: AuthenticatedRequest, res)
     const uid = req.params.userId;
     const { limit, page, offset: skip } = parsePagination(req.query);
     const forcePublic = req.query.visibility === 'public';
+    const canViewPrivateUserContent =
+      Boolean(req.authUser && (req.authUser.uid === uid || req.authUser.role === 'admin' || req.authUser.role === 'super_admin'));
 
     const visibilityWhere = buildPostVisibilityWhere(getPublicVisibilityWhere(forcePublic, req.authUser));
 
@@ -1071,6 +1073,9 @@ router.get('/:userId/posts', asyncHandler(async (req: AuthenticatedRequest, res)
           locationCode: true,
           authorUid: true,
           status: true,
+          reviewNote: true,
+          reviewedBy: true,
+          reviewedAt: true,
           hotScore: true,
           viewCount: true,
           likesCount: true,
@@ -1121,12 +1126,18 @@ router.get('/:userId/posts', asyncHandler(async (req: AuthenticatedRequest, res)
     }
 
     res.json({
-      posts: posts.map((post) => ({
-        ...toPostResponse(post),
-        likedByMe: likedPostSet.has(post.id),
-        favoritedByMe: favoritedPostSet.has(post.id),
-        dislikedByMe: dislikedPostSet.has(post.id),
-      })),
+      posts: posts.map((post) => {
+        const item = toPostResponse(post);
+        return {
+          ...item,
+          reviewNote: canViewPrivateUserContent ? item.reviewNote : null,
+          reviewedBy: canViewPrivateUserContent ? item.reviewedBy : null,
+          reviewedAt: canViewPrivateUserContent ? item.reviewedAt : null,
+          likedByMe: likedPostSet.has(post.id),
+          favoritedByMe: favoritedPostSet.has(post.id),
+          dislikedByMe: dislikedPostSet.has(post.id),
+        };
+      }),
       total,
       page,
       limit,
@@ -1188,6 +1199,7 @@ router.get('/:userId/comments', asyncHandler(async (req: AuthenticatedRequest, r
     const uid = req.params.userId;
     const { limit, page, offset: skip } = parsePagination(req.query);
     const isAdmin = req.authUser?.role === 'admin' || req.authUser?.role === 'super_admin';
+    const canViewPrivateUserContent = Boolean(req.authUser && (req.authUser.uid === uid || isAdmin));
 
     const visibilityWhere = buildPostVisibilityWhere(req.authUser);
     const galleryVisibilityWhere = buildGalleryVisibilityWhere(req.authUser);
@@ -1225,10 +1237,12 @@ router.get('/:userId/comments', asyncHandler(async (req: AuthenticatedRequest, r
     // 让 Prisma 的 in 子句类型对齐 string[]
     const postIds = [...new Set(comments.map((c) => c.postId).filter((id): id is string => Boolean(id)))];
     const galleryIds = [...new Set(comments.map((c) => c.galleryId).filter((id): id is string => Boolean(id)))];
+    const commentIds = comments.map((comment) => comment.id);
     const postsMap = new Map<string, { id: string; title: string; status: string }>();
     const galleriesMap = new Map<string, { id: string; title: string; published: boolean }>();
+    const deletionReasonMap = new Map<string, string | null>();
 
-    const [posts, galleries] = await Promise.all([
+    const [posts, galleries, deleteLogs] = await Promise.all([
       postIds.length
         ? prisma.post.findMany({
             where: {
@@ -1247,9 +1261,25 @@ router.get('/:userId/comments', asyncHandler(async (req: AuthenticatedRequest, r
             select: { id: true, title: true, published: true },
           })
         : Promise.resolve([]),
+      canViewPrivateUserContent && commentIds.length
+        ? prisma.moderationLog.findMany({
+            where: {
+              targetType: 'comment',
+              action: 'delete',
+              targetId: { in: commentIds },
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { targetId: true, note: true },
+          })
+        : Promise.resolve([]),
     ]);
     posts.forEach((p) => postsMap.set(p.id, p));
     galleries.forEach((gallery) => galleriesMap.set(gallery.id, gallery));
+    deleteLogs.forEach((log) => {
+      if (!deletionReasonMap.has(log.targetId)) {
+        deletionReasonMap.set(log.targetId, log.note);
+      }
+    });
 
     res.json({
       comments: comments.map((comment) => {
@@ -1264,6 +1294,7 @@ router.get('/:userId/comments', asyncHandler(async (req: AuthenticatedRequest, r
             : post,
           post,
           gallery,
+          deletionReason: canViewPrivateUserContent && comment.deletedAt ? deletionReasonMap.get(comment.id) ?? null : null,
         };
       }),
       total,

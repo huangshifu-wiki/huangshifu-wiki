@@ -20,6 +20,7 @@ const {
   mockSetTheme,
   mockUpdatePreferences,
   mockShow,
+  mockAuthRole,
 } = vi.hoisted(() => ({
   mockApiGet: vi.fn(),
   mockApiPatch: vi.fn(),
@@ -28,6 +29,7 @@ const {
   mockSetTheme: vi.fn(),
   mockUpdatePreferences: vi.fn(),
   mockShow: vi.fn(),
+  mockAuthRole: vi.fn(() => 'user'),
 }))
 
 vi.mock('../../src/lib/apiClient', () => ({
@@ -43,7 +45,7 @@ vi.mock('../../src/context/AuthContext', () => ({
       email: 'old@example.com',
       displayName: '测试用户',
       photoURL: '',
-      role: 'user',
+      role: mockAuthRole(),
     },
     profile: {
       displayName: '测试用户',
@@ -51,7 +53,7 @@ vi.mock('../../src/context/AuthContext', () => ({
       bio: '旧简介',
       photoURL: '',
       level: 1,
-      role: 'user',
+      role: mockAuthRole(),
       status: 'active',
     },
     refreshAuth: mockRefreshAuth,
@@ -86,6 +88,7 @@ vi.mock('../../src/components/AvatarCropModal', () => ({
 describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockAuthRole.mockReturnValue('user')
     mockApiGet.mockResolvedValue({ posts: [], galleries: [], comments: [] })
     mockApiPatch.mockResolvedValue({})
     mockApiPut.mockResolvedValue({})
@@ -283,7 +286,233 @@ describe('Settings', () => {
     renderSettings('/settings/content?tab=comments')
 
     expect(await screen.findByText('图集评论')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '图集标题' })).toHaveAttribute('href', '/gallery/gallery-1')
+    const targetLink = screen.getByRole('link', { name: '图集标题' })
+    expect(targetLink).toHaveAttribute('href', '/gallery/gallery-1')
+    expect(targetLink).toHaveAttribute('target', '_blank')
+    expect(targetLink).toHaveAttribute('rel', 'noopener noreferrer')
+    const commentLink = screen.getByRole('link', { name: '查看评论：图集评论' })
+    expect(commentLink).toHaveAttribute('href', '/gallery/gallery-1#comment-comment-1')
+    expect(commentLink).toHaveAttribute('target', '_blank')
+    expect(commentLink).toHaveAttribute('rel', 'noopener noreferrer')
     expect(mockApiGet).toHaveBeenCalledWith('/api/users/user-1/comments', { limit: 50 })
+  })
+
+  it('marks deleted comments and hides deep links from regular users', async () => {
+    mockApiGet.mockResolvedValue({
+      comments: [
+        {
+          id: 'comment-deleted',
+          postId: 'post-1',
+          galleryId: null,
+          authorUid: 'user-1',
+          authorName: '测试用户',
+          authorPhoto: null,
+          content: '评论已删除',
+          parentId: null,
+          isDeleted: true,
+          deletedAt: '2026-05-25T10:00:00.000Z',
+          deletionReason: '违规内容',
+          createdAt: '2026-05-25T10:00:00.000Z',
+          targetType: 'post',
+          target: { id: 'post-1', title: '帖子标题', status: 'published' },
+        },
+      ],
+      total: 1,
+    })
+
+    renderSettings('/settings/content?tab=comments')
+
+    expect(await screen.findByText('评论已删除（原因：违规内容）')).toBeInTheDocument()
+    expect(screen.getByText('评论已删除')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '帖子标题' })).toHaveAttribute('href', '/forum/post-1')
+    expect(screen.queryByRole('link', { name: '查看评论：评论已删除' })).not.toBeInTheDocument()
+  })
+
+  it('keeps deleted comment deep links for admins', async () => {
+    mockAuthRole.mockReturnValue('admin')
+    mockApiGet.mockResolvedValue({
+      comments: [
+        {
+          id: 'comment-deleted',
+          postId: 'post-1',
+          galleryId: null,
+          authorUid: 'user-1',
+          authorName: '测试用户',
+          authorPhoto: null,
+          content: '被删评论原文',
+          parentId: null,
+          isDeleted: true,
+          deletedAt: '2026-05-25T10:00:00.000Z',
+          deletionReason: '违规内容',
+          createdAt: '2026-05-25T10:00:00.000Z',
+          targetType: 'post',
+          target: { id: 'post-1', title: '帖子标题', status: 'published' },
+        },
+      ],
+      total: 1,
+    })
+
+    renderSettings('/settings/content?tab=comments')
+
+    expect(await screen.findByText('被删评论原文')).toBeInTheDocument()
+    const commentLink = screen.getByRole('link', { name: '查看评论：被删评论原文' })
+    expect(commentLink).toHaveAttribute('href', '/forum/post-1#comment-comment-deleted')
+    expect(commentLink).toHaveAttribute('target', '_blank')
+    expect(screen.getByText('评论已删除（原因：违规内容）')).toBeInTheDocument()
+  })
+
+  it('labels comments whose source is not visible', async () => {
+    mockApiGet.mockResolvedValue({
+      comments: [
+        {
+          id: 'comment-hidden-source',
+          postId: 'post-1',
+          galleryId: null,
+          authorUid: 'user-1',
+          authorName: '测试用户',
+          authorPhoto: null,
+          content: '来源不可见评论',
+          parentId: null,
+          isDeleted: false,
+          createdAt: '2026-05-25T10:00:00.000Z',
+          targetType: 'post',
+          target: null,
+          post: null,
+        },
+      ],
+      total: 1,
+    })
+
+    renderSettings('/settings/content?tab=comments')
+
+    expect(await screen.findByText('来源不可见评论')).toBeInTheDocument()
+    expect(screen.getByText('原内容不可见')).toBeInTheDocument()
+    expect(screen.queryByText('原内容已删除或不可见')).not.toBeInTheDocument()
+  })
+
+  it('opens content management post and gallery links in new tabs', async () => {
+    mockApiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/users/user-1/posts') {
+        return {
+          posts: [
+            {
+              id: 'post-1',
+              title: '帖子标题',
+              section: '闲聊',
+              content: '',
+              authorUid: 'user-1',
+              status: 'published',
+              likesCount: 0,
+              dislikesCount: 0,
+              commentsCount: 0,
+              createdAt: '2026-05-25T10:00:00.000Z',
+              updatedAt: '2026-05-25T10:00:00.000Z',
+            },
+          ],
+        }
+      }
+
+      if (path === '/api/users/user-1/galleries') {
+        return {
+          galleries: [
+            {
+              id: 'gallery-1',
+              title: '图集标题',
+              description: '',
+              authorUid: 'user-1',
+              authorName: '测试用户',
+              tags: [],
+              locationCode: null,
+              locationName: null,
+              locationDetail: null,
+              copyright: null,
+              published: true,
+              publishedAt: '2026-05-25T10:00:00.000Z',
+              createdAt: '2026-05-25T10:00:00.000Z',
+              updatedAt: '2026-05-25T10:00:00.000Z',
+              images: [],
+            },
+          ],
+        }
+      }
+
+      return { posts: [], galleries: [], comments: [] }
+    })
+
+    renderSettings('/settings/content?tab=posts')
+
+    const postLink = await screen.findByRole('link', { name: /帖子标题/ })
+    expect(postLink).toHaveAttribute('href', '/forum/post-1')
+    expect(postLink).toHaveAttribute('target', '_blank')
+    expect(postLink).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.queryByText('已发布')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('link', { name: '图集' }))
+
+    const galleryLink = await screen.findByRole('link', { name: /图集标题/ })
+    expect(galleryLink).toHaveAttribute('href', '/gallery/gallery-1')
+    expect(galleryLink).toHaveAttribute('target', '_blank')
+    expect(galleryLink).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.queryByText('已发布')).not.toBeInTheDocument()
+  })
+
+  it('only shows content status badges for unpublished content', async () => {
+    mockApiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/users/user-1/posts') {
+        return {
+          posts: [
+            {
+              id: 'post-draft',
+              title: '草稿帖子',
+              section: '闲聊',
+              content: '',
+              authorUid: 'user-1',
+              status: 'rejected',
+              reviewNote: '内容不符合要求',
+              likesCount: 0,
+              dislikesCount: 0,
+              commentsCount: 0,
+              createdAt: '2026-05-25T10:00:00.000Z',
+              updatedAt: '2026-05-25T10:00:00.000Z',
+            },
+          ],
+        }
+      }
+
+      if (path === '/api/users/user-1/galleries') {
+        return {
+          galleries: [
+            {
+              id: 'gallery-draft',
+              title: '未发布图集',
+              description: '',
+              authorUid: 'user-1',
+              authorName: '测试用户',
+              tags: [],
+              locationCode: null,
+              locationName: null,
+              locationDetail: null,
+              copyright: null,
+              published: false,
+              publishedAt: null,
+              createdAt: '2026-05-25T10:00:00.000Z',
+              updatedAt: '2026-05-25T10:00:00.000Z',
+              images: [],
+            },
+          ],
+        }
+      }
+
+      return { posts: [], galleries: [], comments: [] }
+    })
+
+    renderSettings('/settings/content?tab=posts')
+
+    expect(await screen.findByText('已驳回（原因：内容不符合要求）')).toBeInTheDocument()
+    expect(screen.queryByText('已发布')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('link', { name: '图集' }))
+
+    expect(await screen.findByText('未发布')).toBeInTheDocument()
   })
 })

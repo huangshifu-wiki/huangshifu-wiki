@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Routes, Route, Link, useParams, useSearchParams, useNavigate } from 'react-router-dom'
+import { Routes, Route, Link, useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   MessageSquare,
@@ -100,6 +100,9 @@ type CommentItem = {
 }
 
 const DEFAULT_PAGE_SIZE = 20
+const COMMENT_HIGHLIGHT_DURATION_MS = 3200
+const HIGHLIGHTED_COMMENT_CLASS =
+  'bg-[color-mix(in_srgb,var(--color-theme-accent)_18%,var(--color-surface))]'
 
 interface PostCardProps {
   post: PostItem
@@ -383,6 +386,7 @@ const PostDetail = () => {
   const [likingCommentId, setLikingCommentId] = useState<string | null>(null)
   const [showDeletedComments, setShowDeletedComments] = useState(false)
   const [submittingReview, setSubmittingReview] = useState(false)
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null)
   const commentFormRef = useRef<HTMLFormElement | null>(null)
   const commentInputRef = useRef<HTMLTextAreaElement | null>(null)
   const { user, profile, isBanned } = useAuth()
@@ -390,6 +394,7 @@ const PostDetail = () => {
   const dialog = useDialog()
   const { show } = useToast()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const {
     toggleLike,
@@ -426,6 +431,12 @@ const PostDetail = () => {
   }, [])
 
   useEffect(() => {
+    if (isAdmin && location.hash.startsWith('#comment-') && !showDeletedComments) {
+      setShowDeletedComments(true)
+    }
+  }, [isAdmin, location.hash, showDeletedComments])
+
+  useEffect(() => {
     const fetchPost = async () => {
       if (!postId) return
       try {
@@ -450,6 +461,32 @@ const PostDetail = () => {
     setDeleteReasonCommentId(null)
     setCommentDeleteReason('')
   }, [postId])
+
+  useEffect(() => {
+    if (!location.hash.startsWith('#comment-')) {
+      setHighlightedCommentId(null)
+      return
+    }
+    if (!comments.length) return
+
+    const nextHighlightedCommentId = decodeURIComponent(location.hash.slice('#comment-'.length))
+    setHighlightedCommentId(nextHighlightedCommentId)
+
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`comment-${nextHighlightedCommentId}`)
+      target?.scrollIntoView({ block: 'start' })
+    })
+    const clearTimer = window.setTimeout(() => {
+      setHighlightedCommentId((current) =>
+        current === nextHighlightedCommentId ? null : current
+      )
+    }, COMMENT_HIGHLIGHT_DURATION_MS)
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(clearTimer)
+    }
+  }, [comments, location.hash])
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -892,7 +929,14 @@ const PostDetail = () => {
               <div>
                 {rootComments.length > 0 ? (
                   rootComments.map((comment) => (
-                    <div key={comment.id} className="border-b border-border py-5">
+                    <div
+                      id={`comment-${comment.id}`}
+                      key={comment.id}
+                      className={clsx(
+                        'scroll-mt-24 border-b border-border px-3 py-5 transition-colors',
+                        highlightedCommentId === comment.id && HIGHLIGHTED_COMMENT_CLASS
+                      )}
+                    >
                       <div className="flex gap-3">
                         <div className="w-9 h-9 rounded bg-surface-alt flex-shrink-0 overflow-hidden flex items-center justify-center">
                           {comment.isDeleted && !showDeletedComments ? null : (
@@ -925,7 +969,14 @@ const PostDetail = () => {
                       {getReplies(comment.id).length > 0 && (
                         <div className="ml-12 mt-3 space-y-3 border-l-2 border-border pl-4">
                           {getReplies(comment.id).map((reply) => (
-                            <div key={reply.id} className="flex gap-3">
+                            <div
+                              id={`comment-${reply.id}`}
+                              key={reply.id}
+                              className={clsx(
+                                'flex scroll-mt-24 gap-3 px-3 py-2 transition-colors',
+                                highlightedCommentId === reply.id && HIGHLIGHTED_COMMENT_CLASS
+                              )}
+                            >
                               <div className="w-7 h-7 rounded bg-surface-alt flex-shrink-0 overflow-hidden flex items-center justify-center">
                                 <img
                                   src={reply.authorPhoto || DEFAULT_AVATAR}
