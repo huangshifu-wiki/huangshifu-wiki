@@ -83,8 +83,13 @@ export const convertToFormat = (
   format: SupportedImageFormat,
   quality = 80
 ): string => {
-  // 如果 URL 已经是 data URL 或没有转换必要，直接返回
-  if (url.startsWith('data:') || format === 'jpeg') {
+  // 仅对可拼接查询参数的资源 URL 做格式优化，避免破坏 blob/data 等本地预览地址
+  if (
+    format === 'jpeg' ||
+    url.startsWith('data:') ||
+    url.startsWith('blob:') ||
+    url.startsWith('file:')
+  ) {
     return url;
   }
 
