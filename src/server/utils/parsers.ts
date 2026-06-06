@@ -193,7 +193,7 @@ export function normalizePostWriteStatus(rawStatus: unknown, authUser: ApiUser) 
 }
 
 export function parseFavoriteType(value: unknown): FavoriteTargetType | null {
-  if (value === 'wiki' || value === 'post' || value === 'music') {
+  if (value === 'wiki' || value === 'post' || value === 'music' || value === 'gallery') {
     return value;
   }
   return null;

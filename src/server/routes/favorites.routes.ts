@@ -7,8 +7,17 @@ import {
   canViewPost,
   toWikiResponse,
   toPostResponse,
+  toGalleryResponse,
 } from '../utils';
 import type { AuthenticatedRequest } from '../types';
+
+function canViewGallery(gallery: { published: boolean; authorUid: string; deletedAt?: Date | null }, authUser?: AuthenticatedRequest['authUser']) {
+  if (gallery.deletedAt) return false;
+  if (gallery.published) return true;
+  if (!authUser) return false;
+  if (authUser.role === 'admin' || authUser.role === 'super_admin') return true;
+  return gallery.authorUid === authUser.uid;
+}
 
 const router = Router();
 
@@ -33,8 +42,9 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     const wikiIds = favorites.filter((item) => item.targetType === 'wiki').map((item) => item.targetId);
     const postIds = favorites.filter((item) => item.targetType === 'post').map((item) => item.targetId);
     const musicIds = favorites.filter((item) => item.targetType === 'music').map((item) => item.targetId);
+    const galleryIds = favorites.filter((item) => item.targetType === 'gallery').map((item) => item.targetId);
 
-    const [wikiPages, posts, songs] = await Promise.all([
+    const [wikiPages, posts, songs, galleries] = await Promise.all([
       wikiIds.length
         ? prisma.wikiPage.findMany({
             where: { slug: { in: wikiIds }, deletedAt: null },
@@ -50,55 +60,80 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       musicIds.length
         ? prisma.musicTrack.findMany({ where: { docId: { in: musicIds }, deletedAt: null } })
         : Promise.resolve([]),
+      galleryIds.length
+        ? prisma.gallery.findMany({
+            where: { id: { in: galleryIds }, deletedAt: null },
+            include: {
+              images: {
+                include: {
+                  asset: true,
+                },
+                orderBy: { sortOrder: 'asc' },
+              },
+            },
+          })
+        : Promise.resolve([]),
     ]);
 
     const wikiMap = new Map(wikiPages.map((item) => [item.slug, item]));
     const postMap = new Map(posts.map((item) => [item.id, item]));
     const songMap = new Map(songs.map((item) => [item.docId, item]));
+    const galleryMap = new Map(galleries.map((item) => [item.id, item]));
 
-    const items = favorites
-      .map((favorite) => {
-        const base = {
-          id: favorite.id,
-          targetType: favorite.targetType,
-          targetId: favorite.targetId,
-          createdAt: favorite.createdAt.toISOString(),
-        };
-
-        if (favorite.targetType === 'wiki') {
-          const page = wikiMap.get(favorite.targetId);
-          if (!page || !canViewWikiPage(page, req.authUser)) return null;
-          return {
-            ...base,
-            target: toWikiResponse(page),
+    const items = (
+      await Promise.all(
+        favorites.map(async (favorite) => {
+          const base = {
+            id: favorite.id,
+            targetType: favorite.targetType,
+            targetId: favorite.targetId,
+            createdAt: favorite.createdAt.toISOString(),
           };
-        }
 
-        if (favorite.targetType === 'post') {
-          const post = postMap.get(favorite.targetId);
-          if (!post || !canViewPost(post, req.authUser)) return null;
-          return {
-            ...base,
-            target: toPostResponse(post),
-          };
-        }
+          if (favorite.targetType === 'wiki') {
+            const page = wikiMap.get(favorite.targetId);
+            if (!page || !canViewWikiPage(page, req.authUser)) return null;
+            return {
+              ...base,
+              target: toWikiResponse(page),
+            };
+          }
 
-        if (favorite.targetType === 'music') {
-          const song = songMap.get(favorite.targetId);
-          if (!song) return null;
-          return {
-            ...base,
-            target: {
-              ...song,
-              createdAt: song.createdAt.toISOString(),
-              updatedAt: song.updatedAt.toISOString(),
-            },
-          };
-        }
+          if (favorite.targetType === 'post') {
+            const post = postMap.get(favorite.targetId);
+            if (!post || !canViewPost(post, req.authUser)) return null;
+            return {
+              ...base,
+              target: toPostResponse(post),
+            };
+          }
 
-        return null;
-      })
-      .filter(Boolean);
+          if (favorite.targetType === 'music') {
+            const song = songMap.get(favorite.targetId);
+            if (!song) return null;
+            return {
+              ...base,
+              target: {
+                ...song,
+                createdAt: song.createdAt.toISOString(),
+                updatedAt: song.updatedAt.toISOString(),
+              },
+            };
+          }
+
+          if (favorite.targetType === 'gallery') {
+            const gallery = galleryMap.get(favorite.targetId);
+            if (!gallery || !canViewGallery(gallery, req.authUser)) return null;
+            return {
+              ...base,
+              target: await toGalleryResponse(gallery),
+            };
+          }
+
+          return null;
+        })
+      )
+    ).filter(Boolean);
 
     res.json({ favorites: items });
   } catch (error) {
@@ -161,6 +196,22 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
       }
     }
 
+    if (targetType === 'gallery') {
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: targetId },
+        select: {
+          id: true,
+          published: true,
+          authorUid: true,
+          deletedAt: true,
+        },
+      });
+      if (!gallery || !canViewGallery(gallery, req.authUser)) {
+        res.status(404).json({ error: '目标不存在' });
+        return;
+      }
+    }
+
     await prisma.favorite.upsert({
       where: {
         userUid_targetType_targetId: {
@@ -186,6 +237,19 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
       });
       await prisma.wikiPage.update({
         where: { slug: targetId },
+        data: { favoritesCount: count },
+      });
+    }
+
+    if (targetType === 'gallery') {
+      const count = await prisma.favorite.count({
+        where: {
+          targetType,
+          targetId,
+        },
+      });
+      await prisma.gallery.update({
+        where: { id: targetId },
         data: { favoritesCount: count },
       });
     }
@@ -225,6 +289,19 @@ router.delete('/:type/:id', requireAuth, requireActiveUser, async (req: Authenti
       });
       await prisma.wikiPage.update({
         where: { slug: targetId },
+        data: { favoritesCount: count },
+      }).catch(() => undefined);
+    }
+
+    if (targetType === 'gallery') {
+      const count = await prisma.favorite.count({
+        where: {
+          targetType,
+          targetId,
+        },
+      });
+      await prisma.gallery.update({
+        where: { id: targetId },
         data: { favoritesCount: count },
       }).catch(() => undefined);
     }

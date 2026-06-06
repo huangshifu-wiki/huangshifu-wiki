@@ -44,6 +44,7 @@ enum FavoriteTargetType {
   wiki
   post
   music
+  gallery
 }
 
 enum UserBanAction {
@@ -171,6 +172,8 @@ model User {
   postDislikes  PostDislike[] @relation("UserDislikes")
   wikiLikes     WikiLike[]
   wikiDislikes  WikiDislike[]
+  galleryLikes  GalleryLike[]
+  galleryDislikes GalleryDislike[]
   favorites     Favorite[]
   moderationLogs ModerationLog[] @relation("ModerationOperator")
   userBanOps    UserBanLog[]   @relation("UserBanActionBy")
@@ -420,6 +423,32 @@ model WikiDislike {
   @@index([userUid, createdAt])
 }
 
+model GalleryLike {
+  id        String   @id @default(cuid())
+  galleryId String
+  userUid   String
+  createdAt DateTime @default(now())
+  gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userUid], references: [uid], onDelete: Cascade)
+
+  @@unique([galleryId, userUid])
+  @@index([userUid, galleryId])
+  @@index([userUid, createdAt])
+}
+
+model GalleryDislike {
+  id        String   @id @default(cuid())
+  galleryId String
+  userUid   String
+  createdAt DateTime @default(now())
+  gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userUid], references: [uid], onDelete: Cascade)
+
+  @@unique([galleryId, userUid])
+  @@index([userUid, galleryId])
+  @@index([userUid, createdAt])
+}
+
 model Favorite {
   id         String             @id @default(cuid())
   userUid    String
@@ -572,6 +601,9 @@ model Gallery {
   copyright  String?
   published  Boolean        @default(false)
   publishedAt DateTime?
+  likesCount Int            @default(0)
+  dislikesCount Int         @default(0)
+  favoritesCount Int        @default(0)
   deletedAt  DateTime?
   deletedBy  String?
   createdAt  DateTime       @default(now())
@@ -580,6 +612,8 @@ model Gallery {
   location   Region?        @relation(fields: [locationCode], references: [code])
   images     GalleryImage[]
   comments   PostComment[]  @relation("GalleryComments")
+  likes      GalleryLike[]
+  dislikes   GalleryDislike[]
 
   @@index([createdAt])
   @@index([published, updatedAt], map: "Gallery_published_idx")

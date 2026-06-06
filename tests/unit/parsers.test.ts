@@ -434,6 +434,7 @@ describe('parsers', () => {
       expect(parseFavoriteType('wiki')).toBe('wiki');
       expect(parseFavoriteType('post')).toBe('post');
       expect(parseFavoriteType('music')).toBe('music');
+      expect(parseFavoriteType('gallery')).toBe('gallery');
     });
 
     it('returns null for invalid types', () => {

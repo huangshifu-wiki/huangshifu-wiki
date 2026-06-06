@@ -80,6 +80,117 @@ function canCreateGallery(authUser?: ApiUser) {
 
 const router = Router()
 
+async function attachGalleryInteractions<T extends { id: string }>(
+  gallery: T,
+  authUser?: ApiUser
+): Promise<T & {
+  likedByMe: boolean
+  dislikedByMe: boolean
+  favoritedByMe: boolean
+}> {
+  if (!authUser) {
+    return {
+      ...gallery,
+      likedByMe: false,
+      dislikedByMe: false,
+      favoritedByMe: false,
+    }
+  }
+
+  const [like, dislike, favorite] = await Promise.all([
+    prisma.galleryLike.findUnique({
+      where: {
+        galleryId_userUid: {
+          galleryId: gallery.id,
+          userUid: authUser.uid,
+        },
+      },
+      select: { id: true },
+    }),
+    prisma.galleryDislike.findUnique({
+      where: {
+        galleryId_userUid: {
+          galleryId: gallery.id,
+          userUid: authUser.uid,
+        },
+      },
+      select: { id: true },
+    }),
+    prisma.favorite.findUnique({
+      where: {
+        userUid_targetType_targetId: {
+          userUid: authUser.uid,
+          targetType: 'gallery',
+          targetId: gallery.id,
+        },
+      },
+      select: { id: true },
+    }),
+  ])
+
+  return {
+    ...gallery,
+    likedByMe: Boolean(like),
+    dislikedByMe: Boolean(dislike),
+    favoritedByMe: Boolean(favorite),
+  }
+}
+
+async function attachGalleryListInteractions<T extends { id: string }>(
+  galleries: T[],
+  authUser?: ApiUser
+): Promise<Array<T & {
+  likedByMe: boolean
+  dislikedByMe: boolean
+  favoritedByMe: boolean
+}>> {
+  if (!authUser || galleries.length === 0) {
+    return galleries.map((gallery) => ({
+      ...gallery,
+      likedByMe: false,
+      dislikedByMe: false,
+      favoritedByMe: false,
+    }))
+  }
+
+  const galleryIds = galleries.map((gallery) => gallery.id)
+  const [likes, dislikes, favorites] = await Promise.all([
+    prisma.galleryLike.findMany({
+      where: {
+        galleryId: { in: galleryIds },
+        userUid: authUser.uid,
+      },
+      select: { galleryId: true },
+    }),
+    prisma.galleryDislike.findMany({
+      where: {
+        galleryId: { in: galleryIds },
+        userUid: authUser.uid,
+      },
+      select: { galleryId: true },
+    }),
+    prisma.favorite.findMany({
+      where: {
+        targetType: 'gallery',
+        targetId: { in: galleryIds },
+        userUid: authUser.uid,
+      },
+      select: { targetId: true },
+    }),
+  ])
+
+  const likedGalleryIds = new Set(likes.map((like) => like.galleryId))
+  const dislikedGalleryIds = new Set(dislikes.map((dislike) => dislike.galleryId))
+  const favoritedGalleryIds = new Set(favorites.map((favorite) => favorite.targetId))
+
+  return galleries.map((gallery) => ({
+    ...gallery,
+    likedByMe: likedGalleryIds.has(gallery.id),
+    dislikedByMe: dislikedGalleryIds.has(gallery.id),
+    favoritedByMe: favoritedGalleryIds.has(gallery.id),
+  }))
+}
+
 function isString(value: string | null): value is string {
   return typeof value === 'string'
 }
@@ -128,7 +239,7 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
     ])
 
     const result = {
-      galleries: await toGalleryListResponse(galleries),
+      galleries: await toGalleryListResponse(await attachGalleryListInteractions(galleries, req.authUser)),
       total,
       page,
       limit,
@@ -171,7 +282,7 @@ router.get('/:id', asyncHandler(async (req: AuthenticatedRequest, res) => {
       return
     }
 
-    res.json({ gallery: await toGalleryResponse(gallery) })
+    res.json({ gallery: await toGalleryResponse(await attachGalleryInteractions(gallery, req.authUser)) })
   } catch (error) {
     console.error('Fetch gallery detail error:', error)
     res.status(500).json({ error: '获取图集详情失败' })
@@ -288,6 +399,187 @@ router.post('/upload', galleryWriteLimiter, requireAuth, requireActiveUser, asyn
       return
     }
     res.status(500).json({ error: '上传图集失败' })
+  }
+}))
+
+router.post('/:id/like', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  try {
+    const galleryId = req.params.id
+    const gallery = await prisma.gallery.findUnique({
+      where: { id: galleryId },
+      select: {
+        id: true,
+        published: true,
+        authorUid: true,
+        deletedAt: true,
+      },
+    })
+
+    if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
+      res.status(404).json({ error: '图集不存在' })
+      return
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.galleryDislike.deleteMany({
+        where: { galleryId, userUid: req.authUser!.uid },
+      })
+
+      try {
+        await tx.galleryLike.create({
+          data: {
+            galleryId,
+            userUid: req.authUser!.uid,
+          },
+        })
+      } catch {
+        // already liked
+      }
+
+      const [likesCount, dislikesCount] = await Promise.all([
+        tx.galleryLike.count({ where: { galleryId } }),
+        tx.galleryDislike.count({ where: { galleryId } }),
+      ])
+
+      await tx.gallery.update({
+        where: { id: galleryId },
+        data: { likesCount, dislikesCount },
+      })
+    })
+
+    const [likesCount, dislikesCount] = await Promise.all([
+      prisma.galleryLike.count({ where: { galleryId } }),
+      prisma.galleryDislike.count({ where: { galleryId } }),
+    ])
+
+    if (gallery.authorUid !== req.authUser!.uid) {
+      await createNotification(gallery.authorUid, 'like', {
+        galleryId,
+        targetType: 'gallery',
+        actorUid: req.authUser!.uid,
+        actorName: req.authUser!.displayName,
+      })
+    }
+
+    res.json({ liked: true, likesCount, dislikesCount })
+  } catch (error) {
+    console.error('Like gallery error:', error)
+    res.status(500).json({ error: '点赞失败' })
+  }
+}))
+
+router.delete('/:id/like', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  try {
+    const galleryId = req.params.id
+
+    await prisma.$transaction(async (tx) => {
+      const deleted = await tx.galleryLike.deleteMany({
+        where: {
+          galleryId,
+          userUid: req.authUser!.uid,
+        },
+      })
+
+      if (!deleted.count) return
+
+      const likesCount = await tx.galleryLike.count({ where: { galleryId } })
+      await tx.gallery.update({
+        where: { id: galleryId },
+        data: { likesCount },
+      })
+    })
+
+    const likesCount = await prisma.galleryLike.count({ where: { galleryId } })
+    res.json({ liked: false, likesCount })
+  } catch (error) {
+    console.error('Unlike gallery error:', error)
+    res.status(500).json({ error: '取消点赞失败' })
+  }
+}))
+
+router.post('/:id/dislike', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  try {
+    const galleryId = req.params.id
+    const gallery = await prisma.gallery.findUnique({
+      where: { id: galleryId },
+      select: {
+        id: true,
+        published: true,
+        authorUid: true,
+        deletedAt: true,
+      },
+    })
+
+    if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
+      res.status(404).json({ error: '图集不存在' })
+      return
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.galleryLike.deleteMany({
+        where: { galleryId, userUid: req.authUser!.uid },
+      })
+
+      try {
+        await tx.galleryDislike.create({
+          data: {
+            galleryId,
+            userUid: req.authUser!.uid,
+          },
+        })
+      } catch {
+        // already disliked
+      }
+
+      const [likesCount, dislikesCount] = await Promise.all([
+        tx.galleryLike.count({ where: { galleryId } }),
+        tx.galleryDislike.count({ where: { galleryId } }),
+      ])
+
+      await tx.gallery.update({
+        where: { id: galleryId },
+        data: { likesCount, dislikesCount },
+      })
+    })
+
+    const [likesCount, dislikesCount] = await Promise.all([
+      prisma.galleryLike.count({ where: { galleryId } }),
+      prisma.galleryDislike.count({ where: { galleryId } }),
+    ])
+
+    res.json({ disliked: true, dislikesCount, likesCount })
+  } catch (error) {
+    console.error('Dislike gallery error:', error)
+    res.status(500).json({ error: '踩失败' })
+  }
+}))
+
+router.delete('/:id/dislike', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  try {
+    const galleryId = req.params.id
+
+    await prisma.$transaction(async (tx) => {
+      const deleted = await tx.galleryDislike.deleteMany({
+        where: {
+          galleryId,
+          userUid: req.authUser!.uid,
+        },
+      })
+
+      if (!deleted.count) return
+
+      const dislikesCount = await tx.galleryDislike.count({ where: { galleryId } })
+      await tx.gallery.update({
+        where: { id: galleryId },
+        data: { dislikesCount },
+      })
+    })
+
+    const dislikesCount = await prisma.galleryDislike.count({ where: { galleryId } })
+    res.json({ disliked: false, dislikesCount })
+  } catch (error) {
+    console.error('Undislike gallery error:', error)
+    res.status(500).json({ error: '取消踩失败' })
   }
 }))
 

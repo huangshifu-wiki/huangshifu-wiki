@@ -2,14 +2,15 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  Edit3,
   Link2,
   Heart,
   Plus,
   Save,
+  Share2,
+  ThumbsDown,
   Trash2,
   User as UserIcon,
-  Eye,
-  EyeOff,
   Clock,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -146,6 +147,9 @@ const GalleryDetail = () => {
   const [uploading, setUploading] = useState(false);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [pageDragDepth, setPageDragDepth] = useState(0);
+  const [likingGallery, setLikingGallery] = useState(false);
+  const [dislikingGallery, setDislikingGallery] = useState(false);
+  const [favoritingGallery, setFavoritingGallery] = useState(false);
 
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -386,6 +390,182 @@ const GalleryDetail = () => {
       return;
     }
     show(t('gallery.linkCopyFailed'), { variant: 'error' });
+  };
+
+  const toggleGalleryLike = async () => {
+    if (!gallery?.id || likingGallery) return;
+    if (isBanned) {
+      show(t('common.bannedUser'), { variant: 'error' });
+      return;
+    }
+    if (!user) {
+      show(t('common.loginRequired'), { variant: 'error' });
+      return;
+    }
+
+    setLikingGallery(true);
+    const previous = gallery;
+    const wasLiked = Boolean(gallery.likedByMe);
+    setGallery((prev) =>
+      prev
+        ? {
+            ...prev,
+            likedByMe: !wasLiked,
+            likesCount: Math.max(0, Number(prev.likesCount || 0) + (wasLiked ? -1 : 1)),
+            dislikedByMe: wasLiked ? prev.dislikedByMe : false,
+            dislikesCount: wasLiked
+              ? prev.dislikesCount
+              : Math.max(0, Number(prev.dislikesCount || 0) - (prev.dislikedByMe ? 1 : 0)),
+          }
+        : prev
+    );
+
+    try {
+      if (wasLiked) {
+        const data = await apiDelete<{ liked: boolean; likesCount: number }>(
+          `/api/galleries/${gallery.id}/like`
+        );
+        setGallery((prev) =>
+          prev
+            ? {
+                ...prev,
+                likedByMe: data.liked,
+                likesCount: data.likesCount,
+              }
+            : prev
+        );
+      } else {
+        const data = await apiPost<{ liked: boolean; likesCount: number; dislikesCount: number }>(
+          `/api/galleries/${gallery.id}/like`
+        );
+        setGallery((prev) =>
+          prev
+            ? {
+                ...prev,
+                likedByMe: data.liked,
+                likesCount: data.likesCount,
+                dislikedByMe: false,
+                dislikesCount: data.dislikesCount,
+              }
+            : prev
+        );
+      }
+    } catch (error) {
+      setGallery(previous);
+      console.error('Toggle gallery like error:', error);
+      show('图集点赞失败', { variant: 'error' });
+    } finally {
+      setLikingGallery(false);
+    }
+  };
+
+  const toggleGalleryDislike = async () => {
+    if (!gallery?.id || dislikingGallery) return;
+    if (isBanned) {
+      show(t('common.bannedUser'), { variant: 'error' });
+      return;
+    }
+    if (!user) {
+      show(t('common.loginRequired'), { variant: 'error' });
+      return;
+    }
+
+    setDislikingGallery(true);
+    const previous = gallery;
+    const wasDisliked = Boolean(gallery.dislikedByMe);
+    setGallery((prev) =>
+      prev
+        ? {
+            ...prev,
+            dislikedByMe: !wasDisliked,
+            dislikesCount: Math.max(0, Number(prev.dislikesCount || 0) + (wasDisliked ? -1 : 1)),
+            likedByMe: wasDisliked ? prev.likedByMe : false,
+            likesCount: wasDisliked
+              ? prev.likesCount
+              : Math.max(0, Number(prev.likesCount || 0) - (prev.likedByMe ? 1 : 0)),
+          }
+        : prev
+    );
+
+    try {
+      if (wasDisliked) {
+        const data = await apiDelete<{ disliked: boolean; dislikesCount: number }>(
+          `/api/galleries/${gallery.id}/dislike`
+        );
+        setGallery((prev) =>
+          prev
+            ? {
+                ...prev,
+                dislikedByMe: data.disliked,
+                dislikesCount: data.dislikesCount,
+              }
+            : prev
+        );
+      } else {
+        const data = await apiPost<{ disliked: boolean; dislikesCount: number; likesCount: number }>(
+          `/api/galleries/${gallery.id}/dislike`
+        );
+        setGallery((prev) =>
+          prev
+            ? {
+                ...prev,
+                dislikedByMe: data.disliked,
+                dislikesCount: data.dislikesCount,
+                likedByMe: false,
+                likesCount: data.likesCount,
+              }
+            : prev
+        );
+      }
+    } catch (error) {
+      setGallery(previous);
+      console.error('Toggle gallery dislike error:', error);
+      show('图集点踩失败', { variant: 'error' });
+    } finally {
+      setDislikingGallery(false);
+    }
+  };
+
+  const toggleGalleryFavorite = async () => {
+    if (!gallery?.id || favoritingGallery) return;
+    if (isBanned) {
+      show(t('common.bannedUser'), { variant: 'error' });
+      return;
+    }
+    if (!user) {
+      show(t('common.loginRequired'), { variant: 'error' });
+      return;
+    }
+
+    setFavoritingGallery(true);
+    const previous = gallery;
+    const wasFavorited = Boolean(gallery.favoritedByMe);
+    setGallery((prev) =>
+      prev
+        ? {
+            ...prev,
+            favoritedByMe: !wasFavorited,
+            favoritesCount: Math.max(0, Number(prev.favoritesCount || 0) + (wasFavorited ? -1 : 1)),
+          }
+        : prev
+    );
+
+    try {
+      if (wasFavorited) {
+        await apiDelete<{ favorited: boolean }>(`/api/favorites/gallery/${gallery.id}`);
+      } else {
+        await apiPost<{ favorited: boolean }>('/api/favorites', {
+          targetType: 'gallery',
+          targetId: gallery.id,
+        });
+      }
+    } catch (error) {
+      setGallery(previous);
+      console.error('Toggle gallery favorite error:', error);
+      show('图集收藏失败', { variant: 'error' });
+    } finally {
+      setFavoritingGallery(false);
+    }
   };
 
   const handleCopyCommentLink = async (comment: CommentItem) => {
@@ -889,76 +1069,124 @@ const GalleryDetail = () => {
       ) : null}
 
       <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 gallery-detail-page">
-        {/* Breadcrumb + Actions */}
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
-          <Link to="/gallery" className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors">
-            <ArrowLeft size={16} /> {t('gallery.backToList')}
-          </Link>
-          {canManage && (
-            <div className="flex flex-col items-end gap-2">
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {editing ? (
-                  <>
-                    <button
-                      onClick={handleSaveMeta}
-                      disabled={saving || uploading}
-                      className="px-4 py-2 text-[0.9375rem] rounded theme-button-primary transition-all flex items-center gap-2 disabled:opacity-50"
-                    >
-                      <Save size={16} /> {saving || uploading ? t('gallery.saving') : t('gallery.saveChanges')}
-                    </button>
-                    <button
-                      onClick={handleCancelEdit}
-                      disabled={saving || uploading}
-                      className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {t('gallery.cancelEdit')}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={handleEnterEditMode}
-                    className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
-                  >
-                    <Save size={16} /> {t('gallery.enterEditMode')}
-                  </button>
-                )}
+        <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px] lg:items-start">
+          <div className="min-w-0">
+            <Link to="/gallery" className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors">
+              <ArrowLeft size={16} /> {t('gallery.backToList')}
+            </Link>
+
+            <header>
+              <h1 className="text-[1.75rem] font-semibold tracking-[0.12em] text-text-primary">
+                {editing && draft ? draft.title || gallery.title : gallery.title}
+              </h1>
+              {!editing && (
+                <>
+                  <p className="mt-2 text-text-secondary leading-relaxed">
+                    {gallery.description || t('gallery.noDescription')}
+                  </p>
+                  {gallery.copyright && (
+                    <p className="text-xs text-text-muted mt-1">{gallery.copyright}</p>
+                  )}
+                </>
+              )}
+            </header>
+          </div>
+
+          <div className="lg:pt-0">
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <button
+                onClick={handleCopyLink}
+                className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
+                title={t('gallery.copyInternalLink')}
+              >
+                <Link2 size={16} /> 复制链接
+              </button>
+              {canManage && (
                 <button
-                  onClick={handleTogglePublish}
-                  disabled={!editing || saving || uploading}
+                  onClick={handleEnterEditMode}
+                  disabled={editing || saving || uploading}
                   className={clsx(
-                    'px-3 py-2 rounded text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5',
-                    (editing ? draft?.published : gallery.published)
-                      ? 'theme-status-success'
-                      : 'theme-status-warning',
+                    'px-4 py-2 text-[0.9375rem] rounded transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2',
+                    editing ? 'theme-button-secondary' : 'theme-button-primary'
                   )}
                 >
-                  {(editing ? draft?.published : gallery.published) ? <Eye size={14} /> : <EyeOff size={14} />}
-                  {editing ? (draft?.published ? t('gallery.setDraft') : t('gallery.setPublish')) : (gallery.published ? t('gallery.published') : t('gallery.draft'))}
+                  <Edit3 size={16} /> 编辑
                 </button>
-                <button
-                  onClick={handleCopyLink}
-                  className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
-                  title={t('gallery.copyInternalLink')}
-                >
-                  <Link2 size={16} /> {t('gallery.copyInternalLink')}
-                </button>
-                <button
-                  onClick={handleDeleteGallery}
-                  disabled={deletingGallery || saving || uploading}
-                  className="px-4 py-2 text-[0.9375rem] rounded theme-button-danger transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Trash2 size={16} /> {deletingGallery ? '删除中...' : '删除图集'}
-                </button>
-                <input ref={addImagesInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleAddImages} />
-              </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Header */}
-        <header className="mb-6">
-          {editing && draft ? (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                onClick={toggleGalleryLike}
+                disabled={likingGallery}
+                className={clsx(
+                  'flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed',
+                  gallery.likedByMe
+                    ? 'theme-button-danger border border-transparent'
+                    : 'bg-surface border theme-button-danger-outline text-text-secondary'
+                )}
+                title={gallery.likedByMe ? '取消点赞' : '点赞'}
+              >
+                <Heart size={15} fill={gallery.likedByMe ? 'currentColor' : 'none'} /> {gallery.likesCount || 0}
+              </button>
+              <button
+                onClick={toggleGalleryDislike}
+                disabled={dislikingGallery}
+                className={clsx(
+                  'flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed',
+                  gallery.dislikedByMe
+                    ? 'theme-button-warning border border-transparent'
+                    : 'bg-surface border theme-button-warning-outline text-text-secondary'
+                )}
+                title={gallery.dislikedByMe ? '取消点踩' : '点踩'}
+              >
+                <ThumbsDown size={15} /> {gallery.dislikesCount || 0}
+              </button>
+              <button
+                onClick={toggleGalleryFavorite}
+                disabled={favoritingGallery}
+                className={clsx(
+                  'flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed',
+                  gallery.favoritedByMe
+                    ? 'bg-[var(--color-theme-accent)] text-white border border-transparent'
+                    : 'bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
+                )}
+                title={gallery.favoritedByMe ? '取消收藏' : '收藏'}
+              >
+                <Save size={15} /> {gallery.favoritedByMe ? '已收藏' : '收藏'} {gallery.favoritesCount || 0}
+              </button>
+              <button
+                onClick={handleCopyLink}
+                className="flex-1 px-3 py-2 rounded text-sm font-medium bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold transition-all flex items-center justify-center gap-1.5"
+                title="分享"
+              >
+                <Share2 size={15} /> 分享
+              </button>
+            </div>
+          </div>
+        </div>
+        <input ref={addImagesInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleAddImages} />
+
+        {/* Editable metadata */}
+        {editing && draft ? (
+          <section className="mb-6">
             <div className="space-y-4 max-w-2xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleSaveMeta}
+                  disabled={saving || uploading}
+                  className="px-4 py-2 text-[0.9375rem] rounded theme-button-primary transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Save size={16} /> {saving || uploading ? t('gallery.saving') : t('gallery.saveChanges')}
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  disabled={saving || uploading}
+                  className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {t('gallery.cancelEdit')}
+                </button>
+              </div>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-3">
                   <label htmlFor="gallery-title" className="block text-sm font-medium text-text-secondary">
@@ -1029,20 +1257,8 @@ const GalleryDetail = () => {
                 </div>
               </div>
             </div>
-          ) : (
-            <div>
-              <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em] mb-2">
-                {gallery.title}
-              </h1>
-              <p className="text-text-secondary leading-relaxed">
-                {gallery.description || t('gallery.noDescription')}
-              </p>
-              {gallery.copyright && (
-                <p className="text-xs text-text-muted mt-1">{gallery.copyright}</p>
-              )}
-            </div>
-          )}
-        </header>
+          </section>
+        ) : null}
 
         {/* Info bar */}
         <div className="flex items-end justify-between border-b border-border mb-6 pb-2">
@@ -1050,21 +1266,6 @@ const GalleryDetail = () => {
             <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
               {t('gallery.imageCount', { count: images.length })}
             </span>
-            {!editing && gallery.tags?.map((tag) => (
-              <span key={tag} className="text-[11px] theme-tag px-2 py-0.5 rounded">
-                #{tag}
-              </span>
-            ))}
-            {!editing && (
-              <span
-                className={clsx(
-                  'text-[11px] px-2 py-0.5 rounded font-medium',
-                  gallery.published ? 'theme-status-success' : 'theme-status-warning',
-                )}
-              >
-                {gallery.published ? t('gallery.published') : t('gallery.draftBadge')}
-              </span>
-            )}
             {editing ? (
               <span className="text-[11px] px-2 py-0.5 rounded font-medium bg-surface-alt text-text-secondary border border-border">
                 {t('gallery.editMode')}

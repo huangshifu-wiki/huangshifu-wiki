@@ -145,6 +145,12 @@ export interface GalleryItem {
   copyright: string | null;
   published: boolean;
   publishedAt: string | null;
+  likesCount?: number;
+  dislikesCount?: number;
+  favoritesCount?: number;
+  likedByMe?: boolean;
+  dislikedByMe?: boolean;
+  favoritedByMe?: boolean;
   createdAt: string;
   updatedAt: string;
   images: GalleryImageItem[];

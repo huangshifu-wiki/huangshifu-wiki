@@ -398,6 +398,12 @@ type GalleryInput = {
   copyright?: string | null;
   published: boolean;
   publishedAt: Date | null;
+  likesCount?: number;
+  dislikesCount?: number;
+  favoritesCount?: number;
+  likedByMe?: boolean;
+  dislikedByMe?: boolean;
+  favoritedByMe?: boolean;
   deletedAt?: Date | null;
   deletedBy?: string | null;
   createdAt: Date;
@@ -522,6 +528,12 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
     copyright: gallery.copyright || null,
     published: gallery.published,
     publishedAt: gallery.publishedAt ? gallery.publishedAt.toISOString() : null,
+    likesCount: gallery.likesCount ?? 0,
+    dislikesCount: gallery.dislikesCount ?? 0,
+    favoritesCount: gallery.favoritesCount ?? 0,
+    likedByMe: Boolean(gallery.likedByMe),
+    dislikedByMe: Boolean(gallery.dislikedByMe),
+    favoritedByMe: Boolean(gallery.favoritedByMe),
     isDeleted: Boolean(gallery.deletedAt),
     deletedAt: gallery.deletedAt ? gallery.deletedAt.toISOString() : null,
     deletedBy: gallery.deletedBy ?? null,
@@ -601,6 +613,12 @@ export async function toGalleryListResponse(galleries: GalleryInput[], storageSt
     copyright: gallery.copyright || null,
     published: gallery.published,
     publishedAt: gallery.publishedAt ? gallery.publishedAt.toISOString() : null,
+    likesCount: gallery.likesCount ?? 0,
+    dislikesCount: gallery.dislikesCount ?? 0,
+    favoritesCount: gallery.favoritesCount ?? 0,
+    likedByMe: Boolean(gallery.likedByMe),
+    dislikedByMe: Boolean(gallery.dislikedByMe),
+    favoritedByMe: Boolean(gallery.favoritedByMe),
     isDeleted: Boolean(gallery.deletedAt),
     deletedAt: gallery.deletedAt ? gallery.deletedAt.toISOString() : null,
     deletedBy: gallery.deletedBy ?? null,
