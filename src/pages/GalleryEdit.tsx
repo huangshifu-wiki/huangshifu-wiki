@@ -14,6 +14,7 @@ import { splitTagsInput } from '../lib/contentUtils'
 import { useI18n } from '../lib/i18n'
 import { formatUploadLimitWithSize, UPLOAD_MAX_FILE_SIZE_BYTES } from '../lib/uploadLimits'
 import { findExistingImageMapByMd5, getImagePreference } from '../services/imageService'
+import { runInBatches } from '../utils/asyncBatch'
 import { calculateFileMd5Hex } from '../utils/fileMd5'
 import type {
   GalleryCreateResponse,
@@ -40,6 +41,7 @@ type GalleryDraft = {
 }
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp']
+const UPLOAD_BATCH_SIZE = 3
 
 const toEditableImage = (image: GalleryImageItem): EditableGalleryImage => ({
   ...image,
@@ -353,46 +355,61 @@ const GalleryEdit = () => {
 
       if (pendingImages.length) {
         setUploading(true)
-        const imageUrlByMd5 = new Map<string, { url: string; name: string }>()
+        const imageTaskByMd5 = new Map<
+          string,
+          Promise<{ imageRef: { url: string; name: string }; assetId?: string }>
+        >()
         let sessionId: string | null = null
+        let sessionPromise: Promise<string> | null = null
 
         const ensureSession = async () => {
           if (sessionId) return sessionId
-          const sessionData = await apiPost<UploadSessionResponse>('/api/uploads/sessions', {
-            maxFiles: pendingImages.length,
-          })
-          sessionId = sessionData.session.id
-          return sessionId
+          if (!sessionPromise) {
+            sessionPromise = apiPost<UploadSessionResponse>('/api/uploads/sessions', {
+              maxFiles: pendingImages.length,
+            }).then((sessionData) => {
+              sessionId = sessionData.session.id
+              return sessionId
+            })
+          }
+          return sessionPromise
         }
 
-        for (const image of pendingImages) {
+        const processPendingImage = async (image: EditableGalleryImage) => {
           const file = image.pendingFile
-          if (!file) continue
+          if (!file) return
 
           const md5 = await calculateFileMd5Hex(file)
-          const reusedImage = imageUrlByMd5.get(md5)
-          if (reusedImage) {
-            imageUrlByClientId.set(image.clientId, reusedImage)
-            continue
+          let imageTask = imageTaskByMd5.get(md5)
+          if (!imageTask) {
+            imageTask = (async () => {
+              const existing = await findExistingImageMapByMd5(md5)
+              if (existing) {
+                return {
+                  imageRef: { url: existing.localUrl, name: image.name || file.name },
+                }
+              }
+
+              const uploadResult = await uploadFileToSession(await ensureSession(), file)
+              return {
+                assetId: uploadResult.asset.id,
+                imageRef: {
+                  url: uploadResult.tripleStorage?.localUrl || uploadResult.asset.publicUrl,
+                  name: uploadResult.asset.fileName || image.name || file.name,
+                },
+              }
+            })()
+            imageTaskByMd5.set(md5, imageTask)
           }
 
-          const existing = await findExistingImageMapByMd5(md5)
-          if (existing) {
-            const imageRef = { url: existing.localUrl, name: image.name || file.name }
-            imageUrlByMd5.set(md5, imageRef)
-            imageUrlByClientId.set(image.clientId, imageRef)
-            continue
+          const result = await imageTask
+          if (result.assetId) {
+            assetIdByClientId.set(image.clientId, result.assetId)
           }
-
-          const uploadResult = await uploadFileToSession(await ensureSession(), file)
-          assetIdByClientId.set(image.clientId, uploadResult.asset.id)
-          const uploadedImageRef = {
-            url: uploadResult.tripleStorage?.localUrl || uploadResult.asset.publicUrl,
-            name: uploadResult.asset.fileName || image.name || file.name,
-          }
-          imageUrlByMd5.set(md5, uploadedImageRef)
-          imageUrlByClientId.set(image.clientId, uploadedImageRef)
+          imageUrlByClientId.set(image.clientId, result.imageRef)
         }
+
+        await runInBatches(pendingImages, UPLOAD_BATCH_SIZE, processPendingImage)
 
         if (sessionId) {
           await apiPost(`/api/uploads/sessions/${sessionId}/finalize`)
