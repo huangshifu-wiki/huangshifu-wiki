@@ -297,6 +297,37 @@ describe('Settings', () => {
     expect(mockApiGet).toHaveBeenCalledWith('/api/users/user-1/comments', { limit: 50 })
   })
 
+  it('labels replies separately in content management comments tab', async () => {
+    mockApiGet.mockResolvedValue({
+      comments: [
+        {
+          id: 'reply-1',
+          postId: 'post-1',
+          galleryId: null,
+          authorUid: 'user-1',
+          authorName: '测试用户',
+          authorPhoto: null,
+          content: '回复内容',
+          parentId: 'root-comment',
+          replyToId: 'root-comment',
+          replyToAuthorName: '被回复的人',
+          isDeleted: false,
+          createdAt: '2026-05-25T10:00:00.000Z',
+          targetType: 'post',
+          target: { id: 'post-1', title: '帖子标题', status: 'published' },
+        },
+      ],
+      total: 1,
+    })
+
+    renderSettings('/settings/content?tab=comments')
+
+    expect(await screen.findByText('回复了被回复的人在')).toBeInTheDocument()
+    expect(screen.getByText('下的评论')).toBeInTheDocument()
+    expect(screen.queryByText('评论了帖子')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '帖子标题' })).toHaveAttribute('href', '/forum/post-1')
+  })
+
   it('marks deleted comments and hides deep links from regular users', async () => {
     mockApiGet.mockResolvedValue({
       comments: [

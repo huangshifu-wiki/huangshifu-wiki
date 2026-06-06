@@ -512,6 +512,7 @@ const Settings = () => {
         {myComments.map((comment) => {
           const target = comment.target || comment.post || comment.gallery || null
           const isGalleryComment = comment.targetType === 'gallery' || Boolean(comment.gallery)
+          const isReply = Boolean(comment.parentId)
           const canOpenComment = Boolean(target && (!comment.isDeleted || isAdmin))
           const sourceHref = target ? (isGalleryComment ? `/gallery/${target.id}` : `/forum/${target.id}`) : '#'
           const commentHref = canOpenComment ? `${sourceHref}#comment-${comment.id}` : '#'
@@ -534,22 +535,23 @@ const Settings = () => {
               ) : null}
               <div className={clsx('relative z-10 flex flex-col gap-2 py-3', target && 'pointer-events-none')}>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                  <span>评论了{isGalleryComment ? '图集' : '帖子'}</span>
-                  {comment.isDeleted ? (
-                    <span className={clsx(CONTENT_STATUS_BADGE_CLASS, 'theme-status-error')}>
-                      评论已删除
-                      {comment.deletionReason ? `（原因：${comment.deletionReason}）` : ''}
-                    </span>
-                  ) : null}
+                  <span>
+                    {isReply
+                      ? `回复了${comment.replyToAuthorName || '某人'}在`
+                      : `评论了${isGalleryComment ? '图集' : '帖子'}`}
+                  </span>
                   {target ? (
-                    <Link
-                      to={sourceHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="pointer-events-auto text-brand-gold hover:underline"
-                    >
-                      {target.title}
-                    </Link>
+                    <>
+                      <Link
+                        to={sourceHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="pointer-events-auto text-brand-gold hover:underline"
+                      >
+                        {target.title}
+                      </Link>
+                      {isReply ? <span>下的评论</span> : null}
+                    </>
                   ) : (
                     <span className={clsx(
                       CONTENT_STATUS_BADGE_CLASS,
@@ -558,6 +560,12 @@ const Settings = () => {
                       原内容不可见
                     </span>
                   )}
+                  {comment.isDeleted ? (
+                    <span className={clsx(CONTENT_STATUS_BADGE_CLASS, 'theme-status-error')}>
+                      评论已删除
+                      {comment.deletionReason ? `（原因：${comment.deletionReason}）` : ''}
+                    </span>
+                  ) : null}
                 </div>
                 {canOpenComment ? (
                   <p className="max-w-[72ch] text-sm leading-7 text-text-secondary group-hover:text-brand-gold">
