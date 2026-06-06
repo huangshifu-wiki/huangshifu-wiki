@@ -21,9 +21,7 @@ import {
 
 const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.default })))
 const Wiki = lazy(() => import('./pages/wiki').then((m) => ({ default: m.default })))
-const UserProfile = lazy(() =>
-  import('./pages/UserProfile').then((m) => ({ default: m.default }))
-)
+const UserProfile = lazy(() => import('./pages/UserProfile').then((m) => ({ default: m.default })))
 const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.default })))
 const Forum = lazy(() => import('./pages/Forum').then((m) => ({ default: m.default })))
 const Music = lazy(() => import('./pages/Music').then((m) => ({ default: m.default })))
@@ -31,6 +29,7 @@ const Gallery = lazy(() => import('./pages/Gallery').then((m) => ({ default: m.d
 const GalleryDetail = lazy(() =>
   import('./pages/GalleryDetail').then((m) => ({ default: m.default }))
 )
+const GalleryEdit = lazy(() => import('./pages/GalleryEdit').then((m) => ({ default: m.default })))
 const AlbumDetail = lazy(() => import('./pages/AlbumDetail').then((m) => ({ default: m.default })))
 const MusicDetail = lazy(() => import('./pages/MusicDetail').then((m) => ({ default: m.default })))
 const MusicLinks = lazy(() => import('./pages/MusicLinks').then((m) => ({ default: m.default })))
@@ -86,6 +85,8 @@ const MainLayout = () => {
               <Route path="/wiki/*" element={<Wiki />} />
               <Route path="/forum/*" element={<Forum />} />
               <Route path="/gallery" element={<Gallery />} />
+              <Route path="/gallery/new" element={<GalleryEdit />} />
+              <Route path="/gallery/:galleryId/edit" element={<GalleryEdit />} />
               <Route path="/gallery/:galleryId" element={<GalleryDetail />} />
               <Route path="/music" element={<Music />} />
               <Route path="/music/:songId" element={<MusicDetail />} />

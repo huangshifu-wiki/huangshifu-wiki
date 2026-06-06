@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Edit3,
@@ -12,85 +12,85 @@ import {
   Trash2,
   User as UserIcon,
   Clock,
-} from 'lucide-react';
-import { clsx } from 'clsx';
-import { useAuth } from '../context/AuthContext';
-import { SmartImage } from '../components/SmartImage';
-import { Lightbox } from '../components/Lightbox';
-import { CharacterCount } from '../components/CharacterCount';
-import { CommentActionMenu } from '../components/CommentActionMenu';
-import { useDialog } from '../components/Dialog';
-import { useToast } from '../components/Toast';
-import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink';
-import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from '../lib/apiClient';
-import { splitTagsInput } from '../lib/contentUtils';
-import { useI18n } from '../lib/i18n';
-import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu';
-import { formatDateTime, toDateValue } from '../lib/dateUtils';
-import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar';
-import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/uploadLimits';
-import { findExistingImageMapByMd5, getImagePreference } from '../services/imageService';
-import { submitFormOnModifierEnter } from '../lib/formShortcuts';
-import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState';
-import { calculateFileMd5Hex } from '../utils/fileMd5';
-import type { GalleryDetailResponse } from '../types/api';
-import type { GalleryImageItem, GalleryItem } from '../types/entities';
-import { CONTENT_LIMITS } from '../lib/contentLimits';
+} from 'lucide-react'
+import { clsx } from 'clsx'
+import { useAuth } from '../context/AuthContext'
+import { SmartImage } from '../components/SmartImage'
+import { Lightbox } from '../components/Lightbox'
+import { CharacterCount } from '../components/CharacterCount'
+import { CommentActionMenu } from '../components/CommentActionMenu'
+import { useDialog } from '../components/Dialog'
+import { useToast } from '../components/Toast'
+import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
+import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from '../lib/apiClient'
+import { splitTagsInput } from '../lib/contentUtils'
+import { useI18n } from '../lib/i18n'
+import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
+import { formatDateTime, toDateValue } from '../lib/dateUtils'
+import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
+import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/uploadLimits'
+import { findExistingImageMapByMd5, getImagePreference } from '../services/imageService'
+import { submitFormOnModifierEnter } from '../lib/formShortcuts'
+import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState'
+import { calculateFileMd5Hex } from '../utils/fileMd5'
+import type { GalleryDetailResponse } from '../types/api'
+import type { GalleryImageItem, GalleryItem } from '../types/entities'
+import { CONTENT_LIMITS } from '../lib/contentLimits'
 
 type EditableGalleryImage = GalleryImageItem & {
-  clientId: string;
-  pendingFile?: File;
-  isPending?: boolean;
-};
+  clientId: string
+  pendingFile?: File
+  isPending?: boolean
+}
 
 type GalleryDraft = {
-  title: string;
-  description: string;
-  tagsText: string;
-  copyrightText: string;
-  published: boolean;
-  images: EditableGalleryImage[];
-};
+  title: string
+  description: string
+  tagsText: string
+  copyrightText: string
+  published: boolean
+  images: EditableGalleryImage[]
+}
 
 type UploadSessionResponse = {
   session: {
-    id: string;
-  };
-};
+    id: string
+  }
+}
 
 type UploadFileResponse = {
   asset: {
-    id: string;
-    url: string;
-    publicUrl?: string;
-    fileName: string;
-  };
-};
+    id: string
+    url: string
+    publicUrl?: string
+    fileName: string
+  }
+}
 
 type CommentItem = {
-  id: string;
-  galleryId: string | null;
-  authorUid: string;
-  authorName: string;
-  authorPhoto: string | null;
-  content: string;
-  parentId: string | null;
-  replyToId: string | null;
-  replyToAuthorUid: string | null;
-  replyToAuthorName: string | null;
-  isDeleted: boolean;
-  deletedAt?: string | null;
-  deletedBy?: string | null;
-  deletedByName?: string | null;
-  likesCount: number;
-  likedByMe: boolean;
-  createdAt: string;
-};
+  id: string
+  galleryId: string | null
+  authorUid: string
+  authorName: string
+  authorPhoto: string | null
+  content: string
+  parentId: string | null
+  replyToId: string | null
+  replyToAuthorUid: string | null
+  replyToAuthorName: string | null
+  isDeleted: boolean
+  deletedAt?: string | null
+  deletedBy?: string | null
+  deletedByName?: string | null
+  likesCount: number
+  likedByMe: boolean
+  createdAt: string
+}
 
 const toEditableImage = (image: GalleryImageItem): EditableGalleryImage => ({
   ...image,
   clientId: image.id,
-});
+})
 
 const createPendingImage = (file: File): EditableGalleryImage => ({
   clientId: `pending-${Math.random().toString(36).slice(2, 10)}`,
@@ -102,15 +102,15 @@ const createPendingImage = (file: File): EditableGalleryImage => ({
   sizeBytes: file.size,
   pendingFile: file,
   isPending: true,
-});
+})
 
 const releasePendingImageUrls = (images: EditableGalleryImage[]) => {
   images.forEach((image) => {
     if (image.isPending) {
-      URL.revokeObjectURL(image.url);
+      URL.revokeObjectURL(image.url)
     }
-  });
-};
+  })
+}
 
 const createDraftFromGallery = (item: GalleryItem): GalleryDraft => ({
   title: item.title || '',
@@ -119,205 +119,220 @@ const createDraftFromGallery = (item: GalleryItem): GalleryDraft => ({
   copyrightText: item.copyright || '',
   published: item.published,
   images: item.images.map(toEditableImage),
-});
+})
 
 const hasDraggedFiles = (event: Pick<React.DragEvent<HTMLElement>, 'dataTransfer'>) =>
-  Array.from(event.dataTransfer?.types || []).includes('Files');
-const COMMENT_HIGHLIGHT_DURATION_MS = 3200;
+  Array.from(event.dataTransfer?.types || []).includes('Files')
+const COMMENT_HIGHLIGHT_DURATION_MS = 3200
 const HIGHLIGHTED_COMMENT_CLASS =
-  'bg-[color-mix(in_srgb,var(--color-theme-accent)_18%,var(--color-surface))]';
+  'bg-[color-mix(in_srgb,var(--color-theme-accent)_18%,var(--color-surface))]'
 
 const GalleryDetail = () => {
-  const { galleryId } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user, profile, isBanned } = useAuth();
-  const dialog = useDialog();
-  const { show } = useToast();
-  const { t } = useI18n();
+  const { galleryId } = useParams()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { user, profile, isBanned } = useAuth()
+  const dialog = useDialog()
+  const { show } = useToast()
+  const { t } = useI18n()
 
-  const [gallery, setGallery] = useState<GalleryItem | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [gallery, setGallery] = useState<GalleryItem | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
 
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<GalleryDraft | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-  const [pageDragDepth, setPageDragDepth] = useState(0);
-  const [likingGallery, setLikingGallery] = useState(false);
-  const [dislikingGallery, setDislikingGallery] = useState(false);
-  const [favoritingGallery, setFavoritingGallery] = useState(false);
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<GalleryDraft | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
+  const [pageDragDepth, setPageDragDepth] = useState(0)
+  const [likingGallery, setLikingGallery] = useState(false)
+  const [dislikingGallery, setDislikingGallery] = useState(false)
+  const [favoritingGallery, setFavoritingGallery] = useState(false)
 
-  const [comments, setComments] = useState<CommentItem[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [replyTo, setReplyTo] = useState<CommentItem | null>(null);
-  const [submittingComment, setSubmittingComment] = useState(false);
-  const [deletingGallery, setDeletingGallery] = useState(false);
-  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
-  const [restoringCommentId, setRestoringCommentId] = useState<string | null>(null);
-  const [likingCommentId, setLikingCommentId] = useState<string | null>(null);
-  const [showDeletedComments, setShowDeletedComments] = useState(false);
-  const [isGalleryAdminOnly, setIsGalleryAdminOnly] = useState(false);
-  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
-  const { hoveredCommentId, showCommentMenu, hideCommentMenu } = useHoveredCommentMenu();
+  const [comments, setComments] = useState<CommentItem[]>([])
+  const [newComment, setNewComment] = useState('')
+  const [replyTo, setReplyTo] = useState<CommentItem | null>(null)
+  const [submittingComment, setSubmittingComment] = useState(false)
+  const [deletingGallery, setDeletingGallery] = useState(false)
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
+  const [restoringCommentId, setRestoringCommentId] = useState<string | null>(null)
+  const [likingCommentId, setLikingCommentId] = useState<string | null>(null)
+  const [showDeletedComments, setShowDeletedComments] = useState(false)
+  const [isGalleryAdminOnly, setIsGalleryAdminOnly] = useState(false)
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null)
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
+  const { hoveredCommentId, showCommentMenu, hideCommentMenu } = useHoveredCommentMenu()
 
-  const addImagesInputRef = useRef<HTMLInputElement>(null);
-  const commentFormRef = useRef<HTMLFormElement | null>(null);
-  const commentInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const draftRef = useRef<GalleryDraft | null>(null);
+  const addImagesInputRef = useRef<HTMLInputElement>(null)
+  const commentFormRef = useRef<HTMLFormElement | null>(null)
+  const commentInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const draftRef = useRef<GalleryDraft | null>(null)
 
-  const applyDraft = (updater: GalleryDraft | null | ((prev: GalleryDraft | null) => GalleryDraft | null)) => {
-    const previous = draftRef.current;
-    const next = typeof updater === 'function'
-      ? (updater as (value: GalleryDraft | null) => GalleryDraft | null)(previous)
-      : updater;
-    draftRef.current = next;
-    setDraft(next);
-  };
+  const applyDraft = (
+    updater: GalleryDraft | null | ((prev: GalleryDraft | null) => GalleryDraft | null)
+  ) => {
+    const previous = draftRef.current
+    const next =
+      typeof updater === 'function'
+        ? (updater as (value: GalleryDraft | null) => GalleryDraft | null)(previous)
+        : updater
+    draftRef.current = next
+    setDraft(next)
+  }
 
   const fetchGallery = async () => {
-    if (!galleryId) return;
+    if (!galleryId) return
     try {
-      setLoading(true);
-      const data = await apiGet<GalleryDetailResponse>(`/api/galleries/${galleryId}`);
-      setGallery(data.gallery);
+      setLoading(true)
+      const data = await apiGet<GalleryDetailResponse>(`/api/galleries/${galleryId}`)
+      setGallery(data.gallery)
       applyDraft((prev) => {
         if (prev) {
-          releasePendingImageUrls(prev.images);
+          releasePendingImageUrls(prev.images)
         }
-        return null;
-      });
-      setEditing(false);
+        return null
+      })
+      setEditing(false)
     } catch (error) {
-      console.error('Fetch gallery detail error:', error);
-      setGallery(null);
+      console.error('Fetch gallery detail error:', error)
+      setGallery(null)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    fetchGallery();
-  }, [galleryId]);
+    fetchGallery()
+  }, [galleryId])
 
   useEffect(() => {
     const fetchGalleryAccess = async () => {
       try {
-        const data = await apiGet<{ adminOnly: boolean }>('/api/config/gallery-access');
-        setIsGalleryAdminOnly(Boolean(data.adminOnly));
+        const data = await apiGet<{ adminOnly: boolean }>('/api/config/gallery-access')
+        setIsGalleryAdminOnly(Boolean(data.adminOnly))
       } catch (error) {
-        console.error('Fetch gallery access error:', error);
-        setIsGalleryAdminOnly(false);
+        console.error('Fetch gallery access error:', error)
+        setIsGalleryAdminOnly(false)
       }
-    };
+    }
 
-    fetchGalleryAccess();
-  }, []);
+    fetchGalleryAccess()
+  }, [])
 
   const fetchComments = async () => {
-    if (!galleryId) return;
+    if (!galleryId) return
     try {
-      const data = await apiGet<{ comments: CommentItem[] }>(`/api/galleries/${galleryId}/comments`, {
-        includeDeleted: isAdmin && showDeletedComments,
-      });
-      setComments(data.comments || []);
+      const data = await apiGet<{ comments: CommentItem[] }>(
+        `/api/galleries/${galleryId}/comments`,
+        {
+          includeDeleted: isAdmin && showDeletedComments,
+        }
+      )
+      setComments(data.comments || [])
     } catch (error) {
-      console.error('Fetch gallery comments error:', error);
+      console.error('Fetch gallery comments error:', error)
     }
-  };
+  }
 
   useEffect(() => {
     if (isAdmin && location.hash.startsWith('#comment-') && !showDeletedComments) {
-      setShowDeletedComments(true);
+      setShowDeletedComments(true)
     }
-  }, [isAdmin, location.hash, showDeletedComments]);
+  }, [isAdmin, location.hash, showDeletedComments])
 
   useEffect(() => {
     if (gallery?.published && galleryId) {
-      fetchComments();
+      fetchComments()
     }
-  }, [gallery?.published, galleryId, isAdmin, showDeletedComments]);
+  }, [gallery?.published, galleryId, isAdmin, showDeletedComments])
 
   useEffect(() => {
     if (!location.hash.startsWith('#comment-')) {
-      setHighlightedCommentId(null);
-      return;
+      setHighlightedCommentId(null)
+      return
     }
-    if (!comments.length) return;
+    if (!comments.length) return
 
-    const nextHighlightedCommentId = decodeURIComponent(location.hash.slice('#comment-'.length));
-    setHighlightedCommentId(nextHighlightedCommentId);
+    const nextHighlightedCommentId = decodeURIComponent(location.hash.slice('#comment-'.length))
+    setHighlightedCommentId(nextHighlightedCommentId)
 
     const frame = window.requestAnimationFrame(() => {
-      const target = document.getElementById(`comment-${nextHighlightedCommentId}`);
-      target?.scrollIntoView({ block: 'start' });
-    });
+      const target = document.getElementById(`comment-${nextHighlightedCommentId}`)
+      target?.scrollIntoView({ block: 'start' })
+    })
     const clearTimer = window.setTimeout(() => {
-      setHighlightedCommentId((current) =>
-        current === nextHighlightedCommentId ? null : current
-      );
-    }, COMMENT_HIGHLIGHT_DURATION_MS);
+      setHighlightedCommentId((current) => (current === nextHighlightedCommentId ? null : current))
+    }, COMMENT_HIGHLIGHT_DURATION_MS)
 
     return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(clearTimer);
-    };
-  }, [comments, location.hash]);
-
-  useEffect(() => () => {
-    if (draftRef.current) {
-      releasePendingImageUrls(draftRef.current.images);
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(clearTimer)
     }
-  }, []);
+  }, [comments, location.hash])
+
+  useEffect(
+    () => () => {
+      if (draftRef.current) {
+        releasePendingImageUrls(draftRef.current.images)
+      }
+    },
+    []
+  )
 
   const images = useMemo<EditableGalleryImage[]>(
     () => (editing ? draft?.images || [] : (gallery?.images || []).map(toEditableImage)),
-    [draft?.images, editing, gallery?.images],
-  );
+    [draft?.images, editing, gallery?.images]
+  )
 
   const canManage = Boolean(
     user &&
     gallery &&
     !isBanned &&
-    (isAdmin || (!isGalleryAdminOnly && gallery.authorUid === user.uid)),
-  );
-  const rootComments = comments.filter((comment) => !comment.parentId);
-  const getReplies = (parentId: string) => comments.filter((comment) => comment.parentId === parentId);
+    (isAdmin || (!isGalleryAdminOnly && gallery.authorUid === user.uid))
+  )
+  const rootComments = comments.filter((comment) => !comment.parentId)
+  const getReplies = (parentId: string) =>
+    comments.filter((comment) => comment.parentId === parentId)
   const getCommentAuthorName = (comment: CommentItem) =>
-    comment.authorName || t('gallery.anonymousUser');
+    comment.authorName || t('gallery.anonymousUser')
   const canDeleteComment = (comment: CommentItem) =>
-    Boolean(user && !comment.isDeleted && (comment.authorUid === user.uid || isAdmin));
+    Boolean(user && !comment.isDeleted && (comment.authorUid === user.uid || isAdmin))
   const canReplyComment = (comment: CommentItem) =>
-    Boolean(user && !isBanned && gallery?.published && (!comment.isDeleted || !comment.parentId));
+    Boolean(user && !isBanned && gallery?.published && (!comment.isDeleted || !comment.parentId))
   const focusCommentInput = () => {
-    const input = commentInputRef.current;
-    if (!input) return;
-    input.focus();
-    const cursorPosition = input.value.length;
-    input.setSelectionRange(cursorPosition, cursorPosition);
-  };
+    const input = commentInputRef.current
+    if (!input) return
+    input.focus()
+    const cursorPosition = input.value.length
+    input.setSelectionRange(cursorPosition, cursorPosition)
+  }
   const scrollToCommentForm = () => {
-    const form = commentFormRef.current;
+    const form = commentFormRef.current
     const top = form?.getBoundingClientRect().top
       ? window.scrollY + form.getBoundingClientRect().top - 200
-      : document.body.scrollHeight;
-    window.scrollTo({ top, behavior: 'smooth' });
-  };
+      : document.body.scrollHeight
+    window.scrollTo({ top, behavior: 'smooth' })
+  }
   const renderDeletedMeta = (comment: CommentItem) =>
     isAdmin && showDeletedComments && comment.isDeleted ? (
       <span className="text-[10px] text-red-500">
         {t('gallery.deletedBadge')}
-        {comment.deletedByName ? ` · ${t('gallery.deletedBy', { name: comment.deletedByName })}` : ''}
+        {comment.deletedByName
+          ? ` · ${t('gallery.deletedBy', { name: comment.deletedByName })}`
+          : ''}
       </span>
-    ) : null;
+    ) : null
   const renderCommentActions = (comment: CommentItem, size: 'root' | 'reply') => {
     return (
       <>
-        <div className={clsx('flex flex-wrap items-center gap-3', size === 'reply' ? 'mt-1 text-[10px]' : 'text-[10px]')}>
+        <div
+          className={clsx(
+            'flex flex-wrap items-center gap-3',
+            size === 'reply' ? 'mt-1 text-[10px]' : 'text-[10px]'
+          )}
+        >
           <span className="text-text-muted">{formatDateTime(comment.createdAt)}</span>
           <button
             type="button"
@@ -328,16 +343,19 @@ const GalleryDetail = () => {
               comment.likedByMe ? 'text-red-500' : 'text-text-muted hover:text-red-500'
             )}
           >
-            <Heart size={size === 'reply' ? 10 : 12} fill={comment.likedByMe ? 'currentColor' : 'none'} />
+            <Heart
+              size={size === 'reply' ? 10 : 12}
+              fill={comment.likedByMe ? 'currentColor' : 'none'}
+            />
             {comment.likesCount || 0}
           </button>
           {canReplyComment(comment) && (
             <button
               type="button"
               onClick={() => {
-                setReplyTo(comment);
-                scrollToCommentForm();
-                focusCommentInput();
+                setReplyTo(comment)
+                scrollToCommentForm()
+                focusCommentInput()
               }}
               className="font-medium text-brand-gold hover:underline"
             >
@@ -374,38 +392,38 @@ const GalleryDetail = () => {
           />
         </div>
       </>
-    );
-  };
+    )
+  }
 
   const handleOpenLightbox = (index: number) => {
-    setLightboxIndex(index);
-    setLightboxOpen(true);
-  };
+    setLightboxIndex(index)
+    setLightboxOpen(true)
+  }
 
   const handleCopyLink = async () => {
-    if (!gallery?.id) return;
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/gallery/${gallery.id}`));
+    if (!gallery?.id) return
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/gallery/${gallery.id}`))
     if (copied) {
-      show(t('gallery.linkCopied'));
-      return;
+      show(t('gallery.linkCopied'))
+      return
     }
-    show(t('gallery.linkCopyFailed'), { variant: 'error' });
-  };
+    show(t('gallery.linkCopyFailed'), { variant: 'error' })
+  }
 
   const toggleGalleryLike = async () => {
-    if (!gallery?.id || likingGallery) return;
+    if (!gallery?.id || likingGallery) return
     if (isBanned) {
-      show(t('common.bannedUser'), { variant: 'error' });
-      return;
+      show(t('common.bannedUser'), { variant: 'error' })
+      return
     }
     if (!user) {
-      show(t('common.loginRequired'), { variant: 'error' });
-      return;
+      show(t('common.loginRequired'), { variant: 'error' })
+      return
     }
 
-    setLikingGallery(true);
-    const previous = gallery;
-    const wasLiked = Boolean(gallery.likedByMe);
+    setLikingGallery(true)
+    const previous = gallery
+    const wasLiked = Boolean(gallery.likedByMe)
     setGallery((prev) =>
       prev
         ? {
@@ -418,13 +436,13 @@ const GalleryDetail = () => {
               : Math.max(0, Number(prev.dislikesCount || 0) - (prev.dislikedByMe ? 1 : 0)),
           }
         : prev
-    );
+    )
 
     try {
       if (wasLiked) {
         const data = await apiDelete<{ liked: boolean; likesCount: number }>(
           `/api/galleries/${gallery.id}/like`
-        );
+        )
         setGallery((prev) =>
           prev
             ? {
@@ -433,11 +451,11 @@ const GalleryDetail = () => {
                 likesCount: data.likesCount,
               }
             : prev
-        );
+        )
       } else {
         const data = await apiPost<{ liked: boolean; likesCount: number; dislikesCount: number }>(
           `/api/galleries/${gallery.id}/like`
-        );
+        )
         setGallery((prev) =>
           prev
             ? {
@@ -448,31 +466,31 @@ const GalleryDetail = () => {
                 dislikesCount: data.dislikesCount,
               }
             : prev
-        );
+        )
       }
     } catch (error) {
-      setGallery(previous);
-      console.error('Toggle gallery like error:', error);
-      show('图集点赞失败', { variant: 'error' });
+      setGallery(previous)
+      console.error('Toggle gallery like error:', error)
+      show('图集点赞失败', { variant: 'error' })
     } finally {
-      setLikingGallery(false);
+      setLikingGallery(false)
     }
-  };
+  }
 
   const toggleGalleryDislike = async () => {
-    if (!gallery?.id || dislikingGallery) return;
+    if (!gallery?.id || dislikingGallery) return
     if (isBanned) {
-      show(t('common.bannedUser'), { variant: 'error' });
-      return;
+      show(t('common.bannedUser'), { variant: 'error' })
+      return
     }
     if (!user) {
-      show(t('common.loginRequired'), { variant: 'error' });
-      return;
+      show(t('common.loginRequired'), { variant: 'error' })
+      return
     }
 
-    setDislikingGallery(true);
-    const previous = gallery;
-    const wasDisliked = Boolean(gallery.dislikedByMe);
+    setDislikingGallery(true)
+    const previous = gallery
+    const wasDisliked = Boolean(gallery.dislikedByMe)
     setGallery((prev) =>
       prev
         ? {
@@ -485,13 +503,13 @@ const GalleryDetail = () => {
               : Math.max(0, Number(prev.likesCount || 0) - (prev.likedByMe ? 1 : 0)),
           }
         : prev
-    );
+    )
 
     try {
       if (wasDisliked) {
         const data = await apiDelete<{ disliked: boolean; dislikesCount: number }>(
           `/api/galleries/${gallery.id}/dislike`
-        );
+        )
         setGallery((prev) =>
           prev
             ? {
@@ -500,11 +518,13 @@ const GalleryDetail = () => {
                 dislikesCount: data.dislikesCount,
               }
             : prev
-        );
+        )
       } else {
-        const data = await apiPost<{ disliked: boolean; dislikesCount: number; likesCount: number }>(
-          `/api/galleries/${gallery.id}/dislike`
-        );
+        const data = await apiPost<{
+          disliked: boolean
+          dislikesCount: number
+          likesCount: number
+        }>(`/api/galleries/${gallery.id}/dislike`)
         setGallery((prev) =>
           prev
             ? {
@@ -515,31 +535,31 @@ const GalleryDetail = () => {
                 likesCount: data.likesCount,
               }
             : prev
-        );
+        )
       }
     } catch (error) {
-      setGallery(previous);
-      console.error('Toggle gallery dislike error:', error);
-      show('图集点踩失败', { variant: 'error' });
+      setGallery(previous)
+      console.error('Toggle gallery dislike error:', error)
+      show('图集点踩失败', { variant: 'error' })
     } finally {
-      setDislikingGallery(false);
+      setDislikingGallery(false)
     }
-  };
+  }
 
   const toggleGalleryFavorite = async () => {
-    if (!gallery?.id || favoritingGallery) return;
+    if (!gallery?.id || favoritingGallery) return
     if (isBanned) {
-      show(t('common.bannedUser'), { variant: 'error' });
-      return;
+      show(t('common.bannedUser'), { variant: 'error' })
+      return
     }
     if (!user) {
-      show(t('common.loginRequired'), { variant: 'error' });
-      return;
+      show(t('common.loginRequired'), { variant: 'error' })
+      return
     }
 
-    setFavoritingGallery(true);
-    const previous = gallery;
-    const wasFavorited = Boolean(gallery.favoritedByMe);
+    setFavoritingGallery(true)
+    const previous = gallery
+    const wasFavorited = Boolean(gallery.favoritedByMe)
     setGallery((prev) =>
       prev
         ? {
@@ -548,117 +568,119 @@ const GalleryDetail = () => {
             favoritesCount: Math.max(0, Number(prev.favoritesCount || 0) + (wasFavorited ? -1 : 1)),
           }
         : prev
-    );
+    )
 
     try {
       if (wasFavorited) {
-        await apiDelete<{ favorited: boolean }>(`/api/favorites/gallery/${gallery.id}`);
+        await apiDelete<{ favorited: boolean }>(`/api/favorites/gallery/${gallery.id}`)
       } else {
         await apiPost<{ favorited: boolean }>('/api/favorites', {
           targetType: 'gallery',
           targetId: gallery.id,
-        });
+        })
       }
     } catch (error) {
-      setGallery(previous);
-      console.error('Toggle gallery favorite error:', error);
-      show('图集收藏失败', { variant: 'error' });
+      setGallery(previous)
+      console.error('Toggle gallery favorite error:', error)
+      show('图集收藏失败', { variant: 'error' })
     } finally {
-      setFavoritingGallery(false);
+      setFavoritingGallery(false)
     }
-  };
+  }
 
   const handleCopyCommentLink = async (comment: CommentItem) => {
-    if (!gallery?.id) return;
+    if (!gallery?.id) return
     const copied = await copyToClipboard(
       toAbsoluteInternalUrl(`/gallery/${gallery.id}#comment-${comment.id}`)
-    );
+    )
     if (copied) {
-      show(t('gallery.commentLinkCopied'));
-      return;
+      show(t('gallery.commentLinkCopied'))
+      return
     }
-    show(t('gallery.commentLinkCopyFailed'), { variant: 'error' });
-  };
+    show(t('gallery.commentLinkCopyFailed'), { variant: 'error' })
+  }
 
   const handleEnterEditMode = () => {
-    if (!gallery || !canManage || saving || uploading) return;
+    if (!gallery || !canManage || saving || uploading) return
     applyDraft((prev) => {
       if (prev) {
-        releasePendingImageUrls(prev.images);
+        releasePendingImageUrls(prev.images)
       }
-      return createDraftFromGallery(gallery);
-    });
-    setEditing(true);
-  };
+      return createDraftFromGallery(gallery)
+    })
+    setEditing(true)
+  }
 
   const handleCancelEdit = () => {
     applyDraft((prev) => {
       if (prev) {
-        releasePendingImageUrls(prev.images);
+        releasePendingImageUrls(prev.images)
       }
-      return null;
-    });
-    setEditing(false);
-    setPageDragDepth(0);
-    setDraggingIndex(null);
-  };
+      return null
+    })
+    setEditing(false)
+    setPageDragDepth(0)
+    setDraggingIndex(null)
+  }
 
   const handleSaveMeta = async () => {
-    const currentDraft = draftRef.current;
-    if (!gallery || !currentDraft || !canManage || saving || uploading) return;
+    const currentDraft = draftRef.current
+    if (!gallery || !currentDraft || !canManage || saving || uploading) return
     if (currentDraft.images.length === 0) {
-      show(t('gallery.atLeastOneImage'), { variant: 'error' });
-      return;
+      show(t('gallery.atLeastOneImage'), { variant: 'error' })
+      return
     }
     try {
-      setSaving(true);
-      const pendingImages = currentDraft.images.filter((image) => image.isPending && image.pendingFile);
-      let assetIdByClientId = new Map<string, string>();
-      let imageUrlByClientId = new Map<string, { url: string; name: string }>();
+      setSaving(true)
+      const pendingImages = currentDraft.images.filter(
+        (image) => image.isPending && image.pendingFile
+      )
+      let assetIdByClientId = new Map<string, string>()
+      let imageUrlByClientId = new Map<string, { url: string; name: string }>()
 
       if (pendingImages.length) {
-        setUploading(true);
-        const imageUrlByMd5 = new Map<string, { url: string; name: string }>();
-        let sessionId: string | null = null;
+        setUploading(true)
+        const imageUrlByMd5 = new Map<string, { url: string; name: string }>()
+        let sessionId: string | null = null
 
         const ensureSession = async () => {
           if (sessionId) {
-            return sessionId;
+            return sessionId
           }
           const sessionData = await apiPost<UploadSessionResponse>('/api/uploads/sessions', {
             maxFiles: pendingImages.length,
-          });
-          sessionId = sessionData.session.id;
-          return sessionId;
-        };
+          })
+          sessionId = sessionData.session.id
+          return sessionId
+        }
 
         for (const image of pendingImages) {
-          const md5 = await calculateFileMd5Hex(image.pendingFile!);
-          const reusedImage = imageUrlByMd5.get(md5);
+          const md5 = await calculateFileMd5Hex(image.pendingFile!)
+          const reusedImage = imageUrlByMd5.get(md5)
           if (reusedImage) {
-            imageUrlByClientId.set(image.clientId, reusedImage);
-            continue;
+            imageUrlByClientId.set(image.clientId, reusedImage)
+            continue
           }
 
-          const existing = await findExistingImageMapByMd5(md5);
+          const existing = await findExistingImageMapByMd5(md5)
           if (existing) {
-            const imageRef = { url: existing.localUrl, name: image.name || image.pendingFile!.name };
-            imageUrlByMd5.set(md5, imageRef);
-            imageUrlByClientId.set(image.clientId, imageRef);
-            continue;
+            const imageRef = { url: existing.localUrl, name: image.name || image.pendingFile!.name }
+            imageUrlByMd5.set(md5, imageRef)
+            imageUrlByClientId.set(image.clientId, imageRef)
+            continue
           }
 
-          const uploadResult = await uploadFileToSession(await ensureSession(), image.pendingFile!);
-          assetIdByClientId.set(image.clientId, uploadResult.asset.id);
+          const uploadResult = await uploadFileToSession(await ensureSession(), image.pendingFile!)
+          assetIdByClientId.set(image.clientId, uploadResult.asset.id)
           const uploadedImageRef = {
             url: uploadResult.asset.publicUrl || uploadResult.asset.url,
             name: uploadResult.asset.fileName || image.name || image.pendingFile!.name,
-          };
-          imageUrlByMd5.set(md5, uploadedImageRef);
+          }
+          imageUrlByMd5.set(md5, uploadedImageRef)
         }
 
         if (sessionId) {
-          await apiPost(`/api/uploads/sessions/${sessionId}/finalize`);
+          await apiPost(`/api/uploads/sessions/${sessionId}/finalize`)
         }
       }
 
@@ -669,80 +691,78 @@ const GalleryDetail = () => {
         copyright: currentDraft.copyrightText.trim() || null,
         published: currentDraft.published,
         images: currentDraft.images
-          .map((image) => (
+          .map((image) =>
             image.isPending
-              ? (
-                  assetIdByClientId.has(image.clientId)
-                    ? { assetId: assetIdByClientId.get(image.clientId) }
-                    : imageUrlByClientId.get(image.clientId)
-                )
+              ? assetIdByClientId.has(image.clientId)
+                ? { assetId: assetIdByClientId.get(image.clientId) }
+                : imageUrlByClientId.get(image.clientId)
               : { imageId: image.id }
-          ))
+          )
           .filter((image) => image && ('imageId' in image || 'assetId' in image || 'url' in image)),
-      });
-      releasePendingImageUrls(currentDraft.images);
-      setGallery(result.gallery);
-      applyDraft(null);
-      setEditing(false);
-      show(t('gallery.changesSaved'));
+      })
+      releasePendingImageUrls(currentDraft.images)
+      setGallery(result.gallery)
+      applyDraft(null)
+      setEditing(false)
+      show(t('gallery.changesSaved'))
     } catch (error) {
-      console.error('Save gallery meta error:', error);
-      show(t('gallery.saveFailed'), { variant: 'error' });
+      console.error('Save gallery meta error:', error)
+      show(t('gallery.saveFailed'), { variant: 'error' })
     } finally {
-      setUploading(false);
-      setSaving(false);
+      setUploading(false)
+      setSaving(false)
     }
-  };
+  }
 
   const handleTogglePublish = async () => {
-    if (!editing || !canManage || saving) return;
+    if (!editing || !canManage || saving) return
     applyDraft((prev) => {
-      if (!prev) return prev;
+      if (!prev) return prev
       return {
         ...prev,
         published: !prev.published,
-      };
-    });
-  };
+      }
+    })
+  }
 
   const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!galleryId || !user || !newComment.trim() || submittingComment) return;
+    e.preventDefault()
+    if (!galleryId || !user || !newComment.trim() || submittingComment) return
     if (isBanned) {
-      show(t('gallery.bannedCannotComment'), { variant: 'error' });
-      return;
+      show(t('gallery.bannedCannotComment'), { variant: 'error' })
+      return
     }
     if (!gallery?.published) {
-      show(t('gallery.onlyPublishedCanComment'), { variant: 'error' });
-      return;
+      show(t('gallery.onlyPublishedCanComment'), { variant: 'error' })
+      return
     }
 
     try {
-      setSubmittingComment(true);
+      setSubmittingComment(true)
       const data = await apiPost<{ comment: CommentItem }>(`/api/galleries/${galleryId}/comments`, {
         content: newComment,
         parentId: replyTo?.id || null,
-      });
+      })
 
       if (data.comment) {
-        setComments((prev) => [...prev, data.comment]);
+        setComments((prev) => [...prev, data.comment])
       }
 
-      setNewComment('');
-      setReplyTo(null);
+      setNewComment('')
+      setReplyTo(null)
     } catch (error) {
-      console.error('Error adding comment:', error);
-      show(t('gallery.commentFailed'), { variant: 'error' });
+      console.error('Error adding comment:', error)
+      show(t('gallery.commentFailed'), { variant: 'error' })
     } finally {
-      setSubmittingComment(false);
+      setSubmittingComment(false)
     }
-  };
+  }
 
   const handleDeleteGallery = async () => {
-    if (!gallery || !user || deletingGallery) return;
-    const isSelfDelete = gallery.authorUid === user.uid;
-    if (!isSelfDelete && !isAdmin) return;
-    let reason: string | null = null;
+    if (!gallery || !user || deletingGallery) return
+    const isSelfDelete = gallery.authorUid === user.uid
+    if (!isSelfDelete && !isAdmin) return
+    let reason: string | null = null
 
     if (isSelfDelete) {
       const confirmed = await dialog.confirm({
@@ -750,8 +770,8 @@ const GalleryDetail = () => {
         message: `确定要删除图集《${gallery.title}》吗？删除后可由管理员在回收站恢复。`,
         confirmText: '删除',
         variant: 'danger',
-      });
-      if (!confirmed) return;
+      })
+      if (!confirmed) return
     } else {
       const promptValue = await dialog.prompt({
         title: '删除图集',
@@ -762,34 +782,34 @@ const GalleryDetail = () => {
         multiline: true,
         placeholder: '填写删除理由',
         maxLength: CONTENT_LIMITS.gallery.reviewNote,
-      });
-      reason = promptValue?.trim() || null;
-      if (promptValue === null) return;
+      })
+      reason = promptValue?.trim() || null
+      if (promptValue === null) return
       if (!reason) {
-        show('删除他人图集必须填写删除理由', { variant: 'error' });
-        return;
+        show('删除他人图集必须填写删除理由', { variant: 'error' })
+        return
       }
     }
 
     try {
-      setDeletingGallery(true);
-      await apiDelete(`/api/galleries/${gallery.id}`, reason ? { reason } : {});
-      show('图集已删除');
-      navigate('/gallery');
+      setDeletingGallery(true)
+      await apiDelete(`/api/galleries/${gallery.id}`, reason ? { reason } : {})
+      show('图集已删除')
+      navigate('/gallery')
     } catch (error) {
-      console.error('Error deleting gallery:', error);
-      show(error instanceof Error ? error.message : '删除图集失败', { variant: 'error' });
+      console.error('Error deleting gallery:', error)
+      show(error instanceof Error ? error.message : '删除图集失败', { variant: 'error' })
     } finally {
-      setDeletingGallery(false);
+      setDeletingGallery(false)
     }
-  };
+  }
 
   const handleDeleteComment = async (comment: CommentItem) => {
-    if (!user || deletingCommentId) return;
-    const canDeleteComment = comment.authorUid === user.uid || isAdmin;
-    if (!canDeleteComment || comment.isDeleted) return;
-    const isSelfDelete = comment.authorUid === user.uid;
-    let reason: string | null = null;
+    if (!user || deletingCommentId) return
+    const canDeleteComment = comment.authorUid === user.uid || isAdmin
+    if (!canDeleteComment || comment.isDeleted) return
+    const isSelfDelete = comment.authorUid === user.uid
+    let reason: string | null = null
 
     if (isSelfDelete) {
       const confirmed = await dialog.confirm({
@@ -797,8 +817,8 @@ const GalleryDetail = () => {
         message: t('gallery.deleteCommentConfirm'),
         confirmText: '删除',
         variant: 'danger',
-      });
-      if (!confirmed) return;
+      })
+      if (!confirmed) return
     } else {
       const promptValue = await dialog.prompt({
         title: '删除评论',
@@ -809,18 +829,18 @@ const GalleryDetail = () => {
         multiline: true,
         placeholder: '填写删除理由',
         maxLength: CONTENT_LIMITS.gallery.reviewNote,
-      });
-      reason = promptValue?.trim() || null;
-      if (promptValue === null) return;
+      })
+      reason = promptValue?.trim() || null
+      if (promptValue === null) return
       if (!reason) {
-        show('删除他人评论必须填写删除理由', { variant: 'error' });
-        return;
+        show('删除他人评论必须填写删除理由', { variant: 'error' })
+        return
       }
     }
 
     try {
-      setDeletingCommentId(comment.id);
-      await apiDelete(`/api/posts/comments/${comment.id}`, reason ? { reason } : {});
+      setDeletingCommentId(comment.id)
+      await apiDelete(`/api/posts/comments/${comment.id}`, reason ? { reason } : {})
       setComments((prev) =>
         markCommentDeleted(prev, {
           commentId: comment.id,
@@ -829,214 +849,218 @@ const GalleryDetail = () => {
           deletedByName: profile?.displayName || user.displayName || user.uid,
           showDeletedComments,
         })
-      );
+      )
       if (replyTo?.id === comment.id) {
-        setReplyTo(null);
+        setReplyTo(null)
       }
-      show(t('gallery.commentDeleted'));
+      show(t('gallery.commentDeleted'))
     } catch (error) {
-      console.error('Error deleting gallery comment:', error);
-      show(t('gallery.deleteCommentFailed'), { variant: 'error' });
+      console.error('Error deleting gallery comment:', error)
+      show(t('gallery.deleteCommentFailed'), { variant: 'error' })
     } finally {
-      setDeletingCommentId(null);
+      setDeletingCommentId(null)
     }
-  };
+  }
 
   const handleToggleCommentLike = async (comment: CommentItem) => {
-    if (!user || isBanned || likingCommentId || comment.isDeleted) return;
+    if (!user || isBanned || likingCommentId || comment.isDeleted) return
 
     try {
-      setLikingCommentId(comment.id);
+      setLikingCommentId(comment.id)
       const data = comment.likedByMe
-        ? await apiDelete<{ likedByMe: boolean; likesCount: number }>(`/api/posts/comments/${comment.id}/like`)
-        : await apiPost<{ likedByMe: boolean; likesCount: number }>(`/api/posts/comments/${comment.id}/like`);
+        ? await apiDelete<{ likedByMe: boolean; likesCount: number }>(
+            `/api/posts/comments/${comment.id}/like`
+          )
+        : await apiPost<{ likedByMe: boolean; likesCount: number }>(
+            `/api/posts/comments/${comment.id}/like`
+          )
 
-      setComments((prev) =>
-        updateCommentLike(prev, comment.id, data)
-      );
+      setComments((prev) => updateCommentLike(prev, comment.id, data))
     } catch (error) {
-      console.error('Error toggling gallery comment like:', error);
-      show(t('gallery.commentLikeFailed'), { variant: 'error' });
+      console.error('Error toggling gallery comment like:', error)
+      show(t('gallery.commentLikeFailed'), { variant: 'error' })
     } finally {
-      setLikingCommentId(null);
+      setLikingCommentId(null)
     }
-  };
+  }
 
   const handleRestoreComment = async (comment: CommentItem) => {
-    if (!isAdmin || !comment.isDeleted || restoringCommentId) return;
+    if (!isAdmin || !comment.isDeleted || restoringCommentId) return
 
     try {
-      setRestoringCommentId(comment.id);
-      await apiPost(`/api/posts/comments/${comment.id}/restore`);
-      setComments((prev) =>
-        restoreComment(prev, comment.id)
-      );
-      show(t('gallery.commentRestored'));
+      setRestoringCommentId(comment.id)
+      await apiPost(`/api/posts/comments/${comment.id}/restore`)
+      setComments((prev) => restoreComment(prev, comment.id))
+      show(t('gallery.commentRestored'))
     } catch (error) {
-      console.error('Error restoring gallery comment:', error);
-      show(t('gallery.restoreCommentFailed'), { variant: 'error' });
+      console.error('Error restoring gallery comment:', error)
+      show(t('gallery.restoreCommentFailed'), { variant: 'error' })
     } finally {
-      setRestoringCommentId(null);
+      setRestoringCommentId(null)
     }
-  };
+  }
 
   const uploadFileToSession = async (sessionId: string, file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
+    const formData = new FormData()
+    formData.append('file', file)
 
-    const preference = await getImagePreference();
-    const useTripleStorage = preference.strategy === 's3' || preference.strategy === 'external';
+    const preference = await getImagePreference()
+    const useTripleStorage = preference.strategy === 's3' || preference.strategy === 'external'
 
-    const url = new URL(`/api/uploads/sessions/${sessionId}/files`, window.location.origin);
+    const url = new URL(`/api/uploads/sessions/${sessionId}/files`, window.location.origin)
     if (useTripleStorage) {
-      url.searchParams.set('tripleStorage', 'true');
+      url.searchParams.set('tripleStorage', 'true')
     }
 
-    const data = await apiUpload<UploadFileResponse>(url.toString(), formData);
-    return data;
-  };
+    const data = await apiUpload<UploadFileResponse>(url.toString(), formData)
+    return data
+  }
 
   const appendPendingFiles = (fileList: FileList | File[]) => {
-    if (!editing || !draftRef.current || !canManage || uploading) return;
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
-    const files = Array.from(fileList);
-    const invalidFiles: string[] = [];
-    const validImages: EditableGalleryImage[] = [];
+    if (!editing || !draftRef.current || !canManage || uploading) return
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp']
+    const files = Array.from(fileList)
+    const invalidFiles: string[] = []
+    const validImages: EditableGalleryImage[] = []
 
     files.forEach((file) => {
       if (!allowedTypes.includes(file.type)) {
-        invalidFiles.push(`${file.name} (${t('gallery.unsupportedFileType')})`);
-        return;
+        invalidFiles.push(`${file.name} (${t('gallery.unsupportedFileType')})`)
+        return
       }
       if (file.size > UPLOAD_MAX_FILE_SIZE_BYTES) {
-        invalidFiles.push(`${file.name} (${t('gallery.fileTooLarge', { maxSize: formatUploadLimitWithSize() })})`);
-        return;
+        invalidFiles.push(
+          `${file.name} (${t('gallery.fileTooLarge', { maxSize: formatUploadLimitWithSize() })})`
+        )
+        return
       }
-      validImages.push(createPendingImage(file));
-    });
+      validImages.push(createPendingImage(file))
+    })
 
     if (invalidFiles.length) {
-      show(`${t('gallery.filesCannotAdd')}${invalidFiles.slice(0, 3).join(', ')}${invalidFiles.length > 3 ? '...' : ''}`, { variant: 'error' });
+      show(
+        `${t('gallery.filesCannotAdd')}${invalidFiles.slice(0, 3).join(', ')}${invalidFiles.length > 3 ? '...' : ''}`,
+        { variant: 'error' }
+      )
     }
-    if (!validImages.length) return;
+    if (!validImages.length) return
 
     applyDraft((prev) => {
-      if (!prev) return prev;
+      if (!prev) return prev
       return {
         ...prev,
         images: [...prev.images, ...validImages],
-      };
-    });
-    show(t('gallery.imagesAdded', { count: validImages.length }));
-  };
+      }
+    })
+    show(t('gallery.imagesAdded', { count: validImages.length }))
+  }
 
   const handleAddImages = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = event.target.files;
-    event.target.value = '';
+    const fileList = event.target.files
+    event.target.value = ''
 
-    if (!fileList?.length) return;
-    appendPendingFiles(fileList);
-  };
+    if (!fileList?.length) return
+    appendPendingFiles(fileList)
+  }
 
   const handleDeleteImage = async (index: number) => {
-    const currentDraft = draftRef.current;
-    if (!editing || !currentDraft || !canManage) return;
-    const image = currentDraft.images[index];
+    const currentDraft = draftRef.current
+    if (!editing || !currentDraft || !canManage) return
+    const image = currentDraft.images[index]
     if (!image?.clientId) {
-      show(t('gallery.cannotDeleteImage'), { variant: 'error' });
-      return;
+      show(t('gallery.cannotDeleteImage'), { variant: 'error' })
+      return
     }
 
     if (image.isPending) {
-      URL.revokeObjectURL(image.url);
+      URL.revokeObjectURL(image.url)
     }
 
-    const nextImages = currentDraft.images.filter((_, currentIndex) => currentIndex !== index);
+    const nextImages = currentDraft.images.filter((_, currentIndex) => currentIndex !== index)
     applyDraft((prev) => {
-      if (!prev) return prev;
+      if (!prev) return prev
       return {
         ...prev,
         images: nextImages,
-      };
-    });
-    show(image.isPending ? t('gallery.pendingImageRemoved') : t('gallery.markedForDeletion'));
-  };
+      }
+    })
+    show(image.isPending ? t('gallery.pendingImageRemoved') : t('gallery.markedForDeletion'))
+  }
 
   const handleReorder = async (fromIndex: number, toIndex: number) => {
-    const currentDraft = draftRef.current;
-    if (!editing || !currentDraft || !canManage || fromIndex === toIndex) return;
-    const next = [...currentDraft.images];
-    const [moved] = next.splice(fromIndex, 1);
-    if (!moved) return;
-    next.splice(toIndex, 0, moved);
+    const currentDraft = draftRef.current
+    if (!editing || !currentDraft || !canManage || fromIndex === toIndex) return
+    const next = [...currentDraft.images]
+    const [moved] = next.splice(fromIndex, 1)
+    if (!moved) return
+    next.splice(toIndex, 0, moved)
 
     applyDraft((prev) => {
-      if (!prev) return prev;
+      if (!prev) return prev
       return {
         ...prev,
         images: next,
-      };
-    });
-  };
+      }
+    })
+  }
 
   const onThumbDragStart = (event: React.DragEvent<HTMLDivElement>, index: number) => {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', String(index));
-    setDraggingIndex(index);
-  };
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(index))
+    setDraggingIndex(index)
+  }
 
   const onThumbDrop = async (targetIndex: number) => {
-    if (draggingIndex === null) return;
-    const sourceIndex = draggingIndex;
-    setDraggingIndex(null);
-    await handleReorder(sourceIndex, targetIndex);
-  };
+    if (draggingIndex === null) return
+    const sourceIndex = draggingIndex
+    setDraggingIndex(null)
+    await handleReorder(sourceIndex, targetIndex)
+  }
 
   const handlePageDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!editing || !canManage || !hasDraggedFiles(event)) return;
-    event.preventDefault();
-    setPageDragDepth((prev) => prev + 1);
-  };
+    if (!editing || !canManage || !hasDraggedFiles(event)) return
+    event.preventDefault()
+    setPageDragDepth((prev) => prev + 1)
+  }
 
   const handlePageDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!editing || !canManage || !hasDraggedFiles(event)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-  };
+    if (!editing || !canManage || !hasDraggedFiles(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
 
   const handlePageDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!editing || !canManage || !hasDraggedFiles(event)) return;
-    event.preventDefault();
-    setPageDragDepth((prev) => Math.max(0, prev - 1));
-  };
+    if (!editing || !canManage || !hasDraggedFiles(event)) return
+    event.preventDefault()
+    setPageDragDepth((prev) => Math.max(0, prev - 1))
+  }
 
   const handlePageDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!editing || !canManage || !hasDraggedFiles(event)) return;
-    event.preventDefault();
-    setPageDragDepth(0);
-    if (!event.dataTransfer.files?.length) return;
-    appendPendingFiles(event.dataTransfer.files);
-  };
+    if (!editing || !canManage || !hasDraggedFiles(event)) return
+    event.preventDefault()
+    setPageDragDepth(0)
+    if (!event.dataTransfer.files?.length) return
+    appendPendingFiles(event.dataTransfer.files)
+  }
 
   if (loading) {
     return (
-      <div
-        className="min-h-[calc(100vh-60px)] antique-page bg-bg-primary"
-      >
+      <div className="min-h-[calc(100vh-60px)] antique-page bg-bg-primary">
         <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
           <div className="h-48 bg-surface-alt rounded animate-pulse" />
         </div>
       </div>
-    );
+    )
   }
 
   if (!gallery) {
     return (
-      <div
-        className="min-h-[calc(100vh-60px)] antique-page bg-bg-primary"
-      >
+      <div className="min-h-[calc(100vh-60px)] antique-page bg-bg-primary">
         <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-          <Link to="/gallery" className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors">
+          <Link
+            to="/gallery"
+            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+          >
             <ArrowLeft size={16} /> {t('gallery.backToList')}
           </Link>
           <div className="mt-6 bg-surface rounded border border-border p-10 text-center text-text-muted italic tracking-[0.1em]">
@@ -1044,7 +1068,7 @@ const GalleryDetail = () => {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -1071,7 +1095,10 @@ const GalleryDetail = () => {
       <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 gallery-detail-page">
         <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px] lg:items-start">
           <div className="min-w-0">
-            <Link to="/gallery" className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors">
+            <Link
+              to="/gallery"
+              className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+            >
               <ArrowLeft size={16} /> {t('gallery.backToList')}
             </Link>
 
@@ -1102,16 +1129,12 @@ const GalleryDetail = () => {
                 <Link2 size={16} /> 复制链接
               </button>
               {canManage && (
-                <button
-                  onClick={handleEnterEditMode}
-                  disabled={editing || saving || uploading}
-                  className={clsx(
-                    'px-4 py-2 text-[0.9375rem] rounded transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2',
-                    editing ? 'theme-button-secondary' : 'theme-button-primary'
-                  )}
+                <Link
+                  to={`/gallery/${gallery.id}/edit`}
+                  className="px-4 py-2 text-[0.9375rem] rounded theme-button-primary transition-all flex items-center gap-2"
                 >
                   <Edit3 size={16} /> 编辑
-                </button>
+                </Link>
               )}
             </div>
 
@@ -1127,7 +1150,8 @@ const GalleryDetail = () => {
                 )}
                 title={gallery.likedByMe ? '取消点赞' : '点赞'}
               >
-                <Heart size={15} fill={gallery.likedByMe ? 'currentColor' : 'none'} /> {gallery.likesCount || 0}
+                <Heart size={15} fill={gallery.likedByMe ? 'currentColor' : 'none'} />{' '}
+                {gallery.likesCount || 0}
               </button>
               <button
                 onClick={toggleGalleryDislike}
@@ -1153,7 +1177,8 @@ const GalleryDetail = () => {
                 )}
                 title={gallery.favoritedByMe ? '取消收藏' : '收藏'}
               >
-                <Save size={15} /> {gallery.favoritedByMe ? '已收藏' : '收藏'} {gallery.favoritesCount || 0}
+                <Save size={15} /> {gallery.favoritedByMe ? '已收藏' : '收藏'}{' '}
+                {gallery.favoritesCount || 0}
               </button>
               <button
                 onClick={handleCopyLink}
@@ -1165,7 +1190,14 @@ const GalleryDetail = () => {
             </div>
           </div>
         </div>
-        <input ref={addImagesInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleAddImages} />
+        <input
+          ref={addImagesInputRef}
+          type="file"
+          multiple
+          accept="image/*"
+          className="hidden"
+          onChange={handleAddImages}
+        />
 
         {/* Editable metadata */}
         {editing && draft ? (
@@ -1177,7 +1209,8 @@ const GalleryDetail = () => {
                   disabled={saving || uploading}
                   className="px-4 py-2 text-[0.9375rem] rounded theme-button-primary transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Save size={16} /> {saving || uploading ? t('gallery.saving') : t('gallery.saveChanges')}
+                  <Save size={16} />{' '}
+                  {saving || uploading ? t('gallery.saving') : t('gallery.saveChanges')}
                 </button>
                 <button
                   onClick={handleCancelEdit}
@@ -1189,7 +1222,10 @@ const GalleryDetail = () => {
               </div>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-3">
-                  <label htmlFor="gallery-title" className="block text-sm font-medium text-text-secondary">
+                  <label
+                    htmlFor="gallery-title"
+                    className="block text-sm font-medium text-text-secondary"
+                  >
                     {t('gallery.titleLabel')}
                   </label>
                   <CharacterCount current={draft.title.length} max={CONTENT_LIMITS.gallery.title} />
@@ -1198,7 +1234,9 @@ const GalleryDetail = () => {
                   id="gallery-title"
                   type="text"
                   value={draft.title}
-                  onChange={(event) => applyDraft((prev) => prev ? { ...prev, title: event.target.value } : prev)}
+                  onChange={(event) =>
+                    applyDraft((prev) => (prev ? { ...prev, title: event.target.value } : prev))
+                  }
                   maxLength={CONTENT_LIMITS.gallery.title}
                   className="theme-input w-full px-4 py-2.5 rounded text-base"
                   placeholder={t('gallery.titlePlaceholder')}
@@ -1206,15 +1244,25 @@ const GalleryDetail = () => {
               </div>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-3">
-                  <label htmlFor="gallery-description" className="block text-sm font-medium text-text-secondary">
+                  <label
+                    htmlFor="gallery-description"
+                    className="block text-sm font-medium text-text-secondary"
+                  >
                     {t('gallery.descriptionLabel')}
                   </label>
-                  <CharacterCount current={draft.description.length} max={CONTENT_LIMITS.gallery.description} />
+                  <CharacterCount
+                    current={draft.description.length}
+                    max={CONTENT_LIMITS.gallery.description}
+                  />
                 </div>
                 <textarea
                   id="gallery-description"
                   value={draft.description}
-                  onChange={(event) => applyDraft((prev) => prev ? { ...prev, description: event.target.value } : prev)}
+                  onChange={(event) =>
+                    applyDraft((prev) =>
+                      prev ? { ...prev, description: event.target.value } : prev
+                    )
+                  }
                   maxLength={CONTENT_LIMITS.gallery.description}
                   className="theme-input w-full px-4 py-2.5 rounded resize-none text-base"
                   rows={3}
@@ -1224,7 +1272,10 @@ const GalleryDetail = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-3">
-                    <label htmlFor="gallery-tags" className="block text-sm font-medium text-text-secondary">
+                    <label
+                      htmlFor="gallery-tags"
+                      className="block text-sm font-medium text-text-secondary"
+                    >
                       {t('gallery.tagsLabel')}
                     </label>
                     <CharacterCount
@@ -1236,21 +1287,32 @@ const GalleryDetail = () => {
                     id="gallery-tags"
                     type="text"
                     value={draft.tagsText}
-                    onChange={(event) => applyDraft((prev) => prev ? { ...prev, tagsText: event.target.value } : prev)}
+                    onChange={(event) =>
+                      applyDraft((prev) =>
+                        prev ? { ...prev, tagsText: event.target.value } : prev
+                      )
+                    }
                     maxLength={CONTENT_LIMITS.gallery.tag * CONTENT_LIMITS.gallery.tags}
                     className="theme-input w-full px-4 py-2.5 rounded text-base"
                     placeholder={t('gallery.tagsPlaceholder')}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="gallery-copyright" className="block text-sm font-medium text-text-secondary">
+                  <label
+                    htmlFor="gallery-copyright"
+                    className="block text-sm font-medium text-text-secondary"
+                  >
                     {t('gallery.copyrightLabel')}
                   </label>
                   <input
                     id="gallery-copyright"
                     type="text"
                     value={draft.copyrightText}
-                    onChange={(event) => applyDraft((prev) => prev ? { ...prev, copyrightText: event.target.value } : prev)}
+                    onChange={(event) =>
+                      applyDraft((prev) =>
+                        prev ? { ...prev, copyrightText: event.target.value } : prev
+                      )
+                    }
                     className="theme-input w-full px-4 py-2.5 rounded text-base"
                     placeholder={t('gallery.copyrightPlaceholder')}
                   />
@@ -1273,41 +1335,51 @@ const GalleryDetail = () => {
             ) : null}
           </div>
           <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
-            <span className="flex items-center gap-1"><Clock size={14} /> {formatDateTime(gallery.createdAt)}</span>
-            <span className="flex items-center gap-1"><UserIcon size={14} /> {gallery.authorName || gallery.authorUid?.slice(0, 8)}</span>
-            {gallery.publishedAt ? <span>{t('gallery.publishedAt')} {formatDateTime(gallery.publishedAt)}</span> : null}
+            <span className="flex items-center gap-1">
+              <Clock size={14} /> {formatDateTime(gallery.createdAt)}
+            </span>
+            <span className="flex items-center gap-1">
+              <UserIcon size={14} /> {gallery.authorName || gallery.authorUid?.slice(0, 8)}
+            </span>
+            {gallery.publishedAt ? (
+              <span>
+                {t('gallery.publishedAt')} {formatDateTime(gallery.publishedAt)}
+              </span>
+            ) : null}
           </div>
         </div>
 
         {/* Images Grid */}
         <section className="mb-10">
           {editing ? (
-            <p className="mb-3 text-xs text-text-muted">
-              {t('gallery.editImageHint')}
-            </p>
+            <p className="mb-3 text-xs text-text-muted">{t('gallery.editImageHint')}</p>
           ) : null}
 
-          <div className={clsx(
-            'grid gap-4',
-            editing ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-3'
-          )}>
+          <div
+            className={clsx(
+              'grid gap-4',
+              editing ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-3'
+            )}
+          >
             {images.map((image, index) => (
               <div
                 key={image.clientId || image.id}
                 draggable={editing && canManage}
                 onDragStart={(event) => onThumbDragStart(event, index)}
                 onDragOver={(event) => {
-                  if (!editing || !canManage) return;
-                  event.preventDefault();
+                  if (!editing || !canManage) return
+                  event.preventDefault()
                 }}
                 onDrop={(event) => {
-                  event.preventDefault();
-                  onThumbDrop(index);
+                  event.preventDefault()
+                  onThumbDrop(index)
                 }}
                 className={clsx(
                   'relative overflow-hidden rounded group',
-                  editing ? 'aspect-square cursor-grab active:cursor-grabbing' : 'cursor-zoom-in aspect-[3/4]',
-                  draggingIndex === index && 'opacity-60',
+                  editing
+                    ? 'aspect-square cursor-grab active:cursor-grabbing'
+                    : 'cursor-zoom-in aspect-[3/4]',
+                  draggingIndex === index && 'opacity-60'
                 )}
               >
                 <button
@@ -1420,7 +1492,10 @@ const GalleryDetail = () => {
                     />
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                       <p className="text-xs text-text-muted">{t('gallery.commentShortcutHint')}</p>
-                      <CharacterCount current={newComment.length} max={CONTENT_LIMITS.gallery.comment} />
+                      <CharacterCount
+                        current={newComment.length}
+                        max={CONTENT_LIMITS.gallery.comment}
+                      />
                       <button
                         type="submit"
                         disabled={!newComment.trim() || submittingComment}
@@ -1435,96 +1510,110 @@ const GalleryDetail = () => {
             )}
 
             {user && isBanned && (
-              <p className="text-center text-text-muted italic mb-8">{t('gallery.bannedCannotComment')}</p>
+              <p className="text-center text-text-muted italic mb-8">
+                {t('gallery.bannedCannotComment')}
+              </p>
             )}
 
             {!user && (
-              <p className="text-center text-text-muted italic mb-8">{t('gallery.loginToComment')}</p>
+              <p className="text-center text-text-muted italic mb-8">
+                {t('gallery.loginToComment')}
+              </p>
             )}
 
             <div className="space-y-6">
-              {rootComments.length > 0 ? rootComments.map((comment) => (
-                <div
-                  id={`comment-${comment.id}`}
-                  key={comment.id}
-                  onMouseMove={() => showCommentMenu(comment.id)}
-                  onMouseLeave={() => hideCommentMenu(comment.id)}
-                  className={clsx(
-                    'scroll-mt-24 space-y-4 px-3 py-2 transition-colors',
-                    highlightedCommentId === comment.id && HIGHLIGHTED_COMMENT_CLASS,
-                  )}
-                >
-                  <div className="flex gap-3">
-                    <div className="w-10 h-10 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
-                      {comment.isDeleted && !showDeletedComments ? null : (
-                        <img
-                          src={comment.authorPhoto || DEFAULT_AVATAR}
-                          alt=""
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                          onError={handleAvatarError}
-                        />
-                      )}
+              {rootComments.length > 0 ? (
+                rootComments.map((comment) => (
+                  <div
+                    id={`comment-${comment.id}`}
+                    key={comment.id}
+                    onMouseMove={() => showCommentMenu(comment.id)}
+                    onMouseLeave={() => hideCommentMenu(comment.id)}
+                    className={clsx(
+                      'scroll-mt-24 space-y-4 px-3 py-2 transition-colors',
+                      highlightedCommentId === comment.id && HIGHLIGHTED_COMMENT_CLASS
+                    )}
+                  >
+                    <div className="flex gap-3">
+                      <div className="w-10 h-10 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
+                        {comment.isDeleted && !showDeletedComments ? null : (
+                          <img
+                            src={comment.authorPhoto || DEFAULT_AVATAR}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                            onError={handleAvatarError}
+                          />
+                        )}
+                      </div>
+                      <div className="flex-grow">
+                        {comment.isDeleted && !showDeletedComments ? null : (
+                          <div className="mb-1 text-sm font-semibold text-text-primary">
+                            {getCommentAuthorName(comment)}
+                          </div>
+                        )}
+                        <p className="text-text-secondary text-sm leading-relaxed mb-2">
+                          <span
+                            className={comment.isDeleted ? 'italic text-text-muted' : undefined}
+                          >
+                            {comment.content}
+                          </span>
+                        </p>
+                        {renderCommentActions(comment, 'root')}
+                      </div>
                     </div>
-                    <div className="flex-grow">
-                      {comment.isDeleted && !showDeletedComments ? null : (
-                        <div className="mb-1 text-sm font-semibold text-text-primary">
-                          {getCommentAuthorName(comment)}
-                        </div>
-                      )}
-                      <p className="text-text-secondary text-sm leading-relaxed mb-2">
-                        <span className={comment.isDeleted ? 'italic text-text-muted' : undefined}>
-                          {comment.content}
-                        </span>
-                      </p>
-                      {renderCommentActions(comment, 'root')}
-                    </div>
-                  </div>
 
-                  {getReplies(comment.id).length > 0 && (
-                    <div className="ml-14 space-y-4 border-l-2 border-border pl-6">
-                      {getReplies(comment.id).map((reply) => (
-                        <div
-                          id={`comment-${reply.id}`}
-                          key={reply.id}
-                          onMouseMove={(event) => {
-                            event.stopPropagation();
-                            showCommentMenu(reply.id);
-                          }}
-                          onMouseLeave={() => hideCommentMenu(reply.id)}
-                          className={clsx(
-                            'flex scroll-mt-24 gap-3 px-3 py-2 transition-colors',
-                            highlightedCommentId === reply.id && HIGHLIGHTED_COMMENT_CLASS,
-                          )}
-                        >
-                          <div className="w-8 h-8 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
-                            <img
-                              src={reply.authorPhoto || DEFAULT_AVATAR}
-                              alt=""
-                              className="w-full h-full object-cover"
-                              referrerPolicy="no-referrer"
-                              onError={handleAvatarError}
-                            />
+                    {getReplies(comment.id).length > 0 && (
+                      <div className="ml-14 space-y-4 border-l-2 border-border pl-6">
+                        {getReplies(comment.id).map((reply) => (
+                          <div
+                            id={`comment-${reply.id}`}
+                            key={reply.id}
+                            onMouseMove={(event) => {
+                              event.stopPropagation()
+                              showCommentMenu(reply.id)
+                            }}
+                            onMouseLeave={() => hideCommentMenu(reply.id)}
+                            className={clsx(
+                              'flex scroll-mt-24 gap-3 px-3 py-2 transition-colors',
+                              highlightedCommentId === reply.id && HIGHLIGHTED_COMMENT_CLASS
+                            )}
+                          >
+                            <div className="w-8 h-8 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
+                              <img
+                                src={reply.authorPhoto || DEFAULT_AVATAR}
+                                alt=""
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                                onError={handleAvatarError}
+                              />
+                            </div>
+                            <div className="flex-grow">
+                              <p className="text-text-secondary text-xs leading-relaxed">
+                                <span className="font-semibold text-text-primary">
+                                  {getCommentAuthorName(reply)}
+                                </span>
+                                {reply.replyToId &&
+                                reply.replyToId !== reply.parentId &&
+                                reply.replyToAuthorName ? (
+                                  <>
+                                    <span className="text-text-muted"> {t('gallery.reply')} @</span>
+                                    <span className="font-semibold text-text-primary">
+                                      {reply.replyToAuthorName}
+                                    </span>
+                                  </>
+                                ) : null}
+                                <span>：{reply.content}</span>
+                              </p>
+                              {renderCommentActions(reply, 'reply')}
+                            </div>
                           </div>
-                          <div className="flex-grow">
-                            <p className="text-text-secondary text-xs leading-relaxed">
-                              <span className="font-semibold text-text-primary">{getCommentAuthorName(reply)}</span>
-                              {reply.replyToId && reply.replyToId !== reply.parentId && reply.replyToAuthorName ? (
-                                <>
-                                  <span className="text-text-muted"> {t('gallery.reply')} @</span>
-                                  <span className="font-semibold text-text-primary">{reply.replyToAuthorName}</span>
-                                </>
-                              ) : null}
-                              <span>：{reply.content}</span>
-                            </p>
-                            {renderCommentActions(reply, 'reply')}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )) : (
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
                 <p className="text-center text-text-muted italic py-8">{t('gallery.noComments')}</p>
               )}
             </div>
@@ -1533,7 +1622,10 @@ const GalleryDetail = () => {
 
         {/* Back to list */}
         <div className="mt-10 pt-6 border-t border-border text-right">
-          <button onClick={() => navigate('/gallery')} className="text-xs text-text-muted hover:text-brand-gold transition-colors">
+          <button
+            onClick={() => navigate('/gallery')}
+            className="text-xs text-text-muted hover:text-brand-gold transition-colors"
+          >
             {t('gallery.backToList')}
           </button>
         </div>
@@ -1552,7 +1644,7 @@ const GalleryDetail = () => {
         />
       )}
     </div>
-  );
-};
+  )
+}
 
-export default GalleryDetail;
+export default GalleryDetail
