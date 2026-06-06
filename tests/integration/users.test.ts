@@ -938,6 +938,60 @@ describe('Users API - 用户接口测试', () => {
       expect(item.gallery).toMatchObject({ id: gallery.id, title: 'Test Gallery Comment Target' });
       expect(item.post).toBeNull();
     });
+
+    it('应该保留原帖子已不可见的评论并隐藏目标信息', async () => {
+      const hiddenPost = await createTestPost({
+        title: 'Hidden Comment Target Post',
+        status: 'draft',
+        authorUid: adminUser.user.uid,
+      });
+
+      const comment = await prisma.postComment.create({
+        data: {
+          postId: hiddenPost.id,
+          authorUid: testUser.user.uid,
+          content: 'Comment on hidden post',
+        },
+      });
+
+      const response = await request(app).get(`/api/users/${testUser.user.uid}/comments`);
+
+      expect(response.status).toBe(200);
+      const item = response.body.comments.find((entry: { id: string }) => entry.id === comment.id);
+      expect(item).toBeDefined();
+      expect(item.targetType).toBe('post');
+      expect(item.target).toBeNull();
+      expect(item.post).toBeNull();
+      expect(item.content).toBe('Comment on hidden post');
+    });
+
+    it('应该保留原图集已不可见的评论并保持图集目标类型', async () => {
+      const hiddenGallery = await createTestGallery({
+        title: 'Hidden Comment Target Gallery',
+        authorUid: adminUser.user.uid,
+        authorName: adminUser.user.displayName,
+        published: false,
+      });
+
+      const comment = await prisma.postComment.create({
+        data: {
+          galleryId: hiddenGallery.id,
+          authorUid: testUser.user.uid,
+          content: 'Comment on hidden gallery',
+        },
+      });
+
+      const response = await request(app).get(`/api/users/${testUser.user.uid}/comments`);
+
+      expect(response.status).toBe(200);
+      const item = response.body.comments.find((entry: { id: string }) => entry.id === comment.id);
+      expect(item).toBeDefined();
+      expect(item.targetType).toBe('gallery');
+      expect(item.target).toBeNull();
+      expect(item.gallery).toBeNull();
+      expect(item.post).toBeNull();
+      expect(item.content).toBe('Comment on hidden gallery');
+    });
   });
 
   describe('GET /api/users/:userId/favorites 和 /history - 隐私设置', () => {

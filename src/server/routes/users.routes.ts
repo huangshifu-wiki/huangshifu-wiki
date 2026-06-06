@@ -1193,10 +1193,6 @@ router.get('/:userId/comments', asyncHandler(async (req: AuthenticatedRequest, r
     const galleryVisibilityWhere = buildGalleryVisibilityWhere(req.authUser);
     const where = {
       authorUid: uid,
-      OR: [
-        { postId: { not: null }, post: visibilityWhere },
-        { galleryId: { not: null }, gallery: galleryVisibilityWhere },
-      ],
     };
 
     const [comments, total] = await Promise.all([
@@ -1259,7 +1255,7 @@ router.get('/:userId/comments', asyncHandler(async (req: AuthenticatedRequest, r
       comments: comments.map((comment) => {
         const post = comment.postId ? postsMap.get(comment.postId) ?? null : null;
         const gallery = comment.galleryId ? galleriesMap.get(comment.galleryId) ?? null : null;
-        const targetType = gallery ? 'gallery' : 'post';
+        const targetType = comment.galleryId ? 'gallery' : 'post';
         return {
           ...toCommentResponse(comment, { maskDeletedContent: !isAdmin }),
           targetType,
