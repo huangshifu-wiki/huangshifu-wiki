@@ -1887,6 +1887,73 @@ describe('Posts API - 文章接口测试', () => {
     });
   });
 
+  describe('POST/PATCH /api/galleries - 图集描述', () => {
+    it('创建图集时未填写描述应保留为空串', async () => {
+      const asset = await prisma.mediaAsset.create({
+        data: {
+          ownerUid: testUser.user.uid,
+          storageKey: `galleries/test-empty-description-${Date.now()}.jpg`,
+          publicUrl: `/uploads/galleries/test-empty-description-${Date.now()}.jpg`,
+          fileName: 'test-empty-description.jpg',
+          mimeType: 'image/jpeg',
+          sizeBytes: 1024,
+          status: 'ready',
+        },
+      })
+
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword
+      )
+      const response = await agent
+        .post('/api/galleries')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({
+          title: `Test Gallery Empty Description ${Date.now()}`,
+          description: '',
+          assetIds: [asset.id],
+        })
+
+      expect(response.status).toBe(201)
+      expect(response.body.gallery.description).toBe('')
+
+      const createdGallery = await prisma.gallery.findUnique({
+        where: { id: response.body.gallery.id },
+        select: { description: true },
+      })
+      expect(createdGallery?.description).toBe('')
+    })
+
+    it('更新图集时清空描述应保留为空串', async () => {
+      const gallery = await createTestGallery({
+        title: 'Gallery Clear Description Test',
+        description: '原始描述',
+        authorUid: testUser.user.uid,
+        authorName: testUser.user.displayName,
+      })
+
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword
+      )
+      const response = await agent
+        .patch(`/api/galleries/${gallery.id}`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({
+          description: '',
+        })
+
+      expect(response.status).toBe(200)
+      expect(response.body.gallery.description).toBe('')
+
+      const updatedGallery = await prisma.gallery.findUnique({
+        where: { id: gallery.id },
+        select: { description: true },
+      })
+      expect(updatedGallery?.description).toBe('')
+    })
+  });
+
   describe('DELETE /api/admin/posts/:id - 后台删除文章', () => {
     it('管理员后台删除文章时记录删除理由并在管理列表返回', async () => {
       const post = await createTestPost({

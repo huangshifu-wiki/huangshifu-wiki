@@ -11,10 +11,7 @@ import {
   parsePagination,
   createUploadSessionExpiresAt,
   isUploadSessionExpired,
-  buildUploadPublicUrl,
-  getUploadFileStorageKey,
   safeDeleteUploadFileByStorageKey,
-  validateUploadedImage,
   uploadFileToS3,
   uploadFileToExternal,
   toCommentResponse,
@@ -33,11 +30,8 @@ import {
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
 import { prisma } from '../prisma'
-import { syncGalleryImageToImageMap, syncGalleryImageToImageMapWithVariant } from '../services/galleryImageSyncService'
-import {
-  cleanupUnusedMediaAssetById,
-  cleanupUntrackedUploadImageByUrl,
-} from '../services/mediaAssetCleanupService'
+import { syncGalleryImageToImageMapWithVariant } from '../services/galleryImageSyncService'
+import { cleanupUnusedMediaAssetById, cleanupUntrackedUploadImageByUrl } from '../services/mediaAssetCleanupService'
 
 function canViewGallery(gallery: { published: boolean; authorUid: string }, authUser?: ApiUser) {
   if (gallery.published) return true
@@ -289,119 +283,6 @@ router.get('/:id', asyncHandler(async (req: AuthenticatedRequest, res) => {
   }
 }))
 
-router.post('/upload', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  if (!canCreateGallery(req.authUser)) {
-    res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
-    return
-  }
-
-  const files = req.files as Express.Multer.File[]
-  const createdAssetIds: string[] = []
-  try {
-    const title = typeof req.body.title === 'string' ? req.body.title : ''
-    const description = typeof req.body.description === 'string' ? req.body.description : ''
-    const tagsRaw = typeof req.body.tags === 'string' ? req.body.tags : ''
-    if (!ensureGalleryTextLimits(res, { title, description })) {
-      return
-    }
-    const tags = tagsRaw
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-
-    if (!files || files.length === 0) {
-      res.status(400).json({ error: '请上传至少一张图片' })
-      return
-    }
-
-    const finalTitle = title || '默认图集'
-    const validatedFiles = await Promise.all(
-      files.map(async (file) => {
-        const { mimeType } = await validateUploadedImage(file)
-        const asset = await prisma.mediaAsset.create({
-          data: {
-            ownerUid: req.authUser!.uid,
-            storageKey: getUploadFileStorageKey(file),
-            publicUrl: buildUploadPublicUrl(getUploadFileStorageKey(file)),
-            fileName: file.originalname,
-            mimeType,
-            sizeBytes: file.size,
-            status: 'ready',
-          },
-        })
-        createdAssetIds.push(asset.id)
-        return {
-          file,
-          asset,
-        }
-      }),
-    )
-
-    const gallery = await prisma.gallery.create({
-      data: {
-        title: finalTitle,
-        description: description || `${finalTitle} 图集`,
-        authorUid: req.authUser!.uid,
-        authorName: req.authUser!.displayName,
-        tags,
-        images: {
-          create: validatedFiles.map((entry, index) => ({
-            assetId: entry.asset.id,
-            url: entry.asset.publicUrl,
-            name: entry.asset.fileName,
-            sortOrder: index,
-          })),
-        },
-      },
-      include: {
-        images: {
-          include: {
-            asset: true,
-          },
-          orderBy: { sortOrder: 'asc' },
-        },
-      },
-    })
-
-    try {
-      await enqueueGalleryImageEmbeddings(
-        prisma,
-        gallery.images.map((image) => image.id),
-      )
-    } catch (error) {
-      console.error('Enqueue gallery image embeddings error:', error)
-    }
-
-    try {
-      for (const entry of validatedFiles) {
-        await syncGalleryImageToImageMapWithVariant(entry.asset.publicUrl, entry.asset.storageKey)
-      }
-    } catch (error) {
-      console.error('Sync gallery images to ImageMap error:', error)
-    }
-
-    res.status(201).json({ gallery: await toGalleryResponse(gallery) })
-  } catch (error) {
-    if (createdAssetIds.length > 0) {
-      await prisma.mediaAsset.deleteMany({
-        where: {
-          id: { in: createdAssetIds },
-        },
-      })
-    }
-    await Promise.all(
-      files.map((file) => safeDeleteUploadFileByStorageKey(file.filename)),
-    )
-    console.error('Upload gallery error:', error)
-    const message = error instanceof Error ? error.message : ''
-    if (message.includes('图片') || message.includes('文件')) {
-      res.status(400).json({ error: message })
-      return
-    }
-    res.status(500).json({ error: '上传图集失败' })
-  }
-}))
-
 router.post('/:id/like', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const galleryId = req.params.id
@@ -608,9 +489,7 @@ router.post('/', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandl
 
     if (normalizedAssetIds.length > 0) {
       const finalTitle = typeof title === 'string' && title.trim() ? title.trim() : '默认图集'
-      const finalDescription = typeof description === 'string' && description.trim()
-        ? description.trim()
-        : `${finalTitle} 图集`
+      const finalDescription = typeof description === 'string' ? description.trim() : ''
       const finalTags = normalizeTagList(tags)
 
       const assets = await prisma.mediaAsset.findMany({
@@ -720,7 +599,7 @@ router.post('/', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandl
     }
 
     const normalizedTitle = typeof title === 'string' && title.trim() ? title.trim() : '默认图集'
-    const normalizedDescription = typeof description === 'string' && description.trim() ? description.trim() : '无描述'
+    const normalizedDescription = typeof description === 'string' ? description.trim() : ''
     const normalizedTags = normalizeTagList(tags)
 
     const normalizedImages = images
@@ -910,7 +789,7 @@ router.patch('/:id', requireAuth, requireActiveUser, asyncHandler(async (req: Au
       data.title = title
     }
     if (description !== undefined) {
-      data.description = description || '无描述'
+      data.description = description
     }
     if (tags !== undefined) {
       data.tags = tags
