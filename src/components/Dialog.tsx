@@ -16,6 +16,7 @@ type PromptOptions = ConfirmOptions & {
   defaultValue?: string
   placeholder?: string
   multiline?: boolean
+  maxLength?: number
 }
 
 type DialogContextValue = {
@@ -98,6 +99,7 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
       value={promptState.value}
       onChange={handlePromptValueChange}
       placeholder={promptState.placeholder}
+      maxLength={promptState.maxLength}
       className={`${PROMPT_FIELD_CLASS} min-h-24`}
     />
   ) : promptState ? (
@@ -106,6 +108,7 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
       value={promptState.value}
       onChange={handlePromptValueChange}
       placeholder={promptState.placeholder}
+      maxLength={promptState.maxLength}
       className={PROMPT_FIELD_CLASS}
     />
   ) : null

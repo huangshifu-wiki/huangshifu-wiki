@@ -382,8 +382,6 @@ const PostDetail = () => {
   const [loading, setLoading] = useState(true)
   const [submittingComment, setSubmittingComment] = useState(false)
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
-  const [deleteReasonCommentId, setDeleteReasonCommentId] = useState<string | null>(null)
-  const [commentDeleteReason, setCommentDeleteReason] = useState('')
   const [restoringCommentId, setRestoringCommentId] = useState<string | null>(null)
   const [likingCommentId, setLikingCommentId] = useState<string | null>(null)
   const [showDeletedComments, setShowDeletedComments] = useState(false)
@@ -461,11 +459,6 @@ const PostDetail = () => {
   }, [postId, isAdmin, showDeletedComments])
 
   useEffect(() => {
-    setDeleteReasonCommentId(null)
-    setCommentDeleteReason('')
-  }, [postId])
-
-  useEffect(() => {
     if (!location.hash.startsWith('#comment-')) {
       setHighlightedCommentId(null)
       return
@@ -530,23 +523,34 @@ const PostDetail = () => {
     const canDeleteComment = comment.authorUid === user.uid || isAdmin
     if (!canDeleteComment || comment.isDeleted) return
     const isSelfDelete = comment.authorUid === user.uid
-    if (!isSelfDelete && deleteReasonCommentId !== comment.id) {
-      setDeleteReasonCommentId(comment.id)
-      setCommentDeleteReason('')
-      return
+    let reason: string | null = null
+
+    if (isSelfDelete) {
+      const confirmed = await dialog.confirm({
+        title: '删除评论',
+        message: t('forum.deleteCommentConfirm'),
+        confirmText: '删除',
+        variant: 'danger',
+      })
+      if (!confirmed) return
+    } else {
+      const promptValue = await dialog.prompt({
+        title: '删除评论',
+        message: '删除他人评论必须填写删除理由。此操作会记录到管理日志。',
+        confirmText: '确认删除',
+        cancelText: '取消',
+        variant: 'danger',
+        multiline: true,
+        placeholder: '填写删除理由',
+        maxLength: CONTENT_LIMITS.post.reviewNote,
+      })
+      reason = promptValue?.trim() || null
+      if (promptValue === null) return
+      if (!reason) {
+        show('删除他人评论必须填写删除理由', { variant: 'error' })
+        return
+      }
     }
-    const reason = isSelfDelete ? null : commentDeleteReason.trim()
-    if (!isSelfDelete && !reason) {
-      show('删除他人评论必须填写删除理由', { variant: 'error' })
-      return
-    }
-    const confirmed = await dialog.confirm({
-      title: '删除评论',
-      message: t('forum.deleteCommentConfirm'),
-      confirmText: '删除',
-      variant: 'danger',
-    })
-    if (!confirmed) return
 
     try {
       setDeletingCommentId(comment.id)
@@ -562,10 +566,6 @@ const PostDetail = () => {
       )
       if (replyTo?.id === comment.id) {
         setReplyTo(null)
-      }
-      if (deleteReasonCommentId === comment.id) {
-        setDeleteReasonCommentId(null)
-        setCommentDeleteReason('')
       }
       show(t('forum.commentDeleted'))
     } catch (error) {
@@ -666,10 +666,6 @@ const PostDetail = () => {
       </span>
     ) : null
   const renderCommentActions = (comment: CommentItem, size: 'root' | 'reply') => {
-    const requiresDeleteReason = Boolean(
-      user && isAdmin && comment.authorUid !== user.uid && deleteReasonCommentId === comment.id
-    )
-
     return (
       <>
         <div
@@ -717,20 +713,7 @@ const PostDetail = () => {
               className="font-medium text-text-muted hover:text-red-500 disabled:opacity-50"
             >
               <Trash2 size={size === 'reply' ? 11 : 12} className="inline mr-1" />
-              {requiresDeleteReason ? '确认删除' : t('forum.deleteComment')}
-            </button>
-          )}
-          {requiresDeleteReason && (
-            <button
-              type="button"
-              onClick={() => {
-                setDeleteReasonCommentId(null)
-                setCommentDeleteReason('')
-              }}
-              disabled={deletingCommentId === comment.id}
-              className="font-medium text-text-muted hover:text-brand-gold disabled:opacity-50"
-            >
-              取消
+              {t('forum.deleteComment')}
             </button>
           )}
           {isAdmin && showDeletedComments && comment.isDeleted && (
@@ -751,18 +734,6 @@ const PostDetail = () => {
             visibleOnDesktop={hoveredCommentId === comment.id}
           />
         </div>
-        {requiresDeleteReason && (
-          <label className="mt-2 block max-w-xl text-xs font-medium text-text-secondary">
-            删除理由（必填）
-            <textarea
-              value={commentDeleteReason}
-              onChange={(event) => setCommentDeleteReason(event.target.value)}
-              maxLength={CONTENT_LIMITS.post.reviewNote}
-              rows={2}
-              className="mt-1 w-full rounded border border-border bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-danger"
-            />
-          </label>
-        )}
       </>
     )
   }
