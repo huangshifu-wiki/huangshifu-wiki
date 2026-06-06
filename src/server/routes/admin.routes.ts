@@ -561,6 +561,10 @@ router.put('/review-queue/:id/reject', requireAdmin, asyncHandler(async (req: Au
     const targetId = req.params.id;
     const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
     const reqAuthUser = req.authUser!;
+    if (!note) {
+      res.status(400).json({ error: '驳回原因不能为空' });
+      return;
+    }
     if (!ensureTextLimit(res, note, '审核备注', CONTENT_LIMITS.post.reviewNote)) {
       return;
     }
@@ -583,7 +587,7 @@ router.put('/review-queue/:id/reject', requireAdmin, asyncHandler(async (req: Au
 router.post('/review/:type/:id/:action', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { type, id, action } = req.params;
-    const { note } = req.body;
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
     if (!ensureTextLimit(res, note, '审核备注', CONTENT_LIMITS.post.reviewNote)) {
       return;
     }
@@ -593,13 +597,18 @@ router.post('/review/:type/:id/:action', requireAdmin, asyncHandler(async (req: 
       return;
     }
 
+    if (action === 'reject' && !note) {
+      res.status(400).json({ error: '驳回原因不能为空' });
+      return;
+    }
+
     const targetType = normalizeModerationTargetType(type);
     if (!isReviewTargetType(targetType)) {
       res.status(400).json({ error: '无效的类型' });
       return;
     }
 
-    const result = await handleReviewAction(targetType, id, action, req.authUser!, typeof req.body?.note === 'string' ? req.body.note.trim() : '');
+    const result = await handleReviewAction(targetType, id, action, req.authUser!, note);
     res.json(result);
   } catch (error) {
     logger.error({ err: error }, 'Review action error');
