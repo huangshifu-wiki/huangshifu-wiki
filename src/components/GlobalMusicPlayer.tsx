@@ -1,9 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { useMusic } from '../context/MusicContext';
 import { formatTime } from '../lib/formatUtils';
 import { apiGet } from '../lib/apiClient';
+import { useFloatingPresence } from '../hooks/useFloatingPresence';
 import type { MusicPlayUrlResponse } from '../types/api';
 
 interface AudioStats {
@@ -251,6 +251,8 @@ export const GlobalMusicPlayer = () => {
     }
   }, [seekTo]);
 
+  const volumePresence = useFloatingPresence(volumeSliderExpanded);
+
   if (!currentSong) return null;
 
   return (
@@ -342,13 +344,12 @@ export const GlobalMusicPlayer = () => {
           >
             <Volume2 size={18} />
           </button>
-          <AnimatePresence>
-            {volumeSliderExpanded && (
-              <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 6 }}
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-surface rounded border border-border flex items-center gap-2"
+          {volumePresence.mounted && (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2">
+              <div
+                className="floating-popover-up px-3 py-2 bg-surface rounded border border-border flex items-center gap-2"
+                data-state={volumePresence.state}
+                aria-hidden={!volumeSliderExpanded}
               >
                 <input
                   type="range"
@@ -362,9 +363,9 @@ export const GlobalMusicPlayer = () => {
                 <span className="text-xs text-[var(--color-text-antique-muted)] w-6 text-right">
                   {Math.round((contextIsMuted ? 0 : contextVolume) * 100)}
                 </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              </div>
+            </div>
+          )}
         </div>
 
         <button

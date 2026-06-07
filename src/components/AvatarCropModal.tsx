@@ -3,6 +3,7 @@ import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-cr
 import { X, Upload, Loader2 } from 'lucide-react';
 
 import { uploadAvatar, type UploadImageResult } from '../services/imageService';
+import { useFloatingPresence } from '../hooks/useFloatingPresence';
 
 interface AvatarCropModalProps {
   open: boolean;
@@ -24,6 +25,7 @@ function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: numbe
 }
 
 export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalProps) => {
+  const presence = useFloatingPresence(open);
   const [imageSrc, setImageSrc] = useState<string>('');
   const [crop, setCrop] = useState<Crop>();
   const [uploading, setUploading] = useState(false);
@@ -124,11 +126,15 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
     onClose();
   };
 
-  if (!open) return null;
+  if (!presence.mounted) return null;
 
   return (
-    <div className="fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center">
-      <div className="w-full max-w-md bg-surface rounded border border-border flex flex-col overflow-hidden">
+    <div
+      className="floating-overlay fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center"
+      data-state={presence.state}
+      aria-hidden={!open}
+    >
+      <div className="floating-panel w-full max-w-md bg-surface rounded border border-border flex flex-col overflow-hidden">
         <header className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-text-primary">修改头像</h3>

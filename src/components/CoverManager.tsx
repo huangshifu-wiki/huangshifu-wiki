@@ -7,6 +7,7 @@ import { useDialog } from './Dialog';
 import { useToast } from './Toast';
 import { uploadImageWithStrategy, type UploadImageResult } from '../services/imageService';
 import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/uploadLimits';
+import { useFloatingPresence } from '../hooks/useFloatingPresence';
 
 type CoverItem = {
   id: string;
@@ -56,6 +57,7 @@ export const CoverManager = ({
   const [settingDefault, setSettingDefault] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const presence = useFloatingPresence(isOpen);
   const dialog = useDialog();
   const { show } = useToast();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -156,7 +158,7 @@ export const CoverManager = ({
     }
   };
 
-  if (!isOpen) {
+  if (!presence.mounted) {
     return (
       <button
         onClick={() => setIsOpen(true)}
@@ -168,8 +170,12 @@ export const CoverManager = ({
   }
 
   return (
-    <div className="fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center">
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden bg-surface rounded border border-border flex flex-col">
+    <div
+      className="floating-overlay fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center"
+      data-state={presence.state}
+      aria-hidden={!isOpen}
+    >
+      <div className="floating-panel w-full max-w-2xl max-h-[90vh] overflow-hidden bg-surface rounded border border-border flex flex-col">
         <header className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-text-primary">{config.title}</h3>

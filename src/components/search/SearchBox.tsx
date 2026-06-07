@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search as SearchIcon, Camera, Sparkles } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
 import { clsx } from "clsx";
+import { useFloatingPresence } from "../../hooks/useFloatingPresence";
 import type { SearchSuggestion } from "../../hooks/useSearch";
 
 interface SearchBoxProps {
@@ -35,6 +35,14 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
   // 建议列表键盘导航状态
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const suggestionsPresence = useFloatingPresence(suggestions.length > 0);
+  const lastSuggestionsRef = useRef<SearchSuggestion[]>([]);
+
+  if (suggestions.length > 0) {
+    lastSuggestionsRef.current = suggestions;
+  }
+
+  const visibleSuggestions = suggestions.length > 0 ? suggestions : lastSuggestionsRef.current;
 
   useEffect(() => {
     if (!suggestions.length) return;
@@ -164,17 +172,15 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           size={20}
         />
 
-        <AnimatePresence>
-          {suggestions.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className="absolute left-0 right-0 top-full mt-2 bg-surface border border-border rounded z-50 overflow-hidden"
+        {suggestionsPresence.mounted && visibleSuggestions.length > 0 && (
+            <div
+              className="floating-dropdown absolute left-0 right-0 top-full mt-2 bg-surface border border-border rounded z-50 overflow-hidden"
+              data-state={suggestionsPresence.state}
               role="listbox"
               id="search-suggestions"
+              aria-hidden={suggestions.length === 0}
             >
-              {suggestions.map((s, i) => (
+              {visibleSuggestions.map((s, i) => (
                 <button
                   key={i}
                   type="button"
@@ -198,9 +204,8 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                   </div>
                 </button>
               ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+        )}
 
         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
           <button

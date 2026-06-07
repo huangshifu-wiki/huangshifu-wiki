@@ -7,6 +7,7 @@ import { formatDateTime } from '../../lib/dateUtils';
 import { clsx } from 'clsx';
 import { SmartImage } from '../../components/SmartImage';
 import { clearImagePreferenceCache } from '../../services/imageService';
+import { useFloatingPresence } from '../../hooks/useFloatingPresence';
 
 interface ImageMap {
   id: string;
@@ -53,6 +54,8 @@ const AdminImages: React.FC = () => {
   const [editingImage, setEditingImage] = useState<ImageMap | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showPreferenceModal, setShowPreferenceModal] = useState(false);
+  const editModalPresence = useFloatingPresence(Boolean(editingImage));
+  const preferenceModalPresence = useFloatingPresence(showPreferenceModal);
   const [preference, setPreference] = useState<ImagePreference>({ strategy: 'local', fallback: true });
   const dialog = useDialog();
   const { show } = useToast();
@@ -270,9 +273,13 @@ const AdminImages: React.FC = () => {
         )}
       </div>
 
-      {editingImage && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface border border-border rounded p-6 max-w-2xl w-full">
+      {editModalPresence.mounted && editingImage && (
+        <div
+          className="floating-overlay fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          data-state={editModalPresence.state}
+          aria-hidden={!editingImage}
+        >
+          <div className="floating-panel bg-surface border border-border rounded p-6 max-w-2xl w-full">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-text-primary">编辑图片映射</h3>
               <button onClick={() => setEditingImage(null)} className="p-2 hover:bg-surface-alt rounded">
@@ -295,11 +302,15 @@ const AdminImages: React.FC = () => {
         </div>
       )}
 
-      {showImportModal && <ImportModal onClose={() => setShowImportModal(false)} onSuccess={() => { fetchImages(); fetchStats(); setShowImportModal(false); }} />}
+      <ImportModal open={showImportModal} onClose={() => setShowImportModal(false)} onSuccess={() => { fetchImages(); fetchStats(); setShowImportModal(false); }} />
 
-      {showPreferenceModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface border border-border rounded p-6 max-w-md w-full">
+      {preferenceModalPresence.mounted && (
+        <div
+          className="floating-overlay fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          data-state={preferenceModalPresence.state}
+          aria-hidden={!showPreferenceModal}
+        >
+          <div className="floating-panel bg-surface border border-border rounded p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-text-primary">图片加载策略</h3>
               <button onClick={() => setShowPreferenceModal(false)} className="p-2 hover:bg-surface-alt rounded"><XCircle size={20} className="text-text-muted" /></button>
@@ -329,9 +340,10 @@ const AdminImages: React.FC = () => {
   );
 };
 
-interface ImportModalProps { onClose: () => void; onSuccess: () => void; }
+interface ImportModalProps { open: boolean; onClose: () => void; onSuccess: () => void; }
 
-const ImportModal: React.FC<ImportModalProps> = ({ onClose, onSuccess }) => {
+const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) => {
+  const presence = useFloatingPresence(open);
   const [mode, setMode] = useState<'upsert' | 'update' | 'create'>('upsert');
   const [data, setData] = useState('');
   const [loading, setLoading] = useState(false);
@@ -360,9 +372,15 @@ const ImportModal: React.FC<ImportModalProps> = ({ onClose, onSuccess }) => {
     finally { setLoading(false); }
   };
 
+  if (!presence.mounted) return null;
+
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface border border-border rounded p-6 max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div
+      className="floating-overlay fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      data-state={presence.state}
+      aria-hidden={!open}
+    >
+      <div className="floating-panel bg-surface border border-border rounded p-6 max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-text-primary">批量导入图片映射</h3>
           <button onClick={onClose} className="p-2 hover:bg-surface-alt rounded"><XCircle size={20} className="text-text-muted" /></button>

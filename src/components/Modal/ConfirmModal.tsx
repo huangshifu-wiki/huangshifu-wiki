@@ -2,7 +2,7 @@ import React, { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import clsx from "clsx";
-import styles from "./ConfirmModal.module.css";
+import { useFloatingPresence } from "../../hooks/useFloatingPresence";
 
 interface ConfirmModalProps {
 	open: boolean;
@@ -55,8 +55,7 @@ export const ConfirmModal = ({
 	initialFocus = "cancel",
 	children,
 }: ConfirmModalProps) => {
-	if (typeof document === "undefined") return null;
-
+	const presence = useFloatingPresence(open);
 	const variantStyle = variantStyles[variant];
 	const titleId = useId();
 	const messageId = useId();
@@ -123,19 +122,22 @@ export const ConfirmModal = ({
 		}
 	}, [initialFocus, open]);
 
+	if (typeof document === "undefined" || !presence.mounted) return null;
+
 	return createPortal(
 		<div
 			className={clsx(
-				styles.overlay,
+				"floating-overlay",
 				"fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60",
 			)}
 			data-open={open ? "true" : "false"}
+			data-state={presence.state}
 			onClick={onClose}
 			aria-hidden={!open}
 		>
 			<div
 				className={clsx(
-					styles.panel,
+					"floating-panel",
 					"relative w-full max-w-md overflow-hidden rounded-xl border bg-surface",
 					variantStyle.border,
 					variantStyle.glow,

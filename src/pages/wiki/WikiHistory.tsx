@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, History, X } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../context/AuthContext";
 import { useDialog } from "../../components/Dialog";
 import { useToast } from "../../components/Toast";
 import { apiGet, apiPost } from "../../lib/apiClient";
 import { formatDate } from "../../lib/dateUtils";
+import { useFloatingPresence } from "../../hooks/useFloatingPresence";
 import WikiMarkdown from "./WikiMarkdown";
 
 const WikiHistory = () => {
@@ -15,10 +15,18 @@ const WikiHistory = () => {
 	const [revisions, setRevisions] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [selectedRevision, setSelectedRevision] = useState<any>(null);
+	const previewPresence = useFloatingPresence(Boolean(selectedRevision));
+	const lastSelectedRevisionRef = useRef<any>(null);
 	const [loadingRevision, setLoadingRevision] = useState(false);
 	const navigate = useNavigate();
 	const dialog = useDialog();
 	const { show } = useToast();
+
+	if (selectedRevision) {
+		lastSelectedRevisionRef.current = selectedRevision;
+	}
+
+	const previewRevision = selectedRevision ?? lastSelectedRevisionRef.current;
 
 	useEffect(() => {
 		const fetchHistory = async () => {
@@ -138,15 +146,13 @@ const WikiHistory = () => {
 				)}
 			</div>
 
-			<AnimatePresence>
-				{selectedRevision && (
-					<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-						<motion.div
-							initial={{ opacity: 0, scale: 0.95 }}
-							animate={{ opacity: 1, scale: 1 }}
-							exit={{ opacity: 0, scale: 0.95 }}
-						className="bg-surface rounded w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col border border-border"
-						>
+			{previewPresence.mounted && previewRevision && (
+				<div
+					className="floating-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+					data-state={previewPresence.state}
+					aria-hidden={!selectedRevision}
+				>
+					<div className="floating-panel bg-surface rounded w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col border border-border">
 							<div className="p-8 border-b border-border flex justify-between items-center">
 								<div>
 									<h3 className="text-2xl font-serif font-bold text-brand-gold">
@@ -154,10 +160,10 @@ const WikiHistory = () => {
 									</h3>
 									<p className="text-xs text-text-muted mt-1">
 										{formatDate(
-											selectedRevision.createdAt,
+											previewRevision.createdAt,
 											"yyyy-MM-dd HH:mm:ss",
 										)}{" "}
-										· 编辑者: {selectedRevision.editorName}
+										· 编辑者: {previewRevision.editorName}
 									</p>
 								</div>
 								<button
@@ -169,9 +175,9 @@ const WikiHistory = () => {
 							</div>
 								<div className="p-8 sm:p-12 overflow-y-auto flex-grow prose max-w-none">
 								<h1 className="text-4xl font-serif font-bold text-brand-gold mb-8">
-									{selectedRevision.title}
+									{previewRevision.title}
 								</h1>
-								<WikiMarkdown content={selectedRevision.content} />
+								<WikiMarkdown content={previewRevision.content} />
 							</div>
 							<div className="p-8 border-t border-border flex justify-end gap-4">
 								<button
@@ -182,7 +188,7 @@ const WikiHistory = () => {
 								</button>
 								<button
 									onClick={() => {
-										handleRollback(selectedRevision);
+										handleRollback(previewRevision);
 										setSelectedRevision(null);
 									}}
 									className="px-8 py-3 theme-button-primary rounded font-bold transition-all"
@@ -190,10 +196,9 @@ const WikiHistory = () => {
 									回滚到此版本
 								</button>
 							</div>
-						</motion.div>
 					</div>
-				)}
-			</AnimatePresence>
+				</div>
+			)}
 		</div>
 	);
 };

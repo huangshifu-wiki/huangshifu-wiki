@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ZoomIn, ZoomOut, Maximize, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useFloatingPresence } from '../hooks/useFloatingPresence';
 import { getFitScale as getFitScaleUtil, computeNextScale } from '../utils/lightbox';
 
 interface LightboxImage {
@@ -10,6 +11,7 @@ interface LightboxImage {
 }
 
 interface LightboxProps {
+  open: boolean;
   images: LightboxImage[];
   initialIndex: number;
   onClose: () => void;
@@ -19,11 +21,8 @@ const MIN_PIXEL_SCALE = 0.05;
 const MAX_PIXEL_SCALE = 5;
 const ZOOM_RATIO = 0.1;
 
-export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
-  if (!images || images.length === 0) {
-    return null;
-  }
-
+export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps) => {
+  const presence = useFloatingPresence(open);
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const [pixelScale, setPixelScale] = useState(1);
   const [translateX, setTranslateX] = useState(0);
@@ -56,17 +55,6 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
   const activeImage = images[activeIndex];
   const currentImageUrl = activeImage?.originalUrl || activeImage?.url || '';
 
-  useEffect(() => {
-    setActiveIndex(initialIndex);
-  }, [initialIndex]);
-
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  const getFitScale = useCallback(() => {
-    return getFitScaleUtil(imageNaturalWidth, imageNaturalHeight, window.innerWidth, window.innerHeight);
-  }, [imageNaturalWidth, imageNaturalHeight]);
-
   const resetImageState = useCallback(() => {
     setIsImageLoading(true);
     setImageNaturalWidth(0);
@@ -76,6 +64,19 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
     setTranslateY(0);
     setIsDragging(false);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    setActiveIndex(initialIndex);
+    resetImageState();
+  }, [initialIndex, open, resetImageState]);
+
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const getFitScale = useCallback(() => {
+    return getFitScaleUtil(imageNaturalWidth, imageNaturalHeight, window.innerWidth, window.innerHeight);
+  }, [imageNaturalWidth, imageNaturalHeight]);
 
   const close = useCallback(() => {
     if (lightboxStateKey.current) {
@@ -104,8 +105,8 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
   const closeRef = useRef(close);
   closeRef.current = close;
 
-  // Mount / unmount effects — run exactly once to avoid duplicate pushState
   useEffect(() => {
+    if (!open || !presence.mounted) return;
     triggerElementRef.current = document.activeElement as HTMLElement;
     closeButtonRef.current?.focus();
     document.body.style.overflow = 'hidden';
@@ -165,7 +166,7 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
       document.body.style.overflow = '';
       triggerElementRef.current?.focus();
     };
-  }, []);
+  }, [open, presence.mounted]);
 
   // Keep refs in sync with state (for non-drag updates)
   useEffect(() => {
@@ -306,10 +307,15 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
 
   const displayScale = isImageLoading ? null : Math.round(pixelScale * 100);
 
+  if (!presence.mounted || !images || images.length === 0) {
+    return null;
+  }
+
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 select-none"
+      className="floating-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/95 select-none"
+      data-state={presence.state}
       onWheel={handleWheel}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -317,6 +323,7 @@ export const Lightbox = ({ images, initialIndex, onClose }: LightboxProps) => {
       role="dialog"
       aria-modal="true"
       aria-label={`图片查看器 ${activeIndex + 1} / ${images.length}`}
+      aria-hidden={!open}
     >
       {/* Close button */}
       <button

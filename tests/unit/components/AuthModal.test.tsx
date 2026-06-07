@@ -7,13 +7,6 @@ import { ToastProvider } from '../../../src/components/Toast'
 import { AuthModal } from '../../../src/components/Navbar/AuthModal'
 import { register } from '../../../src/lib/auth'
 
-vi.mock('framer-motion', () => ({
-  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  motion: {
-    div: ({ children, ...props }: React.ComponentProps<'div'>) => <div {...props}>{children}</div>,
-  },
-}))
-
 vi.mock('../../../src/lib/i18n', () => ({
   useI18n: () => ({
     t: (key: string) => {

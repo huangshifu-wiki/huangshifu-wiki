@@ -1607,18 +1607,17 @@ const GalleryDetail = () => {
         </div>
       </div>
 
-      {lightboxOpen && (
-        <Lightbox
-          images={images.map((img) => ({
-            id: img.clientId || img.id,
-            url: img.thumbnailUrl || img.url,
-            originalUrl: img.originalUrl || img.url,
-            name: img.name,
-          }))}
-          initialIndex={lightboxIndex}
-          onClose={() => setLightboxOpen(false)}
-        />
-      )}
+      <Lightbox
+        open={lightboxOpen}
+        images={images.map((img) => ({
+          id: img.clientId || img.id,
+          url: img.thumbnailUrl || img.url,
+          originalUrl: img.originalUrl || img.url,
+          name: img.name,
+        }))}
+        initialIndex={lightboxIndex}
+        onClose={() => setLightboxOpen(false)}
+      />
     </div>
   )
 }

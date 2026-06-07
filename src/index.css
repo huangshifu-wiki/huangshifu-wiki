@@ -838,6 +838,120 @@ img {
   text-shadow: 0 0 10px var(--color-highlight-shadow-4);
 }
 
+/* ========================================
+   Floating Layer Motion
+   Shared CSS-only transitions for modals,
+   dropdowns, popovers, and fixed panels.
+   ======================================== */
+.floating-overlay {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.18s ease,
+    visibility 0s linear 0.18s;
+}
+
+.floating-overlay[data-state='open'] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+  animation: floating-overlay-enter 0.22s ease-out both;
+}
+
+.floating-panel {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease;
+}
+
+.floating-overlay[data-state='open'] .floating-panel,
+.floating-panel[data-state='open'] {
+  opacity: 1;
+  transform: translateY(0);
+  animation: floating-panel-enter 0.22s ease-out both;
+}
+
+@keyframes floating-overlay-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes floating-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.floating-dropdown {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transform-origin: top right;
+  pointer-events: none;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    visibility 0s linear 0.18s;
+}
+
+.floating-dropdown[data-state='open'] {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.floating-popover-up {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    visibility 0s linear 0.18s;
+}
+
+.floating-popover-up[data-state='open'] {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.floating-expand {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    grid-template-rows 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.floating-expand[data-state='open'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.floating-expand > * {
+  min-height: 0;
+}
+
 /* prefers-reduced-motion 支持 */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -853,6 +967,16 @@ img {
   .liquidGlass-wrapper:hover,
   .liquidGlass-text,
   .liquidGlass-wrapper:hover .liquidGlass-text {
+    transition: none;
+    transform: none;
+    animation: none;
+  }
+
+  .floating-overlay,
+  .floating-panel,
+  .floating-dropdown,
+  .floating-popover-up,
+  .floating-expand {
     transition: none;
     transform: none;
     animation: none;

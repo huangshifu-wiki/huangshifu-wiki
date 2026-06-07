@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "motion/react";
 import { X, Loader2 } from "lucide-react";
 import clsx from "clsx";
+import { useFloatingPresence } from "../../hooks/useFloatingPresence";
 
 interface FormModalProps {
 	open: boolean;
@@ -29,7 +29,7 @@ export const FormModal = ({
 	loading = false,
 	maxWidth = "max-w-md",
 }: FormModalProps) => {
-	if (typeof document === "undefined") return null;
+	const presence = useFloatingPresence(open);
 
 	// 关闭按钮引用（用于焦点管理）
 	const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -106,30 +106,27 @@ export const FormModal = ({
 		</>
 	);
 
+	if (typeof document === "undefined" || !presence.mounted) return null;
+
 	return createPortal(
-		<AnimatePresence>
-			{open && (
-				<motion.div
-					initial={{ opacity: 0 }}
-					animate={{ opacity: 1 }}
-					exit={{ opacity: 0 }}
-					className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40"
-					onClick={onClose}
-					aria-modal="true"
-				>
-					<motion.div
-						initial={{ opacity: 0, scale: 0.95, y: 8 }}
-						animate={{ opacity: 1, scale: 1, y: 0 }}
-						exit={{ opacity: 0, scale: 0.95, y: 8 }}
-						className={clsx(
-							"w-full bg-surface rounded border border-border flex flex-col max-h-[90vh]",
-							maxWidth,
-						)}
-						onClick={(e) => e.stopPropagation()}
-						role="dialog"
-						aria-labelledby="form-modal-title"
-						aria-describedby={subtitle ? "form-modal-subtitle" : undefined}
-					>
+		<div
+			className="floating-overlay fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40"
+			data-state={presence.state}
+			onClick={onClose}
+			aria-hidden={!open}
+		>
+			<div
+				className={clsx(
+					"floating-panel w-full bg-surface rounded border border-border flex flex-col max-h-[90vh]",
+					maxWidth,
+				)}
+				onClick={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="form-modal-title"
+				aria-describedby={subtitle ? "form-modal-subtitle" : undefined}
+				aria-hidden={!open}
+			>
 						<header className="px-5 py-4 border-b border-border flex items-center justify-between">
 							<div>
 								<h3 id="form-modal-title" className="text-base font-bold text-text-primary">
@@ -159,10 +156,8 @@ export const FormModal = ({
 								{content}
 							</div>
 						)}
-					</motion.div>
-				</motion.div>
-			)}
-		</AnimatePresence>,
+			</div>
+		</div>,
 		document.body,
 	);
 };

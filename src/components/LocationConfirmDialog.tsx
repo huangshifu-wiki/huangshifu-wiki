@@ -1,5 +1,6 @@
 import React from 'react';
 import { MapPin, Check, X, Loader2 } from 'lucide-react';
+import { useFloatingPresence } from '../hooks/useFloatingPresence';
 
 interface RegionSuggestion {
   code: string;
@@ -27,12 +28,18 @@ export const LocationConfirmDialog = ({
   onSkip,
   loading,
 }: LocationConfirmDialogProps) => {
-  if (!open) return null;
+  const presence = useFloatingPresence(open);
+
+  if (!presence.mounted) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div
+      className="floating-overlay fixed inset-0 z-[100] flex items-center justify-center"
+      data-state={presence.state}
+      aria-hidden={!open}
+    >
       <div className="absolute inset-0 bg-black/40" onClick={onSkip} />
-      <div className="relative bg-surface rounded border border-border w-[90vw] max-w-md overflow-hidden">
+      <div className="floating-panel relative bg-surface rounded border border-border w-[90vw] max-w-md overflow-hidden">
         <div className="p-5">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded bg-brand-gold/10">

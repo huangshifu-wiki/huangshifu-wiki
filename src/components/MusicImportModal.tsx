@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Link2, X } from 'lucide-react';
 import { clsx } from 'clsx';
 
 import { apiPost } from '../lib/apiClient';
+import { useFloatingPresence } from '../hooks/useFloatingPresence';
 
 type Platform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo';
 type ResourceType = 'song' | 'album' | 'playlist';
@@ -67,6 +68,7 @@ function resourceTypeLabel(type: ResourceType) {
 }
 
 export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModalProps) => {
+  const presence = useFloatingPresence(open);
   const [url, setUrl] = useState('');
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -83,7 +85,7 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
     return preview.songs.every((song) => selectedIds.has(song.sourceId));
   }, [preview, selectedIds]);
 
-  if (!open) return null;
+  if (!presence.mounted) return null;
 
   const resetResult = () => {
     setImportResult('');
@@ -159,8 +161,12 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
   };
 
   return (
-    <div className="fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center">
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden bg-surface rounded border border-border flex flex-col">
+    <div
+      className="floating-overlay fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center"
+      data-state={presence.state}
+      aria-hidden={!open}
+    >
+      <div className="floating-panel w-full max-w-4xl max-h-[90vh] overflow-hidden bg-surface rounded border border-border flex flex-col">
         <header className="px-5 md:px-6 py-4 border-b border-border flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-text-primary">导入音乐 / 专辑 / 歌单</h3>

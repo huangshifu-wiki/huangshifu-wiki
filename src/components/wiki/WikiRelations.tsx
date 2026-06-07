@@ -10,6 +10,7 @@ import { X, Filter, SortAsc, Search, ChevronDown, ChevronUp } from "lucide-react
 import { clsx } from "clsx";
 import { apiGet } from "../../lib/apiClient";
 import { useToast } from "../../components/Toast";
+import { useFloatingPresence } from "../../hooks/useFloatingPresence";
 import type { WikiRelationType, WikiRelationRecord } from "./types";
 import { RELATION_TYPE_LABELS } from "./types";
 import RelationPreview from "./RelationPreview";
@@ -240,6 +241,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 	>([]);
 	const [relationSearchLoading, setRelationSearchLoading] = useState(false);
 	const [showRelationDropdown, setShowRelationDropdown] = useState(false);
+	const relationDropdownPresence = useFloatingPresence(showRelationDropdown);
 	const [relationSelectedIndex, setRelationSelectedIndex] = useState(-1);
 	const relationSearchRef = useRef<HTMLDivElement>(null);
 	const relationSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -247,6 +249,8 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 	// 编辑状态
 	const [editingRelation, setEditingRelation] =
 		useState<WikiRelationRecord | null>(null);
+	const [editingIndex, setEditingIndex] = useState<number | null>(null);
+	const editModalPresence = useFloatingPresence(Boolean(editingRelation && editingIndex !== null));
 
 	const handleRelationInputChange = useCallback(
 		(input: string, isPaste = false) => {
@@ -355,9 +359,6 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 	const handleRemoveRelation = (index: number) => {
 		onRelationsChange(relations.filter((_, i) => i !== index));
 	};
-
-	// 编辑状态 - 使用原始索引来跟踪，避免 type 变化导致 ID 变化的问题
-	const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
 	const handleEditRelation = (index: number) => {
 		setEditingIndex(index);
@@ -590,20 +591,15 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 				)}
 
 			{/* 编辑关联弹窗 */}
-			<AnimatePresence>
-				{editingRelation && editingIndex !== null && (
-					<motion.div
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						exit={{ opacity: 0 }}
-						className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+			{editModalPresence.mounted && editingRelation && editingIndex !== null && (
+					<div
+						className="floating-overlay fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+						data-state={editModalPresence.state}
+						aria-hidden={!editingRelation}
 						onClick={handleCancelEdit}
 					>
-						<motion.div
-							initial={{ scale: 0.95, y: 20 }}
-							animate={{ scale: 1, y: 0 }}
-							exit={{ scale: 0.95, y: 20 }}
-							className="bg-surface rounded p-6 max-w-md w-full border border-border"
+						<div
+							className="floating-panel bg-surface rounded p-6 max-w-md w-full border border-border"
 							onClick={(e) => e.stopPropagation()}
 						>
 						<div className="flex items-center justify-between mb-4">
@@ -706,10 +702,9 @@ className="rounded border border-border"
 								保存
 								</button>
 							</div>
-						</motion.div>
-					</motion.div>
-				)}
-			</AnimatePresence>
+						</div>
+					</div>
+			)}
 
 			{/* 添加关联表单 */}
 			<div className="flex flex-col gap-3 p-4 bg-surface-alt rounded border border-border">
@@ -772,13 +767,11 @@ className="rounded border border-border"
 								}
 							}}
 						/>
-						<AnimatePresence>
-							{showRelationDropdown && (
-								<motion.div
-									initial={{ opacity: 0, y: -4 }}
-									animate={{ opacity: 1, y: 0 }}
-									exit={{ opacity: 0, y: -4 }}
-									className="absolute z-50 mt-1 w-full bg-surface rounded border border-border shadow-lg max-h-60 overflow-auto"
+						{relationDropdownPresence.mounted && (
+								<div
+									className="floating-dropdown absolute z-50 mt-1 w-full bg-surface rounded border border-border shadow-lg max-h-60 overflow-auto"
+									data-state={relationDropdownPresence.state}
+									aria-hidden={!showRelationDropdown}
 								>
 									<div className="px-3 py-2 text-xs text-text-muted border-b border-border bg-surface-alt">
 										直接输入{" "}
@@ -823,9 +816,8 @@ className="rounded border border-border"
 											</div>
 										))
 									)}
-								</motion.div>
-							)}
-						</AnimatePresence>
+								</div>
+						)}
 					</div>
 					<input
 						type="text"

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X, MapPin, Search, Loader2 } from 'lucide-react';
 import { apiGet } from '../lib/apiClient';
+import { useFloatingPresence } from '../hooks/useFloatingPresence';
 
 declare global {
   interface Window {
@@ -132,6 +133,7 @@ export const MapPickerModal = ({
   onConfirm,
   initialLocation,
 }: MapPickerModalProps) => {
+  const presence = useFloatingPresence(open);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
@@ -232,12 +234,16 @@ export const MapPickerModal = ({
     if (selectedLocation) { onConfirm(selectedLocation); onClose(); }
   };
 
-  if (!open) return null;
+  if (!presence.mounted) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div
+      className="floating-overlay fixed inset-0 z-[100] flex items-center justify-center"
+      data-state={presence.state}
+      aria-hidden={!open}
+    >
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-surface rounded border border-border w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden">
+      <div className="floating-panel relative bg-surface rounded border border-border w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h2 className="text-base font-bold text-text-primary">选择地点</h2>
           <button

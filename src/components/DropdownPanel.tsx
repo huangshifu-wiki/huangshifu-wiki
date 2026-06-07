@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import styles from './DropdownPanel.module.css'
 
 interface DropdownPanelProps {
   open: boolean
@@ -10,8 +9,8 @@ interface DropdownPanelProps {
 export const DropdownPanel = ({ open, className, children }: DropdownPanelProps) => {
   return (
     <div
-      className={`${styles.dropdownPanel} ${className}`}
-      data-open={open ? 'true' : 'false'}
+      className={`floating-dropdown ${className}`}
+      data-state={open ? 'open' : 'closed'}
       aria-hidden={!open}
     >
       {children}

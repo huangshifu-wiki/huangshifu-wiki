@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Image as ImageIcon, Plus, Clock, User as UserIcon, Link2, Trash2 } from 'lucide-react'
@@ -7,7 +7,6 @@ import { ViewModeSelector } from '../components/ViewModeSelector'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
-import { motion, AnimatePresence } from 'motion/react'
 import { SmartImage } from '../components/SmartImage'
 import { useToast } from '../components/Toast'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
@@ -18,6 +17,7 @@ import { usePagination } from '../hooks/usePagination'
 import type { GalleryItem } from '../types/entities'
 import type { GalleryListResponse } from '../types/api'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
+import { useFloatingPresence } from '../hooks/useFloatingPresence'
 
 const DEFAULT_PAGE_SIZE = 24
 
@@ -163,10 +163,18 @@ const GalleryList = () => {
   const [isGalleryAdminOnly, setIsGalleryAdminOnly] = useState(false)
   const [galleryAccessLoaded, setGalleryAccessLoaded] = useState(false)
   const [galleryToDelete, setGalleryToDelete] = useState<{ id: string; title: string } | null>(null)
+  const deleteModalPresence = useFloatingPresence(Boolean(galleryToDelete))
+  const lastGalleryToDeleteRef = useRef<{ id: string; title: string } | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deletingGalleryId, setDeletingGalleryId] = useState<string | null>(null)
   const [totalGalleries, setTotalGalleries] = useState(0)
   const { show } = useToast()
+
+  if (galleryToDelete) {
+    lastGalleryToDeleteRef.current = galleryToDelete
+  }
+
+  const deleteTarget = galleryToDelete ?? lastGalleryToDeleteRef.current
   const { preferences, setViewMode } = useUserPreferences()
   const navigate = useNavigate()
   const viewMode = preferences.viewMode
@@ -342,23 +350,21 @@ const GalleryList = () => {
         )}
 
         {/* Delete Confirm */}
-        <AnimatePresence>
-          {galleryToDelete && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/45">
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-surface rounded p-8 max-w-md w-full border border-border"
-              >
+        {deleteModalPresence.mounted && deleteTarget && (
+          <div
+            className="floating-overlay fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/45"
+            data-state={deleteModalPresence.state}
+            aria-hidden={!galleryToDelete}
+          >
+            <div className="floating-panel bg-surface rounded p-8 max-w-md w-full border border-border">
                 <h3 className="text-xl font-semibold text-text-primary mb-4 tracking-wide">
                   确认删除
                 </h3>
                 <p className="text-text-secondary mb-8 text-[0.9375rem]">
-                  您确定要删除图集《{galleryToDelete.title}》吗？此操作无法撤销。
+                  您确定要删除图集《{deleteTarget.title}》吗？此操作无法撤销。
                 </p>
                 {(() => {
-                  const target = galleries.find((gallery) => gallery.id === galleryToDelete.id)
+                  const target = galleries.find((gallery) => gallery.id === deleteTarget.id)
                   const requiresReason = Boolean(target && user && target.authorUid !== user.uid)
                   return requiresReason ? (
                     <label className="mb-6 block text-sm font-medium text-text-secondary">
@@ -392,10 +398,9 @@ const GalleryList = () => {
                     {deletingGalleryId ? '删除中...' : '确定删除'}
                   </button>
                 </div>
-              </motion.div>
             </div>
-          )}
-        </AnimatePresence>
+          </div>
+        )}
       </div>
     </div>
   )

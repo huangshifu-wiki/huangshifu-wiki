@@ -23,6 +23,7 @@ import { MusicFilters } from '../components/Music/MusicFilters';
 import { BatchActions } from '../components/Music/BatchActions';
 import { ViewModeSelector } from '../components/ViewModeSelector';
 import { VIEW_MODE_CONFIG } from '../lib/viewModes';
+import { useFloatingPresence } from '../hooks/useFloatingPresence';
 import type { SongItem, AlbumItem } from '../types/entities';
 
 const DEFAULT_PAGE_SIZE = 40;
@@ -89,6 +90,7 @@ const Music = () => {
   const [selectedSongs, setSelectedSongs] = useState<Set<string>>(new Set());
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ show: boolean }>({ show: false });
+  const confirmModalPresence = useFloatingPresence(confirmModal.show);
   const [favoriting, setFavoriting] = useState<string | null>(null);
   const [albums, setAlbums] = useState<AlbumItem[]>([]);
   const [loadingAlbums, setLoadingAlbums] = useState(false);
@@ -467,15 +469,13 @@ const Music = () => {
           />
         )}
 
-        <AnimatePresence>
-          {confirmModal.show && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/45">
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-surface rounded p-8 max-w-md w-full border border-border"
-              >
+        {confirmModalPresence.mounted && (
+          <div
+            className="floating-overlay fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/45"
+            data-state={confirmModalPresence.state}
+            aria-hidden={!confirmModal.show}
+          >
+            <div className="floating-panel bg-surface rounded p-8 max-w-md w-full border border-border">
                 <h3 className="text-xl font-semibold text-text-primary mb-4 tracking-wide">{t('music.confirmDelete')}</h3>
                 <p className="text-text-secondary mb-8 text-[0.9375rem]">
                   {t('music.confirmDeleteBatch', { count: selectedSongs.size })}
@@ -494,10 +494,9 @@ const Music = () => {
                     {t('music.confirmDeleteButton')}
                   </button>
                 </div>
-              </motion.div>
             </div>
-          )}
-        </AnimatePresence>
+          </div>
+        )}
 
         {/* Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">

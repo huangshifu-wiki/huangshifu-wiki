@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ExternalLink, Loader2, Search, X, Check, AlertCircle } from 'lucide-react';
 
 import { apiGet } from '../lib/apiClient';
+import { useFloatingPresence } from '../hooks/useFloatingPresence';
 
 type Platform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo';
 
@@ -57,6 +58,7 @@ export const MatchSuggestionModal = ({
   existingPlatformId,
   onSelect,
 }: MatchSuggestionModalProps) => {
+  const presence = useFloatingPresence(open);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([]);
   const [error, setError] = useState('');
@@ -108,11 +110,15 @@ export const MatchSuggestionModal = ({
     onClose();
   };
 
-  if (!open) return null;
+  if (!presence.mounted) return null;
 
   return (
-    <div className="fixed inset-0 z-[130] bg-black/40 p-4 flex items-center justify-center">
-      <div className="w-full max-w-lg max-h-[90vh] overflow-hidden bg-surface rounded border border-border flex flex-col">
+    <div
+      className="floating-overlay fixed inset-0 z-[130] bg-black/40 p-4 flex items-center justify-center"
+      data-state={presence.state}
+      aria-hidden={!open}
+    >
+      <div className="floating-panel w-full max-w-lg max-h-[90vh] overflow-hidden bg-surface rounded border border-border flex flex-col">
         <header className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-text-primary">搜索匹配歌曲</h3>

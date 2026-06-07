@@ -13,13 +13,13 @@ import {
 	Settings,
 	MessageCircle,
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../context/AuthContext";
 import { useI18n } from "../../lib/i18n";
 import { DEFAULT_AVATAR, handleAvatarError } from "../../lib/defaultAvatar";
 import { ThemeToggle } from "../ThemeToggle";
 import accountMenuStyles from "../AccountMenu.module.css";
 import { usePendingReviewCount } from "../../hooks/usePendingReviewCount";
+import { useFloatingPresence } from "../../hooks/useFloatingPresence";
 import type { AuthMode } from "./types";
 
 interface MobileMenuProps {
@@ -39,17 +39,18 @@ export const MobileMenu = ({
 	const { t } = useI18n();
 	const pendingReviewCount = usePendingReviewCount(open && isAdmin && !isBanned);
 	const hasPendingReviews = pendingReviewCount > 0;
+	const presence = useFloatingPresence(open);
+
+	if (!presence.mounted) return null;
 
 	return (
-		<AnimatePresence>
-			{open && (
-				<motion.div
-					initial={{ opacity: 0, height: 0 }}
-					animate={{ opacity: 1, height: "auto" }}
-					exit={{ opacity: 0, height: 0 }}
-					className="md:hidden bg-surface border-b border-border overflow-hidden"
-				>
-					<div className="px-4 py-6 space-y-4">
+		<div
+			className="floating-expand grid md:hidden bg-surface border-b border-border"
+			data-state={presence.state}
+			aria-hidden={!open}
+		>
+			<div>
+				<div className="px-4 py-6 space-y-4">
 						<div className="grid grid-cols-2 gap-4">
 							<NavLink
 								to="/wiki"
@@ -219,9 +220,8 @@ export const MobileMenu = ({
 								</div>
 							)}
 						</div>
-					</div>
-				</motion.div>
-			)}
-		</AnimatePresence>
+				</div>
+			</div>
+		</div>
 	);
 };

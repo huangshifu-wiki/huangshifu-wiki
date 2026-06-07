@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { clsx } from 'clsx';
 import { apiGet, apiPost, apiUpload, getXsrfToken } from '../../lib/apiClient';
 import { useToast } from '../../components/Toast';
+import { useFloatingPresence } from '../../hooks/useFloatingPresence';
 
 type BackupFile = {
   filename: string;
@@ -27,8 +28,16 @@ const AdminBackups = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<DialogType>(null);
   const downloadTargetRef = useRef<string | null>(null);
+  const lastDialogRef = useRef<Exclude<DialogType, null> | null>(null);
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const { show } = useToast();
+  const dialogPresence = useFloatingPresence(Boolean(dialog));
+
+  if (dialog) {
+    lastDialogRef.current = dialog
+  }
+
+  const visibleDialog = dialog ?? lastDialogRef.current
 
   useEffect(() => {
     dialogRef.current = dialog
@@ -227,35 +236,40 @@ const AdminBackups = () => {
         </table>
       </div>
 
-      {dialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={closeDialog}>
-          <div className="bg-surface border border-border rounded w-full max-w-md mx-4 p-6 space-y-5" onClick={(e) => e.stopPropagation()}>
+      {dialogPresence.mounted && visibleDialog && (
+        <div
+          className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          data-state={dialogPresence.state}
+          aria-hidden={!dialog}
+          onClick={closeDialog}
+        >
+          <div className="floating-panel bg-surface border border-border rounded w-full max-w-md mx-4 p-6 space-y-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-text-primary">
-                {dialog === 'create' && '创建备份'}
-                {dialog === 'restore' && '上传备份恢复'}
-                {dialog === 'download' && '下载备份'}
-                {dialog === 'delete' && '删除备份'}
+                {visibleDialog === 'create' && '创建备份'}
+                {visibleDialog === 'restore' && '上传备份恢复'}
+                {visibleDialog === 'download' && '下载备份'}
+                {visibleDialog === 'delete' && '删除备份'}
               </h3>
               <button onClick={closeDialog} className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-alt">
                 <XCircle size={20} />
               </button>
             </div>
 
-            {(dialog === 'restore' || dialog === 'download' || dialog === 'delete') && (
+            {(visibleDialog === 'restore' || visibleDialog === 'download' || visibleDialog === 'delete') && (
               <div className="flex items-start gap-3 p-3 rounded theme-status-warning">
                 <AlertTriangle size={18} className="theme-text-warning shrink-0 mt-0.5" />
                 <p className="text-sm">
-                  {dialog === 'restore'
+                  {visibleDialog === 'restore'
                     ? '恢复操作将覆盖当前数据库中的所有数据，此操作不可逆，请谨慎操作。'
-                    : dialog === 'download'
+                    : visibleDialog === 'download'
                       ? '请输入备份密码后再下载备份文件。'
                       : '删除后无法恢复，请确认操作。'}
                 </p>
               </div>
             )}
 
-            {dialog === 'restore' && (
+            {visibleDialog === 'restore' && (
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-2">选择备份文件</label>
                 <input
@@ -272,7 +286,7 @@ const AdminBackups = () => {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-2">{dialog === 'create' ? '备份密码（用于加密和恢复验证）' : '备份密码'}</label>
+              <label className="block text-sm font-medium text-text-secondary mb-2">{visibleDialog === 'create' ? '备份密码（用于加密和恢复验证）' : '备份密码'}</label>
               <input
                 type="password"
                 value={password}
@@ -282,10 +296,10 @@ const AdminBackups = () => {
                 onKeyDown={(e) => {
                   if (actionLoading) return;
                   if (e.key === 'Enter') {
-                    if (dialog === 'create') handleCreate();
-                    else if (dialog === 'restore') handleRestore();
-                    else if (dialog === 'download') confirmDownload();
-                    else if (dialog === 'delete') handleDelete();
+                    if (visibleDialog === 'create') handleCreate();
+                    else if (visibleDialog === 'restore') handleRestore();
+                    else if (visibleDialog === 'download') confirmDownload();
+                    else if (visibleDialog === 'delete') handleDelete();
                   }
                 }}
               />
@@ -294,18 +308,18 @@ const AdminBackups = () => {
             <div className="flex items-center justify-end gap-3 pt-2">
               <button onClick={closeDialog} className="px-4 py-2 rounded border border-border text-sm text-text-secondary hover:bg-surface-alt transition-all">取消</button>
               <button
-                onClick={() => { if (dialog === 'create') handleCreate(); else if (dialog === 'restore') handleRestore(); else if (dialog === 'download') confirmDownload(); else if (dialog === 'delete') handleDelete(); }}
+                onClick={() => { if (visibleDialog === 'create') handleCreate(); else if (visibleDialog === 'restore') handleRestore(); else if (visibleDialog === 'download') confirmDownload(); else if (visibleDialog === 'delete') handleDelete(); }}
                 disabled={actionLoading !== null}
                 className={clsx(
                   'px-4 py-2 rounded text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2',
-                  dialog === 'delete' || dialog === 'restore' ? 'theme-button-danger' : 'theme-button-primary'
+                  visibleDialog === 'delete' || visibleDialog === 'restore' ? 'theme-button-danger' : 'theme-button-primary'
                 )}
               >
                 {actionLoading && <Loader2 size={14} className="animate-spin" />}
-                {dialog === 'create' && '创建备份'}
-                {dialog === 'restore' && '恢复数据库'}
-                {dialog === 'download' && '确认下载'}
-                {dialog === 'delete' && '确认删除'}
+                {visibleDialog === 'create' && '创建备份'}
+                {visibleDialog === 'restore' && '恢复数据库'}
+                {visibleDialog === 'download' && '确认下载'}
+                {visibleDialog === 'delete' && '确认删除'}
               </button>
             </div>
           </div>
