@@ -918,6 +918,66 @@ describe('Wiki API - 百科接口测试', () => {
     })
   })
 
+  describe('POST /api/wiki/:slug/rollback/:revisionId - 回滚 Wiki 页面', () => {
+    it('回滚页面时应新增一条历史修订快照', async () => {
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword
+      )
+      const wikiPage = await createTestWikiPage({
+        slug: 'test-rollback-history',
+        title: 'Rollback Current Title',
+        content: 'Current content before rollback',
+        authorUid: testUser.user.uid,
+        status: 'published',
+      })
+      const targetRevision = await prisma.wikiRevision.create({
+        data: {
+          pageSlug: wikiPage.slug,
+          title: 'Rollback Target Title',
+          content: 'Content restored by rollback',
+          slug: wikiPage.slug,
+          category: 'general',
+          tags: ['rollback'],
+          editorUid: testUser.user.uid,
+          editorName: testUser.user.displayName,
+        },
+      })
+
+      const response = await agent
+        .post(`/api/wiki/${wikiPage.slug}/rollback/${targetRevision.id}`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+
+      expect(response.status).toBe(200)
+      expect(response.body.page.title).toBe('Rollback Target Title')
+      expect(response.body.page.content).toBe('Content restored by rollback')
+
+      const revisions = await prisma.wikiRevision.findMany({
+        where: { pageSlug: wikiPage.slug },
+        orderBy: { createdAt: 'desc' },
+      })
+      expect(revisions).toHaveLength(2)
+      const rollbackRevision = revisions.find((revision) => revision.editorUid === adminUser.user.uid)
+      expect(rollbackRevision).toMatchObject({
+        pageSlug: wikiPage.slug,
+        title: 'Rollback Target Title',
+        content: 'Content restored by rollback',
+        editorUid: adminUser.user.uid,
+        editorName: adminUser.user.displayName,
+      })
+
+      const moderationLog = await prisma.moderationLog.findFirst({
+        where: {
+          targetType: 'wiki',
+          targetId: wikiPage.slug,
+          action: 'rollback',
+          operatorUid: adminUser.user.uid,
+        },
+      })
+      expect(moderationLog?.note).toBe(`回滚到版本 ${targetRevision.id}`)
+    })
+  })
+
   // ============================================================================
   // 删除 Wiki 页面接口测试（管理员）
   // ============================================================================

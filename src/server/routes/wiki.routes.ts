@@ -2504,40 +2504,59 @@ router.post(
         legacyDuplicateTitle: currentPage.legacyDuplicateTitle,
       })
 
-      const page = await prisma.wikiPage.update({
-        where: { slug: req.params.slug },
-        include: wikiPageResponseInclude,
-        data: {
-          title: revision.title,
-          titleKey: rollbackTitleKey,
-          legacyDuplicateTitle: resolveLegacyDuplicateTitleForWrite({
+      const page = await prisma.$transaction(async (tx) => {
+        const rolledBackPage = await tx.wikiPage.update({
+          where: { slug: req.params.slug },
+          include: wikiPageResponseInclude,
+          data: {
             title: revision.title,
             titleKey: rollbackTitleKey,
-            hasLegacyDuplicateTitleKey: currentPage.hasLegacyDuplicateTitleKey,
-            legacyDuplicateTitle: currentPage.legacyDuplicateTitle,
-            pageSlug: currentPage.slug,
-          }),
-          content: revision.content,
-          category: revision.category || undefined,
-          tags: revision.tags || undefined,
-          relations: revision.relations || undefined,
-          eventDate: revision.eventDate || undefined,
-          status: isAdminRole(req.authUser!.role) ? 'published' : 'pending',
-          reviewNote: null,
-          reviewedBy: null,
-          reviewedAt: null,
-          lastEditorUid: req.authUser!.uid,
-        },
-      })
+            legacyDuplicateTitle: resolveLegacyDuplicateTitleForWrite({
+              title: revision.title,
+              titleKey: rollbackTitleKey,
+              hasLegacyDuplicateTitleKey: currentPage.hasLegacyDuplicateTitleKey,
+              legacyDuplicateTitle: currentPage.legacyDuplicateTitle,
+              pageSlug: currentPage.slug,
+            }),
+            content: revision.content,
+            category: revision.category || undefined,
+            tags: revision.tags || undefined,
+            relations: revision.relations || undefined,
+            eventDate: revision.eventDate || undefined,
+            status: isAdminRole(req.authUser!.role) ? 'published' : 'pending',
+            reviewNote: null,
+            reviewedBy: null,
+            reviewedAt: null,
+            lastEditorUid: req.authUser!.uid,
+          },
+        })
 
-      await prisma.moderationLog.create({
-        data: {
-          targetType: 'wiki',
-          targetId: req.params.slug,
-          action: 'rollback',
-          operatorUid: req.authUser!.uid,
-          note: `回滚到版本 ${req.params.revisionId}`,
-        },
+        await tx.wikiRevision.create({
+          data: {
+            pageSlug: req.params.slug,
+            title: revision.title,
+            content: revision.content,
+            slug: req.params.slug,
+            category: revision.category || undefined,
+            tags: revision.tags || undefined,
+            relations: revision.relations || undefined,
+            eventDate: revision.eventDate || undefined,
+            editorUid: req.authUser!.uid,
+            editorName: req.authUser!.displayName,
+          },
+        })
+
+        await tx.moderationLog.create({
+          data: {
+            targetType: 'wiki',
+            targetId: req.params.slug,
+            action: 'rollback',
+            operatorUid: req.authUser!.uid,
+            note: `回滚到版本 ${req.params.revisionId}`,
+          },
+        })
+
+        return rolledBackPage
       })
 
       clearWikiPageCache(req.params.slug)
