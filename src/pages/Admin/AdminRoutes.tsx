@@ -4,6 +4,7 @@ import { AdminLayout } from '../../components/admin/AdminLayout'
 import { RouteGuard } from '../../components/RouteGuard'
 import AdminDashboard from './AdminDashboard'
 import AdminReviews from './AdminReviews'
+import AdminReviewWorkbench from './AdminReviewWorkbench'
 import AdminListPage from './AdminListPage'
 import AdminUsers from './AdminUsers'
 import AdminLocks from './AdminLocks'
@@ -29,6 +30,7 @@ export const AdminRoutes = () => (
     >
       <Route index element={<AdminDashboard />} />
       <Route path="reviews" element={<AdminReviews />} />
+      <Route path="reviews/workbench" element={<AdminReviewWorkbench />} />
       <Route path="wiki" element={<AdminListPage type="wiki" />} />
       <Route path="music" element={<AdminListPage type="music" />} />
       <Route path="posts" element={<AdminListPage type="posts" />} />

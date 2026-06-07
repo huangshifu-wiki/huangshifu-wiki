@@ -1,132 +1,95 @@
-import React, { useEffect, useState } from 'react';
-import { CheckCircle, XCircle } from 'lucide-react';
-import { clsx } from 'clsx';
-import { apiGet, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient';
-import { formatDateTime, toDateValue } from '../../lib/dateUtils';
-import { useDialog } from '../../components/Dialog';
-import { useToast } from '../../components/Toast';
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { clsx } from 'clsx'
+import { formatDateTime } from '../../lib/dateUtils'
 import {
-  PENDING_REVIEW_COUNT_PATH,
-  notifyPendingReviewCountChanged,
-} from '../../hooks/usePendingReviewCount';
-
-type ReviewQueueItem = {
-  id: string;
-  slug?: string;
-  title?: string;
-  content?: string;
-  updatedAt?: string;
-  sensitiveWords?: string[];
-  reviewType: string;
-  reviewId: string;
-};
-
-type ReviewFilter = 'all' | 'wiki' | 'posts';
-
-const invalidateReviewQueueCaches = () => {
-  invalidateApiCacheByPrefix('/api/admin/review-queue');
-  invalidateApiCacheByPrefix(PENDING_REVIEW_COUNT_PATH);
-  notifyPendingReviewCountChanged();
-};
+  fetchReviewQueue,
+  invalidateReviewQueueCaches,
+  normalizeReviewFilter,
+  REVIEW_FILTER_OPTIONS,
+} from './reviewQueue'
+import type { AdminReviewQueueMergedItem } from '../../types/api'
 
 export const AdminReviews = () => {
-  const [items, setItems] = useState<ReviewQueueItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<ReviewFilter>('all');
-  const dialog = useDialog();
-  const { show } = useToast();
+  const [items, setItems] = useState<AdminReviewQueueMergedItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const filter = normalizeReviewFilter(searchParams.get('type'))
+  const loadRequestRef = useRef(0)
 
   const fetchQueue = async () => {
-    setLoading(true);
+    const requestId = loadRequestRef.current + 1
+    loadRequestRef.current = requestId
+    setLoading(true)
     try {
-      const requests: Promise<{ type: string; items: any[] }>[] = [];
-      if (filter === 'all' || filter === 'wiki') {
-        requests.push(apiGet<{ type: string; items: any[] }>('/api/admin/review-queue', { type: 'wiki', status: 'pending' }));
-      }
-      if (filter === 'all' || filter === 'posts') {
-        requests.push(apiGet<{ type: string; items: any[] }>('/api/admin/review-queue', { type: 'posts', status: 'pending' }));
-      }
-      const results = await Promise.all(requests);
-      const merged = results.flatMap((bucket) =>
-        (bucket.items || []).map((item) => ({
-          ...item,
-          reviewType: bucket.type,
-          reviewId: bucket.type === 'wiki' ? item.slug : item.id,
-        })),
-      );
-      merged.sort((a, b) => {
-        const left = toDateValue(a.updatedAt)?.getTime() || 0;
-        const right = toDateValue(b.updatedAt)?.getTime() || 0;
-        return right - left;
-      });
-      setItems(merged);
+      const nextItems = await fetchReviewQueue(filter)
+      if (requestId !== loadRequestRef.current) return
+      setItems(nextItems)
     } catch (e) {
-      console.error(e);
+      console.error(e)
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) {
+        setLoading(false)
+      }
     }
-  };
+  }
 
   useEffect(() => {
-    fetchQueue();
-  }, [filter]);
-
-  const handleAction = async (item: ReviewQueueItem, action: 'approve' | 'reject') => {
-    let note = '';
-
-    if (action === 'reject') {
-      const input = await dialog.prompt({
-        title: '驳回审核',
-        message: '请填写驳回原因',
-        defaultValue: '',
-        confirmText: '驳回',
-        variant: 'warning',
-        multiline: true,
-      });
-      if (input === null) return;
-      note = input.trim();
-      if (!note) {
-        show('驳回原因不能为空', { variant: 'error' });
-        return;
-      }
-    }
-
-    try {
-      await apiPut(`/api/admin/review-queue/${item.reviewId}/${action}`, { note, type: item.reviewType });
-      invalidateReviewQueueCaches();
-      await fetchQueue();
-      show(action === 'approve' ? '已通过' : '已驳回', { variant: 'success' });
-    } catch (e) {
-      show(action === 'approve' ? '审核通过失败' : '驳回失败', { variant: 'error' });
-    }
-  };
+    void fetchQueue()
+  }, [filter])
 
   const handleRefreshQueue = () => {
-    invalidateReviewQueueCaches();
-    fetchQueue();
-  };
+    invalidateReviewQueueCaches()
+    void fetchQueue()
+  }
+
+  const handleStartReview = () => {
+    if (loading || items.length === 0) return
+    navigate(`/admin/reviews/workbench?type=${filter}`)
+  }
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">审核队列</h1>
-        <button onClick={handleRefreshQueue} className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all">
-          刷新队列
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleRefreshQueue}
+            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
+          >
+            刷新队列
+          </button>
+          <button
+            onClick={handleStartReview}
+            disabled={loading || items.length === 0}
+            className="px-4 py-2 rounded text-sm theme-button-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            开始审核
+          </button>
+        </div>
       </div>
 
       <div className="bg-surface border border-border rounded p-4 flex flex-wrap items-center gap-3">
-        {([
-          { id: 'all', label: '全部待审' },
-          { id: 'wiki', label: '百科待审' },
-          { id: 'posts', label: '帖子待审' },
-        ] as { id: ReviewFilter; label: string }[]).map((item) => (
+        {REVIEW_FILTER_OPTIONS.map((item) => (
           <button
             key={item.id}
-            onClick={() => setFilter(item.id)}
+            onClick={() => {
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev)
+                if (item.id === 'all') {
+                  next.delete('type')
+                } else {
+                  next.set('type', item.id)
+                }
+                return next
+              })
+            }}
             className={clsx(
               'px-4 py-2 rounded text-xs font-medium transition-all',
-              filter === item.id ? 'bg-brand-gold-dark text-white' : 'bg-surface-alt text-text-secondary hover:bg-bg-tertiary',
+              filter === item.id
+                ? 'bg-brand-gold-dark text-white'
+                : 'bg-surface-alt text-text-secondary hover:bg-bg-tertiary'
             )}
           >
             {item.label}
@@ -143,44 +106,61 @@ export const AdminReviews = () => {
       ) : items.length > 0 ? (
         <div className="space-y-3">
           {items.map((item) => (
-            <div key={`${item.reviewType}-${item.reviewId}`} className="bg-surface border border-border rounded p-5">
+            <div
+              key={`${item.reviewType}-${item.reviewId}`}
+              className="bg-surface border border-border rounded p-5"
+            >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className={clsx('px-2 py-0.5 text-[10px] font-medium rounded', item.reviewType === 'wiki' ? 'bg-surface-alt text-brand-gold' : 'bg-bg-tertiary text-text-secondary')}>
+                    <span
+                      className={clsx(
+                        'px-2 py-0.5 text-[10px] font-medium rounded',
+                        item.reviewType === 'wiki'
+                          ? 'bg-surface-alt text-brand-gold'
+                          : 'bg-bg-tertiary text-text-secondary'
+                      )}
+                    >
                       {item.reviewType === 'wiki' ? '百科' : '帖子'}
                     </span>
-                    <span className="px-2 py-0.5 text-[10px] font-medium rounded theme-status-warning">待审核</span>
+                    <span className="px-2 py-0.5 text-[10px] font-medium rounded theme-status-warning">
+                      待审核
+                    </span>
                   </div>
-                  <p className="font-semibold text-text-primary mb-1">{item.title || item.slug || item.id}</p>
-                  <p className="text-xs text-text-muted line-clamp-2">{(String(item.content || '')).replace(/[#*`]/g, '').slice(0, 160) || '无内容摘要'}</p>
-                  <p className="text-[10px] text-text-muted mt-2">更新时间：{formatDateTime(item.updatedAt, 'N/A')}</p>
+                  <p className="font-semibold text-text-primary mb-1">
+                    {item.title || item.slug || item.id}
+                  </p>
+                  <p className="text-xs text-text-muted line-clamp-2">
+                    {(String(item.content || '')).replace(/[#*`]/g, '').slice(0, 160) ||
+                      '无内容摘要'}
+                  </p>
+                  <p className="text-[10px] text-text-muted mt-2">
+                    更新时间：{formatDateTime(item.updatedAt, 'N/A')}
+                  </p>
                   {Array.isArray(item.sensitiveWords) && item.sensitiveWords.length > 0 && (
                     <div className="mt-2 p-2 theme-status-error rounded">
-                      <span className="text-[10px] font-medium theme-text-error">检测到敏感词: </span>
+                      <span className="text-[10px] font-medium theme-text-error">
+                        检测到敏感词:{' '}
+                      </span>
                       {item.sensitiveWords.map((w) => (
-                        <span key={w} className="text-[10px] theme-text-error mr-1">#{w}</span>
+                        <span key={w} className="text-[10px] theme-text-error mr-1">
+                          #{w}
+                        </span>
                       ))}
                     </div>
                   )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => handleAction(item, 'reject')} className="px-4 py-2 rounded text-xs font-medium theme-status-error hover:opacity-90 transition-all">
-                    驳回
-                  </button>
-                  <button onClick={() => handleAction(item, 'approve')} className="px-4 py-2 rounded text-xs font-medium theme-status-success hover:opacity-90 transition-all">
-                    通过
-                  </button>
                 </div>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="bg-surface border border-border rounded py-16 text-center text-text-muted italic">当前没有待审核内容</div>
+        <div className="bg-surface border border-border rounded py-16 text-center text-text-muted italic">
+          当前没有待审核内容
+        </div>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default AdminReviews;
+export default AdminReviews

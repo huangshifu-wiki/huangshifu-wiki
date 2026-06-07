@@ -508,22 +508,51 @@ router.get('/review-queue', requireAdmin, asyncHandler(async (req: Authenticated
       return;
     }
 
+    if (type !== 'wiki' && type !== 'post') {
+      res.status(400).json({ error: 'type 必须为 wiki 或 posts' });
+      return;
+    }
+
     if (type === 'wiki') {
       const items = await prisma.wikiPage.findMany({
         where: { status, deletedAt: null },
+        include: {
+          lastEditor: { select: { displayName: true } },
+          location: true,
+        },
         orderBy: { updatedAt: 'desc' },
         take: 200,
       });
-      res.json({ type, status, items: items.map(toWikiResponse) });
+      res.json({
+        type,
+        status,
+        items: items.map((item) => ({
+          ...toWikiResponse(item),
+          sensitiveWords: containsSensitive(item.content || ''),
+        })),
+      });
       return;
     }
 
     const items = await prisma.post.findMany({
       where: { status, deletedAt: null },
+      include: {
+        author: { select: { displayName: true } },
+        sectionRef: { select: { name: true } },
+        location: true,
+      },
       orderBy: { updatedAt: 'desc' },
       take: 200,
     });
-    res.json({ type: 'posts', status, items: items.map(toPostResponse) });
+    res.json({
+      type: 'posts',
+      status,
+      items: items.map((item) => ({
+        ...toPostResponse(item),
+        sectionName: item.sectionRef?.name || item.section,
+        sensitiveWords: containsSensitive(item.content || ''),
+      })),
+    });
   } catch (error) {
     logger.error({ err: error }, 'Fetch review queue error');
     res.status(500).json({ error: '获取审核队列失败' });

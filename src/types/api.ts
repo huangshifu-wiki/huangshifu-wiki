@@ -309,17 +309,50 @@ export interface AdminBackupsResponse {
   backups: AdminBackup[];
 }
 
-export interface AdminReviewQueueItem {
+export type AdminReviewQueueType = 'wiki' | 'posts';
+
+export type AdminReviewItemType = 'wiki' | 'post';
+
+export type AdminReviewQueueItem = {
   id: string;
-  type: 'wiki' | 'post' | 'gallery';
-  title: string;
-  author: UserResponse['user'];
-  submittedAt: string;
-}
+  slug?: string;
+  title?: string;
+  category?: string;
+  section?: string;
+  sectionName?: string;
+  content?: string;
+  tags?: string[];
+  locationCode?: string | null;
+  locationName?: string | null;
+  locationDetail?: string | null;
+  status?: 'draft' | 'pending' | 'published' | 'rejected';
+  reviewNote?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  viewCount?: number;
+  favoritesCount?: number;
+  likesCount?: number;
+  dislikesCount?: number;
+  commentsCount?: number;
+  isPinned?: boolean;
+  authorUid?: string;
+  authorName?: string | null;
+  lastEditorUid?: string;
+  lastEditorName?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  sensitiveWords?: string[];
+};
+
+export type AdminReviewQueueMergedItem = AdminReviewQueueItem & {
+  reviewType: AdminReviewItemType;
+  reviewId: string;
+};
 
 export interface AdminReviewQueueResponse {
+  type: AdminReviewQueueType;
+  status: 'draft' | 'pending' | 'published' | 'rejected';
   items: AdminReviewQueueItem[];
-  total: number;
 }
 
 export interface AdminReviewQueueCountResponse {

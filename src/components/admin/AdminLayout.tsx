@@ -315,7 +315,7 @@ export const AdminLayout = () => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto bg-[var(--color-bg-antique)]">
+        <main data-admin-scroll-container className="flex-1 overflow-y-auto bg-[var(--color-bg-antique)]">
           <div className="p-4 md:p-6 lg:p-8 min-h-full">
             <Outlet />
           </div>
