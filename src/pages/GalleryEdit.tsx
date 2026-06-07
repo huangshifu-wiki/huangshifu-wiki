@@ -111,7 +111,7 @@ const GalleryEdit = () => {
   const [gallery, setGallery] = useState<GalleryItem | null>(null)
   const [draft, setDraft] = useState<GalleryDraft | null>(null)
   const [loading, setLoading] = useState(true)
-  const [savingMode, setSavingMode] = useState<'draft' | 'publish' | null>(null)
+  const [savingMode, setSavingMode] = useState<'draft' | 'pending' | null>(null)
   const [uploading, setUploading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
@@ -348,9 +348,7 @@ const GalleryEdit = () => {
     appendPendingFiles(event.dataTransfer.files)
   }
 
-  const handleSave = async (mode: 'draft' | 'publish') => {
-    const targetPublished = mode === 'publish'
-    const targetStatus = mode === 'publish' ? 'pending' : 'draft'
+  const handleSave = async (status: 'draft' | 'pending') => {
     const currentDraft = draftRef.current
     if (!currentDraft || !canManage || savingMode || uploading) return
     if (!isCreating && (!gallery || !galleryId)) return
@@ -364,7 +362,7 @@ const GalleryEdit = () => {
     }
 
     try {
-      setSavingMode(mode)
+      setSavingMode(status)
       const pendingImages = currentDraft.images.filter(
         (image) => image.isPending && image.pendingFile
       )
@@ -454,7 +452,7 @@ const GalleryEdit = () => {
           locationCode: currentDraft.locationCode,
           locationDetail: currentDraft.locationName,
           copyright: currentDraft.copyrightText.trim() || null,
-          status: targetStatus,
+          status,
           images: imagesPayload.filter((image) => image && 'url' in image),
         })
 
@@ -477,8 +475,7 @@ const GalleryEdit = () => {
         locationCode: currentDraft.locationCode,
         locationDetail: currentDraft.locationName,
         copyright: currentDraft.copyrightText.trim() || null,
-        status: targetStatus,
-        published: targetPublished,
+        status,
         images: imagesPayload,
       })
 
@@ -578,6 +575,11 @@ const GalleryEdit = () => {
     )
   }
 
+  const submitButtonText =
+    savingMode === 'pending'
+      ? t(isAdmin ? 'gallery.publishing' : 'gallery.submitting')
+      : t(isAdmin ? 'gallery.publishGallery' : 'gallery.submitReview')
+
   return (
     <div
       className="min-h-[calc(100vh-60px)] bg-bg-primary"
@@ -631,7 +633,7 @@ const GalleryEdit = () => {
         <form
           onSubmit={(event) => {
             event.preventDefault()
-            void handleSave('publish')
+            void handleSave('pending')
           }}
           className="space-y-8"
         >
@@ -887,7 +889,7 @@ const GalleryEdit = () => {
               disabled={Boolean(savingMode) || uploading}
               className="px-8 py-2.5 theme-button-primary rounded text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send size={16} /> {savingMode === 'publish' ? t('gallery.saving') : '发布'}
+              <Send size={16} /> {submitButtonText}
             </button>
           </div>
         </form>
