@@ -1,14 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Plus, Save, Send, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Plus, Save, Send, Trash2, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { CharacterCount } from '../components/CharacterCount'
 import { LocationTagInput } from '../components/LocationTagInput'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { SmartImage } from '../components/SmartImage'
+import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
-import { apiGet, apiPatch, apiPost, apiUpload, invalidateApiCacheByPrefix } from '../lib/apiClient'
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  apiUpload,
+  invalidateApiCacheByPrefix,
+} from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { splitTagsInput } from '../lib/contentUtils'
 import { useI18n } from '../lib/i18n'
@@ -97,6 +105,7 @@ const GalleryEdit = () => {
   const navigate = useNavigate()
   const { user, isAdmin, isBanned, loading: authLoading } = useAuth()
   const { show } = useToast()
+  const dialog = useDialog()
   const { t } = useI18n()
 
   const [gallery, setGallery] = useState<GalleryItem | null>(null)
@@ -104,6 +113,9 @@ const GalleryEdit = () => {
   const [loading, setLoading] = useState(true)
   const [savingMode, setSavingMode] = useState<'draft' | 'publish' | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
   const [pageDragDepth, setPageDragDepth] = useState(0)
   const [isGalleryAdminOnly, setIsGalleryAdminOnly] = useState(false)
@@ -184,6 +196,11 @@ const GalleryEdit = () => {
     },
     []
   )
+
+  useEffect(() => {
+    setDeleteReason('')
+    setShowAdvancedOptions(false)
+  }, [galleryId, gallery?.authorUid])
 
   const canManage = Boolean(
     user &&
@@ -485,6 +502,41 @@ const GalleryEdit = () => {
 
   const handleCancel = () => {
     navigate(galleryId ? `/gallery/${galleryId}` : '/gallery')
+  }
+
+  const handleDelete = async () => {
+    if (!galleryId || isCreating || !gallery || isDeleting) return
+    if (!user || (gallery.authorUid !== user.uid && !isAdmin)) return
+
+    const isSelfDelete = gallery.authorUid === user.uid
+    const reason = isSelfDelete ? null : deleteReason.trim()
+    if (!isSelfDelete && !reason) {
+      show(t('gallery.deleteOtherReasonRequired'), { variant: 'error' })
+      return
+    }
+
+    const confirmed = await dialog.confirm({
+      title: t('gallery.deleteGalleryTitle'),
+      message: t('gallery.deleteGalleryConfirm', { title: gallery.title || galleryId }),
+      confirmText: t('gallery.delete'),
+      variant: 'danger',
+    })
+    if (!confirmed) return
+
+    setIsDeleting(true)
+    try {
+      await apiDelete(`/api/galleries/${galleryId}`, reason ? { reason } : {})
+      invalidateApiCacheByPrefix('/api/galleries')
+      show(t('gallery.galleryDeleted'), { variant: 'success' })
+      navigate('/gallery')
+    } catch (error) {
+      console.error('Error deleting gallery:', error)
+      show(error instanceof Error ? error.message : t('gallery.deleteGalleryFailed'), {
+        variant: 'error',
+      })
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   if (loading || authLoading || !galleryAccessLoaded) {
@@ -810,6 +862,21 @@ const GalleryEdit = () => {
           </section>
 
           <div className="pt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+            {!isCreating && gallery && (
+              <button
+                type="button"
+                onClick={() => setShowAdvancedOptions((value) => !value)}
+                aria-expanded={showAdvancedOptions}
+                aria-controls="gallery-advanced-options"
+                className="mr-auto flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+              >
+                <ChevronDown
+                  size={16}
+                  className={`transition-transform ${showAdvancedOptions ? 'rotate-180' : ''}`}
+                />{' '}
+                {t('gallery.advancedOptions')}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void handleSave('draft')}
@@ -827,6 +894,45 @@ const GalleryEdit = () => {
             </button>
           </div>
         </form>
+
+        {!isCreating && gallery && showAdvancedOptions && (
+          <section className="mt-4 flex justify-start text-left">
+            <div
+              id="gallery-advanced-options"
+              className="max-w-[520px] rounded border border-danger/30 bg-surface/60 p-5"
+            >
+              <h2 className="text-base font-bold text-danger tracking-[0.08em]">
+                {t('gallery.deleteZoneTitle')}
+              </h2>
+              <p className="mt-2 text-sm text-text-muted">{t('gallery.deleteZoneDescription')}</p>
+              {gallery.authorUid !== user?.uid && (
+                <label
+                  htmlFor="gallery-delete-reason"
+                  className="mt-4 block text-sm font-medium text-text-secondary"
+                >
+                  {t('gallery.deleteReasonLabel')}
+                  <textarea
+                    id="gallery-delete-reason"
+                    value={deleteReason}
+                    onChange={(event) => setDeleteReason(event.target.value)}
+                    maxLength={CONTENT_LIMITS.gallery.reviewNote}
+                    rows={3}
+                    className="mt-2 w-full rounded border border-border bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-danger"
+                  />
+                </label>
+              )}
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 size={16} />
+                {isDeleting ? t('gallery.deletingGallery') : t('gallery.deleteGallery')}
+              </button>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   )

@@ -159,7 +159,6 @@ const GalleryDetail = () => {
   const [newComment, setNewComment] = useState('')
   const [replyTo, setReplyTo] = useState<CommentItem | null>(null)
   const [submittingComment, setSubmittingComment] = useState(false)
-  const [deletingGallery, setDeletingGallery] = useState(false)
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
   const [restoringCommentId, setRestoringCommentId] = useState<string | null>(null)
   const [likingCommentId, setLikingCommentId] = useState<string | null>(null)
@@ -778,52 +777,6 @@ const GalleryDetail = () => {
       show(t('gallery.commentFailed'), { variant: 'error' })
     } finally {
       setSubmittingComment(false)
-    }
-  }
-
-  const handleDeleteGallery = async () => {
-    if (!gallery || !user || deletingGallery) return
-    const isSelfDelete = gallery.authorUid === user.uid
-    if (!isSelfDelete && !isAdmin) return
-    let reason: string | null = null
-
-    if (isSelfDelete) {
-      const confirmed = await dialog.confirm({
-        title: '删除图集',
-        message: `确定要删除图集《${gallery.title}》吗？删除后可由管理员在回收站恢复。`,
-        confirmText: '删除',
-        variant: 'danger',
-      })
-      if (!confirmed) return
-    } else {
-      const promptValue = await dialog.prompt({
-        title: '删除图集',
-        message: `删除图集《${gallery.title}》前必须填写删除理由。此操作会记录到管理日志。`,
-        confirmText: '确认删除',
-        cancelText: '取消',
-        variant: 'danger',
-        multiline: true,
-        placeholder: '填写删除理由',
-        maxLength: CONTENT_LIMITS.gallery.reviewNote,
-      })
-      reason = promptValue?.trim() || null
-      if (promptValue === null) return
-      if (!reason) {
-        show('删除他人图集必须填写删除理由', { variant: 'error' })
-        return
-      }
-    }
-
-    try {
-      setDeletingGallery(true)
-      await apiDelete(`/api/galleries/${gallery.id}`, reason ? { reason } : {})
-      show('图集已删除')
-      navigate('/gallery')
-    } catch (error) {
-      console.error('Error deleting gallery:', error)
-      show(error instanceof Error ? error.message : '删除图集失败', { variant: 'error' })
-    } finally {
-      setDeletingGallery(false)
     }
   }
 

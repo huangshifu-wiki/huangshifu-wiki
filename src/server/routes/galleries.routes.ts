@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireAuth, requireActiveUser, requireAdmin, isAdminRole } from '../middleware/auth'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { galleryWriteLimiter } from '../middleware/rateLimiter'
+import { galleryDeleteSchema, validateBody } from '../schemas'
 import type { ApiUser, AuthenticatedRequest } from '../types'
 import {
   serializeTags,
@@ -1062,6 +1063,78 @@ router.patch('/:id/publish', requireAuth, requireActiveUser, asyncHandler(async 
     res.status(500).json({ error: '修改图集发布状态失败' })
   }
 }))
+
+router.delete(
+  '/:id',
+  requireAuth,
+  requireActiveUser,
+  validateBody(galleryDeleteSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: req.params.id },
+        select: { authorUid: true, title: true, deletedAt: true },
+      })
+
+      if (!gallery || gallery.deletedAt) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      const isOwner = gallery.authorUid === req.authUser!.uid
+      const isAdmin = isAdminRole(req.authUser!.role)
+      if (!isOwner && !isAdmin) {
+        res.status(403).json({ error: '无权删除该图集' })
+        return
+      }
+
+      const reason = resolveDeleteReason(req.body?.reason, isOwner)
+      if (!isOwner && !reason) {
+        res.status(400).json({ error: '删除理由不能为空' })
+        return
+      }
+      if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.gallery.reviewNote)) {
+        return
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.gallery.update({
+          where: { id: req.params.id },
+          data: softDeleteData(req.authUser!.uid),
+        })
+
+        await tx.moderationLog.create({
+          data: {
+            targetType: 'gallery',
+            targetId: req.params.id,
+            action: 'delete',
+            operatorUid: req.authUser!.uid,
+            note: reason,
+          },
+        })
+      })
+
+      if (gallery.authorUid !== req.authUser!.uid) {
+        await createNotification(gallery.authorUid, 'review_result', {
+          approved: false,
+          action: 'deleted',
+          targetType: 'gallery',
+          targetId: req.params.id,
+          title: gallery.title,
+          note: reason,
+          operatorUid: req.authUser!.uid,
+          operatorName: req.authUser!.displayName,
+        })
+      }
+
+      res.json({ success: true })
+      enhancedCache.invalidateByPrefix('gallery_list_public:')
+    } catch (error) {
+      console.error('Delete gallery error:', error)
+      res.status(500).json({ error: '删除图集失败' })
+    }
+  })
+)
 
 router.post('/:id/images', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
