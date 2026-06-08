@@ -327,6 +327,10 @@
 - 单元测试
 - 构建
 
+### 完成前强制执行
+
+请在任务完成前执行 `npm run verify`。这包含 `lint`, `test:unit`, `test:integration` 和 `build`。
+
 ## 12. 测试与验证
 
 ### 本地命令
@@ -339,10 +343,6 @@
 - 构建：`npm run build`
 - 构建体积检查：`npm run check:build`
 - 排查单元测试日志时使用 `DEBUG_UNIT=1 npm run test:unit`；排查集成测试日志时使用 `DEBUG_INTEGRATION=1 npm run test:integration`
-
-### 交付前强制执行
-
-请在任务完成前执行 `npm run verify`。这包含 `lint`, `test:unit`, `test:integration` 和 `build`。
 
 ### 当前测试结构
 
