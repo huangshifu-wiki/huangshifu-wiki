@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { UserRole as PrismaUserRole } from '@prisma/client';
+import { Prisma, UserRole as PrismaUserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { requireAuth, requireActiveUser, requireAdmin, requireSuperAdmin, userToApiUser, clearUserCache, issueUserSession, isBearerAuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -33,6 +33,25 @@ import type { AuthenticatedRequest, UserStatus } from '../types';
 
 const router = Router();
 const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds();
+
+const USER_WIKI_PAGE_SELECT = {
+  id: true,
+  slug: true,
+  title: true,
+  category: true,
+  status: true,
+  reviewNote: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  favoritesCount: true,
+  isPinned: true,
+  likesCount: true,
+  dislikesCount: true,
+  lastEditorUid: true,
+  lastEditor: { select: { displayName: true } },
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.WikiPageSelect;
 
 type PasswordUpdateResponse = {
   success: true;
@@ -1191,6 +1210,148 @@ router.get('/:userId/galleries', asyncHandler(async (req: AuthenticatedRequest, 
   } catch (error) {
     console.error('Fetch user galleries error:', error);
     res.status(500).json({ error: '获取用户图集失败' });
+  }
+}));
+
+router.get('/:userId/wiki', asyncHandler(async (req: AuthenticatedRequest, res) => {
+  try {
+    const uid = req.params.userId;
+    const { limit, page, offset: skip } = parsePagination(req.query);
+    const isAdmin = req.authUser?.role === 'admin' || req.authUser?.role === 'super_admin';
+    const canViewPrivateUserContent = Boolean(req.authUser && (req.authUser.uid === uid || isAdmin));
+    const visibilityWhere = canViewPrivateUserContent
+      ? isAdmin
+        ? Prisma.sql`page."deletedAt" IS NULL`
+        : Prisma.sql`
+          page."deletedAt" IS NULL
+          AND (
+            page."status" = 'published'
+            OR page."lastEditorUid" = ${uid}
+          )
+        `
+      : Prisma.sql`page."deletedAt" IS NULL AND page."status" = 'published'`;
+    const editedPagesWhere = Prisma.sql`
+      ${visibilityWhere}
+      AND (
+        page."lastEditorUid" = ${uid}
+        OR EXISTS (
+          SELECT 1
+          FROM "WikiRevision" AS revision
+          WHERE revision."pageSlug" = page."slug"
+            AND revision."editorUid" = ${uid}
+        )
+      )
+    `;
+
+    const [pageRows, totalRows] = await Promise.all([
+      prisma.$queryRaw<Array<{ slug: string; editedAt: Date }>>(Prisma.sql`
+        SELECT
+          page."slug",
+          COALESCE(MAX(revision."createdAt"), page."updatedAt") AS "editedAt"
+        FROM "WikiPage" AS page
+        LEFT JOIN "WikiRevision" AS revision
+          ON revision."pageSlug" = page."slug"
+          AND revision."editorUid" = ${uid}
+        WHERE ${editedPagesWhere}
+        GROUP BY page."slug", page."updatedAt"
+        ORDER BY "editedAt" DESC, page."slug" ASC
+        LIMIT ${limit}
+        OFFSET ${skip}
+      `),
+      prisma.$queryRaw<Array<{ count: number | bigint }>>(Prisma.sql`
+        SELECT COUNT(*) AS "count"
+        FROM "WikiPage" AS page
+        WHERE ${editedPagesWhere}
+      `),
+    ]);
+
+    const pageSlugs = pageRows.map((item) => item.slug);
+    const editedAtBySlug = new Map(pageRows.map((item) => [item.slug, item.editedAt]));
+
+    const pages = pageSlugs.length
+      ? await prisma.wikiPage.findMany({
+          where: { slug: { in: pageSlugs } },
+          select: USER_WIKI_PAGE_SELECT,
+        })
+      : [];
+    const pageBySlug = new Map(pages.map((item) => [item.slug, item]));
+    const pageItems = pageSlugs
+      .map((slug) => {
+        const wikiPage = pageBySlug.get(slug);
+        const editedAt = editedAtBySlug.get(slug);
+        if (!wikiPage || !editedAt) return null;
+        return { page: wikiPage, editedAt };
+      })
+      .filter((item): item is { page: (typeof pages)[number]; editedAt: Date } => Boolean(item));
+    const total = Number(totalRows[0]?.count ?? 0);
+
+    const favoritedWikiSet = new Set<string>();
+    const likedWikiSet = new Set<string>();
+    const dislikedWikiSet = new Set<string>();
+    if (req.authUser && pageSlugs.length) {
+      const [favorites, likes, dislikes] = await Promise.all([
+        prisma.favorite.findMany({
+          where: {
+            userUid: req.authUser.uid,
+            targetType: 'wiki',
+            targetId: { in: pageSlugs },
+          },
+          select: { targetId: true },
+        }),
+        prisma.wikiLike.findMany({
+          where: {
+            userUid: req.authUser.uid,
+            pageSlug: { in: pageSlugs },
+          },
+          select: { pageSlug: true },
+        }),
+        prisma.wikiDislike.findMany({
+          where: {
+            userUid: req.authUser.uid,
+            pageSlug: { in: pageSlugs },
+          },
+          select: { pageSlug: true },
+        }),
+      ]);
+      favorites.forEach((item) => favoritedWikiSet.add(item.targetId));
+      likes.forEach((item) => likedWikiSet.add(item.pageSlug));
+      dislikes.forEach((item) => dislikedWikiSet.add(item.pageSlug));
+    }
+
+    res.json({
+      pages: pageItems.map((entry) => {
+        const item = entry.page;
+        return {
+          id: item.id,
+          slug: item.slug,
+          title: item.title,
+          category: item.category,
+          status: item.status,
+          reviewNote: canViewPrivateUserContent ? item.reviewNote : null,
+          reviewedBy: canViewPrivateUserContent ? item.reviewedBy : null,
+          reviewedAt: canViewPrivateUserContent ? item.reviewedAt : null,
+          favoritesCount: item.favoritesCount,
+          isPinned: item.isPinned,
+          likesCount: item.likesCount,
+          dislikesCount: item.dislikesCount,
+          lastEditorUid: item.lastEditorUid,
+          lastEditorName: item.lastEditor?.displayName || '匿名',
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+          editedAt: entry.editedAt.toISOString(),
+          favoritedByMe: favoritedWikiSet.has(item.slug),
+          likedByMe: likedWikiSet.has(item.slug),
+          dislikedByMe: dislikedWikiSet.has(item.slug),
+        };
+      }),
+      total,
+      page,
+      limit,
+      hasMore: skip + pageItems.length < total,
+    });
+  } catch (error) {
+    console.error('Fetch user wiki pages error:', error);
+    res.status(500).json({ error: '获取用户百科失败' });
   }
 }));
 

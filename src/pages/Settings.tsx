@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import {
+  BookOpen,
   Camera,
   ChevronDown,
   ChevronUp,
@@ -42,6 +43,7 @@ import {
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import type { CommentItem, GalleryItem, PostItem } from '../types/entities'
+import type { ContentStatus } from '../types/common'
 
 type PublicProfileForm = {
   displayName: string
@@ -62,13 +64,24 @@ type PasswordForm = {
 }
 
 type SettingsSection = 'profile' | 'content' | 'privacy' | 'account' | 'appearance'
-type ContentTab = 'posts' | 'galleries' | 'comments'
+type ContentTab = 'posts' | 'wiki' | 'galleries' | 'comments'
 
 type UserCommentItem = CommentItem & {
   targetType?: 'post' | 'gallery'
   target?: { id: string; title: string; status?: string; published?: boolean } | null
   gallery?: { id: string; title: string; published: boolean } | null
   deletionReason?: string | null
+}
+
+type UserWikiItem = {
+  id: string
+  slug: string
+  title: string
+  category: string
+  status?: ContentStatus
+  reviewNote?: string | null
+  updatedAt: string
+  editedAt?: string
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -92,7 +105,7 @@ const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'account',
   'appearance',
 ])
-const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'galleries', 'comments'])
+const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'wiki', 'galleries', 'comments'])
 const CONTENT_ITEM_LINK_CLASS =
   'group -mx-3 block px-3 transition-colors hover:bg-surface-alt/70'
 const CONTENT_META_ROW_CLASS = 'flex items-start justify-between gap-3 text-xs text-text-muted'
@@ -209,6 +222,7 @@ const Settings = () => {
   const [savingPassword, setSavingPassword] = useState(false)
   const [contentLoading, setContentLoading] = useState(false)
   const [myPosts, setMyPosts] = useState<PostItem[]>([])
+  const [myWikiPages, setMyWikiPages] = useState<UserWikiItem[]>([])
   const [myGalleries, setMyGalleries] = useState<GalleryItem[]>([])
   const [myComments, setMyComments] = useState<UserCommentItem[]>([])
   const hasPendingGalleryThumbnails = myGalleries.some(shouldWaitForGalleryThumbnail)
@@ -245,6 +259,14 @@ const Settings = () => {
             limit: 50,
           })
           if (!cancelled) setMyPosts(data.posts || [])
+          return
+        }
+
+        if (activeContentTab === 'wiki') {
+          const data = await apiGet<{ pages: UserWikiItem[] }>(`/api/users/${user.uid}/wiki`, {
+            limit: 50,
+          })
+          if (!cancelled) setMyWikiPages(data.pages || [])
           return
         }
 
@@ -514,6 +536,52 @@ const Settings = () => {
         </ul>
       ) : (
         <EmptyState message="暂无帖子" />
+      )
+    }
+
+    if (activeContentTab === 'wiki') {
+      return myWikiPages.length ? (
+        <ul>
+          {myWikiPages.map((page) => (
+            <li key={page.slug} className="border-b border-border last:border-b-0">
+              <Link
+                to={`/wiki/${page.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={clsx(CONTENT_ITEM_LINK_CLASS, 'py-3')}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className={CONTENT_META_ROW_CLASS}>
+                      <span className="min-w-0 text-text-muted">{page.category}</span>
+                      {page.status && page.status !== 'published' ? (
+                        <span
+                          className={clsx(
+                            CONTENT_STATUS_BADGE_CLASS,
+                            getStatusClassName(page.status)
+                          )}
+                        >
+                          {getStatusText(page.status)}
+                          {page.status === 'rejected' && page.reviewNote
+                            ? `（原因：${page.reviewNote}）`
+                            : ''}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                      {page.title}
+                    </p>
+                  </div>
+                  <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
+                    {format(new Date(page.editedAt || page.updatedAt), 'MM-dd HH:mm')}
+                  </p>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <EmptyState message="暂无编辑过的百科" />
       )
     }
 
@@ -825,6 +893,7 @@ const Settings = () => {
                   <div className="flex flex-wrap gap-2">
                     {[
                       { id: 'posts', label: '帖子', icon: FileText },
+                      { id: 'wiki', label: '编辑过的百科', icon: BookOpen },
                       { id: 'galleries', label: '图集', icon: ImageIcon },
                       { id: 'comments', label: '评论', icon: MessageSquare },
                     ].map((item) => {

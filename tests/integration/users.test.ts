@@ -18,7 +18,14 @@
 import { describe, beforeEach, afterEach, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server';
-import { prisma, createTestUser, createTestToken, createTestPost, createTestGallery } from './setup';
+import {
+  prisma,
+  createTestUser,
+  createTestToken,
+  createTestPost,
+  createTestGallery,
+  createTestWikiPage,
+} from './setup';
 import type { CreateTestPostInput } from './setup';
 import { WIKI_MAX_CONTENT_SIZE } from '../../src/lib/contentLimits';
 
@@ -796,6 +803,109 @@ describe('Users API - 用户接口测试', () => {
       expect(
         selfResponse.body.galleries.find((gallery: { title: string }) => gallery.title === 'Test Draft User Gallery')
       ).toBeDefined();
+    });
+  });
+
+  describe('GET /api/users/:userId/wiki - 获取用户编辑过的百科列表', () => {
+    it('本人应该看到自己最后编辑和历史修订过的百科', async () => {
+      const lastEditedPage = await createTestWikiPage({
+        slug: `test-user-last-edited-${Date.now()}`,
+        title: 'Test User Last Edited Wiki',
+        status: 'published',
+        authorUid: testUser.user.uid,
+      });
+      const revisionPage = await createTestWikiPage({
+        slug: `test-user-revision-edited-${Date.now()}`,
+        title: 'Test User Revision Edited Wiki',
+        status: 'published',
+        authorUid: adminUser.user.uid,
+      });
+      const draftRevisionPage = await createTestWikiPage({
+        slug: `test-user-draft-revision-${Date.now()}`,
+        title: 'Test User Draft Revision Wiki',
+        status: 'draft',
+        authorUid: testUser.user.uid,
+      });
+
+      await prisma.wikiRevision.create({
+        data: {
+          pageSlug: revisionPage.slug,
+          title: revisionPage.title,
+          content: revisionPage.content,
+          editorUid: testUser.user.uid,
+          editorName: testUser.user.displayName,
+        },
+      });
+      await prisma.wikiRevision.create({
+        data: {
+          pageSlug: draftRevisionPage.slug,
+          title: draftRevisionPage.title,
+          content: draftRevisionPage.content,
+          editorUid: testUser.user.uid,
+          editorName: testUser.user.displayName,
+        },
+      });
+
+      const response = await request(app)
+        .get(`/api/users/${testUser.user.uid}/wiki`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(response.status).toBe(200);
+      const slugs = response.body.pages.map((page: { slug: string }) => page.slug);
+      expect(slugs).toContain(lastEditedPage.slug);
+      expect(slugs).toContain(revisionPage.slug);
+      expect(slugs).toContain(draftRevisionPage.slug);
+      const revisionItem = response.body.pages.find(
+        (page: { slug: string }) => page.slug === revisionPage.slug
+      );
+      expect(revisionItem.editedAt).toBeTruthy();
+    });
+
+    it('访客只应该看到用户编辑过的已发布百科', async () => {
+      const publishedPage = await createTestWikiPage({
+        slug: `test-public-user-wiki-${Date.now()}`,
+        title: 'Test Public User Wiki',
+        status: 'published',
+        authorUid: testUser.user.uid,
+      });
+      await createTestWikiPage({
+        slug: `test-private-user-wiki-${Date.now()}`,
+        title: 'Test Private User Wiki',
+        status: 'draft',
+        authorUid: testUser.user.uid,
+      });
+
+      const response = await request(app).get(`/api/users/${testUser.user.uid}/wiki`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.pages.map((page: { slug: string }) => page.slug)).toContain(
+        publishedPage.slug
+      );
+      expect(
+        response.body.pages.find((page: { title: string }) => page.title === 'Test Private User Wiki')
+      ).toBeUndefined();
+    });
+
+    it('应该在数据库层按分页返回用户编辑过的百科', async () => {
+      const timestamp = Date.now();
+      for (let index = 0; index < 5; index += 1) {
+        await createTestWikiPage({
+          slug: `test-paginated-user-wiki-${timestamp}-${index}`,
+          title: `Test Paginated User Wiki ${index}`,
+          status: 'published',
+          authorUid: testUser.user.uid,
+        });
+      }
+
+      const response = await request(app)
+        .get(`/api/users/${testUser.user.uid}/wiki`)
+        .query({ page: 1, limit: 2 })
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.pages).toHaveLength(2);
+      expect(response.body.total).toBeGreaterThanOrEqual(5);
+      expect(response.body.hasMore).toBe(true);
     });
   });
 

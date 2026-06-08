@@ -89,7 +89,7 @@ describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockAuthRole.mockReturnValue('user')
-    mockApiGet.mockResolvedValue({ posts: [], galleries: [], comments: [] })
+    mockApiGet.mockResolvedValue({ posts: [], pages: [], galleries: [], comments: [] })
     mockApiPatch.mockResolvedValue({})
     mockApiPut.mockResolvedValue({})
     mockRefreshAuth.mockResolvedValue(undefined)
@@ -297,6 +297,42 @@ describe('Settings', () => {
     expect(mockApiGet).toHaveBeenCalledWith('/api/users/user-1/comments', { limit: 50 })
   })
 
+  it('loads content management wiki tab', async () => {
+    mockApiGet.mockResolvedValue({
+      pages: [
+        {
+          id: 'wiki-1',
+          slug: 'test-wiki',
+          title: '测试百科条目',
+          category: '人物',
+          content: '',
+          tags: [],
+          status: 'pending',
+          reviewNote: null,
+          favoritesCount: 0,
+          likesCount: 0,
+          dislikesCount: 0,
+          lastEditorUid: 'user-1',
+          lastEditorName: '测试用户',
+          editedAt: '2026-05-26T10:00:00.000Z',
+          createdAt: '2026-05-25T10:00:00.000Z',
+          updatedAt: '2026-05-26T10:00:00.000Z',
+        },
+      ],
+      total: 1,
+    })
+
+    renderSettings('/settings/content?tab=wiki')
+
+    const wikiLink = await screen.findByRole('link', { name: /测试百科条目/ })
+    expect(wikiLink).toHaveAttribute('href', '/wiki/test-wiki')
+    expect(wikiLink).toHaveAttribute('target', '_blank')
+    expect(wikiLink).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.getByText('人物')).toBeInTheDocument()
+    expect(screen.getByText('待审核')).toBeInTheDocument()
+    expect(mockApiGet).toHaveBeenCalledWith('/api/users/user-1/wiki', { limit: 50 })
+  })
+
   it('labels replies separately in content management comments tab', async () => {
     mockApiGet.mockResolvedValue({
       comments: [
@@ -467,7 +503,7 @@ describe('Settings', () => {
         }
       }
 
-      return { posts: [], galleries: [], comments: [] }
+      return { posts: [], pages: [], galleries: [], comments: [] }
     })
 
     renderSettings('/settings/content?tab=posts')
@@ -534,7 +570,7 @@ describe('Settings', () => {
         }
       }
 
-      return { posts: [], galleries: [], comments: [] }
+      return { posts: [], pages: [], galleries: [], comments: [] }
     })
 
     renderSettings('/settings/content?tab=posts')
