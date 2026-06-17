@@ -73,7 +73,7 @@
     "react-dom": "^19.2.6",
     "react-image-crop": "^11.0.10",
     "react-markdown": "^10.1.0",
-    "react-router-dom": "^7.15.0",
+    "react-router-dom": "^7.18.0",
     "rehype-autolink-headings": "~7.1.0",
     "rehype-prism-plus": "~2.0.2",
     "rehype-raw": "^7.0.0",
