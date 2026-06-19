@@ -120,6 +120,7 @@ export async function cleanupDatabase() {
     'moderationLog',
     'userBanLog',
     'notification',
+    'EmailVerificationToken',
     'Post',
     'WikiPage',
     'User',

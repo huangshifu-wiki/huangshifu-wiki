@@ -173,9 +173,24 @@ export {
 // === 微信登录 ===
 export {
   createWechatPlaceholderEmail,
+  isWechatPlaceholderEmail,
   exchangeWechatLoginCode,
   buildUniqueWechatEmail,
 } from './wechat';
+
+// === 邮箱验证 ===
+export {
+  EmailVerificationPurpose,
+  EmailVerificationError,
+  getEmailVerificationConfig,
+  setEmailVerificationConfig,
+  isEmailVerificationEnabled,
+  toEmailVerificationPublicConfig,
+  toEmailVerificationAdminConfig,
+  createAndSendEmailVerification,
+  hashEmailVerificationToken,
+  verifyEmailVerificationToken,
+} from './email-verification';
 
 // === 文件上传与存储 ===
 export {

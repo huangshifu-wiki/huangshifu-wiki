@@ -10,6 +10,7 @@ import {
   KeyRound,
   Loader2,
   Mail,
+  MailCheck,
   MessageSquare,
   Save,
   Shield,
@@ -32,7 +33,7 @@ import {
   PROFILE_SIGNATURE_MAX_LENGTH,
   WIKI_MAX_CONTENT_SIZE,
 } from '../lib/contentLimits'
-import { apiGet, apiPatch, apiPut } from '../lib/apiClient'
+import { apiGet, apiPatch, apiPost, apiPut } from '../lib/apiClient'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import {
   shouldWaitForGalleryThumbnail,
@@ -44,6 +45,7 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import type { CommentItem, GalleryItem, PostItem } from '../types/entities'
 import type { ContentStatus } from '../types/common'
+import type { EmailVerificationPublicConfig } from '../types/api'
 
 type PublicProfileForm = {
   displayName: string
@@ -86,6 +88,12 @@ type UserWikiItem = {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
+}
+
+const WECHAT_PLACEHOLDER_EMAIL_SUFFIX = '@wechat.local'
+
+function isWechatPlaceholderEmail(email?: string | null) {
+  return Boolean(email?.trim().toLowerCase().endsWith(WECHAT_PLACEHOLDER_EMAIL_SUFFIX))
 }
 
 const SECTION_NAV = [
@@ -219,6 +227,9 @@ const Settings = () => {
   const [avatarModalOpen, setAvatarModalOpen] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingEmail, setSavingEmail] = useState(false)
+  const [sendingEmailVerification, setSendingEmailVerification] = useState(false)
+  const [emailVerificationConfig, setEmailVerificationConfig] =
+    useState<EmailVerificationPublicConfig>({ enabled: false })
   const [savingPassword, setSavingPassword] = useState(false)
   const [contentLoading, setContentLoading] = useState(false)
   const [myPosts, setMyPosts] = useState<PostItem[]>([])
@@ -246,6 +257,23 @@ const Settings = () => {
     user?.photoURL,
     user?.uid,
   ])
+
+  useEffect(() => {
+    if (!user || activeSection !== 'account') return
+
+    let cancelled = false
+    apiGet<EmailVerificationPublicConfig>('/api/config/email-verification')
+      .then((config) => {
+        if (!cancelled) setEmailVerificationConfig(config)
+      })
+      .catch((error) => {
+        console.error('Error loading email verification config:', error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeSection, user?.uid])
 
   useEffect(() => {
     if (!user || activeSection !== 'content') return
@@ -357,6 +385,10 @@ const Settings = () => {
     return null
   }
 
+  const hasDeliverableEmail = Boolean(user.email && !isWechatPlaceholderEmail(user.email))
+  const canSendEmailVerification =
+    emailVerificationConfig.enabled && !user.emailVerified && hasDeliverableEmail
+
   const handleAvatarSuccess = async (photoURL: string) => {
     setProfileForm((current) => ({ ...current, photoURL }))
     try {
@@ -427,12 +459,32 @@ const Settings = () => {
       await refreshAuth()
       setEmailForm((current) => ({ ...current, currentPassword: '' }))
       setIsEmailEditorOpen(false)
-      show('邮箱已更新')
+      show('邮箱已更新，可按需发送验证邮件', { duration: 4000 })
     } catch (error) {
       console.error('Error updating email:', error)
       show(getErrorMessage(error, '邮箱更新失败，请稍后重试'), { variant: 'error' })
     } finally {
       setSavingEmail(false)
+    }
+  }
+
+  const handleSendEmailVerification = async () => {
+    if (!user?.email) return
+
+    if (isWechatPlaceholderEmail(user.email)) {
+      show('请先修改为真实邮箱后再发送验证邮件', { variant: 'error' })
+      return
+    }
+
+    setSendingEmailVerification(true)
+    try {
+      await apiPost('/api/auth/resend-verification', { email: user.email })
+      show('验证邮件已发送，请查收邮箱', { duration: 4000 })
+    } catch (error) {
+      console.error('Error sending verification email:', error)
+      show(getErrorMessage(error, '验证邮件发送失败，请稍后重试'), { variant: 'error' })
+    } finally {
+      setSendingEmailVerification(false)
     }
   }
 
@@ -974,17 +1026,55 @@ const Settings = () => {
                           <h3 className="text-sm font-semibold text-text-primary">邮箱</h3>
                         </div>
                         <p className="truncate text-sm text-text-secondary">{user.email || '未设置'}</p>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span
+                            className={clsx(
+                              'inline-flex items-center gap-1 rounded border px-2 py-1',
+                              user.emailVerified
+                                ? 'theme-status-success theme-text-success'
+                                : 'theme-status-warning theme-text-warning'
+                            )}
+                          >
+                            <MailCheck size={13} />
+                            {user.emailVerified ? '已验证' : '未验证'}
+                          </span>
+                          {!emailVerificationConfig.enabled && (
+                            <span className="text-text-muted">邮箱验证功能未开启</span>
+                          )}
+                          {emailVerificationConfig.enabled &&
+                            !user.emailVerified &&
+                            !hasDeliverableEmail && (
+                              <span className="text-text-muted">请先修改为真实邮箱后再验证</span>
+                            )}
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={isEmailEditorOpen ? closeEmailEditor : openEmailEditor}
-                        className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
-                        aria-expanded={isEmailEditorOpen}
-                        aria-controls="email-editor"
-                      >
-                        {isEmailEditorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        {isEmailEditorOpen ? '收起' : '修改邮箱'}
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        {canSendEmailVerification && (
+                          <button
+                            type="button"
+                            onClick={handleSendEmailVerification}
+                            disabled={sendingEmailVerification}
+                            className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                          >
+                            {sendingEmailVerification ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <MailCheck size={14} />
+                            )}
+                            {sendingEmailVerification ? '发送中...' : '发送验证邮件'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={isEmailEditorOpen ? closeEmailEditor : openEmailEditor}
+                          className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
+                          aria-expanded={isEmailEditorOpen}
+                          aria-controls="email-editor"
+                        >
+                          {isEmailEditorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          {isEmailEditorOpen ? '收起' : '修改邮箱'}
+                        </button>
+                      </div>
                     </div>
                     {isEmailEditorOpen && (
                       <form

@@ -133,6 +133,7 @@ describe('users routes password update', () => {
         status: true,
         banReason: true,
         bannedAt: true,
+        emailVerifiedAt: true,
         level: true,
         signature: true,
         bio: true,

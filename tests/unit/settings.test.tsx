@@ -15,26 +15,33 @@ import { PASSWORD_MAX_LENGTH } from '../../src/lib/passwordRules'
 const {
   mockApiGet,
   mockApiPatch,
+  mockApiPost,
   mockApiPut,
   mockRefreshAuth,
   mockSetTheme,
   mockUpdatePreferences,
   mockShow,
   mockAuthRole,
+  mockAuthEmail,
+  mockAuthEmailVerified,
 } = vi.hoisted(() => ({
   mockApiGet: vi.fn(),
   mockApiPatch: vi.fn(),
+  mockApiPost: vi.fn(),
   mockApiPut: vi.fn(),
   mockRefreshAuth: vi.fn(),
   mockSetTheme: vi.fn(),
   mockUpdatePreferences: vi.fn(),
   mockShow: vi.fn(),
   mockAuthRole: vi.fn(() => 'user'),
+  mockAuthEmail: vi.fn(() => 'old@example.com'),
+  mockAuthEmailVerified: vi.fn(() => false),
 }))
 
 vi.mock('../../src/lib/apiClient', () => ({
   apiGet: mockApiGet,
   apiPatch: mockApiPatch,
+  apiPost: mockApiPost,
   apiPut: mockApiPut,
 }))
 
@@ -42,10 +49,11 @@ vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => ({
     user: {
       uid: 'user-1',
-      email: 'old@example.com',
+      email: mockAuthEmail(),
       displayName: '测试用户',
       photoURL: '',
       role: mockAuthRole(),
+      emailVerified: mockAuthEmailVerified(),
     },
     profile: {
       displayName: '测试用户',
@@ -89,8 +97,11 @@ describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockAuthRole.mockReturnValue('user')
+    mockAuthEmail.mockReturnValue('old@example.com')
+    mockAuthEmailVerified.mockReturnValue(false)
     mockApiGet.mockResolvedValue({ posts: [], pages: [], galleries: [], comments: [] })
     mockApiPatch.mockResolvedValue({})
+    mockApiPost.mockResolvedValue({})
     mockApiPut.mockResolvedValue({})
     mockRefreshAuth.mockResolvedValue(undefined)
   })
@@ -171,6 +182,7 @@ describe('Settings', () => {
         currentPassword: 'CurrentPassword123!',
       })
     })
+    expect(mockShow).toHaveBeenCalledWith('邮箱已更新，可按需发送验证邮件', { duration: 4000 })
 
     expect(screen.queryByLabelText('新密码')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /修改密码/ }))
@@ -194,6 +206,24 @@ describe('Settings', () => {
         newPassword: 'UpdatedPassword123!',
       })
     })
+  })
+
+  it('does not offer email verification for wechat placeholder emails', async () => {
+    mockAuthEmail.mockReturnValue('mock-openid@wechat.local')
+    mockApiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/config/email-verification') {
+        return { enabled: true }
+      }
+
+      return { posts: [], pages: [], galleries: [], comments: [] }
+    })
+
+    renderSettings('/settings/account')
+
+    expect(await screen.findByText('mock-openid@wechat.local')).toBeInTheDocument()
+    expect(await screen.findByText('请先修改为真实邮箱后再验证')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /发送验证邮件/ })).not.toBeInTheDocument()
+    expect(mockApiPost).not.toHaveBeenCalled()
   })
 
   it('shows a chinese validation message when current password is empty', async () => {

@@ -29,6 +29,7 @@ type SessionUser = {
   status: UserStatus;
   banReason: string | null;
   bannedAt: Date | null;
+  emailVerifiedAt: Date | null;
   level: number;
   signature: string;
   bio: string;
@@ -53,6 +54,7 @@ function userToApiUser(user: {
   status: UserStatus;
   banReason: string | null;
   bannedAt: Date | null;
+  emailVerifiedAt: Date | null;
   level: number;
   signature: string;
   bio: string;
@@ -67,6 +69,7 @@ function userToApiUser(user: {
     status: user.status,
     banReason: user.banReason,
     bannedAt: user.bannedAt ? user.bannedAt.toISOString() : null,
+    emailVerified: Boolean(user.emailVerifiedAt),
     level: user.level,
     signature: user.signature,
     bio: user.bio,

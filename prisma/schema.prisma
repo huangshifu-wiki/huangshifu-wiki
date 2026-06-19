@@ -18,6 +18,11 @@ enum UserStatus {
   banned
 }
 
+enum EmailVerificationPurpose {
+  register
+  change_email
+}
+
 enum ContentStatus {
   draft
   pending
@@ -149,6 +154,7 @@ model User {
   status        UserStatus     @default(active)
   banReason     String?
   bannedAt      DateTime?
+  emailVerifiedAt DateTime?
   level         Int            @default(1)
   signature     String         @default("")
   bio           String
@@ -183,10 +189,28 @@ model User {
   uploadSessions UploadSession[]
   mediaAssets   MediaAsset[]
   editLocks     EditLock[]
+  emailVerificationTokens EmailVerificationToken[]
 
   @@index([status, createdAt])
   @@index([wechatUnionId])
   @@index([deletedAt])
+  @@index([emailVerifiedAt])
+}
+
+model EmailVerificationToken {
+  id        String                   @id @default(cuid())
+  userUid   String
+  email     String
+  tokenHash String                   @unique
+  purpose   EmailVerificationPurpose
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime                 @default(now())
+  user      User                     @relation(fields: [userUid], references: [uid], onDelete: Cascade)
+
+  @@index([userUid, purpose, createdAt])
+  @@index([email, purpose])
+  @@index([expiresAt])
 }
 
 model Region {

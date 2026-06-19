@@ -764,6 +764,7 @@ export function toUserResponse(user: {
   status: UserStatus;
   banReason: string | null;
   bannedAt: Date | null;
+  emailVerifiedAt?: Date | null;
   level: number;
   signature: string;
   bio: string;
@@ -774,6 +775,8 @@ export function toUserResponse(user: {
 }) {
   return {
     ...user,
+    emailVerified: Boolean(user.emailVerifiedAt),
+    emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : null,
     isDeleted: Boolean(user.deletedAt),
     deletedAt: user.deletedAt ? user.deletedAt.toISOString() : null,
     deletedBy: user.deletedBy ?? null,

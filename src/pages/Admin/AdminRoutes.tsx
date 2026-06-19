@@ -12,6 +12,7 @@ import AdminLogs from './AdminLogs'
 import AdminToolPage from './AdminToolPage'
 import AdminDiskMonitor from './AdminDiskMonitor'
 import AdminVariantManager from './AdminVariantManager'
+import AdminSettings from './AdminSettings'
 import NotFound from '../NotFound'
 
 export const AdminRoutes = () => (
@@ -55,6 +56,14 @@ export const AdminRoutes = () => (
       <Route path="markdown_links" element={<AdminToolPage type="markdown_links" />} />
       <Route path="disk-monitor" element={<AdminDiskMonitor />} />
       <Route path="variant-manager" element={<AdminVariantManager />} />
+      <Route
+        path="settings"
+        element={
+          <RouteGuard requireSuperAdmin>
+            <AdminSettings />
+          </RouteGuard>
+        }
+      />
       <Route path="*" element={<NotFound homePath="/admin" homeLabel="返回后台首页" />} />
     </Route>
   </Routes>

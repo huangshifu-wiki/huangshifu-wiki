@@ -19,6 +19,7 @@ import request from 'supertest';
 import { app } from '../../server';
 import { prisma, createTestUser, createTestToken } from './setup';
 import { AUTH_DISPLAY_NAME_MAX_LENGTH } from '../../src/server/schemas/auth.schema';
+import { EmailVerificationPurpose, hashEmailVerificationToken } from '../../src/server/utils/email-verification';
 import { getPasswordSaltRounds } from '../../src/server/utils/password';
 
 const AUTH_TEST_EMAILS = [
@@ -33,10 +34,20 @@ const AUTH_TEST_EMAILS = [
   'blank_name@example.com',
   'special@example.com',
   'test_stale_session@example.com',
+  'verify_pending@example.com',
+  'verify_success@example.com',
+  'change_email_old@example.com',
+  'change_email_new@example.com',
+  'email_config_super@example.com',
+  'email_config_admin@example.com',
+  'mock-openid@wechat.local',
 ];
 const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds();
 
 async function cleanupAuthTestData() {
+  await prisma.siteConfig.deleteMany({
+    where: { key: 'email_verification' },
+  });
   await prisma.user.deleteMany({
     where: {
       OR: [
@@ -54,6 +65,24 @@ function pickCookie(setCookie: string[] | string | undefined, name: string) {
       ? [setCookie]
       : [];
   return cookieList.find((cookie) => cookie.startsWith(`${name}=`));
+}
+
+async function createEmailVerificationToken(input: {
+  userUid: string;
+  email: string;
+  token: string;
+  purpose?: EmailVerificationPurpose;
+  expiresAt?: Date;
+}) {
+  return prisma.emailVerificationToken.create({
+    data: {
+      userUid: input.userUid,
+      email: input.email.toLowerCase().trim(),
+      tokenHash: hashEmailVerificationToken(input.token),
+      purpose: input.purpose || EmailVerificationPurpose.register,
+      expiresAt: input.expiresAt || new Date(Date.now() + 30 * 60 * 1000),
+    },
+  });
 }
 
 describe('Auth API - 认证接口测试', () => {
@@ -163,7 +192,7 @@ describe('Auth API - 认证接口测试', () => {
       });
 
       // 验证额外字段
-      expect(response.body.user).toHaveProperty('emailVerified', true);
+      expect(response.body.user).toHaveProperty('emailVerified', false);
       expect(response.body.user).toHaveProperty('isAnonymous', false);
       expect(response.body.user).toHaveProperty('providerData');
       expect(Array.isArray(response.body.user.providerData)).toBe(true);
@@ -301,6 +330,28 @@ describe('Auth API - 认证接口测试', () => {
       expect(authCookie).toContain('HttpOnly');
     });
 
+    it('邮箱未验证时应该允许登录', async () => {
+      const { user } = await createTestUser({
+        email: 'verify_pending@example.com',
+        password: 'CorrectPassword123!',
+      });
+      await prisma.user.update({
+        where: { uid: user.uid },
+        data: { emailVerifiedAt: null },
+      });
+
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'verify_pending@example.com',
+          password: 'CorrectPassword123!',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.emailVerified).toBe(false);
+      expect(pickCookie(response.headers['set-cookie'], 'hsf_token')).toBeTruthy();
+    });
+
     /**
      * 测试目的：验证错误密码的处理
      * 预期结果：返回 401 状态码和错误信息
@@ -419,7 +470,11 @@ describe('Auth API - 认证接口测试', () => {
         email: 'new_user@example.com',
         displayName: 'NewUser',
         role: 'user',
+        emailVerified: false,
       });
+      expect(response.body.requiresEmailVerification).toBe(false);
+      expect(response.body.verificationEmailSent).toBe(false);
+      expect(pickCookie(response.headers['set-cookie'], 'hsf_token')).toBeUndefined();
 
       // 验证 UID 已生成
       expect(response.body.user.uid).toBeDefined();
@@ -431,6 +486,94 @@ describe('Auth API - 认证接口测试', () => {
       });
       expect(dbUser).not.toBeNull();
       expect(dbUser?.displayName).toBe('NewUser');
+      expect(dbUser?.emailVerifiedAt).toBeNull();
+
+      const tokenCount = await prisma.emailVerificationToken.count({
+        where: {
+          userUid: dbUser!.uid,
+          email: 'new_user@example.com',
+          purpose: EmailVerificationPurpose.register,
+          usedAt: null,
+        },
+      });
+      expect(tokenCount).toBe(0);
+    });
+
+    it('开启邮箱验证时注册会创建验证 token 但不强制验证', async () => {
+      await prisma.siteConfig.create({
+        data: {
+          key: 'email_verification',
+          value: {
+            enabled: true,
+            publicBaseUrl: 'https://example.com',
+            tokenTtlMinutes: 30,
+          },
+        },
+      });
+
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'new_user@example.com',
+          password: 'ValidPassword123!',
+          displayName: 'NewUser',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.requiresEmailVerification).toBe(false);
+      expect(response.body.verificationEmailSent).toBe(true);
+
+      const dbUser = await prisma.user.findUnique({
+        where: { email: 'new_user@example.com' },
+      });
+      expect(dbUser?.emailVerifiedAt).toBeNull();
+
+      const tokenCount = await prisma.emailVerificationToken.count({
+        where: {
+          userUid: dbUser!.uid,
+          email: 'new_user@example.com',
+          purpose: EmailVerificationPurpose.register,
+          usedAt: null,
+        },
+      });
+      expect(tokenCount).toBe(1);
+    });
+
+    it('重发验证邮件时应该跳过微信占位邮箱', async () => {
+      await prisma.siteConfig.create({
+        data: {
+          key: 'email_verification',
+          value: {
+            enabled: true,
+            publicBaseUrl: 'https://example.com',
+            tokenTtlMinutes: 30,
+          },
+        },
+      });
+      const { user } = await createTestUser({
+        email: 'mock-openid@wechat.local',
+      });
+      await prisma.user.update({
+        where: { uid: user.uid },
+        data: { emailVerifiedAt: null },
+      });
+
+      const response = await request(app)
+        .post('/api/auth/resend-verification')
+        .send({ email: 'mock-openid@wechat.local' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ success: true });
+
+      const tokenCount = await prisma.emailVerificationToken.count({
+        where: {
+          userUid: user.uid,
+          email: 'mock-openid@wechat.local',
+          purpose: EmailVerificationPurpose.register,
+          usedAt: null,
+        },
+      });
+      expect(tokenCount).toBe(0);
     });
 
     /**
@@ -545,6 +688,239 @@ describe('Auth API - 认证接口测试', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.user.displayName).toBe(expectedDisplayName);
+    });
+  });
+
+  describe('POST /api/auth/verify-email', () => {
+    it('验证注册邮箱后应该允许登录', async () => {
+      const { user, plainPassword } = await createTestUser({
+        email: 'verify_success@example.com',
+        password: 'CorrectPassword123!',
+      });
+      await prisma.user.update({
+        where: { uid: user.uid },
+        data: { emailVerifiedAt: null },
+      });
+      await createEmailVerificationToken({
+        userUid: user.uid,
+        email: user.email,
+        token: 'valid-register-token',
+      });
+
+      const verifyResponse = await request(app)
+        .post('/api/auth/verify-email')
+        .send({ token: 'valid-register-token' });
+
+      expect(verifyResponse.status).toBe(200);
+      expect(verifyResponse.body).toEqual({
+        success: true,
+        purpose: 'register',
+      });
+
+      const repeatedVerifyResponse = await request(app)
+        .post('/api/auth/verify-email')
+        .send({ token: 'valid-register-token' });
+
+      expect(repeatedVerifyResponse.status).toBe(200);
+      expect(repeatedVerifyResponse.body).toEqual({
+        success: true,
+        purpose: 'register',
+      });
+
+      const dbUser = await prisma.user.findUnique({ where: { uid: user.uid } });
+      expect(dbUser?.emailVerifiedAt).toBeInstanceOf(Date);
+
+      const loginResponse = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: user.email,
+          password: plainPassword,
+        });
+      expect(loginResponse.status).toBe(200);
+      expect(pickCookie(loginResponse.headers['set-cookie'], 'hsf_token')).toBeTruthy();
+    });
+
+    it('验证过期 token 应该返回错误', async () => {
+      const { user } = await createTestUser({
+        email: 'verify_pending@example.com',
+      });
+      await prisma.user.update({
+        where: { uid: user.uid },
+        data: { emailVerifiedAt: null },
+      });
+      await createEmailVerificationToken({
+        userUid: user.uid,
+        email: user.email,
+        token: 'expired-register-token',
+        expiresAt: new Date(Date.now() - 60 * 1000),
+      });
+
+      const response = await request(app)
+        .post('/api/auth/verify-email')
+        .send({ token: 'expired-register-token' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        code: 'TOKEN_EXPIRED',
+      });
+    });
+
+    it('修改邮箱应该立即生效并清空验证状态', async () => {
+      const agent = request.agent(app);
+      const { user, plainPassword } = await createTestUser({
+        email: 'change_email_old@example.com',
+        password: 'CorrectPassword123!',
+      });
+      await createEmailVerificationToken({
+        userUid: user.uid,
+        email: user.email,
+        token: 'old-email-register-token',
+      });
+
+      const loginResponse = await agent
+        .post('/api/auth/login')
+        .send({
+          email: user.email,
+          password: plainPassword,
+        });
+      expect(loginResponse.status).toBe(200);
+      const xsrfToken = pickCookie(loginResponse.headers['set-cookie'], 'XSRF-TOKEN')
+        ?.split(';')[0]
+        .split('=')[1];
+      expect(xsrfToken).toBeTruthy();
+
+      const updateResponse = await agent
+        .put('/api/users/email')
+        .set('X-XSRF-TOKEN', xsrfToken!)
+        .send({
+          currentPassword: plainPassword,
+          newEmail: 'change_email_new@example.com',
+        });
+
+      expect(updateResponse.status).toBe(200);
+      expect(updateResponse.body.requiresEmailVerification).toBe(false);
+      const changedUser = await prisma.user.findUnique({ where: { uid: user.uid } });
+      expect(changedUser?.email).toBe('change_email_new@example.com');
+      expect(changedUser?.emailVerifiedAt).toBeNull();
+
+      const pendingTokenCount = await prisma.emailVerificationToken.count({
+        where: {
+          userUid: user.uid,
+          email: 'change_email_new@example.com',
+          usedAt: null,
+        },
+      });
+      expect(pendingTokenCount).toBe(0);
+
+      const oldToken = await prisma.emailVerificationToken.findFirst({
+        where: {
+          userUid: user.uid,
+          email: 'change_email_old@example.com',
+          tokenHash: hashEmailVerificationToken('old-email-register-token'),
+        },
+      });
+      expect(oldToken?.usedAt).toBeInstanceOf(Date);
+
+      const oldTokenVerifyResponse = await request(app)
+        .post('/api/auth/verify-email')
+        .send({ token: 'old-email-register-token' });
+      expect(oldTokenVerifyResponse.status).toBe(400);
+
+      const userAfterOldToken = await prisma.user.findUnique({ where: { uid: user.uid } });
+      expect(userAfterOldToken?.email).toBe('change_email_new@example.com');
+      expect(userAfterOldToken?.emailVerifiedAt).toBeNull();
+
+      const oldLoginResponse = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'change_email_old@example.com',
+          password: plainPassword,
+        });
+      expect(oldLoginResponse.status).toBe(401);
+
+      const newLoginResponse = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'change_email_new@example.com',
+          password: plainPassword,
+        });
+      expect(newLoginResponse.status).toBe(200);
+    });
+  });
+
+  describe('邮箱验证配置', () => {
+    it('默认关闭且只有超级管理员可以更新', async () => {
+      const defaultResponse = await request(app).get('/api/config/email-verification');
+      expect(defaultResponse.status).toBe(200);
+      expect(defaultResponse.body).toEqual({ enabled: false });
+
+      const adminAgent = request.agent(app);
+      const { plainPassword: adminPassword } = await createTestUser({
+        email: 'email_config_admin@example.com',
+        password: 'CorrectPassword123!',
+        role: 'admin',
+      });
+      const adminLogin = await adminAgent
+        .post('/api/auth/login')
+        .send({ email: 'email_config_admin@example.com', password: adminPassword });
+      const adminXsrf = pickCookie(adminLogin.headers['set-cookie'], 'XSRF-TOKEN')
+        ?.split(';')[0]
+        .split('=')[1];
+      expect(adminXsrf).toBeTruthy();
+
+      const forbiddenResponse = await adminAgent
+        .patch('/api/config/email-verification')
+        .set('X-XSRF-TOKEN', adminXsrf!)
+        .send({ enabled: true });
+      expect(forbiddenResponse.status).toBe(403);
+
+      const superAgent = request.agent(app);
+      const { plainPassword: superPassword } = await createTestUser({
+        email: 'email_config_super@example.com',
+        password: 'CorrectPassword123!',
+        role: 'super_admin',
+      });
+      const superLogin = await superAgent
+        .post('/api/auth/login')
+        .send({ email: 'email_config_super@example.com', password: superPassword });
+      const superXsrf = pickCookie(superLogin.headers['set-cookie'], 'XSRF-TOKEN')
+        ?.split(';')[0]
+        .split('=')[1];
+      expect(superXsrf).toBeTruthy();
+
+      const updateResponse = await superAgent
+        .patch('/api/config/email-verification')
+        .set('X-XSRF-TOKEN', superXsrf!)
+        .send({
+          enabled: true,
+          publicBaseUrl: 'https://wiki.example.com',
+          tokenTtlMinutes: 60,
+          smtpHost: 'smtp.example.com',
+          smtpPort: 587,
+          smtpSecure: false,
+          smtpUser: 'mailer',
+          smtpPass: 'secret',
+          smtpFrom: 'Wiki <no-reply@example.com>',
+        });
+      expect(updateResponse.status).toBe(200);
+      expect(updateResponse.body.config).toEqual({
+        enabled: true,
+        publicBaseUrl: 'https://wiki.example.com',
+        tokenTtlMinutes: 60,
+        smtpHost: 'smtp.example.com',
+        smtpPort: 587,
+        smtpSecure: false,
+        smtpUser: 'mailer',
+        smtpFrom: 'Wiki <no-reply@example.com>',
+        smtpPassSet: true,
+      });
+      expect(updateResponse.body.config).not.toHaveProperty('smtpPass');
+
+      const adminConfigResponse = await superAgent
+        .get('/api/config/email-verification/admin')
+        .set('X-XSRF-TOKEN', superXsrf!);
+      expect(adminConfigResponse.status).toBe(200);
+      expect(adminConfigResponse.body).toEqual(updateResponse.body.config);
     });
   });
 

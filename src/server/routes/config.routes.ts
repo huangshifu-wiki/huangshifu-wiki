@@ -1,6 +1,13 @@
 import { Router } from 'express';
-import { requireAuth, requireAdmin, requireActiveUser } from '../middleware/auth';
-import { prisma, GALLERY_ADMIN_ONLY } from '../utils';
+import { requireAuth, requireAdmin, requireActiveUser, requireSuperAdmin } from '../middleware/auth';
+import {
+  prisma,
+  GALLERY_ADMIN_ONLY,
+  getEmailVerificationConfig,
+  setEmailVerificationConfig,
+  toEmailVerificationPublicConfig,
+  toEmailVerificationAdminConfig,
+} from '../utils';
 import { enhancedCache, CACHE_KEYS } from '../utils/cache';
 import {
   getPresignedUploadUrl,
@@ -25,6 +32,109 @@ router.get('/gallery-access', async (_req, res) => {
   } catch (error) {
     console.error('Get gallery access mode error:', error);
     res.status(500).json({ error: '获取图集权限配置失败' });
+  }
+});
+
+// GET /api/config/email-verification - Get email verification feature config
+router.get('/email-verification', async (_req, res) => {
+  try {
+    const config = await getEmailVerificationConfig();
+    res.json(toEmailVerificationPublicConfig(config));
+  } catch (error) {
+    console.error('Get email verification config error:', error);
+    res.status(500).json({ error: '获取邮箱验证配置失败' });
+  }
+});
+
+// GET /api/config/email-verification/admin - Get full email verification config
+router.get('/email-verification/admin', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    const config = await getEmailVerificationConfig();
+    res.json(toEmailVerificationAdminConfig(config));
+  } catch (error) {
+    console.error('Get email verification admin config error:', error);
+    res.status(500).json({ error: '获取邮箱验证配置失败' });
+  }
+});
+
+// PATCH /api/config/email-verification - Update email verification feature config
+router.patch('/email-verification', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const body = req.body as Record<string, unknown>;
+    const {
+      enabled,
+      publicBaseUrl,
+      tokenTtlMinutes,
+      smtpHost,
+      smtpPort,
+      smtpSecure,
+      smtpUser,
+      smtpFrom,
+      smtpPass,
+      clearSmtpPass,
+    } = body;
+
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: 'enabled 必须是布尔值' });
+      return;
+    }
+
+    if (typeof smtpSecure !== 'boolean') {
+      res.status(400).json({ error: 'smtpSecure 必须是布尔值' });
+      return;
+    }
+
+    const normalizedPublicBaseUrl = typeof publicBaseUrl === 'string' ? publicBaseUrl.trim() : '';
+    const normalizedSmtpHost = typeof smtpHost === 'string' ? smtpHost.trim() : '';
+    const normalizedSmtpFrom = typeof smtpFrom === 'string' ? smtpFrom.trim() : '';
+    const normalizedSmtpUser = typeof smtpUser === 'string' ? smtpUser.trim() : '';
+    const normalizedTokenTtlMinutes = Number(tokenTtlMinutes);
+    const normalizedSmtpPort = Number(smtpPort);
+
+    if (!Number.isInteger(normalizedTokenTtlMinutes) || normalizedTokenTtlMinutes < 5 || normalizedTokenTtlMinutes > 10080) {
+      res.status(400).json({ error: '验证链接有效期必须是 5 到 10080 分钟之间的整数' });
+      return;
+    }
+
+    if (!Number.isInteger(normalizedSmtpPort) || normalizedSmtpPort < 1 || normalizedSmtpPort > 65535) {
+      res.status(400).json({ error: 'SMTP 端口必须是 1 到 65535 之间的整数' });
+      return;
+    }
+
+    if (normalizedPublicBaseUrl) {
+      try {
+        const parsedBaseUrl = new URL(normalizedPublicBaseUrl);
+        if (parsedBaseUrl.protocol !== 'http:' && parsedBaseUrl.protocol !== 'https:') {
+          res.status(400).json({ error: '站点公网地址必须使用 http 或 https' });
+          return;
+        }
+      } catch {
+        res.status(400).json({ error: '站点公网地址格式无效' });
+        return;
+      }
+    }
+
+    if (enabled && (!normalizedPublicBaseUrl || !normalizedSmtpHost || !normalizedSmtpFrom)) {
+      res.status(400).json({ error: '启用邮箱验证前请配置站点公网地址、SMTP Host 和发件人' });
+      return;
+    }
+
+    const config = await setEmailVerificationConfig({
+      enabled,
+      publicBaseUrl: normalizedPublicBaseUrl,
+      tokenTtlMinutes: normalizedTokenTtlMinutes,
+      smtpHost: normalizedSmtpHost,
+      smtpPort: normalizedSmtpPort,
+      smtpSecure,
+      smtpUser: normalizedSmtpUser,
+      smtpFrom: normalizedSmtpFrom,
+      ...(typeof smtpPass === 'string' && smtpPass ? { smtpPass } : {}),
+      ...(clearSmtpPass === true ? { smtpPass: '' } : {}),
+    });
+    res.json({ success: true, config: toEmailVerificationAdminConfig(config) });
+  } catch (error) {
+    console.error('Update email verification config error:', error);
+    res.status(500).json({ error: '更新邮箱验证配置失败' });
   }
 });
 

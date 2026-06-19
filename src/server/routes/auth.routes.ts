@@ -1,12 +1,29 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { UserRole as PrismaUserRole } from '@prisma/client'
-import { requireAuth, requireActiveUser, userToApiUser, issueUserSession, clearAuthCookie, clearUserCache } from '../middleware/auth'
-import { authRateLimiter } from '../middleware/rateLimiter'
+import { userToApiUser, issueUserSession, clearAuthCookie, clearUserCache } from '../middleware/auth'
+import { authRateLimiter, emailVerificationLimiter } from '../middleware/rateLimiter'
 import { asyncHandler } from '../middleware/asyncHandler'
-import { exchangeWechatLoginCode, buildUniqueWechatEmail, logger, getPasswordSaltRounds } from '../utils'
+import {
+  EmailVerificationError,
+  EmailVerificationPurpose,
+  createAndSendEmailVerification,
+  exchangeWechatLoginCode,
+  buildUniqueWechatEmail,
+  logger,
+  getPasswordSaltRounds,
+  isWechatPlaceholderEmail,
+  isEmailVerificationEnabled,
+  verifyEmailVerificationToken,
+} from '../utils'
 import { prisma } from '../prisma'
-import { validateBody, registerSchema, loginSchema } from '../schemas'
+import {
+  validateBody,
+  registerSchema,
+  loginSchema,
+  verifyEmailSchema,
+  resendEmailVerificationSchema,
+} from '../schemas'
 import { AUTH_DISPLAY_NAME_MAX_LENGTH } from '../schemas/auth.schema'
 import type { AuthenticatedRequest } from '../types'
 
@@ -42,7 +59,6 @@ router.get('/me', asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.json({
     user: {
       ...req.authUser,
-      emailVerified: true,
       isAnonymous: false,
       tenantId: null,
       providerData: [
@@ -107,22 +123,124 @@ router.post('/register', authRateLimiter, validateBody(registerSchema), asyncHan
       },
     })
 
+    let verificationEmailSent = false
+    if ((await isEmailVerificationEnabled()) && !isWechatPlaceholderEmail(user.email)) {
+      try {
+        await createAndSendEmailVerification({
+          user,
+          purpose: EmailVerificationPurpose.register,
+        })
+        verificationEmailSent = true
+      } catch (error) {
+        logger.error(
+          { err: error, uid: user.uid, email: user.email },
+          'Register email verification send failed'
+        )
+      }
+    }
+
     const apiUser = userToApiUser(user)
-    logger.info({ uid: user.uid }, 'Creating token for user')
-
-    issueUserSession(req, res, user)
-
     logger.info({ uid: user.uid, email: user.email }, 'Register success')
-    res.status(201).json({ user: apiUser })
+    res.status(201).json({
+      success: true,
+      requiresEmailVerification: false,
+      verificationEmailSent,
+      user: apiUser,
+    })
   } catch (error) {
     logger.error({
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
       body: { ...req.body, password: '[REDACTED]' },
     }, 'Register error')
+    if (error instanceof EmailVerificationError) {
+      res.status(503).json({ error: error.message, code: error.code })
+      return
+    }
     res.status(500).json({ error: '注册失败，请稍后重试' })
   }
 }))
+
+router.post(
+  '/verify-email',
+  emailVerificationLimiter,
+  validateBody(verifyEmailSchema),
+  asyncHandler(async (req, res) => {
+    try {
+      const { token } = req.body as { token: string }
+      const { user, purpose } = await verifyEmailVerificationToken(token)
+      clearUserCache(user.uid)
+
+      logger.info({ uid: user.uid, purpose }, 'Email verification success')
+      res.json({
+        success: true,
+        purpose,
+      })
+    } catch (error) {
+      if (error instanceof EmailVerificationError) {
+        res.status(400).json({ error: error.message, code: error.code })
+        return
+      }
+
+      logger.error({
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      }, 'Email verification error')
+      res.status(500).json({ error: '邮箱验证失败，请稍后重试' })
+    }
+  })
+)
+
+router.post(
+  '/resend-verification',
+  emailVerificationLimiter,
+  validateBody(resendEmailVerificationSchema),
+  asyncHandler(async (req, res) => {
+    try {
+      if (!(await isEmailVerificationEnabled())) {
+        res.status(400).json({ error: '邮箱验证功能未开启', code: 'EMAIL_VERIFICATION_DISABLED' })
+        return
+      }
+
+      const { email } = req.body as { email: string }
+      const normalizedEmail = email.toLowerCase().trim()
+      if (isWechatPlaceholderEmail(normalizedEmail)) {
+        res.json({ success: true, message: '如果该邮箱需要验证，我们会发送一封验证邮件' })
+        return
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: {
+          uid: true,
+          email: true,
+          displayName: true,
+          emailVerifiedAt: true,
+          deletedAt: true,
+        },
+      })
+
+      if (user && !user.deletedAt && !user.emailVerifiedAt) {
+        await createAndSendEmailVerification({
+          user,
+          purpose: EmailVerificationPurpose.register,
+        })
+      }
+
+      res.json({ success: true, message: '如果该邮箱需要验证，我们会发送一封验证邮件' })
+    } catch (error) {
+      logger.error({
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      }, 'Resend email verification error')
+      if (error instanceof EmailVerificationError) {
+        res.status(503).json({ error: error.message, code: error.code })
+        return
+      }
+      res.status(500).json({ error: '验证邮件发送失败，请稍后重试' })
+    }
+  })
+)
 
 router.post('/login', authRateLimiter, validateBody(loginSchema), asyncHandler(async (req, res) => {
   try {

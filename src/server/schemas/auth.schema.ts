@@ -55,6 +55,14 @@ export const loginSchema = z.object({
     .min(1, '密码不能为空'),
 })
 
+export const verifyEmailSchema = z.object({
+  token: z.string({ error: '验证 token 不能为空' }).trim().min(1, '验证 token 不能为空'),
+})
+
+export const resendEmailVerificationSchema = z.object({
+  email: authEmailSchema,
+})
+
 export const passwordSchema = z
   .string({ error: '密码不能为空' })
   .min(PASSWORD_MIN_LENGTH, `密码至少${PASSWORD_MIN_LENGTH}个字符`)

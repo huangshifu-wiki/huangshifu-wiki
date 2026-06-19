@@ -107,14 +107,22 @@ describe('auth module', () => {
     expect(auth.currentUser?.uid).toBe('u_login');
   });
 
-  it('register performs register request then refreshes auth state', async () => {
+  it('register performs register request without refreshing auth state', async () => {
     const { auth, register } = await loadAuthModule();
     const user = createMockUser({ uid: 'u_register' });
-    fetchMock
-      .mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 201 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          success: true,
+          requiresEmailVerification: false,
+          verificationEmailSent: false,
+          user,
+        }),
+        { status: 201 },
+      ),
+    );
 
-    await register('new@example.com', 'pw123456', '新用户');
+    const result = await register('new@example.com', 'pw123456', '新用户');
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -124,7 +132,10 @@ describe('auth module', () => {
         body: JSON.stringify({ email: 'new@example.com', password: 'pw123456', displayName: '新用户' }),
       }),
     );
-    expect(auth.currentUser?.uid).toBe('u_register');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.requiresEmailVerification).toBe(false);
+    expect(result.verificationEmailSent).toBe(false);
+    expect(auth.currentUser).toBeNull();
   });
 
   it('loginWithWeChat returns response payload and refreshes auth state', async () => {
@@ -137,6 +148,32 @@ describe('auth module', () => {
     const data = await loginWithWeChat<{ token: string }>('mock:openid', { displayName: 'wx' });
     expect(data.token).toBe('t');
     expect(auth.currentUser?.uid).toBe('u_wx');
+  });
+
+  it('verifyEmail sends XSRF token when available', async () => {
+    const { verifyEmail } = await loadAuthModule();
+    vi.stubGlobal('document', {
+      cookie: 'XSRF-TOKEN=test-xsrf-token',
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, purpose: 'change_email' }), { status: 200 }),
+    );
+
+    const result = await verifyEmail('email-token');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/verify-email',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-XSRF-TOKEN': 'test-xsrf-token',
+        },
+        body: JSON.stringify({ token: 'email-token' }),
+      }),
+    );
+    expect(result.purpose).toBe('change_email');
   });
 
   it('logoutRequest clears auth state via refresh', async () => {

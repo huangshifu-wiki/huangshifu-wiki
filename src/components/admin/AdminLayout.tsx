@@ -25,6 +25,7 @@ import {
   ChevronRight,
   HardDrive,
   RefreshCw,
+  Settings as SettingsIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../../context/AuthContext'
@@ -72,6 +73,7 @@ const siteNav: AdminNavItem[] = [
   { id: 'markdown_links', label: '链接更新', path: '/admin/markdown_links', icon: LinkIcon },
   { id: 'disk-monitor', label: '磁盘监控', path: '/admin/disk-monitor', icon: HardDrive },
   { id: 'variant-manager', label: '变体管理', path: '/admin/variant-manager', icon: RefreshCw },
+  { id: 'settings', label: '站点设置', path: '/admin/settings', icon: SettingsIcon, superAdminOnly: true },
 ]
 
 const SidebarNavLink = ({

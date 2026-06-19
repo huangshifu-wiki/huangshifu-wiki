@@ -1,4 +1,5 @@
 import { getXsrfToken } from './xsrf';
+import { apiPost } from './apiClient';
 
 export interface AuthProviderInfo {
   providerId: string;
@@ -24,6 +25,13 @@ export interface User {
   isAnonymous: boolean;
   tenantId: string | null;
   providerData: AuthProviderInfo[];
+}
+
+export interface RegisterResponse {
+  success: boolean;
+  requiresEmailVerification: boolean;
+  verificationEmailSent?: boolean;
+  user?: User;
 }
 
 type AuthStateListener = (user: User | null) => void;
@@ -165,8 +173,18 @@ export async function register(email: string, password: string, displayName?: st
     }),
   });
 
-  await parseJsonResponse(response);
-  await refreshAuthState();
+  return parseJsonResponse<RegisterResponse>(response);
+}
+
+export async function verifyEmail(token: string) {
+  return apiPost<{ success: boolean; purpose: 'register' | 'change_email' }>(
+    '/api/auth/verify-email',
+    { token }
+  );
+}
+
+export async function resendEmailVerification(email: string) {
+  return apiPost<{ success: boolean; message?: string }>('/api/auth/resend-verification', { email });
 }
 
 export async function loginWithWeChat<T = unknown>(code: string, profile?: { displayName?: string; photoURL?: string }) {

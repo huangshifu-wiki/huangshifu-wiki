@@ -46,15 +46,24 @@ export const AuthForm = ({
       setAuthLoading(true)
       if (authMode === 'login') {
         await login(email, password)
+        onAuthSuccess()
       } else if (authMode === 'register') {
-        await register(email, password, displayName)
+        const result = await register(email, password, displayName)
+        setAuthMode('login')
+        setPassword('')
+        show(
+          result.verificationEmailSent
+            ? '注册成功，验证邮件已发送，可登录后在设置中查看状态'
+            : '注册成功，请使用邮箱和密码登录',
+          { duration: 4000 }
+        )
       } else {
         await loginWithWeChat(wechatCode, {
           displayName: displayName || undefined,
           photoURL: wechatPhotoURL || undefined,
         })
+        onAuthSuccess()
       }
-      onAuthSuccess()
     } catch (error) {
       console.error('Auth failed:', error)
       show(error instanceof Error ? error.message : t('auth.loginFailed'), {

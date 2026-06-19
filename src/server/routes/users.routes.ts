@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import { requireAuth, requireActiveUser, requireAdmin, requireSuperAdmin, userToApiUser, clearUserCache, issueUserSession, isBearerAuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { profileLimiter } from '../middleware/rateLimiter';
-import { validateBody, adminResetUserPasswordSchema, passwordSchema } from '../schemas';
+import { validateBody, adminResetUserPasswordSchema, passwordSchema, userEmailUpdateSchema } from '../schemas';
 import {
   CONTENT_LIMITS,
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
@@ -77,6 +77,7 @@ const ADMIN_USER_SELECT = {
   status: true,
   banReason: true,
   bannedAt: true,
+  emailVerifiedAt: true,
   level: true,
   signature: true,
   bio: true,
@@ -364,6 +365,7 @@ router.get('/status', requireAuth, asyncHandler(async (req: AuthenticatedRequest
         status: true,
         banReason: true,
         bannedAt: true,
+        emailVerifiedAt: true,
         level: true,
         signature: true,
         bio: true,
@@ -429,6 +431,7 @@ router.put('/:userId/status', requireSuperAdmin, asyncHandler(async (req: Authen
         status: true,
         banReason: true,
         bannedAt: true,
+        emailVerifiedAt: true,
         level: true,
         signature: true,
         bio: true,
@@ -476,6 +479,7 @@ router.put('/name', requireAuth, requireActiveUser, asyncHandler(async (req: Aut
         status: true,
         banReason: true,
         bannedAt: true,
+        emailVerifiedAt: true,
         level: true,
         signature: true,
         bio: true,
@@ -489,6 +493,78 @@ router.put('/name', requireAuth, requireActiveUser, asyncHandler(async (req: Aut
   } catch (error) {
     console.error('Update user name error:', error);
     res.status(500).json({ error: '更新昵称失败' });
+  }
+}));
+
+router.put('/email', profileLimiter, requireAuth, requireActiveUser, validateBody(userEmailUpdateSchema), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  try {
+    const { currentPassword, newEmail } = req.body as {
+      currentPassword: string;
+      newEmail: string;
+    };
+    const normalizedEmail = newEmail.toLowerCase().trim();
+
+    const user = await prisma.user.findUnique({
+      where: { uid: req.authUser!.uid },
+      select: {
+        uid: true,
+        email: true,
+        displayName: true,
+        passwordHash: true,
+      },
+    });
+
+    if (!user?.passwordHash) {
+      res.status(400).json({ error: '当前密码不正确' });
+      return;
+    }
+
+    const validPassword = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!validPassword) {
+      res.status(401).json({ error: '当前密码不正确' });
+      return;
+    }
+
+    if (normalizedEmail === user.email) {
+      res.status(400).json({ error: '新邮箱不能与当前邮箱相同' });
+      return;
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { uid: true },
+    });
+    if (existing && existing.uid !== user.uid) {
+      res.status(409).json({ error: '该邮箱已注册' });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.emailVerificationToken.updateMany({
+        where: {
+          userUid: user.uid,
+          usedAt: null,
+        },
+        data: { usedAt: new Date() },
+      }),
+      prisma.user.update({
+        where: { uid: user.uid },
+        data: {
+          email: normalizedEmail,
+          emailVerifiedAt: null,
+        },
+      }),
+    ]);
+    clearUserCache(user.uid);
+
+    res.json({
+      success: true,
+      requiresEmailVerification: false,
+      message: '邮箱已更新',
+    });
+  } catch (error) {
+    console.error('Update user email error:', error);
+    res.status(500).json({ error: '邮箱更新失败，请稍后重试' });
   }
 }));
 
@@ -557,6 +633,7 @@ router.put('/password', requireAuth, requireActiveUser, asyncHandler(async (req:
         status: true,
         banReason: true,
         bannedAt: true,
+        emailVerifiedAt: true,
         level: true,
         signature: true,
         bio: true,
@@ -600,6 +677,7 @@ router.get('/me', requireAuth, requireActiveUser, asyncHandler(async (req: Authe
         status: true,
         banReason: true,
         bannedAt: true,
+        emailVerifiedAt: true,
         level: true,
         preferences: true,
         createdAt: true,
@@ -763,6 +841,7 @@ router.get('/', requireAdmin, asyncHandler(async (_req, res) => {
         status: true,
         banReason: true,
         bannedAt: true,
+        emailVerifiedAt: true,
         level: true,
         signature: true,
         bio: true,
@@ -797,6 +876,7 @@ const updateUserRoleHandler = asyncHandler(async (req: AuthenticatedRequest, res
         status: true,
         banReason: true,
         bannedAt: true,
+        emailVerifiedAt: true,
         level: true,
         signature: true,
         bio: true,

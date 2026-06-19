@@ -42,6 +42,7 @@ describe('parsers', () => {
     status: 'active' as const,
     banReason: null as string | null,
     bannedAt: null as string | null,
+    emailVerified: true,
     level: 1,
     signature: '',
     bio: '',

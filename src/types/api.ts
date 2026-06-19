@@ -103,6 +103,21 @@ export interface ImagePreference {
   fallback: boolean;
 }
 
+export interface EmailVerificationPublicConfig {
+  enabled: boolean;
+}
+
+export interface EmailVerificationAdminConfig extends EmailVerificationPublicConfig {
+  publicBaseUrl: string;
+  tokenTtlMinutes: number;
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser: string;
+  smtpFrom: string;
+  smtpPassSet: boolean;
+}
+
 // ============================================================================
 // 错误类型定义
 // ============================================================================
@@ -176,6 +191,8 @@ export interface UserResponse {
     avatarUrl?: string;
     role: string;
     status: string;
+    emailVerified?: boolean;
+    emailVerifiedAt?: string | null;
     createdAt: string;
     updatedAt: string;
   };

@@ -13,6 +13,10 @@ export function createWechatPlaceholderEmail(openId: string) {
   return `${fallback}@wechat.local`;
 }
 
+export function isWechatPlaceholderEmail(email?: string | null) {
+  return Boolean(email?.trim().toLowerCase().endsWith('@wechat.local'));
+}
+
 export async function exchangeWechatLoginCode(rawCode: string): Promise<{ openId: string; unionId: string | null }> {
   const code = rawCode.trim();
   if (!code) {

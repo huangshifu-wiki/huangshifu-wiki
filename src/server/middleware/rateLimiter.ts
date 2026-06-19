@@ -47,6 +47,15 @@ export const authRateLimiter = createRateLimiter({
   keyGenerator: extractUidOrIp,
 });
 
+export const emailVerificationLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: '邮箱验证请求过于频繁，请15分钟后再试' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: extractUidOrIp,
+});
+
 export const globalLimiter = createRateLimiter({
   windowMs: 60 * 1000,
   max: 200,
