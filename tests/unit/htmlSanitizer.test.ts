@@ -154,6 +154,25 @@ describe('htmlSanitizer', () => {
       );
     });
 
+    it('renders mention links without changing code spans', () => {
+      const output = renderToStaticMarkup(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(MarkdownRenderer, {
+            content: '正文 @黄诗扶 `@代码` @未知',
+            enableMentions: true,
+            mentionTargets: [{ uid: 'user-1', displayName: '黄诗扶' }],
+          }),
+        ),
+      );
+
+      expect(output).toContain('href="/users/user-1"');
+      expect(output).toContain('class="mention-highlight"');
+      expect(output).toContain('<code>@代码</code>');
+      expect(output).toContain('<span class="mention-highlight">@未知</span>');
+    });
+
     it('uses the shared iframe whitelist for all renderer consumers', () => {
       const output = renderMarkdown(`
 <iframe src="https://player.bilibili.com/video/BV1"></iframe>

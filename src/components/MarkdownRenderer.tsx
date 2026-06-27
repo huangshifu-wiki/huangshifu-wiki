@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import ReactMarkdown, { type Components } from 'react-markdown';
+import type { Pluggable } from 'unified';
 import rehypeAutolinkHeadings from 'rehype-autolink-headings';
 import rehypePrism from 'rehype-prism-plus';
 import rehypeRaw from 'rehype-raw';
@@ -10,11 +11,14 @@ import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
 import { customSchema, isTrustedIframeDomain } from '../lib/htmlSanitizer';
 import { processWikiLinksForPreview } from '../lib/markdownWikiLinks';
+import { splitMentionText, type MentionTarget } from '../lib/mentions';
 import WikiLinkPreview from './WikiLinkPreview';
 
 interface MarkdownRendererProps {
   content: string;
   enableWikiLinks?: boolean;
+  enableMentions?: boolean;
+  mentionTargets?: MentionTarget[];
 }
 
 interface HastNode {
@@ -27,6 +31,8 @@ interface HastNode {
 interface MdastNode {
   type?: string;
   meta?: string | null;
+  value?: string;
+  url?: string;
   data?: {
     hProperties?: Record<string, unknown>;
   };
@@ -136,6 +142,56 @@ const rehypeRemoveCodeMetaAttribute = () => (tree: HastNode) => {
   });
 };
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+const remarkMentions = (targets: MentionTarget[]) => (tree: MdastNode) => {
+  const walk = (node: MdastNode, ancestors: MdastNode[]) => {
+    if (!node.children?.length) return;
+
+    node.children = node.children.flatMap((child) => {
+      if (child.type !== 'text' || typeof child.value !== 'string') {
+        walk(child, [...ancestors, node]);
+        return [child];
+      }
+
+      const insideIgnoredParent = [...ancestors, node].some((ancestor) =>
+        ['link', 'linkReference', 'inlineCode', 'code'].includes(ancestor.type || '')
+      );
+      if (insideIgnoredParent) return [child];
+
+      const segments = splitMentionText(child.value, targets);
+      if (segments.length === 1 && segments[0].type === 'text') return [child];
+
+      return segments.map((segment): MdastNode => {
+        if (segment.type === 'text') {
+          return { type: 'text', value: segment.text };
+        }
+
+        if (segment.target) {
+          return {
+            type: 'link',
+            url: `/users/${segment.target.uid}`,
+            children: [{ type: 'text', value: segment.text }],
+          };
+        }
+
+        return {
+          type: 'html',
+          value: `<span class="mention-highlight">${escapeHtml(segment.text)}</span>`,
+        };
+      });
+    });
+  };
+
+  walk(tree, []);
+};
+
 const markdownComponents: Components = {
   iframe: ({
     src,
@@ -172,6 +228,14 @@ const markdownComponents: Components = {
             {children}
           </Link>
         </WikiLinkPreview>
+      );
+    }
+
+    if (href?.startsWith('/users/')) {
+      return (
+        <Link {...props} to={href} className="mention-highlight">
+          {children}
+        </Link>
       );
     }
 
@@ -219,15 +283,23 @@ const markdownComponents: Components = {
 export default function MarkdownRenderer({
   content,
   enableWikiLinks = false,
+  enableMentions = false,
+  mentionTargets = [],
 }: MarkdownRendererProps) {
   const processedContent = useMemo(() => {
     const raw = content || '';
     return enableWikiLinks ? processWikiLinksForPreview(raw) : raw;
   }, [content, enableWikiLinks]);
+  const mentionPlugins: Pluggable[] = enableMentions ? [[remarkMentions, mentionTargets]] : [];
 
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkAlert, remarkPreserveCodeMeta, remarkGfm]}
+      remarkPlugins={[
+        remarkAlert,
+        remarkPreserveCodeMeta,
+        ...mentionPlugins,
+        remarkGfm,
+      ]}
       rehypePlugins={[
         rehypeRaw,
         rehypeSlug,

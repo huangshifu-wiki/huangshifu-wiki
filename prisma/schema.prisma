@@ -62,6 +62,7 @@ enum NotificationType {
   reply
   like
   review_result
+  mention
 }
 
 enum BrowsingTargetType {
@@ -267,21 +268,22 @@ model Post {
   reviewNote    String?
   reviewedBy    String?
   reviewedAt    DateTime?
-  hotScore      Float         @default(0)
-  viewCount     Int           @default(0)
-  likesCount    Int           @default(0)
-  dislikesCount Int           @default(0)
-  commentsCount Int           @default(0)
-  isPinned      Boolean       @default(false)
-  deletedAt     DateTime?
-  deletedBy     String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  sectionRef    Section       @relation(fields: [section], references: [id], onDelete: Restrict)
-  musicRef      MusicTrack?   @relation(fields: [musicDocId], references: [docId], onDelete: SetNull)
-  albumRef      Album?        @relation(fields: [albumDocId], references: [docId], onDelete: SetNull)
-  author        User          @relation("UserPosts", fields: [authorUid], references: [uid], onDelete: Cascade)
-  location      Region?       @relation(fields: [locationCode], references: [code])
+  pendingReviewBaseContent String?
+  hotScore                 Float         @default(0)
+  viewCount                Int           @default(0)
+  likesCount               Int           @default(0)
+  dislikesCount            Int           @default(0)
+  commentsCount            Int           @default(0)
+  isPinned                 Boolean       @default(false)
+  deletedAt                DateTime?
+  deletedBy                String?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+  sectionRef               Section       @relation(fields: [section], references: [id], onDelete: Restrict)
+  musicRef                 MusicTrack?   @relation(fields: [musicDocId], references: [docId], onDelete: SetNull)
+  albumRef                 Album?        @relation(fields: [albumDocId], references: [docId], onDelete: SetNull)
+  author                   User          @relation("UserPosts", fields: [authorUid], references: [uid], onDelete: Cascade)
+  location                 Region?       @relation(fields: [locationCode], references: [code])
   comments      PostComment[] @relation("PostComments")
   likes         PostLike[]
   dislikes      PostDislike[]

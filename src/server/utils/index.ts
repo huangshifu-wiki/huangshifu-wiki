@@ -60,6 +60,13 @@ export {
   trimText,
 } from './textLimits'
 
+export {
+  buildUniqueDisplayNameFallback,
+  normalizeDisplayNameFallback,
+  validateUserDisplayName,
+  type DisplayNameValidationResult,
+} from './display-name'
+
 // === Wiki 关系引擎 ===
 export {
   RELATION_LABEL_TO_TYPE,
@@ -164,6 +171,13 @@ export {
   recordBrowsingHistory,
   increaseSearchKeywordCount,
 } from './notifications'
+
+export {
+  resolveMentionTargetsForNames,
+  resolveMentionTargetsForText,
+  buildMentionTargetsByTextKey,
+  notifyMentionUsers,
+} from './mentions'
 
 // === 帖子热度 ===
 export { calculatePostHotScore, refreshPostHotScore } from './post-scoring'

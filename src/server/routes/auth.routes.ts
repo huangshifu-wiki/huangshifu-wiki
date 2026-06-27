@@ -22,6 +22,9 @@ import {
   isEmailVerificationEnabled,
   hashEmailVerificationToken,
   verifyEmailVerificationToken,
+  buildUniqueDisplayNameFallback,
+  normalizeDisplayNameFallback,
+  validateUserDisplayName,
 } from '../utils'
 import { prisma } from '../prisma'
 import {
@@ -33,7 +36,6 @@ import {
   passwordResetRequestSchema,
   passwordResetConfirmSchema,
 } from '../schemas'
-import { AUTH_DISPLAY_NAME_MAX_LENGTH } from '../schemas/auth.schema'
 import type { AuthenticatedRequest } from '../types'
 
 const router = Router()
@@ -54,6 +56,24 @@ function sanitizeWechatPhotoUrl(value: string): string | null {
   } catch {
     return null
   }
+}
+
+async function buildWechatDisplayNameForCreate(displayNameRaw: string, openId: string) {
+  const fallbackBase = displayNameRaw || `微信用户${openId.slice(-6)}`
+  if (!displayNameRaw) {
+    return buildUniqueDisplayNameFallback(fallbackBase)
+  }
+
+  const displayNameResult = await validateUserDisplayName(displayNameRaw, { label: '显示名称' })
+  if (displayNameResult.ok === true) {
+    return displayNameResult.displayName
+  }
+
+  logger.info(
+    { openId, status: displayNameResult.status, error: displayNameResult.error },
+    'WeChat displayName rejected for new user, using fallback'
+  )
+  return buildUniqueDisplayNameFallback(fallbackBase)
 }
 
 router.get('/health', (_req, res) => {
@@ -97,16 +117,6 @@ router.post('/register', authRateLimiter, validateBody(registerSchema), asyncHan
     }
 
     const normalizedEmail = email.toLowerCase().trim()
-    const normalizedDisplayName = displayName?.trim()
-    const emailNameFallback = (normalizedEmail.split('@')[0] || '匿名用户').slice(0, AUTH_DISPLAY_NAME_MAX_LENGTH)
-    const name = normalizedDisplayName || emailNameFallback
-    if (name.length > AUTH_DISPLAY_NAME_MAX_LENGTH) {
-      res.status(400).json({ error: `显示名称过长，最多${AUTH_DISPLAY_NAME_MAX_LENGTH}个字符` })
-      return
-    }
-
-    logger.info({ email: normalizedEmail, name }, 'Register attempt')
-
     const existing = await prisma.user.findUnique({
       where: { email: normalizedEmail },
     })
@@ -116,6 +126,21 @@ router.post('/register', authRateLimiter, validateBody(registerSchema), asyncHan
       res.status(409).json({ error: '该邮箱已注册' })
       return
     }
+
+    const emailNameFallback = normalizeDisplayNameFallback(normalizedEmail.split('@')[0] || '匿名用户')
+    let name: string
+    if (displayName !== undefined) {
+      const displayNameResult = await validateUserDisplayName(displayName, { label: '显示名称' })
+      if (displayNameResult.ok === false) {
+        res.status(displayNameResult.status).json({ error: displayNameResult.error })
+        return
+      }
+      name = displayNameResult.displayName
+    } else {
+      name = await buildUniqueDisplayNameFallback(emailNameFallback)
+    }
+
+    logger.info({ email: normalizedEmail, name }, 'Register attempt')
 
     const passwordHash = await bcrypt.hash(password, PASSWORD_SALT_ROUNDS)
     const role = SUPER_ADMIN_EMAIL && normalizedEmail === SUPER_ADMIN_EMAIL ? PrismaUserRole.super_admin : PrismaUserRole.user
@@ -482,15 +507,15 @@ router.post('/wechat/login', authRateLimiter, asyncHandler(async (req, res) => {
       const generatedEmail = await buildUniqueWechatEmail(openId)
       const generatedPassword = `wx_${openId}_${Date.now()}`
       const passwordHash = await bcrypt.hash(generatedPassword, PASSWORD_SALT_ROUNDS)
-      const fallbackName = displayNameRaw || `微信用户${openId.slice(-6)}`
+      const displayName = await buildWechatDisplayNameForCreate(displayNameRaw, openId)
 
-      logger.info({ generatedEmail, fallbackName }, 'Creating new WeChat user')
+      logger.info({ generatedEmail, displayName }, 'Creating new WeChat user')
 
       user = await prisma.user.create({
         data: {
           email: generatedEmail,
           passwordHash,
-          displayName: fallbackName,
+          displayName,
           photoURL: photoURLRaw || null,
           signature: '',
           bio: '',
@@ -499,8 +524,25 @@ router.post('/wechat/login', authRateLimiter, asyncHandler(async (req, res) => {
         },
       })
     } else {
+      let nextDisplayName: string | undefined
+      if (displayNameRaw) {
+        const displayNameResult = await validateUserDisplayName(displayNameRaw, {
+          currentUid: user.uid,
+          currentDisplayName: user.displayName,
+          label: '显示名称',
+        })
+        if (displayNameResult.ok === true) {
+          nextDisplayName = displayNameResult.displayName
+        } else {
+          logger.info(
+            { uid: user.uid, status: displayNameResult.status, error: displayNameResult.error },
+            'WeChat displayName rejected for existing user, skipping update'
+          )
+        }
+      }
+
       const shouldUpdateProfile =
-        (displayNameRaw && displayNameRaw !== user.displayName) ||
+        (nextDisplayName && nextDisplayName !== user.displayName) ||
         (photoURLRaw && photoURLRaw !== (user.photoURL || '')) ||
         user.wechatOpenId !== openId ||
         (!user.wechatUnionId && !!unionId)
@@ -510,7 +552,7 @@ router.post('/wechat/login', authRateLimiter, asyncHandler(async (req, res) => {
         user = await prisma.user.update({
           where: { uid: user.uid },
           data: {
-            displayName: displayNameRaw || undefined,
+            displayName: nextDisplayName || undefined,
             photoURL: photoURLRaw || undefined,
             wechatOpenId: openId,
             wechatUnionId: unionId || user.wechatUnionId,

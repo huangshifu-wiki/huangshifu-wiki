@@ -132,6 +132,17 @@
   /* 超大字体排版 */
 }
 
+.mention-highlight {
+  color: var(--color-theme-accent);
+  font-weight: 700;
+  text-decoration-color: color-mix(in srgb, var(--color-theme-accent) 35%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+a.mention-highlight:hover {
+  text-decoration-line: underline;
+}
+
 :root,
 [data-theme="default"] {
   color-scheme: light;

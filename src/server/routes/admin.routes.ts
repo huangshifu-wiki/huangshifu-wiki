@@ -41,6 +41,7 @@ import {
   enhancedCache,
   CACHE_KEYS,
   clearWikiRelationCache,
+  notifyMentionUsers,
 } from '../utils';
 import {
   cleanupUnusedMediaAssetById,
@@ -115,6 +116,20 @@ async function getDeleteReasonsByTargetId(targetType: 'wiki' | 'post' | 'gallery
   }
 
   return reasons;
+}
+
+async function hasLatestPostSubmitLogForRepublishedEdit(targetId: string) {
+  const latestSubmitLog = await prisma.moderationLog.findFirst({
+    where: {
+      targetType: 'post',
+      targetId,
+      action: 'submit',
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { note: true },
+  });
+
+  return latestSubmitLog?.note === '编辑后重新提交审核';
 }
 
 const backupsDir = path.join(__dirname, '..', '..', '..', 'backups');
@@ -455,7 +470,7 @@ async function handleReviewAction(
   targetType: 'wiki' | 'post' | 'gallery',
   targetId: string,
   action: 'approve' | 'reject',
-  reqAuthUser: { uid: string; role: string },
+  reqAuthUser: { uid: string; role: string; displayName?: string | null },
   note: string,
 ) {
   const reviewedAt = new Date();
@@ -488,15 +503,51 @@ async function handleReviewAction(
   }
 
   if (targetType === 'post') {
+    const existingPost = await prisma.post.findUnique({
+      where: { id: targetId },
+      select: {
+        content: true,
+        pendingReviewBaseContent: true,
+      },
+    });
+    if (!existingPost) {
+      throw new Error(`Post not found: ${targetId}`);
+    }
+
+    const suppressLegacyMentionNotifications =
+      action === 'approve' &&
+      !existingPost.pendingReviewBaseContent &&
+      (await hasLatestPostSubmitLogForRepublishedEdit(targetId));
+    const previousContentForMentions =
+      existingPost.pendingReviewBaseContent ??
+      (suppressLegacyMentionNotifications ? existingPost.content : null);
+
     const post = await prisma.post.update({
       where: { id: targetId },
-      data: { status: action === 'approve' ? 'published' : 'rejected', reviewNote, reviewedBy: reqAuthUser.uid, reviewedAt },
+      data: {
+        status: action === 'approve' ? 'published' : 'rejected',
+        reviewNote,
+        reviewedBy: reqAuthUser.uid,
+        reviewedAt,
+        pendingReviewBaseContent: null,
+      },
+      include: { author: { select: { displayName: true } } },
     });
 
     await prisma.moderationLog.create({ data: { targetType: 'post', targetId, action, operatorUid: reqAuthUser.uid, note: reviewNote } });
 
     if (post.authorUid && post.authorUid !== reqAuthUser.uid) {
       await createNotification(post.authorUid, 'review_result', { approved: action === 'approve', targetType: 'post', targetId, title: post.title, note: reviewNote });
+    }
+
+    if (action === 'approve') {
+      await notifyMentionUsers({
+        content: post.content,
+        previousContent: previousContentForMentions,
+        actorUid: post.authorUid,
+        actorName: post.author?.displayName || '',
+        target: { type: 'post', id: post.id },
+      });
     }
 
     return { item: action === 'approve' ? { ...toPostResponse(post), sensitiveWords: containsSensitive(post.content || '') } : toPostResponse(post), targetType };

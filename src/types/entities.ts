@@ -54,6 +54,7 @@ export interface PostItem {
   title: string;
   section: string;
   content: string;
+  mentionTargets?: MentionTarget[];
   tags?: string[];
   locationCode?: string | null;
   locationName?: string | null;
@@ -83,6 +84,7 @@ export interface CommentItem {
   authorName: string;
   authorPhoto: string | null;
   content: string;
+  mentionTargets?: MentionTarget[];
   parentId: string | null;
   replyToId?: string | null;
   replyToAuthorUid?: string | null;
@@ -182,10 +184,16 @@ export interface AnnouncementItem {
 
 export interface NotificationItem {
   id: string;
-  type: 'reply' | 'like' | 'review_result';
+  type: 'reply' | 'like' | 'review_result' | 'mention';
   payload: Record<string, unknown>;
   isRead: boolean;
   createdAt: string;
+}
+
+export interface MentionTarget {
+  uid: string;
+  displayName: string;
+  photoURL?: string | null;
 }
 
 export interface FavoriteItem {

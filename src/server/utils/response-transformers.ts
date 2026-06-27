@@ -286,6 +286,7 @@ export function toPostResponse(post: {
   musicDocId?: string | null;
   albumDocId?: string | null;
   content: string;
+  mentionTargets?: Array<{ uid: string; displayName: string; photoURL?: string | null }>;
   tags: unknown;
   locationCode?: string | null;
   locationDetail?: string | null;
@@ -306,9 +307,11 @@ export function toPostResponse(post: {
   location?: { code: string; name: string; fullName: string } | null;
   deletedAt?: Date | null;
   deletedBy?: string | null;
+  pendingReviewBaseContent?: string | null;
 }) {
+  const { pendingReviewBaseContent: _pendingReviewBaseContent, ...publicPost } = post;
   return {
-    ...post,
+    ...publicPost,
     authorName: post.author?.displayName || null,
     locationCode: post.locationCode || null,
     locationName: post.location?.fullName || null,
@@ -335,6 +338,7 @@ type CommentResponseInput = {
   galleryId?: string | null;
   authorUid: string;
   content: string;
+  mentionTargets?: Array<{ uid: string; displayName: string; photoURL?: string | null }>;
   parentId: string | null;
   replyToId?: string | null;
   deletedAt?: Date | null;
@@ -373,6 +377,7 @@ export function toCommentResponse(comment: CommentResponseInput, options?: {
     authorName: hideDeletedAuthor ? null : comment.author?.displayName ?? '匿名用户',
     authorPhoto: hideDeletedAuthor ? null : comment.author?.photoURL ?? null,
     content: options?.maskDeletedContent && isDeleted ? DELETED_COMMENT_PLACEHOLDER : comment.content,
+    mentionTargets: options?.maskDeletedContent && isDeleted ? [] : comment.mentionTargets ?? [],
     parentId: comment.parentId,
     replyToId: comment.replyToId ?? null,
     replyToAuthorUid: comment.replyTo?.authorUid ?? null,

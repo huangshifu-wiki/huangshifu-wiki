@@ -41,7 +41,7 @@ export interface HomeFeedResponse {
 export interface NotificationsResponse {
   notifications: Array<{
     id: string;
-    type: 'reply' | 'like' | 'review_result';
+    type: 'reply' | 'like' | 'review_result' | 'mention';
     payload: Record<string, unknown>;
     isRead: boolean;
     createdAt: string;

@@ -32,6 +32,11 @@ const AUTH_TEST_EMAILS = [
   'no_pwd@example.com',
   'mixedcase@example.com',
   'blank_name@example.com',
+  'space_name@example.com',
+  'display_name_conflict_owner@example.com',
+  'display_name_conflict_new@example.com',
+  'alice@example.org',
+  'explicit_alice@example.org',
   'special@example.com',
   'test_stale_session@example.com',
   'verify_pending@example.com',
@@ -41,6 +46,8 @@ const AUTH_TEST_EMAILS = [
   'email_config_super@example.com',
   'email_config_admin@example.com',
   'mock-openid@wechat.local',
+  'wechat_common_nick@wechat.local',
+  'wechat_reserved_name@wechat.local',
 ];
 const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds();
 
@@ -676,6 +683,88 @@ describe('Auth API - 认证接口测试', () => {
       expect(response.body.user.displayName).toBe('blank_name');
     });
 
+    it('displayName 包含空白字符时应该返回 400 错误', async () => {
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'space_name@example.com',
+          password: 'ValidPassword123!',
+          displayName: 'Space Name',
+        });
+
+      expect(response.status).toBe(400);
+    });
+
+    it('displayName 已存在时应该返回 409 错误', async () => {
+      await createTestUser({
+        email: 'display_name_conflict_owner@example.com',
+        displayName: 'DisplayNameConflict',
+      });
+
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'display_name_conflict_new@example.com',
+          password: 'ValidPassword123!',
+          displayName: 'displaynameconflict',
+        });
+
+      expect(response.status).toBe(409);
+    });
+
+    it('未提供 displayName 且邮箱前缀已被使用时应该生成唯一备用昵称', async () => {
+      await createTestUser({
+        email: 'test_existing_alice@example.com',
+        displayName: 'alice',
+      });
+
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'alice@example.org',
+          password: 'ValidPassword123!',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.user.displayName).toBe('alice_2');
+    });
+
+    it('显式提交已存在 displayName 时仍应该返回 409 错误', async () => {
+      await createTestUser({
+        email: 'test_explicit_alice_owner@example.com',
+        displayName: 'explicit_alice',
+      });
+
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'explicit_alice@example.org',
+          password: 'ValidPassword123!',
+          displayName: 'Explicit_Alice',
+        });
+
+      expect(response.status).toBe(409);
+    });
+
+    it('长邮箱前缀备用昵称冲突时生成的名称不应该超过长度上限', async () => {
+      const longPrefix = `test_${'a'.repeat(AUTH_DISPLAY_NAME_MAX_LENGTH - 5)}`;
+      await createTestUser({
+        email: 'test_long_display_name_owner@example.com',
+        displayName: longPrefix,
+      });
+
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: `${longPrefix}@example.org`,
+          password: 'ValidPassword123!',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.user.displayName).toBe(`${longPrefix.slice(0, AUTH_DISPLAY_NAME_MAX_LENGTH - 2)}_2`);
+      expect(response.body.user.displayName).toHaveLength(AUTH_DISPLAY_NAME_MAX_LENGTH);
+    });
+
     it('邮箱前缀超过 50 个字符时应该截断默认昵称', async () => {
       const longPrefix = `a${Date.now()}${'a'.repeat(AUTH_DISPLAY_NAME_MAX_LENGTH + 10)}`
       const expectedDisplayName = longPrefix.slice(0, AUTH_DISPLAY_NAME_MAX_LENGTH)
@@ -845,6 +934,67 @@ describe('Auth API - 认证接口测试', () => {
           password: plainPassword,
         });
       expect(newLoginResponse.status).toBe(200);
+    });
+  });
+
+  describe('POST /api/auth/wechat/login', () => {
+    it('微信新用户昵称重复时应该生成唯一备用昵称', async () => {
+      await createTestUser({
+        email: 'test_wechat_common_name_owner@example.com',
+        displayName: '小明',
+      });
+
+      const response = await request(app)
+        .post('/api/auth/wechat/login')
+        .send({
+          code: 'mock:wechat_common_nick',
+          displayName: '小明',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.displayName).toBe('小明_2');
+      expect(response.body.user.email).toBe('wechat_common_nick@wechat.local');
+    });
+
+    it('微信新用户昵称包含保留字符时应该使用规范化备用昵称', async () => {
+      const response = await request(app)
+        .post('/api/auth/wechat/login')
+        .send({
+          code: 'mock:wechat_reserved_name',
+          displayName: '小 明[1]',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.displayName).toBe('小_明_1_');
+      expect(response.body.user.email).toBe('wechat_reserved_name@wechat.local');
+    });
+
+    it('微信已有用户昵称无效时应该跳过昵称更新但继续登录并更新头像', async () => {
+      const { user } = await createTestUser({
+        email: 'test_wechat_existing@example.com',
+        displayName: 'KeepName',
+      });
+      await prisma.user.update({
+        where: { uid: user.uid },
+        data: { wechatOpenId: 'wechat_existing_openid' },
+      });
+
+      const response = await request(app)
+        .post('/api/auth/wechat/login')
+        .send({
+          code: 'mock:wechat_existing_openid',
+          displayName: 'Bad Name',
+          photoURL: 'https://example.com/avatar.png',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.uid).toBe(user.uid);
+      expect(response.body.user.displayName).toBe('KeepName');
+      expect(response.body.user.photoURL).toBe('https://example.com/avatar.png');
+
+      const updatedUser = await prisma.user.findUnique({ where: { uid: user.uid } });
+      expect(updatedUser?.displayName).toBe('KeepName');
+      expect(updatedUser?.photoURL).toBe('https://example.com/avatar.png');
     });
   });
 

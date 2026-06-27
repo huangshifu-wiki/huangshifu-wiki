@@ -351,6 +351,46 @@ describe('Users API - 用户接口测试', () => {
     });
   });
 
+  describe('GET /api/users/mentions - @提及用户联想', () => {
+    it('应只允许已登录活跃用户搜索可提及用户', async () => {
+      const target = await createTestUser({
+        displayName: 'MentionTargetUser',
+      });
+      const banned = await createTestUser({
+        displayName: 'MentionTargetBanned',
+      });
+      const deleted = await createTestUser({
+        displayName: 'MentionTargetDeleted',
+      });
+      await prisma.user.update({
+        where: { uid: banned.user.uid },
+        data: { status: 'banned', banReason: '测试封禁' },
+      });
+      await prisma.user.update({
+        where: { uid: deleted.user.uid },
+        data: { deletedAt: new Date(), deletedBy: adminUser.user.uid },
+      });
+
+      const unauthenticatedResponse = await request(app)
+        .get('/api/users/mentions')
+        .query({ q: 'MentionTarget' });
+      expect(unauthenticatedResponse.status).toBe(401);
+
+      const response = await request(app)
+        .get('/api/users/mentions')
+        .set('Authorization', `Bearer ${userToken}`)
+        .query({ q: 'MentionTarget', limit: 10 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.users).toEqual([
+        expect.objectContaining({
+          uid: target.user.uid,
+          displayName: 'MentionTargetUser',
+        }),
+      ]);
+    });
+  });
+
   // ============================================================================
   // 获取当前用户信息接口测试
   // ============================================================================
@@ -561,18 +601,88 @@ describe('Users API - 用户接口测试', () => {
         .set('X-XSRF-TOKEN', xsrfToken)
         .send({ displayName: '' });
 
-      expect(response.status).toBe(200);
-      expect(response.body.user.displayName).toBe('');
+      expect(response.status).toBe(400);
 
       const updatedUser = await prisma.user.findUnique({
         where: { uid: testUser.user.uid },
       });
-      expect(updatedUser?.displayName).toBe('');
+      expect(updatedUser?.displayName).toBe(originalDisplayName);
+    });
 
-      await prisma.user.update({
-        where: { uid: testUser.user.uid },
-        data: { displayName: originalDisplayName },
+    it('使用包含空白字符的昵称时应该返回 400 错误', async () => {
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+      const response = await agent
+        .patch('/api/users/me')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ displayName: 'Bad Name' });
+
+      expect(response.status).toBe(400);
+    });
+
+    it('使用已存在昵称时应该返回 409 错误', async () => {
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+      const response = await agent
+        .patch('/api/users/me')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ displayName: adminUser.user.displayName.toLocaleLowerCase() });
+
+      expect(response.status).toBe(409);
+    });
+
+    it('活跃用户应该可以使用被封禁用户占用的昵称', async () => {
+      const reusableDisplayName = `ReusableBannedName_${Date.now()}`;
+      const bannedUser = await createTestUser({
+        email: `test_banned_reusable_${Date.now()}@example.com`,
+        displayName: reusableDisplayName,
       });
+      await prisma.user.update({
+        where: { uid: bannedUser.user.uid },
+        data: { status: 'banned', banReason: '测试封禁', bannedAt: new Date() },
+      });
+
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+      const response = await agent
+        .patch('/api/users/me')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ displayName: reusableDisplayName.toLocaleLowerCase() });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.displayName).toBe(reusableDisplayName.toLocaleLowerCase());
+    });
+
+    it('旧重复昵称未变更时不应阻断其他资料保存', async () => {
+      const duplicateName = `LegacyDuplicate_${Date.now()}`;
+      await prisma.$executeRawUnsafe('ALTER TABLE "User" DISABLE TRIGGER "User_displayName_rules_trigger"');
+      try {
+        await prisma.user.updateMany({
+          where: { uid: { in: [testUser.user.uid, adminUser.user.uid] } },
+          data: { displayName: duplicateName },
+        });
+      } finally {
+        await prisma.$executeRawUnsafe('ALTER TABLE "User" ENABLE TRIGGER "User_displayName_rules_trigger"');
+      }
+
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+      const response = await agent
+        .patch('/api/users/me')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ displayName: duplicateName, bio: 'Legacy duplicate profile update' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.displayName).toBe(duplicateName);
+      expect(response.body.user.bio).toBe('Legacy duplicate profile update');
     });
 
     /**
@@ -632,6 +742,128 @@ describe('Users API - 用户接口测试', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.user.photoURL).toBe(validUrl);
+    });
+  });
+
+  describe('DELETE /api/users/account - 注销账户', () => {
+    it('多个注销账户应该可以共享注销显示名且不能继续访问活跃用户接口', async () => {
+      const first = await createTestUser({
+        email: `test_delete_first_${Date.now()}@example.com`,
+        password: 'DeletePassword123!',
+        displayName: `DeleteFirst_${Date.now()}`,
+      });
+      const second = await createTestUser({
+        email: `test_delete_second_${Date.now()}@example.com`,
+        password: 'DeletePassword123!',
+        displayName: `DeleteSecond_${Date.now()}`,
+      });
+      const firstSession = await createAuthenticatedAgent(first.user.email, first.plainPassword);
+      const secondSession = await createAuthenticatedAgent(second.user.email, second.plainPassword);
+
+      const firstDeleteResponse = await firstSession.agent
+        .delete('/api/users/account')
+        .set('X-XSRF-TOKEN', firstSession.xsrfToken);
+      const secondDeleteResponse = await secondSession.agent
+        .delete('/api/users/account')
+        .set('X-XSRF-TOKEN', secondSession.xsrfToken);
+
+      expect(firstDeleteResponse.status).toBe(200);
+      expect(secondDeleteResponse.status).toBe(200);
+      expect(firstDeleteResponse.body).toEqual({ success: true });
+      expect(secondDeleteResponse.body).toEqual({ success: true });
+
+      const deletedUsers = await prisma.user.findMany({
+        where: { uid: { in: [first.user.uid, second.user.uid] } },
+        select: { uid: true, displayName: true, status: true, deletedAt: true },
+        orderBy: { uid: 'asc' },
+      });
+      expect(deletedUsers).toHaveLength(2);
+      expect(deletedUsers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            uid: first.user.uid,
+            displayName: '已注销用户',
+            status: 'banned',
+            deletedAt: null,
+          }),
+          expect.objectContaining({
+            uid: second.user.uid,
+            displayName: '已注销用户',
+            status: 'banned',
+            deletedAt: null,
+          }),
+        ])
+      );
+
+      const firstMeResponse = await firstSession.agent.get('/api/users/me');
+      expect(firstMeResponse.status).toBe(403);
+      expect(firstMeResponse.body.error).toContain('账号已被封禁');
+
+      const activeSession = await createAuthenticatedAgent(testUser.user.email, testUser.plainPassword);
+      const activeRenameResponse = await activeSession.agent
+        .patch('/api/users/me')
+        .set('X-XSRF-TOKEN', activeSession.xsrfToken)
+        .send({ displayName: '已注销用户' });
+      expect(activeRenameResponse.status).toBe(200);
+      expect(activeRenameResponse.body.user.displayName).toBe('已注销用户');
+    });
+  });
+
+  describe('User displayName 数据库规则', () => {
+    it('封禁用户之间允许重复昵称，但恢复 active 时必须重新满足唯一性', async () => {
+      const timestamp = Date.now();
+      const duplicateName = `DirectDuplicate_${timestamp}`;
+      const activeUser = await createTestUser({
+        email: `test_direct_active_${timestamp}@example.com`,
+        displayName: duplicateName,
+      });
+      const firstBannedUser = await createTestUser({
+        email: `test_direct_banned_first_${timestamp}@example.com`,
+        displayName: `DirectBannedFirst_${timestamp}`,
+      });
+      const secondBannedUser = await createTestUser({
+        email: `test_direct_banned_second_${timestamp}@example.com`,
+        displayName: `DirectBannedSecond_${timestamp}`,
+      });
+
+      await expect(
+        prisma.user.update({
+          where: { uid: firstBannedUser.user.uid },
+          data: {
+            displayName: duplicateName,
+            status: 'banned',
+            banReason: '测试封禁',
+            bannedAt: new Date(),
+          },
+        })
+      ).resolves.toMatchObject({ displayName: duplicateName, status: 'banned' });
+      await expect(
+        prisma.user.update({
+          where: { uid: secondBannedUser.user.uid },
+          data: {
+            displayName: duplicateName,
+            status: 'banned',
+            banReason: '测试封禁',
+            bannedAt: new Date(),
+          },
+        })
+      ).resolves.toMatchObject({ displayName: duplicateName, status: 'banned' });
+
+      await expect(
+        prisma.user.update({
+          where: { uid: firstBannedUser.user.uid },
+          data: { status: 'active', banReason: null, bannedAt: null },
+        })
+      ).rejects.toThrow(/displayName|unique|already|Unique constraint/i);
+
+      const activeUserAfterFailedRestore = await prisma.user.findUnique({
+        where: { uid: activeUser.user.uid },
+        select: { displayName: true, status: true },
+      });
+      expect(activeUserAfterFailedRestore).toEqual({
+        displayName: duplicateName,
+        status: 'active',
+      });
     });
   });
 

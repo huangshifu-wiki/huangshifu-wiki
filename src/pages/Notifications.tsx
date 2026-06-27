@@ -4,6 +4,7 @@ import {
 	CheckCheck,
 	ChevronLeft,
 	MessageCircle,
+	AtSign,
 	ThumbsUp,
 	ShieldCheck,
 	Loader2,
@@ -13,16 +14,9 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../lib/apiClient";
 import { getNotificationLink, getNotificationText } from "../lib/notifications";
 import Pagination from "../components/Pagination";
+import type { NotificationItem } from "../types/entities";
 
-type NotificationType = "reply" | "like" | "review_result";
-
-type NotificationItem = {
-	id: string;
-	type: NotificationType;
-	payload: Record<string, unknown>;
-	isRead: boolean;
-	createdAt: string;
-};
+type NotificationType = NotificationItem["type"];
 
 type NotificationsResponse = {
 	notifications: NotificationItem[];
@@ -41,6 +35,7 @@ const FILTER_OPTIONS: Array<{ id: NotificationFilter; label: string }> = [
 	{ id: "unread", label: "未读" },
 	{ id: "reply", label: "回复" },
 	{ id: "like", label: "点赞" },
+	{ id: "mention", label: "提及" },
 	{ id: "review_result", label: "审核结果" },
 ];
 
@@ -52,6 +47,7 @@ function isNotificationFilter(
 		value === "unread" ||
 		value === "reply" ||
 		value === "like" ||
+		value === "mention" ||
 		value === "review_result"
 	);
 }
@@ -59,6 +55,7 @@ function isNotificationFilter(
 function getNotificationTypeLabel(type: NotificationType) {
 	if (type === "reply") return "回复";
 	if (type === "like") return "点赞";
+	if (type === "mention") return "提及";
 	return "审核";
 }
 
@@ -68,6 +65,9 @@ function NotificationTypeIcon({ type }: { type: NotificationType }) {
 	}
 	if (type === "like") {
 		return <ThumbsUp size={14} className="text-brand-gold" />;
+	}
+	if (type === "mention") {
+		return <AtSign size={14} className="text-brand-gold" />;
 	}
 	return <ShieldCheck size={14} className="text-brand-gold" />;
 }
@@ -104,6 +104,7 @@ const Notifications = () => {
 			if (
 				filter === "reply" ||
 				filter === "like" ||
+				filter === "mention" ||
 				filter === "review_result"
 			) {
 				query.type = filter;

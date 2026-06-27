@@ -46,13 +46,17 @@ import { submitFormOnModifierEnter } from '../lib/formShortcuts'
 import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import MarkdownRenderer from '../components/MarkdownRenderer'
+import MentionTextarea from '../components/MentionTextarea'
+import MentionText from '../components/MentionText'
 import NotFound from './NotFound'
+import type { MentionTarget } from '../lib/mentions'
 
 type PostItem = {
   id: string
   title: string
   section: string
   content?: string
+  mentionTargets?: MentionTarget[]
   excerpt?: string
   tags?: string[]
   locationCode?: string | null
@@ -89,6 +93,7 @@ type CommentItem = {
   authorName: string
   authorPhoto: string | null
   content: string
+  mentionTargets?: MentionTarget[]
   parentId: string | null
   replyToId: string | null
   replyToAuthorUid: string | null
@@ -851,7 +856,11 @@ const PostDetail = () => {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
           <div>
             <div className="prose prose-lg max-w-none font-body leading-relaxed text-text-primary">
-              <MarkdownRenderer content={post.content || ''} />
+              <MarkdownRenderer
+                content={post.content || ''}
+                enableMentions
+                mentionTargets={post.mentionTargets || []}
+              />
             </div>
 
             <section className="mt-12 pt-8 border-t border-border">
@@ -876,10 +885,10 @@ const PostDetail = () => {
                     </div>
                   )}
                   <div className="relative">
-                    <textarea
-                      ref={commentInputRef}
+                    <MentionTextarea
+                      textareaRef={commentInputRef}
                       value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
+                      onChange={setNewComment}
                       maxLength={CONTENT_LIMITS.post.comment}
                       onKeyDown={submitFormOnModifierEnter}
                       placeholder={
@@ -954,7 +963,10 @@ const PostDetail = () => {
                             <span
                               className={comment.isDeleted ? 'italic text-text-muted' : undefined}
                             >
-                              {comment.content}
+                              <MentionText
+                                text={comment.content}
+                                targets={comment.mentionTargets || []}
+                              />
                             </span>
                           </p>
                           {renderCommentActions(comment, 'root')}
@@ -1001,7 +1013,12 @@ const PostDetail = () => {
                                       </span>
                                     </>
                                   ) : null}
-                                  <span>：{reply.content}</span>
+                                  <span>：
+                                    <MentionText
+                                      text={reply.content}
+                                      targets={reply.mentionTargets || []}
+                                    />
+                                  </span>
                                 </p>
                                 {renderCommentActions(reply, 'reply')}
                               </div>

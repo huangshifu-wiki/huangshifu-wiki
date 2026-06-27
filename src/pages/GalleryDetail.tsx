@@ -38,6 +38,9 @@ import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/
 import type { GalleryDetailResponse } from '../types/api'
 import type { GalleryImageItem, GalleryItem } from '../types/entities'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
+import MentionTextarea from '../components/MentionTextarea'
+import MentionText from '../components/MentionText'
+import type { MentionTarget } from '../lib/mentions'
 
 type DisplayGalleryImage = GalleryImageItem & {
   clientId: string
@@ -50,6 +53,7 @@ type CommentItem = {
   authorName: string
   authorPhoto: string | null
   content: string
+  mentionTargets?: MentionTarget[]
   parentId: string | null
   replyToId: string | null
   replyToAuthorUid: string | null
@@ -965,11 +969,11 @@ const GalleryDetail = () => {
                       onError={handleAvatarError}
                     />
                   </div>
-                  <div className="flex-grow">
-                    <textarea
-                      ref={commentInputRef}
+                  <div className="relative flex-grow">
+                    <MentionTextarea
+                      textareaRef={commentInputRef}
                       value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
+                      onChange={setNewComment}
                       maxLength={CONTENT_LIMITS.gallery.comment}
                       onKeyDown={submitFormOnModifierEnter}
                       placeholder={t('gallery.commentPlaceholder')}
@@ -1042,7 +1046,10 @@ const GalleryDetail = () => {
                           <span
                             className={comment.isDeleted ? 'italic text-text-muted' : undefined}
                           >
-                            {comment.content}
+                            <MentionText
+                              text={comment.content}
+                              targets={comment.mentionTargets || []}
+                            />
                           </span>
                         </p>
                         {renderCommentActions(comment, 'root')}
@@ -1089,7 +1096,12 @@ const GalleryDetail = () => {
                                     </span>
                                   </>
                                 ) : null}
-                                <span>：{reply.content}</span>
+                                <span>：
+                                  <MentionText
+                                    text={reply.content}
+                                    targets={reply.mentionTargets || []}
+                                  />
+                                </span>
                               </p>
                               {renderCommentActions(reply, 'reply')}
                             </div>

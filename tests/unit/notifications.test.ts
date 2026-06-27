@@ -212,6 +212,26 @@ describe('getNotificationText', () => {
     ).toContain('已通过你的百科编辑审核')
   })
 
+  it('renders mention text and links to comment anchors', () => {
+    const postMention = makeNotification('mention', {
+      targetType: 'post',
+      postId: 'p1',
+      commentId: 'c1',
+      actorName: '黄诗扶',
+      preview: '@你 来看看',
+    })
+    expect(getNotificationText(postMention)).toBe('黄诗扶 提到了你（评论）：@你 来看看')
+    expect(getNotificationLink(postMention)).toBe('/forum/p1#comment-c1')
+
+    const galleryMention = makeNotification('mention', {
+      targetType: 'gallery',
+      galleryId: 'g1',
+      actorName: '黄诗扶',
+    })
+    expect(getNotificationText(galleryMention)).toBe('黄诗扶 提到了你（图集）')
+    expect(getNotificationLink(galleryMention)).toBe('/gallery/g1')
+  })
+
   it('renders wiki deletion review_result text with optional reason', () => {
     expect(
       getNotificationText(

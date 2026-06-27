@@ -13,7 +13,6 @@ import {
 } from '../schemas';
 import {
   CONTENT_LIMITS,
-  PROFILE_DISPLAY_NAME_MAX_LENGTH,
   PROFILE_SIGNATURE_MAX_LENGTH,
   WIKI_MAX_CONTENT_SIZE,
 } from '../../lib/contentLimits';
@@ -34,6 +33,7 @@ import {
   logger,
   getPasswordSaltRounds,
   ensureTextLimit,
+  validateUserDisplayName,
 } from '../utils';
 import type { AuthenticatedRequest, UserStatus } from '../types';
 
@@ -468,14 +468,18 @@ router.put('/name', requireAuth, requireActiveUser, asyncHandler(async (req: Aut
   try {
     const { displayName } = req.body as { displayName?: string };
 
-    if (!displayName || !displayName.trim()) {
-      res.status(400).json({ error: '昵称不能为空' });
+    const displayNameResult = await validateUserDisplayName(displayName, {
+      currentUid: req.authUser!.uid,
+      currentDisplayName: req.authUser!.displayName,
+    });
+    if (displayNameResult.ok === false) {
+      res.status(displayNameResult.status).json({ error: displayNameResult.error });
       return;
     }
 
     const user = await prisma.user.update({
       where: { uid: req.authUser!.uid },
-      data: { displayName: displayName.trim() },
+      data: { displayName: displayNameResult.displayName },
       select: {
         uid: true,
         email: true,
@@ -719,11 +723,15 @@ router.patch('/me', profileLimiter, requireAuth, requireActiveUser, asyncHandler
     const updateData: Record<string, unknown> = {};
 
     if (displayName !== undefined) {
-      if (typeof displayName === 'string' && displayName.length > PROFILE_DISPLAY_NAME_MAX_LENGTH) {
-        res.status(400).json({ error: `昵称不能超过${PROFILE_DISPLAY_NAME_MAX_LENGTH}个字符` });
+      const displayNameResult = await validateUserDisplayName(displayName, {
+        currentUid: req.authUser!.uid,
+        currentDisplayName: req.authUser!.displayName,
+      });
+      if (displayNameResult.ok === false) {
+        res.status(displayNameResult.status).json({ error: displayNameResult.error });
         return;
       }
-      updateData.displayName = displayName;
+      updateData.displayName = displayNameResult.displayName;
     }
     if (signature !== undefined) {
       if (typeof signature === 'string' && signature.length > PROFILE_SIGNATURE_MAX_LENGTH) {
@@ -947,6 +955,7 @@ router.patch('/:userId', requireAdmin, validateBody(adminUpdateUserSchema), asyn
       select: {
         uid: true,
         email: true,
+        displayName: true,
         role: true,
         emailVerifiedAt: true,
       },
@@ -975,7 +984,17 @@ router.patch('/:userId', requireAdmin, validateBody(adminUpdateUserSchema), asyn
     }
 
     const updateData: Prisma.UserUpdateInput = {};
-    if (displayName !== undefined) updateData.displayName = displayName;
+    if (displayName !== undefined) {
+      const displayNameResult = await validateUserDisplayName(displayName, {
+        currentUid: targetUid,
+        currentDisplayName: targetUser.displayName,
+      });
+      if (displayNameResult.ok === false) {
+        res.status(displayNameResult.status).json({ error: displayNameResult.error });
+        return;
+      }
+      updateData.displayName = displayNameResult.displayName;
+    }
     if (signature !== undefined) updateData.signature = signature;
     if (bio !== undefined) updateData.bio = bio;
     if (email !== undefined) updateData.email = email;
@@ -1254,6 +1273,39 @@ router.get('/me/history', requireAuth, requireActiveUser, asyncHandler(async (re
   } catch (error) {
     console.error('Get user history error:', error);
     res.status(500).json({ error: '获取历史记录失败' });
+  }
+}));
+
+router.get('/mentions', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  try {
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const parsedLimit = Number.parseInt(String(req.query.limit ?? '8'), 10);
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 20) : 8;
+
+    if (!query) {
+      res.json({ users: [] });
+      return;
+    }
+
+    const users = await prisma.user.findMany({
+      where: {
+        status: 'active',
+        deletedAt: null,
+        displayName: { contains: query, mode: 'insensitive' },
+      },
+      select: {
+        uid: true,
+        displayName: true,
+        photoURL: true,
+      },
+      orderBy: [{ displayName: 'asc' }, { createdAt: 'asc' }],
+      take: limit,
+    });
+
+    res.json({ users });
+  } catch (error) {
+    console.error('Search mention users error:', error);
+    res.status(500).json({ error: '搜索用户失败' });
   }
 }));
 

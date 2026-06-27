@@ -46,6 +46,15 @@ export function getNotificationText(notif: NotificationItem) {
       const actorName = getPayloadText(notif.payload, 'actorName')
       return `${actorName ? `${actorName} ` : ''}赞了你的帖子`
     }
+    case 'mention': {
+      const target = resolveReplyTarget(notif.payload)
+      const noun = target?.kind === 'gallery' ? '图集' : '帖子'
+      const targetText = notif.payload.commentId ? '评论' : noun
+      const actorName = getPayloadText(notif.payload, 'actorName')
+      const preview = getPayloadText(notif.payload, 'preview')
+      const base = `${actorName ? `${actorName} ` : ''}提到了你`
+      return preview ? `${base}（${targetText}）：${preview}` : `${base}（${targetText}）`
+    }
     case 'review_result': {
       const payload = notif.payload as ReviewNotificationPayload
       const target =
@@ -80,10 +89,12 @@ export function getNotificationText(notif: NotificationItem) {
 }
 
 export function getNotificationLink(notif: NotificationItem) {
-  if (notif.type === 'reply' || notif.type === 'like') {
+  if (notif.type === 'reply' || notif.type === 'like' || notif.type === 'mention') {
     const target = resolveReplyTarget(notif.payload)
     if (!target) return null
-    return target.kind === 'gallery' ? `/gallery/${target.id}` : `/forum/${target.id}`
+    const base = target.kind === 'gallery' ? `/gallery/${target.id}` : `/forum/${target.id}`
+    const commentId = getPayloadText(notif.payload, 'commentId')
+    return commentId ? `${base}#comment-${commentId}` : base
   }
 
   if (notif.type === 'review_result') {

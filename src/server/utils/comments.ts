@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import type { ApiUser } from '../types'
 import { canViewGallery, canViewPost } from './authorization'
 import { prisma } from './config'
+import { buildMentionTargetsByTextKey } from './mentions'
 import { toCommentResponse } from './response-transformers'
 
 const commentInclude = {
@@ -50,7 +51,7 @@ async function serializeCommentResponses(comments: CommentWithRelations[], optio
     ),
   ]
 
-  const [likedComments, deletedByUsers] = await Promise.all([
+  const [likedComments, deletedByUsers, mentionTargetsByCommentId] = await Promise.all([
     options.authUserUid && commentIds.length
       ? prisma.postCommentLike.findMany({
           where: {
@@ -66,21 +67,32 @@ async function serializeCommentResponses(comments: CommentWithRelations[], optio
           select: { uid: true, displayName: true },
         })
       : Promise.resolve([]),
+    buildMentionTargetsByTextKey(
+      comments
+        .filter((comment) => options.includeDeleted || !comment.deletedAt)
+        .map((comment) => ({ key: comment.id, content: comment.content }))
+    ),
   ])
 
   const likedCommentSet = new Set(likedComments.map((item) => item.commentId))
   const deletedByNameMap = new Map(deletedByUsers.map((user) => [user.uid, user.displayName]))
 
   return comments.map((comment) =>
-    toCommentResponse(comment, {
-      maskDeletedContent: !options.includeDeleted,
-      hideDeletedAuthor: !options.includeDeleted,
-      likedByMe: likedCommentSet.has(comment.id),
-      deletedByName:
-        options.includeDeleted && comment.deletedBy
-          ? deletedByNameMap.get(comment.deletedBy) ?? null
-          : null,
-    })
+    toCommentResponse(
+      {
+        ...comment,
+        mentionTargets: mentionTargetsByCommentId.get(comment.id) ?? [],
+      },
+      {
+        maskDeletedContent: !options.includeDeleted,
+        hideDeletedAuthor: !options.includeDeleted,
+        likedByMe: likedCommentSet.has(comment.id),
+        deletedByName:
+          options.includeDeleted && comment.deletedBy
+            ? deletedByNameMap.get(comment.deletedBy) ?? null
+            : null,
+      }
+    )
   )
 }
 

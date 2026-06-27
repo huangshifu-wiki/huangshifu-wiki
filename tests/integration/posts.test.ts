@@ -69,6 +69,7 @@ async function cleanupPostTestData() {
         { title: { startsWith: 'Admin Restore Post Test' } },
         { title: { startsWith: 'Admin List Delete Post Test' } },
         { title: { startsWith: 'Long Content Test ' } },
+        { title: { startsWith: 'Test Mention ' } },
       ],
     },
   });
@@ -91,6 +92,7 @@ async function cleanupPostTestData() {
         { content: { startsWith: 'Restorable comment' } },
         { content: { startsWith: 'Comment to like' } },
         { content: { startsWith: 'Draft post comment' } },
+        { content: { startsWith: 'Mention comment' } },
       ],
     },
   });
@@ -2676,6 +2678,462 @@ describe('Posts API - 文章接口测试', () => {
         .send('');
 
       expect(response.status).toBe(400);
+    });
+  });
+
+  describe('@mention 通知', () => {
+    it('已发布帖子正文应通知被提及用户并返回可链接目标', async () => {
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+
+      const response = await agent
+        .post('/api/posts')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({
+          title: `Test Mention Published Post ${Date.now()}`,
+          section: 'general',
+          content: `正文提及 @${testUser.user.displayName}`,
+          status: 'published',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.post.mentionTargets).toEqual([
+        expect.objectContaining({
+          uid: testUser.user.uid,
+          displayName: testUser.user.displayName,
+        }),
+      ]);
+
+      const notification = await prisma.notification.findFirst({
+        where: { userUid: testUser.user.uid, type: 'mention' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(notification).not.toBeNull();
+      const payload = notification!.payload as Record<string, unknown>;
+      expect(payload.targetType).toBe('post');
+      expect(payload.postId).toBe(response.body.post.id);
+      expect(payload.commentId).toBeNull();
+      expect(payload.actorUid).toBe(adminUser.user.uid);
+    });
+
+    it('已发布帖子正文应解析带点显示名并发送 mention 通知', async () => {
+      const mentionedUser = await createTestUser({
+        displayName: `Mention.Target_${Date.now()}`,
+      });
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+
+      const response = await agent
+        .post('/api/posts')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({
+          title: `Test Mention Dotted Post ${Date.now()}`,
+          section: 'general',
+          content: `正文提及 @${mentionedUser.user.displayName}`,
+          status: 'published',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.post.mentionTargets).toEqual([
+        expect.objectContaining({
+          uid: mentionedUser.user.uid,
+          displayName: mentionedUser.user.displayName,
+        }),
+      ]);
+
+      const notification = await prisma.notification.findFirst({
+        where: { userUid: mentionedUser.user.uid, type: 'mention' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(notification).not.toBeNull();
+      expect((notification!.payload as Record<string, unknown>).postId).toBe(response.body.post.id);
+    });
+
+    it('已发布帖子正文应剥离尾部标点解析 mention', async () => {
+      const displayName = `MentionPlain_${Date.now()}`;
+      const mentionedUser = await createTestUser({ displayName });
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+
+      const response = await agent
+        .post('/api/posts')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({
+          title: `Test Mention Trailing Punctuation Post ${Date.now()}`,
+          section: 'general',
+          content: `正文提及 @${displayName}!`,
+          status: 'published',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.post.mentionTargets).toEqual([
+        expect.objectContaining({
+          uid: mentionedUser.user.uid,
+          displayName,
+        }),
+      ]);
+
+      const notification = await prisma.notification.findFirst({
+        where: { userUid: mentionedUser.user.uid, type: 'mention' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(notification).not.toBeNull();
+      expect((notification!.payload as Record<string, unknown>).postId).toBe(response.body.post.id);
+    });
+
+    it('已发布帖子正文应解析无空格标点分隔的连续 mention 并发送通知', async () => {
+      const timestamp = Date.now();
+      const firstUser = await createTestUser({ displayName: `MentionCommaFirst_${timestamp}` });
+      const secondUser = await createTestUser({ displayName: `MentionCommaSecond_${timestamp}` });
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+
+      const response = await agent
+        .post('/api/posts')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({
+          title: `Test Mention Consecutive Punctuation Post ${timestamp}`,
+          section: 'general',
+          content: `正文提及 @${firstUser.user.displayName}，@${secondUser.user.displayName}`,
+          status: 'published',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.post.mentionTargets).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            uid: firstUser.user.uid,
+            displayName: firstUser.user.displayName,
+          }),
+          expect.objectContaining({
+            uid: secondUser.user.uid,
+            displayName: secondUser.user.displayName,
+          }),
+        ])
+      );
+      expect(response.body.post.mentionTargets).toHaveLength(2);
+
+      const [firstNotificationCount, secondNotificationCount] = await Promise.all([
+        prisma.notification.count({ where: { userUid: firstUser.user.uid, type: 'mention' } }),
+        prisma.notification.count({ where: { userUid: secondUser.user.uid, type: 'mention' } }),
+      ]);
+      expect(firstNotificationCount).toBe(1);
+      expect(secondNotificationCount).toBe(1);
+    });
+
+    it('已发布帖子正文不应通知 Markdown 链接和 URL 内的 mention', async () => {
+      const mentionedUser = await createTestUser({
+        displayName: `MentionLink_${Date.now()}`,
+      });
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+
+      const response = await agent
+        .post('/api/posts')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({
+          title: `Test Mention Link Ignored Post ${Date.now()}`,
+          section: 'general',
+          content: [
+            `[see @${mentionedUser.user.displayName}](/users/@${mentionedUser.user.displayName})`,
+            `https://example.com/@${mentionedUser.user.displayName}`,
+          ].join('\n'),
+          status: 'published',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.post.mentionTargets).toEqual([]);
+
+      const notification = await prisma.notification.findFirst({
+        where: { userUid: mentionedUser.user.uid, type: 'mention' },
+      });
+      expect(notification).toBeNull();
+    });
+
+    it('草稿帖子正文不应发送 mention 通知', async () => {
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+
+      const response = await agent
+        .post('/api/posts')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({
+          title: `Test Mention Draft Post ${Date.now()}`,
+          section: 'general',
+          content: `草稿提及 @${adminUser.user.displayName}`,
+          status: 'draft',
+        });
+
+      expect(response.status).toBe(201);
+      const notifications = await prisma.notification.findMany({
+        where: { userUid: adminUser.user.uid, type: 'mention' },
+      });
+      expect(notifications).toHaveLength(0);
+    });
+
+    it('管理员审核通过待发布帖子时 mention 通知应归属帖子作者', async () => {
+      const mentionedUser = await createTestUser({
+        displayName: `MentionReviewTarget_${Date.now()}`,
+      });
+      const { agent: authorAgent, xsrfToken: authorXsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+      const createResponse = await authorAgent
+        .post('/api/posts')
+        .set('X-XSRF-TOKEN', authorXsrfToken)
+        .send({
+          title: `Test Mention Review Post ${Date.now()}`,
+          section: 'general',
+          content: `审核提及 @${mentionedUser.user.displayName} @${testUser.user.displayName}`,
+          status: 'pending',
+        });
+
+      expect(createResponse.status).toBe(201);
+      expect(createResponse.body.post.status).toBe('pending');
+
+      const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+      const approveResponse = await adminAgent
+        .put(`/api/admin/review-queue/${createResponse.body.post.id}/approve`)
+        .set('X-XSRF-TOKEN', adminXsrfToken)
+        .send({ type: 'post' });
+
+      expect(approveResponse.status).toBe(200);
+
+      const notification = await prisma.notification.findFirst({
+        where: { userUid: mentionedUser.user.uid, type: 'mention' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(notification).not.toBeNull();
+      const payload = notification!.payload as Record<string, unknown>;
+      expect(payload.actorUid).toBe(testUser.user.uid);
+      expect(payload.actorName).toBe(testUser.user.displayName);
+      expect(payload.postId).toBe(createResponse.body.post.id);
+
+      const authorMentionCount = await prisma.notification.count({
+        where: { userUid: testUser.user.uid, type: 'mention' },
+      });
+      expect(authorMentionCount).toBe(0);
+    });
+
+    it('已发布帖子编辑后重新审核时只通知新增 mention', async () => {
+      const oldMentionedUser = await createTestUser({
+        displayName: `MentionReviewOld_${Date.now()}`,
+      });
+      const newMentionedUser = await createTestUser({
+        displayName: `MentionReviewNew_${Date.now()}`,
+      });
+      const post = await createCurrentUserPost({
+        title: `Test Mention Republish Review Post ${Date.now()}`,
+        content: `原文提及 @${oldMentionedUser.user.displayName}`,
+        status: 'published',
+      });
+
+      const { agent: authorAgent, xsrfToken: authorXsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+      const editResponse = await authorAgent
+        .put(`/api/posts/${post.id}`)
+        .set('X-XSRF-TOKEN', authorXsrfToken)
+        .send({
+          title: post.title,
+          section: post.section,
+          content: `编辑后提及 @${oldMentionedUser.user.displayName} @${newMentionedUser.user.displayName}`,
+          status: 'published',
+        });
+
+      expect(editResponse.status).toBe(200);
+      expect(editResponse.body.post.status).toBe('pending');
+
+      const pendingPost = await prisma.post.findUnique({ where: { id: post.id } });
+      expect(pendingPost?.pendingReviewBaseContent).toBe(post.content);
+
+      const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+      const approveResponse = await adminAgent
+        .put(`/api/admin/review-queue/${post.id}/approve`)
+        .set('X-XSRF-TOKEN', adminXsrfToken)
+        .send({ type: 'post' });
+
+      expect(approveResponse.status).toBe(200);
+
+      const [oldMentionCount, newMentionCount] = await Promise.all([
+        prisma.notification.count({ where: { userUid: oldMentionedUser.user.uid, type: 'mention' } }),
+        prisma.notification.count({ where: { userUid: newMentionedUser.user.uid, type: 'mention' } }),
+      ]);
+      expect(oldMentionCount).toBe(0);
+      expect(newMentionCount).toBe(1);
+
+      const approvedPost = await prisma.post.findUnique({ where: { id: post.id } });
+      expect(approvedPost?.pendingReviewBaseContent).toBeNull();
+    });
+
+    it('无快照的旧复审帖子审核通过时应保守抑制 mention 重复通知', async () => {
+      const mentionedUser = await createTestUser({
+        displayName: `MentionLegacyReview_${Date.now()}`,
+      });
+      const post = await createCurrentUserPost({
+        title: `Test Mention Legacy Republish Review Post ${Date.now()}`,
+        content: `旧待审正文 @${mentionedUser.user.displayName}`,
+        status: 'pending',
+      });
+      await prisma.moderationLog.create({
+        data: {
+          targetType: 'post',
+          targetId: post.id,
+          action: 'submit',
+          operatorUid: testUser.user.uid,
+          note: '编辑后重新提交审核',
+        },
+      });
+
+      const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+      const approveResponse = await adminAgent
+        .put(`/api/admin/review-queue/${post.id}/approve`)
+        .set('X-XSRF-TOKEN', adminXsrfToken)
+        .send({ type: 'post' });
+
+      expect(approveResponse.status).toBe(200);
+
+      const mentionCount = await prisma.notification.count({
+        where: { userUid: mentionedUser.user.uid, type: 'mention' },
+      });
+      expect(mentionCount).toBe(0);
+    });
+
+    it('管理员直接发布待审编辑时应使用快照去重 mention 并清空快照', async () => {
+      const oldMentionedUser = await createTestUser({
+        displayName: `MentionAdminPublishOld_${Date.now()}`,
+      });
+      const newMentionedUser = await createTestUser({
+        displayName: `MentionAdminPublishNew_${Date.now()}`,
+      });
+      const post = await createCurrentUserPost({
+        title: `Test Mention Admin Direct Publish Post ${Date.now()}`,
+        content: `原文提及 @${oldMentionedUser.user.displayName}`,
+        status: 'published',
+      });
+
+      const { agent: authorAgent, xsrfToken: authorXsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword,
+      );
+      const editResponse = await authorAgent
+        .put(`/api/posts/${post.id}`)
+        .set('X-XSRF-TOKEN', authorXsrfToken)
+        .send({
+          title: post.title,
+          section: post.section,
+          content: `管理员发布前提及 @${oldMentionedUser.user.displayName} @${newMentionedUser.user.displayName}`,
+          status: 'published',
+        });
+      expect(editResponse.status).toBe(200);
+
+      const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+      const publishResponse = await adminAgent
+        .put(`/api/posts/${post.id}`)
+        .set('X-XSRF-TOKEN', adminXsrfToken)
+        .send({
+          title: post.title,
+          section: post.section,
+          content: `管理员发布前提及 @${oldMentionedUser.user.displayName} @${newMentionedUser.user.displayName}`,
+          status: 'published',
+        });
+
+      expect(publishResponse.status).toBe(200);
+      expect(publishResponse.body.post.status).toBe('published');
+
+      const [oldMentionCount, newMentionCount, publishedPost] = await Promise.all([
+        prisma.notification.count({ where: { userUid: oldMentionedUser.user.uid, type: 'mention' } }),
+        prisma.notification.count({ where: { userUid: newMentionedUser.user.uid, type: 'mention' } }),
+        prisma.post.findUnique({ where: { id: post.id } }),
+      ]);
+      expect(oldMentionCount).toBe(0);
+      expect(newMentionCount).toBe(1);
+      expect(publishedPost?.pendingReviewBaseContent).toBeNull();
+    });
+
+    it('评论 mention 应通知被提及用户并链接评论锚点', async () => {
+      const mentionedUser = await createTestUser({
+        displayName: `MentionTarget_${Date.now()}`,
+      });
+      const post = await createCurrentUserPost({
+        title: `Test Mention Comment Post ${Date.now()}`,
+        status: 'published',
+      });
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+
+      const response = await agent
+        .post(`/api/posts/${post.id}/comments`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ content: `Mention comment @${mentionedUser.user.displayName}` });
+
+      expect(response.status).toBe(201);
+      expect(response.body.comment.mentionTargets).toEqual([
+        expect.objectContaining({ uid: mentionedUser.user.uid }),
+      ]);
+
+      const notification = await prisma.notification.findFirst({
+        where: { userUid: mentionedUser.user.uid, type: 'mention' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(notification).not.toBeNull();
+      const payload = notification!.payload as Record<string, unknown>;
+      expect(payload.targetType).toBe('post');
+      expect(payload.postId).toBe(post.id);
+      expect(payload.commentId).toBe(response.body.comment.id);
+    });
+
+    it('评论 mention 不应重复通知已经收到回复通知的用户', async () => {
+      const post = await createCurrentUserPost({
+        title: `Test Mention Reply Dedupe Post ${Date.now()}`,
+        status: 'published',
+      });
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+
+      const response = await agent
+        .post(`/api/posts/${post.id}/comments`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ content: `Mention comment @${testUser.user.displayName}` });
+
+      expect(response.status).toBe(201);
+
+      const [replyCount, mentionCount] = await Promise.all([
+        prisma.notification.count({ where: { userUid: testUser.user.uid, type: 'reply' } }),
+        prisma.notification.count({ where: { userUid: testUser.user.uid, type: 'mention' } }),
+      ]);
+      expect(replyCount).toBe(1);
+      expect(mentionCount).toBe(0);
     });
   });
 

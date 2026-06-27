@@ -29,6 +29,8 @@ import {
   softDeleteData,
   resolveDeleteReason,
   createNotification,
+  notifyMentionUsers,
+  resolveMentionTargetsForText,
 } from '../utils'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
@@ -1777,8 +1779,24 @@ router.post('/:id/comments', galleryWriteLimiter, requireAuth, requireActiveUser
       parentId: comment.parentId,
       target: { type: 'gallery', id: req.params.id },
     })
+    const mentionTargets = await resolveMentionTargetsForText(comment.content)
+    const replyRecipientUid = replyTargetUid || gallery.authorUid
+    await notifyMentionUsers({
+      content: comment.content,
+      mentionTargets,
+      actorUid: req.authUser!.uid,
+      actorName: req.authUser!.displayName,
+      target: { type: 'gallery', id: req.params.id, commentId: comment.id },
+      excludeUserUids:
+        replyRecipientUid && replyRecipientUid !== req.authUser!.uid ? [replyRecipientUid] : [],
+    })
 
-    res.status(201).json({ comment: toCommentResponse(comment) })
+    res.status(201).json({
+      comment: toCommentResponse({
+        ...comment,
+        mentionTargets,
+      }),
+    })
   } catch (error) {
     console.error('Create gallery comment error:', error)
     res.status(500).json({ error: '发表评论失败' })

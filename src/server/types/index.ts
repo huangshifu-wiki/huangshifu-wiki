@@ -9,7 +9,7 @@ type WikiBranchStatus = 'draft' | 'pending_review' | 'merged' | 'rejected' | 'co
 type WikiPullRequestStatus = 'open' | 'merged' | 'rejected';
 type FavoriteTargetType = 'wiki' | 'post' | 'music' | 'gallery';
 type ModerationTargetType = 'wiki' | 'post' | 'gallery' | 'comment';
-type NotificationType = 'reply' | 'like' | 'review_result';
+type NotificationType = 'reply' | 'like' | 'review_result' | 'mention';
 type BrowsingTargetType = 'wiki' | 'post' | 'music';
 type PostSortType = 'latest' | 'hot' | 'recommended';
 

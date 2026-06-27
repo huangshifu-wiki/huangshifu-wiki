@@ -30,6 +30,8 @@ import {
   softDeleteData,
   resolveDeleteReason,
   ensureTextLimit,
+  notifyMentionUsers,
+  resolveMentionTargetsForText,
 } from '../utils';
 import type { AuthenticatedRequest, ContentStatus } from '../types';
 import { CONTENT_LIMITS } from '../../lib/contentLimits';
@@ -274,7 +276,24 @@ router.post('/', postWriteLimiter, requireAuth, requireActiveUser, validateBody(
       });
     }
 
-    res.status(201).json({ post: toPostResponse(post) });
+    const mentionTargets = await resolveMentionTargetsForText(post.content);
+
+    if (nextStatus === 'published') {
+      await notifyMentionUsers({
+        content: post.content,
+        mentionTargets,
+        actorUid: req.authUser!.uid,
+        actorName: req.authUser!.displayName,
+        target: { type: 'post', id: post.id },
+      });
+    }
+
+    res.status(201).json({
+      post: toPostResponse({
+        ...post,
+        mentionTargets,
+      }),
+    });
     enhancedCache.invalidateByPrefix('post_list:');
   } catch (error) {
     console.error('Create post error:', error);
@@ -334,11 +353,12 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
     const includeDeletedComments =
       isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true';
 
-    const [comments, likedByMe, favoritedByMe, dislikedByMe] = await Promise.all([
+    const [comments, mentionTargets, likedByMe, favoritedByMe, dislikedByMe] = await Promise.all([
       fetchPostCommentsForResponse(req.params.id, {
         authUserUid: req.authUser?.uid,
         includeDeleted: includeDeletedComments,
       }),
+      resolveMentionTargetsForText(post.content),
       ...(req.authUser
         ? [
             prisma.postLike.count({
@@ -360,6 +380,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
           ...post,
           viewCount: post.viewCount + 1,
           hotScore,
+          mentionTargets,
         }),
         likedByMe,
         favoritedByMe,
@@ -402,6 +423,8 @@ router.put('/:id', postWriteLimiter, requireAuth, requireActiveUser, validateBod
         id: true,
         authorUid: true,
         status: true,
+        content: true,
+        pendingReviewBaseContent: true,
       },
     });
 
@@ -451,6 +474,13 @@ router.put('/:id', postWriteLimiter, requireAuth, requireActiveUser, validateBod
       nextStatus = existingPost.status === 'pending' && normalized === 'draft' ? 'pending' : normalized;
     }
 
+    const nextPendingReviewBaseContent =
+      nextStatus === 'pending'
+        ? !isAdmin && existingPost.status === 'published'
+          ? existingPost.content
+          : existingPost.pendingReviewBaseContent
+        : null;
+
     const post = await prisma.post.update({
       where: { id: req.params.id },
       data: {
@@ -462,6 +492,7 @@ router.put('/:id', postWriteLimiter, requireAuth, requireActiveUser, validateBod
         reviewNote: null,
         reviewedBy: null,
         reviewedAt: null,
+        pendingReviewBaseContent: nextPendingReviewBaseContent,
         musicDocId: normalizedMusicDocId,
         albumDocId: normalizedAlbumDocId,
         locationCode,
@@ -481,7 +512,27 @@ router.put('/:id', postWriteLimiter, requireAuth, requireActiveUser, validateBod
       });
     }
 
-    res.json({ post: toPostResponse(post) });
+    const mentionTargets = await resolveMentionTargetsForText(post.content);
+
+    if (nextStatus === 'published') {
+      await notifyMentionUsers({
+        content: post.content,
+        previousContent:
+          existingPost.pendingReviewBaseContent ??
+          (existingPost.status === 'published' ? existingPost.content : null),
+        mentionTargets,
+        actorUid: req.authUser!.uid,
+        actorName: req.authUser!.displayName,
+        target: { type: 'post', id: post.id },
+      });
+    }
+
+    res.json({
+      post: toPostResponse({
+        ...post,
+        mentionTargets,
+      }),
+    });
     enhancedCache.invalidateByPrefix('post_list:');
   } catch (error) {
     console.error('Edit post error:', error);
@@ -687,8 +738,24 @@ router.post('/:postId/comments', postWriteLimiter, requireAuth, requireActiveUse
       parentId: comment.parentId,
       target: { type: 'post', id: req.params.postId },
     });
+    const mentionTargets = await resolveMentionTargetsForText(comment.content);
+    const replyRecipientUid = replyTargetUid || currentPost.authorUid;
+    await notifyMentionUsers({
+      content: comment.content,
+      mentionTargets,
+      actorUid: req.authUser!.uid,
+      actorName: req.authUser!.displayName,
+      target: { type: 'post', id: req.params.postId, commentId: comment.id },
+      excludeUserUids:
+        replyRecipientUid && replyRecipientUid !== req.authUser!.uid ? [replyRecipientUid] : [],
+    });
 
-    res.status(201).json({ comment: toCommentResponse(comment) });
+    res.status(201).json({
+      comment: toCommentResponse({
+        ...comment,
+        mentionTargets,
+      }),
+    });
   } catch (error) {
     console.error('Create comment error:', error);
     res.status(500).json({ error: '发表评论失败' });
