@@ -1,10 +1,11 @@
-import { Router } from 'express';
+import type { Router } from 'express';
 import multer from 'multer';
 import { prisma } from '../prisma';
 import { requireAuth, requireActiveUser, requireAdmin } from '../middleware/auth';
 import type { AuthenticatedRequest } from '../types';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { uploadLimiter } from '../middleware/rateLimiter';
+import { createRouter } from '../utils/typed-router';
 import {
   createUploadSessionExpiresAt,
   isUploadSessionExpired,
@@ -30,7 +31,7 @@ const __dirname = path.dirname(__filename);
 // uploads.routes.ts 在 src/server/routes/ 下，向上3级到项目根目录
 const uploadsDir = process.env.UPLOADS_PATH || path.join(__dirname, '..', '..', '..', 'uploads');
 
-const router = Router();
+const router = createRouter();
 
 // 配置 multer 用于处理文件上传
 // 使用与 validateUploadedImage 一致的扩展名 + MIME 白名单（JPG/PNG/WEBP/GIF/BMP），

@@ -13,7 +13,9 @@ const qdrantClientInstanceMock = {
 };
 
 vi.mock('@qdrant/js-client-rest', () => ({
-  QdrantClient: vi.fn(() => qdrantClientInstanceMock),
+  QdrantClient: vi.fn(function MockQdrantClient() {
+    return qdrantClientInstanceMock
+  }),
 }));
 
 describe('qdrantService', () => {

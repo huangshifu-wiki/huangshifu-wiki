@@ -1,4 +1,6 @@
 import { Request } from 'express';
+import type { ParamsFlatDictionary } from 'express-serve-static-core';
+import type { ParsedQs } from 'qs';
 import { JwtPayload } from 'jsonwebtoken';
 import { Prisma, UserRole as PrismaUserRole } from '@prisma/client';
 import type { WikiRelationType } from '../../lib/relationConstants';
@@ -158,7 +160,7 @@ interface ApiUser {
   bio: string;
 }
 
-type AuthenticatedRequest = Request & {
+type AuthenticatedRequest = Request<ParamsFlatDictionary, any, any, ParsedQs> & {
   authUser?: ApiUser;
 };
 

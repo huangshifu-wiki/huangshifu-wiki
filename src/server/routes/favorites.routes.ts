@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import type { Router } from 'express';
+import { createRouter } from '../utils/typed-router';
 import { requireAuth, requireActiveUser } from '../middleware/auth';
 import {
   prisma,
@@ -12,7 +13,7 @@ import {
 } from '../utils';
 import type { AuthenticatedRequest } from '../types';
 
-const router = Router();
+const router = createRouter();
 
 // List user favorites
 router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {

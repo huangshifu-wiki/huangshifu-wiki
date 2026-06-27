@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { Router } from 'express';
+import type { Router } from 'express';
+import { createRouter } from '../utils/typed-router';
 import { requireAuth, requireAdmin, requireActiveUser, isAdminRole } from '../middleware/auth';
 import { postWriteLimiter } from '../middleware/rateLimiter';
 import {
@@ -36,7 +37,7 @@ import {
 import type { AuthenticatedRequest, ContentStatus } from '../types';
 import { CONTENT_LIMITS } from '../../lib/contentLimits';
 
-const router = Router();
+const router = createRouter();
 const MUSIC_SECTION_ID = 'music';
 
 // Post list routes

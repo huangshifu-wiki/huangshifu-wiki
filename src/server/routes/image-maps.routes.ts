@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import type { Router } from 'express';
+import { createRouter } from '../utils/typed-router';
 import { requireAuth, requireAdmin, requireActiveUser, isAdminRole } from '../middleware/auth';
 import { prisma, resolveUploadPathByUrl, softDeleteData } from '../utils';
 import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService';
@@ -7,7 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import type { AuthenticatedRequest } from '../types';
 
-const router = Router();
+const router = createRouter();
 
 /**
  * Infer the correct storage type from actual URL fields.

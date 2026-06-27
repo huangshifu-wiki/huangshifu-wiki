@@ -2931,6 +2931,36 @@ describe('Posts API - 文章接口测试', () => {
       expect(authorMentionCount).toBe(0);
     });
 
+    it('管理员审核队列统计会按单值方式解析重复 query 参数', async () => {
+      await createCurrentUserPost({
+        title: `Pending Review Queue Post ${Date.now()}`,
+        content: 'pending post',
+        status: 'pending',
+      });
+      await createCurrentUserPost({
+        title: `Published Review Queue Post ${Date.now()}`,
+        content: 'published post',
+        status: 'published',
+      });
+
+      const { agent: adminAgent } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword,
+      );
+      const response = await adminAgent
+        .get('/api/admin/review-queue/count')
+        .query({ type: ['posts', 'wiki'], status: ['pending', 'published'] });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('pending');
+      expect(response.body.total).toBe(1);
+      expect(response.body.counts).toEqual({
+        wiki: 0,
+        posts: 1,
+        galleries: 0,
+      });
+    });
+
     it('已发布帖子编辑后重新审核时只通知新增 mention', async () => {
       const oldMentionedUser = await createTestUser({
         displayName: `MentionReviewOld_${Date.now()}`,

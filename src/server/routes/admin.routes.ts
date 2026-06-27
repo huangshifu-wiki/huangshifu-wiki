@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import { type Request, type Response, type Router } from 'express';
 import {
   requireAdmin,
   requireSuperAdmin,
@@ -69,11 +69,12 @@ import {
   deleteImageEmbeddingPointsBySource,
   deleteTextEmbeddingPointsBySource,
 } from '../vector/qdrantService';
+import { createRouter } from '../utils/typed-router';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const router = Router();
+const router = createRouter();
 
 function canManageTargetUserRole(
   operatorRole: AuthenticatedRequest['authUser']['role'] | undefined,

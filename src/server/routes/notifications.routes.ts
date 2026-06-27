@@ -1,9 +1,10 @@
-import { Router } from 'express';
+import type { Router } from 'express';
+import { createRouter } from '../utils/typed-router';
 import { requireAuth } from '../middleware/auth';
 import { prisma, toNotificationResponse, parsePagination } from '../utils';
 import type { AuthenticatedRequest } from '../types';
 
-const router = Router();
+const router = createRouter();
 
 // List user notifications
 router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {

@@ -36,6 +36,22 @@ export function parseInteger(value: unknown, fallback: number, options?: { min?:
   return normalized;
 }
 
+export function firstString(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return undefined;
+  return value.find((item): item is string => typeof item === 'string');
+}
+
+export function parseQueryString(value: unknown) {
+  return firstString(value)?.trim() || '';
+}
+
+export function parseRouteParam(value: unknown) {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value.filter((item): item is string => typeof item === 'string').join('/');
+}
+
 export function parseBoolean(value: unknown, fallback = false) {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') {

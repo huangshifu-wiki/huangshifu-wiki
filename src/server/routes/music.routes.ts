@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import type { Router } from 'express';
+import { createRouter } from '../utils/typed-router';
 import { requireAuth, requireActiveUser, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { adminBatchSongCoversSchema, validateBody } from '../schemas';
@@ -36,7 +37,7 @@ import type { AuthenticatedRequest, ContentStatus } from '../types';
 import { Prisma } from '@prisma/client';
 import { CONTENT_LIMITS } from '../../lib/contentLimits';
 
-const router = Router();
+const router = createRouter();
 
 function ensureMusicTextLimits(res: Parameters<typeof ensureTextLimit>[0], input: Record<string, unknown>) {
   return (

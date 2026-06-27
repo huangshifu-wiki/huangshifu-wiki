@@ -24,14 +24,15 @@ function setXsrfCookie(req: Request, res: Response): void {
   });
 }
 
-export function csrfMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export function csrfMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const authReq = req as AuthenticatedRequest
   if (SAFE_METHODS.has(req.method.toUpperCase())) {
     setXsrfCookie(req, res);
     next();
     return;
   }
 
-  if (!req.authUser) {
+  if (!authReq.authUser) {
     next();
     return;
   }

@@ -1,11 +1,12 @@
-import { Router } from 'express';
+import type { Router } from 'express';
+import { createRouter } from '../utils/typed-router';
 import { prisma } from '../prisma';
 import { requireAdmin } from '../middleware/auth';
 import { ensureTextLimit, softDeleteData } from '../utils';
 import type { AuthenticatedRequest } from '../types';
 import { CONTENT_LIMITS } from '../../lib/contentLimits';
 
-const router = Router();
+const router = createRouter();
 
 router.get('/', async (_req, res) => {
   try {

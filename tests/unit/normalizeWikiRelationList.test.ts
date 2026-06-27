@@ -38,6 +38,7 @@ describe('normalizeWikiRelationList', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 

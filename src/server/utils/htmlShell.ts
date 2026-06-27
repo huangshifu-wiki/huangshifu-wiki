@@ -1,4 +1,5 @@
 const HTML_BOOTSTRAP_AUTH_UID_PLACEHOLDER = '"__HSF_BOOTSTRAP_AUTH_UID_VALUE__"'
+export const SPA_FALLBACK_PATH = '/{*splat}'
 
 export function injectHtmlBootstrapState(
   html: string,

@@ -1,4 +1,5 @@
 import type { AuthenticatedRequest } from '../types'
+import { parseBoolean, firstString } from './parsers'
 
 export const SOFT_DELETE_TABS = [
   'wiki',
@@ -19,7 +20,7 @@ export function isSoftDeleteTab(value: string): value is SoftDeleteTab {
 }
 
 export function includeDeletedFromQuery(query: AuthenticatedRequest['query']) {
-  return query.includeDeleted === 'true'
+  return parseBoolean(firstString(query.includeDeleted), false)
 }
 
 export function deletedAtFilter(includeDeleted: boolean): { deletedAt?: null } {

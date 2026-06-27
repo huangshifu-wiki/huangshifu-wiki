@@ -1,7 +1,13 @@
-import { Request, Response, NextFunction, RequestHandler } from 'express'
+import type {
+  NextFunction,
+  ParamsFlatDictionary,
+  Request,
+  RequestHandler,
+  Response,
+} from 'express-serve-static-core'
 
-export function asyncHandler(fn: RequestHandler): RequestHandler {
-  return (req: Request, res: Response, next: NextFunction) => {
+export function asyncHandler<T extends RequestHandler<ParamsFlatDictionary>>(fn: T): RequestHandler<ParamsFlatDictionary> {
+  return (req: Request<ParamsFlatDictionary>, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next)
   }
 }

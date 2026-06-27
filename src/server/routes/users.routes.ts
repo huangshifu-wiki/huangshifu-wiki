@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import type { Router } from 'express';
+import { createRouter } from '../utils/typed-router';
 import { EmailVerificationPurpose, Prisma, UserRole as PrismaUserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { requireAuth, requireActiveUser, requireAdmin, requireSuperAdmin, userToApiUser, clearUserCache, issueUserSession, isBearerAuthRequest } from '../middleware/auth';
@@ -37,7 +38,7 @@ import {
 } from '../utils';
 import type { AuthenticatedRequest, UserStatus } from '../types';
 
-const router = Router();
+const router = createRouter();
 const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds();
 
 const USER_WIKI_PAGE_SELECT = {

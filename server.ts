@@ -54,6 +54,7 @@ import { isSemanticSearchEnabled } from './src/server/utils'
 import {
   injectHtmlBootstrapState,
   shouldBypassProductionStaticHtml,
+  SPA_FALLBACK_PATH,
 } from './src/server/utils/htmlShell'
 import type { AuthenticatedRequest } from './src/server/types'
 
@@ -417,7 +418,7 @@ async function startServer() {
       appType: 'custom',
     })
     app.use(vite.middlewares)
-    app.get('*', async (req: AuthenticatedRequest, res, next) => {
+    app.get(SPA_FALLBACK_PATH, async (req: AuthenticatedRequest, res, next) => {
       try {
         const htmlPath = path.join(process.cwd(), 'index.html')
         let html = await fs.promises.readFile(htmlPath, 'utf-8')
@@ -434,7 +435,7 @@ async function startServer() {
     })
   } else {
     // SPA fallback - 所有未匹配的路由返回 index.html（注入 CSP nonce）
-    app.get('*', (req: AuthenticatedRequest, res) => {
+    app.get(SPA_FALLBACK_PATH, (req: AuthenticatedRequest, res) => {
       const distPath = path.join(process.cwd(), 'dist')
       const htmlPath = path.join(distPath, 'index.html')
       fs.readFile(htmlPath, 'utf-8', (err, html) => {

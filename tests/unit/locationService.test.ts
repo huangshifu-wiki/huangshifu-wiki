@@ -2,12 +2,14 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // Mock Prisma - must be defined before imports
 vi.mock('@prisma/client', () => ({
-  PrismaClient: vi.fn().mockImplementation(() => ({
-    region: {
-      findMany: vi.fn(),
-      findUnique: vi.fn(),
-    },
-  })),
+  PrismaClient: vi.fn(function MockPrismaClient() {
+    return {
+      region: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+      },
+    }
+  }),
   Region: {},
 }));
 

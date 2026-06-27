@@ -5,9 +5,15 @@ const putObjectCommandMock = vi.fn();
 const s3ClientMock = vi.fn();
 
 vi.mock('@aws-sdk/client-s3', () => ({
-  S3Client: s3ClientMock,
-  GetObjectCommand: vi.fn((params) => ({ type: 'GetObjectCommand', params })),
-  DeleteObjectCommand: vi.fn((params) => ({ type: 'DeleteObjectCommand', params })),
+  S3Client: vi.fn(function MockS3Client() {
+    return s3ClientMock
+  }),
+  GetObjectCommand: vi.fn(function MockGetObjectCommand(params) {
+    return { type: 'GetObjectCommand', params }
+  }),
+  DeleteObjectCommand: vi.fn(function MockDeleteObjectCommand(params) {
+    return { type: 'DeleteObjectCommand', params }
+  }),
   PutObjectCommand: putObjectCommandMock,
 }));
 
@@ -36,7 +42,9 @@ describe('s3Service', () => {
       S3_SSL_ENABLED: 'true',
       S3_ENABLE_MD5_VERIFICATION: 'false',
     };
-    putObjectCommandMock.mockImplementation((params) => ({ type: 'PutObjectCommand', params }));
+    putObjectCommandMock.mockImplementation(function MockPutObjectCommand(params) {
+      return { type: 'PutObjectCommand', params }
+    });
     getSignedUrlMock.mockResolvedValue('https://signed.example.com/upload');
   });
 

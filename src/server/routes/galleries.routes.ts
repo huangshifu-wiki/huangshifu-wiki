@@ -1,4 +1,5 @@
-import { Router } from 'express'
+import type { Router } from 'express'
+import { createRouter } from '../utils/typed-router'
 import { requireAuth, requireActiveUser, requireAdmin, isAdminRole } from '../middleware/auth'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { galleryWriteLimiter } from '../middleware/rateLimiter'
@@ -70,7 +71,7 @@ function canCreateGallery(authUser?: ApiUser) {
   return !GALLERY_ADMIN_ONLY
 }
 
-const router = Router()
+const router = createRouter()
 
 async function cleanupRemovedGalleryImages(
   images: Array<{ assetId: string | null; url: string }>

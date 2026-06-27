@@ -1,4 +1,5 @@
-import { Router } from 'express'
+import type { Router } from 'express'
+import { createRouter } from '../utils/typed-router'
 import { requireAuth, requireAdmin, requireActiveUser, requireSuperAdmin } from '../middleware/auth'
 import type { AuthenticatedRequest } from '../types'
 import {
@@ -9,6 +10,8 @@ import {
   toEmailVerificationPublicConfig,
   toEmailVerificationAdminConfig,
   isSemanticSearchEnabled,
+  parseQueryString,
+  parseRouteParam,
 } from '../utils'
 import { enhancedCache, CACHE_KEYS } from '../utils/cache'
 import {
@@ -25,7 +28,7 @@ import {
   cancelSyncTask,
 } from '../services/imageSyncService'
 
-const router = Router()
+const router = createRouter()
 
 // GET /api/config/gallery-access - Get gallery write access mode
 router.get('/gallery-access', async (_req, res) => {
@@ -364,12 +367,10 @@ router.get('/s3/config', requireAuth, requireAdmin, async (_req, res) => {
 // GET /api/s3/presign-upload - Get S3 presigned upload URL
 router.get('/s3/presign-upload', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
-    const { filename, contentType, contentMd5, fileSize } = req.query as {
-      filename?: string
-      contentType?: string
-      contentMd5?: string
-      fileSize?: string
-    }
+    const filename = parseQueryString(req.query.filename)
+    const contentType = parseQueryString(req.query.contentType) || undefined
+    const contentMd5 = parseQueryString(req.query.contentMd5) || undefined
+    const fileSize = parseQueryString(req.query.fileSize) || undefined
 
     if (!filename) {
       res.status(400).json({ error: '缺少 filename 参数' })
@@ -393,10 +394,10 @@ router.get('/s3/presign-upload', requireAuth, requireActiveUser, async (req: Aut
   }
 })
 
-// GET /api/s3/presign-download/:key(*) - Get S3 presigned download URL
-router.get('/s3/presign-download/:key(*)', requireAuth, async (req, res) => {
+// GET /api/s3/presign-download/*key - Get S3 presigned download URL
+router.get('/s3/presign-download/*key', requireAuth, async (req, res) => {
   try {
-    const { key } = req.params
+    const key = parseRouteParam(req.params.key)
 
     if (!key) {
       res.status(400).json({ error: '缺少 key 参数' })
@@ -412,10 +413,10 @@ router.get('/s3/presign-download/:key(*)', requireAuth, async (req, res) => {
   }
 })
 
-// GET /api/s3/presign-delete/:key(*) - Get S3 presigned delete URL
-router.get('/s3/presign-delete/:key(*)', requireAuth, requireAdmin, async (req, res) => {
+// GET /api/s3/presign-delete/*key - Get S3 presigned delete URL
+router.get('/s3/presign-delete/*key', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { key } = req.params
+    const key = parseRouteParam(req.params.key)
 
     if (!key) {
       res.status(400).json({ error: '缺少 key 参数' })

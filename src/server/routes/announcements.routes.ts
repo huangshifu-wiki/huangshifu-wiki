@@ -1,4 +1,5 @@
-import { Router } from 'express'
+import type { Router } from 'express'
+import { createRouter } from '../utils/typed-router'
 import { prisma } from '../prisma'
 import { requireAdmin } from '../middleware/auth'
 import { asyncHandler } from '../middleware/asyncHandler'
@@ -7,7 +8,7 @@ import { ensureTextLimit, softDeleteData } from '../utils'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import type { AuthenticatedRequest } from '../types'
 
-const router = Router()
+const router = createRouter()
 
 function clearAnnouncementCache(): void {
   enhancedCache.delete(CACHE_KEYS.ANNOUNCEMENT_LATEST)

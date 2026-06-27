@@ -165,7 +165,8 @@ function clearUserCache(uid: string): void {
   enhancedCache.delete(getUserCacheKey(uid));
 }
 
-async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+async function authMiddleware(req: Request, res: Response, next: NextFunction) {
+  const authReq = req as AuthenticatedRequest
   const token = getTokenFromRequest(req);
   if (!token) {
     next();
@@ -214,7 +215,7 @@ async function authMiddleware(req: AuthenticatedRequest, res: Response, next: Ne
     }
 
     if (apiUser) {
-      req.authUser = apiUser;
+      authReq.authUser = apiUser;
     }
   } catch (error) {
     logger.warn({ err: error }, 'Invalid auth token');
@@ -224,26 +225,28 @@ async function authMiddleware(req: AuthenticatedRequest, res: Response, next: Ne
   next();
 }
 
-function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  if (!req.authUser) {
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const authReq = req as AuthenticatedRequest
+  if (!authReq.authUser) {
     res.status(401).json({ error: '请先登录' });
     return;
   }
   next();
 }
 
-function requireActiveUser(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  if (!req.authUser) {
+function requireActiveUser(req: Request, res: Response, next: NextFunction) {
+  const authReq = req as AuthenticatedRequest
+  if (!authReq.authUser) {
     res.status(401).json({ error: '请先登录' });
     return;
   }
 
-  if (req.authUser.status === 'banned') {
+  if (authReq.authUser.status === 'banned') {
     res.status(403).json({
-      error: req.authUser.banReason ? `账号已被封禁：${req.authUser.banReason}` : '账号已被封禁，无法执行写操作',
+      error: authReq.authUser.banReason ? `账号已被封禁：${authReq.authUser.banReason}` : '账号已被封禁，无法执行写操作',
       code: 'USER_BANNED',
-      banReason: req.authUser.banReason,
-      bannedAt: req.authUser.bannedAt,
+      banReason: authReq.authUser.banReason,
+      bannedAt: authReq.authUser.bannedAt,
     });
     return;
   }
@@ -251,24 +254,26 @@ function requireActiveUser(req: AuthenticatedRequest, res: Response, next: NextF
   next();
 }
 
-function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  if (!req.authUser || !isAdminRole(req.authUser.role)) {
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const authReq = req as AuthenticatedRequest
+  if (!authReq.authUser || !isAdminRole(authReq.authUser.role)) {
     res.status(403).json({ error: '需要管理员权限' });
     return;
   }
-  if (req.authUser.status === 'banned') {
+  if (authReq.authUser.status === 'banned') {
     res.status(403).json({ error: '账号已被封禁，无法执行管理操作' });
     return;
   }
   next();
 }
 
-function requireSuperAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  if (!req.authUser || req.authUser.role !== 'super_admin') {
+function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  const authReq = req as AuthenticatedRequest
+  if (!authReq.authUser || authReq.authUser.role !== 'super_admin') {
     res.status(403).json({ error: '需要超级管理员权限' });
     return;
   }
-  if (req.authUser.status === 'banned') {
+  if (authReq.authUser.status === 'banned') {
     res.status(403).json({ error: '账号已被封禁，无法执行管理操作' });
     return;
   }

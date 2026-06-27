@@ -1,11 +1,31 @@
 import { describe, expect, it } from 'vitest'
+import express from 'express'
+import request from 'supertest'
 
 import {
   injectHtmlBootstrapState,
+  SPA_FALLBACK_PATH,
   shouldBypassProductionStaticHtml,
 } from '../../src/server/utils/htmlShell'
 
 describe('server production html routing helpers', () => {
+  it('registers an Express 5 SPA fallback that matches root and nested paths', async () => {
+    const app = express()
+
+    expect(() => {
+      app.get(SPA_FALLBACK_PATH, (_req, res) => {
+        res.type('html').send('<!doctype html><title>SPA</title>')
+      })
+    }).not.toThrow()
+
+    await expect(request(app).get('/').expect(200)).resolves.toMatchObject({
+      text: expect.stringContaining('<title>SPA</title>'),
+    })
+    await expect(request(app).get('/foo/bar').expect(200)).resolves.toMatchObject({
+      text: expect.stringContaining('<title>SPA</title>'),
+    })
+  })
+
   it('bypasses production static middleware only for /index.html', () => {
     expect(shouldBypassProductionStaticHtml('/index.html')).toBe(true)
     expect(shouldBypassProductionStaticHtml('/')).toBe(false)

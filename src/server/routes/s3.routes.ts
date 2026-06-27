@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import type { Router } from 'express';
 import { requireAuth, requireActiveUser, requireAdmin } from '../middleware/auth';
 import type { AuthenticatedRequest } from '../types';
 import {
@@ -7,8 +7,10 @@ import {
   getPresignedDeleteUrl,
   getPublicConfig,
 } from '../s3/s3Service';
+import { parseQueryString, parseRouteParam } from '../utils';
+import { createRouter } from '../utils/typed-router';
 
-const router = Router();
+const router = createRouter();
 
 router.get('/config', async (_req, res) => {
   try {
@@ -22,12 +24,10 @@ router.get('/config', async (_req, res) => {
 
 router.get('/presign-upload', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
-    const { filename, contentType, contentMd5, fileSize } = req.query as {
-      filename?: string;
-      contentType?: string;
-      contentMd5?: string;
-      fileSize?: string;
-    };
+    const filename = parseQueryString(req.query.filename);
+    const contentType = parseQueryString(req.query.contentType) || undefined;
+    const contentMd5 = parseQueryString(req.query.contentMd5) || undefined;
+    const fileSize = parseQueryString(req.query.fileSize) || undefined;
 
     if (!filename) {
       res.status(400).json({ error: '缺少 filename 参数' });
@@ -51,9 +51,9 @@ router.get('/presign-upload', requireAuth, requireActiveUser, async (req: Authen
   }
 });
 
-router.get('/presign-download/:key(*)', requireAuth, async (req, res) => {
+router.get('/presign-download/*key', requireAuth, async (req, res) => {
   try {
-    const { key } = req.params;
+    const key = parseRouteParam(req.params.key);
 
     if (!key) {
       res.status(400).json({ error: '缺少 key 参数' });
@@ -69,9 +69,9 @@ router.get('/presign-download/:key(*)', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/presign-delete/:key(*)', requireAuth, requireAdmin, async (req, res) => {
+router.get('/presign-delete/*key', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { key } = req.params;
+    const key = parseRouteParam(req.params.key);
 
     if (!key) {
       res.status(400).json({ error: '缺少 key 参数' });

@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import type { Router } from 'express';
+import { createRouter } from '../utils/typed-router';
 import { requireAdmin } from '../middleware/auth';
 import { adminBatchAlbumCoversSchema, validateBody } from '../schemas';
 import {
@@ -24,7 +25,7 @@ import type { AuthenticatedRequest } from '../types';
 import type { AlbumCover } from '@prisma/client';
 import { CONTENT_LIMITS } from '../../lib/contentLimits';
 
-const router = Router();
+const router = createRouter();
 
 function ensureAlbumTextLimits(res: Parameters<typeof ensureTextLimit>[0], input: Record<string, unknown>) {
   return (

@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client'
-import { Router, type Response, json } from 'express'
+import { type Response, type Router, json } from 'express'
 import { requireAuth, requireActiveUser, requireAdmin, isAdminRole } from '../middleware/auth'
 import {
   validateBody,
@@ -55,8 +55,9 @@ import {
   deleteImageEmbeddingPointsBySource,
   deleteTextEmbeddingPointsBySource,
 } from '../vector/qdrantService'
+import { createRouter } from '../utils/typed-router'
 
-const router = Router()
+const router = createRouter()
 
 const wikiPageResponseInclude = {
   lastEditor: { select: { displayName: true } },
@@ -327,7 +328,7 @@ router.get(
   })
 )
 
-const mpWikiRouter = Router()
+const mpWikiRouter = createRouter()
 
 mpWikiRouter.get('/', async (req: AuthenticatedRequest, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0')
