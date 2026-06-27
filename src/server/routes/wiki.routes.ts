@@ -2197,32 +2197,35 @@ router.post(
         return
       }
 
-      const mergedSnapshot = await prisma.wikiRevision.create({
-        data: {
-          pageSlug: pr.pageSlug,
-          title: headRevision.title,
-          content: headRevision.content,
-          slug: headRevision.slug || pr.pageSlug,
-          category: headRevision.category || pr.page.category,
-          tags: headRevision.tags || [],
-          relations: headRevision.relations || [],
-          eventDate: headRevision.eventDate || null,
-          editorUid: req.authUser!.uid,
-          editorName: req.authUser!.displayName,
-        },
-      })
+      const mergedAt = new Date()
 
+      // 先完成标题键校验，确保不会因冲突导致事务失败
       const mergedTitleKey = await resolveWikiTitleKeyForWrite({
         pageSlug: pr.page.slug,
-        title: mergedSnapshot.title,
+        title: headRevision.title,
         currentTitle: pr.page.title,
         currentTitleKey: pr.page.titleKey,
         hasLegacyDuplicateTitleKey: pr.page.hasLegacyDuplicateTitleKey,
         legacyDuplicateTitle: pr.page.legacyDuplicateTitle,
       })
-      const mergedAt = new Date()
-      await prisma.$transaction([
-        prisma.wikiPage.update({
+
+      await prisma.$transaction(async (tx) => {
+        const mergedSnapshot = await tx.wikiRevision.create({
+          data: {
+            pageSlug: pr.pageSlug,
+            title: headRevision.title,
+            content: headRevision.content,
+            slug: headRevision.slug || pr.pageSlug,
+            category: headRevision.category || pr.page.category,
+            tags: headRevision.tags || [],
+            relations: headRevision.relations || [],
+            eventDate: headRevision.eventDate || null,
+            editorUid: req.authUser!.uid,
+            editorName: req.authUser!.displayName,
+          },
+        })
+
+        await tx.wikiPage.update({
           where: { slug: pr.pageSlug },
           data: {
             title: mergedSnapshot.title,
@@ -2246,14 +2249,16 @@ router.post(
             lastEditorUid: req.authUser!.uid,
             mergedAt,
           },
-        }),
-        prisma.wikiBranch.update({
+        })
+
+        await tx.wikiBranch.update({
           where: { id: pr.branchId },
           data: {
             status: 'merged',
           },
-        }),
-        prisma.wikiPullRequest.update({
+        })
+
+        await tx.wikiPullRequest.update({
           where: { id: pr.id },
           data: {
             status: 'merged',
@@ -2262,8 +2267,9 @@ router.post(
             mergedAt,
             conflictData: Prisma.JsonNull,
           },
-        }),
-        prisma.moderationLog.create({
+        })
+
+        await tx.moderationLog.create({
           data: {
             targetType: 'wiki',
             targetId: pr.pageSlug,
@@ -2271,8 +2277,8 @@ router.post(
             operatorUid: req.authUser!.uid,
             note: `Merge PR ${pr.id}`,
           },
-        }),
-      ])
+        })
+      })
 
       const updatedPage = await prisma.wikiPage.findUnique({
         where: { slug: pr.pageSlug },
@@ -2565,48 +2571,6 @@ router.post(
       if (sendWikiUniqueConflict(error, res)) return
       logger.error({ err: error }, 'Rollback wiki page error')
       res.status(500).json({ error: '回滚失败' })
-    }
-  })
-)
-
-router.post(
-  '/:slug/revisions',
-  wikiWriteLimiter,
-  requireAuth,
-  requireActiveUser,
-  validateWikiSlugParam,
-  validateBody(wikiRevisionSchema.pick({ title: true, content: true })),
-  asyncHandler(async (req: AuthenticatedRequest, res) => {
-    try {
-      const { title, content } = req.body as {
-        title?: string
-        content?: string
-      }
-
-      if (!title || !content) {
-        res.status(400).json({ error: '缺少必要字段' })
-        return
-      }
-
-      const revision = await prisma.wikiRevision.create({
-        data: {
-          pageSlug: req.params.slug,
-          title,
-          content,
-          editorUid: req.authUser!.uid,
-          editorName: req.authUser!.displayName,
-        },
-      })
-
-      res.status(201).json({
-        revision: {
-          ...revision,
-          createdAt: revision.createdAt.toISOString(),
-        },
-      })
-    } catch (error) {
-      logger.error({ err: error }, 'Create wiki revision error')
-      res.status(500).json({ error: '保存历史版本失败' })
     }
   })
 )

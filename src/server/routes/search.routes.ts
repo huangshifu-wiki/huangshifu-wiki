@@ -525,7 +525,7 @@ export function buildHybridResponse(
 ): HybridSearchResponse {
   const keywordFlat: HybridSearchItem[] = [
     ...keywordResults.wiki.map((d, i) => ({
-      id: String(d.slug ?? i),
+      id: `wiki:${d.slug ?? i}`,
       type: 'wiki' as const,
       data: d,
       relevanceScore: 0,
@@ -533,7 +533,7 @@ export function buildHybridResponse(
       keywordRank: i,
     })),
     ...keywordResults.posts.map((d, i) => ({
-      id: String(d.id ?? i),
+      id: `post:${d.id ?? i}`,
       type: 'post' as const,
       data: d,
       relevanceScore: 0,
@@ -541,7 +541,7 @@ export function buildHybridResponse(
       keywordRank: i,
     })),
     ...keywordResults.galleries.map((d, i) => ({
-      id: String(d.id ?? i),
+      id: `gallery:${d.id ?? i}`,
       type: 'gallery' as const,
       data: d,
       relevanceScore: 0,
@@ -549,7 +549,7 @@ export function buildHybridResponse(
       keywordRank: i,
     })),
     ...keywordResults.music.map((d, i) => ({
-      id: String(d.docId ?? i),
+      id: `music:${d.docId ?? i}`,
       type: 'music' as const,
       data: d,
       relevanceScore: 0,
@@ -557,7 +557,7 @@ export function buildHybridResponse(
       keywordRank: i,
     })),
     ...keywordResults.albums.map((d, i) => ({
-      id: String(d.docId ?? i),
+      id: `album:${d.docId ?? i}`,
       type: 'album' as const,
       data: d,
       relevanceScore: 0,
@@ -659,8 +659,12 @@ export function buildHybridResponse(
     galleries: keywordFlat
       .filter((v) => v.type === 'gallery')
       .map((v) => v.data as Awaited<ReturnType<typeof toGalleryResponse>>),
-    music: keywordResults.music.map(toMusicResponse),
-    albums: keywordResults.albums.map(toAlbumResponse),
+    music: keywordFlat
+      .filter((v) => v.type === 'music' && v.data && typeof v.data === 'object' && 'createdAt' in v.data)
+      .map((v) => toMusicResponse(v.data as Parameters<typeof toMusicResponse>[0])),
+    albums: keywordFlat
+      .filter((v) => v.type === 'album' && v.data && typeof v.data === 'object' && 'createdAt' in v.data)
+      .map((v) => toAlbumResponse(v.data as Parameters<typeof toAlbumResponse>[0])),
     searchMeta: {
       mode: degraded ? 'keyword (degraded)' : mode,
       query,

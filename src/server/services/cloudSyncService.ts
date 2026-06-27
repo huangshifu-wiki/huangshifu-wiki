@@ -236,7 +236,9 @@ export class CloudSyncService {
    * 同步到 S3
    */
   private async syncToS3(task: CloudSyncTask): Promise<void> {
-    const storageKey = path.basename(task.filePath);
+    // 使用基于 ImageMap ID 的稳定命名空间，避免同名文件互相覆盖
+    const ext = path.extname(task.filePath);
+    const storageKey = `sync/${task.imageMapId}/${Date.now()}${ext}`;
     const result = await uploadFileToS3(task.filePath, storageKey, task.mimeType);
 
     if (result.success && result.url) {

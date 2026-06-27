@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { prisma } from '../prisma';
-import { requireAuth, requireActiveUser } from '../middleware/auth';
+import { requireAuth, requireActiveUser, requireAdmin } from '../middleware/auth';
 import type { AuthenticatedRequest } from '../types';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { uploadLimiter } from '../middleware/rateLimiter';
@@ -44,6 +44,16 @@ const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   'image/bmp',
 ]);
 
+class UploadSessionRequestError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    message: string
+  ) {
+    super(message);
+    this.name = 'UploadSessionRequestError';
+  }
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
@@ -75,11 +85,23 @@ const upload = multer({
  */
 router.post('/sessions', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
+    const maxFilesRaw = req.body?.maxFiles
+    let maxFiles = 50
+    if (maxFilesRaw !== undefined) {
+      const parsedMaxFiles = Number(maxFilesRaw)
+      if (!Number.isInteger(parsedMaxFiles) || parsedMaxFiles < 1 || parsedMaxFiles > 50) {
+        res.status(400).json({ error: 'maxFiles 必须是 1 到 50 之间的整数' })
+        return
+      }
+      maxFiles = parsedMaxFiles
+    }
+
     const session = await prisma.uploadSession.create({
       data: {
         ownerUid: req.authUser!.uid,
         status: 'open',
         expiresAt: createUploadSessionExpiresAt(),
+        maxFiles,
       },
     });
 
@@ -89,6 +111,7 @@ router.post('/sessions', requireAuth, requireActiveUser, asyncHandler(async (req
         ownerUid: session.ownerUid,
         status: session.status,
         expiresAt: session.expiresAt.toISOString(),
+        maxFiles: session.maxFiles,
         uploadedFiles: session.uploadedFiles,
       },
     });
@@ -172,15 +195,25 @@ router.post(
           ownerUid: true,
           status: true,
           expiresAt: true,
+          maxFiles: true,
+          uploadedFiles: true,
         },
       });
 
+      const cleanupFile = () => {
+        if (req.file) {
+          safeDeleteUploadFileByStorageKey(req.file.filename).catch((err) => logger.debug({ err }, 'Temp file cleanup failed'));
+        }
+      };
+
       if (!session) {
+        cleanupFile();
         res.status(404).json({ error: '上传会话不存在' });
         return;
       }
 
       if (session.ownerUid !== req.authUser!.uid) {
+        cleanupFile();
         res.status(403).json({ error: '无权访问该会话' });
         return;
       }
@@ -192,11 +225,13 @@ router.post(
             data: { status: 'expired' },
           });
         }
+        cleanupFile();
         res.status(410).json({ error: '上传会话已过期，请重新创建会话' });
         return;
       }
 
       if (session.status !== 'open') {
+        cleanupFile();
         res.status(400).json({ error: '会话状态不正确' });
         return;
       }
@@ -217,42 +252,91 @@ router.post(
       const storageKey = getUploadFileStorageKey(file);
       const publicUrl = buildUploadPublicUrl(storageKey);
 
-      const asset = await prisma.mediaAsset.create({
-        data: {
-          ownerUid: req.authUser!.uid,
-          storageKey,
-          publicUrl,
-          fileName: file.originalname,
-          mimeType,
-          sizeBytes: file.size,
-          status: 'ready',
-        },
-      });
-
-      // 始终创建 ImageMap 记录，用于统一图片管理
-      const imageId = `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      // 计算 MD5 并检查重复
       const fileBuffer = await fs.promises.readFile(file.path);
       const imageMd5 = crypto.createHash('md5').update(fileBuffer).digest('hex');
-      await prisma.imageMap.create({
-        data: {
-          id: imageId,
-          md5: imageMd5, // 使用唯一值避免冲突
-          localUrl: publicUrl,
-          s3Url: null,
-          externalUrl: null,
-          storageType: 'local',
-        },
-      });
+      const newImageMapId = `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
-      // 更新会话的上传文件计数
-      await prisma.uploadSession.update({
-        where: { id: session.id },
-        data: {
-          uploadedFiles: {
-            increment: 1,
+      const [asset, imageMap] = await prisma.$transaction(async (tx) => {
+        const reservedSlot = await tx.uploadSession.updateMany({
+          where: {
+            id: session.id,
+            ownerUid: req.authUser!.uid,
+            status: 'open',
+            expiresAt: { gt: new Date() },
+            uploadedFiles: { lt: session.maxFiles },
           },
-        },
+          data: {
+            uploadedFiles: { increment: 1 },
+          },
+        });
+
+        if (reservedSlot.count !== 1) {
+          const currentSession = await tx.uploadSession.findUnique({
+            where: { id: session.id },
+            select: {
+              ownerUid: true,
+              status: true,
+              expiresAt: true,
+              uploadedFiles: true,
+              maxFiles: true,
+            },
+          });
+
+          if (!currentSession) {
+            throw new UploadSessionRequestError(404, '上传会话不存在');
+          }
+
+          if (currentSession.ownerUid !== req.authUser!.uid) {
+            throw new UploadSessionRequestError(403, '无权访问该会话');
+          }
+
+          if (currentSession.status === 'expired' || isUploadSessionExpired(currentSession.expiresAt)) {
+            throw new UploadSessionRequestError(410, '上传会话已过期，请重新创建会话');
+          }
+
+          if (currentSession.status !== 'open') {
+            throw new UploadSessionRequestError(400, '会话状态不正确');
+          }
+
+          throw new UploadSessionRequestError(400, '已达到最大上传数量限制');
+        }
+
+        // 创建媒体资源记录
+        const newAsset = await tx.mediaAsset.create({
+          data: {
+            ownerUid: req.authUser!.uid,
+            storageKey,
+            publicUrl,
+            fileName: file.originalname,
+            mimeType,
+            sizeBytes: file.size,
+            status: 'ready',
+            sessionId: session.id,
+          },
+        });
+
+        const nextImageMap = await tx.imageMap.upsert({
+          where: { md5: imageMd5 },
+          update: {
+            deletedAt: null,
+            deletedBy: null,
+          },
+          create: {
+            id: newImageMapId,
+            md5: imageMd5,
+            localUrl: publicUrl,
+            s3Url: null,
+            externalUrl: null,
+            storageType: 'local',
+          },
+          select: { id: true },
+        });
+
+        return [newAsset, nextImageMap] as const;
       });
+      const imageId = imageMap.id;
+      const isNewImageMap = imageId === newImageMapId;
 
       // 构建响应
       const response: {
@@ -307,18 +391,20 @@ router.post(
                 }
               }
 
-              // 更新 ImageMap 记录
-              try {
-                await prisma.imageMap.update({
-                  where: { id: imageId },
-                  data: {
-                    s3Url,
-                    ...(blurhash && { blurhash }),
-                    storageType: preference.strategy,
-                  },
-                });
-              } catch (imageMapError) {
-                console.error('Update ImageMap failed:', imageMapError);
+              // 仅对新创建的 ImageMap 更新 S3 URL，已有 ImageMap 保留原始数据
+              if (isNewImageMap) {
+                try {
+                  await prisma.imageMap.update({
+                    where: { id: imageId },
+                    data: {
+                      s3Url,
+                      ...(blurhash && { blurhash }),
+                      storageType: preference.strategy,
+                    },
+                  });
+                } catch (imageMapError) {
+                  console.error('Update ImageMap failed:', imageMapError);
+                }
               }
             }
           } catch (s3Error) {
@@ -350,8 +436,8 @@ router.post(
           }
         }
 
-        // 如果 S3 上传失败或未执行，确保更新 ImageMap 的基本信息
-        if (!s3Url) {
+        // 如果 S3 上传失败或未执行，仅对新创建的 ImageMap 更新信息
+        if (!s3Url && isNewImageMap) {
           try {
             await prisma.imageMap.update({
               where: { id: imageId },
@@ -384,15 +470,25 @@ router.post(
 
       res.status(201).json(response);
     } catch (error) {
-      console.error('Upload file to session error:', error);
-
       // 清理上传的文件
       if (req.file) {
         await safeDeleteUploadFileByStorageKey(req.file.filename).catch((err) => logger.debug({ err }, 'Temp file cleanup failed'));
       }
 
+      if (error instanceof UploadSessionRequestError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+
+      console.error('Upload file to session error:', error);
+
       const message = error instanceof Error ? error.message : '上传文件失败';
-      if (message.includes('图片') || message.includes('文件') || message.includes('超过')) {
+      if (
+        message.includes('图片') ||
+        message.includes('文件') ||
+        message.includes('超过') ||
+        message.includes('已达到最大上传数量限制')
+      ) {
         res.status(400).json({ error: message });
         return;
       }
@@ -489,7 +585,7 @@ router.delete('/sessions/:sessionId', requireAuth, requireActiveUser, asyncHandl
  * DELETE /api/uploads/superbed - 从 Superbed 删除图片
  * Body: { imageIds: string[] }
  */
-router.delete('/superbed', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.delete('/superbed', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const { imageIds } = req.body as { imageIds?: string[] };
 

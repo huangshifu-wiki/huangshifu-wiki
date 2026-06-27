@@ -163,7 +163,7 @@ export async function generateBlurhashFromFile(filePath: string): Promise<string
   }
 
   try {
-    const buffer = fs.readFileSync(filePath);
+    const buffer = await fs.promises.readFile(filePath);
     const blurhash = await generateBlurhashFromBuffer(buffer);
 
     if (blurhash) {

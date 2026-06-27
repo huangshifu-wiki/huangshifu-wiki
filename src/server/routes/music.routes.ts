@@ -32,7 +32,7 @@ import {
 } from '../utils';
 import { parseMusicUrl } from '../music/musicUrlParser';
 import { getMusicResourcePreview, searchMusicResources, type MusicResourcePreview } from '../music/metingService';
-import type { AuthenticatedRequest, MusicPlatform, ContentStatus } from '../types';
+import type { AuthenticatedRequest, ContentStatus } from '../types';
 import { Prisma } from '@prisma/client';
 import { CONTENT_LIMITS } from '../../lib/contentLimits';
 
@@ -528,6 +528,108 @@ router.get('/instrumental-targets', asyncHandler(async (req, res) => {
   }
 }));
 
+// Match suggestions (must be before /:docId routes to avoid being captured by :docId param)
+router.get('/match-suggestions', asyncHandler(async (req: AuthenticatedRequest, res) => {
+  try {
+    const platform = typeof req.query.platform === 'string' ? req.query.platform.trim() : '';
+    const title = typeof req.query.title === 'string' ? req.query.title.trim() : '';
+    const artist = typeof req.query.artist === 'string' ? req.query.artist.trim() : '';
+
+    if (!platform || !title || !artist) {
+      res.status(400).json({ error: '缺少必要参数：platform, title, artist' });
+      return;
+    }
+
+    const parsedPlatform = parseMusicPlatform(platform);
+    if (!parsedPlatform) {
+      res.status(400).json({ error: '无效的平台' });
+      return;
+    }
+
+    const cleanTitle = title.replace(/[（].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
+    const keyword = `${cleanTitle} ${artist}`.trim();
+
+    const searchResults = await searchMusicResources({
+      platform: parsedPlatform,
+      keyword,
+      type: 'song',
+      limit: 20,
+    });
+
+    const normalizedTitle = cleanTitle.toLowerCase().replace(/\s+/g, '');
+    const normalizedArtist = artist.toLowerCase().replace(/\s+/g, '');
+
+    const scored = searchResults
+      .map((item) => {
+        const itemTitleClean = item.title.replace(/[（].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
+        const itemTitleNorm = itemTitleClean.toLowerCase().replace(/\s+/g, '');
+        const itemArtistNorm = item.artist.toLowerCase().replace(/\s+/g, '');
+        const titleScore = calculateSimilarity(normalizedTitle, itemTitleNorm);
+        const artistScore = calculateSimilarity(normalizedArtist, itemArtistNorm);
+        const avgScore = (titleScore + artistScore) / 2;
+        return { ...item, score: avgScore };
+      })
+      .filter((item) => item.score >= 0.35)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    let autoSelectedIndex: number | null = null;
+    if (scored.length === 1 && scored[0].score >= 0.8) {
+      autoSelectedIndex = 0;
+    } else if (scored.length > 1 && scored[0].score >= 0.85 && scored[1].score < scored[0].score - 0.15) {
+      autoSelectedIndex = 0;
+    }
+
+    const sourceField = getPlatformSourceField(parsedPlatform);
+    const sourceIds = scored.map((item) => item.sourceId);
+    const existingSongsByPlatformId = sourceIds.length
+      ? await prisma.musicTrack.findMany({
+          where: {
+            [sourceField]: { in: sourceIds },
+          } as Prisma.MusicTrackWhereInput,
+          select: {
+            docId: true,
+            title: true,
+            artist: true,
+            neteaseId: true,
+            tencentId: true,
+            kugouId: true,
+            baiduId: true,
+            kuwoId: true,
+          },
+        })
+      : [];
+
+    const existingMap = new Map<string, { docId: string; title: string; artist: string }>();
+    for (const s of existingSongsByPlatformId) {
+      const sourceId = s[sourceField];
+      if (sourceId) {
+        existingMap.set(sourceId, { docId: s.docId, title: s.title, artist: s.artist });
+      }
+    }
+
+    const suggestions = scored.map((item, index) => {
+      const existing = existingMap.get(item.sourceId);
+      return {
+        sourceId: item.sourceId,
+        title: item.title,
+        artist: item.artist,
+        album: item.album,
+        cover: item.picId,
+        sourceUrl: item.sourceUrl,
+        score: Math.round(item.score * 100),
+        isAutoSelected: index === autoSelectedIndex,
+        alreadyLinked: existing ? { docId: existing.docId, title: existing.title } : null,
+      };
+    });
+
+    res.json({ suggestions, autoSelectedIndex });
+  } catch (error) {
+    console.error('Match suggestions error:', error);
+    res.status(500).json({ error: '搜索匹配歌曲失败' });
+  }
+}));
+
 // Get music by docId
 router.get('/:docId', asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
@@ -714,96 +816,6 @@ router.patch('/:docId', requireAdmin, asyncHandler(async (req: AuthenticatedRequ
   } catch (error) {
     console.error('Update music error:', error);
     res.status(500).json({ error: '更新歌曲失败' });
-  }
-}));
-
-// Match suggestions
-router.get('/match-suggestions', asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const platform = typeof req.query.platform === 'string' ? req.query.platform.trim() : '';
-    const title = typeof req.query.title === 'string' ? req.query.title.trim() : '';
-    const artist = typeof req.query.artist === 'string' ? req.query.artist.trim() : '';
-    const docId = typeof req.query.docId === 'string' ? req.query.docId.trim() : '';
-
-    if (!platform || !title || !artist) {
-      res.status(400).json({ error: '缺少必要参数：platform, title, artist' });
-      return;
-    }
-
-    const validPlatforms = ['netease', 'tencent', 'kugou', 'baidu', 'kuwo'];
-    if (!validPlatforms.includes(platform)) {
-      res.status(400).json({ error: '无效的平台' });
-      return;
-    }
-
-    const cleanTitle = title.replace(/[（].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
-    const keyword = `${cleanTitle} ${artist}`.trim();
-
-    const searchResults = await searchMusicResources({
-      platform: platform as MusicPlatform,
-      keyword,
-      type: 'song',
-      limit: 20,
-    });
-
-    const normalizedTitle = cleanTitle.toLowerCase().replace(/\s+/g, '');
-    const normalizedArtist = artist.toLowerCase().replace(/\s+/g, '');
-
-    const scored = searchResults
-      .map((item) => {
-        const itemTitleClean = item.title.replace(/[（].*[)）]/g, '').replace(/[【\[].*[]】\]/g, '').trim();
-        const itemTitleNorm = itemTitleClean.toLowerCase().replace(/\s+/g, '');
-        const itemArtistNorm = item.artist.toLowerCase().replace(/\s+/g, '');
-        const titleScore = calculateSimilarity(normalizedTitle, itemTitleNorm);
-        const artistScore = calculateSimilarity(normalizedArtist, itemArtistNorm);
-        const avgScore = (titleScore + artistScore) / 2;
-        return { ...item, score: avgScore };
-      })
-      .filter((item) => item.score >= 0.35)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-
-    let autoSelectedIndex: number | null = null;
-    if (scored.length === 1 && scored[0].score >= 0.8) {
-      autoSelectedIndex = 0;
-    } else if (scored.length > 1 && scored[0].score >= 0.85 && scored[1].score < scored[0].score - 0.15) {
-      autoSelectedIndex = 0;
-    }
-
-    const existingSongsByPlatformId = await prisma.musicTrack.findMany({
-      where: {
-        OR: scored.map((item) => {
-          const field = getPlatformSourceField(platform as MusicPlatform);
-          return { [field]: item.sourceId };
-        }) as Prisma.MusicTrackWhereInput[],
-      },
-      select: { docId: true, id: true, title: true, artist: true },
-    });
-
-    const existingMap = new Map<string, { docId: string; title: string; artist: string }>();
-    for (const s of existingSongsByPlatformId) {
-      existingMap.set(s.id, { docId: s.docId, title: s.title, artist: s.artist });
-    }
-
-    const suggestions = scored.map((item, index) => {
-      const existing = existingMap.get(item.sourceId);
-      return {
-        sourceId: item.sourceId,
-        title: item.title,
-        artist: item.artist,
-        album: item.album,
-        cover: item.picId,
-        sourceUrl: item.sourceUrl,
-        score: Math.round(item.score * 100),
-        isAutoSelected: index === autoSelectedIndex,
-        alreadyLinked: existing ? { docId: existing.docId, title: existing.title } : null,
-      };
-    });
-
-    res.json({ suggestions, autoSelectedIndex });
-  } catch (error) {
-    console.error('Match suggestions error:', error);
-    res.status(500).json({ error: '搜索匹配歌曲失败' });
   }
 }));
 

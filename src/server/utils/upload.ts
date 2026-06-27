@@ -125,7 +125,24 @@ export function extractStorageKeyFromUploadUrl(url: string): string | null {
   if (!raw) {
     return null;
   }
-  return decodeURIComponent(raw);
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function resolveUploadPathByUrl(url: string | null | undefined): string | null {
+  if (!url || typeof url !== 'string') {
+    return null;
+  }
+
+  const storageKey = extractStorageKeyFromUploadUrl(url);
+  if (!storageKey) {
+    return null;
+  }
+
+  return resolveUploadPathByStorageKey(storageKey);
 }
 
 export async function safeDeleteUploadFileByStorageKey(storageKey: string): Promise<void> {

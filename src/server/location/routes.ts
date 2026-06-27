@@ -5,23 +5,24 @@ import {
   getProvinces,
   getCitiesByProvince,
   getDistrictsByCity,
-  // getFullRegionPath,  // not used by frontend; path field may be missing from some import records
   fuzzyMatchRegion,
   suggestRegions,
   type RegionSearchResult,
 } from './locationService';
 import { resolveCoordinateToRegion, searchAddress, isAmapConfigured } from './geoService';
+import { parseInteger } from '../utils/parsers';
 
 const router = Router();
 
 router.get('/', async (req, res) => {
   try {
-    const { q, level, parentCode, limit = '20' } = req.query;
+    const { q, level, parentCode, limit: limitRaw } = req.query;
+    const limit = parseInteger(limitRaw, 20, { min: 1, max: 100 });
 
     if (q && typeof q === 'string') {
       const results = await searchRegions(q, {
-        limit: parseInt(limit as string, 10),
-        level: level ? parseInt(level as string, 10) : undefined,
+        limit,
+        level: level ? parseInteger(level, 3, { min: 1, max: 4 }) : undefined,
         parentCode: parentCode as string | undefined,
       });
       res.json({ regions: results });
@@ -41,8 +42,8 @@ router.get('/', async (req, res) => {
     }
 
     if (level) {
-      const levelNum = parseInt(level as string, 10);
-      const regions = await searchRegions('', { level: levelNum, limit: parseInt(limit as string, 10) });
+      const levelNum = parseInteger(level, 3, { min: 1, max: 4 });
+      const regions = await searchRegions('', { level: levelNum, limit });
       res.json({ regions });
       return;
     }
@@ -56,14 +57,15 @@ router.get('/', async (req, res) => {
 
 router.get('/search', async (req, res) => {
   try {
-    const { q, limit = '20' } = req.query;
+    const { q, limit: limitRaw } = req.query;
+    const limit = parseInteger(limitRaw, 20, { min: 1, max: 100 });
 
     if (!q || typeof q !== 'string') {
       res.json({ regions: [] });
       return;
     }
 
-    const regions = await fuzzyMatchRegion(q, parseInt(limit as string, 10));
+    const regions = await fuzzyMatchRegion(q, limit);
     res.json({ regions });
   } catch (error) {
     console.error('Search regions error:', error);
@@ -73,14 +75,15 @@ router.get('/search', async (req, res) => {
 
 router.get('/suggest', async (req, res) => {
   try {
-    const { q, limit = '5' } = req.query;
+    const { q, limit: limitRaw } = req.query;
+    const limit = parseInteger(limitRaw, 5, { min: 1, max: 100 });
 
     if (!q || typeof q !== 'string') {
       res.json({ regions: [] });
       return;
     }
 
-    const regions = await suggestRegions(q, parseInt(limit as string, 10));
+    const regions = await suggestRegions(q, limit);
     res.json({ regions });
   } catch (error) {
     console.error('Suggest regions error:', error);

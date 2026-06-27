@@ -6,6 +6,7 @@ const mockPrisma = vi.hoisted(() => ({
   imageMap: {
     findUnique: vi.fn(),
     update: vi.fn(),
+    create: vi.fn(),
   },
 }))
 
@@ -19,6 +20,7 @@ vi.mock('../../src/server/middleware/auth', () => ({
     }
     next()
   },
+  isAdminRole: (role?: string) => role === 'admin' || role === 'super_admin',
   requireActiveUser: (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
   requireAdmin: (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
 }))
@@ -28,6 +30,7 @@ vi.mock('../../src/server/utils', () => ({
   uploadsDir: '/tmp/uploads',
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
   softDeleteData: (deletedBy: string) => ({ deletedAt: new Date(), deletedBy }),
+  resolveUploadPathByUrl: vi.fn(() => null),
 }))
 
 vi.mock('../../src/server/services/variantCleanup.service', () => ({
@@ -58,6 +61,20 @@ describe('image maps delete route', () => {
     vi.clearAllMocks()
     mockPrisma.imageMap.findUnique.mockResolvedValue({ id: 'img-1', deletedAt: null })
     mockPrisma.imageMap.update.mockResolvedValue({ id: 'img-1' })
+    mockPrisma.imageMap.create.mockResolvedValue({
+      id: 'img-1',
+      md5: 'md5-1',
+      localUrl: '/uploads/test.jpg',
+      externalUrl: null,
+      s3Url: null,
+      thumbnailUrl: null,
+      storageType: 'local',
+      blurhash: null,
+      thumbhash: null,
+      deletedAt: null,
+      deletedBy: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    })
     mockCleanupByImageMapId.mockResolvedValue({
       success: true,
       trigger: 'on_delete',
@@ -70,15 +87,15 @@ describe('image maps delete route', () => {
     })
   })
 
-  async function createApp() {
+  async function createApp(role: 'user' | 'admin' | 'super_admin' = 'admin') {
     const { registerImageMapsRoutes } = await import('../../src/server/routes/image-maps.routes')
 
     const app = express()
     app.use(express.json())
     app.use((req, _res, next) => {
       ;(req as express.Request & { authUser?: { uid: string; role: string } }).authUser = {
-        uid: 'admin-1',
-        role: 'admin',
+        uid: `${role}-1`,
+        role,
       }
       next()
     })
@@ -115,5 +132,147 @@ describe('image maps delete route', () => {
     expect(response.body).toEqual({ error: '图片映射不存在' })
     expect(mockCleanupByImageMapId).not.toHaveBeenCalled()
     expect(mockPrisma.imageMap.update).not.toHaveBeenCalled()
+  })
+
+  it('creates a new image map for a normal user', async () => {
+    mockPrisma.imageMap.findUnique.mockResolvedValueOnce(null)
+    mockPrisma.imageMap.create.mockResolvedValueOnce({
+      id: 'img-new',
+      md5: 'md5-new',
+      localUrl: '/uploads/new.jpg',
+      externalUrl: null,
+      s3Url: null,
+      thumbnailUrl: null,
+      storageType: 'local',
+      blurhash: null,
+      thumbhash: null,
+      deletedAt: null,
+      deletedBy: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    })
+
+    const app = await createApp('user')
+    const response = await request(app).post('/api/image-maps').send({
+      id: 'img-new',
+      md5: 'md5-new',
+      localUrl: '/uploads/new.jpg',
+      storageType: 'local',
+    })
+
+    expect(response.status).toBe(201)
+    expect(response.body.item).toMatchObject({
+      id: 'img-new',
+      md5: 'md5-new',
+      localUrl: '/uploads/new.jpg',
+      storageType: 'local',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    })
+    expect(mockPrisma.imageMap.create).toHaveBeenCalledWith({
+      data: {
+        id: 'img-new',
+        md5: 'md5-new',
+        localUrl: '/uploads/new.jpg',
+        storageType: 'local',
+      },
+    })
+    expect(mockPrisma.imageMap.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects updating an existing image map for a normal user', async () => {
+    mockPrisma.imageMap.findUnique.mockResolvedValueOnce({
+      id: 'img-1',
+      md5: 'md5-1',
+      localUrl: '/uploads/original.jpg',
+      s3Url: null,
+      externalUrl: null,
+      storageType: 'local',
+    })
+
+    const app = await createApp('user')
+    const response = await request(app).post('/api/image-maps').send({
+      id: 'img-1',
+      md5: 'md5-1',
+      s3Url: 'https://cdn.example.com/image.jpg',
+      storageType: 's3',
+    })
+
+    expect(response.status).toBe(403)
+    expect(response.body).toEqual({ error: '需要管理员权限' })
+    expect(mockPrisma.imageMap.update).not.toHaveBeenCalled()
+    expect(mockPrisma.imageMap.create).not.toHaveBeenCalled()
+  })
+
+  it('updates an existing image map as admin when id and md5 match', async () => {
+    mockPrisma.imageMap.findUnique.mockResolvedValueOnce({
+      id: 'img-1',
+      md5: 'md5-1',
+      localUrl: '/uploads/original.jpg',
+      s3Url: null,
+      externalUrl: null,
+      storageType: 'local',
+    })
+    mockPrisma.imageMap.update.mockResolvedValueOnce({
+      id: 'img-1',
+      md5: 'md5-1',
+      localUrl: '/uploads/original.jpg',
+      externalUrl: null,
+      s3Url: 'https://cdn.example.com/image.jpg',
+      thumbnailUrl: null,
+      storageType: 's3',
+      blurhash: null,
+      thumbhash: null,
+      deletedAt: null,
+      deletedBy: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    })
+
+    const app = await createApp()
+    const response = await request(app).post('/api/image-maps').send({
+      id: 'img-1',
+      md5: 'md5-1',
+      s3Url: 'https://cdn.example.com/image.jpg',
+      storageType: 's3',
+    })
+
+    expect(response.status).toBe(200)
+    expect(response.body.item).toMatchObject({
+      id: 'img-1',
+      md5: 'md5-1',
+      s3Url: 'https://cdn.example.com/image.jpg',
+      storageType: 's3',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    })
+    expect(mockPrisma.imageMap.update).toHaveBeenCalledWith({
+      where: { id: 'img-1' },
+      data: {
+        s3Url: 'https://cdn.example.com/image.jpg',
+        storageType: 's3',
+      },
+    })
+    expect(mockPrisma.imageMap.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects updating an existing image map when md5 does not match', async () => {
+    mockPrisma.imageMap.findUnique.mockResolvedValueOnce({
+      id: 'img-1',
+      md5: 'md5-1',
+      localUrl: '/uploads/original.jpg',
+      s3Url: null,
+      externalUrl: null,
+      storageType: 'local',
+    })
+
+    const app = await createApp()
+    const response = await request(app).post('/api/image-maps').send({
+      id: 'img-1',
+      md5: 'md5-2',
+      s3Url: 'https://cdn.example.com/image.jpg',
+      storageType: 's3',
+    })
+
+    expect(response.status).toBe(409)
+    expect(response.body).toEqual({ error: '图片映射已存在且与当前图片不匹配' })
+    expect(mockPrisma.imageMap.update).not.toHaveBeenCalled()
+    expect(mockPrisma.imageMap.create).not.toHaveBeenCalled()
   })
 })

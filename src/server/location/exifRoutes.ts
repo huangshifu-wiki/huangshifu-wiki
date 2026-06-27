@@ -7,10 +7,12 @@ import {
 } from './exifService';
 import { resolveCoordinateToRegion, isAmapConfigured } from './geoService';
 import { findMostCommonRegion, type RegionSearchResult } from './locationService';
+import { requireAuth, requireActiveUser } from '../middleware/auth';
+import type { AuthenticatedRequest } from '../types';
 
 const router = Router();
 
-router.post('/extract-gps', async (req, res) => {
+router.post('/extract-gps', requireAuth, requireActiveUser, async (req, res) => {
   try {
     const { imageUrls } = req.body as { imageUrls?: string[] };
 
@@ -53,7 +55,7 @@ router.post('/extract-gps', async (req, res) => {
   }
 });
 
-router.post('/extract-gps-with-region', async (req, res) => {
+router.post('/extract-gps-with-region', requireAuth, requireActiveUser, async (req, res) => {
   try {
     if (!isAmapConfigured()) {
       res.status(503).json({ error: '地图服务未配置，无法解析行政区划' });
@@ -117,7 +119,7 @@ router.post('/extract-gps-with-region', async (req, res) => {
   }
 });
 
-router.get('/extract-single', async (req, res) => {
+router.get('/extract-single', requireAuth, requireActiveUser, async (req, res) => {
   try {
     const { url } = req.query;
 

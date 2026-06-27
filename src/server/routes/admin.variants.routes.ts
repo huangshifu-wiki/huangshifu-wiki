@@ -13,6 +13,7 @@ import { prisma } from '../prisma';
 import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { variantCleanup, CleanupTrigger } from '../services/variantCleanup.service';
 import { variantGenerator } from '../services/variantGenerator';
+import { resolveUploadPathByUrl } from '../utils';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -251,8 +252,13 @@ router.post('/rebuild-all-variants', requireAuth, requireAdmin, async (
             continue;
           }
 
-          const localFilePath = urlToAbsolutePath(imageMap.localUrl);
-          
+          const localFilePath = resolveUploadPathByUrl(imageMap.localUrl);
+          if (!localFilePath) {
+            console.warn(`[Admin] Skipping ${imageMap.id}: source file path is invalid`);
+            skippedCount++;
+            continue;
+          }
+
           try {
             await fs.promises.access(localFilePath, fs.constants.R_OK);
           } catch {
@@ -389,11 +395,6 @@ router.get('/cleanup/stats', requireAuth, requireAdmin, async (_req, res) => {
 // ============================================================================
 // 工具函数
 // ============================================================================
-
-function urlToAbsolutePath(url: string): string {
-  const relativePath = url.replace(/^\/uploads\//, '');
-  return path.join(uploadsDir, relativePath);
-}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + ' B';

@@ -971,7 +971,7 @@ describe('Posts API - 文章接口测试', () => {
       const dbPost = await prisma.post.findUnique({
         where: { id: post.id },
       });
-      expect(dbPost?.commentsCount).toBe(3);
+      expect(dbPost?.commentsCount).toBe(2);
     });
 
     it('应该允许通过通用评论接口删除图集评论', async () => {
@@ -2045,6 +2045,39 @@ describe('Posts API - 文章接口测试', () => {
       expect(createdGallery?.copyright).toBe('摄影：测试用户')
     })
 
+    it('创建图集时应允许复用没有当前用户 MediaAsset 归属的去重本地图片 URL', async () => {
+      const sharedUrl = `/uploads/galleries/shared-dedup-${Date.now()}.jpg`
+      await prisma.imageMap.create({
+        data: {
+          id: `img_map_${Date.now()}`,
+          md5: `md5_shared_${Date.now()}`,
+          localUrl: sharedUrl,
+          storageType: 'local',
+        },
+      })
+
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword
+      )
+      const response = await agent
+        .post('/api/galleries')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({
+          title: `Gallery Reuse Shared Upload ${Date.now()}`,
+          images: [{ url: sharedUrl, name: 'shared-dedup.jpg' }],
+        })
+
+      expect(response.status).toBe(201)
+      const createdImage = await prisma.galleryImage.findFirst({
+        where: { galleryId: response.body.gallery.id },
+        select: { assetId: true, url: true, name: true },
+      })
+      expect(createdImage?.url).toBe(sharedUrl)
+      expect(createdImage?.name).toBe('shared-dedup.jpg')
+      expect(createdImage?.assetId).toBeNull()
+    })
+
     it('更新图集时清空描述应保留为空串', async () => {
       const gallery = await createTestGallery({
         title: 'Gallery Clear Description Test',
@@ -2215,6 +2248,88 @@ describe('Posts API - 文章接口测试', () => {
       })
       expect(moderationLog).not.toBeNull()
       expect(moderationLog?.note).toBeNull()
+    })
+
+    it('上传会话达到最大文件数时应返回 400 而不是 500', async () => {
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword
+      )
+      const pngBuffer = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4xQAAAAASUVORK5CYII=',
+        'base64'
+      )
+
+      const sessionResponse = await agent
+        .post('/api/uploads/sessions')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ maxFiles: 1 })
+
+      expect(sessionResponse.status).toBe(201)
+      const sessionId = sessionResponse.body.session.id as string
+
+      const firstUpload = await agent
+        .post(`/api/uploads/sessions/${sessionId}/files`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .attach('file', pngBuffer, 'first.png')
+
+      expect(firstUpload.status).toBe(201)
+
+      const secondUpload = await agent
+        .post(`/api/uploads/sessions/${sessionId}/files`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .attach('file', pngBuffer, 'second.png')
+
+      expect(secondUpload.status).toBe(400)
+      expect(secondUpload.body.error).toBe('已达到最大上传数量限制')
+    })
+
+    it('上传会话并发命中 maxFiles 时只应接受一个文件', async () => {
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword
+      )
+      const pngBuffer = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4xQAAAAASUVORK5CYII=',
+        'base64'
+      )
+
+      const sessionResponse = await agent
+        .post('/api/uploads/sessions')
+        .set('X-XSRF-TOKEN', xsrfToken)
+        .send({ maxFiles: 1 })
+
+      expect(sessionResponse.status).toBe(201)
+      const sessionId = sessionResponse.body.session.id as string
+
+      const [firstUpload, secondUpload] = await Promise.all([
+        agent
+          .post(`/api/uploads/sessions/${sessionId}/files`)
+          .set('X-XSRF-TOKEN', xsrfToken)
+          .attach('file', pngBuffer, 'first-concurrent.png'),
+        agent
+          .post(`/api/uploads/sessions/${sessionId}/files`)
+          .set('X-XSRF-TOKEN', xsrfToken)
+          .attach('file', pngBuffer, 'second-concurrent.png'),
+      ])
+
+      const statuses = [firstUpload.status, secondUpload.status].sort((a, b) => a - b)
+      expect(statuses).toEqual([201, 400])
+
+      const failedUpload = [firstUpload, secondUpload].find((response) => response.status === 400)
+      expect(failedUpload?.body.error).toBe('已达到最大上传数量限制')
+
+      const [session, assetCount] = await Promise.all([
+        prisma.uploadSession.findUnique({
+          where: { id: sessionId },
+          select: { uploadedFiles: true },
+        }),
+        prisma.mediaAsset.count({
+          where: { sessionId },
+        }),
+      ])
+      expect(session?.uploadedFiles).toBe(1)
+      expect(assetCount).toBe(1)
     })
 
     it('普通用户编辑已发布图集时应像论坛一样强制回待审核', async () => {

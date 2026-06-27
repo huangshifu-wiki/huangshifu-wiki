@@ -1672,8 +1672,11 @@ router.get('/:userId/comments', asyncHandler(async (req: AuthenticatedRequest, r
         const post = comment.postId ? postsMap.get(comment.postId) ?? null : null;
         const gallery = comment.galleryId ? galleriesMap.get(comment.galleryId) ?? null : null;
         const targetType = comment.galleryId ? 'gallery' : 'post';
+        const targetVisible = comment.postId ? !!post : !!gallery;
+        const commentResp = toCommentResponse(comment, { maskDeletedContent: !isAdmin });
         return {
-          ...toCommentResponse(comment, { maskDeletedContent: !isAdmin }),
+          ...commentResp,
+          content: targetVisible || isAdmin ? commentResp.content : null,
           targetType,
           target: gallery
             ? { id: gallery.id, title: gallery.title, status: gallery.status, published: gallery.published }

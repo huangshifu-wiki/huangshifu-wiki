@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { requireAuth, requireActiveUser, requireAdmin } from '../middleware/auth';
+import type { AuthenticatedRequest } from '../types';
 import {
-  getPresignedUploadUrl,
+  getUserPresignedUploadUrl,
   getPresignedDownloadUrl,
   getPresignedDeleteUrl,
   getPublicConfig,
@@ -19,12 +20,11 @@ router.get('/config', async (_req, res) => {
   }
 });
 
-router.get('/presign-upload', requireAuth, requireActiveUser, async (req, res) => {
+router.get('/presign-upload', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
-    const { filename, contentType, key, contentMd5, fileSize } = req.query as {
+    const { filename, contentType, contentMd5, fileSize } = req.query as {
       filename?: string;
       contentType?: string;
-      key?: string;
       contentMd5?: string;
       fileSize?: string;
     };
@@ -34,19 +34,20 @@ router.get('/presign-upload', requireAuth, requireActiveUser, async (req, res) =
       return;
     }
 
-    const objectKey = key || filename;
-
-    const result = await getPresignedUploadUrl(objectKey, undefined, {
-      contentType: contentType || 'application/octet-stream',
+    const result = await getUserPresignedUploadUrl({
+      userUid: req.authUser!.uid,
+      filename,
+      contentType,
       contentMd5,
-      fileSize: fileSize ? parseInt(fileSize) : undefined,
+      fileSize,
     });
 
     res.json(result);
   } catch (error) {
     console.error('[S3] 生成上传签名失败:', error);
     const message = error instanceof Error ? error.message : '生成上传签名失败';
-    res.status(500).json({ error: message });
+    const status = message.includes('验证失败') || message.includes('必须') ? 400 : 500;
+    res.status(status).json({ error: message });
   }
 });
 

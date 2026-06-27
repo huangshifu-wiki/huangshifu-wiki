@@ -98,15 +98,6 @@ export async function generateVariants(
 
   for (const variant of defaultVariants) {
     try {
-      const result = await optimizeImage(inputBuffer, {
-        maxWidth: variant.width,
-        maxHeight: variant.height ?? Math.round(variant.width * 0.75),
-        quality: variant.quality || 85,
-        format: 'webp',
-        generateBlurhash: false,
-      });
-
-      // 直接生成变体 buffer（避免重复调用 optimizeImage）
       const variantBuffer = await sharp(inputBuffer)
         .resize(variant.width, variant.height ?? Math.round(variant.width * 0.75), {
           fit: 'inside',

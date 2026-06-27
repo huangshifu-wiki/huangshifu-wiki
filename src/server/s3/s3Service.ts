@@ -5,6 +5,8 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import crypto from 'crypto';
+import path from 'path';
 
 import { S3_ENV_VAR_NAMES } from '@/config/s3.config.example';
 import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits';
@@ -344,6 +346,36 @@ export async function getPresignedUploadUrl(
     console.error(`[S3] 生成上传预签名 URL 失败:`, error);
     throw new Error(`生成上传预签名 URL 失败: ${error instanceof Error ? error.message : '未知错误'}`);
   }
+}
+
+function parsePresignedUploadFileSize(fileSize: string | undefined): number | undefined {
+  if (!fileSize) {
+    return undefined;
+  }
+
+  const parsed = Number(fileSize);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error('fileSize 必须是正整数');
+  }
+
+  return parsed;
+}
+
+export async function getUserPresignedUploadUrl(input: {
+  userUid: string;
+  filename: string;
+  contentType?: string;
+  contentMd5?: string;
+  fileSize?: string;
+}): ReturnType<typeof getPresignedUploadUrl> {
+  const ext = path.extname(input.filename).toLowerCase();
+  const objectKey = `users/${input.userUid}/${Date.now()}_${crypto.randomUUID()}${ext}`;
+
+  return getPresignedUploadUrl(objectKey, undefined, {
+    contentType: input.contentType || 'application/octet-stream',
+    contentMd5: input.contentMd5,
+    fileSize: parsePresignedUploadFileSize(input.fileSize),
+  });
 }
 
 export async function getPresignedDownloadUrl(

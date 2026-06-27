@@ -45,7 +45,9 @@
 - DELETE /api/wiki/:slug        删除百科
 - POST   /api/wiki/:slug/submit  提交审核
 - POST   /api/wiki/:slug/rollback/:revisionId  回滚
-- GET    /api/wiki/:slug/revisions  获取历史版本
+- GET    /api/wiki/:slug/history  获取历史版本列表
+- GET    /api/wiki/:slug/revisions/:revisionId  获取历史版本详情
+- POST   /api/wiki/branches/:branchId/revisions  保存分支修订
 
 阶段2: 创建 Forum API 端点
 - POST   /api/posts              创建帖子

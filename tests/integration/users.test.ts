@@ -1178,7 +1178,7 @@ describe('Users API - 用户接口测试', () => {
       expect(item.post).toBeNull();
     });
 
-    it('应该保留原帖子已不可见的评论并隐藏目标信息', async () => {
+    it('应该保留原帖子已不可见的评论并隐藏目标信息和正文', async () => {
       const hiddenPost = await createTestPost({
         title: 'Hidden Comment Target Post',
         status: 'draft',
@@ -1201,10 +1201,11 @@ describe('Users API - 用户接口测试', () => {
       expect(item.targetType).toBe('post');
       expect(item.target).toBeNull();
       expect(item.post).toBeNull();
-      expect(item.content).toBe('Comment on hidden post');
+      // 目标不可见时，对非管理员屏蔽评论正文
+      expect(item.content).toBeNull();
     });
 
-    it('应该保留原图集已不可见的评论并保持图集目标类型', async () => {
+    it('应该保留原图集已不可见的评论并屏蔽正文', async () => {
       const hiddenGallery = await createTestGallery({
         title: 'Hidden Comment Target Gallery',
         authorUid: adminUser.user.uid,
@@ -1229,7 +1230,8 @@ describe('Users API - 用户接口测试', () => {
       expect(item.target).toBeNull();
       expect(item.gallery).toBeNull();
       expect(item.post).toBeNull();
-      expect(item.content).toBe('Comment on hidden gallery');
+      // 目标不可见时，对非管理员屏蔽评论正文
+      expect(item.content).toBeNull();
     });
 
     it('应该返回已删除评论状态和删除原因', async () => {

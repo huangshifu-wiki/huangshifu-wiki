@@ -44,7 +44,9 @@ export function csrfMiddleware(req: AuthenticatedRequest, res: Response, next: N
     return;
   }
 
-  if (!crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken))) {
+  const cookieBuf = Buffer.from(cookieToken)
+  const headerBuf = Buffer.from(headerToken)
+  if (cookieBuf.length !== headerBuf.length || !crypto.timingSafeEqual(cookieBuf, headerBuf)) {
     res.status(403).json({ error: 'CSRF token mismatch', code: 'CSRF_MISMATCH' });
     return;
   }

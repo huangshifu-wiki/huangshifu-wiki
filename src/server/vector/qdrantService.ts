@@ -473,28 +473,34 @@ export async function deleteImageEmbeddingPointsBySource(
   await ensureQdrantCollection()
   const client = getQdrantClient()
   const collectionName = getQdrantCollectionName()
+  let totalDeleted = 0
+  let offset: Record<string, unknown> | number | string | undefined
 
-  const filtered = await client.scroll(collectionName, {
-    filter: {
-      must: [
-        { key: 'sourceType', match: { value: sourceType } },
-        { key: 'sourceId', match: { value: sourceId } },
-      ],
-    },
-    with_payload: false,
-    with_vector: false,
-    limit: 1000,
-  })
+  do {
+    const filtered = await client.scroll(collectionName, {
+      filter: {
+        must: [
+          { key: 'sourceType', match: { value: sourceType } },
+          { key: 'sourceId', match: { value: sourceId } },
+        ],
+      },
+      with_payload: false,
+      with_vector: false,
+      limit: 1000,
+      offset,
+    })
 
-  const pointIds = filtered.points.map((p) => p.id)
-  if (pointIds.length === 0) {
-    return 0
-  }
+    const pointIds = filtered.points.map((p) => p.id)
+    if (pointIds.length === 0) break
 
-  await client.delete(collectionName, {
-    wait: true,
-    points: pointIds,
-  })
+    await client.delete(collectionName, {
+      wait: true,
+      points: pointIds,
+    })
 
-  return pointIds.length
+    totalDeleted += pointIds.length
+    offset = filtered.next_page_offset as Record<string, unknown> | number | string | undefined
+  } while (offset !== null && offset !== undefined)
+
+  return totalDeleted
 }

@@ -55,7 +55,7 @@ export const buildS3Url = (s3Url: string, s3BaseUrl: string): string => {
   }
   const trimmedBase = s3BaseUrl.replace(/\/+$/, '');
   const trimmedUrl = s3Url.replace(/^\/+/, '');
-  return `${trimmedBase}${trimmedUrl}`;
+  return `${trimmedBase}/${trimmedUrl}`;
 };
 
 export interface ImageUrlResult {
@@ -387,6 +387,7 @@ export const uploadToS3 = async (file: File): Promise<{ id: string; s3Url: strin
     // 更新已存在的图片映射
     await apiPost('/api/image-maps', {
       id: existingItems[0].id,
+      md5,
       s3Url,
       storageType: 's3',
     });
@@ -592,7 +593,7 @@ export const uploadImageWithStrategy = async (
     
     return {
       assetId: data.asset.id,
-      url: data.asset.publicUrl,
+      url: selectedUrl,
       localUrl,
       s3Url,
       externalUrl,

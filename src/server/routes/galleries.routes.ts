@@ -441,6 +441,15 @@ router.post('/:id/like', requireAuth, requireActiveUser, asyncHandler(async (req
 router.delete('/:id/like', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const galleryId = req.params.id
+    const gallery = await prisma.gallery.findUnique({
+      where: { id: galleryId },
+      select: { id: true, status: true, published: true, authorUid: true, deletedAt: true },
+    })
+
+    if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
+      res.status(404).json({ error: '图集不存在' })
+      return
+    }
 
     await prisma.$transaction(async (tx) => {
       const deleted = await tx.galleryLike.deleteMany({
@@ -528,6 +537,15 @@ router.post('/:id/dislike', requireAuth, requireActiveUser, asyncHandler(async (
 router.delete('/:id/dislike', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
     const galleryId = req.params.id
+    const gallery = await prisma.gallery.findUnique({
+      where: { id: galleryId },
+      select: { id: true, status: true, published: true, authorUid: true, deletedAt: true },
+    })
+
+    if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
+      res.status(404).json({ error: '图集不存在' })
+      return
+    }
 
     await prisma.$transaction(async (tx) => {
       const deleted = await tx.galleryDislike.deleteMany({
@@ -767,7 +785,7 @@ router.post('/', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandl
           ...galleryStatusData(nextStatus),
           images: {
             create: normalizedImages.map((image, index) => ({
-              assetId: assetByUrl.get(image.url) || null,
+              assetId: assetByUrl.get(image.url),
               url: image.url,
               name: image.name,
               sortOrder: index,
@@ -1764,73 +1782,6 @@ router.post('/:id/comments', galleryWriteLimiter, requireAuth, requireActiveUser
   } catch (error) {
     console.error('Create gallery comment error:', error)
     res.status(500).json({ error: '发表评论失败' })
-  }
-}))
-
-router.delete('/:id', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: req.params.id },
-      include: {
-        images: true,
-      },
-    })
-
-    if (!gallery || gallery.deletedAt) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    const isOwner = gallery.authorUid === req.authUser!.uid
-    const isAdmin = isAdminRole(req.authUser!.role)
-    if (!isOwner && !isAdmin) {
-      res.status(403).json({ error: '无权删除该图集' })
-      return
-    }
-
-    const reason = resolveDeleteReason(req.body?.reason, isOwner)
-    if (!isOwner && !reason) {
-      res.status(400).json({ error: '删除理由不能为空' })
-      return
-    }
-    if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.gallery.reviewNote)) {
-      return
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.gallery.update({
-        where: { id: req.params.id },
-        data: softDeleteData(req.authUser!.uid),
-      })
-
-      await tx.moderationLog.create({
-        data: {
-          targetType: 'gallery',
-          targetId: req.params.id,
-          action: 'delete',
-          operatorUid: req.authUser!.uid,
-          note: reason,
-        },
-      })
-    })
-
-    if (!isOwner) {
-      await createNotification(gallery.authorUid, 'review_result', {
-        approved: false,
-        action: 'deleted',
-        targetType: 'gallery',
-        targetId: req.params.id,
-        title: gallery.title,
-        note: reason,
-        operatorUid: req.authUser!.uid,
-        operatorName: req.authUser!.displayName,
-      })
-    }
-
-    res.json({ success: true })
-  } catch (error) {
-    console.error('Delete gallery error:', error)
-    res.status(500).json({ error: '删除图集失败' })
   }
 }))
 

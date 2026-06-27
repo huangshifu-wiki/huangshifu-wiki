@@ -60,6 +60,10 @@ import { registerAdminVariantsRoutes } from './src/server/routes/admin.variants.
 import { cloudSyncService } from './src/server/services/cloudSyncService'
 import { variantGenerator } from './src/server/services/variantGenerator'
 import { isSemanticSearchEnabled } from './src/server/utils'
+import {
+  injectHtmlBootstrapState,
+  shouldBypassProductionStaticHtml,
+} from './src/server/utils/htmlShell'
 import type { AuthenticatedRequest } from './src/server/types'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -92,7 +96,6 @@ fs.mkdirSync(backupsDir, { recursive: true })
 const DEFAULT_PORT = Number(process.env.PORT) || 3003
 const DEFAULT_HMR_PORT = Number(process.env.VITE_HMR_PORT) || 24678
 const CORS_ORIGIN = process.env.CORS_ORIGIN || ''
-const HTML_BOOTSTRAP_AUTH_UID_PLACEHOLDER = '"__HSF_BOOTSTRAP_AUTH_UID_VALUE__"'
 
 function parseCorsOrigins(envValue: string): string[] {
   return envValue
@@ -142,22 +145,6 @@ function isDevLocalOrPrivateOrigin(origin: string): boolean {
   } catch {
     return false
   }
-}
-
-function injectHtmlBootstrapState(
-  html: string,
-  options: { authUid: string | null; nonce?: string | null }
-): string {
-  let nextHtml = html.replaceAll(
-    HTML_BOOTSTRAP_AUTH_UID_PLACEHOLDER,
-    JSON.stringify(options.authUid)
-  )
-
-  if (options.nonce) {
-    nextHtml = nextHtml.replace(/<script/g, `<script nonce="${options.nonce}"`)
-  }
-
-  return nextHtml
 }
 
 const CORS_MAX_AGE = 86400
@@ -276,25 +263,32 @@ app.use(
 // 生产环境静态资源服务 - 必须在 compression 之后
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(process.cwd(), 'dist')
-  app.use(
-    express.static(distPath, {
-      maxAge: '1y', // 静态资源缓存1年
-      immutable: true, // 文件名带hash，内容不变则永不失效
-      setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.js')) {
-          res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
-        } else if (filePath.endsWith('.css')) {
-          res.setHeader('Content-Type', 'text/css; charset=utf-8')
-        } else if (filePath.endsWith('.html')) {
-          res.setHeader('Content-Type', 'text/html; charset=utf-8')
-        }
-        if (filePath.match(/\.(woff2?|ttf|otf|eot|svg)$/)) {
-          res.setHeader('Access-Control-Allow-Origin', '*')
-          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
-        }
-      },
-    })
-  )
+  const staticMiddleware = express.static(distPath, {
+    index: false,
+    maxAge: '1y', // 静态资源缓存1年
+    immutable: true, // 文件名带hash，内容不变则永不失效
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+      } else if (filePath.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8')
+      } else if (filePath.endsWith('.html')) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      }
+      if (filePath.match(/\.(woff2?|ttf|otf|eot|svg)$/)) {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+      }
+    },
+  })
+
+  app.use((req, res, next) => {
+    if (shouldBypassProductionStaticHtml(req.path)) {
+      next()
+      return
+    }
+    staticMiddleware(req, res, next)
+  })
 }
 
 app.use(express.json({ limit: '1mb' }))

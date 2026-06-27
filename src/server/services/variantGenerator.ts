@@ -14,6 +14,7 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { resolveUploadPathByUrl } from '../utils/upload';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -408,8 +409,7 @@ export class VariantGenerator {
    * 将 URL 转换为绝对路径
    */
   urlToAbsolutePath(url: string): string {
-    const relativePath = url.replace(/^\/uploads\//, '');
-    return path.join(uploadsDir, relativePath);
+    return resolveUploadPathByUrl(url) || '';
   }
 
   /**

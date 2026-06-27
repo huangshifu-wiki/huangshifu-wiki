@@ -40,6 +40,7 @@ import {
   normalizeDeleteReason,
   enhancedCache,
   CACHE_KEYS,
+  clearWikiRelationCache,
 } from '../utils';
 import {
   cleanupUnusedMediaAssetById,
@@ -80,6 +81,14 @@ const execFileAsync = promisify(execFile);
 
 function isString(value: string | null): value is string {
   return typeof value === 'string';
+}
+
+function invalidateWikiContentCaches() {
+  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_PAGE}:`);
+  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`);
+  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`);
+  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_TIMELINE}:`);
+  clearWikiRelationCache();
 }
 
 async function getDeleteReasonsByTargetId(targetType: 'wiki' | 'post' | 'gallery' | 'comment', targetIds: string[]) {
@@ -204,6 +213,37 @@ async function permanentlyDeleteWikiById(id: string) {
   return page.slug;
 }
 
+async function permanentlyDeletePostById(id: string) {
+  const post = await prisma.post.findUnique({
+    where: { id },
+    select: { id: true, title: true },
+  });
+  if (!post) return false;
+
+  await prisma.$transaction(async (tx) => {
+    await Promise.all([
+      tx.favorite.deleteMany({ where: { targetType: 'post', targetId: post.id } }),
+      tx.browsingHistory.deleteMany({ where: { targetType: 'post', targetId: post.id } }),
+      tx.postImageEmbedding.deleteMany({ where: { postId: post.id } }),
+      tx.textEmbeddingChunk.deleteMany({ where: { sourceType: 'post', sourceId: post.id } }),
+    ]);
+    await tx.post.delete({ where: { id } });
+  });
+
+  void Promise.allSettled([
+    deleteImageEmbeddingPointsBySource('post', post.id),
+    deleteTextEmbeddingPointsBySource('post', post.id),
+  ]).then((results) => {
+    results.forEach((result) => {
+      if (result.status === 'rejected') {
+        logger.warn({ err: result.reason, postId: post.id }, 'Delete post embedding points failed');
+      }
+    });
+  });
+
+  return true;
+}
+
 async function permanentlyDeleteGalleryById(id: string) {
   const gallery = await prisma.gallery.findUnique({
     where: { id },
@@ -235,7 +275,7 @@ function invalidateSoftDeleteCaches(
     enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`);
     enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`);
     enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_TIMELINE}:`);
-    enhancedCache.delete('wiki_relation_bundle');
+    clearWikiRelationCache();
     return;
   }
 
@@ -1202,6 +1242,12 @@ router.post('/wiki-links/update', requireAuth, requireAdmin, asyncHandler(async 
     }
 
     const result = await batchUpdateWikiLinks(mappings, { dryRun });
+
+    // 批量更新完成后清空 Wiki 相关缓存
+    if (!dryRun && result.successCount > 0) {
+      invalidateWikiContentCaches();
+    }
+
     res.json(result);
   } catch (error) {
     logger.error({ err: error }, 'Batch update wiki links error');
@@ -1266,6 +1312,9 @@ router.post('/wiki-links/sync-with-imagemap', requireAuth, requireAdmin, asyncHa
     }
 
     const result = await batchUpdateWikiLinks(mappings, { dryRun });
+    if (!dryRun && result.successCount > 0) {
+      invalidateWikiContentCaches();
+    }
     res.json({ message: dryRun ? '预览同步完成' : '同步完成', result });
   } catch (error) {
     logger.error({ err: error }, 'Sync wiki links with ImageMap error');
@@ -2358,7 +2407,11 @@ router.delete('/:tab/:id/permanent', requireAdmin, asyncHandler(async (req: Auth
       return;
     }
     if (tab === 'posts') {
-      await prisma.post.delete({ where: { id } });
+      const deleted = await permanentlyDeletePostById(id);
+      if (!deleted) {
+        res.status(404).json({ error: '记录不存在' });
+        return;
+      }
       invalidateSoftDeleteCaches(tab);
       res.json({ success: true });
       return;

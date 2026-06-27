@@ -37,18 +37,46 @@ interface RegionData {
   sortOrder: number;
 }
 
-function httpGet(url: string): Promise<string> {
+function httpGet(url: string, maxRedirects = 3): Promise<string> {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
-    protocol.get(url, (res) => {
+    const req = protocol.get(url, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        httpGet(res.headers.location).then(resolve).catch(reject);
+        if (maxRedirects <= 0) {
+          res.resume();
+          reject(new Error('重定向次数超过限制'));
+          return;
+        }
+        res.resume();
+        const redirectUrl = new URL(res.headers.location, url).toString();
+        httpGet(redirectUrl, maxRedirects - 1).then(resolve).catch(reject);
         return;
       }
       let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => resolve(data));
-    }).on('error', reject);
+      let totalBytes = 0;
+      let aborted = false;
+      const MAX_BODY_SIZE = 50 * 1024 * 1024; // 50MB
+      res.on('data', (chunk: Buffer) => {
+        totalBytes += chunk.length;
+        if (totalBytes > MAX_BODY_SIZE) {
+          aborted = true;
+          res.destroy();
+          req.destroy(new Error('响应体超过大小限制'));
+          return;
+        }
+        data += chunk.toString();
+      });
+      res.on('end', () => {
+        if (!aborted) {
+          resolve(data);
+        }
+      });
+      res.on('error', reject);
+    });
+    req.setTimeout(30000, () => {
+      req.destroy(new Error('请求超时'));
+    });
+    req.on('error', reject);
   });
 }
 

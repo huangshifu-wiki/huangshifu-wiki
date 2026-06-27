@@ -3,7 +3,7 @@ import type { DataType } from '@huggingface/transformers'
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 const DEFAULT_MODEL_NAME = 'OFA-Sys/chinese-clip-vit-base-patch16'
 const DEFAULT_VECTOR_SIZE = 512
@@ -343,7 +343,7 @@ async function downloadFromModelScope(modelName: string): Promise<string> {
   // 方法1: 尝试使用 modelscope CLI 下载
   try {
     console.log(`[CLIP] 方法1: 使用 modelscope CLI 下载模型...`);
-    execSync(`modelscope download --model ${modelName} --local_dir "${targetDir}"`, {
+    execFileSync('modelscope', ['download', '--model', modelName, '--local_dir', targetDir], {
       stdio: 'pipe',
       timeout: 300000, // 5分钟超时
     });
@@ -364,11 +364,10 @@ import sys
 sys.path.insert(0, '/usr/local/lib/python3.10/dist-packages')
 sys.path.insert(0, '/usr/lib/python3/dist-packages')
 from modelscope import snapshot_download
-import os
-model_dir = snapshot_download('${modelName}', cache_dir='${path.dirname(targetDir)}')
-print(f"DOWNLOADED_TO: {model_dir}")
+model_dir = snapshot_download(${JSON.stringify(modelName)}, cache_dir=${JSON.stringify(path.dirname(targetDir))})
+print("DOWNLOADED_TO:" + model_dir)
 `;
-    const result = execSync(`python3 -c "${pythonScript}"`, {
+    const result = execFileSync('python3', ['-c', pythonScript], {
       stdio: 'pipe',
       timeout: 600000, // 10分钟超时
       encoding: 'utf-8',
@@ -396,8 +395,8 @@ print(f"DOWNLOADED_TO: {model_dir}")
       fs.rmSync(targetDir, { recursive: true, force: true });
     }
 
-    execSync(`git lfs install`, { stdio: 'pipe' });
-    execSync(`git clone https://www.modelscope.cn/${modelName}.git "${targetDir}"`, {
+    execFileSync('git', ['lfs', 'install'], { stdio: 'pipe' });
+    execFileSync('git', ['clone', `https://www.modelscope.cn/${modelName}.git`, targetDir], {
       stdio: 'pipe',
       timeout: 600000, // 10分钟超时
     });

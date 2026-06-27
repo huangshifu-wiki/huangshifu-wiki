@@ -1,15 +1,11 @@
 import { Router } from 'express';
-import { requireAuth, requireAdmin, requireActiveUser } from '../middleware/auth';
-import { prisma, uploadsDir, softDeleteData } from '../utils';
+import { requireAuth, requireAdmin, requireActiveUser, isAdminRole } from '../middleware/auth';
+import { prisma, resolveUploadPathByUrl, softDeleteData } from '../utils';
 import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService';
 import { getS3BaseUrl, getPublicConfig } from '../s3/s3Service';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import type { AuthenticatedRequest } from '../types';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const router = Router();
 
@@ -53,36 +49,6 @@ function normalizeImageMap(item: {
     deletedBy: item.deletedBy ?? null,
     createdAt: item.createdAt.toISOString(),
   };
-}
-
-/**
- * Convert a localUrl like "/uploads/general/2024/01/uuid.jpg" to an absolute file path.
- * Returns null if the URL cannot be resolved safely.
- */
-function localUrlToAbsoluteFile(localUrl: string | null | undefined): string | null {
-  if (!localUrl || typeof localUrl !== 'string') {
-    return null;
-  }
-
-  // localUrl starts with "/uploads/", strip that prefix
-  if (!localUrl.startsWith('/uploads/')) {
-    return null;
-  }
-
-  const relativePath = localUrl.slice('/uploads/'.length);
-  if (!relativePath) {
-    return null;
-  }
-
-  const resolvedBase = path.resolve(uploadsDir);
-  const resolvedTarget = path.resolve(resolvedBase, relativePath);
-
-  // Path traversal protection
-  if (!resolvedTarget.startsWith(resolvedBase)) {
-    return null;
-  }
-
-  return resolvedTarget;
 }
 
 // GET /api/image-maps - List image maps
@@ -305,7 +271,7 @@ router.post('/refresh-all-blurhash', requireAuth, requireAdmin, async (req, res)
 
     for (const imageMap of imageMaps) {
       // Prioritize localUrl for file-based blurhash generation
-      const filePath = localUrlToAbsoluteFile(imageMap.localUrl);
+      const filePath = resolveUploadPathByUrl(imageMap.localUrl);
 
       if (!filePath) {
         continue;
@@ -363,7 +329,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/image-maps - Create image map
-router.post('/', requireAuth, requireActiveUser, async (req, res) => {
+router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
     const { id, md5, localUrl, externalUrl, s3Url, storageType } = req.body as {
       id?: string;
@@ -383,7 +349,7 @@ router.post('/', requireAuth, requireActiveUser, async (req, res) => {
     let thumbhash: string | undefined;
 
     // Try to generate blurhash from local file path first
-    const filePath = localUrlToAbsoluteFile(localUrl);
+    const filePath = resolveUploadPathByUrl(localUrl);
     if (filePath && isBlurhashEnabled() && shouldAutoGenerate()) {
       try {
         console.log('[ImageMap] Auto-generating blurhash from local file:', filePath);
@@ -398,18 +364,51 @@ router.post('/', requireAuth, requireActiveUser, async (req, res) => {
       }
     }
 
-    const item = await prisma.imageMap.upsert({
+    const existing = await prisma.imageMap.findUnique({
       where: { id },
-      update: {
-        md5,
-        ...(localUrl !== undefined && { localUrl: localUrl || null }),
-        ...(externalUrl !== undefined && { externalUrl: externalUrl || null }),
-        ...(s3Url !== undefined && { s3Url: s3Url || null }),
-        ...(storageType !== undefined && { storageType }),
-        ...(blurhash !== undefined && { blurhash }),
-        ...(thumbhash !== undefined && { thumbhash }),
+      select: {
+        id: true,
+        md5: true,
+        localUrl: true,
+        s3Url: true,
+        externalUrl: true,
+        storageType: true,
       },
-      create: {
+    });
+    if (existing) {
+      if (existing.md5 !== md5) {
+        res.status(409).json({ error: '图片映射已存在且与当前图片不匹配' });
+        return;
+      }
+
+      if (!isAdminRole(req.authUser?.role)) {
+        res.status(403).json({ error: '需要管理员权限' });
+        return;
+      }
+
+      const item = await prisma.imageMap.update({
+        where: { id },
+        data: {
+          ...(localUrl !== undefined && { localUrl: localUrl || null }),
+          ...(externalUrl !== undefined && { externalUrl: externalUrl || null }),
+          ...(s3Url !== undefined && { s3Url: s3Url || null }),
+          ...(storageType !== undefined && { storageType }),
+          ...(blurhash !== undefined && { blurhash: blurhash || null }),
+          ...(thumbhash !== undefined && { thumbhash: thumbhash || null }),
+        },
+      });
+
+      res.json({
+        item: {
+          ...item,
+          createdAt: item.createdAt.toISOString(),
+        },
+      });
+      return;
+    }
+
+    const item = await prisma.imageMap.create({
+      data: {
         id,
         md5,
         ...(localUrl && { localUrl }),
@@ -506,7 +505,7 @@ router.post('/:id/refresh-blurhash', requireAuth, requireAdmin, async (req, res)
     }
 
     // Use localUrl to generate blurhash from local file
-    const filePath = localUrlToAbsoluteFile(imageMap.localUrl);
+    const filePath = resolveUploadPathByUrl(imageMap.localUrl);
 
     if (!filePath) {
       res.status(400).json({ error: '没有可用的本地图片路径' });
@@ -581,7 +580,7 @@ router.post('/migrate-to-s3', requireAuth, requireAdmin, async (req, res) => {
     for (const imageMap of imageMaps) {
       try {
         // Convert localUrl to absolute file path
-        const filePath = localUrlToAbsoluteFile(imageMap.localUrl);
+        const filePath = resolveUploadPathByUrl(imageMap.localUrl);
 
         if (!filePath) {
           errors.push(`无法解析本地路径: ${imageMap.id} (${imageMap.localUrl})`);

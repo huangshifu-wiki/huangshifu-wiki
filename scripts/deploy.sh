@@ -324,8 +324,8 @@ else
   nohup env NODE_ENV=production npx tsx server.ts > "$ROOT_DIR/app.log" 2>&1 &
 fi
 
-log "health check: http://127.0.0.1:${APP_PORT}/api/health"
-if curl -fsS "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null 2>&1; then
+log "health check: http://127.0.0.1:${APP_PORT}/healthz"
+if curl -fsS "http://127.0.0.1:${APP_PORT}/healthz" >/dev/null 2>&1; then
   log "health check passed"
 else
   error "health check failed"

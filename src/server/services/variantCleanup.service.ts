@@ -13,6 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger';
+import { resolveUploadPathByUrl } from '../utils/upload';
 import { variantGenerator } from './variantGenerator';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -374,8 +375,7 @@ export class VariantCleanupService {
   }
 
   private urlToFilePath(url: string): string {
-    const relativePath = url.replace(/^\/uploads\//, '');
-    return path.join(uploadsDir, relativePath);
+    return resolveUploadPathByUrl(url) || '';
   }
 
   private formatBytes(bytes: number): string {

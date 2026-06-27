@@ -200,6 +200,7 @@ export {
   isUploadSessionExpired,
   buildUploadPublicUrl,
   resolveUploadPathByStorageKey,
+  resolveUploadPathByUrl,
   extractStorageKeyFromUploadUrl,
   safeDeleteUploadFileByStorageKey,
   safeDeleteUploadFileByUrl,

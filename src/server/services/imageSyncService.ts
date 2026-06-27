@@ -7,7 +7,7 @@ import { prisma } from '../prisma';
 import {
   uploadFileToS3,
   uploadToSuperbed,
-  uploadsDir,
+  resolveUploadPathByUrl,
 } from '../utils';
 import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService';
 import { getPublicConfig } from '../s3/s3Service';
@@ -87,48 +87,6 @@ export function cleanupOldSyncTasks(): void {
 }
 
 /**
- * 将本地URL转换为绝对文件路径
- */
-function localUrlToAbsoluteFile(localUrl: string | null | undefined): string | null {
-  if (!localUrl || typeof localUrl !== 'string') {
-    console.log(`[ImageSync] localUrl 为空或不是字符串: ${localUrl}`);
-    return null;
-  }
-
-  console.log(`[ImageSync] 解析 localUrl: ${localUrl}`);
-
-  if (!localUrl.startsWith('/uploads/')) {
-    console.log(`[ImageSync] localUrl 不以 /uploads/ 开头`);
-    return null;
-  }
-
-  const relativePath = localUrl.slice('/uploads/'.length);
-  if (!relativePath) {
-    console.log(`[ImageSync] relativePath 为空`);
-    return null;
-  }
-
-  console.log(`[ImageSync] relativePath: ${relativePath}`);
-  console.log(`[ImageSync] uploadsDir: ${uploadsDir}`);
-
-  const resolvedBase = path.resolve(uploadsDir);
-  const resolvedTarget = path.resolve(resolvedBase, relativePath);
-
-  console.log(`[ImageSync] resolvedBase: ${resolvedBase}`);
-  console.log(`[ImageSync] resolvedTarget: ${resolvedTarget}`);
-
-  // 路径遍历保护
-  // 在 Linux 上，需要确保路径分隔符一致
-  const baseWithSep = resolvedBase.endsWith(path.sep) ? resolvedBase : resolvedBase + path.sep;
-  if (!resolvedTarget.startsWith(baseWithSep) && resolvedTarget !== resolvedBase) {
-    console.log(`[ImageSync] 路径遍历检查失败: target=${resolvedTarget}, base=${baseWithSep}`);
-    return null;
-  }
-
-  return resolvedTarget;
-}
-
-/**
  * 同步单张图片到S3
  */
 async function syncImageToS3(imageMap: {
@@ -146,7 +104,7 @@ async function syncImageToS3(imageMap: {
       return { success: true, s3Url: imageMap.s3Url };
     }
 
-    const filePath = localUrlToAbsoluteFile(imageMap.localUrl);
+    const filePath = resolveUploadPathByUrl(imageMap.localUrl);
     if (!filePath) {
       console.error(`[ImageSync] 无法解析本地路径: ${imageMap.localUrl}`);
       return { success: false, error: `无法解析本地路径: ${imageMap.localUrl}` };
@@ -237,7 +195,7 @@ async function syncImageToExternal(imageMap: {
       return { success: true, externalUrl: imageMap.externalUrl };
     }
 
-    const filePath = localUrlToAbsoluteFile(imageMap.localUrl);
+    const filePath = resolveUploadPathByUrl(imageMap.localUrl);
     if (!filePath) {
       return { success: false, error: `无法解析本地路径: ${imageMap.localUrl}` };
     }
@@ -385,7 +343,7 @@ export async function executeSyncTask(taskId: string): Promise<void> {
       }
     }
 
-    task.status = task.failed === 0 ? 'completed' : 'completed';
+    task.status = 'completed';
     task.completedAt = new Date();
 
     console.log(`[ImageSync] 任务完成: ${taskId}, 成功: ${task.succeeded}, 失败: ${task.failed}`);

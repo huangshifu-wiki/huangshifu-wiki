@@ -233,15 +233,13 @@ router.post('/', postWriteLimiter, requireAuth, requireActiveUser, validateBody(
       finalSection = MUSIC_SECTION_ID;
     }
 
-    if (finalSection !== section) {
-      const sectionExists = await prisma.section.findUnique({
-        where: { id: section },
-        select: { id: true },
-      });
-      if (!sectionExists) {
-        res.status(400).json({ error: '版块不存在' });
-        return;
-      }
+    const sectionExists = await prisma.section.findUnique({
+      where: { id: finalSection },
+      select: { id: true },
+    });
+    if (!sectionExists) {
+      res.status(400).json({ error: '版块不存在' });
+      return;
     }
 
     const nextStatus = normalizePostWriteStatus(status, req.authUser!);
@@ -432,15 +430,13 @@ router.put('/:id', postWriteLimiter, requireAuth, requireActiveUser, validateBod
       finalSection = MUSIC_SECTION_ID;
     }
 
-    if (finalSection !== section) {
-      const sectionExists = await prisma.section.findUnique({
-        where: { id: section },
-        select: { id: true },
-      });
-      if (!sectionExists) {
-        res.status(400).json({ error: '版块不存在' });
-        return;
-      }
+    const sectionExists = await prisma.section.findUnique({
+      where: { id: finalSection },
+      select: { id: true },
+    });
+    if (!sectionExists) {
+      res.status(400).json({ error: '版块不存在' });
+      return;
     }
 
     let nextStatus: ContentStatus;
@@ -737,6 +733,13 @@ router.delete('/comments/:id', requireAuth, requireActiveUser, async (req: Authe
           },
         });
 
+        if (comment.postId) {
+          await tx.post.update({
+            where: { id: comment.postId },
+            data: { commentsCount: { decrement: 1 } },
+          });
+        }
+
         await tx.moderationLog.create({
           data: {
             targetType: 'comment',
@@ -769,12 +772,21 @@ router.post('/comments/:id/restore', requireAdmin, async (req: AuthenticatedRequ
     }
 
     if (comment.deletedAt) {
-      await prisma.postComment.update({
-        where: { id: req.params.id },
-        data: {
-          deletedAt: null,
-          deletedBy: null,
-        },
+      await prisma.$transaction(async (tx) => {
+        await tx.postComment.update({
+          where: { id: req.params.id },
+          data: {
+            deletedAt: null,
+            deletedBy: null,
+          },
+        });
+
+        if (comment.postId) {
+          await tx.post.update({
+            where: { id: comment.postId },
+            data: { commentsCount: { increment: 1 } },
+          });
+        }
       });
     }
 
@@ -896,6 +908,15 @@ router.post('/:id/like', requireAuth, requireActiveUser, async (req: Authenticat
 router.delete('/:id/like', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
     const postId = req.params.id;
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, status: true, authorUid: true, deletedAt: true },
+    });
+
+    if (!post || !canViewPost(post, req.authUser)) {
+      res.status(404).json({ error: '帖子未找到' });
+      return;
+    }
 
     await prisma.$transaction(async (tx) => {
       const deleted = await tx.postLike.deleteMany({
@@ -1010,6 +1031,15 @@ router.post('/:id/dislike', requireAuth, requireActiveUser, async (req: Authenti
 router.delete('/:id/dislike', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
     const postId = req.params.id;
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, status: true, authorUid: true, deletedAt: true },
+    });
+
+    if (!post || !canViewPost(post, req.authUser)) {
+      res.status(404).json({ error: '帖子未找到' });
+      return;
+    }
 
     await prisma.$transaction(async (tx) => {
       const deleted = await tx.postDislike.deleteMany({

@@ -113,29 +113,31 @@ export async function batchUpdateWikiLinks(
 
       // 预览模式不实际修改
       if (!dryRun) {
-        // 更新页面内容
-        await prisma.wikiPage.update({
-          where: { slug: page.slug },
-          data: {
-            content: replaceResult.content,
-            updatedAt: new Date(),
-          },
-        });
+        await prisma.$transaction(async (tx) => {
+          // 更新页面内容
+          await tx.wikiPage.update({
+            where: { slug: page.slug },
+            data: {
+              content: replaceResult.content,
+              updatedAt: new Date(),
+            },
+          });
 
-        // 创建修订记录
-        await prisma.wikiRevision.create({
-          data: {
-            pageSlug: page.slug,
-            title: page.title,
-            content: replaceResult.content,
-            slug: page.slug,
-            category: page.category,
-            tags: page.tags as any,
-            relations: page.relations as any,
-            eventDate: page.eventDate,
-            editorUid: editorUid || 'system',
-            editorName: editorName || `链接更新服务 (自动更新${replaceResult.replaceCount}处)`,
-          },
+          // 创建修订记录
+          await tx.wikiRevision.create({
+            data: {
+              pageSlug: page.slug,
+              title: page.title,
+              content: replaceResult.content,
+              slug: page.slug,
+              category: page.category,
+              tags: page.tags as any,
+              relations: page.relations as any,
+              eventDate: page.eventDate,
+              editorUid: editorUid || 'system',
+              editorName: editorName || `链接更新服务 (自动更新${replaceResult.replaceCount}处)`,
+            },
+          });
         });
       }
 

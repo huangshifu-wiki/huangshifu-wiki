@@ -20,17 +20,16 @@
  */
 
 import dotenv from 'dotenv';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import readline from 'readline';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// 加载测试环境变量
+// 只加载测试环境变量，避免被 .env.local / .env 覆盖 DATABASE_URL
 dotenv.config({ path: path.resolve(__dirname, '../.env.test') });
-dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
-dotenv.config();
+process.env.DOTENV_CONFIG_QUIET = 'true';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -64,10 +63,16 @@ function parseDatabaseUrl(url: string) {
 }
 
 const dbConfig = parseDatabaseUrl(DATABASE_URL);
+const escapedDatabaseName = dbConfig.database.replace(/'/g, "''");
 
-// 安全检查：确保是测试数据库
-if (!dbConfig.database.includes('test')) {
-  console.error('❌ 安全检查失败：数据库名称必须包含 "test"');
+// 安全检查：数据库名称必须明确匹配测试环境命名约定
+const isAllowedTestDatabase =
+  dbConfig.database === 'huangshifu_wiki_test' ||
+  dbConfig.database.startsWith('hsf_test_') ||
+  dbConfig.database.endsWith('_test');
+
+if (!isAllowedTestDatabase) {
+  console.error('❌ 安全检查失败：数据库名称必须是受允许的测试数据库命名');
   console.error(`当前数据库名称: ${dbConfig.database}`);
   console.error('这可以防止意外清理生产或开发数据库');
   process.exit(1);
@@ -150,16 +155,24 @@ async function dropDatabase() {
 
   try {
     // 断开所有连接
-    const terminateConnectionsCommand = `psql -h ${dbConfig.host} -p ${dbConfig.port} -U ${dbConfig.user} -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = '${dbConfig.database}' AND pid <> pg_backend_pid();"`;
-
-    execSync(terminateConnectionsCommand, {
+    execFileSync('psql', [
+      '-h', dbConfig.host,
+      '-p', dbConfig.port,
+      '-U', dbConfig.user,
+      '-d', 'postgres',
+      '-c', `SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = '${escapedDatabaseName}' AND pid <> pg_backend_pid();`,
+    ], {
       env: { ...process.env, PGPASSWORD: dbConfig.password },
       stdio: 'pipe',
     });
 
     // 删除数据库
-    const dropDbCommand = `dropdb -h ${dbConfig.host} -p ${dbConfig.port} -U ${dbConfig.user} ${dbConfig.database}`;
-    execSync(dropDbCommand, {
+    execFileSync('dropdb', [
+      '-h', dbConfig.host,
+      '-p', dbConfig.port,
+      '-U', dbConfig.user,
+      dbConfig.database,
+    ], {
       env: { ...process.env, PGPASSWORD: dbConfig.password },
       stdio: 'inherit',
     });

@@ -181,7 +181,12 @@ export function parseMusicUrl(rawUrl: string): ParsedMusicUrl | null {
     return null;
   }
 
-  const decoded = decodeURIComponent(normalized);
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(normalized);
+  } catch {
+    return null;
+  }
   for (const rule of PLATFORM_URL_PATTERNS) {
     for (const pattern of rule.patterns) {
       const matched = decoded.match(pattern);
