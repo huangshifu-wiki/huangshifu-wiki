@@ -1,36 +1,44 @@
-name: 功能建议
-description: 提出新能力、交互改进或维护建议
-title: 'feat: '
+name: 我有一个建议
+description: 提出新功能、页面改进或使用体验建议
+title: '建议：'
 labels: ['enhancement']
 body:
   - type: textarea
-    id: problem
+    id: idea
     attributes:
-      label: 背景与问题
-      description: 这个建议解决什么实际问题？
+      label: 你希望增加或改进什么？
+      description: 用日常语言描述你的想法。
+      placeholder: 例如：希望图库可以按拍摄地点筛选，或者 Wiki 页面可以显示最近编辑记录。
     validations:
       required: true
   - type: textarea
-    id: proposal
+    id: reason
     attributes:
-      label: 建议方案
-      description: 描述你期望的行为、入口、流程或接口。
-    validations:
-      required: true
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: 备选方案
-      description: 如果考虑过其他做法，可以写在这里。
+      label: 为什么这个建议有用？
+      placeholder: 例如：这样查找图片会更快，或者新用户更容易理解页面内容。
     validations:
       required: false
-  - type: checkboxes
-    id: scope
+  - type: input
+    id: page
     attributes:
-      label: 影响范围
+      label: 和哪个页面或功能有关？
+      placeholder: 例如：首页、Wiki、图库、音乐、搜索、个人中心
+    validations:
+      required: false
+  - type: textarea
+    id: example
+    attributes:
+      label: 有没有参考例子？
+      description: 可以贴截图、链接，或描述你见过的类似功能。
+    validations:
+      required: false
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: 你觉得它有多重要？
       options:
-        - label: 前端体验
-        - label: 后端接口
-        - label: 数据库
-        - label: 部署或配置
-        - label: 文档
+        - 有空再做
+        - 比较有用
+        - 很影响使用
+    validations:
+      required: false

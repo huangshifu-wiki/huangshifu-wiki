@@ -1,0 +1,34 @@
+name: 内容需要修正
+description: 资料错误、链接失效、图片或歌词信息需要调整
+title: '内容修正：'
+labels: ['content']
+body:
+  - type: textarea
+    id: content
+    attributes:
+      label: 哪里的内容需要修正？
+      description: 请写页面名称、条目名称，或直接粘贴链接。
+      placeholder: 例如：某首歌的发行日期、某个 Wiki 条目的介绍、某张图片说明。
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: 现在显示的内容是什么？
+      placeholder: 可以复制当前文字，或描述错误位置。
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: 应该改成什么？
+      placeholder: 请写出建议修改后的内容。
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: 参考来源
+      description: 如果有来源链接、截图或说明，请放在这里。
+    validations:
+      required: false

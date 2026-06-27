@@ -3,7 +3,7 @@
 ## 1. 项目概况
 
 - 项目：黄诗扶 Wiki
-- 包名：`react-example`
+- 包名：`huangshifu-wiki`
 - 形态：单包全栈应用，React SPA + Express API
 - 运行时：浏览器 + Node.js 22
 - 模块系统：ESM

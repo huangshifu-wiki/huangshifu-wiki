@@ -20,6 +20,9 @@ nul
 .spec/
 .sisyphus/
 
+# WeChat DevTools local private config
+miniprogram-webview/project.private.config.json
+
 # local runtime data (uploads, db snapshots, model cache)
 uploads/
 remote-snapshot/

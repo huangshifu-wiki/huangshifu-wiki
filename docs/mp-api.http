@@ -1,5 +1,5 @@
 ### WeChat login (mock mode)
-POST http://localhost:3000/api/auth/wechat/login
+POST http://localhost:3003/api/auth/wechat/login
 Content-Type: application/json
 
 {
@@ -8,10 +8,10 @@ Content-Type: application/json
 }
 
 ### MP wiki list
-GET http://localhost:3000/api/mp/wiki?category=all&page=1&limit=5
+GET http://localhost:3003/api/mp/wiki?category=all&page=1&limit=5
 
 ### MP create post
-POST http://localhost:3000/api/mp/posts
+POST http://localhost:3003/api/mp/posts
 Content-Type: application/json
 
 {
@@ -22,7 +22,7 @@ Content-Type: application/json
 }
 
 ### MP create comment
-POST http://localhost:3000/api/mp/comments
+POST http://localhost:3003/api/mp/comments
 Content-Type: application/json
 
 {

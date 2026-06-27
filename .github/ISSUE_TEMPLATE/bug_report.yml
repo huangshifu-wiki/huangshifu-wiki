@@ -1,42 +1,65 @@
-name: Bug 报告
-description: 报告可复现的问题或回归
-title: 'bug: '
+name: 我遇到了问题
+description: 页面打不开、按钮没反应、内容显示异常等问题
+title: '问题：'
 labels: ['bug']
 body:
   - type: textarea
-    id: summary
+    id: what-happened
     attributes:
-      label: 问题描述
-      description: 简要说明发生了什么，以及你期望发生什么。
+      label: 发生了什么？
+      description: 用自己的话描述问题，不需要写技术细节。
+      placeholder: 例如：打开某个 Wiki 页面后一直在加载，或者点击发布按钮没有反应。
     validations:
       required: true
-  - type: textarea
-    id: steps
+  - type: input
+    id: page
     attributes:
-      label: 复现步骤
-      description: 请提供最小可复现步骤。
-      placeholder: |
-        1. 打开 ...
-        2. 点击 ...
-        3. 看到 ...
-    validations:
-      required: true
-  - type: textarea
-    id: environment
-    attributes:
-      label: 环境信息
-      description: 浏览器、Node.js、数据库、部署方式等。
-      placeholder: |
-        - Node.js:
-        - 浏览器:
-        - 部署方式:
+      label: 出问题的页面或链接
+      description: 如果方便，请粘贴页面地址；不知道也可以写页面名称。
+      placeholder: 例如：Wiki 详情页、图库上传页、/admin
     validations:
       required: false
   - type: textarea
-    id: logs
+    id: steps
     attributes:
-      label: 日志或截图
-      description: 如有相关日志、错误堆栈或截图，请贴在这里。请勿包含密钥。
-      render: shell
+      label: 你当时做了什么？
+      description: 简单写一下问题出现前的操作。
+      placeholder: |
+        1. 打开 ...
+        2. 点击 ...
+        3. 页面出现 ...
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: 你原本希望看到什么？
+      placeholder: 例如：页面正常打开、图片上传成功、内容保存成功。
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图或录屏
+      description: 如果有截图、录屏或报错提示，可以拖到这里。请不要上传包含隐私的信息。
+    validations:
+      required: false
+  - type: dropdown
+    id: device
+    attributes:
+      label: 你使用的设备
+      options:
+        - 手机浏览器
+        - 电脑浏览器
+        - 微信小程序
+        - 其他
+    validations:
+      required: false
+  - type: input
+    id: time
+    attributes:
+      label: 大概发生时间
+      description: 如果是偶发问题，时间能帮助排查。
+      placeholder: 例如：今天下午 3 点左右
     validations:
       required: false
