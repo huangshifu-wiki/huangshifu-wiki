@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -6,6 +7,10 @@ import dotenv from 'dotenv';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 dotenv.config({ path: path.resolve(__dirname, '.env.test') });
+
+const testUploadsPath =
+  process.env.UPLOADS_PATH || path.join(os.tmpdir(), 'huangshifu-wiki-test-uploads');
+process.env.UPLOADS_PATH = testUploadsPath;
 
 export default defineConfig({
   define: {
@@ -19,6 +24,7 @@ export default defineConfig({
   test: {
     env: {
       NODE_ENV: 'test',
+      UPLOADS_PATH: testUploadsPath,
     },
     environment: 'node',
     include: ['tests/integration/**/*.test.ts'],

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -9,6 +10,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 dotenv.config({ path: path.resolve(__dirname, '.env.local') });
 dotenv.config();
+
+const testUploadsPath =
+  process.env.UPLOADS_PATH || path.join(os.tmpdir(), 'huangshifu-wiki-test-uploads');
+process.env.UPLOADS_PATH = testUploadsPath;
 
 export default defineConfig({
   define: {
@@ -22,6 +27,7 @@ export default defineConfig({
   test: {
     env: {
       NODE_ENV: 'test',
+      UPLOADS_PATH: testUploadsPath,
     },
     environment: 'jsdom',
     setupFiles: ['./tests/unit/setup.ts'],
