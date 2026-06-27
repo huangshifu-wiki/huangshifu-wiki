@@ -1,0 +1,42 @@
+name: Bug 报告
+description: 报告可复现的问题或回归
+title: 'bug: '
+labels: ['bug']
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述
+      description: 简要说明发生了什么，以及你期望发生什么。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请提供最小可复现步骤。
+      placeholder: |
+        1. 打开 ...
+        2. 点击 ...
+        3. 看到 ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: 浏览器、Node.js、数据库、部署方式等。
+      placeholder: |
+        - Node.js:
+        - 浏览器:
+        - 部署方式:
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 如有相关日志、错误堆栈或截图，请贴在这里。请勿包含密钥。
+      render: shell
+    validations:
+      required: false

@@ -1,65 +1,48 @@
-# Security Policy
+# 安全政策
 
-## Supported Versions
+## 支持范围
 
-We release security updates for the following versions:
-- **Current**: Latest release on `main` branch
-- **Previous**: Previous major version (if applicable)
+当前仅维护 `main` 分支和最新部署版本。历史分支、个人 fork 和非官方部署不承诺安全更新。
 
-## Reporting a Vulnerability
+## 报告漏洞
 
-If you discover a security vulnerability in this project, please:
+请不要通过公开 issue、公开 PR 或讨论区披露安全漏洞。
 
-1. **Do NOT** open a public issue
-2. Send details to: [your-email@example.com]
-3. Include:
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Potential impact
-   - Suggested fix (if available)
+推荐使用 GitHub 私有安全报告：
 
-## Response Timeline
+<https://github.com/yangwenjie1231/huangshifu-wiki/security/advisories/new>
 
-- **Initial Response**: Within 48 hours
-- **Status Update**: Within 7 days
-- **Fix Release**: Based on severity and complexity
+报告时请尽量包含：
 
-## Security Best Practices
+- 漏洞影响范围
+- 复现步骤或最小复现请求
+- 受影响的接口、页面、权限角色或部署配置
+- 可能的修复建议
+- 是否已在公开环境中验证
 
-This project follows these security practices:
+请不要提交真实用户数据、生产密钥、Cookie、Token 或其他敏感信息。
 
-### Dependencies
-- Regular dependency audits via CI/CD pipeline
-- Automated vulnerability scanning on every PR
-- Critical/High vulnerabilities block merges
+## 处理流程
 
-### Code Security
-- Static code analysis via GitHub CodeQL
-- No hardcoded secrets or credentials
-- Input validation and sanitization
-- SQL injection prevention via Prisma ORM
-- XSS prevention via Content Security Policy
+- 收到报告后会先确认可复现性和影响范围。
+- 高风险问题优先修复认证、权限、上传、存储、数据泄露和远程执行相关场景。
+- 在修复合并并完成必要部署前，请避免公开披露细节。
 
-### Infrastructure
-- HTTPS only for all endpoints
-- Secure cookie configuration
-- Rate limiting on API endpoints
-- Helmet.js for security headers
+## 项目安全基线
 
-## Known Security Considerations
+- 认证使用 JWT HttpOnly Cookie。
+- 已登录写请求需要通过 CSRF 校验。
+- 管理接口使用管理员权限中间件保护。
+- 服务端使用 Prisma 访问数据库，并对主要请求体进行校验。
+- 上传接口限制文件类型、大小和存储策略。
+- CI 包含类型检查、测试、构建、依赖审计和 CodeQL。
 
-### Current Vulnerabilities
-Check the [Security tab](../../security) for the latest scan results.
+## 依赖漏洞
 
-### Third-Party Dependencies
-This project uses npm packages which may have their own vulnerabilities.
-We monitor these through automated scanning.
+依赖安全检查使用：
 
-## Security Updates
+```bash
+npm audit --omit=dev --audit-level=high
+```
 
-Security patches are released as:
-- **Critical**: Within 24-72 hours
-- **High**: Within 1 week
-- **Moderate/Low**: Next scheduled release
-
-Subscribe to releases to get notified about security updates.
+开发依赖和传递依赖中的中低风险问题会结合实际暴露面和升级风险排期处理。

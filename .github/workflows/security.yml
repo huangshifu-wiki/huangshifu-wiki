@@ -1,333 +1,51 @@
-# ============================================================================
-# Security Scanning Workflow
-# ============================================================================
-# 功能：
-#   1. 依赖漏洞扫描 (npm audit) - 检测 npm 依赖中的已知漏洞
-#   2. CodeQL 代码安全分析 - 静态分析检测代码层面的安全问题
-#
-# 触发条件：
-#   - push 到 main 分支
-#   - PR 到 main 分支
-#   - 每周一凌晨 2:00 UTC 定时扫描
-#   - 手动触发 (workflow_dispatch)
-#
-# 输出：
-#   - SARIF 格式上传到 GitHub Security tab
-#   - PR 中展示安全扫描结果摘要
-# ============================================================================
-
 name: Security Scan
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
-      - '**/*.ts'
-      - '**/*.tsx'
-      - '**/*.js'
-      - '**/*.jsx'
   pull_request:
     branches: [main]
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
-      - '**/*.ts'
-      - '**/*.tsx'
-      - '**/*.js'
-      - '**/*.jsx'
   schedule:
-    # 每周一 UTC 02:00 (北京时间 10:00) 运行深度安全扫描
     - cron: '0 2 * * 1'
   workflow_dispatch:
-    inputs:
-      full_scan:
-        description: '运行完整的深度扫描（包含 CodeQL 完整分析）'
-        required: false
-        default: false
-        type: boolean
 
-# 最小权限原则：只授予必要的权限
 permissions:
+  actions: read
   contents: read
-  security-events: write  # 用于上传 SARIF 结果到 Security tab
-  pull-requests: write    # 用于在 PR 中显示结果
-  actions: read           # 用于读取 workflow 状态
+  security-events: write
 
 concurrency:
   group: security-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # ==========================================================================
-  # Job 1: 依赖漏洞扫描
-  # ==========================================================================
   dependency-audit:
-    name: Dependency Vulnerability Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: |
-          echo "Installing dependencies..."
-          npm ci --legacy-peer-deps --ignore-scripts || {
-            echo "Warning: npm ci failed, attempting npm install as fallback"
-            npm install --legacy-peer-deps --ignore-scripts || true
-          }
-          
-          # Verify node_modules exists
-          if [ -d "node_modules" ]; then
-            echo "✓ node_modules directory exists"
-            ls node_modules/ | head -5
-          else
-            echo "⚠️ node_modules not found, audit may be limited"
-          fi
-
-      # ------------------------------------------------------------------
-      # npm audit: 扫描已知依赖漏洞 (非阻塞 - 始终成功退出)
-      # ------------------------------------------------------------------
-      - name: Run npm audit
-        id: npm-audit
-        run: |
-          set +e
-          echo "=== Running npm vulnerability audit ==="
-          npm audit --json > audit-results.json 2>&1
-          AUDIT_EXIT_CODE=$?
-          echo "npm audit exit code: $AUDIT_EXIT_CODE"
-
-          if [ ! -f audit-results.json ] || [ ! -s audit-results.json ]; then
-            echo '{"vulnerabilities":{}}' > audit-results.json
-            echo "No valid audit results, using empty template"
-          fi
-
-          echo 'Y29uc3QgZnMgPSByZXF1aXJlKCdmcycpOwpsZXQgZGF0YTsKdHJ5IHsgZGF0YSA9IEpTT04ucGFyc2UoZnMucmVhZEZpbGVTeW5jKCdhdWRpdC1yZXN1bHRzLmpzb24nLCAndXRmOCcpKTsgfQpjYXRjaChlKSB7IGRhdGEgPSB7IHZ1bG5lcmFiaWxpdGllczoge30gfTsgfQpsZXQgc3VtbWFyeSA9IHsgY3JpdGljYWw6IDAsIGhpZ2g6IDAsIG1vZGVyYXRlOiAwLCBsb3c6IDAsIGluZm86IDAsIHRvdGFsOiAwIH07CmlmIChkYXRhLnZ1bG5lcmFiaWxpdGllcykgeyBmb3IgKGNvbnN0IFtwa2csIHZ1bG5dIG9mIE9iamVjdC5lbnRyaWVzKGRhdGEudnVsbmVyYWJpbGl0aWVzKSkgeyBzdW1tYXJ5W3Z1bG4uc2V2ZXJpdHldID0gKHN1bW1hcnlbdnVsbi5zZXZlcml0eV0gfHwgMCkgKyAxOyBzdW1tYXJ5LnRvdGFsKys7IH0gfQplbHNlIGlmIChkYXRhLmFkdmlzb3JpZXMpIHsgZm9yIChjb25zdCBhZHZpc29yeSBvZiBPYmplY3QudmFsdWVzKGRhdGEuYWR2aXNvcmllcykpIHsgc3VtbWFyeVthZHZpc29yeS5zZXZlcml0eV0gPSAoc3VtbWFyeVthZHZpc29yeS5zZXZlcml0eV0gfHwgMCkgKyAxOyBzdW1tYXJ5LnRvdGFsKys7IH0gfQpjb25zb2xlLmxvZygiPT09IFZ1bG5lcmFiaWxpdHkgU3VtbWFyeSA9PT0iKTsKY29uc29sZS5sb2coSlNPTi5zdHJpbmdpZnkoc3VtbWFyeSkpOwpjb25zdCBmczIgPSByZXF1aXJlKCdmcycpOwpmczIuYXBwZW5kRmlsZVN5bmMocHJvY2Vzcy5lbnYuR0lUSFVCX09VVFBVVCwgInN1bW1hcnk9IiArIEpTT04uc3RyaW5naWZ5KHN1bW1hcnkpICsgIlxuIik7CmZzMy5hcHBlbmRGaWxlU3luYyhwcm9jZXNzLmVudi5GSVRIQl9PVVRQVVQsICJoYXNfY3JpdGljYWxfb3JfaGlnaD0iICsgKChzdW1tYXJ5LmNyaXRpY2FsID4gMCB8fCBzdW1tYXJ5LmhpZ2ggPiAwKSA/ICJ0cnVlIiA6ICJmYWxzZSIpICsgIlxuIik7' | base64 -d > /tmp/audit-summary.cjs && node /tmp/audit-summary.cjs
-          exit 0
-
-      # ------------------------------------------------------------------
-      # 将 npm audit 结果转换为 SARIF 格式并上传
-      # ------------------------------------------------------------------
-      - name: Convert audit results to SARIF
-        if: always()
-        run: |
-          echo "Creating SARIF file..."
-
-          printf '%s\n' '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"npm-audit","informationUri":"https://docs.npmjs.com/cli/v10/commands/npm-audit","rules":[]},"results":[]}]}' > sarif-npm-audit.json
-
-          if [ -f audit-results.json ] && [ -s audit-results.json ]; then
-            echo "Processing audit results..."
-            echo 'Y29uc3QgZnMgPSByZXF1aXJlKCdmcycpOwpsZXQgZGF0YTsKdHJ5IHsgZGF0YSA9IEpTT04ucGFyc2UoZnMucmVhZEZpbGVTeW5jKCdhdWRpdC1yZXN1bHRzLmpzb24nLCAndXRmOCcpKTsgfQpjYXRjaCAoZSkgeyBjb25zb2xlLmxvZygnV2FybmluZzogQ291bGQgbm90IHBhcnNlJyk7IGRhdGEgPSB7IHZ1bG5lcmFiaWxpdGllczoge30gfTsgfQoKY29uc3Qgc2FyaWYgPSBKU09OLnBhcnNlKGZzLnJlYWRGaWxlU3luYygnc2FyaWYtbnBtLWF1ZGl0Lmpzb24nLCAndXRmOCcpKTsKY29uc3QgcnVsZUluZGV4ID0ge307CmNvbnN0IHJlc3VsdHMgPSBbXTsKCmZ1bmN0aW9uIGFkZFZ1bG5lcmFiaWxpdHkocGtnLCB2dWxuLCBzZXZlcml0eSkgewogIHZhciBydWxlSWQgPSAibnBtLSIgKyBwa2cucmVwbGFjZSgvW15hLXpBLVowLTlfLV0vZywgJy0nKTsKICBpZiAoIXJ1bGVJbmRleFtydWxlSWRdKSB7CiAgICBydWxlSW5kZXhbcnVsZUldXSA9IHNhcmlmLnJ1bnNbMF0udG9vbC5kcml2ZXIucnVsZXMubGVuZ3RoOwogICAgc2FyaWYucnVuc1swXS50b29sLmRyaXZlci5ydWxlcy5wdXNoKHsKICAgICAgaWQ6IHJ1bGVJZCwKICAgICAgc2hvcnREZXNjcmlwdGlvbjogeyB0ZXh0OiB2dWxuLnRpdGxlIHx8ICgiVnVsbmVyYWJpbGl0eSBpbiAiICsgcGtnKSB9LAogICAgICBmdWxsRGVzY3JpcHRpb246IHsgdGV4dDogdnVubi5vdmVydmlldyB8fCAiIiB9LAogICAgICBoZWxwOiB7CiAgICAgICAgdGV4dDogWyJQYWNrYWdlOiIsIHBrZywgIlNldmVyaXR5OiIsIHNldmVyaXR5LnRvVXBwZXJDYXNlKCksICJGaXg6IiwgKHZ1bG4uZml4QXZhaWxhYmxlID09PSBmYWxzZSA/ICJObyBmaXggYXZhaWxhYmxlIiA6IHZ1bG4uZml4QXZhaWxhYmxlICYmIHZ1bG4uZml4QXZhaWxhYmxlLnZlcnNpb24gPyAiVXBkYXRlIHRvICIgKyB2dWxuLmZpeEF2YWlsYWJsZS52ZXJzaW9uIDogIlJ1biBucG0gYXVkaXQgZml4IildLmpvaW4oIiAiKQogICAgICB9LAogICAgICBwcm9wZXJ0aWVzOiB7ICJzZWN1cml0eS1zZXZlcml0eSI6IGdldFNldmVyaXR5U2NvcmUoc2V2ZXJpdHkpLCB0YWdzOiBbImRlcGVuZGVuY3kiLCAidnVsbmVyYWJpbGl0eSIsIHNldmVyaXR5XSB9CiAgICB9KTsKICB9CiAgcmVzdWx0cy5wdXNoKHsKICAgIHJ1bGVJZDogcnVsZUlkLAogICAgbGV2ZWw6IGdldExldmVsKHNldmVyaXR5KSwKICAgIG1lc3NhZ2U6IHsgdGV4dDogKHZ1bG4udGl0bGUgfHwgIkRlcGVuZGVuY3kgdnVsbmVyYWJpbGl0eSIpICsgIiBbIiArIHNldmVyaXR5LnRvVXBwZXJDYXNlKCkgKyAiXSIgfSwKICAgIGxvY2F0aW9uczogW3sgcGh5c2ljYWxMb2NhdGlvbjogeyBhcnRpZmFjdExvY2F0aW9uOiB7IHVyaTogInBhY2thZ2UuanNvbiIgfSwgcmVnaW9uOiB7IHN0YXJ0TGluZTogMSwgZW5kTGluZTogMSB9IH0gfV0sCiAgICBwcm9wZXJ0aWVzOiB7IHBhY2thZ2U6IHBrZywgc2V2ZXJpdHk6IHNldmVyaXR5LCB2dWxuZXJhYmxlVmVyc2lvbnM6IHZ1bG4ucmFuZ2UgfHwgIk4vQSIsIHBhdGNoZWRWZXJzaW9uczogdnVsbi5maXhBdmFpbGFibGUgJiYgdnVsbi5maXhBdmFpbGFibGUudmVyc2lvbiA/IHZ1bG4uZml4QXZhaWxhYmxlLnZlcnNpb24gOiAiTi9BIiB9CiAgfSk7Cn0KCmZ1bmN0aW9uIGdldFNldmVyaXR5U2NvcmUoc2V2KSB7CiAgdmFyIHMgPSB7IGNyaXRpY2FsOiAiOS44IiwgaGlnaDogIjcuNSIsIG1vZGVyYXRlOiAiNS4wIiwgbG93OiAiMi4wIiB9OwogIHJldHVybiBzW3Nldi50b0xvd2VyQ2FzZSgpXSB8fCAiMS4wIjsKfQoKZnVuY3Rpb24gZ2V0TGV2ZWwoc2V2KSB7CiAgdmFyIHMgPSBzZXYudG9Mb3dlckNhc2UoKTsKICByZXR1cm4gcyA9PT0gImNyaXRpY2FsIiB8fCBzID09PSAiaGlnaCIgPyAiZXJyb3IiIDogcyA9PT0gIm1vZGVyYXRlIiA/ICJ3YXJuaW5nIiA6ICJub3RlIjsKfQoKaWYgKGRhdGEudnVsbmVyYWJpbGl0aWVzKSB7CiAgZm9yICh2YXIgcGFpciBvZiBPYmplY3QuZW50cmllcyhkYXRhLnZ1bG5lcmFiaWxpdGllcykpIHsKICAgIGFkZFZ1bG5lcmFiaWxpdHkocGFpclswXSwgcGFpclsxXSwgcGFpclsxXS5zZXZlcml0eSk7CiAgfQp9CgpzYXJpZi5ydW5zWzBdLnJlc3VsdHMgPSByZXN1bHRzOwpmcy53cml0ZUZpbGVTeW5jKCJzYXJpZi1ucG0tYXVkaXQuanNvbiIsIEpTT04uc3RyaW5naWZ5KHNhggKyAiIGZpbmRpbmdzIik7' | base64 -d > /tmp/sarif-convert.cjs && node /tmp/sarif-convert.cjs
-          else
-            echo "No audit results file found or file is empty"
-            echo "SARIF file created with empty results (template only)"
-          fi
-
-          echo "SARIF file ready: $(ls -la sarif-npm-audit.json | awk '{print $5}')"
-
-      - name: Upload npm audit results to GitHub Security tab
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: sarif-npm-audit.json
-          category: npm-audit
-        continue-on-error: true
-
-      # ------------------------------------------------------------------
-      # 在 PR 中添加安全扫描结果注释
-      # ------------------------------------------------------------------
-      - name: Comment on PR with audit results
-        if: github.event_name == 'pull_request' && steps.npm-audit.outcome != 'skipped'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const summary = '${{ steps.npm-audit.outputs.summary }}';
-            const hasCriticalHigh = '${{ steps.npm-audit.outputs.has_critical_or_high }}' === 'true';
-            const data = JSON.parse(summary);
-            
-            const body = `## ⚠️ Dependency Security Audit Report
-            
-            | Severity | Count |
-            |----------|-------|
-            | 🔴 Critical | ${data.critical || 0} |
-            | 🟠 High | ${data.high || 0} |
-            | 🟡 Moderate | ${data.moderate || 0} |
-            | 🟢 Low | ${data.low || 0} |
-            | ℹ️ Info | ${data.info || 0} |
-            | **Total** | **${data.total || 0}** |
-            
-            ---
-            ${hasCriticalHigh ? '**Action Required:** Critical or high severity vulnerabilities detected! Please review and update affected dependencies.' : '✅ No critical or high severity vulnerabilities found.'}
-            
-            > Run \`npm audit fix\` to automatically fix fixable vulnerabilities.
-            > For detailed report, check the **Security** tab or download the artifact.`;
-            
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            
-            const botComment = comments.find(comment => 
-              comment.user.type === 'Bot' && 
-              comment.body.includes('Dependency Security Audit Report')
-            );
-            
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body
-              });
-            }
-
-      - name: Generate detailed vulnerability report
-        if: always()
-        run: |
-          echo "## Dependency Vulnerability Detailed Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ -f "audit-results.json" ]; then
-            echo 'Y29uc3QgZnMgPSByZXF1aXJlKCdmcycpOwpjb25zdCBkYXRhID0gSlNPTi5wYXJzZShmcy5yZWFkRmlsZVN5bmMoJ2F1ZGl0LXJlc3VsdHMuanNvbicsICd1dGY4JykpOwpjb25zdCB2dWxucyA9IGRhdGEudnVsbmVyYWJpbGl0aWVzIHx8IHt9Owpjb25zdCBtZXRhID0gZGF0YS5tZXRhZGF0YSB8fCB7fTsKY29uc3Qgc3VtbWFyeSA9IG1ldGEudnVsbmVyYWJpbGl0aWVzIHx8IHt9Owpjb25zdCB0b3RhbFZ1bG5zID0gc3VtbWFyeS50b3RhbCB8fCAwOwpjb25zdCBMID0gW107CkwucHVzaCgiIyMjIFZ1bG5lcmFiaWxpdHkgT3ZlcnZpZXdcbiIpOwpMLnB1c2goInwgU2V2ZXJpdHkgfCBDb3VudCB8IEFjdGlvbiBSZXF1aXJlZCB8Iik7CkwucHVzaCgifC0tLS0tLS0tLS18LS0tLS0tLXwtLS0tLS0tLS0tLS0tLS0tfCIpOwpMLnB1c2goInwgQ3JpdGljYWwgfCAiICsgKHN1bW1hcnkuY3JpdGljYWwgfHwgMCkgKyAiIHwgSW1tZWRpYXRlIEZpeCB8Iik7CkwucHVzaCgifCBIaWdoIHwgIiArIChzdW1tYXJ5LmhpZ2ggfHwgMCkgKyAiIHwgSGlnaCBQcmlvcml0eSB8Iik7CkwucHVzaCgifCBNb2RlcmF0ZSB8ICIgKyAoc3VtbWFyeS5tb2RlcmF0ZSB8fCAwKSArICIgfCBTY2hlZHVsZSBGaXggfCIpOwpMLnB1c2goInwgTG93IHwgIiArIChzdW1tYXJ5LmxvdyB8fCAwKSArICIgfCBPcHRpb25hbCB8Iik7CkwucHVzaCgifCBJbmZvIHwgIiArIChzdW1tYXJ5LmluZm8gfHwgMCkgKyAiIHwgTm9uZSB8Iik7CkwucHVzaCgifCAqKlRvdGFsKiogfCAqKiIgKyB0b3RhbFZ1bG5zICsgIioqIHxcbiIpOwpjb25zdCBjcml0aWNhbD1bXSwgaGlnaD1bXTsKZm9yIChjb25zdCBbcGtnLCB2XSBvZiBPYmplY3QuZW50cmllcyh2dWxucykpIHsgY29uc3QgaXRlbT17cGFja2FnZTpwa2csLi4udn0sIHM9KHYuc2V2ZXJpdHl8fCcnKS50b0xvd2VyQ2FzZSgpOyBpZihzPT09J2NyaXRpY2FsJykgY3JpdGljYWwucHVzaChpdGVtKTsgZWxzZSBpZihzPT09J2hpZ2gnKSBoaWdoLnB1c2goaXRlbSk7IH0KaWYoY3JpdGljYWwubGVuZ3RoPjApe0wucHVzaCgiIyMjIENyaXRpY2FsIFZ1bG5lcmFiaWxpdGllcyAoSW1tZWRpYXRlIEFjdGlvbiBSZXF1aXJlZClcbiIpO2Zvcihjb25zdCB2IG9mIGNyaXRpY2FsKXtMLnB1c2goIiMjIyMgIit2LnBhY2thZ2UrKHYuaXNEaXJlY3Q/IiAqKGRpcmVjdCkqIjoiICoodHJhbnNpdGl2ZSkqIikpO0wucHVzaCgiLSAqKlNldmVyaXR5Kio6IENyaXRpY2FsIik7TC5wdXNoKCItICoqQWZmZWN0ZWQgUmFuZ2UqKjogIisodi5yYW5nZXx8Ik4vQSIpKTtpZihBcnJheS5pc0FycmF5KHYudmlhKSlmb3IoY29uc3QgYyBvZiB2LnZpYSl7aWYodHlwZW9mIGM9PT0ib2JqZWN0Iil7TC5wdXNoKCItICoqQ1ZFKio6IFsiKyhjLm5hbWV8fCJOL0EiKSsiXSgiKygoYy51cmx8fCIjIikpKyIpIik7TC5wdXNoKCIgIC0gKipUaXRsZSoqOiAiKyhjLnRpdGxlfHwiIikpO0wucHVzaCgiICAtICoqQ1dFKio6ICIrKChjLmN3ZXx8W10pLmpvaW4oIiwgIikpKTt9fUwucHVzaCgiLSAqKkZpeCBBdmFpbGFibGUqKjogIisodi5maXhBdmFpbGFibGU/IlllcyI6Ik5vIikpO2lmKHYuZml4QXZhaWxhYmxlJiZ2LmZpeEF2YWlsYWJsZS52ZXJzaW9uKUwucHVzaCgiICAtICoqUmVjb21tZW5kZWQgVmVyc2lvbioqOiBgIit2LmZpeEF2YWlsYWJsZS52ZXJzaW9uKyJgIik7TC5wdXNoKCIiKTt9fQppZihoaWdoLmxlbmd0aD4wKXtMLnB1c2goIiMjIyBIaWdoIFNldmVyaXR5IFZ1bG5lcmFiaWxpdGllc1xuIik7Zm9yKGNvbnN0IHYgb2YgaGlnaC5zbGljZSgwLDEwKSl7Y29uc3QgY3Zlcz1BcnJheS5pc0FycmF5KHYudmlhKT92LnZpYS5maWx0ZXIoYz0+dHlwZW9mIGM9PT0ib2JqZWN0Iik6W107Y29uc3QgdG9wQ1ZFPWN2ZXNbMF07TC5wdXNoKCIqKiIrdi5wYWNrYWdlKyIqKiIrKHYuaXNEaXJlY3Q/IiAqKGRpcmVjdCkqIjoiICoodHJhbnNpdGl2ZSkqIikpO2lmKHRvcENWRSl7TC5wdXNoKCItIGAiKyh0b3BDVkUudGl0bGV8fCIiKS5zdWJzdHJpbmcoMCw4MCkrImAiKTtMLnB1c2goIi0gQ1ZTUzogIisodG9wQ1ZFLmN2c3M/LnNjb3JlfHwiTi9BIikrIiB8IENXRTogIisoKHRvcENWRS5jd2V8fFtdKS5qb2luKCIsIikpKTt9TC5wdXNoKCItIEZpeDogIisodi5maXhBdmFpbGFibGU/LnZlcnNpb258fCJVcGdyYWRlIHJlcXVpcmVkIikrIlxuIik7fWlmKGhpZ2gubGVuZ3RoPjEwKUwucHVzaCgiKi4uLiBhbmQgIisoaGlnaC5sZW5ndGgtMTApKyIgbW9yZSBoaWdoIHNldmVyaXR5IHZ1bG5lcmFiaWxpdGllcypcbiIpO30KTC5wdXNoKCIjIyMgUmVtZWRpYXRpb24gUmVjb21tZW5kYXRpb25zXG4iKTsKTC5wdXNoKCIjIyMjIFByaW9yaXR5IEFjdGlvbnM6XG4iKTsKTC5wdXNoKCIxLiBDcml0aWNhbC9IaWdoIERpcmVjdCBEZXBlbmRlbmNpZXM6XG4gICAtIFJ1biBucG0gdXBkYXRlIHRvIHBhdGNoIHRvIHNhZmUgdmVyc2lvblxuMi4gVHJhbnNpdGl2ZSBEZXBlbmRlbmNpZXM6XG4gICAtIFVzZSBucG0gYXVkaXQgZml4IHRvIGF1dG8tZml4IHdoZXJlIHBvc3NpYmxlXG4zLiBNb25pdG9yICYgUmV2aWV3OlxuICAgLSBDaGVjayBHaXRIdWIgU2VjdXJpdHkgdGFiIGZvciB0aGlzIHJlcG9zaXRvcnlcbiIpOwpjb25zdCBoYXNDcml0aWNhbEhpZ2g9KHN1bW1hcnkuY3JpdGljYWx8fDApPjB8fChzdW1tYXJ5LmhpZ2h8fDApPjA7CmlmKGhhc0NyaXRpY2FsSGlnaCl7TC5wdXNoKCItLS1cbiMjIyBTZWN1cml0eSBDaGVjayBGYWlsZWRcbiIrdG90YWxWdWxucysiIHZ1bG5lcmFiaWxpdGllcyBkZXRlY3RlZCAoIisoc3VtbWFyeS5jcml0aWNhbHx8MCkrIiBjcml0aWNhbCwgIisoc3VtbWFyeS5oaWdofHwwKSsiIGhpZ2gpLlxuIik7fWVsc2V7TC5wdXNoKCItLS1cbiMjIyBTZWN1cml0eSBDaGVjayBQYXNzZWRcbk5vIGNyaXRpY2FsIG9yIGhpZ2ggc2V2ZXJpdHkgdnVsbmVyYWJpbGl0aWVzIGZvdW5kLlxuIik7fQpwcm9jZXNzLnN0ZG91dC53cml0ZShMLmpvaW4oIlxuIikpOw==' | base64 -d > /tmp/report.cjs && node /tmp/report.cjs >> $GITHUB_STEP_SUMMARY
-          else
-            echo "No audit results file found" >> $GITHUB_STEP_SUMMARY
-          fi
-
-      - name: Check for critical/high vulnerabilities
-        if: always()
-        run: |
-          HAS_CRITICAL_HIGH="${{ steps.npm-audit.outputs.has_critical_or_high }}"
-          
-          if [ "$HAS_CRITICAL_HIGH" = "true" ]; then
-            echo "::warning::Critical or high severity vulnerabilities detected! Please review and fix when possible."
-            echo "⚠️ Critical or high severity vulnerabilities detected (non-blocking)"
-            # Don't fail the workflow - just warn
-          else
-            echo "✓ No critical or high severity vulnerabilities found."
-          fi
-          
-          exit 0
-
-      - name: Upload audit artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-audit-report
-          path: |
-            audit-results.json
-            sarif-npm-audit.json
-          retention-days: 14
-          if-no-files-found: ignore
-
-  # ==========================================================================
-  # Job 2: CodeQL 静态代码安全分析
-  # ==========================================================================
-  codeql-analyze:
-    name: CodeQL Analysis (${{ github.event_name == 'schedule' || inputs.full_scan == 'true' && 'Deep' || 'Standard' }})
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ github.event_name == 'schedule' || inputs.full_scan == 'true' && 60 || 30 }}
-
-    needs: dependency-audit
-    if: ${{ github.event_name != 'pull_request' && false }}
-    continue-on-error: true
-
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ['javascript']
-        include:
-          - language: javascript
-            build-mode: autobuild
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
-          queries: ${{ (github.event_name == 'schedule' || inputs.full_scan == 'true') &&
-            'security-extended,security-and-quality' ||
-            'security-extended' }}
-          tools: latest
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-        env:
-          NODE_ENV: production
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: '/language:${{ matrix.language }}'
-          output: sarif-results-${{ matrix.language }}
-          upload-database: true
-          wait-for-processing: true
-
-      - name: Export analysis summary
-        if: always()
-        run: |
-          echo "=== CodeQL Analysis Complete ==="
-          echo "Language: ${{ matrix.language }}"
-          echo "Build Mode: ${{ matrix.build-mode }}"
-          echo "Scan Type: ${{ (github.event_name == 'schedule' || inputs.full_scan == 'true') && 'Full Deep Scan' || 'Standard Security Scan' }}"
-          echo ""
-          echo "Results have been uploaded to the GitHub Security tab."
-
-  # ==========================================================================
-  # Job 3: 安全扫描汇总
-  # ==========================================================================
-  security-summary:
-    name: Security Summary & Notifications
+    name: Dependency Audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [dependency-audit, codeql-analyze]
-    if: always()
 
     steps:
-      - name: Generate security summary
-        run: |
-          DEP_STATUS="${{ needs.dependency-audit.result }}"
-          CODEQL_STATUS="${{ needs.codeql-analyze.result }}"
+      - uses: actions/checkout@v4
 
-          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Dependency Audit | $DEP_STATUS |" >> $GITHUB_STEP_SUMMARY
-          echo "| CodeQL Analysis | $CODEQL_STATUS |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
 
-          if [[ "$DEP_STATUS" == "failure" || "$CODEQL_STATUS" == "failure" ]]; then
-            echo "### ⚠️ Issues Detected (Non-blocking)" >> $GITHUB_STEP_SUMMARY
-            echo "One or more security checks found issues. Please review the detailed reports." >> $GITHUB_STEP_SUMMARY
-            # Don't fail - just report
-          else
-            echo "### ✅ All Security Checks Passed" >> $GITHUB_STEP_SUMMARY
-            echo "No critical security issues detected." >> $GITHUB_STEP_SUMMARY
-          fi
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
 
-      - name: Final status check
-        run: |
-          # Always succeed - security issues are reported but non-blocking
-          echo "::notice::Security scan completed. Please review reports for any issues."
-          exit 0
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended,security-and-quality
+
+      - uses: github/codeql-action/analyze@v3

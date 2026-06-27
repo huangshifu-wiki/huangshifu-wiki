@@ -1,0 +1,36 @@
+name: 功能建议
+description: 提出新能力、交互改进或维护建议
+title: 'feat: '
+labels: ['enhancement']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 背景与问题
+      description: 这个建议解决什么实际问题？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 描述你期望的行为、入口、流程或接口。
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 备选方案
+      description: 如果考虑过其他做法，可以写在这里。
+    validations:
+      required: false
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: 影响范围
+      options:
+        - label: 前端体验
+        - label: 后端接口
+        - label: 数据库
+        - label: 部署或配置
+        - label: 文档

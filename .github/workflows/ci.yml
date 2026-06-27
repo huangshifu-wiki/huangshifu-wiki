@@ -18,153 +18,41 @@ env:
   POSTGRES_DB: huangshifu_wiki_test
 
 jobs:
-  # ============================================================
-  # Job 1: Lint (Type Check)
-  # ============================================================
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Cache node_modules
-        id: cache-node-modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run lint
 
-      - name: Install dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci --legacy-peer-deps
-
-      - name: Cache Prisma Client
-        id: cache-prisma
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules/.prisma
-            node_modules/@prisma/client
-          key: ${{ runner.os }}-prisma-${{ hashFiles('prisma/schema.prisma') }}
-          restore-keys: |
-            ${{ runner.os }}-prisma-
-
-      - name: Generate Prisma Client
-        if: steps.cache-prisma.outputs.cache-hit != 'true'
-        run: npx prisma generate
-
-      - name: Run type check
-        run: npm run lint
-
-  # ============================================================
-  # Job 2: Unit Tests + Coverage
-  # ============================================================
   test-unit:
-    name: Unit Tests & Coverage
+    name: Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Cache node_modules
-        id: cache-node-modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run test:coverage
 
-      - name: Install dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci --legacy-peer-deps
-
-      - name: Cache Prisma Client
-        id: cache-prisma
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules/.prisma
-            node_modules/@prisma/client
-          key: ${{ runner.os }}-prisma-${{ hashFiles('prisma/schema.prisma') }}
-          restore-keys: |
-            ${{ runner.os }}-prisma-
-
-      - name: Generate Prisma Client
-        if: steps.cache-prisma.outputs.cache-hit != 'true'
-        run: npx prisma generate
-
-      - name: Run unit tests with coverage
-        run: npm run test:coverage
-
-      - name: Check coverage thresholds
-        run: |
-          echo "Checking coverage thresholds..."
-          if [ ! -f "coverage/coverage-summary.json" ]; then
-            echo "::error::Coverage summary not found"
-            exit 1
-          fi
-          node -e "
-          const fs = require('fs');
-          const summary = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'));
-          const total = summary.total;
-          
-          const thresholds = {
-            lines: 25,
-            statements: 25,
-            functions: 40,
-            branches: 70
-          };
-          
-          const actual = {
-            lines: total.lines.pct,
-            statements: total.statements.pct,
-            functions: total.functions.pct,
-            branches: total.branches.pct
-          };
-          
-          console.log('=== Coverage Report Summary ===');
-          console.log('Metric      | Actual  | Threshold | Status');
-          console.log('------------|---------|-----------|--------');
-          
-          let failed = false;
-          for (const [key, threshold] of Object.entries(thresholds)) {
-            const value = actual[key];
-            const passed = value >= threshold;
-            const status = passed ? 'PASS' : 'FAIL';
-            if (!passed) failed = true;
-            console.log(\`\${key.padEnd(11)} | \${value.toFixed(1).padStart(5)}%  | \${threshold.toString().padStart(9)}% | \${status}\`);
-          }
-          console.log('===============================');
-          
-          if (failed) {
-            console.log('::error::Coverage thresholds not met!');
-            process.exit(1);
-          } else {
-            console.log('All coverage thresholds passed!');
-          }
-          "
-
-      - name: Upload coverage artifact
+      - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -172,9 +60,6 @@ jobs:
           path: coverage/
           if-no-files-found: ignore
 
-  # ============================================================
-  # Job 3: Integration Tests (with PostgreSQL)
-  # ============================================================
   test-integration:
     name: Integration Tests
     runs-on: ubuntu-latest
@@ -193,360 +78,58 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U postgres"
+          --health-cmd="pg_isready -U postgres -d huangshifu_wiki_test"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Cache node_modules
-        id: cache-node-modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
+      - run: npm ci
+      - run: npm run db:generate
 
-      - name: Install dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci --legacy-peer-deps
-
-      - name: Cache Prisma Client
-        id: cache-prisma
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules/.prisma
-            node_modules/@prisma/client
-          key: ${{ runner.os }}-prisma-${{ hashFiles('prisma/schema.prisma') }}
-          restore-keys: |
-            ${{ runner.os }}-prisma-
-
-      - name: Generate Prisma Client
-        if: steps.cache-prisma.outputs.cache-hit != 'true'
-        run: npx prisma generate
-
-      - name: Run database migrations
-        run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
-
-      - name: Wait for PostgreSQL to be ready
+      - name: Wait for PostgreSQL
         run: |
           for i in {1..30}; do
-            if pg_isready -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}; then
-              echo "PostgreSQL is ready!"
+            if pg_isready -h localhost -p 5432 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"; then
               exit 0
             fi
-            echo "Waiting for PostgreSQL... ($i/30)"
             sleep 2
           done
-          echo "::error::PostgreSQL did not become ready in time"
           exit 1
 
-      - name: Run integration tests
-        run: npm run test:integration || echo "No integration tests configured yet"
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
+      - run: npm run db:deploy
+      - run: npm run test:integration
 
-      - name: Upload integration test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: integration-test-results
-          path: |
-            test-results/
-            coverage/
-          if-no-files-found: ignore
-
-  # ============================================================
-  # Job 4: Build Verification
-  # ============================================================
   build:
-    name: Build Verification
+    name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [lint, test-unit, test-integration]
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Cache node_modules
-        id: cache-node-modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run build
+      - run: npm run check:build
 
-      - name: Install dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci --legacy-peer-deps
-
-      - name: Cache Prisma Client
-        id: cache-prisma
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules/.prisma
-            node_modules/@prisma/client
-          key: ${{ runner.os }}-prisma-${{ hashFiles('prisma/schema.prisma') }}
-          restore-keys: |
-            ${{ runner.os }}-prisma-
-
-      - name: Generate Prisma Client
-        if: steps.cache-prisma.outputs.cache-hit != 'true'
-        run: npx prisma generate
-
-      - name: Build application
-        run: npm run build
-
-      - name: Verify build output exists
-        run: |
-          echo "Verifying build output..."
-          if [ ! -d "dist" ]; then
-            echo "::error::Build output directory 'dist/' not found!"
-            exit 1
-          fi
-          echo "✓ dist/ directory exists"
-
-      - name: Check build artifact size
-        run: |
-          echo "Analyzing build artifacts..."
-          TOTAL_SIZE=$(du -sh dist/ | cut -f1)
-          FILE_COUNT=$(find dist/ -type f | wc -l)
-          
-          echo "=== Build Artifact Summary ==="
-          echo "Total size: $TOTAL_SIZE"
-          echo "File count: $FILE_COUNT"
-          echo "==============================="
-          
-          # Warning threshold: 50MB (adjust as needed)
-          SIZE_IN_KB=$(du -sk dist/ | cut -f1)
-          WARNING_THRESHOLD=51200  # 50MB in KB
-          
-          if [ "$SIZE_IN_KB" -gt "$WARNING_THRESHOLD" ]; then
-            echo "::warning::Build size ($TOTAL_SIZE) exceeds warning threshold (50MB)"
-            echo "Consider optimizing bundle size or checking for unexpected large files."
-            
-            # List largest files
-            echo ""
-            echo "Top 10 largest files:"
-            find dist/ -type f -exec du -k {} \; | sort -rn | head -10 | awk '{printf "%8s KB  %s\n", $1, $2}'
-          else
-            echo "✓ Build size is within acceptable limits"
-          fi
-
-      - name: Upload build artifacts
+      - name: Upload build output
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: build-output
           path: dist/
           retention-days: 7
-
-  # ============================================================
-  # Job 5: Test Report (same workflow - no cross-workflow download)
-  # ============================================================
-  report:
-    name: Generate Test Report
-    runs-on: ubuntu-latest
-    needs: [build]
-    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
-    
-    permissions:
-      contents: read
-      pull-requests: write
-      checks: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download unit test artifacts
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: coverage-report-unit
-          path: coverage/unit
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: build-output
-          path: build-output
-
-      - name: List downloaded files
-        run: |
-          echo "=== Coverage files ==="
-          find coverage/ -type f 2>/dev/null || echo "No coverage files"
-          echo ""
-          echo "=== Build output ==="
-          find build-output/ -type f 2>/dev/null || echo "No build output"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-
-      - name: Generate Test Summary Report
-        id: summary
-        run: |
-          echo "## 📊 Test Summary Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Unit Tests" >> $GITHUB_STEP_SUMMARY
-          
-          if [ -f "coverage/unit/coverage-summary.json" ]; then
-            node -e "
-            const fs = require('fs');
-            const summary = JSON.parse(fs.readFileSync('coverage/unit/coverage-summary.json', 'utf8'));
-            const total = summary.total;
-            
-            console.log('| Metric | Coverage | Threshold | Status |');
-            console.log('|--------|----------|-----------|--------|');
-            const metrics = [
-              ['Lines', total.lines.pct, 30],
-              ['Statements', total.statements.pct, 30],
-              ['Functions', total.functions.pct, 45],
-              ['Branches', total.branches.pct, 72]
-            ];
-            
-            for (const [name, actual, threshold] of metrics) {
-              const status = actual >= threshold ? '✅' : '❌';
-              console.log(\`| \${name} | \${actual.toFixed(1)}% | \${threshold}% | \${status} |\`);
-            }
-            " >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Metric | Coverage | Threshold | Status |" >> $GITHUB_STEP_SUMMARY
-            echo "|--------|----------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-            echo "| *No data* | - | - | ⚠️ |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Build Information" >> $GITHUB_STEP_SUMMARY
-          
-          if [ -d "build-output" ]; then
-            BUILD_SIZE=$(du -sh build-output 2>/dev/null | cut -f1)
-            FILE_COUNT=$(find build-output -type f 2>/dev/null | wc -l)
-            echo "- **Build Size**: ${BUILD_SIZE}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Files Count**: ${FILE_COUNT}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- *Build artifacts not available*" >> $GITHUB_STEP_SUMMARY
-          fi
-
-      - name: Comment on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            let commentBody = '## 🧪 CI Test Report\n\n';
-            
-            // Unit test coverage
-            if (fs.existsSync('coverage/unit/coverage-summary.json')) {
-              const coverageData = JSON.parse(fs.readFileSync('coverage/unit/coverage-summary.json', 'utf8'));
-              const total = coverageData.total;
-              
-              commentBody += '### ✅ Unit Test Coverage\n\n';
-              commentBody += '| Metric | Value | Threshold |\n|--------|-------|----------|\n';
-              commentBody += `| Lines | ${total.lines.pct.toFixed(1)}% | ≥25% |\n`;
-              commentBody += `| Statements | ${total.statements.pct.toFixed(1)}% | ≥25% |\n`;
-              commentBody += `| Functions | ${total.functions.pct.toFixed(1)}% | ≥40% |\n`;
-              commentBody += `| Branches | ${total.branches.pct.toFixed(1)}% | ≥70% |\n\n`;
-
-              const allPassed =
-                total.lines.pct >= 25 &&
-                total.statements.pct >= 25 &&
-                total.functions.pct >= 40 &&
-                total.branches.pct >= 70;
-              
-              commentBody += allPassed ? '**Status: ✅ All thresholds passed!**\n\n' : '**Status: ❌ Some thresholds not met**\n\n';
-            } else {
-              commentBody += '### ✅ Unit Tests\n\n*Tests completed.*\n\n';
-            }
-            
-            // Integration tests
-            let integrationFiles = [];
-            if (fs.existsSync('results/integration')) {
-              try {
-                integrationFiles = fs.readdirSync('results/integration');
-              } catch (e) {
-                integrationFiles = [];
-              }
-            }
-            if (integrationFiles.length > 0) {
-              commentBody += '### 🔗 Integration Tests\n\n';
-              commentBody += '*Integration tests executed successfully.*\n\n';
-            }
-            
-            // Build info
-            if (fs.existsSync('build-output')) {
-              commentBody += '### 📦 Build Artifacts\n\n';
-              commentBody += '*Build completed successfully.*\n\n';
-            }
-            
-            commentBody += '---\n';
-            commentBody += `_Generated by CI workflow_`;
-            
-            // Create or update PR comment
-            const prNumber = context.payload.pull_request.number;
-            
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber
-            });
-            
-            const existingComment = comments.find(comment => 
-              comment.user.type === 'Bot' && 
-              comment.body.includes('CI Test Report')
-            );
-            
-            if (existingComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existingComment.id,
-                body: commentBody
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body: commentBody
-              });
-            }
-
-      - name: Upload combined report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-report-combined
-          path: |
-            coverage/
-            results/
-          retention-days: 30
-          if-no-files-found: ignore
