@@ -5,7 +5,7 @@
 默认部署内容：
 
 - `app`：React 构建产物 + Express API，监听容器内 `3003`
-- `postgres`：PostgreSQL 16，数据保存在 Docker volume
+- `postgres`：PostgreSQL 16，数据保存在 Docker volume，仅在 Compose 内部网络暴露
 - `qdrant`：仅在 `ENABLE_SEMANTIC_SEARCH=true` 时通过 `semantic` profile 启动
 
 默认关闭图片语义搜索，避免首次上线时被 Qdrant 和 CLIP 模型下载阻塞。
@@ -111,7 +111,7 @@ TRANSFORMERS_CACHE="/app/models/transformers"
 
 ```bash
 docker compose --profile semantic ps qdrant
-curl http://127.0.0.1:6333/healthz
+docker compose --profile semantic run --rm --no-deps app curl http://qdrant:6333/healthz
 ```
 
 ## 5. Nginx 反向代理

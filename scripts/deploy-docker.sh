@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 ENV_TEMPLATE="$ROOT_DIR/.env.docker.example"
 
+# 部署行为开关，可在执行脚本时通过环境变量覆盖。
+# 例如：PULL_LATEST=1 SKIP_SEED=1 ./scripts/deploy-docker.sh
 PULL_LATEST="${PULL_LATEST:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_MIGRATE="${SKIP_MIGRATE:-0}"
@@ -35,6 +37,7 @@ require_cmd() {
   fi
 }
 
+# 生成部署所需的随机密钥，用于填充首次创建的 .env。
 random_hex() {
   local bytes="${1:-24}"
   if command -v openssl >/dev/null 2>&1; then
@@ -44,6 +47,7 @@ random_hex() {
   fi
 }
 
+# 将 .env 模板中的占位符替换为真实随机值。
 replace_literal() {
   local search="$1"
   local replacement="$2"
@@ -53,6 +57,7 @@ replace_literal() {
   fi
 }
 
+# 首次部署时自动从 .env.docker.example 创建 .env。
 bootstrap_env() {
   if [[ -f "$ENV_FILE" ]]; then
     return
@@ -67,6 +72,7 @@ bootstrap_env() {
   cp "$ENV_TEMPLATE" "$ENV_FILE"
 }
 
+# 只替换模板占位符；如果用户已经手动填写过值，不会覆盖。
 fill_env_placeholders() {
   local postgres_password
   local jwt_secret
@@ -81,6 +87,7 @@ fill_env_placeholders() {
   replace_literal 'replace_with_backup_password' "$backup_password"
 }
 
+# 将 .env 导入当前 shell，供 compose 和后续校验读取。
 load_env() {
   set -a
   # shellcheck disable=SC1090
@@ -88,6 +95,7 @@ load_env() {
   set +a
 }
 
+# 部署前做硬性校验，避免容器启动后才暴露配置错误。
 validate_env() {
   local missing=()
 
@@ -117,6 +125,8 @@ is_semantic_enabled() {
   [[ "${ENABLE_SEMANTIC_SEARCH:-false}" == 'true' ]]
 }
 
+# 统一封装 docker compose 调用，确保始终使用同一个 env 文件。
+# 语义搜索启用时自动带上 semantic profile，从而启动 Qdrant。
 compose() {
   local args=(docker compose --env-file "$ENV_FILE")
   if is_semantic_enabled; then
@@ -125,6 +135,7 @@ compose() {
   APP_ENV_FILE="$ENV_FILE" "${args[@]}" "$@"
 }
 
+# PostgreSQL 必须先可用，后续 Prisma 迁移和 seed 才能执行。
 wait_for_postgres() {
   log 'waiting for postgres to be ready'
   for i in {1..60}; do
@@ -142,12 +153,12 @@ wait_for_postgres() {
   exit 1
 }
 
+# Qdrant 只在启用语义搜索时启动和检查。
+# Qdrant 不发布宿主机端口，因此用临时 app 容器走 Compose 内部网络检查。
 wait_for_qdrant() {
-  local qdrant_port="${QDRANT_HTTP_PORT:-6333}"
-
   log 'waiting for qdrant to be ready'
   for i in {1..30}; do
-    if curl -fsS "http://127.0.0.1:${qdrant_port}/healthz" >/dev/null 2>&1; then
+    if compose run --rm --no-deps app curl -fsS 'http://qdrant:6333/healthz' >/dev/null 2>&1; then
       log 'qdrant is ready'
       return
     fi
@@ -159,6 +170,7 @@ wait_for_qdrant() {
   exit 1
 }
 
+# 应用启动后检查 /healthz，避免脚本在服务实际不可用时误报成功。
 wait_for_app() {
   local app_port="${APP_PORT:-3003}"
   local health_url="http://127.0.0.1:${app_port}/healthz"
@@ -178,6 +190,7 @@ wait_for_app() {
 }
 
 main() {
+  # 基础依赖检查。
   require_cmd docker
   require_cmd curl
 
@@ -188,29 +201,35 @@ main() {
 
   cd "$ROOT_DIR"
 
+  # 准备并校验环境变量。
   bootstrap_env
   fill_env_placeholders
   load_env
   validate_env
 
+  # 给 compose 和容器提供默认运行参数。
   export APP_PORT="${APP_PORT:-3003}"
   export PORT="${PORT:-3003}"
   export NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmjs.org}"
   export APP_ENV_FILE="$ENV_FILE"
 
+  # 可选拉取最新代码，适合服务器上直接更新部署。
   if [[ "$PULL_LATEST" == '1' ]]; then
     require_cmd git
     log 'pulling latest code'
     git pull --ff-only
   fi
 
+  # uploads/backups 是持久目录，需要映射到容器并允许 appuser 写入。
   log 'creating persistent directories'
   mkdir -p "$ROOT_DIR/uploads" "$ROOT_DIR/backups"
   chown -R 1001:1001 "$ROOT_DIR/uploads" "$ROOT_DIR/backups" 2>/dev/null || true
 
+  # 先校验 compose 配置，避免执行到一半才发现 YAML 或变量错误。
   log 'validating docker compose configuration'
   compose config >/dev/null
 
+  # 构建应用镜像；SKIP_BUILD=1 可用于只重启已有镜像。
   if [[ "$SKIP_BUILD" != '1' ]]; then
     log 'building app image'
     compose build app
@@ -218,10 +237,12 @@ main() {
     warn 'SKIP_BUILD=1, reusing existing app image'
   fi
 
+  # 数据库先启动，后续迁移和 seed 都依赖它。
   log 'starting postgres'
   compose up -d postgres
   wait_for_postgres
 
+  # 语义搜索默认可关闭，避免首次部署被 Qdrant 或模型缓存阻塞。
   if is_semantic_enabled; then
     log 'semantic search enabled; starting qdrant'
     compose up -d qdrant
@@ -230,6 +251,7 @@ main() {
     log 'semantic search disabled; qdrant profile will not be started'
   fi
 
+  # 生产环境使用 Prisma migrate deploy 应用已提交的迁移。
   if [[ "$SKIP_MIGRATE" != '1' ]]; then
     log 'applying prisma migrations'
     compose run --rm app npm run db:deploy
@@ -237,6 +259,7 @@ main() {
     warn 'SKIP_MIGRATE=1, skipping prisma migrations'
   fi
 
+  # seed 用于初始化必要数据；已有数据的更新部署可用 SKIP_SEED=1 跳过。
   if [[ "$SKIP_SEED" != '1' ]]; then
     log 'running seed'
     compose run --rm app npm run db:seed
@@ -244,6 +267,7 @@ main() {
     warn 'SKIP_SEED=1, skipping seed'
   fi
 
+  # 最后启动应用，并等待健康检查通过。
   log 'starting app'
   compose up -d app
   wait_for_app
@@ -254,7 +278,7 @@ main() {
   log 'health:   /healthz'
   log 'logs:     docker compose logs -f app'
   if is_semantic_enabled; then
-    log "qdrant:   http://127.0.0.1:${QDRANT_HTTP_PORT:-6333}"
+    log 'qdrant:   http://qdrant:6333 (compose network only)'
   fi
 }
 

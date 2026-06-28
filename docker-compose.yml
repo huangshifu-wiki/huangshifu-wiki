@@ -7,8 +7,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-hsf_wiki}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-huangshifu_wiki}
-    ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,9 +25,6 @@ services:
     profiles:
       - semantic
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${QDRANT_HTTP_PORT:-6333}:6333"
-      - "127.0.0.1:${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_storage:/qdrant/storage
 
