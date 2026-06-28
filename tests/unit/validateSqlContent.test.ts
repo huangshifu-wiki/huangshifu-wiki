@@ -1,6 +1,10 @@
 import { afterEach, describe, it, expect } from 'vitest'
 import {
+  parseBackupMetadata,
+  sanitizeFilename,
+  serializeBackupMetadata,
   formatPostgresClientMissingError,
+  formatBackupTimestamp,
   getPostgresClientExecutable,
   isPostgresClientMissingError,
   validateSqlContent,
@@ -174,5 +178,36 @@ CREATE FUNCTION "trigger_function"() RETURNS trigger AS $$ BEGIN RETURN NEW; END
     })
 
     expect(isPostgresClientMissingError(error)).toBe(false)
+  })
+
+  it('should format backup timestamps using the current filename-safe format', () => {
+    expect(formatBackupTimestamp(new Date('2026-06-28T10:11:12.345Z'))).toBe(
+      '2026-06-28_10-11-12-345'
+    )
+  })
+
+  it('should accept current and legacy backup filenames only', () => {
+    expect(sanitizeFilename('backup_2026-06-28_10-11-12.zip')).toBe(true)
+    expect(sanitizeFilename('backup_2026-06-28_10-11-12-345.zip')).toBe(true)
+    expect(sanitizeFilename('backup_2026-06-28T10-11-12-345Z.zip')).toBe(true)
+    expect(sanitizeFilename('../backup_2026-06-28_10-11-12.zip')).toBe(false)
+    expect(sanitizeFilename('backup_2026-06-28_10-11-12.sql')).toBe(false)
+  })
+
+  it('should round-trip backup archive metadata', () => {
+    const serialized = serializeBackupMetadata({
+      format: 'huangshifu-wiki-backup',
+      version: 2,
+      encrypted: true,
+      encryption: 'aes-256-gcm',
+    })
+
+    expect(parseBackupMetadata(serialized)).toEqual({
+      format: 'huangshifu-wiki-backup',
+      version: 2,
+      encrypted: true,
+      encryption: 'aes-256-gcm',
+    })
+    expect(parseBackupMetadata(Buffer.from('not json'))).toBeNull()
   })
 })

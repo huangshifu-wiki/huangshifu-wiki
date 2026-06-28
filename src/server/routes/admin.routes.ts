@@ -29,10 +29,13 @@ import {
   normalizeModerationTargetType,
   createNotification,
   parseDatabaseUrl,
-  verifyBackupPassword,
   sanitizeFilename,
+  formatBackupTimestamp,
   formatFileSize,
   cleanupOldBackups,
+  BACKUP_METADATA_ENTRY,
+  serializeBackupMetadata,
+  parseBackupMetadata,
   encryptBuffer,
   decryptBuffer,
   validateSqlContent,
@@ -148,7 +151,7 @@ fs.mkdirSync(backupsDir, { recursive: true });
 const BACKUP_PASSWORD = process.env.BACKUP_PASSWORD || '';
 
 if (!BACKUP_PASSWORD) {
-  logger.warn('BACKUP_PASSWORD 未配置或为空 — 备份操作将要求请求体提供密码，未加密备份被禁止');
+  logger.warn('BACKUP_PASSWORD 未配置或为空 — 新备份将以明文 SQL 写入 zip 文件');
 }
 
 async function handleBackupList(_req: Request, res: Response) {
@@ -171,19 +174,8 @@ async function handleBackupList(_req: Request, res: Response) {
 
 async function handleBackupDelete(req: AuthenticatedRequest, res: Response) {
   try {
-    const { password } = req.body as { password?: string };
     const filename = req.params.filename;
     const normalized = path.normalize(filename);
-
-    if (!BACKUP_PASSWORD) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量' });
-      return;
-    }
-
-    if (!password || !verifyBackupPassword(password)) {
-      res.status(401).json({ error: '备份密码错误' });
-      return;
-    }
 
     if (normalized.includes('..') || !sanitizeFilename(filename)) {
       res.status(400).json({ error: '无效的文件名' });
@@ -1500,21 +1492,13 @@ router.post('/wiki-links/sync-with-imagemap', requireAuth, requireAdmin, asyncHa
 // POST /api/admin/backup/create - Create backup
 router.post('/backup/create', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
-    const { password } = req.body as { password?: string };
-    const backupPassword = password || BACKUP_PASSWORD;
-
-    if (!backupPassword) {
-      res.status(400).json({ error: '请提供备份密码' });
-      return;
-    }
-
     const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '');
     if (!dbConfig) {
       res.status(500).json({ error: 'DATABASE_URL 格式无效' });
       return;
     }
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = formatBackupTimestamp();
     const sqlFilename = `backup_${timestamp}.sql`;
     const sqlFilePath = path.join(backupsDir, sqlFilename);
     const zipFilename = `backup_${timestamp}.zip`;
@@ -1530,6 +1514,7 @@ router.post('/backup/create', requireSuperAdmin, asyncHandler(async (req: Authen
       '--clean',
       '--if-exists',
       '--exclude-table-data=ImageEmbedding',
+      '--exclude-table-data=TextEmbeddingChunk',
       '--exclude-table-data=_prisma_migrations',
       '-f', sqlFilePath,
     ];
@@ -1544,7 +1529,8 @@ router.post('/backup/create', requireSuperAdmin, asyncHandler(async (req: Authen
     const sqlContent = await fs.promises.readFile(sqlFilePath);
     await fs.promises.unlink(sqlFilePath);
 
-    const encryptedContent = encryptBuffer(sqlContent, backupPassword);
+    const isEncrypted = Boolean(BACKUP_PASSWORD);
+    const archiveContent = isEncrypted ? encryptBuffer(sqlContent, BACKUP_PASSWORD) : sqlContent;
 
     await new Promise<void>((resolve, reject) => {
       const output = fs.createWriteStream(zipFilePath);
@@ -1554,7 +1540,16 @@ router.post('/backup/create', requireSuperAdmin, asyncHandler(async (req: Authen
       archive.on('error', (err) => reject(err));
 
       archive.pipe(output);
-      archive.append(encryptedContent, { name: sqlFilename });
+      archive.append(archiveContent, { name: sqlFilename });
+      archive.append(
+        serializeBackupMetadata({
+          format: 'huangshifu-wiki-backup',
+          version: 2,
+          encrypted: isEncrypted,
+          encryption: isEncrypted ? 'aes-256-gcm' : undefined,
+        }),
+        { name: BACKUP_METADATA_ENTRY }
+      );
       archive.finalize();
     });
 
@@ -1608,20 +1603,8 @@ router.get('/backup/list', requireSuperAdmin, asyncHandler(async (_req, res) => 
 // POST /api/admin/backup/:filename/download - Download backup
 router.post('/backup/:filename/download', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
-    const { password } = req.body as { password?: string };
     const filename = req.params.filename;
     const normalized = path.normalize(filename);
-
-    const backupPassword = password || BACKUP_PASSWORD;
-    if (!backupPassword) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
-      return;
-    }
-
-    if (!password || !verifyBackupPassword(password)) {
-      res.status(401).json({ error: '备份密码错误' });
-      return;
-    }
 
     if (normalized.includes('..') || !sanitizeFilename(filename)) {
       res.status(400).json({ error: '无效的文件名' });
@@ -1657,19 +1640,8 @@ router.post('/backup/:filename/download', requireSuperAdmin, asyncHandler(async 
 // POST /api/admin/backup/restore - Restore backup
 router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), validateBody(backupRestoreSchema), asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
-    const { password, confirm } = req.body as { password?: string; confirm?: boolean };
+    const { legacyPassword, confirm } = req.body as { legacyPassword?: string; confirm?: boolean };
     const file = req.file;
-
-    const backupPassword = password || BACKUP_PASSWORD;
-    if (!backupPassword) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
-      return;
-    }
-
-    if (!password || !verifyBackupPassword(password)) {
-      res.status(401).json({ error: '备份密码错误' });
-      return;
-    }
 
     if (!confirm) {
       res.status(400).json({ error: '恢复操作需要二次确认，请传入 confirm: true' });
@@ -1699,14 +1671,56 @@ router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), v
     }
 
     const encryptedContent = sqlEntry.getData();
+    const metadataEntry = zipEntries.find((e) => e.entryName === BACKUP_METADATA_ENTRY);
+    const metadata = parseBackupMetadata(metadataEntry?.getData());
 
     let sqlContent: Buffer;
-    try {
-      sqlContent = decryptBuffer(encryptedContent, password);
-    } catch {
-      await fs.promises.unlink(file.path);
-      res.status(401).json({ error: '备份密码错误或文件已损坏' });
-      return;
+    if (metadata?.encrypted) {
+      if (!BACKUP_PASSWORD) {
+        await fs.promises.unlink(file.path);
+        res.status(400).json({ error: '服务器未配置 BACKUP_PASSWORD，无法恢复加密备份' });
+        return;
+      }
+
+      try {
+        sqlContent = decryptBuffer(encryptedContent, BACKUP_PASSWORD);
+      } catch {
+        await fs.promises.unlink(file.path);
+        res.status(400).json({ error: '备份文件无法用服务器密钥解密，请确认 BACKUP_PASSWORD 配置' });
+        return;
+      }
+    } else if (metadata) {
+      sqlContent = encryptedContent;
+    } else {
+      const rawContent = encryptedContent.toString('utf-8');
+      if (rawContent.includes('PostgreSQL database dump') || rawContent.includes('pg_dump')) {
+        sqlContent = encryptedContent;
+      } else {
+        const candidatePasswords = [BACKUP_PASSWORD, legacyPassword].filter(
+          (candidate, index, candidates): candidate is string =>
+            Boolean(candidate) && candidates.indexOf(candidate) === index
+        );
+
+        let decrypted: Buffer | null = null;
+        for (const candidate of candidatePasswords) {
+          try {
+            decrypted = decryptBuffer(encryptedContent, candidate);
+            break;
+          } catch {
+            // Try the next compatible legacy password source.
+          }
+        }
+
+        if (!decrypted) {
+          await fs.promises.unlink(file.path);
+          res.status(400).json({
+            error: '旧备份文件已加密，请配置 BACKUP_PASSWORD 或提供旧备份解密密码',
+          });
+          return;
+        }
+
+        sqlContent = decrypted;
+      }
     }
 
     const sqlContentStr = sqlContent.toString('utf-8');
@@ -1726,7 +1740,7 @@ router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), v
 
     logger.info('Creating pre-restore backup before database restore')
     try {
-      const preRestoreTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const preRestoreTimestamp = formatBackupTimestamp();
       const preRestoreSqlFilename = `backup_${preRestoreTimestamp}.sql`;
       const preRestoreSqlFilePath = path.join(backupsDir, preRestoreSqlFilename);
       const preRestoreZipFilename = `backup_${preRestoreTimestamp}.zip`;
@@ -1742,6 +1756,7 @@ router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), v
         '--clean',
         '--if-exists',
         '--exclude-table-data=ImageEmbedding',
+        '--exclude-table-data=TextEmbeddingChunk',
         '--exclude-table-data=_prisma_migrations',
         '-f', preRestoreSqlFilePath,
       ];
@@ -1755,7 +1770,10 @@ router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), v
       const preRestoreSqlContent = await fs.promises.readFile(preRestoreSqlFilePath);
       await fs.promises.unlink(preRestoreSqlFilePath);
 
-      const preRestoreEncrypted = encryptBuffer(preRestoreSqlContent, BACKUP_PASSWORD);
+      const preRestoreEncrypted = Boolean(BACKUP_PASSWORD);
+      const preRestoreContent = preRestoreEncrypted
+        ? encryptBuffer(preRestoreSqlContent, BACKUP_PASSWORD)
+        : preRestoreSqlContent;
 
       await new Promise<void>((resolve, reject) => {
         const output = fs.createWriteStream(preRestoreZipFilePath);
@@ -1765,7 +1783,16 @@ router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), v
         archive.on('error', (err) => reject(err));
 
         archive.pipe(output);
-        archive.append(preRestoreEncrypted, { name: preRestoreSqlFilename });
+        archive.append(preRestoreContent, { name: preRestoreSqlFilename });
+        archive.append(
+          serializeBackupMetadata({
+            format: 'huangshifu-wiki-backup',
+            version: 2,
+            encrypted: preRestoreEncrypted,
+            encryption: preRestoreEncrypted ? 'aes-256-gcm' : undefined,
+          }),
+          { name: BACKUP_METADATA_ENTRY }
+        );
         archive.finalize();
       });
 
@@ -1850,20 +1877,8 @@ router.get('/backups', requireSuperAdmin, asyncHandler(async (_req, res) => {
 // DELETE /api/admin/backup/:filename - Delete backup (legacy compatible)
 router.post('/backup/:filename/delete', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
-    const { password } = req.body as { password?: string };
     const filename = req.params.filename;
     const normalized = path.normalize(filename);
-
-    const backupPassword = password || BACKUP_PASSWORD;
-    if (!backupPassword) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
-      return;
-    }
-
-    if (!password || !verifyBackupPassword(password)) {
-      res.status(401).json({ error: '备份密码错误' });
-      return;
-    }
 
     if (normalized.includes('..') || !sanitizeFilename(filename)) {
       res.status(400).json({ error: '无效的文件名' });
@@ -1889,20 +1904,8 @@ router.post('/backup/:filename/delete', requireSuperAdmin, asyncHandler(async (r
 // DELETE /api/admin/backups/:filename - Delete backup
 router.post('/backups/:filename/delete', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
-    const { password } = req.body as { password?: string };
     const filename = req.params.filename;
     const normalized = path.normalize(filename);
-
-    const backupPassword = password || BACKUP_PASSWORD;
-    if (!backupPassword) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
-      return;
-    }
-
-    if (!password || !verifyBackupPassword(password)) {
-      res.status(401).json({ error: '备份密码错误' });
-      return;
-    }
 
     if (normalized.includes('..') || !sanitizeFilename(filename)) {
       res.status(400).json({ error: '无效的文件名' });

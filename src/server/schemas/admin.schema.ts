@@ -7,7 +7,8 @@ import {
 } from '../../lib/contentLimits'
 
 export const backupRestoreSchema = z.object({
-  password: z.string().min(1),
+  confirm: z.preprocess((value) => value === true || value === 'true', z.literal(true)),
+  legacyPassword: z.string().optional(),
 })
 
 export const adminResetUserPasswordSchema = z.object({

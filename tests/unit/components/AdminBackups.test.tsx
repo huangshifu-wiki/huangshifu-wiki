@@ -23,6 +23,13 @@ vi.mock('../../../src/components/Toast', () => ({
   }),
 }))
 
+const initialBackup = {
+  filename: 'backup_2026-06-28_10-00-00-000.zip',
+  size: 1024,
+  sizeFormatted: '1 KB',
+  createdAt: '2026-06-28T10:00:00.000Z',
+}
+
 describe('AdminBackups', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -33,16 +40,9 @@ describe('AdminBackups', () => {
       revokeObjectURL: vi.fn(),
     })
     mockGetXsrfToken.mockReturnValue('token')
-    mockApiGet.mockResolvedValue({
-      backups: [
-        {
-          filename: 'backup-1.zip',
-          size: 1024,
-          sizeFormatted: '1 KB',
-          createdAt: '2025-01-01T00:00:00.000Z',
-        },
-      ],
-    })
+    mockApiGet.mockResolvedValue({ backups: [initialBackup] })
+    mockApiPost.mockResolvedValue({ backup: initialBackup })
+    mockApiUpload.mockResolvedValue({ success: true })
     mockFetch.mockResolvedValue({
       ok: true,
       blob: vi.fn().mockResolvedValue(new Blob(['backup'])),
@@ -53,94 +53,114 @@ describe('AdminBackups', () => {
     cleanup()
   })
 
-  it('opens download dialog instead of delete dialog when password is missing', async () => {
+  it('downloads a backup without asking for a backup password', async () => {
     render(<AdminBackups />)
 
     await waitFor(() => {
-      expect(screen.getByText('backup-1.zip')).toBeInTheDocument()
+      expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByTitle('下载'))
 
-    expect(screen.getByText('下载备份')).toBeInTheDocument()
-    expect(screen.getByText('请输入备份密码后再下载备份文件。')).toBeInTheDocument()
-    expect(screen.queryByText('删除备份')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    expect(screen.queryByText('下载备份')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('请输入备份密码')).not.toBeInTheDocument()
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      `/api/admin/backup/${encodeURIComponent(initialBackup.filename)}/download`
+    )
+    expect(mockFetch.mock.calls[0][1]).not.toHaveProperty('body')
   })
 
-  it('disables confirm download while the request is in flight', async () => {
-    let resolveFetch: ((value: Response) => void) | null = null
-    mockFetch.mockReturnValue(
-      new Promise((resolve) => {
-        resolveFetch = resolve as (value: Response) => void
-      })
-    )
+  it('creates a backup without sending a password and refreshes the list without cache', async () => {
+    const createdBackup = {
+      filename: 'backup_2026-06-28_10-01-00-000.zip',
+      size: 2048,
+      sizeFormatted: '2 KB',
+      createdAt: '2026-06-28T10:01:00.000Z',
+    }
+    mockApiPost.mockResolvedValueOnce({ backup: createdBackup })
+    mockApiGet
+      .mockResolvedValueOnce({ backups: [initialBackup] })
+      .mockResolvedValueOnce({ backups: [createdBackup, initialBackup] })
 
     render(<AdminBackups />)
 
     await waitFor(() => {
-      expect(screen.getByText('backup-1.zip')).toBeInTheDocument()
+      expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByTitle('下载'))
-    fireEvent.change(screen.getByPlaceholderText('请输入备份密码'), {
-      target: { value: 'secret' },
-    })
-    fireEvent.click(screen.getByText('确认下载'))
+    fireEvent.click(screen.getByText('创建备份'))
+    fireEvent.click(screen.getAllByText('创建备份').at(-1)!)
 
     await waitFor(() => {
-      expect(screen.getByText('确认下载').closest('button')).toBeDisabled()
+      expect(mockApiPost).toHaveBeenCalledWith('/api/admin/backup/create')
     })
-
-    expect(mockFetch).toHaveBeenCalledTimes(1)
-
-    resolveFetch?.({
-      ok: true,
-      blob: vi.fn().mockResolvedValue(new Blob(['backup'])),
-    } as unknown as Response)
+    expect(mockApiPost.mock.calls[0]).toHaveLength(1)
 
     await waitFor(() => {
-      expect(mockShow).toHaveBeenCalledWith('下载完成', { variant: 'success' })
+      expect(screen.getByText(createdBackup.filename)).toBeInTheDocument()
+    })
+    expect(mockApiGet).toHaveBeenLastCalledWith('/api/admin/backup/list', undefined, {
+      staleTime: 0,
+      swr: false,
     })
   })
 
-  it('does not close a newer dialog when an earlier download finishes', async () => {
-    let resolveFetch: ((value: Response) => void) | null = null
-    mockFetch.mockReturnValue(
-      new Promise((resolve) => {
-        resolveFetch = resolve as (value: Response) => void
-      })
-    )
+  it('deletes a backup without sending a password and removes it from the table', async () => {
+    mockApiGet
+      .mockResolvedValueOnce({ backups: [initialBackup] })
+      .mockResolvedValueOnce({ backups: [] })
+    mockApiPost.mockResolvedValueOnce({ success: true })
 
     render(<AdminBackups />)
 
     await waitFor(() => {
-      expect(screen.getByText('backup-1.zip')).toBeInTheDocument()
+      expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByTitle('下载'))
-    fireEvent.change(screen.getByPlaceholderText('请输入备份密码'), {
-      target: { value: 'secret' },
-    })
-    fireEvent.click(screen.getByText('确认下载'))
-
-    await waitFor(() => {
-      expect(screen.getByText('确认下载').closest('button')).toBeDisabled()
-    })
-
-    fireEvent.click(screen.getByText('取消'))
     fireEvent.click(screen.getByTitle('删除'))
-
-    expect(screen.getByText('删除备份')).toBeInTheDocument()
-
-    resolveFetch?.({
-      ok: true,
-      blob: vi.fn().mockResolvedValue(new Blob(['backup'])),
-    } as unknown as Response)
+    fireEvent.click(screen.getByText('确认删除'))
 
     await waitFor(() => {
-      expect(mockShow).toHaveBeenCalledWith('下载完成', { variant: 'success' })
+      expect(mockApiPost).toHaveBeenCalledWith(
+        `/api/admin/backup/${encodeURIComponent(initialBackup.filename)}/delete`
+      )
+    })
+    expect(mockApiPost.mock.calls[0]).toHaveLength(1)
+
+    await waitFor(() => {
+      expect(screen.queryByText(initialBackup.filename)).not.toBeInTheDocument()
+    })
+  })
+
+  it('passes legacy restore passwords without trimming them', async () => {
+    const { container } = render(<AdminBackups />)
+
+    await waitFor(() => {
+      expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
     })
 
-    expect(screen.getByText('删除备份')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('上传恢复'))
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(['zip'], 'backup.zip', { type: 'application/zip' })],
+      },
+    })
+    fireEvent.change(screen.getByPlaceholderText('仅旧加密备份需要'), {
+      target: { value: ' secret ' },
+    })
+    fireEvent.click(screen.getByText('恢复数据库'))
+
+    await waitFor(() => {
+      expect(mockApiUpload).toHaveBeenCalledTimes(1)
+    })
+
+    const formData = mockApiUpload.mock.calls[0][1] as FormData
+    expect(formData.get('legacyPassword')).toBe(' secret ')
+    expect(formData.get('confirm')).toBe('true')
   })
 })

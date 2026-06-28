@@ -148,8 +148,8 @@ UPLOAD_SESSION_TTL_MINUTES="45"
 # Custom uploads storage path (absolute path)
 UPLOADS_PATH=""
 
-# Database backup
-BACKUP_PASSWORD="请替换为备份加密密码"
+# Database backup; optional server-side encryption key
+BACKUP_PASSWORD=""
 BACKUP_RETAIN_COUNT="20"
 
 # Vector search (Qdrant + CLIP)
@@ -364,7 +364,7 @@ EOF
 
 | 变量                    | 说明                                   |
 | --------------------- | ------------------------------------ |
-| `BACKUP_PASSWORD`      | 备份加密密码（必须设置，否则备份功能不可用）             |
+| `BACKUP_PASSWORD`      | 备份文件服务端加密密钥（可选；留空时新备份为明文 SQL zip） |
 | `BACKUP_RETAIN_COUNT`  | 备份保留数量（默认 20），超过后自动删除最旧备份           |
 
 #### 音乐缓存
@@ -869,7 +869,7 @@ npm run build
 **前置条件**：
 
 1. 服务器已安装 `pg_dump` 和 `psql`（PostgreSQL 客户端工具，安装 PostgreSQL 时自带）
-2. 在 `.env` 中配置 `BACKUP_PASSWORD`（备份加密密码）
+2. 可选：在 `.env` 中配置 `BACKUP_PASSWORD` 作为备份文件服务端加密密钥
 
 如果客户端工具不在服务进程的 `PATH` 中，可在 `.env` 中通过 `PG_DUMP_PATH` 和 `PSQL_PATH`
 配置可执行文件的绝对路径。
@@ -878,13 +878,13 @@ npm run build
 
 1. 使用超级管理员账号登录
 2. 进入管理面板，选择「数据库备份」标签页
-3. 点击「创建备份」并输入备份密码
-4. 备份完成后可点击下载按钮将加密备份文件下载到本地
-5. 需要恢复时，点击「上传恢复」，选择之前下载的 `.zip` 备份文件并输入密码
+3. 点击「创建备份」
+4. 备份完成后可点击下载按钮将备份文件下载到本地
+5. 需要恢复时，点击「上传恢复」并选择之前下载的 `.zip` 备份文件
 
 **功能特性**：
 
-- 手动创建加密备份（AES-256-CBC 加密 + ZIP 压缩）
+- 手动创建备份；配置 `BACKUP_PASSWORD` 时使用 AES-256-GCM 加密 SQL 内容，否则写入明文 SQL zip
 - 下载备份文件到本地
 - 上传备份文件恢复数据库
 - 删除旧备份
@@ -899,8 +899,8 @@ npm run build
 **注意事项**：
 
 - 恢复操作会**覆盖当前数据库中的所有数据**，请谨慎操作
-- 备份密码用于加密备份文件内容，请妥善保管
-- 每次创建/恢复/删除操作都需要输入备份密码验证
+- `BACKUP_PASSWORD` 只作为服务器端备份文件加密密钥，不作为管理面板操作密码
+- 创建、下载、删除备份只要求超级管理员权限；恢复旧版自定义密码加密备份时，可在恢复弹窗中提供旧备份解密密码
 - 备份文件存储在服务器 `backups/` 目录下
 
 ### 14.2 手动备份（备选方案）

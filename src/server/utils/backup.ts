@@ -5,6 +5,15 @@ import fs from 'fs';
 import path from 'path';
 import { backupsDir, BACKUP_PASSWORD, BACKUP_RETAIN_COUNT } from './config';
 
+export const BACKUP_METADATA_ENTRY = 'backup-meta.json';
+
+export interface BackupArchiveMetadata {
+  format: 'huangshifu-wiki-backup';
+  version: 2;
+  encrypted: boolean;
+  encryption?: 'aes-256-gcm';
+}
+
 // ─── 解析与验证 ─────────────────────────────────────────────────────
 
 type PostgresClientTool = 'pg_dump' | 'psql'
@@ -57,8 +66,38 @@ export function verifyBackupPassword(password: string): boolean {
   return timingSafeEqual(Buffer.from(password), Buffer.from(BACKUP_PASSWORD));
 }
 
+export function formatBackupTimestamp(date = new Date()): string {
+  return date.toISOString().slice(0, 23).replace('T', '_').replace(/[:.]/g, '-');
+}
+
 export function sanitizeFilename(name: string): boolean {
-  return /^backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip$/.test(name);
+  const currentFormat = /^backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d{3})?\.zip$/;
+  const legacyIsoFormat = /^backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.zip$/;
+  return currentFormat.test(name) || legacyIsoFormat.test(name);
+}
+
+export function serializeBackupMetadata(metadata: BackupArchiveMetadata): Buffer {
+  return Buffer.from(JSON.stringify(metadata, null, 2), 'utf-8');
+}
+
+export function parseBackupMetadata(content: Buffer | undefined): BackupArchiveMetadata | null {
+  if (!content) return null;
+
+  try {
+    const parsed = JSON.parse(content.toString('utf-8')) as Partial<BackupArchiveMetadata>;
+    if (parsed.format !== 'huangshifu-wiki-backup' || parsed.version !== 2) {
+      return null;
+    }
+
+    return {
+      format: parsed.format,
+      version: parsed.version,
+      encrypted: parsed.encrypted === true,
+      encryption: parsed.encryption,
+    };
+  } catch {
+    return null;
+  }
 }
 
 const SQL_ALLOWED_PREFIXES = [
