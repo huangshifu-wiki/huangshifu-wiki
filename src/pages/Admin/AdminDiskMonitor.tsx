@@ -22,10 +22,26 @@ interface DiskMonitorConfig {
   uploadsMinFreeMB: number;
 }
 
+type DiskApiResponse<T> = { success: boolean; data: T; error?: string };
+
+const NO_CACHE_OPTIONS = { staleTime: 0, swr: false };
+
+function getDiskRequestError<T>(
+  result: PromiseSettledResult<DiskApiResponse<T>>,
+  fallback: string
+) {
+  if (result.status === 'rejected') {
+    return result.reason instanceof Error ? result.reason.message : fallback;
+  }
+
+  return result.value.success ? null : result.value.error || fallback;
+}
+
 export const AdminDiskMonitor: React.FC = () => {
   const [diskStatus, setDiskStatus] = useState<DiskStatus | null>(null);
   const [config, setConfig] = useState<DiskMonitorConfig | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingConfig, setEditingConfig] = useState<Partial<DiskMonitorConfig>>({});
   const [isEditing, setIsEditing] = useState(false);
@@ -34,27 +50,65 @@ export const AdminDiskMonitor: React.FC = () => {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const dialog = useDialog();
 
-  const fetchDiskStatus = useCallback(async () => {
+  const fetchDiskStatus = useCallback(async (options: { showLoading?: boolean } = {}) => {
+    const { showLoading = true } = options;
     try {
-      setLoading(true);
-      setError(null);
-      const [statusRes, configRes] = await Promise.all([
-        apiGet<{ success: boolean; data: DiskStatus; error?: string }>('/api/admin/disk/status'),
-        apiGet<{ success: boolean; data: DiskMonitorConfig; error?: string }>('/api/admin/disk/config'),
+      if (showLoading) setLoading(true);
+      if (showLoading) setError(null);
+      const [statusRes, configRes] = await Promise.allSettled([
+        apiGet<DiskApiResponse<DiskStatus>>('/api/admin/disk/status', undefined, NO_CACHE_OPTIONS),
+        apiGet<DiskApiResponse<DiskMonitorConfig>>('/api/admin/disk/config', undefined, NO_CACHE_OPTIONS),
       ]);
-      if (statusRes.success) setDiskStatus(statusRes.data);
-      if (configRes.success) setConfig(configRes.data);
+      if (statusRes.status === 'fulfilled' && statusRes.value.success) {
+        setDiskStatus(statusRes.value.data);
+      }
+      if (configRes.status === 'fulfilled' && configRes.value.success) {
+        setConfig(configRes.value.data);
+      }
+      const errors = [
+        getDiskRequestError(statusRes, '获取磁盘状态失败'),
+        getDiskRequestError(configRes, '获取监控配置失败'),
+      ].filter((message): message is string => Boolean(message));
+      if (errors.length > 0) throw new Error(errors.join('；'));
+      setError(null);
     } catch (err) {
       console.error('Failed to fetch disk status:', err);
       setError(err instanceof Error ? err.message : '网络错误');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+    }
+  }, []);
+
+  const handleManualRefresh = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      setError(null);
+      const [statusRes, configRes] = await Promise.allSettled([
+        apiPost<DiskApiResponse<DiskStatus>>('/api/admin/disk/check'),
+        apiGet<DiskApiResponse<DiskMonitorConfig>>('/api/admin/disk/config', undefined, NO_CACHE_OPTIONS),
+      ]);
+      if (statusRes.status === 'fulfilled' && statusRes.value.success) {
+        setDiskStatus(statusRes.value.data);
+      }
+      if (configRes.status === 'fulfilled' && configRes.value.success) {
+        setConfig(configRes.value.data);
+      }
+      const errors = [
+        getDiskRequestError(statusRes, '刷新磁盘状态失败'),
+        getDiskRequestError(configRes, '获取监控配置失败'),
+      ].filter((message): message is string => Boolean(message));
+      if (errors.length > 0) throw new Error(errors.join('；'));
+    } catch (err) {
+      console.error('Failed to refresh disk status:', err);
+      setError(err instanceof Error ? err.message : '刷新失败');
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     fetchDiskStatus();
-    const interval = setInterval(fetchDiskStatus, 30000);
+    const interval = setInterval(() => fetchDiskStatus({ showLoading: false }), 30000);
     return () => clearInterval(interval);
   }, [fetchDiskStatus]);
 
@@ -179,7 +233,7 @@ export const AdminDiskMonitor: React.FC = () => {
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">磁盘监控</h1>
         <div className="p-4 theme-status-error rounded">
           <p className="text-sm theme-text-error font-medium">{error}</p>
-          <button onClick={fetchDiskStatus} className="mt-2 px-4 py-2 theme-button-primary rounded text-sm font-medium transition-all">
+          <button onClick={() => fetchDiskStatus()} className="mt-2 px-4 py-2 theme-button-primary rounded text-sm font-medium transition-all">
             重试
           </button>
         </div>
@@ -196,11 +250,11 @@ export const AdminDiskMonitor: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={fetchDiskStatus}
-            disabled={loading}
+            onClick={handleManualRefresh}
+            disabled={loading || refreshing}
             className="inline-flex items-center gap-2 px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all disabled:opacity-50"
           >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> 刷新
+            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> 刷新
           </button>
           <button
             onClick={handleStartEdit}
