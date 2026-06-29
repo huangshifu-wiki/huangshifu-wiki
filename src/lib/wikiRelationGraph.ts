@@ -248,7 +248,6 @@ export function layoutRelationGraphRadial(
   const positioned: RelationGraphNodePosition[] = []
   const centerNodes = groups.get(0) || []
   centerNodes.forEach((node) => positioned.push({ ...node, ...center }))
-
   ;([1, 2] as const).forEach((depth) => {
     const depthNodes = groups.get(depth) || []
     const radius = depthRadii[depth] * scale

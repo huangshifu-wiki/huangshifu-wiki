@@ -283,7 +283,7 @@
 - 提交消息正文必须使用真实换行，不要把 `\n` 作为字面量写进提交消息。如果确实需要，请通过 `git -c hooks.allowLiteralNewlines=true commit ...` 绕过
 - 在正文中说明本次提交修复了什么问题（如有），实际改变了什么
 - 不要把无关改动混进同一个提交
-- 提交前确认必要验证已通过，至少包括本次改动影响范围内的类型检查、测试或构建
+- 提交前必须先执行 `npm run format`，再确认必要验证已通过，至少包括本次改动影响范围内的类型检查、测试或构建
 
 ## 11. 修改规则
 
@@ -329,13 +329,14 @@
 
 ### 完成前强制执行
 
-请在任务完成前执行 `npm run verify`。这包含 `lint`, `test:unit`, `test:integration` 和 `build`。
+请在任务完成前执行 `npm run format`、`npm run verify`。这包含格式化，`lint`, `test:unit`, `test:integration` 和 `build`。
 
 ## 12. 测试与验证
 
 ### 本地命令
 
 - 开发：`npm run dev`
+- 格式化：`npm run format`
 - 类型检查：`npm run lint`
 - 单元测试：`npm run test:unit`
 - 覆盖率：`npm run test:coverage`
