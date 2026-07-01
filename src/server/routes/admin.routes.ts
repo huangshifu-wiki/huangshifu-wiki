@@ -448,22 +448,14 @@ async function permanentlyDeleteAlbumByDocId(docId: string) {
   })
   if (!album) return false
 
-  const coverIds = album.covers.map((cover) => cover.id)
   const assetIds = [...new Set(album.covers.map((cover) => cover.assetId).filter(isString))]
   const coversWithoutAsset = album.covers.filter((cover) => !cover.assetId)
 
   await prisma.$transaction(async (tx) => {
-    if (coverIds.length) {
-      await tx.musicTrack.updateMany({
-        where: {
-          defaultCoverSource: { in: coverIds.map((coverId) => `album_cover:${coverId}`) },
-        },
-        data: {
-          defaultCoverSource: null,
-          cover: '',
-        },
-      })
-    }
+    await tx.musicTrack.updateMany({
+      where: { coverAlbumDocId: docId },
+      data: { coverAlbumDocId: null },
+    })
 
     await tx.songAlbumRelation.deleteMany({ where: { albumDocId: docId } })
     await tx.album.delete({ where: { docId } })
@@ -2277,6 +2269,58 @@ router.get(
       if (tab === 'music') {
         const data = await prisma.musicTrack.findMany({
           where: activeWhere,
+          select: {
+            docId: true,
+            title: true,
+            artists: true,
+            lyricists: true,
+            composers: true,
+            arrangers: true,
+            vocals: true,
+            album: true,
+            audioUrl: true,
+            lyric: true,
+            releaseDate: true,
+            durationMs: true,
+            coverId: true,
+            coverAlbumDocId: true,
+            displayAlbumMode: true,
+            manualAlbumName: true,
+            deletedAt: true,
+            deletedBy: true,
+            createdAt: true,
+            updatedAt: true,
+            externalSources: {
+              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            },
+            covers: {
+              orderBy: { sortOrder: 'asc' },
+              select: {
+                id: true,
+                publicUrl: true,
+                isDefault: true,
+              },
+            },
+            albumRelations: {
+              select: {
+                album: {
+                  select: {
+                    docId: true,
+                    coverId: true,
+                    covers: {
+                      orderBy: { sortOrder: 'asc' },
+                      select: {
+                        id: true,
+                        publicUrl: true,
+                        isDefault: true,
+                      },
+                    },
+                  },
+                },
+              },
+              orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+            },
+          },
           orderBy: { updatedAt: 'desc' },
           take: 100,
         })

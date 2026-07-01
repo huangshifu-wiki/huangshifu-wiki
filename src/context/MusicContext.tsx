@@ -1,8 +1,8 @@
 import React, { createContext, useCallback, useContext, useMemo, useState, ReactNode } from 'react'
-import { Platform, PlatformIds } from '../types/PlatformIds'
+import { isPlayableSong } from '../lib/musicPlayback'
+import type { MusicExternalSource } from '../types/entities'
 
 interface Song {
-  id: string
   docId?: string
   title: string
   artists: string[]
@@ -14,8 +14,8 @@ interface Song {
   description?: string | null
   releaseDate?: string | null
   durationMs?: number | null
-  primaryPlatform?: Platform | null
-  platformIds?: PlatformIds
+  sources?: MusicExternalSource[]
+  playable?: boolean
 }
 
 interface MusicContextType {
@@ -54,9 +54,10 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
 
   const setPlaylist = useCallback(
     (songs: Song[]) => {
-      setPlaylistState(songs)
+      const playableSongs = songs.filter(isPlayableSong)
+      setPlaylistState(playableSongs)
 
-      if (!songs.length) {
+      if (!playableSongs.length) {
         setCurrentIndex(-1)
         return
       }
@@ -64,13 +65,12 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       setCurrentIndex((prevIndex) => {
         if (
           prevIndex >= 0 &&
-          prevIndex < songs.length &&
+          prevIndex < playableSongs.length &&
           currentSong &&
-          songs[prevIndex] &&
-          ((songs[prevIndex].docId &&
-            currentSong.docId &&
-            songs[prevIndex].docId === currentSong.docId) ||
-            songs[prevIndex].id === currentSong.id)
+          playableSongs[prevIndex] &&
+          playableSongs[prevIndex].docId &&
+          currentSong.docId &&
+          playableSongs[prevIndex].docId === currentSong.docId
         ) {
           return prevIndex
         }
@@ -79,10 +79,8 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
           return -1
         }
 
-        const matched = songs.findIndex((song) =>
-          song.docId && currentSong.docId
-            ? song.docId === currentSong.docId
-            : song.id === currentSong.id
+        const matched = playableSongs.findIndex(
+          (song) => song.docId && song.docId === currentSong.docId
         )
         return matched
       })
@@ -92,7 +90,7 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
 
   const setCurrentSong = useCallback(
     (song: Song | null) => {
-      if (!song) {
+      if (!song || !isPlayableSong(song)) {
         setCurrentSongState(null)
         setCurrentIndex(-1)
         setIsPlaying(false)
@@ -101,9 +99,7 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
 
       setCurrentSongState(song)
 
-      const index = playlist.findIndex((item) =>
-        item.docId && song.docId ? item.docId === song.docId : item.id === song.id
-      )
+      const index = playlist.findIndex((item) => item.docId && item.docId === song.docId)
       setCurrentIndex(index)
     },
     [playlist]
@@ -126,13 +122,22 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
 
   const playAlbumTracks = useCallback(
     (_albumId: string, _albumTitle: string, songs: Song[], startIndex = 0) => {
-      if (!songs.length) {
+      const playableSongs = songs.filter(isPlayableSong)
+      if (!playableSongs.length) {
         return
       }
 
-      setPlaylistState(songs)
-      const normalizedIndex = ((startIndex % songs.length) + songs.length) % songs.length
-      const song = songs[normalizedIndex]
+      setPlaylistState(playableSongs)
+      const targetSong = songs[startIndex]
+      const targetIndex =
+        targetSong?.docId && isPlayableSong(targetSong)
+          ? playableSongs.findIndex((song) => song.docId === targetSong.docId)
+          : -1
+      const normalizedIndex =
+        targetIndex >= 0
+          ? targetIndex
+          : ((startIndex % playableSongs.length) + playableSongs.length) % playableSongs.length
+      const song = playableSongs[normalizedIndex]
       if (!song) {
         return
       }

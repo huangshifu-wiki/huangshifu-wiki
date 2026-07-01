@@ -68,32 +68,34 @@ export function resolveSongDisplayAlbum(song: {
   }
 }
 
-export function resolveSongCoverUrl(
-  song: Pick<MusicTrackWithRelations, 'cover' | 'defaultCoverSource' | 'covers' | 'albumRelations'>
-) {
-  const source = (song.defaultCoverSource || '').trim()
-  if (!source || source === 'old_cover') {
-    return song.cover || ''
-  }
-
-  if (source.startsWith('song_cover:')) {
-    const coverId = source.slice('song_cover:'.length)
-    const matched = song.covers.find((item) => item.id === coverId)
-    return matched?.publicUrl || song.cover || ''
-  }
-
-  if (source.startsWith('album_cover:')) {
-    const coverId = source.slice('album_cover:'.length)
-    for (const relation of song.albumRelations) {
-      const matched = relation.album.covers.find((item) => item.id === coverId)
-      if (matched?.publicUrl) {
-        return matched.publicUrl
-      }
+export function resolveSongCoverUrl(song: {
+  coverId: string | null
+  coverAlbumDocId: string | null
+  covers: Array<{ id: string; publicUrl: string; isDefault?: boolean }>
+  albumRelations: Array<{
+    album: {
+      docId: string
+      coverId: string | null
+      covers: Array<{ id: string; publicUrl: string; isDefault?: boolean }>
     }
-    return song.cover || ''
+  }>
+}) {
+  if (song.coverAlbumDocId) {
+    const relation = song.albumRelations.find((item) => item.album.docId === song.coverAlbumDocId)
+    if (!relation) return ''
+    return resolveAlbumCoverUrl(relation.album)
   }
 
-  return song.cover || ''
+  const selected = song.coverId ? song.covers.find((item) => item.id === song.coverId) : null
+  return selected?.publicUrl || song.covers.find((item) => item.isDefault)?.publicUrl || ''
+}
+
+export function resolveAlbumCoverUrl(album: {
+  coverId: string | null
+  covers: Array<{ id: string; publicUrl: string; isDefault?: boolean }>
+}) {
+  const selected = album.coverId ? album.covers.find((item) => item.id === album.coverId) : null
+  return selected?.publicUrl || album.covers.find((item) => item.isDefault)?.publicUrl || ''
 }
 
 // ─── 自定义链接函数 ──────────────────────────────────────────────
@@ -167,45 +169,64 @@ export function normalizeSongCustomPlatformLinks(input: unknown): SongCustomPlat
 // ─── 平台解析函数 ────────────────────────────────────────────────
 
 export function getPlatformSourceId(
-  song: {
-    neteaseId?: string | null
-    tencentId?: string | null
-    kugouId?: string | null
-    baiduId?: string | null
-    kuwoId?: string | null
-    id?: string | null
-  },
+  sources: Array<{ platform: MusicPlatform; sourceId: string; isPrimary?: boolean }>,
   platform: MusicPlatform
 ): string {
-  if (platform === 'netease') return song.neteaseId?.trim() || ''
-  if (platform === 'tencent') return song.tencentId?.trim() || ''
-  if (platform === 'kugou') return song.kugouId?.trim() || ''
-  if (platform === 'baidu') return song.baiduId?.trim() || ''
-  if (platform === 'kuwo') return song.kuwoId?.trim() || ''
-  return song.id?.trim() || ''
-}
-
-export function getPlatformSourceField(
-  platform: MusicPlatform
-): 'neteaseId' | 'tencentId' | 'kugouId' | 'baiduId' | 'kuwoId' {
-  if (platform === 'netease') return 'neteaseId'
-  if (platform === 'tencent') return 'tencentId'
-  if (platform === 'kugou') return 'kugouId'
-  if (platform === 'baidu') return 'baiduId'
-  return 'kuwoId'
+  const source = sources.find((item) => item.platform === platform && item.sourceId.trim())
+  return source?.sourceId.trim() || ''
 }
 
 export function buildPlaybackPlatformCandidates(song: {
-  enabledPlatform?: MusicPlatform | null
-  primaryPlatform?: MusicPlatform | null
+  externalSources?: Array<{ platform: MusicPlatform; isPrimary?: boolean }>
 }): MusicPlatform[] {
-  const preferred = song.enabledPlatform || song.primaryPlatform || null
   const deduped = new Set<MusicPlatform>()
-  if (preferred) {
-    deduped.add(preferred)
+  const primary = song.externalSources?.find((source) => source.isPrimary)
+  if (primary) {
+    deduped.add(primary.platform)
   }
-  DEFAULT_MUSIC_PLATFORMS.forEach((platform) => deduped.add(platform))
+  for (const source of song.externalSources || []) {
+    deduped.add(source.platform)
+  }
   return [...deduped.values()]
+}
+
+export function normalizeMusicExternalSourceInputs(value: unknown) {
+  if (!Array.isArray(value)) return []
+  const deduped = new Set<string>()
+  const sources: Array<{
+    platform: MusicPlatform
+    sourceId: string
+    sourceUrl: string | null
+    isPrimary: boolean
+  }> = []
+
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const record = item as Record<string, unknown>
+    const platform = record.platform as MusicPlatform
+    if (!DEFAULT_MUSIC_PLATFORMS.includes(platform)) continue
+    const sourceId = typeof record.sourceId === 'string' ? record.sourceId.trim() : ''
+    if (!sourceId) continue
+
+    const key = `${platform}:${sourceId}`
+    if (deduped.has(key)) continue
+    deduped.add(key)
+    sources.push({
+      platform,
+      sourceId,
+      sourceUrl:
+        typeof record.sourceUrl === 'string' && record.sourceUrl.trim()
+          ? record.sourceUrl.trim()
+          : null,
+      isPrimary: record.isPrimary === true,
+    })
+  }
+
+  if (sources.length && !sources.some((source) => source.isPrimary)) {
+    sources[0].isPrimary = true
+  }
+
+  return sources
 }
 
 // ─── 播放缓存函数 ────────────────────────────────────────────────
@@ -259,23 +280,30 @@ export function setCachedPlayUrl(
 
 export async function resolveMusicPlayUrl(song: {
   docId: string
-  id: string
   audioUrl: string
-  primaryPlatform: MusicPlatform
-  enabledPlatform: MusicPlatform | null
-  neteaseId: string | null
-  tencentId: string | null
-  kugouId: string | null
-  baiduId: string | null
-  kuwoId: string | null
+  externalSources: Array<{ platform: MusicPlatform; sourceId: string; isPrimary: boolean }>
 }) {
   clearExpiredPlayUrlCache()
+
+  const fallbackUrl = song.audioUrl?.trim() || ''
+  if (fallbackUrl) {
+    return {
+      platform: null,
+      sourceId: null,
+      playUrl: fallbackUrl,
+      cached: false,
+      cacheExpiresAt: null,
+      fallback: true,
+      playable: true,
+      errors: [],
+    }
+  }
 
   const candidates = buildPlaybackPlatformCandidates(song)
   const errors: Array<{ platform: MusicPlatform; reason: string }> = []
 
   for (const platform of candidates) {
-    const sourceId = getPlatformSourceId(song, platform)
+    const sourceId = getPlatformSourceId(song.externalSources, platform)
     if (!sourceId) {
       continue
     }
@@ -289,6 +317,7 @@ export async function resolveMusicPlayUrl(song: {
         playUrl: cached.url,
         cached: true,
         cacheExpiresAt: new Date(cached.expiresAt).toISOString(),
+        playable: true,
       }
     }
 
@@ -311,31 +340,20 @@ export async function resolveMusicPlayUrl(song: {
         playUrl: resolvedUrl,
         cached: false,
         cacheExpiresAt: new Date(cachedRecord.expiresAt).toISOString(),
+        playable: true,
       }
     } catch (error) {
       errors.push({ platform, reason: error instanceof Error ? error.message : 'resolve_failed' })
     }
   }
 
-  const fallbackUrl = song.audioUrl?.trim() || ''
-  if (fallbackUrl) {
-    return {
-      platform: song.primaryPlatform,
-      sourceId: song.id,
-      playUrl: fallbackUrl,
-      cached: false,
-      cacheExpiresAt: null,
-      fallback: true,
-      errors,
-    }
-  }
-
   return {
-    platform: song.primaryPlatform,
-    sourceId: song.id,
+    platform: null,
+    sourceId: null,
     playUrl: '',
     cached: false,
     cacheExpiresAt: null,
+    playable: false,
     errors,
   }
 }
@@ -391,8 +409,6 @@ export function buildAlbumTracksPayload(
       docId: string
       title: string
       artists: string[]
-      cover: string
-      id: string
     }
   }>
 ) {
@@ -401,7 +417,7 @@ export function buildAlbumTracksPayload(
     Array<{
       songDocId: string
       trackOrder: number
-      song: { docId: string; title: string; artists: string[]; cover: string; id: string }
+      song: { docId: string; title: string; artists: string[] }
     }>
   >()
 
@@ -499,36 +515,79 @@ export async function addSongCoverFromAsset(
 
   const currentCount = await prisma.songCover.count({ where: { songDocId } })
 
-  const cover = await prisma.songCover.create({
-    data: {
-      songDocId,
-      assetId: asset.id,
-      storageKey: asset.storageKey,
-      publicUrl: asset.publicUrl,
-      sortOrder: currentCount,
-      isDefault: markDefault,
-    },
-  })
-
-  if (markDefault) {
-    await prisma.songCover.updateMany({
-      where: {
+  return prisma.$transaction(async (tx) => {
+    const cover = await tx.songCover.create({
+      data: {
         songDocId,
-        id: { not: cover.id },
-      },
-      data: {
-        isDefault: false,
-      },
-    })
-    await prisma.musicTrack.update({
-      where: { docId: songDocId },
-      data: {
-        defaultCoverSource: `song_cover:${cover.id}`,
+        assetId: asset.id,
+        storageKey: asset.storageKey,
+        publicUrl: asset.publicUrl,
+        sortOrder: currentCount,
+        isDefault: markDefault,
       },
     })
-  }
 
-  return cover
+    if (markDefault) {
+      await tx.songCover.updateMany({
+        where: {
+          songDocId,
+          id: { not: cover.id },
+          isDefault: true,
+        },
+        data: {
+          isDefault: false,
+        },
+      })
+      await tx.musicTrack.update({
+        where: { docId: songDocId },
+        data: {
+          coverId: cover.id,
+          coverAlbumDocId: null,
+        },
+      })
+    }
+
+    return cover
+  })
+}
+
+export async function addSongCoverFromUrl(
+  songDocId: string,
+  publicUrl: string,
+  markDefault = false
+) {
+  const url = publicUrl.trim()
+  if (!url) return null
+
+  const currentCount = await prisma.songCover.count({ where: { songDocId } })
+
+  return prisma.$transaction(async (tx) => {
+    const cover = await tx.songCover.create({
+      data: {
+        songDocId,
+        storageKey: `external/song/${songDocId}/${currentCount}`,
+        publicUrl: url,
+        sortOrder: currentCount,
+        isDefault: markDefault,
+      },
+    })
+
+    if (markDefault) {
+      await tx.songCover.updateMany({
+        where: { songDocId, id: { not: cover.id }, isDefault: true },
+        data: { isDefault: false },
+      })
+      await tx.musicTrack.update({
+        where: { docId: songDocId },
+        data: {
+          coverId: cover.id,
+          coverAlbumDocId: null,
+        },
+      })
+    }
+
+    return cover
+  })
 }
 
 export async function addAlbumCoverFromAsset(
@@ -552,85 +611,127 @@ export async function addAlbumCoverFromAsset(
 
   const currentCount = await prisma.albumCover.count({ where: { albumDocId } })
 
-  const cover = await prisma.albumCover.create({
-    data: {
-      albumDocId,
-      assetId: asset.id,
-      storageKey: asset.storageKey,
-      publicUrl: asset.publicUrl,
-      sortOrder: currentCount,
-      isDefault: markDefault,
-    },
-  })
-
-  if (markDefault) {
-    await prisma.albumCover.updateMany({
-      where: {
+  return prisma.$transaction(async (tx) => {
+    const cover = await tx.albumCover.create({
+      data: {
         albumDocId,
-        id: { not: cover.id },
-      },
-      data: {
-        isDefault: false,
-      },
-    })
-    await prisma.album.update({
-      where: { docId: albumDocId },
-      data: {
-        defaultCoverSource: `album_cover:${cover.id}`,
+        assetId: asset.id,
+        storageKey: asset.storageKey,
+        publicUrl: asset.publicUrl,
+        sortOrder: currentCount,
+        isDefault: markDefault,
       },
     })
-  }
 
-  return cover
+    if (markDefault) {
+      await tx.albumCover.updateMany({
+        where: {
+          albumDocId,
+          id: { not: cover.id },
+          isDefault: true,
+        },
+        data: {
+          isDefault: false,
+        },
+      })
+      await tx.album.update({
+        where: { docId: albumDocId },
+        data: {
+          coverId: cover.id,
+        },
+      })
+    }
+
+    return cover
+  })
+}
+
+export async function addAlbumCoverFromUrl(
+  albumDocId: string,
+  publicUrl: string,
+  markDefault = false
+) {
+  const url = publicUrl.trim()
+  if (!url) return null
+
+  const currentCount = await prisma.albumCover.count({ where: { albumDocId } })
+
+  return prisma.$transaction(async (tx) => {
+    const cover = await tx.albumCover.create({
+      data: {
+        albumDocId,
+        storageKey: `external/album/${albumDocId}/${currentCount}`,
+        publicUrl: url,
+        sortOrder: currentCount,
+        isDefault: markDefault,
+      },
+    })
+
+    if (markDefault) {
+      await tx.albumCover.updateMany({
+        where: { albumDocId, id: { not: cover.id }, isDefault: true },
+        data: { isDefault: false },
+      })
+      await tx.album.update({
+        where: { docId: albumDocId },
+        data: { coverId: cover.id },
+      })
+    }
+
+    return cover
+  })
 }
 
 export async function createOrUpdateImportedSong(params: {
   platform: MusicPlatform
   track: ImportSongInput
-  userUid: string
   albumNameFallback?: string
 }) {
-  const { platform, track, userUid, albumNameFallback } = params
-  const sourceField = getPlatformSourceField(platform)
+  const { platform, track, albumNameFallback } = params
   const platformId = track.sourceId
 
-  const existingByPlatformId = await prisma.musicTrack.findFirst({
+  const existingSource = await prisma.musicExternalSource.findUnique({
     where: {
-      deletedAt: null,
-      OR: [{ [sourceField]: platformId }, { id: track.sourceId }] as Prisma.MusicTrackWhereInput[],
+      resourceType_platform_sourceId: {
+        resourceType: 'song',
+        platform,
+        sourceId: platformId,
+      },
+    },
+    include: {
+      song: true,
     },
   })
 
-  if (existingByPlatformId) {
+  if (existingSource?.song && !existingSource.song.deletedAt) {
     const fallbackTitle = `未命名歌曲 ${track.sourceId}`
     const title = track.title || fallbackTitle
     const artists = track.artists.length ? track.artists : ['未知歌手']
     const album = track.album || albumNameFallback || '未知专辑'
 
-    const resolvedCover =
-      (await resolveMetingCoverUrl(platform as ParsedMusicPlatform, track.picId, track.cover)) ||
-      track.cover
-    const resolvedAudioUrl =
-      (await resolveMetingAudioUrl(platform as ParsedMusicPlatform, track.urlId)) || ''
-    const resolvedLyric =
-      (await resolveMetingLyric(platform as ParsedMusicPlatform, track.lyricId)) || ''
+    const [resolvedCoverRaw, resolvedAudioUrlRaw, resolvedLyricRaw] = await Promise.all([
+      resolveMetingCoverUrl(platform as ParsedMusicPlatform, track.picId, track.cover),
+      resolveMetingAudioUrl(platform as ParsedMusicPlatform, track.urlId),
+      resolveMetingLyric(platform as ParsedMusicPlatform, track.lyricId),
+    ])
+    const resolvedCover = resolvedCoverRaw || track.cover
+    const resolvedAudioUrl = resolvedAudioUrlRaw || ''
+    const resolvedLyric = resolvedLyricRaw || ''
 
     const song = await prisma.musicTrack.update({
-      where: { docId: existingByPlatformId.docId },
+      where: { docId: existingSource.song.docId },
       data: {
-        id: existingByPlatformId.id || track.sourceId,
         title,
         artists,
         album,
-        cover: resolvedCover || '',
         audioUrl: resolvedAudioUrl || '',
         lyric: resolvedLyric || null,
-        description: existingByPlatformId.description ?? null,
-        primaryPlatform: platform,
-        enabledPlatform: platform,
-        [sourceField]: platformId,
+        description: existingSource.song.description ?? null,
       },
     })
+    if (resolvedCover && !existingSource.song.coverId && !existingSource.song.coverAlbumDocId) {
+      await addSongCoverFromUrl(song.docId, resolvedCover, true)
+    }
     return {
       song,
       created: false,
@@ -646,73 +747,45 @@ export async function createOrUpdateImportedSong(params: {
 
   const existingByTitleArtist = await prisma.musicTrack.findFirst({
     where: {
-      AND: [
-        { deletedAt: null },
-        { title: { equals: title } },
-        { artists: { equals: artists } },
-        {
-          OR: [
-            { neteaseId: { not: null } },
-            { tencentId: { not: null } },
-            { kugouId: { not: null } },
-            { baiduId: { not: null } },
-            { kuwoId: { not: null } },
-          ],
-        },
-      ],
+      AND: [{ deletedAt: null }, { title: { equals: title } }, { artists: { equals: artists } }],
     } as Prisma.MusicTrackWhereInput,
+    include: {
+      externalSources: true,
+    },
   })
 
-  const resolvedCover =
-    (await resolveMetingCoverUrl(platform as ParsedMusicPlatform, track.picId, track.cover)) ||
-    track.cover
-  const resolvedAudioUrl =
-    (await resolveMetingAudioUrl(platform as ParsedMusicPlatform, track.urlId)) || ''
-  const resolvedLyric =
-    (await resolveMetingLyric(platform as ParsedMusicPlatform, track.lyricId)) || ''
+  const [resolvedCoverRaw, resolvedAudioUrlRaw, resolvedLyricRaw] = await Promise.all([
+    resolveMetingCoverUrl(platform as ParsedMusicPlatform, track.picId, track.cover),
+    resolveMetingAudioUrl(platform as ParsedMusicPlatform, track.urlId),
+    resolveMetingLyric(platform as ParsedMusicPlatform, track.lyricId),
+  ])
+  const resolvedCover = resolvedCoverRaw || track.cover
+  const resolvedAudioUrl = resolvedAudioUrlRaw || ''
+  const resolvedLyric = resolvedLyricRaw || ''
 
   if (existingByTitleArtist) {
-    const conflictPlatformId = (existingByTitleArtist as unknown as Record<string, string | null>)[
-      sourceField
-    ]
-    if (conflictPlatformId) {
-      const song = await prisma.musicTrack.create({
-        data: {
-          id: track.sourceId,
-          title,
-          artists,
-          album,
-          cover: resolvedCover || '',
-          audioUrl: resolvedAudioUrl || '',
-          lyric: resolvedLyric || null,
-          description: null,
-          primaryPlatform: platform,
-          enabledPlatform: platform,
-          [sourceField]: platformId,
-          addedBy: userUid,
-        },
-      })
-      return {
-        song,
-        created: true,
-        linked: false,
-      }
-    }
-
     const updatedSong = await prisma.musicTrack.update({
       where: { docId: existingByTitleArtist.docId },
       data: {
-        id: existingByTitleArtist.id || track.sourceId,
         title,
         artists,
         album,
-        cover: resolvedCover || '',
         audioUrl: resolvedAudioUrl || '',
         lyric: resolvedLyric || null,
         description: existingByTitleArtist.description ?? null,
-        primaryPlatform: platform,
-        enabledPlatform: platform,
-        [sourceField]: platformId,
+      },
+    })
+    if (resolvedCover && !existingByTitleArtist.coverId && !existingByTitleArtist.coverAlbumDocId) {
+      await addSongCoverFromUrl(updatedSong.docId, resolvedCover, true)
+    }
+    await prisma.musicExternalSource.create({
+      data: {
+        resourceType: 'song',
+        songDocId: updatedSong.docId,
+        platform,
+        sourceId: platformId,
+        sourceUrl: track.sourceUrl || null,
+        isPrimary: !existingByTitleArtist.externalSources.length,
       },
     })
     return {
@@ -729,20 +802,26 @@ export async function createOrUpdateImportedSong(params: {
 
   const song = await prisma.musicTrack.create({
     data: {
-      id: track.sourceId,
       title,
       artists,
       album,
-      cover: resolvedCover || '',
       audioUrl: resolvedAudioUrl || '',
       lyric: resolvedLyric || null,
       description: null,
-      primaryPlatform: platform,
-      enabledPlatform: platform,
-      [sourceField]: platformId,
-      addedBy: userUid,
+      externalSources: {
+        create: {
+          resourceType: 'song',
+          platform,
+          sourceId: platformId,
+          sourceUrl: track.sourceUrl || null,
+          isPrimary: true,
+        },
+      },
     },
   })
+  if (resolvedCover) {
+    await addSongCoverFromUrl(song.docId, resolvedCover, true)
+  }
 
   await autoLinkInstrumental(song.docId, title, primaryArtist, track.isInstrumental)
 
@@ -825,6 +904,12 @@ export async function fetchSongsWithRelations(
     include: {
       covers: {
         orderBy: { sortOrder: 'asc' },
+        select: {
+          id: true,
+          publicUrl: true,
+          isDefault: true,
+          sortOrder: true,
+        },
       },
       albumRelations: {
         include: {
@@ -834,10 +919,14 @@ export async function fetchSongsWithRelations(
               title: true,
               artist: true,
               releaseDate: true,
-              cover: true,
-              defaultCoverSource: true,
+              coverId: true,
               covers: {
                 orderBy: { sortOrder: 'asc' },
+                select: {
+                  id: true,
+                  publicUrl: true,
+                  isDefault: true,
+                },
               },
             },
           },
@@ -848,6 +937,9 @@ export async function fetchSongsWithRelations(
         select: {
           targetSongDocId: true,
         },
+      },
+      externalSources: {
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       },
     },
     orderBy: { createdAt: 'desc' },
@@ -863,13 +955,29 @@ export async function fetchSongWithRelationsByDocId(songDocId: string) {
     include: {
       covers: {
         orderBy: { sortOrder: 'asc' },
+        select: {
+          id: true,
+          publicUrl: true,
+          isDefault: true,
+          sortOrder: true,
+        },
       },
       albumRelations: {
         include: {
           album: {
-            include: {
+            select: {
+              docId: true,
+              title: true,
+              artist: true,
+              releaseDate: true,
+              coverId: true,
               covers: {
                 orderBy: { sortOrder: 'asc' },
+                select: {
+                  id: true,
+                  publicUrl: true,
+                  isDefault: true,
+                },
               },
             },
           },
@@ -880,6 +988,9 @@ export async function fetchSongWithRelationsByDocId(songDocId: string) {
         select: {
           targetSongDocId: true,
         },
+      },
+      externalSources: {
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       },
     },
   })

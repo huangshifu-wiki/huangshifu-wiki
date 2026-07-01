@@ -14,17 +14,19 @@ export interface UserProfile {
   bio: string
 }
 
-export interface PlatformIds {
-  neteaseId?: string | null
-  tencentId?: string | null
-  kugouId?: string | null
-  baiduId?: string | null
-  kuwoId?: string | null
+export interface MusicExternalSource {
+  id: string
+  resourceType: 'song' | 'album'
+  platform: Platform
+  sourceId: string
+  sourceUrl?: string | null
+  isPrimary: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface SongItem {
   docId: string
-  id: string
   title: string
   artists: string[]
   lyricists?: string[]
@@ -36,21 +38,21 @@ export interface SongItem {
   audioUrl: string
   releaseDate?: string | null
   durationMs?: number | null
-  primaryPlatform?: Platform | null
   lyric?: string | null
   description?: string | null
   favoritedByMe?: boolean
-  platformIds?: PlatformIds
+  sources?: MusicExternalSource[]
+  playable?: boolean
   createdAt?: string
 }
 
 export interface AlbumItem {
   docId?: string
-  id: string
   title: string
   artist: string
   cover: string
   description?: string | null
+  sources?: MusicExternalSource[]
   trackCount?: number
   tracks?: unknown[]
 }

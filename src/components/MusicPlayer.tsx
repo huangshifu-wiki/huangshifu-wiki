@@ -4,10 +4,8 @@ import { useMusic } from '../context/MusicContext'
 import { formatTime } from '../lib/formatUtils'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { apiGet } from '../lib/apiClient'
-import type { Platform, PlatformIds } from '../types/PlatformIds'
 
 interface Song {
-  id: string
   docId?: string
   title: string
   artists: string[]
@@ -17,12 +15,10 @@ interface Song {
   playUrl?: string
   lyric?: string | null
   description?: string | null
-  primaryPlatform?: Platform | null
-  platformIds?: PlatformIds
+  playable?: boolean
 }
 
 interface MusicSongApiResponse {
-  id: string
   docId?: string | null
   title: string
   artists: string[]
@@ -33,8 +29,7 @@ interface MusicSongApiResponse {
   playUrl?: string
   lyric?: string | null
   description?: string | null
-  primaryPlatform?: Platform | null
-  platformIds?: PlatformIds
+  playable?: boolean
 }
 
 export const MusicPlayer = ({ songId }: { songId: string }) => {
@@ -58,7 +53,6 @@ export const MusicPlayer = ({ songId }: { songId: string }) => {
       try {
         const apiSong = await apiGet<MusicSongApiResponse>(`/api/music/song/${songId}`)
         setSong({
-          id: apiSong.id,
           docId: apiSong.docId || undefined,
           title: apiSong.title,
           artists: apiSong.artists,
@@ -68,8 +62,7 @@ export const MusicPlayer = ({ songId }: { songId: string }) => {
           playUrl: apiSong.playUrl,
           lyric: apiSong.lyric || null,
           description: apiSong.description || null,
-          primaryPlatform: apiSong.primaryPlatform,
-          platformIds: apiSong.platformIds,
+          playable: apiSong.playable,
         })
       } catch (e) {
         console.error('Error fetching song:', e)
@@ -81,7 +74,7 @@ export const MusicPlayer = ({ songId }: { songId: string }) => {
   }, [songId])
 
   const togglePlay = () => {
-    if (currentSong?.id !== song?.id) {
+    if (currentSong?.docId !== song?.docId) {
       setCurrentSong(song)
       setIsPlaying(true)
     } else {
@@ -93,7 +86,7 @@ export const MusicPlayer = ({ songId }: { songId: string }) => {
     return <div className="py-4 text-center text-xs text-text-muted animate-pulse">加载中...</div>
   if (!song) return null
 
-  const isCurrent = currentSong?.id === song.id
+  const isCurrent = currentSong?.docId === song.docId
 
   return (
     <div className="bg-surface-alt rounded border border-border p-4">

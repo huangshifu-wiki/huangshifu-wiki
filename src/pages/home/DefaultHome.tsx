@@ -482,7 +482,7 @@ export const DefaultHome = () => {
             ) : albums.length > 0 ? (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-1">
                 {albums.map((album) => {
-                  const albumId = album.docId || album.id
+                  const albumId = album.docId || ''
                   return (
                     <Link
                       key={albumId}

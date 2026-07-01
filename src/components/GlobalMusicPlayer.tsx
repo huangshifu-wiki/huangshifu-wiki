@@ -71,15 +71,6 @@ export const GlobalMusicPlayer = () => {
         return
       }
 
-      const neteaseId = currentSong.platformIds?.neteaseId
-      if (currentSong.primaryPlatform === 'netease' && neteaseId) {
-        const directUrl = `https://music.163.com/song/media/outer/url?id=${neteaseId}.mp3`
-        setResolvedPlayUrl(directUrl)
-        setResolvingPlayUrl(false)
-        setPlayUrlError('')
-        return
-      }
-
       setResolvingPlayUrl(true)
       setPlayUrlError('')
 
@@ -88,10 +79,14 @@ export const GlobalMusicPlayer = () => {
           `/api/music/${encodeURIComponent(currentSong.docId)}/play-url`
         )
         const nextUrl =
-          typeof data.playUrl === 'string' && data.playUrl.trim()
+          data.playable !== false && typeof data.playUrl === 'string' && data.playUrl.trim()
             ? data.playUrl.trim()
             : currentSong.playUrl || fallback
         setResolvedPlayUrl(nextUrl)
+        if (!nextUrl) {
+          setIsPlaying(false)
+          setPlayUrlError('暂无可播放音源')
+        }
       } catch (error) {
         console.error('Resolve play url failed:', error)
         setResolvedPlayUrl(currentSong.playUrl || fallback)

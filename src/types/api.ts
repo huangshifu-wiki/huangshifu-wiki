@@ -272,7 +272,6 @@ export interface PostListResponse extends PaginatedResponse<PostDetailResponse['
 
 export interface MusicListResponse {
   songs: Array<{
-    id: string
     docId: string
     title: string
     artists: string[]
@@ -284,6 +283,7 @@ export interface MusicListResponse {
     description?: string | null
     coverUrl?: string
     playUrl?: string
+    playable?: boolean
     releaseDate?: string | null
     durationMs?: number | null
     createdAt: string
@@ -293,7 +293,6 @@ export interface MusicListResponse {
 
 export interface MusicDetailResponse {
   song: {
-    id: string
     docId: string
     title: string
     artists: string[]
@@ -305,6 +304,7 @@ export interface MusicDetailResponse {
     description?: string | null
     coverUrl?: string
     playUrl?: string
+    playable?: boolean
     releaseDate?: string | null
     durationMs?: number | null
     createdAt: string
@@ -313,6 +313,11 @@ export interface MusicDetailResponse {
 
 export interface MusicPlayUrlResponse {
   playUrl: string
+  playable?: boolean
+  platform?: string | null
+  sourceId?: string | null
+  cached?: boolean
+  cacheExpiresAt?: string | null
 }
 
 // ============================================================================

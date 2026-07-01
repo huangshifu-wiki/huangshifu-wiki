@@ -35,18 +35,18 @@ describe('Music API - 音乐接口测试', () => {
     await prisma.musicTrack.deleteMany({
       where: {
         OR: [
-          { id: { startsWith: 'test-markdown-description-' } },
-          { id: { startsWith: 'test-optional-metadata-' } },
-          { id: { startsWith: 'test-artist-partial-search-' } },
-          { id: { startsWith: 'test-display-relation-' } },
+          { title: { startsWith: 'Markdown Description Test Song' } },
+          { title: { startsWith: 'Optional Metadata Test Song' } },
+          { title: { startsWith: 'Artist Partial Search Test Song' } },
+          { title: { startsWith: 'Display Relation Song' } },
         ],
       },
     })
     await prisma.album.deleteMany({
       where: {
         OR: [
-          { id: { startsWith: 'test-display-relation-' } },
-          { id: { startsWith: 'test-optional-album-' } },
+          { title: { startsWith: 'Display Relation Album' } },
+          { title: { startsWith: 'Optional Album' } },
         ],
       },
     })
@@ -70,18 +70,18 @@ describe('Music API - 音乐接口测试', () => {
     await prisma.musicTrack.deleteMany({
       where: {
         OR: [
-          { id: { startsWith: 'test-markdown-description-' } },
-          { id: { startsWith: 'test-optional-metadata-' } },
-          { id: { startsWith: 'test-artist-partial-search-' } },
-          { id: { startsWith: 'test-display-relation-' } },
+          { title: { startsWith: 'Markdown Description Test Song' } },
+          { title: { startsWith: 'Optional Metadata Test Song' } },
+          { title: { startsWith: 'Artist Partial Search Test Song' } },
+          { title: { startsWith: 'Display Relation Song' } },
         ],
       },
     })
     await prisma.album.deleteMany({
       where: {
         OR: [
-          { id: { startsWith: 'test-display-relation-' } },
-          { id: { startsWith: 'test-optional-album-' } },
+          { title: { startsWith: 'Display Relation Album' } },
+          { title: { startsWith: 'Optional Album' } },
         ],
       },
     })
@@ -98,11 +98,9 @@ describe('Music API - 音乐接口测试', () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const song = await prisma.musicTrack.create({
       data: {
-        id: `test-markdown-description-${suffix}`,
         title: 'Markdown Description Test Song',
         artists: ['Markdown Description Test Artist'],
         album: '',
-        addedBy: adminUser.user.uid,
       },
     })
     const markdownDescription = '\n\n    const value = 1\n\n正文\n'
@@ -127,7 +125,6 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('创建歌曲时允许省略发行日期和时长', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       adminUser.user.email,
       adminUser.plainPassword
@@ -137,7 +134,6 @@ describe('Music API - 音乐接口测试', () => {
       .post('/api/music')
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({
-        id: `test-optional-metadata-${suffix}`,
         title: 'Optional Metadata Test Song',
         artists: ['Optional Metadata Test Artist'],
       })
@@ -148,7 +144,6 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('创建歌曲时拒绝非法发行日期和时长', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       adminUser.user.email,
       adminUser.plainPassword
@@ -158,7 +153,6 @@ describe('Music API - 音乐接口测试', () => {
       .post('/api/music')
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({
-        id: `test-optional-metadata-${suffix}-date`,
         title: 'Invalid Date Test Song',
         artists: ['Optional Metadata Test Artist'],
         releaseDate: '2026-02-31',
@@ -170,7 +164,6 @@ describe('Music API - 音乐接口测试', () => {
       .post('/api/music')
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({
-        id: `test-optional-metadata-${suffix}-duration`,
         title: 'Invalid Duration Test Song',
         artists: ['Optional Metadata Test Artist'],
         durationMs: -1,
@@ -180,45 +173,33 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('创建专辑时允许省略发行日期', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       adminUser.user.email,
       adminUser.plainPassword
     )
 
-    const response = await agent
-      .post('/api/albums')
-      .set('X-XSRF-TOKEN', xsrfToken)
-      .send({
-        id: `test-optional-album-${suffix}`,
-        sourceId: `test-optional-album-source-${suffix}`,
-        title: 'Optional Album Release Date',
-        artist: 'Optional Album Artist',
-        cover: '',
-        description: 'Optional album description',
-        platformUrl: 'https://music.example.com/album/optional',
-      })
+    const response = await agent.post('/api/albums').set('X-XSRF-TOKEN', xsrfToken).send({
+      title: 'Optional Album Release Date',
+      artist: 'Optional Album Artist',
+      cover: '',
+      description: 'Optional album description',
+    })
 
     expect(response.status).toBe(201)
     expect(response.body.album.releaseDate).toBeNull()
   })
 
   it('创建专辑时拒绝非法发行日期', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       adminUser.user.email,
       adminUser.plainPassword
     )
 
-    const response = await agent
-      .post('/api/albums')
-      .set('X-XSRF-TOKEN', xsrfToken)
-      .send({
-        id: `test-optional-album-${suffix}`,
-        title: 'Invalid Album Release Date',
-        artist: 'Optional Album Artist',
-        releaseDate: '2026-02-31',
-      })
+    const response = await agent.post('/api/albums').set('X-XSRF-TOKEN', xsrfToken).send({
+      title: 'Invalid Album Release Date',
+      artist: 'Optional Album Artist',
+      releaseDate: '2026-02-31',
+    })
 
     expect(response.status).toBe(400)
   })
@@ -228,28 +209,20 @@ describe('Music API - 音乐接口测试', () => {
     const [album, displaySong, normalSong] = await Promise.all([
       prisma.album.create({
         data: {
-          id: `test-display-relation-album-${suffix}`,
-          platform: 'netease',
-          sourceId: `test-display-relation-album-${suffix}`,
           title: 'Display Relation Album',
           artist: 'Batch Artist',
-          cover: '',
         },
       }),
       prisma.musicTrack.create({
         data: {
-          id: `test-display-relation-song-display-${suffix}`,
           title: 'Display Relation Song Display',
           artists: ['Batch Artist'],
-          addedBy: adminUser.user.uid,
         },
       }),
       prisma.musicTrack.create({
         data: {
-          id: `test-display-relation-song-normal-${suffix}`,
           title: 'Display Relation Song Normal',
           artists: ['Batch Artist'],
-          addedBy: adminUser.user.uid,
         },
       }),
     ])
@@ -300,11 +273,9 @@ describe('Music API - 音乐接口测试', () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const song = await prisma.musicTrack.create({
       data: {
-        id: `test-artist-partial-search-${suffix}`,
         title: 'Artist Partial Search Test Song',
         artists: ['黄诗扶'],
         album: '',
-        addedBy: adminUser.user.uid,
       },
     })
 

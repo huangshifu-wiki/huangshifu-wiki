@@ -54,24 +54,28 @@ vi.mock('../../../src/lib/i18n', () => ({
 
 const mockSong = {
   docId: 'song-001',
-  id: '12345',
   title: '测试歌曲名',
   artists: ['测试歌手'],
   album: '测试专辑',
   cover: '',
   audioUrl: '',
-  primaryPlatform: 'netease' as const,
+  sources: [
+    {
+      id: 'source-001',
+      resourceType: 'song' as const,
+      platform: 'netease' as const,
+      sourceId: '12345',
+      isPrimary: true,
+    },
+  ],
   favoritedByMe: false,
 }
 
 const defaultProps = {
   song: mockSong,
-  isBatchMode: false,
-  isSelected: false,
   isCurrentSong: false,
   isFavoriting: false,
   onPlay: vi.fn(),
-  onToggleSelect: vi.fn(),
   onToggleFavorite: vi.fn(),
 }
 
@@ -123,16 +127,6 @@ describe('SongCard', () => {
     expect(screen.queryByLabelText(/复制内链/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/查看帖子/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/删除/)).not.toBeInTheDocument()
-  })
-
-  it('in batch mode renders a select-style button', () => {
-    renderWithRouter(<SongCard {...defaultProps} isBatchMode={true} />)
-    expect(screen.getByText('选择')).toBeInTheDocument()
-  })
-
-  it('in batch mode with selected shows selected text', () => {
-    renderWithRouter(<SongCard {...defaultProps} isBatchMode={true} isSelected={true} />)
-    expect(screen.getByText('已选')).toBeInTheDocument()
   })
 
   it('highlights current song with themed background class', () => {

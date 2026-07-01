@@ -1,24 +1,17 @@
 import React, { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, ExternalLink, Plus, Search, Trash2 } from 'lucide-react'
 
-import { apiGet, apiPatch } from '../lib/apiClient'
+import { apiPatch } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { getPlatformExternalUrl } from '../lib/musicPlatformUrls'
 import { formatMusicCredits, normalizeStringListInput } from '../lib/musicCredits'
-import { Platform, PlatformIds } from '../types/PlatformIds'
+import type { Platform } from '../types/common'
+import type { MusicExternalSource } from '../types/entities'
 import { useToast } from './Toast'
 import { MatchSuggestionModal } from './MatchSuggestionModal'
 import { FormModal } from './Modal/FormModal'
 import { CharacterCount } from './CharacterCount'
 import MarkdownEditor from './MarkdownEditor'
-
-type CustomPlatformConfig = {
-  key: string
-  label: string
-  urlPattern: string
-  color: string
-  bgColor: string
-}
 
 type SongFormData = {
   title: string
@@ -54,7 +47,6 @@ const normalizeCustomPlatformLinkUrl = (value: string) => {
 
 type SongItem = {
   docId: string
-  id: string
   title: string
   artists: string[]
   lyricists?: string[]
@@ -68,10 +60,8 @@ type SongItem = {
   description?: string | null
   releaseDate?: string | null
   durationMs?: number | null
-  primaryPlatform?: Platform | null
   favoritedByMe?: boolean
-  platformIds?: PlatformIds
-  customPlatformIds?: Record<string, string>
+  sources?: MusicExternalSource[]
   customPlatformLinks?: CustomPlatformLink[]
 }
 
@@ -83,36 +73,96 @@ interface SongEditModalProps {
 }
 
 const platformFields: Array<{
-  key: keyof PlatformIds
+  platform: Platform
   label: string
   urlPattern: (id: string) => string
 }> = [
   {
-    key: 'neteaseId',
+    platform: 'netease',
     label: '网易云音乐',
     urlPattern: (id) => getPlatformExternalUrl('netease', id) || '#',
   },
   {
-    key: 'tencentId',
+    platform: 'tencent',
     label: 'QQ音乐',
     urlPattern: (id) => getPlatformExternalUrl('tencent', id) || '#',
   },
   {
-    key: 'kugouId',
+    platform: 'kugou',
     label: '酷狗音乐',
     urlPattern: (id) => getPlatformExternalUrl('kugou', id) || '#',
   },
   {
-    key: 'baiduId',
+    platform: 'baidu',
     label: '百度音乐',
     urlPattern: (id) => getPlatformExternalUrl('baidu', id) || '#',
   },
   {
-    key: 'kuwoId',
+    platform: 'kuwo',
     label: '酷我音乐',
     urlPattern: (id) => getPlatformExternalUrl('kuwo', id) || '#',
   },
 ]
+
+export type PlatformSourceIds = Partial<Record<Platform, string | null>>
+
+const getPlatformSourceIds = (sources: MusicExternalSource[] | undefined): PlatformSourceIds =>
+  platformFields.reduce<PlatformSourceIds>((result, field) => {
+    result[field.platform] =
+      sources?.find((source) => source.platform === field.platform)?.sourceId || ''
+    return result
+  }, {})
+
+const normalizePlatformSourceId = (value: string | null | undefined) => (value || '').trim()
+
+const hasPlatformSourceIdChanges = (
+  sourceIds: PlatformSourceIds,
+  existingSources: MusicExternalSource[] | undefined
+) => {
+  const existingSourceIds = getPlatformSourceIds(existingSources)
+  return platformFields.some(
+    (field) =>
+      normalizePlatformSourceId(sourceIds[field.platform]) !==
+      normalizePlatformSourceId(existingSourceIds[field.platform])
+  )
+}
+
+export const buildSourcesPatchFromPlatformSourceIds = (
+  sourceIds: PlatformSourceIds,
+  existingSources: MusicExternalSource[] | undefined
+) => {
+  if (!hasPlatformSourceIdChanges(sourceIds, existingSources)) {
+    return undefined
+  }
+
+  const sources = platformFields
+    .map((field) => {
+      const sourceId = normalizePlatformSourceId(sourceIds[field.platform])
+      if (!sourceId) return null
+
+      const existingByPlatform = existingSources?.find(
+        (source) => source.platform === field.platform
+      )
+      const unchangedSource = existingSources?.find(
+        (source) => source.platform === field.platform && source.sourceId === sourceId
+      )
+
+      return {
+        resourceType: 'song' as const,
+        platform: field.platform,
+        sourceId,
+        sourceUrl: unchangedSource?.sourceUrl ?? null,
+        isPrimary: existingByPlatform?.isPrimary === true,
+      }
+    })
+    .filter((source): source is NonNullable<typeof source> => Boolean(source))
+
+  const primaryIndex = sources.findIndex((source) => source.isPrimary)
+  return sources.map((source, index) => ({
+    ...source,
+    isPrimary: primaryIndex >= 0 ? index === primaryIndex : index === 0,
+  }))
+}
 
 const creditFields: Array<{
   key: 'lyricists' | 'composers' | 'arrangers' | 'vocals'
@@ -139,33 +189,16 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
     lyric: song.lyric || '',
     description: song.description || '',
   })
-  const [platformIds, setPlatformIds] = useState<PlatformIds>({
-    neteaseId: song.platformIds?.neteaseId || '',
-    tencentId: song.platformIds?.tencentId || '',
-    kugouId: song.platformIds?.kugouId || '',
-    baiduId: song.platformIds?.baiduId || '',
-    kuwoId: song.platformIds?.kuwoId || '',
-  })
+  const [platformSourceIds, setPlatformSourceIds] = useState<PlatformSourceIds>(
+    getPlatformSourceIds(song.sources)
+  )
   const [customPlatformLinks, setCustomPlatformLinks] = useState<CustomPlatformLink[]>(
     song.customPlatformLinks || []
   )
-  const [customPlatformIds, setCustomPlatformIds] = useState<Record<string, string>>(
-    song.customPlatformIds || {}
-  )
-  const [customPlatforms, setCustomPlatforms] = useState<CustomPlatformConfig[]>([])
   const [platformExpanded, setPlatformExpanded] = useState(false)
-  const [customPlatformExpanded, setCustomPlatformExpanded] = useState(false)
   const [matchingPlatform, setMatchingPlatform] = useState<Platform | null>(null)
   const [saving, setSaving] = useState(false)
   const { show } = useToast()
-
-  useEffect(() => {
-    if (open) {
-      apiGet<{ platforms: CustomPlatformConfig[] }>('/api/music-platforms')
-        .then((data) => setCustomPlatforms(data.platforms || []))
-        .catch(() => setCustomPlatforms([]))
-    }
-  }, [open])
 
   useEffect(() => {
     if (song) {
@@ -182,15 +215,8 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
         lyric: song.lyric || '',
         description: song.description || '',
       })
-      setPlatformIds({
-        neteaseId: song.platformIds?.neteaseId || '',
-        tencentId: song.platformIds?.tencentId || '',
-        kugouId: song.platformIds?.kugouId || '',
-        baiduId: song.platformIds?.baiduId || '',
-        kuwoId: song.platformIds?.kuwoId || '',
-      })
+      setPlatformSourceIds(getPlatformSourceIds(song.sources))
       setCustomPlatformLinks(song.customPlatformLinks || [])
-      setCustomPlatformIds(song.customPlatformIds || {})
     }
   }, [song, open])
 
@@ -231,7 +257,8 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
         ? formData.description
         : null
     try {
-      await apiPatch(`/api/music/${song.docId}`, {
+      const sourcesPatch = buildSourcesPatchFromPlatformSourceIds(platformSourceIds, song.sources)
+      const payload: Record<string, unknown> = {
         title: formData.title.trim(),
         artists,
         lyricists: normalizeStringListInput(formData.lyricists),
@@ -243,14 +270,12 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
         durationMs: formData.durationMs ? Number(formData.durationMs) : null,
         lyric: formData.lyric?.trim() || null,
         description,
-        neteaseId: platformIds.neteaseId || null,
-        tencentId: platformIds.tencentId || null,
-        kugouId: platformIds.kugouId || null,
-        baiduId: platformIds.baiduId || null,
-        kuwoId: platformIds.kuwoId || null,
-        customPlatformIds,
         customPlatformLinks: normalizedCustomPlatformLinks.filter((link) => link.label && link.url),
-      })
+      }
+      if (sourcesPatch) {
+        payload.sources = sourcesPatch
+      }
+      await apiPatch(`/api/music/${song.docId}`, payload)
       show('歌曲已更新')
       onSuccess()
       onClose()
@@ -270,8 +295,8 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
     }
   }
 
-  const handlePlatformIdChange = (key: keyof PlatformIds, value: string) => {
-    setPlatformIds((prev) => ({ ...prev, [key]: value }))
+  const handlePlatformIdChange = (platform: Platform, value: string) => {
+    setPlatformSourceIds((prev) => ({ ...prev, [platform]: value }))
   }
 
   const handleCustomPlatformLinkChange = (
@@ -293,11 +318,11 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
   }
 
   const handleMatchSelect = (platform: Platform, sourceId: string) => {
-    handlePlatformIdChange(`${platform}Id` as keyof PlatformIds, sourceId)
+    handlePlatformIdChange(platform, sourceId)
     setMatchingPlatform(null)
   }
 
-  const linkedPlatforms = platformFields.filter((p) => platformIds[p.key])
+  const linkedPlatforms = platformFields.filter((p) => platformSourceIds[p.platform])
 
   return (
     <>
@@ -456,17 +481,17 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
         {platformExpanded && (
           <div className="space-y-2">
             {platformFields.map((platform) => {
-              const currentId = platformIds[platform.key] || ''
+              const currentId = platformSourceIds[platform.platform] || ''
               const isLinked = Boolean(currentId)
               return (
-                <div key={platform.key} className="flex items-center gap-2">
+                <div key={platform.platform} className="flex items-center gap-2">
                   <span className="w-24 text-xs text-text-secondary shrink-0">
                     {platform.label}
                   </span>
                   <input
                     type="text"
                     value={currentId}
-                    onChange={(e) => handlePlatformIdChange(platform.key, e.target.value)}
+                    onChange={(e) => handlePlatformIdChange(platform.platform, e.target.value)}
                     maxLength={CONTENT_LIMITS.music.platformId}
                     placeholder={isLinked ? '已关联' : '输入平台歌曲ID'}
                     className="theme-input flex-1 px-3 py-2 text-sm rounded"
@@ -483,7 +508,7 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
                   )}
                   <button
                     type="button"
-                    onClick={() => setMatchingPlatform(platform.key.replace('Id', '') as Platform)}
+                    onClick={() => setMatchingPlatform(platform.platform)}
                     className="px-3 py-2 rounded border border-border text-xs text-text-secondary hover:text-brand-gold hover:border-brand-gold transition-all flex items-center gap-1"
                   >
                     <Search size={13} />
@@ -493,86 +518,6 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
               )
             })}
           </div>
-        )}
-
-        {customPlatforms.length > 0 && (
-          <>
-            <button
-              type="button"
-              onClick={() => setCustomPlatformExpanded((prev) => !prev)}
-              className="w-full flex items-center justify-between p-3 rounded border border-border bg-surface-alt/60 hover:bg-surface-alt transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-text-primary">预设平台</span>
-                {Object.keys(customPlatformIds).length > 0 && (
-                  <span className="text-xs px-1.5 py-0.5 rounded theme-tag font-medium">
-                    已添加 {Object.keys(customPlatformIds).length} 个
-                  </span>
-                )}
-              </div>
-              {customPlatformExpanded ? (
-                <ChevronUp size={16} className="text-text-muted" />
-              ) : (
-                <ChevronDown size={16} className="text-text-muted" />
-              )}
-            </button>
-
-            {customPlatformExpanded && (
-              <div className="space-y-2">
-                {customPlatforms.map((platform) => {
-                  const currentId = customPlatformIds[platform.key] || ''
-                  const isLinked = Boolean(currentId)
-                  const buildUrl = (id: string) => platform.urlPattern.replace('{id}', id)
-                  return (
-                    <div key={platform.key} className="flex items-center gap-2">
-                      <span className="w-20 text-xs px-2 py-1 rounded text-center shrink-0 theme-tag font-medium">
-                        {platform.label}
-                      </span>
-                      <input
-                        type="text"
-                        value={currentId}
-                        onChange={(e) =>
-                          setCustomPlatformIds((prev) => ({
-                            ...prev,
-                            [platform.key]: e.target.value,
-                          }))
-                        }
-                        maxLength={CONTENT_LIMITS.music.platformId}
-                        placeholder={isLinked ? '已添加' : '输入平台ID'}
-                        className="theme-input flex-1 px-3 py-2 text-sm rounded"
-                      />
-                      {isLinked && (
-                        <>
-                          <a
-                            href={buildUrl(currentId)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 text-text-muted hover:text-brand-gold transition-colors"
-                          >
-                            <ExternalLink size={14} />
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCustomPlatformIds((prev) => {
-                                const next = { ...prev }
-                                delete next[platform.key]
-                                return next
-                              })
-                            }
-                            className="p-1.5 text-text-muted theme-icon-button-danger transition-colors"
-                            title="移除"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </>
         )}
 
         <div className="rounded border border-border bg-surface-alt/60 p-3 space-y-3">
@@ -662,7 +607,7 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
               <p className="text-xs text-text-muted truncate">
                 {formatMusicCredits(song.artists, '未知歌手')}
               </p>
-              <p className="text-xs text-text-muted mt-0.5">ID: {song.id}</p>
+              <p className="text-xs text-text-muted mt-0.5">docId: {song.docId}</p>
             </div>
           </div>
         </div>
@@ -675,7 +620,7 @@ export const SongEditModal = ({ open, onClose, onSuccess, song }: SongEditModalP
           title={formData.title}
           artist={formatMusicCredits(normalizeStringListInput(formData.artists), '未知歌手')}
           targetPlatform={matchingPlatform}
-          existingPlatformId={platformIds[`${matchingPlatform}Id` as keyof PlatformIds]}
+          existingPlatformId={platformSourceIds[matchingPlatform]}
           onSelect={(sourceId) => handleMatchSelect(matchingPlatform, sourceId)}
         />
       )}

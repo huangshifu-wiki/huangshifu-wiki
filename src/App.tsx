@@ -33,7 +33,6 @@ const GalleryDetail = lazy(() =>
 const GalleryEdit = lazy(() => import('./pages/GalleryEdit').then((m) => ({ default: m.default })))
 const AlbumDetail = lazy(() => import('./pages/AlbumDetail').then((m) => ({ default: m.default })))
 const MusicDetail = lazy(() => import('./pages/MusicDetail').then((m) => ({ default: m.default })))
-const MusicLinks = lazy(() => import('./pages/MusicLinks').then((m) => ({ default: m.default })))
 const Search = lazy(() => import('./pages/Search').then((m) => ({ default: m.default })))
 const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.default })))
 const ForgotPassword = lazy(() =>
@@ -155,8 +154,8 @@ const MainLayout = () => {
               <Route path="/gallery/:galleryId/edit" element={<GalleryEdit />} />
               <Route path="/gallery/:galleryId" element={<GalleryDetail />} />
               <Route path="/music" element={<Music />} />
+              <Route path="/music/links" element={<Navigate to="/admin/music" replace />} />
               <Route path="/music/:songId" element={<MusicDetail />} />
-              <Route path="/music/links" element={<MusicLinks />} />
               <Route path="/album/:albumId" element={<AlbumDetail />} />
               <Route path="/search" element={<Search />} />
               <Route path="/login" element={<Login />} />

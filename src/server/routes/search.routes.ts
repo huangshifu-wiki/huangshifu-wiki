@@ -896,7 +896,6 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
           },
           select: {
             docId: true,
-            id: true,
             title: true,
             artists: true,
             lyricists: true,
@@ -904,22 +903,17 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
             arrangers: true,
             vocals: true,
             album: true,
-            cover: true,
             audioUrl: true,
             releaseDate: true,
             durationMs: true,
-            primaryPlatform: true,
-            enabledPlatform: true,
-            neteaseId: true,
-            tencentId: true,
-            kugouId: true,
-            baiduId: true,
-            kuwoId: true,
+            coverId: true,
+            coverAlbumDocId: true,
             displayAlbumMode: true,
             manualAlbumName: true,
-            defaultCoverSource: true,
             customPlatformLinks: true,
-            addedBy: true,
+            externalSources: {
+              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            },
             covers: {
               orderBy: { sortOrder: 'asc' },
               select: {
@@ -937,6 +931,15 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                     title: true,
                     artist: true,
                     releaseDate: true,
+                    coverId: true,
+                    covers: {
+                      orderBy: { sortOrder: 'asc' },
+                      select: {
+                        id: true,
+                        publicUrl: true,
+                        isDefault: true,
+                      },
+                    },
                   },
                 },
               },
@@ -967,18 +970,15 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
           },
           select: {
             docId: true,
-            id: true,
-            resourceType: true,
-            platform: true,
-            sourceId: true,
             title: true,
             artist: true,
-            cover: true,
             description: true,
-            platformUrl: true,
             tracks: true,
             releaseDate: true,
-            defaultCoverSource: true,
+            coverId: true,
+            externalSources: {
+              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            },
             covers: {
               orderBy: { sortOrder: 'asc' },
               select: {
@@ -993,10 +993,29 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                 song: {
                   select: {
                     docId: true,
-                    id: true,
                     title: true,
                     artists: true,
-                    cover: true,
+                    coverId: true,
+                    coverAlbumDocId: true,
+                    covers: {
+                      orderBy: { sortOrder: 'asc' },
+                      select: {
+                        id: true,
+                        publicUrl: true,
+                        isDefault: true,
+                      },
+                    },
+                    albumRelations: {
+                      include: {
+                        album: {
+                          include: {
+                            covers: {
+                              orderBy: { sortOrder: 'asc' },
+                            },
+                          },
+                        },
+                      },
+                    },
                   },
                 },
               },

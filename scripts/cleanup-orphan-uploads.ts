@@ -155,8 +155,6 @@ async function collectReferencedStorageKeys() {
     galleryImages,
     songCovers,
     albumCovers,
-    musicTracks,
-    albums,
     wikiEmbeddings,
     postEmbeddings,
   ] = await Promise.all([
@@ -166,8 +164,6 @@ async function collectReferencedStorageKeys() {
     prisma.galleryImage.findMany({ select: { url: true } }),
     prisma.songCover.findMany({ select: { storageKey: true, publicUrl: true } }),
     prisma.albumCover.findMany({ select: { storageKey: true, publicUrl: true } }),
-    prisma.musicTrack.findMany({ select: { cover: true } }),
-    prisma.album.findMany({ select: { cover: true } }),
     prisma.wikiImageEmbedding.findMany({ select: { imageUrl: true } }),
     prisma.postImageEmbedding.findMany({ select: { imageUrl: true } }),
   ])
@@ -195,8 +191,6 @@ async function collectReferencedStorageKeys() {
     addStorageKey(keys, item.publicUrl)
   }
 
-  for (const item of musicTracks) addStorageKey(keys, item.cover)
-  for (const item of albums) addStorageKey(keys, item.cover)
   for (const item of wikiEmbeddings) addStorageKey(keys, item.imageUrl)
   for (const item of postEmbeddings) addStorageKey(keys, item.imageUrl)
 

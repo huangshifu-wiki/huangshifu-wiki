@@ -1,16 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import {
-  ArrowLeft,
-  Disc3,
-  Play,
-  Heart,
-  ExternalLink,
-  Link2,
-  ChevronDown,
-  ChevronUp,
-  Trash2,
-} from 'lucide-react'
+import { ArrowLeft, Disc3, Play, Heart, Link2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
@@ -22,11 +12,11 @@ import { CoverManager } from '../components/CoverManager'
 import { SmartImage } from '../components/SmartImage'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { formatMusicCredits } from '../lib/musicCredits'
-import { Platform, PlatformIds } from '../types/PlatformIds'
+import { isPlayableSong } from '../lib/musicPlayback'
+import type { MusicExternalSource } from '../types/entities'
 
 type SongItem = {
   docId: string
-  id: string
   title: string
   artists: string[]
   album: string
@@ -36,21 +26,24 @@ type SongItem = {
   lyric?: string | null
   favoritedByMe?: boolean
   trackOrder?: number
-  primaryPlatform?: Platform | null
-  platformIds?: PlatformIds
+  discNumber?: number
+  sources?: MusicExternalSource[]
+  playable?: boolean
 }
 
 type AlbumResponse = {
   album: {
-    id: string
+    docId: string
     title: string
     artist: string
     cover: string
     description?: string | null
-    platformUrl?: string | null
     tracks: SongItem[]
   }
 }
+
+const compareTracks = (a: SongItem, b: SongItem) =>
+  (a.discNumber || 0) - (b.discNumber || 0) || (a.trackOrder || 0) - (b.trackOrder || 0)
 
 const AlbumDetail = () => {
   const { albumId } = useParams()
@@ -73,6 +66,13 @@ const AlbumDetail = () => {
   const { currentSong, playAlbumTracks } = useMusic()
   const { show } = useToast()
 
+  const sortedTracks = useMemo(
+    () => [...(album?.tracks || [])].sort(compareTracks),
+    [album?.tracks]
+  )
+
+  const playableTracks = useMemo(() => sortedTracks.filter(isPlayableSong), [sortedTracks])
+
   const fetchAlbum = async () => {
     if (!albumId) return
     setLoading(true)
@@ -93,8 +93,24 @@ const AlbumDetail = () => {
 
   const handlePlay = (index = 0) => {
     if (!album) return
-    const tracks = [...album.tracks].sort((a, b) => (a.trackOrder || 0) - (b.trackOrder || 0))
-    playAlbumTracks(album.id, album.title, tracks, index)
+    if (!playableTracks.length) {
+      show('当前专辑暂无可播放音源', { variant: 'error' })
+      return
+    }
+
+    const selectedTrack = sortedTracks[index]
+    if (selectedTrack && !isPlayableSong(selectedTrack)) {
+      show('这首歌暂无可播放音源', { variant: 'error' })
+      return
+    }
+
+    const playableIndex = selectedTrack
+      ? Math.max(
+          0,
+          playableTracks.findIndex((track) => track.docId === selectedTrack.docId)
+        )
+      : 0
+    playAlbumTracks(album.docId, album.title, playableTracks, playableIndex)
   }
 
   const toggleFavorite = async (song: SongItem) => {
@@ -132,8 +148,8 @@ const AlbumDetail = () => {
   }
 
   const handleCopyAlbumLink = async () => {
-    if (!album?.id) return
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/album/${album.id}`))
+    if (!album?.docId) return
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/album/${album.docId}`))
     if (copied) {
       show('专辑内链已复制')
       return
@@ -219,10 +235,10 @@ const AlbumDetail = () => {
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => handlePlay(0)}
-                disabled={album.tracks.length === 0}
-                className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all disabled:opacity-50"
+                disabled={playableTracks.length === 0}
+                className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Play size={16} /> 播放专辑
+                <Play size={16} /> {playableTracks.length > 0 ? '播放专辑' : '暂无音源'}
               </button>
               <button
                 onClick={handleCopyAlbumLink}
@@ -230,16 +246,6 @@ const AlbumDetail = () => {
               >
                 <Link2 size={15} /> 复制内链
               </button>
-              {album.platformUrl ? (
-                <a
-                  href={album.platformUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
-                >
-                  <ExternalLink size={15} /> 原始链接
-                </a>
-              ) : null}
             </div>
           </div>
         </div>
@@ -286,53 +292,61 @@ const AlbumDetail = () => {
             曲目列表
           </h2>
           <div className="flex flex-col">
-            {album.tracks.map((track, index) => (
-              <div
-                key={track.docId}
-                onClick={() => navigate(`/music/${track.docId}`)}
-                className={clsx(
-                  'flex items-center gap-4 py-3 px-1 border-b border-border cursor-pointer transition-colors',
-                  currentSong?.docId === track.docId && 'bg-brand-gold/10'
-                )}
-              >
-                <span className="text-sm text-text-muted w-7 text-right flex-shrink-0">
-                  {(track.trackOrder ?? index) + 1}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handlePlay(index)
-                  }}
-                  className="w-8 h-8 flex items-center justify-center text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded-full transition-all flex-shrink-0"
-                >
-                  <Play size={14} />
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-base text-text-primary truncate hover:text-brand-gold transition-colors">
-                    {track.title}
-                  </p>
-                  <p className="text-xs text-text-muted truncate">
-                    {formatMusicCredits(track.artists, '未知歌手')}
-                  </p>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggleFavorite(track)
-                  }}
-                  disabled={favoriting === track.docId}
+            {sortedTracks.map((track, index) => {
+              const playable = isPlayableSong(track)
+              return (
+                <div
+                  key={track.docId}
+                  onClick={() => navigate(`/music/${track.docId}`)}
                   className={clsx(
-                    'p-2 transition-colors flex-shrink-0',
-                    track.favoritedByMe
-                      ? 'theme-text-error'
-                      : 'text-text-muted theme-icon-button-danger',
-                    favoriting === track.docId && 'opacity-50 cursor-not-allowed'
+                    'flex items-center gap-4 py-3 px-1 border-b border-border cursor-pointer transition-colors',
+                    currentSong?.docId === track.docId && 'bg-brand-gold/10'
                   )}
                 >
-                  <Heart size={15} />
-                </button>
-              </div>
-            ))}
+                  <span className="text-sm text-text-muted w-7 text-right flex-shrink-0">
+                    {(track.trackOrder ?? index) + 1}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handlePlay(index)
+                    }}
+                    disabled={!playable}
+                    className="w-8 h-8 flex items-center justify-center text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded-full transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-text-secondary disabled:hover:bg-transparent"
+                    title={playable ? '播放' : '暂无可播放音源'}
+                  >
+                    <Play size={14} />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-base text-text-primary truncate hover:text-brand-gold transition-colors">
+                      {track.title}
+                    </p>
+                    <p className="text-xs text-text-muted truncate">
+                      {formatMusicCredits(track.artists, '未知歌手')}
+                    </p>
+                    {!playable ? (
+                      <p className="text-xs text-text-muted truncate">暂无可播放音源</p>
+                    ) : null}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleFavorite(track)
+                    }}
+                    disabled={favoriting === track.docId}
+                    className={clsx(
+                      'p-2 transition-colors flex-shrink-0',
+                      track.favoritedByMe
+                        ? 'theme-text-error'
+                        : 'text-text-muted theme-icon-button-danger',
+                      favoriting === track.docId && 'opacity-50 cursor-not-allowed'
+                    )}
+                  >
+                    <Heart size={15} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
           {album.tracks.length === 0 ? (
             <div className="py-10 text-center text-text-muted italic">

@@ -5,48 +5,52 @@ import {
   resolveAudioUrl as resolveMetingAudioUrl,
   resolveLyric as resolveMetingLyric,
 } from '../music/metingService'
-import type { MusicTrackWithRelations } from '../types'
-
 const router = Router()
 
 router.get('/song/:id', async (req, res) => {
   const { id } = req.params
 
   try {
-    const existing = await prisma.musicTrack.findFirst({
+    const existingSource = await prisma.musicExternalSource.findFirst({
       where: {
-        deletedAt: null,
-        OR: [
-          { id },
-          { neteaseId: id },
-          { tencentId: id },
-          { kugouId: id },
-          { baiduId: id },
-          { kuwoId: id },
-        ],
+        resourceType: 'song',
+        sourceId: id,
       },
       include: {
-        covers: {
-          orderBy: { sortOrder: 'asc' },
-        },
-        albumRelations: {
+        song: {
           include: {
-            album: {
+            covers: {
+              orderBy: { sortOrder: 'asc' },
+            },
+            albumRelations: {
               include: {
-                covers: {
-                  orderBy: { sortOrder: 'asc' },
+                album: {
+                  include: {
+                    covers: {
+                      orderBy: { sortOrder: 'asc' },
+                    },
+                  },
                 },
               },
+              orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+            },
+            instrumentalLinks: {
+              select: {
+                targetSongDocId: true,
+              },
+            },
+            externalSources: {
+              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
             },
           },
-          orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
         },
       },
     })
+    const existing = existingSource?.song || null
 
-    if (existing) {
+    if (existing && !existing.deletedAt) {
       const resolved = await resolveMusicPlayUrl(existing)
-      const song = toSongResponse(existing as MusicTrackWithRelations)
+      const song = toSongResponse(existing)
       res.json({
         ...song,
         playUrl: resolved.playUrl || song.audioUrl,
@@ -73,7 +77,6 @@ router.get('/song/:id', async (req, res) => {
 
     res.json({
       docId: null,
-      id: track.sourceId,
       title: track.title || preview.title,
       artists: track.artists.length ? track.artists : [preview.artist],
       lyricists: [],
@@ -88,15 +91,19 @@ router.get('/song/:id', async (req, res) => {
       audioUrl: audioUrl || '',
       playUrl: audioUrl || '',
       lyric: lyric || null,
-      primaryPlatform: 'netease',
-      enabledPlatform: 'netease',
-      platformIds: {
-        neteaseId: track.sourceId,
-        tencentId: null,
-        kugouId: null,
-        baiduId: null,
-        kuwoId: null,
-      },
+      sources: [
+        {
+          id: `preview-netease-${track.sourceId}`,
+          resourceType: 'song',
+          platform: 'netease',
+          sourceId: track.sourceId,
+          sourceUrl: track.sourceUrl,
+          isPrimary: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+      playable: Boolean(audioUrl),
       customPlatformLinks: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Plus, ArrowUpDown } from 'lucide-react'
+import { ArrowUpDown } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useI18n } from '../../lib/i18n'
 import { ViewModeSelector } from '../ViewModeSelector'
@@ -12,8 +12,6 @@ type ActiveTab = 'music' | 'albums'
 interface MusicFiltersProps {
   activeTab: ActiveTab
   onTabChange: (tab: ActiveTab) => void
-  isAdmin: boolean
-  onCreateAlbum: () => void
   sortBy: SortBy
   onSortByChange: (sortBy: SortBy) => void
   sortOrder: SortOrder
@@ -29,8 +27,6 @@ interface MusicFiltersProps {
 const MusicFilters: React.FC<MusicFiltersProps> = ({
   activeTab,
   onTabChange,
-  isAdmin,
-  onCreateAlbum,
   sortBy,
   onSortByChange,
   sortOrder,
@@ -75,14 +71,6 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
         >
           {t('music.tabAlbums')}
         </button>
-        {activeTab === 'albums' && isAdmin && (
-          <button
-            onClick={onCreateAlbum}
-            className="text-[0.8125rem] text-brand-gold font-medium hover:text-brand-gold/80 transition-colors flex items-center gap-1 self-center mb-1 cursor-pointer"
-          >
-            <Plus size={14} /> {t('music.createAlbum')}
-          </button>
-        )}
       </div>
 
       <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">

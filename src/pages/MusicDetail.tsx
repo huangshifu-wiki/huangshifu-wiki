@@ -31,24 +31,16 @@ import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { getPlatformExternalUrl } from '../lib/musicPlatformUrls'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { formatTime } from '../lib/formatUtils'
-import { Platform, PlatformIds } from '../types/PlatformIds'
+import { isPlayableSong } from '../lib/musicPlayback'
+import type { MusicExternalSource } from '../types/entities'
 
 type CustomPlatformLink = {
   label: string
   url: string
 }
 
-type CustomPlatformConfig = {
-  key: string
-  label: string
-  urlPattern: string
-  color: string
-  bgColor: string
-}
-
 type SongItem = {
   docId: string
-  id: string
   title: string
   artists: string[]
   lyricists?: string[]
@@ -62,15 +54,14 @@ type SongItem = {
   description?: string | null
   releaseDate?: string | null
   durationMs?: number | null
-  primaryPlatform?: Platform | null
   favoritedByMe?: boolean
-  platformIds?: PlatformIds
-  customPlatformIds?: Record<string, string>
   customPlatformLinks?: CustomPlatformLink[]
+  sources?: MusicExternalSource[]
+  playable?: boolean
 }
 
 type SongDetailResponse = {
-  song: SongItem & { platformIds?: PlatformIds }
+  song: SongItem
 }
 
 type PostItem = {
@@ -82,9 +73,9 @@ type PostItem = {
 }
 
 const getSongExternalUrl = (song: SongItem) => {
-  const id = (song.id || '').trim()
-  if (!id) return '#'
-  return getPlatformExternalUrl(song.primaryPlatform || 'netease', id) || '#'
+  const source = song.sources?.find((item) => item.isPrimary) || song.sources?.[0]
+  if (!source) return null
+  return source.sourceUrl || getPlatformExternalUrl(source.platform, source.sourceId)
 }
 
 const formatDate = (value: string | null | undefined) => {
@@ -101,7 +92,6 @@ const MusicDetail = () => {
   const [loading, setLoading] = useState(true)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [customPlatforms, setCustomPlatforms] = useState<CustomPlatformConfig[]>([])
   const [descExpanded, setDescExpanded] = useState(false)
   const [lyricsExpanded, setLyricsExpanded] = useState(false)
   const [lyricsCopied, setLyricsCopied] = useState(false)
@@ -120,12 +110,6 @@ const MusicDetail = () => {
     toast: { show },
     t,
   })
-
-  useEffect(() => {
-    apiGet<{ platforms: CustomPlatformConfig[] }>('/api/music-platforms')
-      .then((data) => setCustomPlatforms(data.platforms || []))
-      .catch(() => setCustomPlatforms([]))
-  }, [])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -159,6 +143,10 @@ const MusicDetail = () => {
 
   const handlePlay = () => {
     if (!song) return
+    if (!isPlayableSong(song)) {
+      show('暂无可播放音源', { variant: 'error' })
+      return
+    }
     setPlaylist([song])
     setCurrentSong(song)
     setIsPlaying(true)
@@ -237,6 +225,8 @@ const MusicDetail = () => {
   }
 
   const artistsText = formatMusicCredits(song.artists, '未知歌手')
+  const externalUrl = getSongExternalUrl(song)
+  const canPlay = isPlayableSong(song)
   const creditRows = [
     { label: '作词', value: formatMusicCredits(song.lyricists) },
     { label: '作曲', value: formatMusicCredits(song.composers) },
@@ -273,14 +263,19 @@ const MusicDetail = () => {
                 </p>
                 <div className="flex flex-wrap gap-x-5 gap-y-2 mb-4 text-sm text-text-muted">
                   <span>专辑：{song.album}</span>
-                  <span>ID：{song.id}</span>
+                  {song.sources?.[0] && (
+                    <span>
+                      来源：{song.sources[0].platform} / {song.sources[0].sourceId}
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={handlePlay}
-                    className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all"
+                    disabled={!canPlay}
+                    className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <Play size={16} /> 播放
+                    <Play size={16} /> {canPlay ? '播放' : '暂无音源'}
                   </button>
                   <button
                     onClick={toggleFavorite}
@@ -301,14 +296,16 @@ const MusicDetail = () => {
                   >
                     <Link2 size={15} /> 复制内链
                   </button>
-                  <a
-                    href={getSongExternalUrl(song)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
-                  >
-                    <ExternalLink size={15} /> 原始链接
-                  </a>
+                  {externalUrl && (
+                    <a
+                      href={externalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
+                    >
+                      <ExternalLink size={15} /> 原始链接
+                    </a>
+                  )}
                 </div>
               </div>
             </div>
@@ -450,38 +447,6 @@ const MusicDetail = () => {
               </div>
             )}
 
-            {/* Preset Platforms */}
-            {customPlatforms.length > 0 &&
-              song?.customPlatformIds &&
-              Object.keys(song.customPlatformIds).length > 0 && (
-                <div className="mb-10">
-                  <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 pb-2.5 border-b border-border flex items-center gap-2">
-                    <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                    预设平台
-                  </h2>
-                  <div className="flex flex-wrap gap-2">
-                    {customPlatforms
-                      .filter((p) => song.customPlatformIds?.[p.key])
-                      .map((platform) => {
-                        const id = song.customPlatformIds![platform.key]
-                        const url = platform.urlPattern.replace('{id}', id)
-                        return (
-                          <a
-                            key={platform.key}
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all hover:text-[var(--color-accent-antique)] border-b border-transparent hover:border-[var(--color-accent-antique)] text-[var(--color-text-antique-muted)]"
-                          >
-                            {platform.label}
-                            <ExternalLink size={12} />
-                          </a>
-                        )
-                      })}
-                  </div>
-                </div>
-              )}
-
             {/* Admin */}
             {isAdmin && song?.docId && (
               <div className="mb-10">
@@ -549,10 +514,14 @@ const MusicDetail = () => {
                   <span className="text-text-muted">专辑</span>
                   <span className="text-text-primary">{song.album}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-text-muted">平台 ID</span>
-                  <span className="text-text-primary">{song.id}</span>
-                </div>
+                {song.sources?.[0] && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-text-muted">主来源</span>
+                    <span className="text-text-primary">
+                      {song.sources[0].platform} / {song.sources[0].sourceId}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </aside>
