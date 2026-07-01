@@ -14,15 +14,17 @@ import { SongCard } from '../components/Music/SongCard'
 import { AlbumCard } from '../components/Music/AlbumCard'
 import { MusicFilters } from '../components/Music/MusicFilters'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
-import { formatMusicCredits } from '../lib/musicCredits'
 import { isPlayableSong } from '../lib/musicPlayback'
 import type { SongItem, AlbumItem } from '../types/entities'
+import type { AlbumListResponse, MusicListResponse } from '../types/api'
 
 const Music = () => {
   const [songs, setSongs] = useState<SongItem[]>([])
+  const [songTotal, setSongTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [favoriting, setFavoriting] = useState<string | null>(null)
   const [albums, setAlbums] = useState<AlbumItem[]>([])
+  const [albumTotal, setAlbumTotal] = useState(0)
   const [loadingAlbums, setLoadingAlbums] = useState(false)
   const [activeTab, setActiveTab] = useState<'music' | 'albums'>('music')
   const { user } = useAuth()
@@ -35,96 +37,78 @@ const Music = () => {
   const [sortBy, setSortBy] = useState<'createdAt' | 'title' | 'artist'>('createdAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
-  const displaySongs = useMemo(() => {
-    let result = [...songs]
+  const playableSongs = useMemo(() => songs.filter(isPlayableSong), [songs])
 
-    result.sort((a, b) => {
-      if (sortBy === 'title') {
-        return sortOrder === 'asc'
-          ? a.title.localeCompare(b.title, 'zh-CN')
-          : b.title.localeCompare(a.title, 'zh-CN')
-      }
-      if (sortBy === 'artist') {
-        const artistA = formatMusicCredits(a.artists, '')
-        const artistB = formatMusicCredits(b.artists, '')
-        return sortOrder === 'asc'
-          ? artistA.localeCompare(artistB, 'zh-CN')
-          : artistB.localeCompare(artistA, 'zh-CN')
-      }
-      return sortOrder === 'asc'
-        ? (a.createdAt || '').localeCompare(b.createdAt || '')
-        : (b.createdAt || '').localeCompare(a.createdAt || '')
-    })
-
-    return result
-  }, [songs, sortBy, sortOrder])
-  const playableSongs = useMemo(() => displaySongs.filter(isPlayableSong), [displaySongs])
-
-  const musicPagination = usePagination({ totalCount: displaySongs.length, defaultPageSize: 40 })
-  const albumPagination = usePagination({ totalCount: albums.length, defaultPageSize: 24 })
+  const musicPagination = usePagination({ totalCount: songTotal, defaultPageSize: 40 })
+  const albumPagination = usePagination({ totalCount: albumTotal, defaultPageSize: 24 })
   const [showAccompaniments, setShowAccompaniments] = useState(false)
 
-  const paginatedSongs = useMemo(() => {
-    const start = (musicPagination.page - 1) * musicPagination.pageSize
-    return displaySongs.slice(start, start + musicPagination.pageSize)
-  }, [displaySongs, musicPagination.page, musicPagination.pageSize])
-
-  const paginatedAlbums = useMemo(() => {
-    const start = (albumPagination.page - 1) * albumPagination.pageSize
-    return albums.slice(start, start + albumPagination.pageSize)
-  }, [albums, albumPagination.page, albumPagination.pageSize])
-
   useEffect(() => {
-    musicPagination.setPage(1)
-    albumPagination.setPage(1)
-  }, [activeTab])
+    let cancelled = false
 
-  const fetchSongs = async () => {
-    setLoading(true)
-    try {
-      const data = await apiGet<{ songs: SongItem[]; total: number }>('/api/music', {
-        limit: 100,
-        page: 1,
-        includeInstrumentals: showAccompaniments,
-      })
-      const fetchedSongs = data.songs || []
-      setSongs(fetchedSongs)
-    } catch (e) {
-      console.error('Fetch songs error:', e)
-      setSongs([])
+    const fetchSongs = async () => {
+      setLoading(true)
+      try {
+        const data = await apiGet<MusicListResponse>('/api/music', {
+          limit: musicPagination.pageSize,
+          page: musicPagination.page,
+          includeInstrumentals: showAccompaniments,
+          sortBy,
+          sortOrder,
+        })
+        if (cancelled) return
+        setSongs(data.songs || [])
+        setSongTotal(data.total || 0)
+      } catch (e) {
+        if (cancelled) return
+        console.error('Fetch songs error:', e)
+        setSongs([])
+        setSongTotal(0)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
-    setLoading(false)
-  }
 
-  useEffect(() => {
     fetchSongs()
-  }, [showAccompaniments])
 
-  useEffect(() => {
-    setPlaylist(displaySongs)
-  }, [displaySongs, setPlaylist])
-
-  const fetchAlbums = async () => {
-    setLoadingAlbums(true)
-    try {
-      const data = await apiGet<{ albums: AlbumItem[]; total: number; hasMore?: boolean }>(
-        '/api/albums',
-        {
-          limit: 100,
-          page: 1,
-        }
-      )
-      setAlbums(data.albums || [])
-    } catch (error) {
-      console.error('Fetch albums error:', error)
-      setAlbums([])
+    return () => {
+      cancelled = true
     }
-    setLoadingAlbums(false)
-  }
+  }, [showAccompaniments, sortBy, sortOrder, musicPagination.page, musicPagination.pageSize])
 
   useEffect(() => {
+    setPlaylist(songs)
+  }, [songs, setPlaylist])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchAlbums = async () => {
+      setLoadingAlbums(true)
+      try {
+        const data = await apiGet<AlbumListResponse>('/api/albums', {
+          limit: albumPagination.pageSize,
+          page: albumPagination.page,
+        })
+        if (cancelled) return
+        setAlbums(data.albums || [])
+        setAlbumTotal(data.total || 0)
+      } catch (error) {
+        if (cancelled) return
+        console.error('Fetch albums error:', error)
+        setAlbums([])
+        setAlbumTotal(0)
+      } finally {
+        if (!cancelled) setLoadingAlbums(false)
+      }
+    }
+
     fetchAlbums()
-  }, [])
+
+    return () => {
+      cancelled = true
+    }
+  }, [albumPagination.page, albumPagination.pageSize])
 
   const playSong = (song: SongItem) => {
     if (!isPlayableSong(song)) {
@@ -219,11 +203,17 @@ const Music = () => {
                 musicPagination.setPage(1)
               }}
               sortOrder={sortOrder}
-              onSortOrderChange={setSortOrder}
+              onSortOrderChange={(value) => {
+                setSortOrder(value)
+                musicPagination.setPage(1)
+              }}
               showAccompaniments={showAccompaniments}
-              onShowAccompanimentsChange={setShowAccompaniments}
-              musicCount={displaySongs.length}
-              albumCount={albums.length}
+              onShowAccompanimentsChange={(value) => {
+                setShowAccompaniments(value)
+                musicPagination.setPage(1)
+              }}
+              musicCount={songTotal}
+              albumCount={albumTotal}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
             />
@@ -231,7 +221,7 @@ const Music = () => {
             {/* Content */}
             {activeTab === 'music' ? (
               <div className="flex flex-col mt-6">
-                {paginatedSongs.length > 0 ? (
+                {songs.length > 0 ? (
                   <>
                     <div
                       className={clsx(
@@ -244,7 +234,7 @@ const Music = () => {
                             )
                       )}
                     >
-                      {paginatedSongs.map((song) => (
+                      {songs.map((song) => (
                         <SongCard
                           key={song.docId}
                           song={song}
@@ -303,7 +293,7 @@ const Music = () => {
                         VIEW_MODE_CONFIG[viewMode].gap
                       )}
                     >
-                      {paginatedAlbums.map((album) => (
+                      {albums.map((album) => (
                         <AlbumCard
                           key={album.docId}
                           album={album}
@@ -343,11 +333,11 @@ const Music = () => {
               <div className="flex flex-col gap-2.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">单曲</span>
-                  <span className="text-text-primary font-medium">{songs.length}</span>
+                  <span className="text-text-primary font-medium">{songTotal}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">专辑</span>
-                  <span className="text-text-primary font-medium">{albums.length}</span>
+                  <span className="text-text-primary font-medium">{albumTotal}</span>
                 </div>
               </div>
             </div>

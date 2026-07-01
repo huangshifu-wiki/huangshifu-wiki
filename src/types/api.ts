@@ -1,4 +1,4 @@
-import type { GalleryItem } from './entities'
+import type { AlbumItem, GalleryItem, SongItem } from './entities'
 
 export interface ApiResponse<T> {
   data: T
@@ -271,24 +271,19 @@ export interface PostListResponse extends PaginatedResponse<PostDetailResponse['
 // ============================================================================
 
 export interface MusicListResponse {
-  songs: Array<{
-    docId: string
-    title: string
-    artists: string[]
-    lyricists?: string[]
-    composers?: string[]
-    arrangers?: string[]
-    vocals?: string[]
-    album?: string
-    description?: string | null
-    coverUrl?: string
-    playUrl?: string
-    playable?: boolean
-    releaseDate?: string | null
-    durationMs?: number | null
-    createdAt: string
-  }>
+  songs: SongItem[]
   total: number
+  page: number
+  limit: number
+  hasMore: boolean
+}
+
+export interface AlbumListResponse {
+  albums: AlbumItem[]
+  total: number
+  page: number
+  limit: number
+  hasMore: boolean
 }
 
 export interface MusicDetailResponse {

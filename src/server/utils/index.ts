@@ -165,6 +165,7 @@ export {
   createOrUpdateImportedSong,
   autoLinkInstrumental,
   fetchSongsWithRelations,
+  fetchSongsWithRelationsByDocIds,
   fetchSongWithRelationsByDocId,
   ensureDisplayRelation,
 } from './music'

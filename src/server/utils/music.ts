@@ -894,7 +894,13 @@ export async function autoLinkInstrumental(
 
 export async function fetchSongsWithRelations(
   where?: Record<string, unknown>,
-  pagination?: { take?: number; skip?: number }
+  pagination?: {
+    take?: number
+    skip?: number
+    orderBy?:
+      | Prisma.MusicTrackOrderByWithRelationInput
+      | Prisma.MusicTrackOrderByWithRelationInput[]
+  }
 ) {
   const songs = await prisma.musicTrack.findMany({
     where: {
@@ -942,11 +948,19 @@ export async function fetchSongsWithRelations(
         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: pagination?.orderBy || { createdAt: 'desc' },
     ...(pagination?.take !== undefined ? { take: pagination.take } : {}),
     ...(pagination?.skip !== undefined ? { skip: pagination.skip } : {}),
   })
   return songs as MusicTrackWithRelations[]
+}
+
+export async function fetchSongsWithRelationsByDocIds(songDocIds: string[]) {
+  if (!songDocIds.length) return []
+
+  const songs = await fetchSongsWithRelations({ docId: { in: songDocIds } })
+  const order = new Map(songDocIds.map((docId, index) => [docId, index]))
+  return songs.sort((a, b) => (order.get(a.docId) ?? 0) - (order.get(b.docId) ?? 0))
 }
 
 export async function fetchSongWithRelationsByDocId(songDocId: string) {

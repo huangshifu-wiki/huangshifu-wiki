@@ -39,6 +39,8 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Optional Metadata Test Song' } },
           { title: { startsWith: 'Artist Partial Search Test Song' } },
           { title: { startsWith: 'Display Relation Song' } },
+          { title: { startsWith: 'Paged Music Test Song' } },
+          { title: { startsWith: '000 Paged Music Test Song' } },
         ],
       },
     })
@@ -74,6 +76,8 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Optional Metadata Test Song' } },
           { title: { startsWith: 'Artist Partial Search Test Song' } },
           { title: { startsWith: 'Display Relation Song' } },
+          { title: { startsWith: 'Paged Music Test Song' } },
+          { title: { startsWith: '000 Paged Music Test Song' } },
         ],
       },
     })
@@ -95,7 +99,6 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('更新歌曲描述时应保留 Markdown 源文本首尾空白', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const song = await prisma.musicTrack.create({
       data: {
         title: 'Markdown Description Test Song',
@@ -205,7 +208,6 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('重写专辑曲目关系时保留已有展示专辑选择', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const [album, displaySong, normalSong] = await Promise.all([
       prisma.album.create({
         data: {
@@ -270,7 +272,6 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('音乐搜索和搜索建议支持艺术家名称部分匹配', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const song = await prisma.musicTrack.create({
       data: {
         title: 'Artist Partial Search Test Song',
@@ -294,5 +295,63 @@ describe('Music API - 音乐接口测试', () => {
         (item: { type: string; id?: string }) => item.type === 'music' && item.id === song.docId
       )
     ).toBe(true)
+  })
+
+  it('音乐列表分页返回总数并支持跨页排序', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const { agent } = await createAuthenticatedAgent(adminUser.user.email, adminUser.plainPassword)
+    await Promise.all(
+      [
+        { title: '000 Paged Music Test Song C', artists: ['002 丙歌手'] },
+        { title: '000 Paged Music Test Song A', artists: ['000 甲歌手'] },
+        { title: '000 Paged Music Test Song B', artists: ['001 乙歌手'] },
+      ].map((song) =>
+        prisma.musicTrack.create({
+          data: {
+            title: `${song.title} ${suffix}`,
+            artists: song.artists,
+            album: '',
+          },
+        })
+      )
+    )
+
+    const collectSeededTitles = async (sortBy: 'title' | 'artist') => {
+      const seededTitles: string[] = []
+      let totalPages = 1
+
+      for (let page = 1; page <= totalPages; page += 1) {
+        const response = await agent
+          .get('/api/music')
+          .query({ limit: 2, page, sortBy, sortOrder: 'asc' })
+
+        expect(response.status).toBe(200)
+        expect(response.body.total).toBeGreaterThanOrEqual(3)
+        expect(response.body.page).toBe(page)
+        expect(response.body.limit).toBe(2)
+        totalPages = Math.ceil(response.body.total / 2)
+
+        seededTitles.push(
+          ...response.body.songs
+            .map((song: { title: string }) => song.title)
+            .filter((title: string) => title.endsWith(suffix))
+        )
+
+        if (seededTitles.length === 3) break
+      }
+
+      return seededTitles
+    }
+
+    expect(await collectSeededTitles('title')).toEqual([
+      `000 Paged Music Test Song A ${suffix}`,
+      `000 Paged Music Test Song B ${suffix}`,
+      `000 Paged Music Test Song C ${suffix}`,
+    ])
+    expect(await collectSeededTitles('artist')).toEqual([
+      `000 Paged Music Test Song A ${suffix}`,
+      `000 Paged Music Test Song B ${suffix}`,
+      `000 Paged Music Test Song C ${suffix}`,
+    ])
   })
 })

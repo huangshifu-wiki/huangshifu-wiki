@@ -7,6 +7,7 @@ import {
   prisma,
   toSongResponse,
   fetchSongsWithRelations,
+  fetchSongsWithRelationsByDocIds,
   fetchSongWithRelationsByDocId,
   normalizeMusicImportTracks,
   createOrUpdateImportedSong,
@@ -49,6 +50,57 @@ import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { formatMusicCredits, normalizeStringListInput } from '../../lib/musicCredits'
 
 const router = createRouter()
+
+type MusicListSortBy = 'createdAt' | 'title' | 'artist'
+type MusicListSortOrder = 'asc' | 'desc'
+
+function parseMusicListSortBy(value: unknown): MusicListSortBy {
+  return value === 'title' || value === 'artist' || value === 'createdAt' ? value : 'createdAt'
+}
+
+function parseMusicListSortOrder(value: unknown): MusicListSortOrder {
+  return value === 'asc' || value === 'desc' ? value : 'desc'
+}
+
+function buildCreatedAtOrderBy(
+  sortOrder: MusicListSortOrder
+): Prisma.MusicTrackOrderByWithRelationInput[] {
+  return [{ createdAt: sortOrder }, { docId: 'asc' }]
+}
+
+function compareMusicListRows(
+  a: { docId: string; title: string; artists: string[]; createdAt: Date },
+  b: { docId: string; title: string; artists: string[]; createdAt: Date },
+  sortBy: MusicListSortBy,
+  sortOrder: MusicListSortOrder
+) {
+  const direction = sortOrder === 'asc' ? 1 : -1
+  const result =
+    sortBy === 'artist'
+      ? formatMusicCredits(a.artists, '').localeCompare(formatMusicCredits(b.artists, ''), 'zh-CN')
+      : a.title.localeCompare(b.title, 'zh-CN')
+
+  if (result !== 0) return result * direction
+  const createdAtResult = b.createdAt.getTime() - a.createdAt.getTime()
+  if (createdAtResult !== 0) return createdAtResult
+  return a.docId.localeCompare(b.docId)
+}
+
+async function fetchAlbumTrackPage(albumDocId: string, skip: number, limit: number) {
+  const where = { albumDocId, song: { deletedAt: null } }
+  const [relations, total] = await Promise.all([
+    prisma.songAlbumRelation.findMany({
+      where,
+      select: { songDocId: true },
+      orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }, { songDocId: 'asc' }],
+      take: limit,
+      skip,
+    }),
+    prisma.songAlbumRelation.count({ where }),
+  ])
+  const songDocIds = relations.map((relation) => relation.songDocId)
+  return [await fetchSongsWithRelationsByDocIds(songDocIds), total] as const
+}
 
 function ensureMusicTextLimits(
   res: Parameters<typeof ensureTextLimit>[0],
@@ -152,9 +204,11 @@ router.get(
       const page = parseInteger(req.query.page, 1, { min: 1 })
       const skip = (page - 1) * limit
       const includeInstrumentals = parseBoolean(req.query.includeInstrumentals, true)
+      const sortBy = parseMusicListSortBy(req.query.sortBy)
+      const sortOrder = parseMusicListSortOrder(req.query.sortOrder)
 
       if (!req.authUser && !albumDocId) {
-        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}`
+        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortBy}:${sortOrder}`
         const cached = enhancedCache.get(cacheKey)
         if (cached) {
           res.json(cached)
@@ -163,7 +217,7 @@ router.get(
       }
 
       let instrumentalDocIds: string[] = []
-      if (!includeInstrumentals) {
+      if (!albumDocId && !includeInstrumentals) {
         const relations = await prisma.songInstrumentalRelation.findMany({
           select: { songDocId: true },
           distinct: ['songDocId'],
@@ -184,10 +238,33 @@ router.get(
           ? { deletedAt: null, docId: { notIn: instrumentalDocIds } }
           : { deletedAt: null }
 
-      const [songs, total] = await Promise.all([
-        fetchSongsWithRelations(where, { take: limit, skip }),
-        prisma.musicTrack.count({ where }),
-      ])
+      const [songs, total] = albumDocId
+        ? await fetchAlbumTrackPage(albumDocId, skip, limit)
+        : sortBy === 'artist' || sortBy === 'title'
+          ? await (async () => {
+              const rows = await prisma.musicTrack.findMany({
+                where,
+                select: {
+                  docId: true,
+                  title: true,
+                  artists: true,
+                  createdAt: true,
+                },
+              })
+              const songDocIds = rows
+                .sort((a, b) => compareMusicListRows(a, b, sortBy, sortOrder))
+                .slice(skip, skip + limit)
+                .map((song) => song.docId)
+              return [await fetchSongsWithRelationsByDocIds(songDocIds), rows.length] as const
+            })()
+          : await Promise.all([
+              fetchSongsWithRelations(where, {
+                take: limit,
+                skip,
+                orderBy: buildCreatedAtOrderBy(sortOrder),
+              }),
+              prisma.musicTrack.count({ where }),
+            ])
 
       const favoritedMusicSet = new Set<string>()
       if (req.authUser && songs.length) {
@@ -217,7 +294,7 @@ router.get(
       }
 
       if (!req.authUser && !albumDocId) {
-        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}`
+        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortBy}:${sortOrder}`
         enhancedCache.set(cacheKey, result, 120)
       }
 
