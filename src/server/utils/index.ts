@@ -159,6 +159,7 @@ export {
   buildAlbumTracksPayload,
   applyAlbumTracksToRelations,
   addSongCoverFromAsset,
+  addSongCoverFromUrl,
   addAlbumCoverFromUrl,
   addAlbumCoverFromAsset,
   createOrUpdateImportedSong,
