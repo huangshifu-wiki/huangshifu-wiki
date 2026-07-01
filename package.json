@@ -112,7 +112,7 @@
     "autoprefixer": "^10.5.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
-    "echarts": "^5.5.1",
+    "echarts": "^6.1.0",
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^29.1.1",
     "lucide-react": "^0.546.0",
