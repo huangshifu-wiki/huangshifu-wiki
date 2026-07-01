@@ -102,7 +102,7 @@ describe('Music page pagination', () => {
         songs: [pageOneSong],
         total: 213,
         page: 1,
-        limit: 40,
+        limit: 50,
         hasMore: true,
       })
     })
@@ -117,7 +117,7 @@ describe('Music page pagination', () => {
     expect(screen.getByText('213')).toBeInTheDocument()
     expect(screen.getByText('123')).toBeInTheDocument()
     expect(mockApiGet).toHaveBeenCalledWith('/api/music', {
-      limit: 40,
+      limit: 50,
       page: 1,
       includeInstrumentals: false,
       sortBy: 'createdAt',
@@ -134,7 +134,7 @@ describe('Music page pagination', () => {
 
     await waitFor(() => {
       expect(mockApiGet).toHaveBeenCalledWith('/api/music', {
-        limit: 40,
+        limit: 50,
         page: 2,
         includeInstrumentals: false,
         sortBy: 'createdAt',

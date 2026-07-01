@@ -39,7 +39,7 @@ const Music = () => {
 
   const playableSongs = useMemo(() => songs.filter(isPlayableSong), [songs])
 
-  const musicPagination = usePagination({ totalCount: songTotal, defaultPageSize: 40 })
+  const musicPagination = usePagination({ totalCount: songTotal, defaultPageSize: 50 })
   const albumPagination = usePagination({ totalCount: albumTotal, defaultPageSize: 24 })
   const [showAccompaniments, setShowAccompaniments] = useState(false)
 
