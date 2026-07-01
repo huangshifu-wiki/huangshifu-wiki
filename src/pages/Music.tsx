@@ -12,7 +12,7 @@ import { useI18n } from '../lib/i18n'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { SongCard } from '../components/Music/SongCard'
 import { AlbumCard } from '../components/Music/AlbumCard'
-import { MusicFilters } from '../components/Music/MusicFilters'
+import { MusicFilters, type SortBy } from '../components/Music/MusicFilters'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import { isPlayableSong } from '../lib/musicPlayback'
 import type { SongItem, AlbumItem } from '../types/entities'
@@ -34,7 +34,7 @@ const Music = () => {
   const { show } = useToast()
   const { t } = useI18n()
 
-  const [sortBy, setSortBy] = useState<'createdAt' | 'title' | 'artist'>('createdAt')
+  const [sortBy, setSortBy] = useState<SortBy>('releaseDate')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   const playableSongs = useMemo(() => songs.filter(isPlayableSong), [songs])
@@ -191,9 +191,9 @@ const Music = () => {
         </header>
 
         {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-8 items-start">
           {/* Main Content */}
-          <div>
+          <div className="min-w-0">
             <MusicFilters
               activeTab={activeTab}
               onTabChange={setActiveTab}

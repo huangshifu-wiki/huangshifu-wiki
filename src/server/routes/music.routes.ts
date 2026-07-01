@@ -51,21 +51,27 @@ import { formatMusicCredits, normalizeStringListInput } from '../../lib/musicCre
 
 const router = createRouter()
 
-type MusicListSortBy = 'createdAt' | 'title' | 'artist'
+type MusicListSortBy = 'releaseDate' | 'title' | 'artist'
 type MusicListSortOrder = 'asc' | 'desc'
 
 function parseMusicListSortBy(value: unknown): MusicListSortBy {
-  return value === 'title' || value === 'artist' || value === 'createdAt' ? value : 'createdAt'
+  if (value === 'createdAt' || value === 'releaseDate') return 'releaseDate'
+  if (value === 'title' || value === 'artist') return value
+  return 'releaseDate'
 }
 
 function parseMusicListSortOrder(value: unknown): MusicListSortOrder {
   return value === 'asc' || value === 'desc' ? value : 'desc'
 }
 
-function buildCreatedAtOrderBy(
+function buildReleaseDateOrderBy(
   sortOrder: MusicListSortOrder
 ): Prisma.MusicTrackOrderByWithRelationInput[] {
-  return [{ createdAt: sortOrder }, { docId: 'asc' }]
+  return [
+    { releaseDate: { sort: sortOrder, nulls: 'last' } },
+    { createdAt: 'desc' },
+    { docId: 'asc' },
+  ]
 }
 
 function compareMusicListRows(
@@ -261,7 +267,7 @@ router.get(
               fetchSongsWithRelations(where, {
                 take: limit,
                 skip,
-                orderBy: buildCreatedAtOrderBy(sortOrder),
+                orderBy: buildReleaseDateOrderBy(sortOrder),
               }),
               prisma.musicTrack.count({ where }),
             ])

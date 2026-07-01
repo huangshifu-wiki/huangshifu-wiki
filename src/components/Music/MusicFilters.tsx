@@ -5,7 +5,7 @@ import { useI18n } from '../../lib/i18n'
 import { ViewModeSelector } from '../ViewModeSelector'
 import type { ViewMode } from '../../types/userPreferences'
 
-type SortBy = 'createdAt' | 'title' | 'artist'
+type SortBy = 'releaseDate' | 'title' | 'artist'
 type SortOrder = 'asc' | 'desc'
 type ActiveTab = 'music' | 'albums'
 
@@ -41,7 +41,7 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
   const { t } = useI18n()
 
   const sortLabel = {
-    createdAt: '时间',
+    releaseDate: '时间',
     title: '名称',
     artist: '歌手',
   } as const
@@ -80,7 +80,7 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
         {activeTab === 'music' && (
           <>
             <div className="flex items-center">
-              {(['createdAt', 'title', 'artist'] as SortBy[]).map((key) => (
+              {(['releaseDate', 'title', 'artist'] as SortBy[]).map((key) => (
                 <button
                   key={key}
                   onClick={() => onSortByChange(key)}

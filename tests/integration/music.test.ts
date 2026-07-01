@@ -41,6 +41,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Display Relation Song' } },
           { title: { startsWith: 'Paged Music Test Song' } },
           { title: { startsWith: '000 Paged Music Test Song' } },
+          { title: { startsWith: 'Release Date Sort Test Song' } },
         ],
       },
     })
@@ -78,6 +79,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Display Relation Song' } },
           { title: { startsWith: 'Paged Music Test Song' } },
           { title: { startsWith: '000 Paged Music Test Song' } },
+          { title: { startsWith: 'Release Date Sort Test Song' } },
         ],
       },
     })
@@ -352,6 +354,68 @@ describe('Music API - 音乐接口测试', () => {
       `000 Paged Music Test Song A ${suffix}`,
       `000 Paged Music Test Song B ${suffix}`,
       `000 Paged Music Test Song C ${suffix}`,
+    ])
+  })
+
+  it('音乐列表按发行时间排序并将未知日期放最后', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const { agent } = await createAuthenticatedAgent(adminUser.user.email, adminUser.plainPassword)
+    await Promise.all(
+      [
+        { title: 'Release Date Sort Test Song Unknown', releaseDate: null },
+        { title: 'Release Date Sort Test Song New', releaseDate: new Date('2099-01-01') },
+        { title: 'Release Date Sort Test Song Old', releaseDate: new Date('2097-01-01') },
+        { title: 'Release Date Sort Test Song Middle', releaseDate: new Date('2098-01-01') },
+      ].map((song) =>
+        prisma.musicTrack.create({
+          data: {
+            title: `${song.title} ${suffix}`,
+            artists: ['发行时间排序测试'],
+            album: '',
+            releaseDate: song.releaseDate,
+          },
+        })
+      )
+    )
+
+    const collectSeededTitles = async (query: Record<string, string | number> = {}) => {
+      const seededTitles: string[] = []
+      let totalPages = 1
+
+      for (let page = 1; page <= totalPages; page += 1) {
+        const response = await agent.get('/api/music').query({ limit: 100, page, ...query })
+
+        expect(response.status).toBe(200)
+        totalPages = Math.ceil(response.body.total / 100)
+
+        seededTitles.push(
+          ...response.body.songs
+            .map((song: { title: string }) => song.title)
+            .filter((title: string) => title.endsWith(suffix))
+        )
+
+        if (seededTitles.length === 4) break
+      }
+
+      return seededTitles
+    }
+
+    const descOrder = [
+      `Release Date Sort Test Song New ${suffix}`,
+      `Release Date Sort Test Song Middle ${suffix}`,
+      `Release Date Sort Test Song Old ${suffix}`,
+      `Release Date Sort Test Song Unknown ${suffix}`,
+    ]
+    expect(await collectSeededTitles()).toEqual(descOrder)
+    expect(await collectSeededTitles({ sortBy: 'releaseDate', sortOrder: 'desc' })).toEqual(
+      descOrder
+    )
+    expect(await collectSeededTitles({ sortBy: 'createdAt', sortOrder: 'desc' })).toEqual(descOrder)
+    expect(await collectSeededTitles({ sortBy: 'releaseDate', sortOrder: 'asc' })).toEqual([
+      `Release Date Sort Test Song Old ${suffix}`,
+      `Release Date Sort Test Song Middle ${suffix}`,
+      `Release Date Sort Test Song New ${suffix}`,
+      `Release Date Sort Test Song Unknown ${suffix}`,
     ])
   })
 })

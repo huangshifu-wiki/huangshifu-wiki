@@ -120,9 +120,19 @@ describe('Music page pagination', () => {
       limit: 50,
       page: 1,
       includeInstrumentals: false,
-      sortBy: 'createdAt',
+      sortBy: 'releaseDate',
       sortOrder: 'desc',
     })
+  })
+
+  it('keeps the content column shrinkable so the stats sidebar stays in the grid', async () => {
+    render(<Music />)
+
+    await screen.findByText('第一页歌曲')
+
+    const layout = screen.getByText('统计').closest('.grid')
+    expect(layout).toHaveClass('lg:grid-cols-[minmax(0,1fr)_280px]')
+    expect(layout?.firstElementChild).toHaveClass('min-w-0')
   })
 
   it('requests the next server page when pagination changes', async () => {
@@ -137,7 +147,7 @@ describe('Music page pagination', () => {
         limit: 50,
         page: 2,
         includeInstrumentals: false,
-        sortBy: 'createdAt',
+        sortBy: 'releaseDate',
         sortOrder: 'desc',
       })
     })
