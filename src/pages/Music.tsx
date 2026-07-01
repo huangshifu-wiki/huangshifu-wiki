@@ -234,10 +234,13 @@ const Music = () => {
                             )
                       )}
                     >
-                      {songs.map((song) => (
+                      {songs.map((song, index) => (
                         <SongCard
                           key={song.docId}
                           song={song}
+                          sequenceNumber={
+                            (musicPagination.page - 1) * musicPagination.pageSize + index + 1
+                          }
                           viewMode={viewMode}
                           isCurrentSong={currentSong?.docId === song.docId}
                           isFavoriting={favoriting === song.docId}

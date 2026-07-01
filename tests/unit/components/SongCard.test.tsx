@@ -104,6 +104,12 @@ describe('SongCard', () => {
     expect(button).toHaveAttribute('aria-label', '测试歌曲名 - 测试歌手')
   })
 
+  it('renders sequence number in list layout', () => {
+    renderWithRouter(<SongCard {...defaultProps} sequenceNumber={51} />)
+
+    expect(screen.getByText('51')).toBeInTheDocument()
+  })
+
   it('shows cover play button with correct aria-label', () => {
     renderWithRouter(<SongCard {...defaultProps} />)
     const playButtons = screen.getAllByLabelText(/播放/)
@@ -141,6 +147,12 @@ describe('SongCard', () => {
 
     expect(card?.className).toContain('rounded')
     expect(container.querySelector('.aspect-square')).toBeInTheDocument()
+  })
+
+  it('does not render sequence number in grid layout', () => {
+    renderWithRouter(<SongCard {...defaultProps} sequenceNumber={51} viewMode="medium" />)
+
+    expect(screen.queryByText('51')).not.toBeInTheDocument()
   })
 
   it('keeps compact grid cards from rendering album metadata', () => {

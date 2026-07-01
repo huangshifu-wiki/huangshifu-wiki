@@ -39,7 +39,12 @@ vi.mock('../../src/components/PageSkeleton', () => ({
 }))
 
 vi.mock('../../src/components/Music/SongCard', () => ({
-  SongCard: ({ song }: { song: { title: string } }) => <div>{song.title}</div>,
+  SongCard: ({ song, sequenceNumber }: { song: { title: string }; sequenceNumber?: number }) => (
+    <div>
+      <span data-testid="song-sequence">{sequenceNumber}</span>
+      <span>{song.title}</span>
+    </div>
+  ),
 }))
 
 vi.mock('../../src/components/Music/AlbumCard', () => ({
@@ -151,5 +156,44 @@ describe('Music page pagination', () => {
         sortOrder: 'desc',
       })
     })
+  })
+
+  it('passes global sequence numbers across server pages', async () => {
+    const user = userEvent.setup()
+    mockApiGet.mockImplementation((url: string, params?: { page?: number }) => {
+      if (url === '/api/albums') {
+        return Promise.resolve({
+          albums: [],
+          total: 123,
+          page: 1,
+          limit: 24,
+          hasMore: true,
+        })
+      }
+
+      return Promise.resolve({
+        songs: [
+          {
+            ...pageOneSong,
+            docId: `song-${params?.page ?? 1}`,
+            title: `第 ${params?.page ?? 1} 页歌曲`,
+          },
+        ],
+        total: 213,
+        page: params?.page ?? 1,
+        limit: 50,
+        hasMore: true,
+      })
+    })
+
+    render(<Music />)
+
+    await screen.findByText('第 1 页歌曲')
+    expect(screen.getByTestId('song-sequence')).toHaveTextContent('1')
+
+    await user.click(screen.getAllByLabelText('下一页')[0])
+
+    await screen.findByText('第 2 页歌曲')
+    expect(screen.getByTestId('song-sequence')).toHaveTextContent('51')
   })
 })

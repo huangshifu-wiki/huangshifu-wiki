@@ -13,6 +13,7 @@ interface SongCardProps {
   song: SongItem
   isCurrentSong: boolean
   isFavoriting: boolean
+  sequenceNumber?: number
   viewMode?: ViewMode
   onPlay: (song: SongItem) => void
   onToggleFavorite: (song: SongItem) => void
@@ -22,6 +23,7 @@ const SongCard = React.memo(function SongCard({
   song,
   isCurrentSong,
   isFavoriting,
+  sequenceNumber,
   viewMode = 'list',
   onPlay,
   onToggleFavorite,
@@ -164,6 +166,15 @@ const SongCard = React.memo(function SongCard({
       tabIndex={0}
       aria-label={`${song.title} - ${artistsText}`}
     >
+      {sequenceNumber !== undefined ? (
+        <span
+          className="w-9 flex-shrink-0 text-right text-sm tabular-nums text-text-muted"
+          aria-hidden="true"
+        >
+          {sequenceNumber}
+        </span>
+      ) : null}
+
       {/* Cover */}
       <div className="relative w-14 h-14 flex-shrink-0 overflow-hidden rounded">
         <SmartImage
