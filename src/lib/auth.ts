@@ -121,6 +121,14 @@ export const auth = {
   },
 }
 
+export function resetAuthStateForTests() {
+  if (process.env.NODE_ENV !== 'test') return
+
+  listeners.clear()
+  currentUser = null
+  initialized = false
+}
+
 export function onAuthStateChanged(_auth: unknown, callback: AuthStateListener) {
   listeners.add(callback)
 

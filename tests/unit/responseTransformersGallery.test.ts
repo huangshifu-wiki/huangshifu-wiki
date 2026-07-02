@@ -75,4 +75,61 @@ describe('gallery response transformers', () => {
       thumbnailStatus: 'processing',
     })
   })
+
+  it('keeps gallery originals local even when external image maps exist', async () => {
+    const { toGalleryResponse } = await import('../../src/server/utils/response-transformers')
+
+    mockSiteConfigFindUnique.mockResolvedValue({ value: { strategy: 'external' } })
+    mockImageMapFindMany.mockResolvedValue([
+      {
+        localUrl: '/uploads/galleries/test.jpg',
+        externalUrl: 'https://cdn.example.com/test.jpg',
+        s3Url: 'https://s3.example.com/test.jpg',
+        thumbnailUrl: '/uploads/variants/test-thumb.webp',
+        variantStatus: 'ready',
+      },
+    ])
+
+    const result = await toGalleryResponse({
+      id: 'gallery-1',
+      title: '测试图集',
+      description: '',
+      authorUid: 'user-1',
+      authorName: '作者',
+      tags: [],
+      locationCode: null,
+      locationDetail: null,
+      copyright: null,
+      status: 'published',
+      published: true,
+      publishedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+      images: [
+        {
+          id: 'image-1',
+          url: '/uploads/galleries/test.jpg',
+          name: 'test.jpg',
+          sortOrder: 0,
+          assetId: 'asset-1',
+          asset: {
+            id: 'asset-1',
+            publicUrl: '/uploads/galleries/test.jpg',
+            fileName: 'test.jpg',
+            mimeType: 'image/jpeg',
+            sizeBytes: 1024,
+            status: 'ready',
+            storageKey: 'galleries/test.jpg',
+          },
+        },
+      ],
+    })
+
+    expect(result.images[0]).toMatchObject({
+      url: '/uploads/variants/test-thumb.webp',
+      originalUrl: '/uploads/galleries/test.jpg',
+      thumbnailUrl: '/uploads/variants/test-thumb.webp',
+    })
+    expect(mockSiteConfigFindUnique).not.toHaveBeenCalled()
+  })
 })

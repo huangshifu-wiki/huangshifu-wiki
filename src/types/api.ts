@@ -1,4 +1,4 @@
-import type { GalleryItem } from './entities'
+import type { AlbumItem, GalleryItem, SongItem } from './entities'
 
 export interface ApiResponse<T> {
   data: T
@@ -116,6 +116,12 @@ export interface EmailVerificationAdminConfig extends EmailVerificationPublicCon
   smtpUser: string
   smtpFrom: string
   smtpPassSet: boolean
+  verificationSubject: string
+  verificationTextBody: string
+  verificationHtmlBody: string
+  resetSubject: string
+  resetTextBody: string
+  resetHtmlBody: string
 }
 
 export interface RegistrationConfig {
@@ -271,29 +277,23 @@ export interface PostListResponse extends PaginatedResponse<PostDetailResponse['
 // ============================================================================
 
 export interface MusicListResponse {
-  songs: Array<{
-    id: string
-    docId: string
-    title: string
-    artists: string[]
-    lyricists?: string[]
-    composers?: string[]
-    arrangers?: string[]
-    vocals?: string[]
-    album?: string
-    description?: string | null
-    coverUrl?: string
-    playUrl?: string
-    releaseDate?: string | null
-    durationMs?: number | null
-    createdAt: string
-  }>
+  songs: SongItem[]
   total: number
+  page: number
+  limit: number
+  hasMore: boolean
+}
+
+export interface AlbumListResponse {
+  albums: AlbumItem[]
+  total: number
+  page: number
+  limit: number
+  hasMore: boolean
 }
 
 export interface MusicDetailResponse {
   song: {
-    id: string
     docId: string
     title: string
     artists: string[]
@@ -305,6 +305,7 @@ export interface MusicDetailResponse {
     description?: string | null
     coverUrl?: string
     playUrl?: string
+    playable?: boolean
     releaseDate?: string | null
     durationMs?: number | null
     createdAt: string
@@ -313,6 +314,11 @@ export interface MusicDetailResponse {
 
 export interface MusicPlayUrlResponse {
   playUrl: string
+  playable?: boolean
+  platform?: string | null
+  sourceId?: string | null
+  cached?: boolean
+  cacheExpiresAt?: string | null
 }
 
 // ============================================================================
@@ -342,12 +348,38 @@ export interface GalleryUploadResponse {
 export interface AdminBackup {
   filename: string
   size: number
+  sizeFormatted?: string
   createdAt: string
   note: string
 }
 
 export interface AdminBackupsResponse {
   backups: AdminBackup[]
+}
+
+export interface AdminBackupCreateResponse {
+  backup: AdminBackup
+}
+
+export interface AdminBackupNoteResponse {
+  success: boolean
+  note: string
+}
+
+export interface RestoreMediaReport {
+  filename: string
+  generatedAt: string
+  referencedKeys: number
+  scannedFiles: number
+  missingFiles: number
+  orphanFiles: number
+  orphanSizeBytes: number
+}
+
+export interface AdminBackupRestoreResponse {
+  success: boolean
+  mediaReport?: RestoreMediaReport
+  mediaReportError?: string
 }
 
 export type AdminReviewQueueType = 'wiki' | 'posts' | 'galleries'

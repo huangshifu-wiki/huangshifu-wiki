@@ -118,6 +118,9 @@ export const songSchema = z.object({
 export const musicListResponseSchema = z.object({
   songs: z.array(songSchema),
   total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+  hasMore: z.boolean(),
 })
 
 export const musicDetailResponseSchema = z.object({

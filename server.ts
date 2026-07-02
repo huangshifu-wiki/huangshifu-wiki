@@ -226,7 +226,8 @@ if (!isTestEnv && isRateLimitDisabledInDevelopment()) {
 app.use(
   helmet({
     contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: true,
+    // 为了支持音乐播放而关闭
+    crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: true,
   })
 )

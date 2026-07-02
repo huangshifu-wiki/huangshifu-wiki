@@ -8,7 +8,6 @@ import type {
   PostSortType,
   MusicPlatform,
   DisplayAlbumMode,
-  MusicCollectionType,
   ApiUser,
 } from '../types'
 import { isAdminRole } from '../middleware/auth'
@@ -261,13 +260,6 @@ export function parseMusicPlatform(value: unknown): MusicPlatform | null {
 
 export function parseDisplayAlbumMode(value: unknown): DisplayAlbumMode | null {
   if (value === 'none' || value === 'linked' || value === 'manual') {
-    return value
-  }
-  return null
-}
-
-export function parseMusicCollectionType(value: unknown): MusicCollectionType | null {
-  if (value === 'album' || value === 'playlist') {
     return value
   }
   return null

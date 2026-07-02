@@ -30,6 +30,9 @@ import { formatMusicCredits } from '../../lib/musicCredits'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { SmartImage } from '../../components/SmartImage'
+import { MusicImportModal } from '../../components/MusicImportModal'
+import Pagination from '../../components/Pagination'
+import { usePagination } from '../../hooks/usePagination'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
 
@@ -57,6 +60,11 @@ type ListConfig = {
   hasCreate: boolean
 }
 
+type AdminListResponse = {
+  data: AdminDataItem[]
+  total?: number
+}
+
 const configMap: Record<ListType, ListConfig> = {
   wiki: {
     title: '百科管理',
@@ -82,7 +90,6 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'status', label: '平台', className: 'min-w-[130px]' },
       { key: 'relations', label: '专辑', className: 'min-w-[180px]' },
       { key: 'ids', label: '平台 ID', className: 'min-w-[220px]' },
-      { key: 'owner', label: '添加者', className: 'min-w-[120px]' },
       { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
       { key: 'actions', label: '操作', className: 'min-w-[110px] text-right' },
     ],
@@ -164,10 +171,16 @@ const getTags = (item: AdminDataItem) =>
 
 const getImages = (item: AdminDataItem) => (Array.isArray(item.images) ? item.images : [])
 
-const getPlatforms = (item: AdminDataItem) =>
-  item.platforms && typeof item.platforms === 'object' && !Array.isArray(item.platforms)
-    ? (item.platforms as Record<string, string | null | undefined>)
-    : {}
+const getSources = (item: AdminDataItem) =>
+  Array.isArray(item.sources)
+    ? item.sources.filter(
+        (source): source is { platform: string; sourceId: string; isPrimary?: boolean } =>
+          source &&
+          typeof source === 'object' &&
+          typeof (source as { platform?: unknown }).platform === 'string' &&
+          typeof (source as { sourceId?: unknown }).sourceId === 'string'
+      )
+    : []
 
 const formatCount = (value: unknown) => toNumber(value).toLocaleString('zh-CN')
 
@@ -195,7 +208,7 @@ const getItemHref = (type: ListType, item: AdminDataItem) => {
   if (type === 'wiki' && item.slug) return `/wiki/${item.slug}`
   if (type === 'posts' && item.id) return `/forum/${item.id}`
   if (type === 'galleries' && item.id) return `/gallery/${item.id}`
-  if (type === 'music' && (item.docId || item.id)) return `/music/${item.docId || item.id}`
+  if (type === 'music' && item.docId) return `/music/${item.docId}`
   return null
 }
 
@@ -288,7 +301,7 @@ const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementT
           {type === 'wiki' && `slug: ${toText(item.slug)}`}
           {type === 'posts' && `ID: ${toText(item.id)}`}
           {type === 'galleries' && `ID: ${toText(item.id)}`}
-          {type === 'music' && `docId: ${toText(item.docId)} / 原始ID: ${toText(item.id)}`}
+          {type === 'music' && `docId: ${toText(item.docId)}`}
           {type === 'sections' && `ID: ${toText(item.id)}`}
           {type === 'announcements' && `ID: ${toText(item.id)}`}
         </p>
@@ -325,10 +338,14 @@ const renderStatus = (type: ListType, item: AdminDataItem) => {
     )
   }
   if (type === 'music') {
+    const sources = getSources(item)
+    const primary = sources.find((source) => source.isPrimary) || sources[0]
     return (
       <div className="space-y-1 text-xs">
-        {renderBadge(toText(item.primaryPlatform, '未知平台'), 'bg-surface-alt text-brand-gold')}
-        <p className="text-text-muted">启用：{toText(item.enabledPlatform, '默认')}</p>
+        {primary
+          ? renderBadge(primary.platform, 'bg-surface-alt text-brand-gold')
+          : renderBadge('无平台来源')}
+        <p className="text-text-muted">来源：{sources.length}</p>
       </div>
     )
   }
@@ -343,9 +360,6 @@ const renderOwner = (type: ListType, item: AdminDataItem) => {
         <p className="text-text-muted">{toText(item.lastEditorUid)}</p>
       </div>
     )
-  }
-  if (type === 'music') {
-    return <span className="text-xs text-text-muted">{toText(item.addedBy, '未记录')}</span>
   }
   return (
     <div className="space-y-1 text-xs">
@@ -403,27 +417,20 @@ const renderRelations = (type: ListType, item: AdminDataItem) => {
   return <span className="text-xs text-text-muted">N/A</span>
 }
 
-const renderPlatformIds = (item: AdminDataItem) => {
-  const platforms = getPlatforms(item)
-  const rows = [
-    ['网易', platforms.netease],
-    ['QQ', platforms.tencent],
-    ['酷狗', platforms.kugou],
-    ['百度', platforms.baidu],
-    ['酷我', platforms.kuwo],
-  ]
+const renderExternalSources = (item: AdminDataItem) => {
+  const sources = getSources(item)
 
   return (
     <div className="flex max-w-[260px] flex-wrap gap-1 text-xs">
-      {rows.map(([label, id]) =>
-        id
-          ? renderKeyedBadge(
-              label || 'unknown',
-              `${label}: ${id}`,
+      {sources.length
+        ? sources.map((source) =>
+            renderKeyedBadge(
+              `${source.platform}:${source.sourceId}`,
+              `${source.platform}: ${source.sourceId}`,
               'bg-surface-alt text-brand-gold'
             )
-          : renderKeyedBadge(label || 'unknown', `${label}: 无`)
-      )}
+          )
+        : renderBadge('无外部来源')}
     </div>
   )
 }
@@ -465,7 +472,7 @@ const renderCell = (
   if (key === 'link') return renderLink(item)
   if (key === 'order')
     return <span className="text-sm font-medium text-text-primary">{toNumber(item.order)}</span>
-  if (key === 'ids') return renderPlatformIds(item)
+  if (key === 'ids') return renderExternalSources(item)
   if (key === 'lifecycle') return renderDateBlock(item)
   return null
 }
@@ -476,6 +483,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const cfg = configMap[type]
   const Icon = cfg.icon
   const [data, setData] = useState<AdminDataItem[]>([])
+  const [musicTotal, setMusicTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [pendingActions, setPendingActions] = useState<
     Record<string, 'delete' | 'restore' | 'permanentDelete'>
@@ -483,6 +491,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
   const [batchDisplayOpen, setBatchDisplayOpen] = useState(false)
   const [batchDisplaySaving, setBatchDisplaySaving] = useState(false)
+  const [musicImportOpen, setMusicImportOpen] = useState(false)
   const [batchDisplayForm, setBatchDisplayForm] = useState({
     displayAlbumMode: 'linked' as 'linked' | 'manual' | 'none',
     manualAlbumName: '',
@@ -492,15 +501,22 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const dialog = useDialog()
   const { show } = useToast()
   const [newItem, setNewItem] = useState<any>({})
+  const isMusicList = type === 'music'
+  const musicPagination = usePagination({ totalCount: musicTotal, defaultPageSize: 50 })
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const result = await apiGet<{ data: AdminDataItem[] }>(`/api/admin/${cfg.apiPath}`, {
+      const result = await apiGet<AdminListResponse>(`/api/admin/${cfg.apiPath}`, {
         includeDeleted: showDeleted ? 'true' : undefined,
+        page: isMusicList ? musicPagination.page : undefined,
+        limit: isMusicList ? musicPagination.pageSize : undefined,
       })
       const nextData = result.data || []
       setData(nextData)
+      if (isMusicList) {
+        setMusicTotal(result.total ?? nextData.length)
+      }
       setSelectedRowIds((prev) => {
         const rowIds = new Set(nextData.map(getAdminItemId))
         return new Set([...prev].filter((rowId) => rowIds.has(rowId)))
@@ -508,6 +524,9 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     } catch (e) {
       console.error(e)
       setData([])
+      if (isMusicList) {
+        setMusicTotal(0)
+      }
     } finally {
       setLoading(false)
     }
@@ -528,15 +547,28 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
 
   useEffect(() => {
     fetchData()
-  }, [type, showDeleted])
+  }, [
+    type,
+    showDeleted,
+    isMusicList ? musicPagination.page : 1,
+    isMusicList ? musicPagination.pageSize : 50,
+  ])
 
   useEffect(() => {
     setSelectedRowIds(new Set())
     setBatchDisplayOpen(false)
+    musicPagination.setPage(1)
   }, [type])
 
-  const isSelectableList = type === 'music'
+  const isSelectableList = isMusicList
   const selectedCount = selectedRowIds.size
+
+  const handleToggleDeleted = () => {
+    if (isMusicList) {
+      musicPagination.setPage(1)
+    }
+    setShowDeleted((value) => !value)
+  }
 
   const toggleSelectedRow = (rowId: string) => {
     setSelectedRowIds((prev) => {
@@ -707,6 +739,13 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           link: newItem.link?.trim() || null,
           active: newItem.active ?? true,
         })
+      } else if (type === 'music') {
+        await apiPost('/api/music', {
+          title: newItem.title?.trim(),
+          artists: newItem.artists?.trim(),
+          album: newItem.album?.trim() || '',
+          audioUrl: newItem.audioUrl?.trim() || '',
+        })
       }
       setNewItem({})
       await fetchData()
@@ -816,264 +855,329 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     })()
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-[0.12em] text-text-primary">
-          <Icon size={24} className="text-brand-gold" /> {cfg.title}
-        </h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowDeleted((value) => !value)}
-            className={clsx(
-              'rounded border px-4 py-2 text-sm transition-all',
-              showDeleted
-                ? 'border-brand-gold text-brand-gold'
-                : 'border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
-            )}
-          >
-            <Ban size={14} className="mr-1 inline" /> {showDeleted ? '隐藏已删除' : '显示已删除'}
-          </button>
-          <button
-            onClick={fetchData}
-            className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
-          >
-            <RefreshCw size={14} className="mr-1 inline" /> 刷新
-          </button>
-        </div>
-      </div>
-
-      {isSelectableList && (
-        <div className="rounded border border-border bg-surface p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-text-secondary">
-              已选择 <span className="font-semibold text-brand-gold">{selectedCount}</span> 首歌曲
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
+    <>
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-[0.12em] text-text-primary">
+            <Icon size={24} className="text-brand-gold" /> {cfg.title}
+          </h1>
+          <div className="flex items-center gap-2">
+            {type === 'music' && (
               <button
-                type="button"
-                onClick={toggleAllRows}
-                disabled={!data.length}
-                className="rounded border border-border px-3 py-1.5 text-xs text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setMusicImportOpen(true)}
+                className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
               >
-                {selectedCount === data.length && data.length ? '取消全选' : '全选'}
+                <Plus size={14} className="mr-1 inline" /> 导入音乐
               </button>
-              <button
-                type="button"
-                onClick={() => setBatchDisplayOpen((value) => !value)}
-                disabled={!selectedCount}
-                className="rounded theme-button-secondary px-3 py-1.5 text-xs transition-all disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                批量更新展示
-              </button>
-            </div>
-          </div>
-
-          {batchDisplayOpen && selectedCount > 0 && (
-            <div className="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-4 md:grid-cols-[160px_1fr_1fr_auto]">
-              <select
-                value={batchDisplayForm.displayAlbumMode}
-                onChange={(event) =>
-                  setBatchDisplayForm((prev) => ({
-                    ...prev,
-                    displayAlbumMode: event.target.value as 'linked' | 'manual' | 'none',
-                  }))
-                }
-                className="rounded border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none"
-              >
-                <option value="linked">显示关联专辑</option>
-                <option value="manual">显示手动专辑</option>
-                <option value="none">不显示专辑</option>
-              </select>
-              <input
-                type="text"
-                value={batchDisplayForm.manualAlbumName}
-                onChange={(event) =>
-                  setBatchDisplayForm((prev) => ({ ...prev, manualAlbumName: event.target.value }))
-                }
-                disabled={batchDisplayForm.displayAlbumMode !== 'manual'}
-                maxLength={CONTENT_LIMITS.music.manualAlbumName}
-                placeholder="手动专辑名"
-                className="rounded border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-              />
-              <input
-                type="text"
-                value={batchDisplayForm.displayAlbumDocId}
-                onChange={(event) =>
-                  setBatchDisplayForm((prev) => ({
-                    ...prev,
-                    displayAlbumDocId: event.target.value,
-                  }))
-                }
-                disabled={batchDisplayForm.displayAlbumMode !== 'linked'}
-                placeholder="展示专辑 docId（可选）"
-                className="rounded border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-              />
-              <button
-                type="button"
-                onClick={() => void handleBatchDisplaySubmit()}
-                disabled={batchDisplaySaving}
-                className="rounded theme-button-primary px-4 py-2 text-sm transition-all disabled:cursor-wait disabled:opacity-50"
-              >
-                {batchDisplaySaving ? '保存中...' : '保存'}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {cfg.hasCreate && (
-        <div className="rounded border border-border bg-surface p-5">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
-            <Plus size={16} /> 新增
-          </h3>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            {type === 'sections' && (
-              <>
-                <input
-                  type="text"
-                  placeholder="名称"
-                  value={newItem.name || ''}
-                  onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                  className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                />
-                <input
-                  type="text"
-                  placeholder="描述"
-                  value={newItem.description || ''}
-                  onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                  className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                />
-                <input
-                  type="number"
-                  placeholder="排序"
-                  value={newItem.order || 0}
-                  onChange={(e) => setNewItem({ ...newItem, order: Number(e.target.value) })}
-                  className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                />
-              </>
-            )}
-            {type === 'announcements' && (
-              <>
-                <input
-                  type="text"
-                  placeholder="公告内容"
-                  value={newItem.content || ''}
-                  onChange={(e) => setNewItem({ ...newItem, content: e.target.value })}
-                  className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none md:col-span-2"
-                />
-                <input
-                  type="text"
-                  placeholder="跳转链接 (可选)"
-                  value={newItem.link || ''}
-                  onChange={(e) => setNewItem({ ...newItem, link: e.target.value })}
-                  className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                />
-              </>
             )}
             <button
-              onClick={handleCreate}
-              className="rounded bg-brand-gold-dark px-5 py-2 text-sm font-medium text-white transition-all hover:bg-brand-gold"
+              onClick={handleToggleDeleted}
+              className={clsx(
+                'rounded border px-4 py-2 text-sm transition-all',
+                showDeleted
+                  ? 'border-brand-gold text-brand-gold'
+                  : 'border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
+              )}
             >
-              添加
+              <Ban size={14} className="mr-1 inline" /> {showDeleted ? '隐藏已删除' : '显示已删除'}
+            </button>
+            <button
+              onClick={fetchData}
+              className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
+            >
+              <RefreshCw size={14} className="mr-1 inline" /> 刷新
             </button>
           </div>
         </div>
-      )}
 
-      <div className="overflow-hidden rounded border border-border bg-surface">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="border-b border-border bg-surface-alt">
-                {isSelectableList && (
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                    <input
-                      type="checkbox"
-                      checked={data.length > 0 && selectedCount === data.length}
-                      onChange={toggleAllRows}
-                      className="accent-brand-gold"
-                      aria-label="选择全部歌曲"
-                    />
-                  </th>
-                )}
-                {cfg.columns.map((col) => (
-                  <th
-                    key={col.key}
-                    className={clsx(
-                      'px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted',
-                      col.className
-                    )}
-                  >
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {loading ? (
-                [1, 2, 3].map((i) => (
-                  <tr key={i} className="animate-pulse">
+        {isSelectableList && (
+          <div className="rounded border border-border bg-surface p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-text-secondary">
+                已选择 <span className="font-semibold text-brand-gold">{selectedCount}</span> 首歌曲
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleAllRows}
+                  disabled={!data.length}
+                  className="rounded border border-border px-3 py-1.5 text-xs text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {selectedCount === data.length && data.length ? '取消全选' : '全选'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchDisplayOpen((value) => !value)}
+                  disabled={!selectedCount}
+                  className="rounded theme-button-secondary px-3 py-1.5 text-xs transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  批量更新展示
+                </button>
+              </div>
+            </div>
+
+            {batchDisplayOpen && selectedCount > 0 && (
+              <div className="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-4 md:grid-cols-[160px_1fr_1fr_auto]">
+                <select
+                  value={batchDisplayForm.displayAlbumMode}
+                  onChange={(event) =>
+                    setBatchDisplayForm((prev) => ({
+                      ...prev,
+                      displayAlbumMode: event.target.value as 'linked' | 'manual' | 'none',
+                    }))
+                  }
+                  className="rounded border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none"
+                >
+                  <option value="linked">显示关联专辑</option>
+                  <option value="manual">显示手动专辑</option>
+                  <option value="none">不显示专辑</option>
+                </select>
+                <input
+                  type="text"
+                  value={batchDisplayForm.manualAlbumName}
+                  onChange={(event) =>
+                    setBatchDisplayForm((prev) => ({
+                      ...prev,
+                      manualAlbumName: event.target.value,
+                    }))
+                  }
+                  disabled={batchDisplayForm.displayAlbumMode !== 'manual'}
+                  maxLength={CONTENT_LIMITS.music.manualAlbumName}
+                  placeholder="手动专辑名"
+                  className="rounded border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <input
+                  type="text"
+                  value={batchDisplayForm.displayAlbumDocId}
+                  onChange={(event) =>
+                    setBatchDisplayForm((prev) => ({
+                      ...prev,
+                      displayAlbumDocId: event.target.value,
+                    }))
+                  }
+                  disabled={batchDisplayForm.displayAlbumMode !== 'linked'}
+                  placeholder="展示专辑 docId（可选）"
+                  className="rounded border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleBatchDisplaySubmit()}
+                  disabled={batchDisplaySaving}
+                  className="rounded theme-button-primary px-4 py-2 text-sm transition-all disabled:cursor-wait disabled:opacity-50"
+                >
+                  {batchDisplaySaving ? '保存中...' : '保存'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {cfg.hasCreate && (
+          <div className="rounded border border-border bg-surface p-5">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <Plus size={16} /> 新增
+            </h3>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              {type === 'sections' && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="名称"
+                    value={newItem.name || ''}
+                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="描述"
+                    value={newItem.description || ''}
+                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                  <input
+                    type="number"
+                    placeholder="排序"
+                    value={newItem.order || 0}
+                    onChange={(e) => setNewItem({ ...newItem, order: Number(e.target.value) })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                </>
+              )}
+              {type === 'announcements' && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="公告内容"
+                    value={newItem.content || ''}
+                    onChange={(e) => setNewItem({ ...newItem, content: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none md:col-span-2"
+                  />
+                  <input
+                    type="text"
+                    placeholder="跳转链接 (可选)"
+                    value={newItem.link || ''}
+                    onChange={(e) => setNewItem({ ...newItem, link: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                </>
+              )}
+              {type === 'music' && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="歌曲标题"
+                    value={newItem.title || ''}
+                    onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="艺人，多个用逗号分隔"
+                    value={newItem.artists || ''}
+                    onChange={(e) => setNewItem({ ...newItem, artists: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="专辑（可选）"
+                    value={newItem.album || ''}
+                    onChange={(e) => setNewItem({ ...newItem, album: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="音频链接（可选）"
+                    value={newItem.audioUrl || ''}
+                    onChange={(e) => setNewItem({ ...newItem, audioUrl: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                </>
+              )}
+              <button
+                onClick={handleCreate}
+                className="rounded bg-brand-gold-dark px-5 py-2 text-sm font-medium text-white transition-all hover:bg-brand-gold"
+              >
+                添加
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="overflow-hidden rounded border border-border bg-surface">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-border bg-surface-alt">
+                  {isSelectableList && (
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                      <input
+                        type="checkbox"
+                        checked={data.length > 0 && selectedCount === data.length}
+                        onChange={toggleAllRows}
+                        className="accent-brand-gold"
+                        aria-label="选择全部歌曲"
+                      />
+                    </th>
+                  )}
+                  {cfg.columns.map((col) => (
+                    <th
+                      key={col.key}
+                      className={clsx(
+                        'px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted',
+                        col.className
+                      )}
+                    >
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {loading ? (
+                  [1, 2, 3].map((i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td
+                        colSpan={cfg.columns.length + (isSelectableList ? 1 : 0)}
+                        className="px-5 py-4"
+                      >
+                        <div className="h-6 rounded bg-surface-alt" />
+                      </td>
+                    </tr>
+                  ))
+                ) : data.length > 0 ? (
+                  data.map((item) => {
+                    const rowId = getAdminItemId(item)
+                    return (
+                      <tr
+                        key={rowId}
+                        className={clsx(
+                          'transition-colors hover:bg-surface-alt',
+                          item.isDeleted && 'opacity-70'
+                        )}
+                      >
+                        {isSelectableList && (
+                          <td className="px-5 py-4 align-top">
+                            <input
+                              type="checkbox"
+                              checked={selectedRowIds.has(rowId)}
+                              onChange={() => toggleSelectedRow(rowId)}
+                              className="accent-brand-gold"
+                              aria-label={`选择 ${toText(item.title || item.id || rowId)}`}
+                            />
+                          </td>
+                        )}
+                        {cfg.columns.map((col) => (
+                          <td
+                            key={col.key}
+                            className={clsx(
+                              'px-5 py-4 align-top',
+                              col.key === 'actions' && 'text-right'
+                            )}
+                          >
+                            {col.key === 'actions'
+                              ? renderActions(item, rowId)
+                              : renderCell(type, item, col.key, Icon)}
+                          </td>
+                        ))}
+                      </tr>
+                    )
+                  })
+                ) : (
+                  <tr>
                     <td
                       colSpan={cfg.columns.length + (isSelectableList ? 1 : 0)}
-                      className="px-5 py-4"
+                      className="px-5 py-16 text-center italic text-text-muted"
                     >
-                      <div className="h-6 rounded bg-surface-alt" />
+                      暂无数据
                     </td>
                   </tr>
-                ))
-              ) : data.length > 0 ? (
-                data.map((item) => {
-                  const rowId = getAdminItemId(item)
-                  return (
-                    <tr
-                      key={rowId}
-                      className={clsx(
-                        'transition-colors hover:bg-surface-alt',
-                        item.isDeleted && 'opacity-70'
-                      )}
-                    >
-                      {isSelectableList && (
-                        <td className="px-5 py-4 align-top">
-                          <input
-                            type="checkbox"
-                            checked={selectedRowIds.has(rowId)}
-                            onChange={() => toggleSelectedRow(rowId)}
-                            className="accent-brand-gold"
-                            aria-label={`选择 ${toText(item.title || item.id || rowId)}`}
-                          />
-                        </td>
-                      )}
-                      {cfg.columns.map((col) => (
-                        <td
-                          key={col.key}
-                          className={clsx(
-                            'px-5 py-4 align-top',
-                            col.key === 'actions' && 'text-right'
-                          )}
-                        >
-                          {col.key === 'actions'
-                            ? renderActions(item, rowId)
-                            : renderCell(type, item, col.key, Icon)}
-                        </td>
-                      ))}
-                    </tr>
-                  )
-                })
-              ) : (
-                <tr>
-                  <td
-                    colSpan={cfg.columns.length + (isSelectableList ? 1 : 0)}
-                    className="px-5 py-16 text-center italic text-text-muted"
-                  >
-                    暂无数据
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {isMusicList && musicPagination.totalPages > 1 && (
+            <Pagination
+              page={musicPagination.page}
+              totalPages={musicPagination.totalPages}
+              onPageChange={musicPagination.handlePageChange}
+              pageSize={musicPagination.pageSize}
+              onPageSizeChange={musicPagination.handlePageSizeChange}
+              showPageSizeSelector
+            />
+          )}
         </div>
       </div>
-    </div>
+      {type === 'music' && (
+        <MusicImportModal
+          open={musicImportOpen}
+          onClose={() => setMusicImportOpen(false)}
+          onImported={() => {
+            setMusicImportOpen(false)
+            void fetchData()
+          }}
+        />
+      )}
+    </>
   )
 }
 

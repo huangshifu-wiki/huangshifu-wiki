@@ -4,31 +4,28 @@ import { Play, Heart } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useI18n } from '../../lib/i18n'
 import { formatMusicCredits } from '../../lib/musicCredits'
+import { isPlayableSong } from '../../lib/musicPlayback'
 import { SmartImage } from '../SmartImage'
 import type { SongItem } from '../../types/entities'
 import type { ViewMode } from '../../types/userPreferences'
 
 interface SongCardProps {
   song: SongItem
-  isBatchMode: boolean
-  isSelected: boolean
   isCurrentSong: boolean
   isFavoriting: boolean
+  sequenceNumber?: number
   viewMode?: ViewMode
   onPlay: (song: SongItem) => void
-  onToggleSelect: (docId: string) => void
   onToggleFavorite: (song: SongItem) => void
 }
 
 const SongCard = React.memo(function SongCard({
   song,
-  isBatchMode,
-  isSelected,
   isCurrentSong,
   isFavoriting,
+  sequenceNumber,
   viewMode = 'list',
   onPlay,
-  onToggleSelect,
   onToggleFavorite,
 }: SongCardProps) {
   const { t } = useI18n()
@@ -36,32 +33,14 @@ const SongCard = React.memo(function SongCard({
   const isList = viewMode === 'list'
   const isSmallGrid = viewMode === 'small'
   const artistsText = formatMusicCredits(song.artists, '未知歌手')
+  const canPlay = isPlayableSong(song)
+  const albumText = (song.displayAlbum ? song.displayAlbum.title : song.album).trim()
+  const releaseDateText = song.releaseDate ? `发行日期：${song.releaseDate}` : null
+  const listMetaItems = [artistsText, albumText, releaseDateText].filter(Boolean)
 
   const handleRowClick = () => {
-    if (isBatchMode) {
-      onToggleSelect(song.docId)
-    } else {
-      navigate(`/music/${song.docId}`)
-    }
+    navigate(`/music/${song.docId}`)
   }
-
-  const renderBatchButton = (compact = false) => (
-    <button
-      onClick={(e) => {
-        e.stopPropagation()
-        onToggleSelect(song.docId)
-      }}
-      className={clsx(
-        'rounded text-xs font-semibold transition-all',
-        compact ? 'px-2 py-1.5' : 'px-3 py-1.5',
-        isSelected
-          ? 'bg-[var(--color-theme-accent)] text-white'
-          : 'bg-surface-alt text-text-secondary hover:text-brand-gold'
-      )}
-    >
-      {isSelected ? t('music.selected') : t('music.select')}
-    </button>
-  )
 
   const renderFavoriteButton = (compact = false) => (
     <button
@@ -87,15 +66,18 @@ const SongCard = React.memo(function SongCard({
       type="button"
       onClick={(e) => {
         e.stopPropagation()
+        if (!canPlay) return
         onPlay(song)
       }}
+      disabled={!canPlay}
       className={clsx(
         'absolute inset-0 flex items-center justify-center bg-black/35 text-white opacity-0 transition-opacity',
         'hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
-        isCurrentSong && !isBatchMode && 'opacity-100 bg-black/25'
+        isCurrentSong && 'opacity-100 bg-black/25',
+        !canPlay && 'cursor-not-allowed opacity-0 hover:opacity-0 focus-visible:opacity-0'
       )}
-      title={t('music.play')}
-      aria-label={`播放 ${song.title}`}
+      title={canPlay ? t('music.play') : '暂无可播放音源'}
+      aria-label={canPlay ? `播放 ${song.title}` : `${song.title} 暂无可播放音源`}
     >
       <span
         className={clsx(
@@ -121,8 +103,7 @@ const SongCard = React.memo(function SongCard({
         className={clsx(
           'gufeng-song-item group cursor-pointer rounded transition-all',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
-          isCurrentSong && !isBatchMode && 'bg-brand-gold/10',
-          isBatchMode && isSelected && 'bg-brand-gold/15'
+          isCurrentSong && 'bg-brand-gold/10'
         )}
         role="button"
         tabIndex={0}
@@ -135,8 +116,8 @@ const SongCard = React.memo(function SongCard({
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
             lazy={false}
           />
-          {!isBatchMode && renderCoverPlayButton(isSmallGrid)}
-          {isCurrentSong && !isBatchMode && (
+          {renderCoverPlayButton(isSmallGrid)}
+          {isCurrentSong && (
             <div className="absolute left-2 top-2 rounded bg-[var(--color-theme-accent)] px-2 py-0.5 text-[10px] font-semibold text-white">
               {t('music.playing')}
             </div>
@@ -161,11 +142,23 @@ const SongCard = React.memo(function SongCard({
           >
             {artistsText}
           </p>
-          {!isSmallGrid && <p className="text-xs text-text-muted/80 truncate">{song.album}</p>}
+          {!isSmallGrid && albumText && (
+            <p className="text-xs text-text-muted/80 truncate">{albumText}</p>
+          )}
+          {releaseDateText && (
+            <p
+              className={clsx(
+                'text-text-muted/80 truncate',
+                isSmallGrid ? 'text-[0.6875rem]' : 'text-xs'
+              )}
+            >
+              {isSmallGrid ? `发行：${song.releaseDate}` : releaseDateText}
+            </p>
+          )}
         </div>
 
         <div className="mt-2 flex min-h-8 items-center justify-between gap-2">
-          {isBatchMode ? renderBatchButton(true) : renderFavoriteButton(isSmallGrid)}
+          {renderFavoriteButton(isSmallGrid)}
         </div>
       </div>
     )
@@ -182,13 +175,21 @@ const SongCard = React.memo(function SongCard({
       }}
       className={clsx(
         'gufeng-song-item group flex items-center gap-4 py-4 px-1 border-b border-border transition-all cursor-pointer',
-        isCurrentSong && !isBatchMode && 'bg-brand-gold/10',
-        isBatchMode && isSelected && 'bg-brand-gold/15'
+        isCurrentSong && 'bg-brand-gold/10'
       )}
       role="button"
       tabIndex={0}
       aria-label={`${song.title} - ${artistsText}`}
     >
+      {sequenceNumber !== undefined ? (
+        <span
+          className="w-9 flex-shrink-0 text-right text-sm tabular-nums text-text-muted"
+          aria-hidden="true"
+        >
+          {sequenceNumber}
+        </span>
+      ) : null}
+
       {/* Cover */}
       <div className="relative w-14 h-14 flex-shrink-0 overflow-hidden rounded">
         <SmartImage
@@ -197,7 +198,7 @@ const SongCard = React.memo(function SongCard({
           className="w-full h-full object-cover rounded"
           lazy={false}
         />
-        {!isBatchMode && renderCoverPlayButton(true)}
+        {renderCoverPlayButton(true)}
       </div>
 
       {/* Info */}
@@ -211,25 +212,21 @@ const SongCard = React.memo(function SongCard({
           {song.title}
         </p>
         <p className="text-[0.8125rem] text-text-muted truncate mt-0.5 flex items-center gap-2 flex-wrap">
-          {artistsText}
-          <span className="w-[3px] h-[3px] bg-border rounded-full inline-block" />
-          {song.album}
+          {listMetaItems.map((item, index) => (
+            <React.Fragment key={`${index}-${item}`}>
+              {index > 0 && (
+                <span className="w-[3px] h-[3px] bg-border rounded-full inline-block" />
+              )}
+              <span>{item}</span>
+            </React.Fragment>
+          ))}
         </p>
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        {isBatchMode ? (
-          renderBatchButton()
-        ) : (
-          <>
-            {/* Desktop actions */}
-            <div className="hidden md:flex items-center gap-0.5">{renderFavoriteButton()}</div>
-
-            {/* Mobile actions: always visible but compact */}
-            <div className="flex md:hidden items-center gap-0.5">{renderFavoriteButton()}</div>
-          </>
-        )}
+        <div className="hidden md:flex items-center gap-0.5">{renderFavoriteButton()}</div>
+        <div className="flex md:hidden items-center gap-0.5">{renderFavoriteButton()}</div>
       </div>
     </div>
   )

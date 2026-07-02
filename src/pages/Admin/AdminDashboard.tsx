@@ -16,27 +16,31 @@ import { apiGet } from '../../lib/apiClient'
 import { useAuth } from '../../context/AuthContext'
 
 const cards = [
-  { key: 'wiki', label: '百科', path: '/admin/wiki', icon: Book, countKey: 'wiki' },
-  { key: 'music', label: '音乐', path: '/admin/music', icon: Music, countKey: 'music' },
-  { key: 'posts', label: '帖子', path: '/admin/posts', icon: MessageSquare, countKey: 'posts' },
+  { key: 'wiki', label: '百科', path: '/admin/wiki', icon: Book },
+  { key: 'music', label: '音乐', path: '/admin/music', icon: Music },
+  { key: 'posts', label: '帖子', path: '/admin/posts', icon: MessageSquare },
   {
     key: 'galleries',
     label: '图集',
     path: '/admin/galleries',
     icon: ImageIcon,
-    countKey: 'galleries',
   },
-  { key: 'users', label: '用户', path: '/admin/users', icon: Users, countKey: 'users' },
-  { key: 'sections', label: '版块', path: '/admin/sections', icon: Layers, countKey: 'sections' },
+  { key: 'users', label: '用户', path: '/admin/users', icon: Users },
+  { key: 'sections', label: '版块', path: '/admin/sections', icon: Layers },
   {
     key: 'announcements',
     label: '公告',
     path: '/admin/announcements',
     icon: Megaphone,
-    countKey: 'announcements',
   },
-  { key: 'locks', label: '编辑锁', path: '/admin/locks', icon: Lock, countKey: 'locks' },
+  { key: 'locks', label: '编辑锁', path: '/admin/locks', icon: Lock },
 ]
+
+type AdminDashboardListResponse = {
+  data?: unknown[]
+  locks?: unknown[]
+  total?: number
+}
 
 export const AdminDashboard = () => {
   const { user } = useAuth()
@@ -52,9 +56,9 @@ export const AdminDashboard = () => {
       await Promise.all(
         cards.map(async (c) => {
           try {
-            const data = await apiGet<{ data?: any[]; locks?: any[] }>(`/api/admin/${c.key}`)
-            const arr = data.data || (data as any).locks || []
-            results[c.key] = arr.length
+            const data = await apiGet<AdminDashboardListResponse>(`/api/admin/${c.key}`)
+            results[c.key] =
+              typeof data.total === 'number' ? data.total : (data.data || data.locks || []).length
           } catch {
             results[c.key] = 0
           }

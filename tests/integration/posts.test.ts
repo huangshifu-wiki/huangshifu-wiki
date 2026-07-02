@@ -2028,12 +2028,19 @@ describe('Posts API - 文章接口测试', () => {
 
     it('创建图集时应允许复用没有当前用户 MediaAsset 归属的去重本地图片 URL', async () => {
       const sharedUrl = `/uploads/galleries/shared-dedup-${Date.now()}.jpg`
-      await prisma.imageMap.create({
+      const otherUser = await createTestUser({
+        email: `gallery-shared-owner-${Date.now()}@example.com`,
+        displayName: `SharedGalleryOwner${Date.now()}`,
+      })
+      const sharedAsset = await prisma.mediaAsset.create({
         data: {
-          id: `img_map_${Date.now()}`,
-          md5: `md5_shared_${Date.now()}`,
-          localUrl: sharedUrl,
-          storageType: 'local',
+          ownerUid: otherUser.user.uid,
+          storageKey: sharedUrl.slice('/uploads/'.length),
+          publicUrl: sharedUrl,
+          fileName: 'shared-dedup.jpg',
+          mimeType: 'image/jpeg',
+          sizeBytes: 1024,
+          status: 'ready',
         },
       })
 
@@ -2056,7 +2063,7 @@ describe('Posts API - 文章接口测试', () => {
       })
       expect(createdImage?.url).toBe(sharedUrl)
       expect(createdImage?.name).toBe('shared-dedup.jpg')
-      expect(createdImage?.assetId).toBeNull()
+      expect(createdImage?.assetId).toBe(sharedAsset.id)
     })
 
     it('更新图集时清空描述应保留为空串', async () => {

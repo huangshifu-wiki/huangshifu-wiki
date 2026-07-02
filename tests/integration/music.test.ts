@@ -35,18 +35,21 @@ describe('Music API - 音乐接口测试', () => {
     await prisma.musicTrack.deleteMany({
       where: {
         OR: [
-          { id: { startsWith: 'test-markdown-description-' } },
-          { id: { startsWith: 'test-optional-metadata-' } },
-          { id: { startsWith: 'test-artist-partial-search-' } },
-          { id: { startsWith: 'test-display-relation-' } },
+          { title: { startsWith: 'Markdown Description Test Song' } },
+          { title: { startsWith: 'Optional Metadata Test Song' } },
+          { title: { startsWith: 'Artist Partial Search Test Song' } },
+          { title: { startsWith: 'Display Relation Song' } },
+          { title: { startsWith: 'Paged Music Test Song' } },
+          { title: { startsWith: '000 Paged Music Test Song' } },
+          { title: { startsWith: 'Release Date Sort Test Song' } },
         ],
       },
     })
     await prisma.album.deleteMany({
       where: {
         OR: [
-          { id: { startsWith: 'test-display-relation-' } },
-          { id: { startsWith: 'test-optional-album-' } },
+          { title: { startsWith: 'Display Relation Album' } },
+          { title: { startsWith: 'Optional Album' } },
         ],
       },
     })
@@ -70,18 +73,21 @@ describe('Music API - 音乐接口测试', () => {
     await prisma.musicTrack.deleteMany({
       where: {
         OR: [
-          { id: { startsWith: 'test-markdown-description-' } },
-          { id: { startsWith: 'test-optional-metadata-' } },
-          { id: { startsWith: 'test-artist-partial-search-' } },
-          { id: { startsWith: 'test-display-relation-' } },
+          { title: { startsWith: 'Markdown Description Test Song' } },
+          { title: { startsWith: 'Optional Metadata Test Song' } },
+          { title: { startsWith: 'Artist Partial Search Test Song' } },
+          { title: { startsWith: 'Display Relation Song' } },
+          { title: { startsWith: 'Paged Music Test Song' } },
+          { title: { startsWith: '000 Paged Music Test Song' } },
+          { title: { startsWith: 'Release Date Sort Test Song' } },
         ],
       },
     })
     await prisma.album.deleteMany({
       where: {
         OR: [
-          { id: { startsWith: 'test-display-relation-' } },
-          { id: { startsWith: 'test-optional-album-' } },
+          { title: { startsWith: 'Display Relation Album' } },
+          { title: { startsWith: 'Optional Album' } },
         ],
       },
     })
@@ -95,14 +101,11 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('更新歌曲描述时应保留 Markdown 源文本首尾空白', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const song = await prisma.musicTrack.create({
       data: {
-        id: `test-markdown-description-${suffix}`,
         title: 'Markdown Description Test Song',
         artists: ['Markdown Description Test Artist'],
         album: '',
-        addedBy: adminUser.user.uid,
       },
     })
     const markdownDescription = '\n\n    const value = 1\n\n正文\n'
@@ -127,7 +130,6 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('创建歌曲时允许省略发行日期和时长', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       adminUser.user.email,
       adminUser.plainPassword
@@ -137,7 +139,6 @@ describe('Music API - 音乐接口测试', () => {
       .post('/api/music')
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({
-        id: `test-optional-metadata-${suffix}`,
         title: 'Optional Metadata Test Song',
         artists: ['Optional Metadata Test Artist'],
       })
@@ -148,7 +149,6 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('创建歌曲时拒绝非法发行日期和时长', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       adminUser.user.email,
       adminUser.plainPassword
@@ -158,7 +158,6 @@ describe('Music API - 音乐接口测试', () => {
       .post('/api/music')
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({
-        id: `test-optional-metadata-${suffix}-date`,
         title: 'Invalid Date Test Song',
         artists: ['Optional Metadata Test Artist'],
         releaseDate: '2026-02-31',
@@ -170,7 +169,6 @@ describe('Music API - 音乐接口测试', () => {
       .post('/api/music')
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({
-        id: `test-optional-metadata-${suffix}-duration`,
         title: 'Invalid Duration Test Song',
         artists: ['Optional Metadata Test Artist'],
         durationMs: -1,
@@ -180,76 +178,55 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('创建专辑时允许省略发行日期', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       adminUser.user.email,
       adminUser.plainPassword
     )
 
-    const response = await agent
-      .post('/api/albums')
-      .set('X-XSRF-TOKEN', xsrfToken)
-      .send({
-        id: `test-optional-album-${suffix}`,
-        sourceId: `test-optional-album-source-${suffix}`,
-        title: 'Optional Album Release Date',
-        artist: 'Optional Album Artist',
-        cover: '',
-        description: 'Optional album description',
-        platformUrl: 'https://music.example.com/album/optional',
-      })
+    const response = await agent.post('/api/albums').set('X-XSRF-TOKEN', xsrfToken).send({
+      title: 'Optional Album Release Date',
+      artist: 'Optional Album Artist',
+      cover: '',
+      description: 'Optional album description',
+    })
 
     expect(response.status).toBe(201)
     expect(response.body.album.releaseDate).toBeNull()
   })
 
   it('创建专辑时拒绝非法发行日期', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       adminUser.user.email,
       adminUser.plainPassword
     )
 
-    const response = await agent
-      .post('/api/albums')
-      .set('X-XSRF-TOKEN', xsrfToken)
-      .send({
-        id: `test-optional-album-${suffix}`,
-        title: 'Invalid Album Release Date',
-        artist: 'Optional Album Artist',
-        releaseDate: '2026-02-31',
-      })
+    const response = await agent.post('/api/albums').set('X-XSRF-TOKEN', xsrfToken).send({
+      title: 'Invalid Album Release Date',
+      artist: 'Optional Album Artist',
+      releaseDate: '2026-02-31',
+    })
 
     expect(response.status).toBe(400)
   })
 
   it('重写专辑曲目关系时保留已有展示专辑选择', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const [album, displaySong, normalSong] = await Promise.all([
       prisma.album.create({
         data: {
-          id: `test-display-relation-album-${suffix}`,
-          platform: 'netease',
-          sourceId: `test-display-relation-album-${suffix}`,
           title: 'Display Relation Album',
           artist: 'Batch Artist',
-          cover: '',
         },
       }),
       prisma.musicTrack.create({
         data: {
-          id: `test-display-relation-song-display-${suffix}`,
           title: 'Display Relation Song Display',
           artists: ['Batch Artist'],
-          addedBy: adminUser.user.uid,
         },
       }),
       prisma.musicTrack.create({
         data: {
-          id: `test-display-relation-song-normal-${suffix}`,
           title: 'Display Relation Song Normal',
           artists: ['Batch Artist'],
-          addedBy: adminUser.user.uid,
         },
       }),
     ])
@@ -297,14 +274,11 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   it('音乐搜索和搜索建议支持艺术家名称部分匹配', async () => {
-    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const song = await prisma.musicTrack.create({
       data: {
-        id: `test-artist-partial-search-${suffix}`,
         title: 'Artist Partial Search Test Song',
         artists: ['黄诗扶'],
         album: '',
-        addedBy: adminUser.user.uid,
       },
     })
 
@@ -323,5 +297,125 @@ describe('Music API - 音乐接口测试', () => {
         (item: { type: string; id?: string }) => item.type === 'music' && item.id === song.docId
       )
     ).toBe(true)
+  })
+
+  it('音乐列表分页返回总数并支持跨页排序', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const { agent } = await createAuthenticatedAgent(adminUser.user.email, adminUser.plainPassword)
+    await Promise.all(
+      [
+        { title: '000 Paged Music Test Song C', artists: ['002 丙歌手'] },
+        { title: '000 Paged Music Test Song A', artists: ['000 甲歌手'] },
+        { title: '000 Paged Music Test Song B', artists: ['001 乙歌手'] },
+      ].map((song) =>
+        prisma.musicTrack.create({
+          data: {
+            title: `${song.title} ${suffix}`,
+            artists: song.artists,
+            album: '',
+          },
+        })
+      )
+    )
+
+    const collectSeededTitles = async (sortBy: 'title' | 'artist') => {
+      const seededTitles: string[] = []
+      let totalPages = 1
+
+      for (let page = 1; page <= totalPages; page += 1) {
+        const response = await agent
+          .get('/api/music')
+          .query({ limit: 2, page, sortBy, sortOrder: 'asc' })
+
+        expect(response.status).toBe(200)
+        expect(response.body.total).toBeGreaterThanOrEqual(3)
+        expect(response.body.page).toBe(page)
+        expect(response.body.limit).toBe(2)
+        totalPages = Math.ceil(response.body.total / 2)
+
+        seededTitles.push(
+          ...response.body.songs
+            .map((song: { title: string }) => song.title)
+            .filter((title: string) => title.endsWith(suffix))
+        )
+
+        if (seededTitles.length === 3) break
+      }
+
+      return seededTitles
+    }
+
+    expect(await collectSeededTitles('title')).toEqual([
+      `000 Paged Music Test Song A ${suffix}`,
+      `000 Paged Music Test Song B ${suffix}`,
+      `000 Paged Music Test Song C ${suffix}`,
+    ])
+    expect(await collectSeededTitles('artist')).toEqual([
+      `000 Paged Music Test Song A ${suffix}`,
+      `000 Paged Music Test Song B ${suffix}`,
+      `000 Paged Music Test Song C ${suffix}`,
+    ])
+  })
+
+  it('音乐列表按发行时间排序并将未知日期放最后', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const { agent } = await createAuthenticatedAgent(adminUser.user.email, adminUser.plainPassword)
+    await Promise.all(
+      [
+        { title: 'Release Date Sort Test Song Unknown', releaseDate: null },
+        { title: 'Release Date Sort Test Song New', releaseDate: new Date('2099-01-01') },
+        { title: 'Release Date Sort Test Song Old', releaseDate: new Date('2097-01-01') },
+        { title: 'Release Date Sort Test Song Middle', releaseDate: new Date('2098-01-01') },
+      ].map((song) =>
+        prisma.musicTrack.create({
+          data: {
+            title: `${song.title} ${suffix}`,
+            artists: ['发行时间排序测试'],
+            album: '',
+            releaseDate: song.releaseDate,
+          },
+        })
+      )
+    )
+
+    const collectSeededTitles = async (query: Record<string, string | number> = {}) => {
+      const seededTitles: string[] = []
+      let totalPages = 1
+
+      for (let page = 1; page <= totalPages; page += 1) {
+        const response = await agent.get('/api/music').query({ limit: 100, page, ...query })
+
+        expect(response.status).toBe(200)
+        totalPages = Math.ceil(response.body.total / 100)
+
+        seededTitles.push(
+          ...response.body.songs
+            .map((song: { title: string }) => song.title)
+            .filter((title: string) => title.endsWith(suffix))
+        )
+
+        if (seededTitles.length === 4) break
+      }
+
+      return seededTitles
+    }
+
+    const descOrder = [
+      `Release Date Sort Test Song New ${suffix}`,
+      `Release Date Sort Test Song Middle ${suffix}`,
+      `Release Date Sort Test Song Old ${suffix}`,
+      `Release Date Sort Test Song Unknown ${suffix}`,
+    ]
+    expect(await collectSeededTitles()).toEqual(descOrder)
+    expect(await collectSeededTitles({ sortBy: 'releaseDate', sortOrder: 'desc' })).toEqual(
+      descOrder
+    )
+    expect(await collectSeededTitles({ sortBy: 'createdAt', sortOrder: 'desc' })).toEqual(descOrder)
+    expect(await collectSeededTitles({ sortBy: 'releaseDate', sortOrder: 'asc' })).toEqual([
+      `Release Date Sort Test Song Old ${suffix}`,
+      `Release Date Sort Test Song Middle ${suffix}`,
+      `Release Date Sort Test Song New ${suffix}`,
+      `Release Date Sort Test Song Unknown ${suffix}`,
+    ])
   })
 })

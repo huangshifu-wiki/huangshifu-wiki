@@ -229,11 +229,16 @@ export async function apiDelete<T>(
   })
 }
 
-export function apiDownload(path: string): Promise<Response> {
+export function apiDownload(path: string, options: RequestInit = {}): Promise<Response> {
+  const { headers, ...rest } = options
   const xsrfToken = getXsrfToken()
   return fetch(path, {
+    ...rest,
     credentials: 'include',
-    headers: xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {},
+    headers: {
+      ...(xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {}),
+      ...(headers || {}),
+    },
   })
 }
 

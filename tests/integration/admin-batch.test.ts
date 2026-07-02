@@ -47,10 +47,10 @@ describe('Admin batch operations API', () => {
       where: { title: { startsWith: 'Admin Batch Gallery' } },
     })
     await prisma.album.deleteMany({
-      where: { id: { startsWith: 'test-admin-batch-album-' } },
+      where: { title: { startsWith: 'Batch' } },
     })
     await prisma.musicTrack.deleteMany({
-      where: { id: { startsWith: 'test-admin-batch-song-' } },
+      where: { title: { startsWith: 'Batch' } },
     })
     await prisma.mediaAsset.deleteMany({
       where: { storageKey: { startsWith: 'test-admin-batch/' } },
@@ -169,21 +169,15 @@ describe('Admin batch operations API', () => {
     const [song, album] = await Promise.all([
       prisma.musicTrack.create({
         data: {
-          id: `test-admin-batch-song-${suffix}`,
           title: 'Batch Cover Song',
           artists: ['Batch Artist'],
           album: 'Batch Album',
-          addedBy: adminUser.user.uid,
         },
       }),
       prisma.album.create({
         data: {
-          id: `test-admin-batch-album-${suffix}`,
-          platform: 'netease',
-          sourceId: `test-admin-batch-album-source-${suffix}`,
           title: 'Batch Cover Album',
           artist: 'Batch Artist',
-          cover: '/uploads/test-admin-batch-album-old.jpg',
         },
       }),
     ])
@@ -264,8 +258,7 @@ describe('Admin batch operations API', () => {
     expect(finalAlbumResponse.status).toBe(200)
     await expect(prisma.album.findUnique({ where: { docId: album.docId } })).resolves.toMatchObject(
       {
-        cover: '',
-        defaultCoverSource: 'old_cover',
+        coverId: null,
       }
     )
   })
@@ -305,22 +298,16 @@ describe('Admin batch operations API', () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const album = await prisma.album.create({
       data: {
-        id: `test-admin-batch-album-${suffix}`,
-        platform: 'netease',
-        sourceId: `test-admin-batch-display-album-source-${suffix}`,
         title: 'Batch Display Album',
         artist: 'Batch Artist',
-        cover: '/uploads/test-admin-batch-display-album.jpg',
       },
     })
     const songs = await Promise.all(
       [0, 1].map((index) =>
         prisma.musicTrack.create({
           data: {
-            id: `test-admin-batch-song-${suffix}-${index}`,
             title: `Batch Display Song ${index}`,
             artists: ['Batch Artist'],
-            addedBy: adminUser.user.uid,
           },
         })
       )
@@ -363,7 +350,7 @@ describe('Admin batch operations API', () => {
     expect(linkedResponse.status).toBe(200)
     const updatedSongs = await prisma.musicTrack.findMany({
       where: { docId: { in: songs.map((song) => song.docId) } },
-      orderBy: { id: 'asc' },
+      orderBy: { title: 'asc' },
     })
     expect(updatedSongs.every((song) => song.displayAlbumMode === 'linked')).toBe(true)
     expect(updatedSongs.every((song) => song.manualAlbumName === null)).toBe(true)

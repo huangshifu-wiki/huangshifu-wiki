@@ -47,7 +47,6 @@ export {
   parseFavoriteType,
   parseMusicPlatform,
   parseDisplayAlbumMode,
-  parseMusicCollectionType,
   parseBrowsingTargetType,
   parseModerationTargetType,
   normalizeModerationTargetType,
@@ -142,15 +141,18 @@ export {
   deleteCommentLike,
 } from './comments'
 
+export { findReadyMediaAssetByPublicUrl, localizeImageUrlAsMediaAsset } from './remoteImageAsset'
+
 // === 音乐全链路 ===
 export {
   resolveSongDisplayAlbum,
   resolveSongCoverUrl,
+  resolveAlbumCoverUrl,
   normalizeSongCustomPlatformLinkUrl,
   normalizeSongCustomPlatformLinks,
   getPlatformSourceId,
-  getPlatformSourceField,
   buildPlaybackPlatformCandidates,
+  normalizeMusicExternalSourceInputs,
   clearExpiredPlayUrlCache,
   getCachedPlayUrl,
   setCachedPlayUrl,
@@ -159,10 +161,13 @@ export {
   buildAlbumTracksPayload,
   applyAlbumTracksToRelations,
   addSongCoverFromAsset,
+  addSongCoverFromUrl,
+  addAlbumCoverFromUrl,
   addAlbumCoverFromAsset,
   createOrUpdateImportedSong,
   autoLinkInstrumental,
   fetchSongsWithRelations,
+  fetchSongsWithRelationsByDocIds,
   fetchSongWithRelationsByDocId,
   ensureDisplayRelation,
 } from './music'

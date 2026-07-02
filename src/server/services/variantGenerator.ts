@@ -49,11 +49,13 @@ export interface VariantGeneratorStats {
 
 interface VariantGeneratorOptions {
   autoStart?: boolean
+  processOnEnqueue?: boolean
 }
 
 export class VariantGenerator {
   private queue: VariantTask[] = []
   private processing = new Set<string>()
+  private processOnEnqueue: boolean
 
   private config = {
     maxConcurrent: parseInt(process.env.VARIANT_MAX_CONCURRENT || '3', 10),
@@ -76,6 +78,8 @@ export class VariantGenerator {
   private processInterval: NodeJS.Timeout | null = null
 
   constructor(options: VariantGeneratorOptions = {}) {
+    this.processOnEnqueue = options.processOnEnqueue ?? true
+
     if (options.autoStart === false) {
       return
     }
@@ -157,7 +161,9 @@ export class VariantGenerator {
     }
 
     console.log(`[Variant] 📥 Task enqueued: ${task.imageMapId}`)
-    this.processNext()
+    if (this.processOnEnqueue) {
+      this.processNext()
+    }
   }
 
   /**
@@ -451,4 +457,5 @@ export class VariantGenerator {
 
 export const variantGenerator = new VariantGenerator({
   autoStart: process.env.NODE_ENV !== 'test',
+  processOnEnqueue: process.env.NODE_ENV !== 'test',
 })

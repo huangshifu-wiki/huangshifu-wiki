@@ -44,7 +44,6 @@ type ImportResponse = {
   collection?: {
     docId: string
     title: string
-    resourceType: ResourceType
   } | null
 }
 
@@ -154,10 +153,7 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
       const parts = [`导入成功 ${summary.imported} 首`]
       if (summary.skipped) parts.push(`已存在 ${summary.skipped} 首`)
       if (summary.failed) parts.push(`失败 ${summary.failed} 首`)
-      if (response.collection)
-        parts.push(
-          `已更新${resourceTypeLabel(response.collection.resourceType)}：${response.collection.title}`
-        )
+      if (response.collection) parts.push(`已更新专辑：${response.collection.title}`)
       setImportResult(parts.join('，'))
       setConfirmingImport(false)
       await onImported()

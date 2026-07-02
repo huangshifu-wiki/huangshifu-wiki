@@ -11,19 +11,18 @@ import {
   buildPostVisibilityWhere,
   parsePostSort,
   parseMusicPlatform,
-  parseMusicCollectionType,
   normalizeTrackDiscPayload,
   parseInteger,
   parseBoolean,
   normalizeOptionalDateOnly,
   applyAlbumTracksToRelations,
+  normalizeMusicExternalSourceInputs,
   enhancedCache,
   ensureTextLimit,
   softDeleteData,
 } from '../utils'
 import { cleanupUnusedMediaAssetById } from '../services/mediaAssetCleanupService'
 import type { AuthenticatedRequest } from '../types'
-import type { AlbumCover } from '@prisma/client'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 
 const router = createRouter()
@@ -33,30 +32,23 @@ function ensureAlbumTextLimits(
   input: Record<string, unknown>
 ) {
   return (
-    ensureTextLimit(res, input.id, '专辑 ID', CONTENT_LIMITS.album.id) &&
-    ensureTextLimit(res, input.sourceId, '来源 ID', CONTENT_LIMITS.album.sourceId) &&
     ensureTextLimit(res, input.title, '专辑标题', CONTENT_LIMITS.album.title) &&
     ensureTextLimit(res, input.artist, '艺人', CONTENT_LIMITS.album.artist) &&
     ensureTextLimit(res, input.description, '专辑描述', CONTENT_LIMITS.album.description) &&
-    ensureTextLimit(res, input.platformUrl, '平台链接', CONTENT_LIMITS.album.platformUrl) &&
-    ensureTextLimit(res, input.cover, '封面链接', CONTENT_LIMITS.album.cover) &&
-    ensureTextLimit(
-      res,
-      input.defaultCoverSource,
-      '默认封面来源',
-      CONTENT_LIMITS.album.defaultCoverSource
-    ) &&
     ensureTextLimit(res, input.name, 'Disc 名称', CONTENT_LIMITS.album.discName)
   )
 }
 
 async function deleteAlbumCoverById(albumDocId: string, coverId: string) {
-  const cover = await prisma.albumCover.findFirst({
-    where: {
-      id: coverId,
-      albumDocId,
-    },
-  })
+  const [album, cover] = await Promise.all([
+    prisma.album.findUnique({ where: { docId: albumDocId }, select: { coverId: true } }),
+    prisma.albumCover.findFirst({
+      where: {
+        id: coverId,
+        albumDocId,
+      },
+    }),
+  ])
 
   if (!cover) return false
 
@@ -69,30 +61,29 @@ async function deleteAlbumCoverById(albumDocId: string, coverId: string) {
   const remaining = await prisma.albumCover.findMany({
     where: { albumDocId },
     orderBy: { sortOrder: 'asc' },
+    select: {
+      id: true,
+      isDefault: true,
+    },
   })
 
-  if (!remaining.length) {
+  if (!remaining.length && album?.coverId === coverId) {
     await prisma.album.update({
       where: { docId: albumDocId },
-      data: {
-        defaultCoverSource: 'old_cover',
-        cover: '',
-      },
+      data: { coverId: null },
     })
-  } else {
-    const hasDefault = remaining.some((item) => item.isDefault)
-    const first = remaining[0]
-    if (!hasDefault) {
-      await prisma.albumCover.update({
-        where: { id: first.id },
-        data: { isDefault: true },
-      })
+  } else if (album?.coverId === coverId || cover.isDefault) {
+    const fallback = remaining.find((item) => item.isDefault) || remaining[0]
+    if (fallback && album?.coverId === coverId) {
       await prisma.album.update({
         where: { docId: albumDocId },
-        data: {
-          defaultCoverSource: `album_cover:${first.id}`,
-          cover: first.publicUrl,
-        },
+        data: { coverId: fallback.id },
+      })
+    }
+    if (fallback && !fallback.isDefault) {
+      await prisma.albumCover.update({
+        where: { id: fallback.id },
+        data: { isDefault: true },
       })
     }
   }
@@ -104,19 +95,17 @@ async function deleteAlbumCoverById(albumDocId: string, coverId: string) {
 router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
     const platform = parseMusicPlatform(req.query.platform)
-    const resourceType = parseMusicCollectionType(req.query.resourceType)
     const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 })
     const page = parseInteger(req.query.page, 1, { min: 1 })
     const skip = (page - 1) * limit
 
     const where = {
       deletedAt: null,
-      ...(platform ? { platform } : {}),
-      ...(resourceType ? { resourceType } : {}),
+      ...(platform ? { externalSources: { some: { platform } } } : {}),
     }
 
     if (!req.authUser) {
-      const cacheKey = `album_list:${platform || 'all'}:${resourceType || 'all'}:${page}:${limit}`
+      const cacheKey = `album_list:${platform || 'all'}:${page}:${limit}`
       const cached = enhancedCache.get(cacheKey)
       if (cached) {
         res.json(cached)
@@ -129,17 +118,11 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
         where,
         select: {
           docId: true,
-          id: true,
-          resourceType: true,
-          platform: true,
-          sourceId: true,
           title: true,
           artist: true,
-          cover: true,
           description: true,
-          platformUrl: true,
+          coverId: true,
           releaseDate: true,
-          defaultCoverSource: true,
           createdAt: true,
           updatedAt: true,
           covers: {
@@ -150,6 +133,9 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
               isDefault: true,
               sortOrder: true,
             },
+          },
+          externalSources: {
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
           },
           _count: {
             select: { songRelations: true },
@@ -164,27 +150,8 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
 
     const result = {
       albums: albums.map((album) => ({
-        docId: album.docId,
-        id: album.id,
-        resourceType: album.resourceType,
-        platform: album.platform,
-        sourceId: album.sourceId,
-        title: album.title,
-        artist: album.artist,
-        cover: album.cover,
-        description: album.description,
-        platformUrl: album.platformUrl,
-        releaseDate: album.releaseDate ? album.releaseDate.toISOString().slice(0, 10) : null,
-        defaultCoverSource: album.defaultCoverSource,
-        covers: album.covers.map((cover) => ({
-          id: cover.id,
-          url: cover.publicUrl,
-          isDefault: cover.isDefault,
-          sortOrder: cover.sortOrder,
-        })),
+        ...toAlbumResponse(album),
         trackCount: album._count.songRelations,
-        createdAt: album.createdAt.toISOString(),
-        updatedAt: album.updatedAt.toISOString(),
       })),
       total,
       page,
@@ -193,7 +160,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     }
 
     if (!req.authUser) {
-      const cacheKey = `album_list:${platform || 'all'}:${resourceType || 'all'}:${page}:${limit}`
+      const cacheKey = `album_list:${platform || 'all'}:${page}:${limit}`
       enhancedCache.set(cacheKey, result, 120)
     }
 
@@ -214,19 +181,11 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
         covers: {
           orderBy: { sortOrder: 'asc' },
         },
+        externalSources: {
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        },
       },
     })
-
-    if (!album) {
-      album = await prisma.album.findUnique({
-        where: { id: identifier },
-        include: {
-          covers: {
-            orderBy: { sortOrder: 'asc' },
-          },
-        },
-      })
-    }
 
     if (!album || album.deletedAt) {
       res.status(404).json({ error: '专辑不存在' })
@@ -252,6 +211,9 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
                 },
               },
               orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+            },
+            externalSources: {
+              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
             },
           },
         },
@@ -286,24 +248,10 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
       songRelations: relations,
     })
 
-    const coverFromDefault = (() => {
-      const source =
-        typeof album.defaultCoverSource === 'string' ? album.defaultCoverSource.trim() : ''
-      if (!source) return ''
-      if (source === 'old_cover') return album.cover || ''
-      if (source.startsWith('album_cover:')) {
-        const id = source.slice('album_cover:'.length)
-        const matched = (album.covers || []).find((cover) => cover.id === id)
-        return matched?.publicUrl || ''
-      }
-      return ''
-    })()
-
     res.json({
       album: {
         ...albumResponse,
         id: album.docId,
-        cover: coverFromDefault || album.cover,
         tracks,
         discs: normalizeTrackDiscPayload(album.tracks),
       },
@@ -385,16 +333,11 @@ router.post('/', requireAdmin, async (req, res) => {
     const body = (req.body || {}) as Record<string, unknown>
     const title = typeof body.title === 'string' ? body.title.trim() : ''
     const artist = typeof body.artist === 'string' ? body.artist.trim() : ''
-    const id = typeof body.id === 'string' ? body.id.trim() : ''
-    const sourceId = typeof body.sourceId === 'string' ? body.sourceId.trim() : id
-    const platform = parseMusicPlatform(body.platform) || 'netease'
-    const resourceType = parseMusicCollectionType(body.resourceType) || 'album'
     const description = typeof body.description === 'string' ? body.description.trim() : null
-    const platformUrl = typeof body.platformUrl === 'string' ? body.platformUrl.trim() : null
     const hasReleaseDate = Object.prototype.hasOwnProperty.call(body, 'releaseDate')
     const releaseDate = hasReleaseDate ? normalizeOptionalDateOnly(body.releaseDate) : null
-    const cover = typeof body.cover === 'string' ? body.cover.trim() : ''
     const tracks = normalizeTrackDiscPayload(body.tracks)
+    const sources = normalizeMusicExternalSourceInputs(body.sources)
     if (!ensureAlbumTextLimits(res, body)) {
       return
     }
@@ -408,42 +351,65 @@ router.post('/', requireAdmin, async (req, res) => {
       return
     }
 
-    const finalSourceId = sourceId || id || `${Date.now()}`
-    const finalId = id || `${platform}_${resourceType}_${finalSourceId}`
-
-    const existing = await prisma.album.findUnique({ where: { id: finalId } })
-    if (existing) {
-      res.status(409).json({ error: '专辑已存在' })
-      return
+    if (sources.length) {
+      const existingSource = await prisma.musicExternalSource.findFirst({
+        where: {
+          resourceType: 'album',
+          OR: sources.map((source) => ({
+            platform: source.platform,
+            sourceId: source.sourceId,
+          })),
+        },
+      })
+      if (existingSource) {
+        res.status(409).json({ error: '专辑来源已存在' })
+        return
+      }
     }
 
     const created = await prisma.album.create({
       data: {
-        id: finalId,
-        resourceType,
-        platform,
-        sourceId: finalSourceId,
         title,
         artist,
         description,
-        platformUrl,
         releaseDate,
-        cover,
         tracks,
+        ...(sources.length
+          ? {
+              externalSources: {
+                create: sources.map((source) => ({
+                  resourceType: 'album' as const,
+                  platform: source.platform,
+                  sourceId: source.sourceId,
+                  sourceUrl: source.sourceUrl,
+                  isPrimary: source.isPrimary,
+                })),
+              },
+            }
+          : {}),
       },
       include: {
         covers: {
           orderBy: { sortOrder: 'asc' },
+        },
+        externalSources: {
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
         },
         songRelations: {
           include: {
             song: {
               select: {
                 docId: true,
-                id: true,
                 title: true,
                 artists: true,
-                cover: true,
+                coverId: true,
+                coverAlbumDocId: true,
+                covers: { orderBy: { sortOrder: 'asc' } },
+                albumRelations: {
+                  include: {
+                    album: { include: { covers: { orderBy: { sortOrder: 'asc' } } } },
+                  },
+                },
               },
             },
           },
@@ -482,8 +448,6 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
     if (typeof body.artist === 'string') updateData.artist = body.artist.trim()
     if (typeof body.description === 'string' || body.description === null)
       updateData.description = body.description
-    if (typeof body.platformUrl === 'string' || body.platformUrl === null)
-      updateData.platformUrl = body.platformUrl
     if (Object.prototype.hasOwnProperty.call(body, 'releaseDate')) {
       const releaseDate = normalizeOptionalDateOnly(body.releaseDate)
       if (releaseDate === undefined) {
@@ -491,16 +455,6 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
         return
       }
       updateData.releaseDate = releaseDate
-    }
-    if (typeof body.cover === 'string') updateData.cover = body.cover.trim()
-
-    const platform = parseMusicPlatform(body.platform)
-    if (platform) updateData.platform = platform
-    const resourceType = parseMusicCollectionType(body.resourceType)
-    if (resourceType) updateData.resourceType = resourceType
-    if (typeof body.sourceId === 'string') updateData.sourceId = body.sourceId.trim()
-    if (typeof body.defaultCoverSource === 'string' || body.defaultCoverSource === null) {
-      updateData.defaultCoverSource = body.defaultCoverSource
     }
     if (!ensureAlbumTextLimits(res, body)) {
       return
@@ -512,22 +466,73 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
       await applyAlbumTracksToRelations(docId, normalizedTracks)
     }
 
-    const updated = await prisma.album.update({
+    const shouldReplaceSources = Object.prototype.hasOwnProperty.call(body, 'sources')
+    const sources = shouldReplaceSources ? normalizeMusicExternalSourceInputs(body.sources) : []
+    if (sources.length) {
+      const conflict = await prisma.musicExternalSource.findFirst({
+        where: {
+          resourceType: 'album',
+          OR: sources.map((source) => ({
+            platform: source.platform,
+            sourceId: source.sourceId,
+          })),
+          albumDocId: { not: docId },
+        },
+      })
+      if (conflict) {
+        res.status(409).json({ error: '专辑来源已存在' })
+        return
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.album.update({
+        where: { docId },
+        data: updateData,
+      })
+      if (shouldReplaceSources) {
+        await tx.musicExternalSource.deleteMany({
+          where: { resourceType: 'album', albumDocId: docId },
+        })
+        if (sources.length) {
+          await tx.musicExternalSource.createMany({
+            data: sources.map((source) => ({
+              resourceType: 'album',
+              albumDocId: docId,
+              platform: source.platform,
+              sourceId: source.sourceId,
+              sourceUrl: source.sourceUrl,
+              isPrimary: source.isPrimary,
+            })),
+          })
+        }
+      }
+    })
+
+    const updated = await prisma.album.findUniqueOrThrow({
       where: { docId },
-      data: updateData,
       include: {
         covers: {
           orderBy: { sortOrder: 'asc' },
+        },
+        externalSources: {
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
         },
         songRelations: {
           include: {
             song: {
               select: {
                 docId: true,
-                id: true,
                 title: true,
                 artists: true,
-                cover: true,
+                coverId: true,
+                coverAlbumDocId: true,
+                covers: { orderBy: { sortOrder: 'asc' } },
+                albumRelations: {
+                  include: {
+                    album: { include: { covers: { orderBy: { sortOrder: 'asc' } } } },
+                  },
+                },
               },
             },
           },
@@ -624,14 +629,6 @@ router.post('/:docId/covers', requireAdmin, async (req, res) => {
     }
 
     const cover = await addAlbumCoverFromAsset(albumDocId, assetId, isDefault)
-    if (isDefault) {
-      await prisma.album.update({
-        where: { docId: albumDocId },
-        data: {
-          cover: cover.publicUrl,
-        },
-      })
-    }
 
     res.status(201).json({
       cover: {
@@ -731,10 +728,7 @@ router.patch('/:docId/covers/:coverId/default', requireAdmin, async (req, res) =
     })
     await prisma.album.update({
       where: { docId: albumDocId },
-      data: {
-        defaultCoverSource: `album_cover:${coverId}`,
-        cover: cover.publicUrl,
-      },
+      data: { coverId },
     })
 
     res.json({ success: true })
@@ -748,7 +742,6 @@ router.patch('/:docId/covers/:coverId/default', requireAdmin, async (req, res) =
 router.post('/:docId/sync-covers-to-songs', requireAdmin, async (req, res) => {
   try {
     const albumDocId = req.params.docId
-    const coverId = typeof req.body?.coverId === 'string' ? req.body.coverId.trim() : ''
     const songDocIdsRaw = Array.isArray(req.body?.songDocIds) ? req.body.songDocIds : []
     const songDocIds = songDocIdsRaw
       .filter((item: unknown): item is string => typeof item === 'string')
@@ -766,14 +759,12 @@ router.post('/:docId/sync-covers-to-songs', requireAdmin, async (req, res) => {
       return
     }
 
-    let selectedCover: AlbumCover | null = null
-    if (coverId) {
-      selectedCover = album.covers.find((item) => item.id === coverId) || null
-    }
-    if (!selectedCover) {
-      selectedCover = album.covers.find((item) => item.isDefault) || album.covers[0] || null
-    }
-    if (!selectedCover) {
+    const hasDisplayCover = Boolean(
+      album.covers.find((item) => item.id === album.coverId) ||
+      album.covers.find((item) => item.isDefault) ||
+      album.covers[0]
+    )
+    if (!hasDisplayCover) {
       res.status(400).json({ error: '专辑没有可同步的封面' })
       return
     }
@@ -799,18 +790,14 @@ router.post('/:docId/sync-covers-to-songs', requireAdmin, async (req, res) => {
         docId: { in: targetSongDocIds },
       },
       data: {
-        cover: selectedCover.publicUrl,
-        defaultCoverSource: `album_cover:${selectedCover.id}`,
+        coverId: null,
+        coverAlbumDocId: albumDocId,
       },
     })
 
     res.json({
       success: true,
       syncedCount: targetSongDocIds.length,
-      cover: {
-        id: selectedCover.id,
-        url: selectedCover.publicUrl,
-      },
     })
   } catch (error) {
     console.error('Sync album covers error:', error)

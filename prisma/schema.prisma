@@ -104,9 +104,9 @@ enum DisplayAlbumMode {
   manual
 }
 
-enum MusicCollectionType {
+enum MusicExternalResourceType {
+  song
   album
-  playlist
 }
 
 enum StorageType {
@@ -175,7 +175,6 @@ model User {
   wikiReviewedPullRequests WikiPullRequest[] @relation("WikiPullRequestReviewer")
   wikiPullRequestComments WikiPullRequestComment[] @relation("WikiPRCommentAuthor")
   galleries     Gallery[]      @relation("UserGalleries")
-  musicAdded    MusicTrack[]   @relation("MusicAddedBy")
   postLikes     PostLike[]
   postDislikes  PostDislike[] @relation("UserDislikes")
   wikiLikes     WikiLike[]
@@ -773,36 +772,32 @@ model PostImageEmbedding {
 
 model Album {
   docId              String              @id @default(cuid())
-  id                 String              @unique
-  resourceType       MusicCollectionType @default(album)
-  platform           MusicPlatform
-  sourceId           String
   title              String
   artist             String
-  cover              String
   description        String?
-  platformUrl        String?
   tracks             Json?
   releaseDate        DateTime?           @db.Date
-  defaultCoverSource String?
+  coverId            String?
   deletedAt          DateTime?
   deletedBy          String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
-  covers             AlbumCover[]
+  covers             AlbumCover[]        @relation("AlbumCovers")
+  selectedCover      AlbumCover?         @relation("SelectedAlbumCover", fields: [coverId], references: [id], onDelete: SetNull)
   songRelations      SongAlbumRelation[]
   posts              Post[]
+  externalSources    MusicExternalSource[]
+  coverForSongs      MusicTrack[]        @relation("SongCoverAlbum")
 
-  @@unique([platform, sourceId, resourceType])
   @@index([title])
   @@index([artist])
+  @@index([coverId])
   @@index([createdAt])
   @@index([deletedAt])
 }
 
 model MusicTrack {
   docId     String   @id @default(cuid())
-  id        String   @unique
   title     String
   artists   String[] @default([])
   lyricists String[] @default([])
@@ -810,45 +805,53 @@ model MusicTrack {
   arrangers String[] @default([])
   vocals    String[] @default([])
   album     String   @default("")
-  cover     String   @default("")
   audioUrl  String   @default("")
   lyric     String?
   description String?
   releaseDate DateTime? @db.Date
   durationMs  Int?
-  primaryPlatform    MusicPlatform   @default(netease)
-  enabledPlatform    MusicPlatform?
-  neteaseId          String?
-  tencentId          String?
-  kugouId            String?
-  baiduId            String?
-  kuwoId             String?
-  customPlatformIds  Json?
   customPlatformLinks Json?
   displayAlbumMode   DisplayAlbumMode @default(linked)
   manualAlbumName    String?
-  defaultCoverSource String?
-  addedBy   String?
+  coverId   String?
+  coverAlbumDocId String?
   deletedAt DateTime?
   deletedBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  adder     User?    @relation("MusicAddedBy", fields: [addedBy], references: [uid], onDelete: SetNull)
   posts     Post[]
-  covers    SongCover[]
+  covers    SongCover[] @relation("SongCovers")
+  selectedCover SongCover? @relation("SelectedSongCover", fields: [coverId], references: [id], onDelete: SetNull)
+  coverAlbum Album? @relation("SongCoverAlbum", fields: [coverAlbumDocId], references: [docId], onDelete: SetNull)
   albumRelations SongAlbumRelation[]
   instrumentalLinks   SongInstrumentalRelation[] @relation("SongInstrumentalSource")
   instrumentalForLinks SongInstrumentalRelation[] @relation("SongInstrumentalTarget")
+  externalSources MusicExternalSource[]
 
-  @@index([primaryPlatform])
-  @@index([enabledPlatform])
-  @@index([neteaseId])
-  @@index([tencentId])
-  @@index([kugouId])
-  @@index([baiduId])
-  @@index([kuwoId])
+  @@index([coverId])
+  @@index([coverAlbumDocId])
   @@index([createdAt])
   @@index([deletedAt])
+}
+
+model MusicExternalSource {
+  id           String                    @id @default(cuid())
+  resourceType MusicExternalResourceType
+  songDocId    String?
+  albumDocId   String?
+  platform     MusicPlatform
+  sourceId     String
+  sourceUrl    String?
+  isPrimary    Boolean                   @default(false)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  song         MusicTrack?                @relation(fields: [songDocId], references: [docId], onDelete: Cascade)
+  album        Album?                     @relation(fields: [albumDocId], references: [docId], onDelete: Cascade)
+
+  @@unique([resourceType, platform, sourceId])
+  @@index([songDocId])
+  @@index([albumDocId])
+  @@index([platform, sourceId])
 }
 
 model SongCover {
@@ -861,7 +864,8 @@ model SongCover {
   sortOrder  Int       @default(0)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-  song       MusicTrack @relation(fields: [songDocId], references: [docId], onDelete: Cascade)
+  song       MusicTrack @relation("SongCovers", fields: [songDocId], references: [docId], onDelete: Cascade)
+  selectedBySongs MusicTrack[] @relation("SelectedSongCover")
   asset      MediaAsset? @relation("SongCoverAsset", fields: [assetId], references: [id], onDelete: SetNull)
 
   @@index([songDocId, sortOrder])
@@ -878,7 +882,8 @@ model AlbumCover {
   sortOrder  Int       @default(0)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-  album      Album     @relation(fields: [albumDocId], references: [docId], onDelete: Cascade)
+  album      Album     @relation("AlbumCovers", fields: [albumDocId], references: [docId], onDelete: Cascade)
+  selectedByAlbums Album[] @relation("SelectedAlbumCover")
   asset      MediaAsset? @relation("AlbumCoverAsset", fields: [assetId], references: [id], onDelete: SetNull)
 
   @@index([albumDocId, sortOrder])

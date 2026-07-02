@@ -366,14 +366,20 @@ describe('apiTypes', () => {
           },
         ],
         total: 2,
+        page: 1,
+        limit: 20,
+        hasMore: false,
       }
       const result = musicListResponseSchema.parse(data)
       expect(result.songs).toHaveLength(2)
       expect(result.total).toBe(2)
+      expect(result.page).toBe(1)
+      expect(result.limit).toBe(20)
+      expect(result.hasMore).toBe(false)
     })
 
     it('should parse valid music list with empty songs', () => {
-      const data = { songs: [], total: 0 }
+      const data = { songs: [], total: 0, page: 1, limit: 20, hasMore: false }
       const result = musicListResponseSchema.parse(data)
       expect(result.songs).toEqual([])
       expect(result.total).toBe(0)

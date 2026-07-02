@@ -47,6 +47,7 @@
     "embeddings:sync": "tsx scripts/sync-image-embeddings.ts",
     "embeddings:enqueue": "tsx scripts/sync-image-embeddings.ts --enqueue-only",
     "uploads:cleanup": "tsx scripts/cleanup-orphan-uploads.ts",
+    "songs:import": "tsx scripts/import-songs.ts",
     "regions:import": "tsx scripts/import-regions.ts",
     "validate:migrations": "tsx scripts/validate-migrations.ts",
     "check:build": "tsx scripts/check-build-size.ts"

@@ -236,7 +236,7 @@ export function formatFileSize(bytes: number): string {
 
 // ─── 备份清理 ───────────────────────────────────────────────────────
 
-export async function cleanupOldBackups(): Promise<void> {
+export async function cleanupOldBackups(skipFiles?: string[]): Promise<void> {
   try {
     const backupFilenames = (await fs.promises.readdir(backupsDir)).filter(
       (f) => f.startsWith('backup_') && f.endsWith('.zip')
@@ -252,7 +252,7 @@ export async function cleanupOldBackups(): Promise<void> {
     ).sort((a, b) => b.mtime - a.mtime)
 
     if (files.length > BACKUP_RETAIN_COUNT) {
-      const toDelete = files.slice(BACKUP_RETAIN_COUNT)
+      const toDelete = files.slice(BACKUP_RETAIN_COUNT).filter((f) => !skipFiles?.includes(f.name))
       for (const file of toDelete) {
         await fs.promises.unlink(path.join(backupsDir, file.name))
         if (sanitizeFilename(file.name)) {

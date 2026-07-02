@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import path from 'path'
+import sharp from 'sharp'
 import { prisma } from '../../../src/server/prisma'
 
 // 定义 mock 函数（必须在 vi.mock 之前）
@@ -182,6 +183,28 @@ describe('VariantGenerator - 队列管理', () => {
       mockAccess.mockResolvedValue(undefined)
       vi.useRealTimers()
     }
+  })
+
+  it('禁用入队即处理时只应保留队列任务', async () => {
+    const module = await import('../../../src/server/services/variantGenerator')
+    const VariantGenerator = module.VariantGenerator
+    const queuedOnlyGenerator = new VariantGenerator({
+      autoStart: false,
+      processOnEnqueue: false,
+    })
+
+    await queuedOnlyGenerator.enqueue({
+      imageMapId: 'queued-only-1',
+      localFilePath: '/uploads/queued-only.png',
+      priority: 'normal' as const,
+    })
+
+    expect(queuedOnlyGenerator.getQueueStats()).toMatchObject({
+      queueLength: 1,
+      processingCount: 0,
+    })
+    expect(sharp).not.toHaveBeenCalled()
+    expect(prisma.imageMap.update).not.toHaveBeenCalled()
   })
 })
 

@@ -95,24 +95,20 @@ const mockGalleries: GalleryItem[] = [
 const mockSongs: SongItem[] = [
   {
     docId: 'song-1',
-    id: '1001',
     title: '吹梦到西洲',
     artists: ['黄诗扶'],
     album: '人间不值得',
     cover: '/uploads/song-1.jpg',
     audioUrl: '',
-    primaryPlatform: 'netease',
     createdAt: '2024-02-01T00:00:00.000Z',
   },
   {
     docId: 'song-2',
-    id: '1002',
     title: '九万字',
     artists: ['黄诗扶'],
     album: '九万字',
     cover: '/uploads/song-2.jpg',
     audioUrl: '',
-    primaryPlatform: 'netease',
     createdAt: '2024-02-02T00:00:00.000Z',
   },
 ]
@@ -120,7 +116,6 @@ const mockSongs: SongItem[] = [
 const mockAlbums: AlbumItem[] = [
   {
     docId: 'album-1',
-    id: 'album-source-1',
     title: '精选专辑',
     artist: '黄诗扶',
     cover: '/uploads/album-1.jpg',

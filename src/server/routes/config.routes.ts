@@ -22,7 +22,6 @@ import {
   getPresignedDownloadUrl,
   getPresignedDeleteUrl,
   getPublicConfig,
-  validateS3Config,
 } from '../s3/s3Service'
 import {
   startSyncTask,
@@ -121,6 +120,12 @@ router.patch('/email-verification', requireAuth, requireSuperAdmin, async (req, 
       smtpFrom,
       smtpPass,
       clearSmtpPass,
+      verificationSubject,
+      verificationTextBody,
+      verificationHtmlBody,
+      resetSubject,
+      resetTextBody,
+      resetHtmlBody,
     } = body
 
     if (typeof enabled !== 'boolean') {
@@ -187,6 +192,12 @@ router.patch('/email-verification', requireAuth, requireSuperAdmin, async (req, 
       smtpFrom: normalizedSmtpFrom,
       ...(typeof smtpPass === 'string' && smtpPass ? { smtpPass } : {}),
       ...(clearSmtpPass === true ? { smtpPass: '' } : {}),
+      ...(typeof verificationSubject === 'string' ? { verificationSubject } : {}),
+      ...(typeof verificationTextBody === 'string' ? { verificationTextBody } : {}),
+      ...(typeof verificationHtmlBody === 'string' ? { verificationHtmlBody } : {}),
+      ...(typeof resetSubject === 'string' ? { resetSubject } : {}),
+      ...(typeof resetTextBody === 'string' ? { resetTextBody } : {}),
+      ...(typeof resetHtmlBody === 'string' ? { resetHtmlBody } : {}),
     })
     res.json({ success: true, config: toEmailVerificationAdminConfig(config) })
   } catch (error) {

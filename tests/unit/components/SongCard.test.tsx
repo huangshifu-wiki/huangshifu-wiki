@@ -54,24 +54,28 @@ vi.mock('../../../src/lib/i18n', () => ({
 
 const mockSong = {
   docId: 'song-001',
-  id: '12345',
   title: '测试歌曲名',
   artists: ['测试歌手'],
   album: '测试专辑',
   cover: '',
   audioUrl: '',
-  primaryPlatform: 'netease' as const,
+  sources: [
+    {
+      id: 'source-001',
+      resourceType: 'song' as const,
+      platform: 'netease' as const,
+      sourceId: '12345',
+      isPrimary: true,
+    },
+  ],
   favoritedByMe: false,
 }
 
 const defaultProps = {
   song: mockSong,
-  isBatchMode: false,
-  isSelected: false,
   isCurrentSong: false,
   isFavoriting: false,
   onPlay: vi.fn(),
-  onToggleSelect: vi.fn(),
   onToggleFavorite: vi.fn(),
 }
 
@@ -91,6 +95,49 @@ describe('SongCard', () => {
     const html = container.innerHTML
     expect(html).toContain('测试歌手')
     expect(html).toContain('测试专辑')
+    expect(container.querySelectorAll('.bg-border.rounded-full')).toHaveLength(1)
+  })
+
+  it('hides album and its separator when display album is disabled', () => {
+    const { container } = renderWithRouter(
+      <SongCard
+        {...defaultProps}
+        song={{
+          ...mockSong,
+          displayAlbum: {
+            mode: 'none',
+            albumDocId: null,
+            title: '',
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('测试歌手')).toBeInTheDocument()
+    expect(screen.queryByText('测试专辑')).not.toBeInTheDocument()
+    expect(container.querySelectorAll('.bg-border.rounded-full')).toHaveLength(0)
+  })
+
+  it('keeps release date separated when album is hidden', () => {
+    const { container } = renderWithRouter(
+      <SongCard
+        {...defaultProps}
+        song={{
+          ...mockSong,
+          releaseDate: '2024-01-02',
+          displayAlbum: {
+            mode: 'none',
+            albumDocId: null,
+            title: '',
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('测试歌手')).toBeInTheDocument()
+    expect(screen.getByText('发行日期：2024-01-02')).toBeInTheDocument()
+    expect(screen.queryByText('测试专辑')).not.toBeInTheDocument()
+    expect(container.querySelectorAll('.bg-border.rounded-full')).toHaveLength(1)
   })
 
   it('has button role with correct aria-label', () => {
@@ -98,6 +145,12 @@ describe('SongCard', () => {
     const button = container.querySelector('[role="button"]')
     expect(button).toBeInTheDocument()
     expect(button).toHaveAttribute('aria-label', '测试歌曲名 - 测试歌手')
+  })
+
+  it('renders sequence number in list layout', () => {
+    renderWithRouter(<SongCard {...defaultProps} sequenceNumber={51} />)
+
+    expect(screen.getByText('51')).toBeInTheDocument()
   })
 
   it('shows cover play button with correct aria-label', () => {
@@ -125,16 +178,6 @@ describe('SongCard', () => {
     expect(screen.queryByLabelText(/删除/)).not.toBeInTheDocument()
   })
 
-  it('in batch mode renders a select-style button', () => {
-    renderWithRouter(<SongCard {...defaultProps} isBatchMode={true} />)
-    expect(screen.getByText('选择')).toBeInTheDocument()
-  })
-
-  it('in batch mode with selected shows selected text', () => {
-    renderWithRouter(<SongCard {...defaultProps} isBatchMode={true} isSelected={true} />)
-    expect(screen.getByText('已选')).toBeInTheDocument()
-  })
-
   it('highlights current song with themed background class', () => {
     const { container } = renderWithRouter(<SongCard {...defaultProps} isCurrentSong={true} />)
     const row = container.firstElementChild
@@ -149,8 +192,35 @@ describe('SongCard', () => {
     expect(container.querySelector('.aspect-square')).toBeInTheDocument()
   })
 
+  it('does not render sequence number in grid layout', () => {
+    renderWithRouter(<SongCard {...defaultProps} sequenceNumber={51} viewMode="medium" />)
+
+    expect(screen.queryByText('51')).not.toBeInTheDocument()
+  })
+
   it('keeps compact grid cards from rendering album metadata', () => {
     renderWithRouter(<SongCard {...defaultProps} viewMode="small" />)
+
+    expect(screen.queryByText('测试专辑')).not.toBeInTheDocument()
+    expect(screen.getByText('测试歌手')).toBeInTheDocument()
+  })
+
+  it('does not render an empty album row in grid layout', () => {
+    renderWithRouter(
+      <SongCard
+        {...defaultProps}
+        viewMode="medium"
+        song={{
+          ...mockSong,
+          album: '',
+          displayAlbum: {
+            mode: 'manual',
+            albumDocId: null,
+            title: '',
+          },
+        }}
+      />
+    )
 
     expect(screen.queryByText('测试专辑')).not.toBeInTheDocument()
     expect(screen.getByText('测试歌手')).toBeInTheDocument()

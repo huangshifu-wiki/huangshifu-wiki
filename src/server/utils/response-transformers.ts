@@ -5,12 +5,14 @@ import { serializeTags } from './parsers'
 import {
   resolveSongDisplayAlbum,
   resolveSongCoverUrl,
+  resolveAlbumCoverUrl,
   normalizeSongCustomPlatformLinks,
 } from './music'
 
 import { Prisma, UserRole as PrismaUserRole } from '@prisma/client'
 import type { VariantStatus } from '@prisma/client'
 import { normalizeStringListInput } from '../../lib/musicCredits'
+import { isPlayableSong } from '../../lib/musicPlayback'
 import { RELATION_TYPE_LABELS } from '../../lib/relationConstants'
 
 import type {
@@ -24,12 +26,12 @@ import type {
   PostSortType,
   MusicPlatform,
   DisplayAlbumMode,
-  MusicCollectionType,
   WikiRelationRecord,
   WikiRelationResolved,
   WikiRelationGraphNode,
   WikiRelationGraphEdge,
   MusicTrackWithRelations,
+  MusicExternalSourceRecord,
   PlayUrlCacheValue,
   ImportSongInput,
   SongCustomPlatformLink,
@@ -56,6 +58,19 @@ const RELATION_LABEL_TO_TYPE: Record<string, WikiRelationType> = Object.fromEntr
 
 function formatDateOnly(value?: Date | null) {
   return value ? value.toISOString().slice(0, 10) : null
+}
+
+function serializeMusicExternalSources(sources: MusicExternalSourceRecord[]) {
+  return sources.map((source) => ({
+    id: source.id,
+    resourceType: source.resourceType,
+    platform: source.platform,
+    sourceId: source.sourceId,
+    sourceUrl: source.sourceUrl,
+    isPrimary: source.isPrimary,
+    createdAt: source.createdAt.toISOString(),
+    updatedAt: source.updatedAt.toISOString(),
+  }))
 }
 
 function parseBoolean(value: unknown, fallback = false) {
@@ -471,8 +486,7 @@ function resolveGalleryImageLocalUrl(image: GalleryInput['images'][number]) {
 
 function resolveImageUrl(
   image: GalleryInput['images'][number],
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>,
-  storageStrategy: 'local' | 's3' | 'external'
+  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
 ) {
   let url = image.asset?.publicUrl || image.url
   const localUrl = resolveGalleryImageLocalUrl(image)
@@ -481,18 +495,7 @@ function resolveImageUrl(
     const imageMap = imageMapByLocalUrl.get(localUrl)
 
     if (imageMap) {
-      switch (storageStrategy) {
-        case 'external':
-          url = imageMap.externalUrl || imageMap.s3Url || imageMap.localUrl || url
-          break
-        case 's3':
-          url = imageMap.s3Url || imageMap.externalUrl || imageMap.localUrl || url
-          break
-        case 'local':
-        default:
-          url = imageMap.localUrl || url
-          break
-      }
+      url = imageMap.localUrl || url
     }
   }
 
@@ -525,24 +528,7 @@ function resolveThumbnailStatus(
 }
 
 export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?: string) {
-  let resolvedStorageStrategy: 'local' | 's3' | 'external' = 'local'
-
-  if (storageStrategy && ['local', 's3', 'external'].includes(storageStrategy)) {
-    resolvedStorageStrategy = storageStrategy as 'local' | 's3' | 'external'
-  } else {
-    try {
-      const storageConfig = await prisma.siteConfig.findUnique({
-        where: { key: 'image_preference' },
-        select: { value: true },
-      })
-      const preference = storageConfig?.value as
-        | { strategy?: 'local' | 's3' | 'external' }
-        | undefined
-      resolvedStorageStrategy = preference?.strategy || 'local'
-    } catch (error) {
-      console.warn('Failed to get storage strategy:', error)
-    }
-  }
+  void storageStrategy
 
   const localUrls: string[] = []
   for (const img of gallery.images) {
@@ -605,7 +591,7 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
         id: image.id,
         assetId: image.assetId || image.asset?.id || null,
         url: resolveThumbnailUrl(image, imageMapByLocalUrl) || '',
-        originalUrl: resolveImageUrl(image, imageMapByLocalUrl, resolvedStorageStrategy),
+        originalUrl: resolveImageUrl(image, imageMapByLocalUrl),
         thumbnailUrl: resolveThumbnailUrl(image, imageMapByLocalUrl),
         thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
         name: image.asset?.fileName || image.name,
@@ -617,25 +603,7 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
 
 export async function toGalleryListResponse(galleries: GalleryInput[], storageStrategy?: string) {
   if (galleries.length === 0) return []
-
-  let resolvedStorageStrategy: 'local' | 's3' | 'external' = 'local'
-
-  if (storageStrategy && ['local', 's3', 'external'].includes(storageStrategy)) {
-    resolvedStorageStrategy = storageStrategy as 'local' | 's3' | 'external'
-  } else {
-    try {
-      const storageConfig = await prisma.siteConfig.findUnique({
-        where: { key: 'image_preference' },
-        select: { value: true },
-      })
-      const preference = storageConfig?.value as
-        | { strategy?: 'local' | 's3' | 'external' }
-        | undefined
-      resolvedStorageStrategy = preference?.strategy || 'local'
-    } catch (error) {
-      console.warn('Failed to get storage strategy:', error)
-    }
-  }
+  void storageStrategy
 
   const allLocalUrls: string[] = []
   for (const gallery of galleries) {
@@ -700,7 +668,7 @@ export async function toGalleryListResponse(galleries: GalleryInput[], storageSt
         id: image.id,
         assetId: image.assetId || image.asset?.id || null,
         url: resolveThumbnailUrl(image, imageMapByLocalUrl) || '',
-        originalUrl: resolveImageUrl(image, imageMapByLocalUrl, resolvedStorageStrategy),
+        originalUrl: resolveImageUrl(image, imageMapByLocalUrl),
         thumbnailUrl: resolveThumbnailUrl(image, imageMapByLocalUrl),
         thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
         name: image.asset?.fileName || image.name,
@@ -712,7 +680,6 @@ export async function toGalleryListResponse(galleries: GalleryInput[], storageSt
 
 export function toMusicResponse(track: {
   docId: string
-  id: string
   title: string
   artists: string[]
   lyricists?: string[]
@@ -720,30 +687,37 @@ export function toMusicResponse(track: {
   arrangers?: string[]
   vocals?: string[]
   album: string
-  cover: string
   audioUrl: string
   lyric?: string | null
   releaseDate?: Date | null
   durationMs?: number | null
-  primaryPlatform: string
-  enabledPlatform?: string | null
-  neteaseId?: string | null
-  tencentId?: string | null
-  kugouId?: string | null
-  baiduId?: string | null
-  kuwoId?: string | null
+  coverId?: string | null
+  coverAlbumDocId?: string | null
+  covers?: Array<{ id: string; publicUrl: string; isDefault?: boolean }>
+  albumRelations?: Array<{
+    album: {
+      docId: string
+      coverId: string | null
+      covers: Array<{ id: string; publicUrl: string; isDefault?: boolean }>
+    }
+  }>
+  externalSources?: MusicExternalSourceRecord[]
   displayAlbumMode: string
   manualAlbumName?: string | null
-  defaultCoverSource?: string | null
-  addedBy?: string | null
   deletedAt?: Date | null
   deletedBy?: string | null
   createdAt: Date
   updatedAt: Date
 }) {
+  const cover = resolveSongCoverUrl({
+    coverId: track.coverId ?? null,
+    coverAlbumDocId: track.coverAlbumDocId ?? null,
+    covers: track.covers || [],
+    albumRelations: track.albumRelations || [],
+  })
+
   return {
     docId: track.docId,
-    id: track.id,
     title: track.title,
     artists: normalizeStringListInput(track.artists),
     lyricists: normalizeStringListInput(track.lyricists),
@@ -751,23 +725,15 @@ export function toMusicResponse(track: {
     arrangers: normalizeStringListInput(track.arrangers),
     vocals: normalizeStringListInput(track.vocals),
     album: track.album,
-    cover: track.cover || track.defaultCoverSource || '',
+    cover,
     audioUrl: track.audioUrl,
     lyric: track.lyric || null,
     releaseDate: formatDateOnly(track.releaseDate),
     durationMs: track.durationMs ?? null,
-    primaryPlatform: track.primaryPlatform,
-    enabledPlatform: track.enabledPlatform || null,
-    platforms: {
-      netease: track.neteaseId,
-      tencent: track.tencentId,
-      kugou: track.kugouId,
-      baidu: track.baiduId,
-      kuwo: track.kuwoId,
-    },
+    sources: serializeMusicExternalSources(track.externalSources || []),
+    playable: isPlayableSong(track),
     displayAlbumMode: track.displayAlbumMode,
     manualAlbumName: track.manualAlbumName || null,
-    addedBy: track.addedBy || null,
     isDeleted: Boolean(track.deletedAt),
     deletedAt: track.deletedAt ? track.deletedAt.toISOString() : null,
     deletedBy: track.deletedBy ?? null,
@@ -883,7 +849,6 @@ export function toSongResponse(
 
   const base = {
     docId: song.docId,
-    id: song.id,
     title: song.title,
     artists: normalizeStringListInput(song.artists),
     lyricists: normalizeStringListInput(song.lyricists),
@@ -895,20 +860,14 @@ export function toSongResponse(
     audioUrl: song.audioUrl,
     releaseDate: formatDateOnly(song.releaseDate),
     durationMs: song.durationMs ?? null,
-    primaryPlatform: song.primaryPlatform,
-    enabledPlatform: song.enabledPlatform,
-    platformIds: {
-      neteaseId: song.neteaseId,
-      tencentId: song.tencentId,
-      kugouId: song.kugouId,
-      baiduId: song.baiduId,
-      kuwoId: song.kuwoId,
-    },
+    sources: serializeMusicExternalSources(song.externalSources),
+    playable: isPlayableSong(song),
     customPlatformLinks,
     displayAlbumMode: song.displayAlbumMode,
     displayAlbum,
     manualAlbumName: song.manualAlbumName,
-    defaultCoverSource: song.defaultCoverSource,
+    coverId: song.coverId,
+    coverAlbumDocId: song.coverAlbumDocId,
     covers: song.covers.map((cover) => ({
       id: cover.id,
       url: cover.publicUrl,
@@ -941,18 +900,12 @@ export function toSongResponse(
 
 export function toAlbumResponse(album: {
   docId: string
-  id: string
-  resourceType: MusicCollectionType
-  platform: MusicPlatform
-  sourceId: string
   title: string
   artist: string
-  cover: string
   description: string | null
-  platformUrl: string | null
-  tracks: Prisma.JsonValue
+  tracks?: Prisma.JsonValue
   releaseDate?: Date | null
-  defaultCoverSource: string | null
+  coverId: string | null
   deletedAt?: Date | null
   deletedBy?: string | null
   createdAt: Date
@@ -963,6 +916,7 @@ export function toAlbumResponse(album: {
     isDefault: boolean
     sortOrder: number
   }>
+  externalSources?: MusicExternalSourceRecord[]
   songRelations?: Array<{
     songDocId: string
     discNumber: number
@@ -970,27 +924,34 @@ export function toAlbumResponse(album: {
     isDisplay: boolean
     song?: {
       docId: string
-      id: string
       title: string
       artists: string[]
-      cover: string
+      coverId: string | null
+      coverAlbumDocId: string | null
+      covers: Array<{
+        id: string
+        publicUrl: string
+        isDefault: boolean
+      }>
+      albumRelations: MusicTrackWithRelations['albumRelations']
     }
   }>
 }) {
+  const coverUrl = resolveAlbumCoverUrl({
+    coverId: album.coverId,
+    covers: album.covers || [],
+  })
+
   return {
     docId: album.docId,
-    id: album.id,
-    resourceType: album.resourceType,
-    platform: album.platform,
-    sourceId: album.sourceId,
     title: album.title,
     artist: album.artist,
-    cover: album.cover,
+    cover: coverUrl,
     description: album.description,
-    platformUrl: album.platformUrl,
+    sources: serializeMusicExternalSources(album.externalSources || []),
     releaseDate: formatDateOnly(album.releaseDate),
     tracks: album.tracks || [],
-    defaultCoverSource: album.defaultCoverSource,
+    coverId: album.coverId,
     isDeleted: Boolean(album.deletedAt),
     deletedAt: album.deletedAt ? album.deletedAt.toISOString() : null,
     deletedBy: album.deletedBy ?? null,
@@ -1008,10 +969,9 @@ export function toAlbumResponse(album: {
       song: relation.song
         ? {
             docId: relation.song.docId,
-            id: relation.song.id,
             title: relation.song.title,
             artists: normalizeStringListInput(relation.song.artists),
-            cover: relation.song.cover,
+            cover: resolveSongCoverUrl(relation.song),
           }
         : null,
     })),

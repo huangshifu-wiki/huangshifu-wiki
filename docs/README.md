@@ -10,6 +10,7 @@
 
 ## 功能与运维
 
+- [批量导入歌曲](music-song-import.md)
 - [图片系统](IMAGE_SYSTEM.md)
 - [Blurhash 使用指南](BLURHASH_USAGE_GUIDE.md)
 - [S3 设置指南](S3_SETUP_GUIDE.md)

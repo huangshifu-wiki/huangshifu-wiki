@@ -20,7 +20,6 @@ import {
   parseFavoriteType,
   parseMusicPlatform,
   parseDisplayAlbumMode,
-  parseMusicCollectionType,
   parseBrowsingTargetType,
   parseModerationTargetType,
   normalizeModerationTargetType,
@@ -488,17 +487,6 @@ describe('parsers', () => {
 
     it('returns null for invalid modes', () => {
       expect(parseDisplayAlbumMode('grid')).toBeNull()
-    })
-  })
-
-  describe('parseMusicCollectionType', () => {
-    it('returns valid types', () => {
-      expect(parseMusicCollectionType('album')).toBe('album')
-      expect(parseMusicCollectionType('playlist')).toBe('playlist')
-    })
-
-    it('returns null for invalid types', () => {
-      expect(parseMusicCollectionType('single')).toBeNull()
     })
   })
 

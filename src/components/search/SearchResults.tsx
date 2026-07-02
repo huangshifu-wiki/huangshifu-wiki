@@ -61,10 +61,10 @@ function galleryToConfig(
 
 function musicToConfig(track: SongItem): import('./SearchResultCard').SearchResultCardConfig {
   return {
-    id: track.id,
+    id: track.docId,
     title: track.title,
     subtitle: `${formatMusicCredits(track.artists, '未知歌手')} — ${track.album}`,
-    link: `/music/${track.id}`,
+    link: `/music/${track.docId}`,
     image: track.cover || undefined,
     type: 'music',
   }
@@ -72,10 +72,10 @@ function musicToConfig(track: SongItem): import('./SearchResultCard').SearchResu
 
 function albumToConfig(album: AlbumItem): import('./SearchResultCard').SearchResultCardConfig {
   return {
-    id: album.id,
+    id: album.docId || album.title,
     title: album.title,
     subtitle: album.artist,
-    link: `/album/${album.id}`,
+    link: `/album/${album.docId}`,
     image: album.cover || undefined,
     meta: `${album.trackCount} 曲`,
     type: 'album',
@@ -419,7 +419,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                   <div className={resultGridClassName}>
                     {results.albums.map((album) => (
                       <SearchResultCard
-                        key={(album as AlbumItem).docId || (album as AlbumItem).id}
+                        key={(album as AlbumItem).docId}
                         config={albumToConfig(album as AlbumItem)}
                         viewMode={viewMode}
                         cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}

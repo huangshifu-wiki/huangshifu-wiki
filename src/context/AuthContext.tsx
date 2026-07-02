@@ -1,12 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import type { User } from '../lib/auth'
+import { auth, onAuthStateChanged, refreshAuthState } from '../lib/auth'
 import { UserPreferencesProvider } from './UserPreferencesContext'
 import type { UserProfile } from '../types/entities'
 import { setAuthErrorCallback, type AppError } from '../lib/errorHandler'
 
-// 延迟加载 auth 模块，避免首屏阻塞
-// 使用动态导入实现真正的懒加载
-type AuthModule = typeof import('../lib/auth')
 // 注意：项目使用基于 JWT 的自定义认证系统，不是 Firebase
 
 interface AuthContextType {
@@ -37,7 +35,6 @@ const LAZY_INIT_DELAY = 100 // 延迟初始化时间（毫秒），足够让首�
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const authModuleRef = useRef<AuthModule | null>(null)
   const unsubscribeRef = useRef<(() => void) | null>(null)
   const isInitializedRef = useRef(false)
   const latestUserRef = useRef<User | null>(null)
@@ -58,12 +55,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isInitializedRef.current && !immediate) return
 
       try {
-        // 动态导入 auth 模块
-        if (!authModuleRef.current) {
-          authModuleRef.current = await import('../lib/auth')
-        }
-        const { auth, onAuthStateChanged } = authModuleRef.current
-
         // 清理之前的订阅
         cleanupSubscription()
 
@@ -131,10 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       refreshInFlightRef.current = true
       setLoading(true)
-      if (!authModuleRef.current) {
-        authModuleRef.current = await import('../lib/auth')
-      }
-      await authModuleRef.current.refreshAuthState()
+      await refreshAuthState()
     } catch (error) {
       console.error('Failed to refresh auth:', error)
     } finally {

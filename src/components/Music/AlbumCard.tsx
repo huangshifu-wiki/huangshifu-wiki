@@ -18,7 +18,7 @@ const AlbumCard = React.memo(function AlbumCard({
   onCopyLink,
 }: AlbumCardProps) {
   const { t } = useI18n()
-  const albumId = album.docId || album.id
+  const albumId = album.docId || ''
   const trackCount = album.trackCount ?? album.tracks?.length ?? 0
 
   if (viewMode === 'list') {

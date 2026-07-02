@@ -1257,6 +1257,12 @@ describe('Auth API - 认证接口测试', () => {
         smtpUser: 'mailer',
         smtpFrom: 'Wiki <no-reply@example.com>',
         smtpPassSet: true,
+        verificationSubject: '请验证你的账号邮箱',
+        verificationTextBody: expect.any(String),
+        verificationHtmlBody: expect.any(String),
+        resetSubject: '重置你的黄诗扶 Wiki 密码',
+        resetTextBody: expect.any(String),
+        resetHtmlBody: expect.any(String),
       })
       expect(updateResponse.body.config).not.toHaveProperty('smtpPass')
 

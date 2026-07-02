@@ -17,7 +17,20 @@ type PostSortType = 'latest' | 'hot' | 'recommended'
 
 type MusicPlatform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo'
 type DisplayAlbumMode = 'none' | 'linked' | 'manual'
-type MusicCollectionType = 'album' | 'playlist'
+type MusicExternalResourceType = 'song' | 'album'
+
+type MusicExternalSourceRecord = {
+  id: string
+  resourceType: MusicExternalResourceType
+  songDocId: string | null
+  albumDocId: string | null
+  platform: MusicPlatform
+  sourceId: string
+  sourceUrl: string | null
+  isPrimary: boolean
+  createdAt: Date
+  updatedAt: Date
+}
 
 type WikiRelationRecord = {
   type: WikiRelationType
@@ -54,7 +67,6 @@ type WikiRelationGraphEdge = {
 
 type MusicTrackWithRelations = {
   docId: string
-  id: string
   title: string
   artists: string[]
   lyricists: string[]
@@ -62,23 +74,16 @@ type MusicTrackWithRelations = {
   arrangers: string[]
   vocals: string[]
   album: string
-  cover: string
   audioUrl: string
   lyric: string | null
   description: string | null
   releaseDate: Date | null
   durationMs: number | null
-  primaryPlatform: MusicPlatform
-  enabledPlatform: MusicPlatform | null
-  neteaseId: string | null
-  tencentId: string | null
-  kugouId: string | null
-  baiduId: string | null
-  kuwoId: string | null
+  coverId: string | null
+  coverAlbumDocId: string | null
   customPlatformLinks: Prisma.JsonValue | null
   displayAlbumMode: DisplayAlbumMode
   manualAlbumName: string | null
-  defaultCoverSource: string | null
   createdAt: Date
   updatedAt: Date
   covers: Array<{
@@ -97,8 +102,7 @@ type MusicTrackWithRelations = {
       title: string
       artist: string
       releaseDate: Date | null
-      cover: string
-      defaultCoverSource: string | null
+      coverId: string | null
       covers: Array<{
         id: string
         publicUrl: string
@@ -109,6 +113,7 @@ type MusicTrackWithRelations = {
   instrumentalLinks?: Array<{
     targetSongDocId: string
   }>
+  externalSources: MusicExternalSourceRecord[]
 }
 
 interface PlayUrlCacheValue {
@@ -303,7 +308,6 @@ export type {
   PostSortType,
   MusicPlatform,
   DisplayAlbumMode,
-  MusicCollectionType,
   WikiRelationRecord,
   WikiRelationResolved,
   WikiRelationGraphNode,
@@ -312,6 +316,8 @@ export type {
   PlayUrlCacheValue,
   ImportSongInput,
   SongCustomPlatformLink,
+  MusicExternalResourceType,
+  MusicExternalSourceRecord,
   SessionJwtPayload,
   WechatCodeSessionResponse,
   ApiUser,
