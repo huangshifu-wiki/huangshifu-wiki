@@ -116,6 +116,12 @@ export interface EmailVerificationAdminConfig extends EmailVerificationPublicCon
   smtpUser: string
   smtpFrom: string
   smtpPassSet: boolean
+  verificationSubject: string
+  verificationTextBody: string
+  verificationHtmlBody: string
+  resetSubject: string
+  resetTextBody: string
+  resetHtmlBody: string
 }
 
 export interface RegistrationConfig {

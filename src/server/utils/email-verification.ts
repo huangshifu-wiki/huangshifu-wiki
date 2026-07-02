@@ -21,6 +21,12 @@ export type EmailVerificationConfig = {
   smtpUser: string
   smtpPass: string
   smtpFrom: string
+  verificationSubject: string
+  verificationTextBody: string
+  verificationHtmlBody: string
+  resetSubject: string
+  resetTextBody: string
+  resetHtmlBody: string
 }
 
 export type EmailVerificationPublicConfig = {
@@ -60,6 +66,32 @@ type EmailVerificationUser = {
   displayName: string
 }
 
+const VERIFICATION_TEXT_DEFAULT = `{{displayName}}，你好：
+
+你正在验证黄诗扶 Wiki 账号邮箱。点击下方链接完成验证。
+
+{{verificationUrl}}
+
+链接有效期为 {{tokenTtlMinutes}} 分钟。如果不是你本人操作，请忽略此邮件。`
+
+const VERIFICATION_HTML_DEFAULT = `<p>{{displayName}}，你好：</p>
+<p>你正在验证黄诗扶 Wiki 账号邮箱。点击下方链接完成验证。</p>
+<p><a href="{{verificationUrl}}">{{actionText}}</a></p>
+<p>链接有效期为 {{tokenTtlMinutes}} 分钟。如果不是你本人操作，请忽略此邮件。</p>`
+
+const RESET_TEXT_DEFAULT = `{{displayName}}，你好：
+
+你正在重置黄诗扶 Wiki 账号密码。点击下方链接设置新密码。
+
+{{verificationUrl}}
+
+链接有效期为 {{tokenTtlMinutes}} 分钟。如果不是你本人操作，请忽略此邮件。`
+
+const RESET_HTML_DEFAULT = `<p>{{displayName}}，你好：</p>
+<p>你正在重置黄诗扶 Wiki 账号密码。点击下方链接设置新密码。</p>
+<p><a href="{{verificationUrl}}">{{actionText}}</a></p>
+<p>链接有效期为 {{tokenTtlMinutes}} 分钟。如果不是你本人操作，请忽略此邮件。</p>`
+
 const DEFAULT_EMAIL_VERIFICATION_CONFIG: EmailVerificationConfig = {
   enabled: false,
   publicBaseUrl: '',
@@ -70,11 +102,13 @@ const DEFAULT_EMAIL_VERIFICATION_CONFIG: EmailVerificationConfig = {
   smtpUser: '',
   smtpPass: '',
   smtpFrom: '',
+  verificationSubject: '请验证你的账号邮箱',
+  verificationTextBody: VERIFICATION_TEXT_DEFAULT,
+  verificationHtmlBody: VERIFICATION_HTML_DEFAULT,
+  resetSubject: '重置你的黄诗扶 Wiki 密码',
+  resetTextBody: RESET_TEXT_DEFAULT,
+  resetHtmlBody: RESET_HTML_DEFAULT,
 }
-const EMAIL_VERIFICATION_SUBJECT = '请验证你的账号邮箱'
-const EMAIL_VERIFICATION_INTRO = '你正在验证黄诗扶 Wiki 账号邮箱。点击下方链接完成验证。'
-const PASSWORD_RESET_SUBJECT = '重置你的黄诗扶 Wiki 密码'
-const PASSWORD_RESET_INTRO = '你正在重置黄诗扶 Wiki 账号密码。点击下方链接设置新密码。'
 
 function normalizeUrl(value: unknown) {
   if (typeof value !== 'string') return ''
@@ -101,6 +135,10 @@ function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function normalizeTemplateField(value: unknown, defaultValue: string) {
+  return normalizeString(value) || defaultValue
+}
+
 function normalizeEmailVerificationConfig(value: unknown): EmailVerificationConfig {
   if (!value || typeof value !== 'object') {
     return { ...DEFAULT_EMAIL_VERIFICATION_CONFIG }
@@ -121,6 +159,30 @@ function normalizeEmailVerificationConfig(value: unknown): EmailVerificationConf
     smtpUser: normalizeString(config.smtpUser),
     smtpPass: typeof config.smtpPass === 'string' ? config.smtpPass : '',
     smtpFrom: normalizeString(config.smtpFrom),
+    verificationSubject: normalizeTemplateField(
+      config.verificationSubject,
+      DEFAULT_EMAIL_VERIFICATION_CONFIG.verificationSubject
+    ),
+    verificationTextBody: normalizeTemplateField(
+      config.verificationTextBody,
+      DEFAULT_EMAIL_VERIFICATION_CONFIG.verificationTextBody
+    ),
+    verificationHtmlBody: normalizeTemplateField(
+      config.verificationHtmlBody,
+      DEFAULT_EMAIL_VERIFICATION_CONFIG.verificationHtmlBody
+    ),
+    resetSubject: normalizeTemplateField(
+      config.resetSubject,
+      DEFAULT_EMAIL_VERIFICATION_CONFIG.resetSubject
+    ),
+    resetTextBody: normalizeTemplateField(
+      config.resetTextBody,
+      DEFAULT_EMAIL_VERIFICATION_CONFIG.resetTextBody
+    ),
+    resetHtmlBody: normalizeTemplateField(
+      config.resetHtmlBody,
+      DEFAULT_EMAIL_VERIFICATION_CONFIG.resetHtmlBody
+    ),
   }
 }
 
@@ -223,6 +285,10 @@ function getTransporter(config: EmailVerificationConfig) {
   })
 }
 
+function renderTemplate(template: string, vars: Record<string, string>) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`)
+}
+
 async function sendVerificationEmail(options: {
   email: string
   displayName: string
@@ -230,18 +296,23 @@ async function sendVerificationEmail(options: {
   purpose: EmailVerificationPurpose
   config: EmailVerificationConfig
 }) {
+  const config = options.config
   const isPasswordReset = options.purpose === EmailVerificationPurpose.reset_password
   const verificationUrl = isPasswordReset
-    ? getPasswordResetUrl(options.token, options.config.publicBaseUrl)
-    : getVerificationUrl(options.token, options.config.publicBaseUrl)
-  const subject = isPasswordReset ? PASSWORD_RESET_SUBJECT : EMAIL_VERIFICATION_SUBJECT
-  const intro = isPasswordReset ? PASSWORD_RESET_INTRO : EMAIL_VERIFICATION_INTRO
+    ? getPasswordResetUrl(options.token, config.publicBaseUrl)
+    : getVerificationUrl(options.token, config.publicBaseUrl)
+  const displayName = options.displayName
+  const subject = isPasswordReset ? config.resetSubject : config.verificationSubject
+  const textBody = isPasswordReset ? config.resetTextBody : config.verificationTextBody
+  const htmlBody = isPasswordReset ? config.resetHtmlBody : config.verificationHtmlBody
   const actionText = isPasswordReset ? '重置密码' : '完成邮箱验证'
-  const displayName = options.displayName || options.email
-  const escapedDisplayName = escapeHtml(displayName)
-  const escapedIntro = escapeHtml(intro)
-  const escapedVerificationUrl = escapeHtml(verificationUrl)
-  const transporter = getTransporter(options.config)
+  const templateVars = {
+    displayName,
+    verificationUrl,
+    actionText,
+    tokenTtlMinutes: String(config.tokenTtlMinutes),
+  }
+  const transporter = getTransporter(config)
 
   if (!transporter) {
     if (isProductionRuntime()) {
@@ -262,24 +333,11 @@ async function sendVerificationEmail(options: {
 
   try {
     await transporter.sendMail({
-      from: options.config.smtpFrom,
+      from: config.smtpFrom,
       to: options.email,
-      subject,
-      text: [
-        `${displayName}，你好：`,
-        '',
-        intro,
-        '',
-        verificationUrl,
-        '',
-        `链接有效期为 ${options.config.tokenTtlMinutes} 分钟。如果不是你本人操作，请忽略此邮件。`,
-      ].join('\n'),
-      html: `
-        <p>${escapedDisplayName}，你好：</p>
-        <p>${escapedIntro}</p>
-        <p><a href="${escapedVerificationUrl}">${actionText}</a></p>
-        <p>链接有效期为 ${options.config.tokenTtlMinutes} 分钟。如果不是你本人操作，请忽略此邮件。</p>
-      `,
+      subject: renderTemplate(subject, templateVars),
+      text: renderTemplate(textBody, templateVars),
+      html: renderTemplate(htmlBody, { ...templateVars, displayName: escapeHtml(displayName) }),
     })
   } catch (error) {
     logger.error(

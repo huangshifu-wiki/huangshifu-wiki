@@ -63,6 +63,8 @@ describe('email verification utility', () => {
         smtpUser: 'user',
         smtpPass: 'secret',
         smtpFrom: 'Wiki <no-reply@example.com>',
+        verificationSubject: '请验证你的账号邮箱',
+        resetSubject: '重置你的黄诗扶 Wiki 密码',
       },
     })
     mockPrisma.emailVerificationToken.create.mockResolvedValue({
