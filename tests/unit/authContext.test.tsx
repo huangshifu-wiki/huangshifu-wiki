@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { apiGet, clearApiCache } from '../../src/lib/apiClient'
 import { AuthProvider, useAuth } from '../../src/context/AuthContext'
+import { resetAuthStateForTests } from '../../src/lib/auth'
 
 type User = import('../../src/lib/auth').User
 
@@ -43,6 +44,7 @@ describe('AuthProvider', () => {
 
   beforeEach(() => {
     vi.resetModules()
+    resetAuthStateForTests()
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
     vi.stubGlobal(

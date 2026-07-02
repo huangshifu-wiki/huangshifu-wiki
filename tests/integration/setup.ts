@@ -22,9 +22,11 @@ const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds()
 if (!verboseIntegrationLogging) {
   const originalConsoleLog = console.log.bind(console)
   const originalConsoleWarn = console.warn.bind(console)
+  const originalConsoleError = console.error.bind(console)
   const noisyPrefixes = [
     '[Integration Test]',
     '[Variant]',
+    '[GalleryImageSync]',
     '[DiskMonitor]',
     '[CloudSync]',
     '[API]',
@@ -51,6 +53,13 @@ if (!verboseIntegrationLogging) {
       return
     }
     originalConsoleWarn(...args)
+  }
+
+  console.error = (...args: Parameters<typeof console.error>) => {
+    if (shouldSuppress(args)) {
+      return
+    }
+    originalConsoleError(...args)
   }
 }
 

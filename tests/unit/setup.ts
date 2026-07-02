@@ -7,6 +7,7 @@ if (!verboseUnitLogging) {
   const noisyPrefixes = [
     '[Integration Test]',
     '[Variant]',
+    '[GalleryImageSync]',
     '[DiskMonitor]',
     '[CloudSync]',
     '[API]',
