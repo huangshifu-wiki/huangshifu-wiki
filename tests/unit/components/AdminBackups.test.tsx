@@ -198,6 +198,44 @@ describe('AdminBackups', () => {
     })
   })
 
+  it('restores from an existing backup and refreshes the backup list', async () => {
+    const preRestoreBackup = {
+      filename: 'backup_2026-06-28_10-05-00-000.zip',
+      size: 4096,
+      sizeFormatted: '4 KB',
+      createdAt: '2026-06-28T10:05:00.000Z',
+      note: '',
+    }
+    mockApiGet
+      .mockResolvedValueOnce({ backups: [initialBackup] })
+      .mockResolvedValueOnce({ backups: [preRestoreBackup, initialBackup] })
+    mockApiPost.mockResolvedValueOnce({ success: true })
+
+    render(<AdminBackups />)
+
+    await waitFor(() => {
+      expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTitle('恢复'))
+    fireEvent.click(screen.getByText('恢复数据库'))
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith(
+        `/api/admin/backup/${encodeURIComponent(initialBackup.filename)}/restore`,
+        { confirm: true }
+      )
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(preRestoreBackup.filename)).toBeInTheDocument()
+    })
+    expect(mockApiGet).toHaveBeenLastCalledWith('/api/admin/backup/list', undefined, {
+      staleTime: 0,
+      swr: false,
+    })
+  })
+
   it('passes legacy restore passwords without trimming them', async () => {
     const { container } = render(<AdminBackups />)
 

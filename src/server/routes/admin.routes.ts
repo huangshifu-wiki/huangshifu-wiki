@@ -1850,245 +1850,304 @@ router.post(
   })
 )
 
-// POST /api/admin/backup/restore - Restore backup
+// ─── 站内备份恢复共享函数 ────────────────────────────────────────────
+
+type RestoreFromZipResult = {
+  success: boolean
+  error?: string
+  statusCode?: number
+}
+
+async function restoreDatabaseFromZip(
+  zipFilePath: string,
+  dbConfig: { host: string; port: string; user: string; password: string; database: string },
+  legacyPassword?: string,
+  sourceBackupFilename?: string
+): Promise<RestoreFromZipResult> {
+  let sqlContent: Buffer
+  try {
+    const AdmZip = (await import('adm-zip')).default
+    const zip = new AdmZip(zipFilePath)
+    const zipEntries = zip.getEntries()
+
+    const sqlEntry = zipEntries.find((e) => e.entryName.endsWith('.sql'))
+    if (!sqlEntry) {
+      return { success: false, error: '备份文件中未找到 SQL 数据', statusCode: 400 }
+    }
+
+    const encryptedContent = sqlEntry.getData()
+    const metadataEntry = zipEntries.find((e) => e.entryName === BACKUP_METADATA_ENTRY)
+    const metadata = parseBackupMetadata(metadataEntry?.getData())
+
+    if (metadata?.encrypted) {
+      if (!BACKUP_PASSWORD) {
+        return {
+          success: false,
+          error: '服务器未配置 BACKUP_PASSWORD，无法恢复加密备份',
+          statusCode: 400,
+        }
+      }
+      try {
+        sqlContent = decryptBuffer(encryptedContent, BACKUP_PASSWORD)
+      } catch {
+        return {
+          success: false,
+          error: '备份文件无法用服务器密钥解密，请确认 BACKUP_PASSWORD 配置',
+          statusCode: 400,
+        }
+      }
+    } else if (metadata) {
+      sqlContent = encryptedContent
+    } else {
+      const rawContent = encryptedContent.toString('utf-8')
+      if (rawContent.includes('PostgreSQL database dump') || rawContent.includes('pg_dump')) {
+        sqlContent = encryptedContent
+      } else {
+        const candidatePasswords = [BACKUP_PASSWORD, legacyPassword].filter(
+          (candidate, index, candidates): candidate is string =>
+            Boolean(candidate) && candidates.indexOf(candidate) === index
+        )
+
+        let decrypted: Buffer | null = null
+        for (const candidate of candidatePasswords) {
+          try {
+            decrypted = decryptBuffer(encryptedContent, candidate)
+            break
+          } catch {
+            // Try the next compatible legacy password source.
+          }
+        }
+
+        if (!decrypted) {
+          return {
+            success: false,
+            error: '旧备份文件已加密，请配置 BACKUP_PASSWORD 或提供旧备份解密密码',
+            statusCode: 400,
+          }
+        }
+
+        sqlContent = decrypted
+      }
+    }
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to parse backup zip')
+    return { success: false, error: '备份文件解析失败', statusCode: 400 }
+  }
+
+  const sqlContentStr = sqlContent.toString('utf-8')
+  if (!sqlContentStr.includes('PostgreSQL database dump') && !sqlContentStr.includes('pg_dump')) {
+    return { success: false, error: '备份文件格式无效', statusCode: 400 }
+  }
+
+  const validation = validateSqlContent(sqlContentStr)
+  if (!validation.valid) {
+    logger.error({ reason: validation.reason }, 'SQL validation failed during restore')
+    return { success: false, error: validation.reason!, statusCode: 400 }
+  }
+
+  // Pre-restore backup
+  logger.info('Creating pre-restore backup before database restore')
+  try {
+    const preRestoreTimestamp = formatBackupTimestamp()
+    const preRestoreSqlFilename = `backup_${preRestoreTimestamp}.sql`
+    const preRestoreSqlFilePath = path.join(backupsDir, preRestoreSqlFilename)
+    const preRestoreZipFilename = `backup_${preRestoreTimestamp}.zip`
+    const preRestoreZipFilePath = path.join(backupsDir, preRestoreZipFilename)
+
+    const pgDumpArgs = [
+      '-h',
+      dbConfig.host,
+      '-p',
+      dbConfig.port,
+      '-U',
+      dbConfig.user,
+      '-d',
+      dbConfig.database,
+      '--no-owner',
+      '--no-privileges',
+      '--clean',
+      '--if-exists',
+      '--exclude-table-data=ImageEmbedding',
+      '--exclude-table-data=TextEmbeddingChunk',
+      '--exclude-table-data=_prisma_migrations',
+      '-f',
+      preRestoreSqlFilePath,
+    ]
+    const pgDumpEnv = { ...process.env, PGPASSWORD: dbConfig.password }
+
+    await execFileAsync(getPostgresClientExecutable('pg_dump'), pgDumpArgs, {
+      env: pgDumpEnv,
+      timeout: 300000,
+    })
+
+    const preRestoreSqlContent = await fs.promises.readFile(preRestoreSqlFilePath)
+    await fs.promises.unlink(preRestoreSqlFilePath)
+
+    const preRestoreEncrypted = Boolean(BACKUP_PASSWORD)
+    const preRestoreContent = preRestoreEncrypted
+      ? encryptBuffer(preRestoreSqlContent, BACKUP_PASSWORD)
+      : preRestoreSqlContent
+
+    await new Promise<void>((resolve, reject) => {
+      const output = fs.createWriteStream(preRestoreZipFilePath)
+      const archive = archiver('zip', { zlib: { level: 9 } })
+
+      output.on('close', () => resolve())
+      archive.on('error', (err) => reject(err))
+
+      archive.pipe(output)
+      archive.append(preRestoreContent, { name: preRestoreSqlFilename })
+      archive.append(
+        serializeBackupMetadata({
+          format: 'huangshifu-wiki-backup',
+          version: 2,
+          encrypted: preRestoreEncrypted,
+          encryption: preRestoreEncrypted ? 'aes-256-gcm' : undefined,
+        }),
+        { name: BACKUP_METADATA_ENTRY }
+      )
+      archive.finalize()
+    })
+
+    await cleanupOldBackups(sourceBackupFilename ? [sourceBackupFilename] : undefined)
+    logger.info({ filename: preRestoreZipFilename }, 'Pre-restore backup created successfully')
+  } catch (preBackupError) {
+    logger.error({ err: preBackupError }, 'Pre-restore backup creation failed, aborting restore')
+    if (isPostgresClientMissingError(preBackupError)) {
+      return { success: false, error: formatPostgresClientMissingError('pg_dump'), statusCode: 500 }
+    }
+    return {
+      success: false,
+      error: '预备份创建失败，恢复操作已中止，请查看服务器日志',
+      statusCode: 500,
+    }
+  }
+
+  // Execute restore
+  const tempSqlPath = path.join(backupsDir, `restore_${Date.now()}.sql`)
+  await fs.promises.writeFile(tempSqlPath, sqlContent)
+
+  try {
+    const psqlArgs = [
+      '-h',
+      dbConfig.host,
+      '-p',
+      dbConfig.port,
+      '-U',
+      dbConfig.user,
+      '-d',
+      dbConfig.database,
+      '--single-transaction',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-f',
+      tempSqlPath,
+    ]
+    const psqlEnv = { ...process.env, PGPASSWORD: dbConfig.password }
+
+    await execFileAsync(getPostgresClientExecutable('psql'), psqlArgs, {
+      env: psqlEnv,
+      timeout: 600000,
+    })
+  } catch (psqlError) {
+    logger.error({ err: psqlError }, 'psql restore failed')
+    if (isPostgresClientMissingError(psqlError)) {
+      return { success: false, error: formatPostgresClientMissingError('psql'), statusCode: 500 }
+    }
+    return { success: false, error: '恢复数据库失败，请查看服务器日志', statusCode: 500 }
+  } finally {
+    await fs.promises.unlink(tempSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'))
+  }
+
+  return { success: true }
+}
+
+// POST /api/admin/backup/restore - Restore backup (upload)
 router.post(
   '/backup/restore',
   requireSuperAdmin,
   uploadBackup.single('file'),
   validateBody(backupRestoreSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { legacyPassword, confirm } = req.body as { legacyPassword?: string; confirm?: boolean }
+    const file = req.file
+
+    if (!confirm) {
+      res.status(400).json({ error: '恢复操作需要二次确认，请传入 confirm: true' })
+      return
+    }
+
+    if (!file) {
+      res.status(400).json({ error: '请上传备份文件' })
+      return
+    }
+
+    const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '')
+    if (!dbConfig) {
+      await fs.promises.unlink(file.path).catch(() => {})
+      res.status(500).json({ error: 'DATABASE_URL 格式无效' })
+      return
+    }
+
     try {
-      const { legacyPassword, confirm } = req.body as { legacyPassword?: string; confirm?: boolean }
-      const file = req.file
+      const result = await restoreDatabaseFromZip(file.path, dbConfig, legacyPassword)
 
-      if (!confirm) {
-        res.status(400).json({ error: '恢复操作需要二次确认，请传入 confirm: true' })
+      if (!result.success) {
+        res.status(result.statusCode).json({ error: result.error })
         return
-      }
-
-      if (!file) {
-        res.status(400).json({ error: '请上传备份文件' })
-        return
-      }
-
-      const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '')
-      if (!dbConfig) {
-        res.status(500).json({ error: 'DATABASE_URL 格式无效' })
-        return
-      }
-
-      const AdmZip = (await import('adm-zip')).default
-      const zip = new AdmZip(file.path)
-      const zipEntries = zip.getEntries()
-
-      const sqlEntry = zipEntries.find((e) => e.entryName.endsWith('.sql'))
-      if (!sqlEntry) {
-        await fs.promises.unlink(file.path)
-        res.status(400).json({ error: '备份文件中未找到 SQL 数据' })
-        return
-      }
-
-      const encryptedContent = sqlEntry.getData()
-      const metadataEntry = zipEntries.find((e) => e.entryName === BACKUP_METADATA_ENTRY)
-      const metadata = parseBackupMetadata(metadataEntry?.getData())
-
-      let sqlContent: Buffer
-      if (metadata?.encrypted) {
-        if (!BACKUP_PASSWORD) {
-          await fs.promises.unlink(file.path)
-          res.status(400).json({ error: '服务器未配置 BACKUP_PASSWORD，无法恢复加密备份' })
-          return
-        }
-
-        try {
-          sqlContent = decryptBuffer(encryptedContent, BACKUP_PASSWORD)
-        } catch {
-          await fs.promises.unlink(file.path)
-          res
-            .status(400)
-            .json({ error: '备份文件无法用服务器密钥解密，请确认 BACKUP_PASSWORD 配置' })
-          return
-        }
-      } else if (metadata) {
-        sqlContent = encryptedContent
-      } else {
-        const rawContent = encryptedContent.toString('utf-8')
-        if (rawContent.includes('PostgreSQL database dump') || rawContent.includes('pg_dump')) {
-          sqlContent = encryptedContent
-        } else {
-          const candidatePasswords = [BACKUP_PASSWORD, legacyPassword].filter(
-            (candidate, index, candidates): candidate is string =>
-              Boolean(candidate) && candidates.indexOf(candidate) === index
-          )
-
-          let decrypted: Buffer | null = null
-          for (const candidate of candidatePasswords) {
-            try {
-              decrypted = decryptBuffer(encryptedContent, candidate)
-              break
-            } catch {
-              // Try the next compatible legacy password source.
-            }
-          }
-
-          if (!decrypted) {
-            await fs.promises.unlink(file.path)
-            res.status(400).json({
-              error: '旧备份文件已加密，请配置 BACKUP_PASSWORD 或提供旧备份解密密码',
-            })
-            return
-          }
-
-          sqlContent = decrypted
-        }
-      }
-
-      const sqlContentStr = sqlContent.toString('utf-8')
-      if (
-        !sqlContentStr.includes('PostgreSQL database dump') &&
-        !sqlContentStr.includes('pg_dump')
-      ) {
-        await fs.promises.unlink(file.path)
-        res.status(400).json({ error: '备份文件格式无效' })
-        return
-      }
-
-      const validation = validateSqlContent(sqlContentStr)
-      if (!validation.valid) {
-        await fs.promises.unlink(file.path)
-        logger.error({ reason: validation.reason }, 'SQL validation failed during restore')
-        res.status(400).json({ error: validation.reason })
-        return
-      }
-
-      logger.info('Creating pre-restore backup before database restore')
-      try {
-        const preRestoreTimestamp = formatBackupTimestamp()
-        const preRestoreSqlFilename = `backup_${preRestoreTimestamp}.sql`
-        const preRestoreSqlFilePath = path.join(backupsDir, preRestoreSqlFilename)
-        const preRestoreZipFilename = `backup_${preRestoreTimestamp}.zip`
-        const preRestoreZipFilePath = path.join(backupsDir, preRestoreZipFilename)
-
-        const pgDumpArgs = [
-          '-h',
-          dbConfig.host,
-          '-p',
-          dbConfig.port,
-          '-U',
-          dbConfig.user,
-          '-d',
-          dbConfig.database,
-          '--no-owner',
-          '--no-privileges',
-          '--clean',
-          '--if-exists',
-          '--exclude-table-data=ImageEmbedding',
-          '--exclude-table-data=TextEmbeddingChunk',
-          '--exclude-table-data=_prisma_migrations',
-          '-f',
-          preRestoreSqlFilePath,
-        ]
-        const pgDumpEnv = { ...process.env, PGPASSWORD: dbConfig.password }
-
-        await execFileAsync(getPostgresClientExecutable('pg_dump'), pgDumpArgs, {
-          env: pgDumpEnv,
-          timeout: 300000,
-        })
-
-        const preRestoreSqlContent = await fs.promises.readFile(preRestoreSqlFilePath)
-        await fs.promises.unlink(preRestoreSqlFilePath)
-
-        const preRestoreEncrypted = Boolean(BACKUP_PASSWORD)
-        const preRestoreContent = preRestoreEncrypted
-          ? encryptBuffer(preRestoreSqlContent, BACKUP_PASSWORD)
-          : preRestoreSqlContent
-
-        await new Promise<void>((resolve, reject) => {
-          const output = fs.createWriteStream(preRestoreZipFilePath)
-          const archive = archiver('zip', { zlib: { level: 9 } })
-
-          output.on('close', () => resolve())
-          archive.on('error', (err) => reject(err))
-
-          archive.pipe(output)
-          archive.append(preRestoreContent, { name: preRestoreSqlFilename })
-          archive.append(
-            serializeBackupMetadata({
-              format: 'huangshifu-wiki-backup',
-              version: 2,
-              encrypted: preRestoreEncrypted,
-              encryption: preRestoreEncrypted ? 'aes-256-gcm' : undefined,
-            }),
-            { name: BACKUP_METADATA_ENTRY }
-          )
-          archive.finalize()
-        })
-
-        await cleanupOldBackups()
-        logger.info({ filename: preRestoreZipFilename }, 'Pre-restore backup created successfully')
-      } catch (preBackupError) {
-        logger.error(
-          { err: preBackupError },
-          'Pre-restore backup creation failed, aborting restore'
-        )
-        await fs.promises.unlink(file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'))
-        if (isPostgresClientMissingError(preBackupError)) {
-          res.status(500).json({ error: formatPostgresClientMissingError('pg_dump') })
-          return
-        }
-        res.status(500).json({ error: '预备份创建失败，恢复操作已中止，请查看服务器日志' })
-        return
-      }
-
-      const tempSqlPath = path.join(backupsDir, `restore_${Date.now()}.sql`)
-      await fs.promises.writeFile(tempSqlPath, sqlContent)
-
-      try {
-        const psqlArgs = [
-          '-h',
-          dbConfig.host,
-          '-p',
-          dbConfig.port,
-          '-U',
-          dbConfig.user,
-          '-d',
-          dbConfig.database,
-          '--single-transaction',
-          '-v',
-          'ON_ERROR_STOP=1',
-          '-f',
-          tempSqlPath,
-        ]
-        const psqlEnv = { ...process.env, PGPASSWORD: dbConfig.password }
-
-        await execFileAsync(getPostgresClientExecutable('psql'), psqlArgs, {
-          env: psqlEnv,
-          timeout: 600000,
-        })
-      } finally {
-        await fs.promises.unlink(tempSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'))
-        await fs.promises.unlink(file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'))
       }
 
       res.json({ success: true, message: '数据库恢复成功' })
-    } catch (error) {
-      logger.error({ err: error }, 'Restore backup error')
-      if (req.file) {
-        try {
-          await fs.promises.access(req.file.path)
-        } catch {
-          /* already gone */
-        }
-        await fs.promises
-          .unlink(req.file.path)
-          .catch((err) => logger.warn({ err }, 'Cleanup failed'))
-      }
-      if (isPostgresClientMissingError(error)) {
-        res.status(500).json({ error: formatPostgresClientMissingError('psql') })
-        return
-      }
-      res.status(500).json({ error: '恢复数据库失败，请查看服务器日志' })
+    } finally {
+      await fs.promises.unlink(file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'))
     }
+  })
+)
+
+// POST /api/admin/backup/:filename/restore - Restore from existing backup
+router.post(
+  '/backup/:filename/restore',
+  requireSuperAdmin,
+  validateBody(backupRestoreSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { legacyPassword, confirm } = req.body as { legacyPassword?: string; confirm?: boolean }
+
+    if (!confirm) {
+      res.status(400).json({ error: '恢复操作需要二次确认，请传入 confirm: true' })
+      return
+    }
+
+    const filename = req.params.filename
+    const normalized = path.normalize(filename)
+
+    if (normalized.includes('..') || !sanitizeFilename(filename)) {
+      res.status(400).json({ error: '无效的文件名' })
+      return
+    }
+
+    const filePath = path.join(backupsDir, normalized)
+    try {
+      await fs.promises.access(filePath)
+    } catch {
+      res.status(404).json({ error: '备份文件不存在' })
+      return
+    }
+
+    const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '')
+    if (!dbConfig) {
+      res.status(500).json({ error: 'DATABASE_URL 格式无效' })
+      return
+    }
+
+    const result = await restoreDatabaseFromZip(filePath, dbConfig, legacyPassword, normalized)
+
+    if (!result.success) {
+      res.status(result.statusCode).json({ error: result.error })
+      return
+    }
+
+    // Do NOT delete the original backup file
+    res.json({ success: true, message: '数据库恢复成功' })
   })
 )
 

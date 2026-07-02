@@ -6,6 +6,7 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  RotateCcw,
   Trash2,
   Upload,
   XCircle,
@@ -28,7 +29,7 @@ type BackupFile = {
 type BackupCreateResponse = { backup: BackupFile }
 type BackupListResponse = { backups: BackupFile[] }
 type BackupNoteResponse = { success: boolean; note: string }
-type DialogType = 'create' | 'restore' | 'delete' | 'note' | null
+type DialogType = 'create' | 'restore' | 'restore-existing' | 'delete' | 'note' | null
 
 const AdminBackups = () => {
   const [backups, setBackups] = useState<BackupFile[]>([])
@@ -40,6 +41,7 @@ const AdminBackups = () => {
   const [legacyPassword, setLegacyPassword] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [noteTarget, setNoteTarget] = useState<string | null>(null)
+  const [restoreTarget, setRestoreTarget] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastDialogRef = useRef<Exclude<DialogType, null> | null>(null)
   const [restoreFile, setRestoreFile] = useState<File | null>(null)
@@ -82,6 +84,7 @@ const AdminBackups = () => {
     setLegacyPassword('')
     setDeleteTarget(null)
     setNoteTarget(null)
+    setRestoreTarget(null)
     setRestoreFile(null)
   }
 
@@ -201,6 +204,30 @@ const AdminBackups = () => {
     }
   }
 
+  const handleRestoreExisting = async () => {
+    if (!restoreTarget) return
+    setActionLoading('restore-existing')
+    try {
+      await apiPost<{ success: boolean }>(
+        `/api/admin/backup/${encodeURIComponent(restoreTarget)}/restore`,
+        { confirm: true, ...(legacyPassword !== '' ? { legacyPassword } : {}) }
+      )
+      show('数据库恢复成功')
+      closeDialog()
+      await fetchBackups(false)
+    } catch (error) {
+      show(error instanceof Error ? error.message : '恢复失败', { variant: 'error' })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const openRestoreExistingDialog = (filename: string) => {
+    setRestoreTarget(filename)
+    setLegacyPassword('')
+    setDialog('restore-existing')
+  }
+
   const openDeleteDialog = (filename: string) => {
     setDeleteTarget(filename)
     setDialog('delete')
@@ -309,6 +336,13 @@ const AdminBackups = () => {
                         <Download size={18} />
                       </button>
                       <button
+                        onClick={() => openRestoreExistingDialog(backup.filename)}
+                        className="p-2 text-text-secondary hover:text-red-500 hover:bg-surface-alt rounded transition-all"
+                        title="恢复"
+                      >
+                        <RotateCcw size={18} />
+                      </button>
+                      <button
                         onClick={() => openDeleteDialog(backup.filename)}
                         className="p-2 theme-icon-button-danger hover:bg-surface-alt rounded transition-all"
                         title="删除"
@@ -345,6 +379,7 @@ const AdminBackups = () => {
               <h3 className="text-lg font-bold text-text-primary">
                 {visibleDialog === 'create' && '创建备份'}
                 {visibleDialog === 'restore' && '上传备份恢复'}
+                {visibleDialog === 'restore-existing' && '从站内备份恢复'}
                 {visibleDialog === 'delete' && '删除备份'}
                 {visibleDialog === 'note' && '编辑备注'}
               </h3>
@@ -356,11 +391,13 @@ const AdminBackups = () => {
               </button>
             </div>
 
-            {(visibleDialog === 'restore' || visibleDialog === 'delete') && (
+            {(visibleDialog === 'restore' ||
+              visibleDialog === 'restore-existing' ||
+              visibleDialog === 'delete') && (
               <div className="flex items-start gap-3 p-3 rounded theme-status-warning">
                 <AlertTriangle size={18} className="theme-text-warning shrink-0 mt-0.5" />
                 <p className="text-sm">
-                  {visibleDialog === 'restore'
+                  {visibleDialog === 'restore' || visibleDialog === 'restore-existing'
                     ? '恢复操作将覆盖当前数据库中的所有数据，此操作不可逆，请谨慎操作。'
                     : '删除后无法恢复，请确认操作。'}
                 </p>
@@ -425,7 +462,13 @@ const AdminBackups = () => {
               </div>
             )}
 
-            {visibleDialog === 'restore' && (
+            {visibleDialog === 'restore-existing' && (
+              <div className="p-3 rounded bg-surface-alt border border-border mb-4">
+                <p className="text-sm font-medium text-text-primary break-all">{restoreTarget}</p>
+              </div>
+            )}
+
+            {(visibleDialog === 'restore' || visibleDialog === 'restore-existing') && (
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-2">
                   旧备份解密密码（可选）
@@ -439,7 +482,11 @@ const AdminBackups = () => {
                   onKeyDown={(e) => {
                     if (actionLoading) return
                     if (e.key === 'Enter') {
-                      handleRestore()
+                      if (visibleDialog === 'restore-existing') {
+                        handleRestoreExisting()
+                      } else {
+                        handleRestore()
+                      }
                     }
                   }}
                 />
@@ -457,13 +504,16 @@ const AdminBackups = () => {
                 onClick={() => {
                   if (visibleDialog === 'create') handleCreate()
                   else if (visibleDialog === 'restore') handleRestore()
+                  else if (visibleDialog === 'restore-existing') handleRestoreExisting()
                   else if (visibleDialog === 'delete') handleDelete()
                   else if (visibleDialog === 'note') handleUpdateNote()
                 }}
                 disabled={actionLoading !== null}
                 className={clsx(
                   'px-4 py-2 rounded text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2',
-                  visibleDialog === 'delete' || visibleDialog === 'restore'
+                  visibleDialog === 'delete' ||
+                    visibleDialog === 'restore' ||
+                    visibleDialog === 'restore-existing'
                     ? 'theme-button-danger'
                     : 'theme-button-primary'
                 )}
@@ -471,6 +521,7 @@ const AdminBackups = () => {
                 {actionLoading && <Loader2 size={14} className="animate-spin" />}
                 {visibleDialog === 'create' && '创建备份'}
                 {visibleDialog === 'restore' && '恢复数据库'}
+                {visibleDialog === 'restore-existing' && '恢复数据库'}
                 {visibleDialog === 'delete' && '确认删除'}
                 {visibleDialog === 'note' && '保存备注'}
               </button>
