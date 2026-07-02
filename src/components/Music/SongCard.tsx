@@ -34,6 +34,7 @@ const SongCard = React.memo(function SongCard({
   const isSmallGrid = viewMode === 'small'
   const artistsText = formatMusicCredits(song.artists, '未知歌手')
   const canPlay = isPlayableSong(song)
+  const releaseDateText = song.releaseDate ? `发行日期：${song.releaseDate}` : null
 
   const handleRowClick = () => {
     navigate(`/music/${song.docId}`)
@@ -140,6 +141,16 @@ const SongCard = React.memo(function SongCard({
             {artistsText}
           </p>
           {!isSmallGrid && <p className="text-xs text-text-muted/80 truncate">{song.album}</p>}
+          {releaseDateText && (
+            <p
+              className={clsx(
+                'text-text-muted/80 truncate',
+                isSmallGrid ? 'text-[0.6875rem]' : 'text-xs'
+              )}
+            >
+              {isSmallGrid ? `发行：${song.releaseDate}` : releaseDateText}
+            </p>
+          )}
         </div>
 
         <div className="mt-2 flex min-h-8 items-center justify-between gap-2">
@@ -200,6 +211,12 @@ const SongCard = React.memo(function SongCard({
           {artistsText}
           <span className="w-[3px] h-[3px] bg-border rounded-full inline-block" />
           {song.album}
+          {releaseDateText && (
+            <>
+              <span className="w-[3px] h-[3px] bg-border rounded-full inline-block" />
+              <span>{releaseDateText}</span>
+            </>
+          )}
         </p>
       </div>
 
