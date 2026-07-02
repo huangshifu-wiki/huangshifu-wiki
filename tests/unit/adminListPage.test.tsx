@@ -42,9 +42,34 @@ vi.mock('../../src/components/SmartImage', () => ({
   ),
 }))
 
+const makeMusicItem = (overrides: Record<string, unknown> = {}) => ({
+  docId: 'song-doc-1',
+  id: 'song-1',
+  title: '测试歌曲',
+  artists: ['测试歌手'],
+  displayAlbumMode: 'none',
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-02T00:00:00.000Z',
+  ...overrides,
+})
+
+const makeMusicListResponse = (
+  data = [makeMusicItem()],
+  overrides: Record<string, unknown> = {}
+) => ({
+  data,
+  total: data.length,
+  page: 1,
+  limit: 50,
+  totalPages: 1,
+  hasMore: false,
+  ...overrides,
+})
+
 describe('AdminListPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.scrollTo = vi.fn()
     mockConfirmDialog.mockResolvedValue(true)
     mockPromptDialog.mockResolvedValue('')
 
@@ -123,5 +148,70 @@ describe('AdminListPage', () => {
     expect(mockInvalidateApiCacheByPrefix.mock.invocationCallOrder[0]).toBeLessThan(
       mockApiGet.mock.invocationCallOrder[1]
     )
+  })
+
+  it('音乐管理请求应带分页参数', async () => {
+    mockApiGet.mockResolvedValue(makeMusicListResponse())
+
+    render(
+      <MemoryRouter>
+        <AdminListPage type="music" />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText('测试歌曲')).toBeInTheDocument()
+    expect(mockApiGet).toHaveBeenCalledWith('/api/admin/music', {
+      includeDeleted: undefined,
+      page: 1,
+      limit: 50,
+    })
+  })
+
+  it('音乐管理超过一页时应显示分页并支持翻页', async () => {
+    const user = userEvent.setup()
+    mockApiGet
+      .mockResolvedValueOnce(
+        makeMusicListResponse([makeMusicItem({ title: '第一页歌曲' })], {
+          total: 51,
+          totalPages: 2,
+          hasMore: true,
+        })
+      )
+      .mockResolvedValueOnce(
+        makeMusicListResponse(
+          [
+            makeMusicItem({
+              docId: 'song-doc-51',
+              id: 'song-51',
+              title: '第二页歌曲',
+              createdAt: '2024-01-03T00:00:00.000Z',
+              updatedAt: '2024-01-04T00:00:00.000Z',
+            }),
+          ],
+          {
+            total: 51,
+            page: 2,
+            totalPages: 2,
+          }
+        )
+      )
+
+    render(
+      <MemoryRouter>
+        <AdminListPage type="music" />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText('第一页歌曲')).toBeInTheDocument()
+    expect(screen.getByText('第 1 / 2 页')).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('下一页'))
+
+    expect(await screen.findByText('第二页歌曲')).toBeInTheDocument()
+    expect(mockApiGet).toHaveBeenLastCalledWith('/api/admin/music', {
+      includeDeleted: undefined,
+      page: 2,
+      limit: 50,
+    })
   })
 })

@@ -31,6 +31,8 @@ import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { SmartImage } from '../../components/SmartImage'
 import { MusicImportModal } from '../../components/MusicImportModal'
+import Pagination from '../../components/Pagination'
+import { usePagination } from '../../hooks/usePagination'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
 
@@ -56,6 +58,11 @@ type ListConfig = {
   apiPath: string
   columns: { key: ColumnKey; label: string; className?: string }[]
   hasCreate: boolean
+}
+
+type AdminListResponse = {
+  data: AdminDataItem[]
+  total?: number
 }
 
 const configMap: Record<ListType, ListConfig> = {
@@ -476,6 +483,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const cfg = configMap[type]
   const Icon = cfg.icon
   const [data, setData] = useState<AdminDataItem[]>([])
+  const [musicTotal, setMusicTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [pendingActions, setPendingActions] = useState<
     Record<string, 'delete' | 'restore' | 'permanentDelete'>
@@ -493,15 +501,22 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const dialog = useDialog()
   const { show } = useToast()
   const [newItem, setNewItem] = useState<any>({})
+  const isMusicList = type === 'music'
+  const musicPagination = usePagination({ totalCount: musicTotal, defaultPageSize: 50 })
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const result = await apiGet<{ data: AdminDataItem[] }>(`/api/admin/${cfg.apiPath}`, {
+      const result = await apiGet<AdminListResponse>(`/api/admin/${cfg.apiPath}`, {
         includeDeleted: showDeleted ? 'true' : undefined,
+        page: isMusicList ? musicPagination.page : undefined,
+        limit: isMusicList ? musicPagination.pageSize : undefined,
       })
       const nextData = result.data || []
       setData(nextData)
+      if (isMusicList) {
+        setMusicTotal(result.total ?? nextData.length)
+      }
       setSelectedRowIds((prev) => {
         const rowIds = new Set(nextData.map(getAdminItemId))
         return new Set([...prev].filter((rowId) => rowIds.has(rowId)))
@@ -509,6 +524,9 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     } catch (e) {
       console.error(e)
       setData([])
+      if (isMusicList) {
+        setMusicTotal(0)
+      }
     } finally {
       setLoading(false)
     }
@@ -529,15 +547,28 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
 
   useEffect(() => {
     fetchData()
-  }, [type, showDeleted])
+  }, [
+    type,
+    showDeleted,
+    isMusicList ? musicPagination.page : 1,
+    isMusicList ? musicPagination.pageSize : 50,
+  ])
 
   useEffect(() => {
     setSelectedRowIds(new Set())
     setBatchDisplayOpen(false)
+    musicPagination.setPage(1)
   }, [type])
 
-  const isSelectableList = type === 'music'
+  const isSelectableList = isMusicList
   const selectedCount = selectedRowIds.size
+
+  const handleToggleDeleted = () => {
+    if (isMusicList) {
+      musicPagination.setPage(1)
+    }
+    setShowDeleted((value) => !value)
+  }
 
   const toggleSelectedRow = (rowId: string) => {
     setSelectedRowIds((prev) => {
@@ -840,7 +871,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               </button>
             )}
             <button
-              onClick={() => setShowDeleted((value) => !value)}
+              onClick={handleToggleDeleted}
               className={clsx(
                 'rounded border px-4 py-2 text-sm transition-all',
                 showDeleted
@@ -1124,6 +1155,16 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               </tbody>
             </table>
           </div>
+          {isMusicList && musicPagination.totalPages > 1 && (
+            <Pagination
+              page={musicPagination.page}
+              totalPages={musicPagination.totalPages}
+              onPageChange={musicPagination.handlePageChange}
+              pageSize={musicPagination.pageSize}
+              onPageSizeChange={musicPagination.handlePageSizeChange}
+              showPageSizeSelector
+            />
+          )}
         </div>
       </div>
       {type === 'music' && (

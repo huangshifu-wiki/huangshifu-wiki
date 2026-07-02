@@ -28,6 +28,7 @@ import {
   toMusicResponse,
   parseContentStatus,
   parseDisplayAlbumMode,
+  parsePagination,
   normalizeModerationTargetType,
   createNotification,
   parseDatabaseUrl,
@@ -2267,64 +2268,77 @@ router.get(
       }
 
       if (tab === 'music') {
-        const data = await prisma.musicTrack.findMany({
-          where: activeWhere,
-          select: {
-            docId: true,
-            title: true,
-            artists: true,
-            lyricists: true,
-            composers: true,
-            arrangers: true,
-            vocals: true,
-            album: true,
-            audioUrl: true,
-            lyric: true,
-            releaseDate: true,
-            durationMs: true,
-            coverId: true,
-            coverAlbumDocId: true,
-            displayAlbumMode: true,
-            manualAlbumName: true,
-            deletedAt: true,
-            deletedBy: true,
-            createdAt: true,
-            updatedAt: true,
-            externalSources: {
-              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-            },
-            covers: {
-              orderBy: { sortOrder: 'asc' },
-              select: {
-                id: true,
-                publicUrl: true,
-                isDefault: true,
+        const { limit, page, offset: skip } = parsePagination(req.query)
+        const [total, data] = await Promise.all([
+          prisma.musicTrack.count({ where: activeWhere }),
+          prisma.musicTrack.findMany({
+            where: activeWhere,
+            select: {
+              docId: true,
+              title: true,
+              artists: true,
+              lyricists: true,
+              composers: true,
+              arrangers: true,
+              vocals: true,
+              album: true,
+              audioUrl: true,
+              lyric: true,
+              releaseDate: true,
+              durationMs: true,
+              coverId: true,
+              coverAlbumDocId: true,
+              displayAlbumMode: true,
+              manualAlbumName: true,
+              deletedAt: true,
+              deletedBy: true,
+              createdAt: true,
+              updatedAt: true,
+              externalSources: {
+                orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
               },
-            },
-            albumRelations: {
-              select: {
-                album: {
-                  select: {
-                    docId: true,
-                    coverId: true,
-                    covers: {
-                      orderBy: { sortOrder: 'asc' },
-                      select: {
-                        id: true,
-                        publicUrl: true,
-                        isDefault: true,
+              covers: {
+                orderBy: { sortOrder: 'asc' },
+                select: {
+                  id: true,
+                  publicUrl: true,
+                  isDefault: true,
+                },
+              },
+              albumRelations: {
+                select: {
+                  album: {
+                    select: {
+                      docId: true,
+                      coverId: true,
+                      covers: {
+                        orderBy: { sortOrder: 'asc' },
+                        select: {
+                          id: true,
+                          publicUrl: true,
+                          isDefault: true,
+                        },
                       },
                     },
                   },
                 },
+                orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
               },
-              orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
             },
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
+            orderBy: { updatedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+        ])
+        const totalPages = Math.max(1, Math.ceil(total / limit))
+        res.json({
+          data: data.map(toMusicResponse),
+          total,
+          page,
+          limit,
+          totalPages,
+          hasMore: skip + data.length < total,
         })
-        res.json({ data: data.map(toMusicResponse) })
         return
       }
 
