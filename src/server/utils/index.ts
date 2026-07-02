@@ -141,6 +141,8 @@ export {
   deleteCommentLike,
 } from './comments'
 
+export { findReadyMediaAssetByPublicUrl, localizeImageUrlAsMediaAsset } from './remoteImageAsset'
+
 // === 音乐全链路 ===
 export {
   resolveSongDisplayAlbum,

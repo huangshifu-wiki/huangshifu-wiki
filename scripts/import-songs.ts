@@ -18,6 +18,7 @@ interface CliOptions {
   yes: boolean
   duplicates: SongDuplicateAction | null
   previewFormat: 'table' | 'markdown'
+  resolveCovers: boolean
 }
 
 const DUPLICATE_ACTIONS = new Set<SongDuplicateAction>(['fill', 'overwrite', 'skip'])
@@ -42,11 +43,13 @@ function printUsage() {
   npm run songs:import -- ./huangshifu-songs.json --dry-run
   npm run songs:import -- ./huangshifu-songs.json --dry-run --markdown
   npm run songs:import -- ./huangshifu-songs.json --yes --duplicates=fill
+  npm run songs:import -- ./huangshifu-songs.json --yes --duplicates=fill --resolve-covers
 
 参数:
   --dry-run                 只预览，不写入数据库
   --yes                     跳过确认，必须配合 --duplicates
   --duplicates=<action>     重复歌曲策略：fill | overwrite | skip
+  --resolve-covers          写入时按平台 ID 解析封面并本地保存，dry-run 不解析
   --preview-format=<format> 预览表格格式：table | markdown
   --markdown                等同于 --preview-format=markdown`)
 }
@@ -59,6 +62,7 @@ function parseArgs(argv: string[]): CliOptions {
     yes: false,
     duplicates: null,
     previewFormat: 'table',
+    resolveCovers: false,
   }
 
   for (const arg of args) {
@@ -68,6 +72,10 @@ function parseArgs(argv: string[]): CliOptions {
     }
     if (arg === '--yes') {
       options.yes = true
+      continue
+    }
+    if (arg === '--resolve-covers') {
+      options.resolveCovers = true
       continue
     }
     if (arg.startsWith('--duplicates=')) {
@@ -267,7 +275,9 @@ async function main() {
     }
   }
 
-  const result = await executeSongJsonImport(preview, actions)
+  const result = await executeSongJsonImport(preview, actions, {
+    resolveCovers: options.resolveCovers,
+  })
   console.log('\n导入完成')
   console.table(result.summary)
 
@@ -278,6 +288,14 @@ async function main() {
     console.log('\n失败或无效项目：')
     for (const item of failed) {
       console.log(`#${item.index + 1} ${item.title || '(无标题)'}: ${item.error || item.action}`)
+    }
+  }
+
+  const coverFailed = result.items.filter((item) => item.coverError)
+  if (coverFailed.length) {
+    console.log('\n封面处理失败项目：')
+    for (const item of coverFailed) {
+      console.log(`#${item.index + 1} ${item.title || '(无标题)'}: ${item.coverError}`)
     }
   }
 }

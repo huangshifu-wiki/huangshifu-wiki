@@ -21,6 +21,7 @@ import {
   resolveLyric as resolveMetingLyric,
   resolveCoverUrl as resolveMetingCoverUrl,
 } from '../music/metingService'
+import { localizeImageUrlAsMediaAsset } from './remoteImageAsset'
 
 // ─── 显示辅助函数 ───────────────────────────────────────────────
 
@@ -558,36 +559,11 @@ export async function addSongCoverFromUrl(
 ) {
   const url = publicUrl.trim()
   if (!url) return null
-
-  const currentCount = await prisma.songCover.count({ where: { songDocId } })
-
-  return prisma.$transaction(async (tx) => {
-    const cover = await tx.songCover.create({
-      data: {
-        songDocId,
-        storageKey: `external/song/${songDocId}/${currentCount}`,
-        publicUrl: url,
-        sortOrder: currentCount,
-        isDefault: markDefault,
-      },
-    })
-
-    if (markDefault) {
-      await tx.songCover.updateMany({
-        where: { songDocId, id: { not: cover.id }, isDefault: true },
-        data: { isDefault: false },
-      })
-      await tx.musicTrack.update({
-        where: { docId: songDocId },
-        data: {
-          coverId: cover.id,
-          coverAlbumDocId: null,
-        },
-      })
-    }
-
-    return cover
+  const asset = await localizeImageUrlAsMediaAsset(url, {
+    namespace: 'music-covers/songs',
+    fallbackName: `${songDocId}.jpg`,
   })
+  return addSongCoverFromAsset(songDocId, asset.assetId, markDefault)
 }
 
 export async function addAlbumCoverFromAsset(
@@ -653,33 +629,21 @@ export async function addAlbumCoverFromUrl(
 ) {
   const url = publicUrl.trim()
   if (!url) return null
-
-  const currentCount = await prisma.albumCover.count({ where: { albumDocId } })
-
-  return prisma.$transaction(async (tx) => {
-    const cover = await tx.albumCover.create({
-      data: {
-        albumDocId,
-        storageKey: `external/album/${albumDocId}/${currentCount}`,
-        publicUrl: url,
-        sortOrder: currentCount,
-        isDefault: markDefault,
-      },
-    })
-
-    if (markDefault) {
-      await tx.albumCover.updateMany({
-        where: { albumDocId, id: { not: cover.id }, isDefault: true },
-        data: { isDefault: false },
-      })
-      await tx.album.update({
-        where: { docId: albumDocId },
-        data: { coverId: cover.id },
-      })
-    }
-
-    return cover
+  const asset = await localizeImageUrlAsMediaAsset(url, {
+    namespace: 'music-covers/albums',
+    fallbackName: `${albumDocId}.jpg`,
   })
+  return addAlbumCoverFromAsset(albumDocId, asset.assetId, markDefault)
+}
+
+async function maybeAddImportedSongCover(songDocId: string, coverUrl: string, markDefault = true) {
+  try {
+    await addSongCoverFromUrl(songDocId, coverUrl, markDefault)
+    return true
+  } catch (error) {
+    console.warn(`Import song cover failed for ${songDocId}:`, error)
+    return false
+  }
 }
 
 export async function createOrUpdateImportedSong(params: {
@@ -730,7 +694,7 @@ export async function createOrUpdateImportedSong(params: {
       },
     })
     if (resolvedCover && !existingSource.song.coverId && !existingSource.song.coverAlbumDocId) {
-      await addSongCoverFromUrl(song.docId, resolvedCover, true)
+      await maybeAddImportedSongCover(song.docId, resolvedCover, true)
     }
     return {
       song,
@@ -776,7 +740,7 @@ export async function createOrUpdateImportedSong(params: {
       },
     })
     if (resolvedCover && !existingByTitleArtist.coverId && !existingByTitleArtist.coverAlbumDocId) {
-      await addSongCoverFromUrl(updatedSong.docId, resolvedCover, true)
+      await maybeAddImportedSongCover(updatedSong.docId, resolvedCover, true)
     }
     await prisma.musicExternalSource.create({
       data: {
@@ -820,7 +784,7 @@ export async function createOrUpdateImportedSong(params: {
     },
   })
   if (resolvedCover) {
-    await addSongCoverFromUrl(song.docId, resolvedCover, true)
+    await maybeAddImportedSongCover(song.docId, resolvedCover, true)
   }
 
   await autoLinkInstrumental(song.docId, title, primaryArtist, track.isInstrumental)

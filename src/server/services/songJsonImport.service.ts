@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { normalizeStringListInput } from '../../lib/musicCredits'
+import { getMusicResourcePreview, resolveCoverUrlCandidates } from '../music/metingService'
 import {
   addSongCoverFromUrl,
   autoLinkInstrumental,
@@ -95,6 +96,7 @@ export interface SongImportResultItem {
   songDocId: string | null
   matchType: SongImportMatchType
   error?: string
+  coverError?: string
 }
 
 export interface SongImportSummary {
@@ -105,11 +107,17 @@ export interface SongImportSummary {
   invalid: number
   failed: number
   sourceConflicts: number
+  coversAdded: number
+  coverFailed: number
 }
 
 export interface SongImportExecutionResult {
   summary: SongImportSummary
   items: SongImportResultItem[]
+}
+
+export interface SongImportExecutionOptions {
+  resolveCovers?: boolean
 }
 
 type RawSongRecord = Record<string, unknown>
@@ -541,12 +549,82 @@ async function maybeAddCover(
   input: NormalizedSongJsonInput,
   song:
     | SongImportExistingSong
-    | { docId: string; coverId?: string | null; coverAlbumDocId?: string | null }
+    | { docId: string; coverId?: string | null; coverAlbumDocId?: string | null },
+  options: SongImportExecutionOptions = {}
 ) {
-  if (!input.coverUrl) return false
+  if (!input.coverUrl && !options.resolveCovers) return false
   if (song.coverId || song.coverAlbumDocId) return false
-  await addSongCoverFromUrl(song.docId, input.coverUrl, true)
-  return true
+
+  if (input.coverUrl) {
+    await addSongCoverFromUrl(song.docId, input.coverUrl, true)
+    return true
+  }
+
+  if (!options.resolveCovers) return false
+
+  return addFirstAvailableCoverFromSources(song.docId, input)
+}
+
+async function addFirstAvailableCoverFromSources(
+  songDocId: string,
+  input: NormalizedSongJsonInput
+) {
+  const seen = new Set<string>()
+  let lastError: unknown = null
+
+  for (const source of input.sources) {
+    try {
+      const preview = await getMusicResourcePreview(source.platform, 'song', source.sourceId)
+      const track = preview.songs[0]
+      const coverUrls = track?.picId
+        ? await resolveCoverUrlCandidates(
+            source.platform,
+            track.picId,
+            track.cover || preview.cover
+          )
+        : [preview.cover]
+
+      const uniqueCoverUrls = coverUrls.filter((coverUrl) => {
+        if (!coverUrl || seen.has(coverUrl)) return false
+        seen.add(coverUrl)
+        return true
+      })
+      try {
+        if (await addFirstAvailableCover(songDocId, uniqueCoverUrls)) {
+          return true
+        }
+      } catch (error) {
+        lastError = error
+      }
+    } catch {
+      continue
+    }
+  }
+
+  if (lastError) {
+    throw lastError
+  }
+
+  return false
+}
+
+async function addFirstAvailableCover(songDocId: string, coverUrls: string[]) {
+  let lastError: unknown = null
+
+  for (const coverUrl of coverUrls) {
+    try {
+      await addSongCoverFromUrl(songDocId, coverUrl, true)
+      return true
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  if (lastError) {
+    throw lastError
+  }
+
+  return false
 }
 
 function createSummary(): SongImportSummary {
@@ -558,12 +636,38 @@ function createSummary(): SongImportSummary {
     invalid: 0,
     failed: 0,
     sourceConflicts: 0,
+    coversAdded: 0,
+    coverFailed: 0,
+  }
+}
+
+async function tryMaybeAddCover(
+  input: NormalizedSongJsonInput,
+  song:
+    | SongImportExistingSong
+    | { docId: string; coverId?: string | null; coverAlbumDocId?: string | null },
+  summary: SongImportSummary,
+  options: SongImportExecutionOptions
+) {
+  try {
+    const changed = await maybeAddCover(input, song, options)
+    if (changed) {
+      summary.coversAdded += 1
+    }
+    return { changed, error: null as string | null }
+  } catch (error) {
+    summary.coverFailed += 1
+    return {
+      changed: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
   }
 }
 
 export async function executeSongJsonImport(
   preview: SongImportPreview,
-  actions: Map<number, SongDuplicateAction>
+  actions: Map<number, SongDuplicateAction>,
+  options: SongImportExecutionOptions = {}
 ): Promise<SongImportExecutionResult> {
   const summary = createSummary()
   const results: SongImportResultItem[] = []
@@ -603,7 +707,7 @@ export async function executeSongJsonImport(
         const song = await prisma.musicTrack.create({
           data: buildCreateData(item.input),
         })
-        await maybeAddCover(item.input, song)
+        const coverResult = await tryMaybeAddCover(item.input, song, summary, options)
         await autoLinkInstrumental(
           song.docId,
           item.input.title,
@@ -617,6 +721,7 @@ export async function executeSongJsonImport(
           action: 'create',
           songDocId: song.docId,
           matchType: item.matchType,
+          ...(coverResult.error ? { coverError: coverResult.error } : {}),
         })
         continue
       }
@@ -647,13 +752,15 @@ export async function executeSongJsonImport(
         continue
       }
 
+      let coverError: string | null = null
       if (action === 'overwrite') {
         await prisma.musicTrack.update({
           where: { docId: item.existingSong.docId },
           data: buildOverwriteData(item.input),
         })
         await replaceSources(item.input, item.existingSong)
-        await maybeAddCover(item.input, item.existingSong)
+        const coverResult = await tryMaybeAddCover(item.input, item.existingSong, summary, options)
+        coverError = coverResult.error
         summary.overwritten += 1
       } else {
         const data = buildFillUpdateData(item.input, item.existingSong)
@@ -665,7 +772,9 @@ export async function executeSongJsonImport(
           })
         }
         const sourcesChanged = await appendMissingSources(item.input, item.existingSong)
-        const coverChanged = await maybeAddCover(item.input, item.existingSong)
+        const coverResult = await tryMaybeAddCover(item.input, item.existingSong, summary, options)
+        const coverChanged = coverResult.changed
+        coverError = coverResult.error
         summary.filled += 1
         changed = changed || hasDataChanges || sourcesChanged || coverChanged
       }
@@ -679,6 +788,7 @@ export async function executeSongJsonImport(
         action,
         songDocId: item.existingSong.docId,
         matchType: item.matchType,
+        ...(coverError ? { coverError } : {}),
       })
     } catch (error) {
       summary.failed += 1

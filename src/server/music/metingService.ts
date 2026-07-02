@@ -60,6 +60,8 @@ function createClient(platform: MusicPlatform, formatted = true) {
 }
 
 const METING_API_TIMEOUT_MS = 5000
+const COVER_PROBE_TIMEOUT_MS = 3000
+const TENCENT_COVER_SIZES = [3543, 3000, 1500, 1000, 800, 500, 300]
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -156,26 +158,91 @@ async function runRawValue(platform: MusicPlatform, runner: (client: Meting) => 
 }
 
 async function resolvePicById(platform: MusicPlatform, picId: string, fallback = '') {
+  const candidates = await resolvePicCandidatesById(platform, picId, fallback)
+  if (platform === 'tencent') {
+    return (await firstReachableImageUrl(candidates)) || candidates[0] || fallback
+  }
+  return candidates[0] || fallback
+}
+
+async function resolvePicCandidatesById(platform: MusicPlatform, picId: string, fallback = '') {
   if (!picId) {
-    return fallback
+    return fallback ? [fallback] : []
+  }
+
+  if (platform === 'tencent') {
+    const urls = TENCENT_COVER_SIZES.map((size) =>
+      normalizeImageUrl(
+        `https://y.gtimg.cn/music/photo_new/T002R${size}x${size}M000${picId}.jpg?max_age=2592000`
+      )
+    )
+    return uniqueImageUrls([...urls, fallback])
   }
 
   try {
     const client = createClient(platform, true)
-    const raw = ensureString(await withTimeout(client.pic(picId, 500), METING_API_TIMEOUT_MS))
+    const raw = ensureString(await withTimeout(client.pic(picId, 3543), METING_API_TIMEOUT_MS))
     const parsed = parseJsonSafe<unknown>(raw, {})
     if (Array.isArray(parsed)) {
-      const first = parsed[0] as { url?: string } | undefined
-      return normalizeImageUrl(first?.url, fallback)
+      const urls = parsed
+        .map((item) => normalizeImageUrl((item as { url?: string } | undefined)?.url))
+        .filter(Boolean)
+      return uniqueImageUrls([...urls, fallback])
     }
     if (parsed && typeof parsed === 'object') {
-      return normalizeImageUrl((parsed as { url?: string }).url, fallback)
+      return uniqueImageUrls([normalizeImageUrl((parsed as { url?: string }).url), fallback])
     }
   } catch {
-    return fallback
+    return fallback ? [fallback] : []
   }
 
-  return fallback
+  return fallback ? [fallback] : []
+}
+
+function uniqueImageUrls(urls: string[]) {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const url of urls) {
+    const normalized = normalizeImageUrl(url)
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized)
+      result.push(normalized)
+    }
+  }
+  return result
+}
+
+async function firstReachableImageUrl(urls: string[]) {
+  for (const url of urls) {
+    if (await isImageUrlReachable(url)) {
+      return url
+    }
+  }
+  return ''
+}
+
+async function isImageUrlReachable(url: string) {
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(COVER_PROBE_TIMEOUT_MS),
+    })
+    if (response.ok) return true
+    if (response.status === 404) return false
+  } catch {
+    // Some image CDNs reject HEAD but allow GET.
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: AbortSignal.timeout(COVER_PROBE_TIMEOUT_MS),
+    })
+    await response.body?.cancel()
+    return response.ok
+  } catch {
+    return false
+  }
 }
 
 function normalizeTrack(platform: MusicPlatform, track: MetingTrackRaw): MusicImportTrack | null {
@@ -467,4 +534,12 @@ export async function resolveLyric(platform: MusicPlatform, lyricId: string) {
 
 export async function resolveCoverUrl(platform: MusicPlatform, picId: string, fallback = '') {
   return resolvePicById(platform, picId, fallback)
+}
+
+export async function resolveCoverUrlCandidates(
+  platform: MusicPlatform,
+  picId: string,
+  fallback = ''
+) {
+  return resolvePicCandidatesById(platform, picId, fallback)
 }

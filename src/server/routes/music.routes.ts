@@ -54,6 +54,16 @@ const router = createRouter()
 type MusicListSortBy = 'releaseDate' | 'title' | 'artist'
 type MusicListSortOrder = 'asc' | 'desc'
 
+async function maybeAddImportedAlbumCover(albumDocId: string, coverUrl: string) {
+  try {
+    await addAlbumCoverFromUrl(albumDocId, coverUrl, true)
+    return true
+  } catch (error) {
+    console.warn(`Import album cover failed for ${albumDocId}:`, error)
+    return false
+  }
+}
+
 function parseMusicListSortBy(value: unknown): MusicListSortBy {
   if (value === 'createdAt' || value === 'releaseDate') return 'releaseDate'
   if (value === 'title' || value === 'artist') return value
@@ -596,8 +606,8 @@ router.post(
             albumListChanged = true
           }
           if (preview.cover && !existingAlbum.coverId) {
-            await addAlbumCoverFromUrl(existingAlbum.docId, preview.cover, true)
-            albumListChanged = true
+            const coverAdded = await maybeAddImportedAlbumCover(existingAlbum.docId, preview.cover)
+            albumListChanged = albumListChanged || coverAdded
           }
         } else {
           const createdAlbum = await prisma.album.create({
@@ -618,7 +628,7 @@ router.post(
             },
           })
           if (preview.cover) {
-            await addAlbumCoverFromUrl(createdAlbum.docId, preview.cover, true)
+            await maybeAddImportedAlbumCover(createdAlbum.docId, preview.cover)
           }
           await applyAlbumTracksToRelations(createdAlbum.docId, tracksPayload)
           albumListChanged = true

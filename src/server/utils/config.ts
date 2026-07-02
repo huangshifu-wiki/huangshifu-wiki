@@ -1,6 +1,7 @@
 import axios from 'axios'
 import crypto from 'crypto'
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -22,7 +23,10 @@ export const defaultUploadsDir = path.join(__dirname, '..', '..', '..', 'uploads
 export const uploadsDir = process.env.UPLOADS_PATH || defaultUploadsDir
 fs.mkdirSync(uploadsDir, { recursive: true })
 
-export const backupsDir = path.join(__dirname, '..', '..', '..', 'backups')
+export const backupsDir =
+  process.env.NODE_ENV === 'test'
+    ? path.join(os.tmpdir(), 'huangshifu-wiki-test-backups')
+    : path.join(__dirname, '..', '..', '..', 'backups')
 fs.mkdirSync(backupsDir, { recursive: true })
 
 // 环境变量常量

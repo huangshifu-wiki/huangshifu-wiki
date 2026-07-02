@@ -486,8 +486,7 @@ function resolveGalleryImageLocalUrl(image: GalleryInput['images'][number]) {
 
 function resolveImageUrl(
   image: GalleryInput['images'][number],
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>,
-  storageStrategy: 'local' | 's3' | 'external'
+  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
 ) {
   let url = image.asset?.publicUrl || image.url
   const localUrl = resolveGalleryImageLocalUrl(image)
@@ -496,18 +495,7 @@ function resolveImageUrl(
     const imageMap = imageMapByLocalUrl.get(localUrl)
 
     if (imageMap) {
-      switch (storageStrategy) {
-        case 'external':
-          url = imageMap.externalUrl || imageMap.s3Url || imageMap.localUrl || url
-          break
-        case 's3':
-          url = imageMap.s3Url || imageMap.externalUrl || imageMap.localUrl || url
-          break
-        case 'local':
-        default:
-          url = imageMap.localUrl || url
-          break
-      }
+      url = imageMap.localUrl || url
     }
   }
 
@@ -540,24 +528,7 @@ function resolveThumbnailStatus(
 }
 
 export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?: string) {
-  let resolvedStorageStrategy: 'local' | 's3' | 'external' = 'local'
-
-  if (storageStrategy && ['local', 's3', 'external'].includes(storageStrategy)) {
-    resolvedStorageStrategy = storageStrategy as 'local' | 's3' | 'external'
-  } else {
-    try {
-      const storageConfig = await prisma.siteConfig.findUnique({
-        where: { key: 'image_preference' },
-        select: { value: true },
-      })
-      const preference = storageConfig?.value as
-        | { strategy?: 'local' | 's3' | 'external' }
-        | undefined
-      resolvedStorageStrategy = preference?.strategy || 'local'
-    } catch (error) {
-      console.warn('Failed to get storage strategy:', error)
-    }
-  }
+  void storageStrategy
 
   const localUrls: string[] = []
   for (const img of gallery.images) {
@@ -620,7 +591,7 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
         id: image.id,
         assetId: image.assetId || image.asset?.id || null,
         url: resolveThumbnailUrl(image, imageMapByLocalUrl) || '',
-        originalUrl: resolveImageUrl(image, imageMapByLocalUrl, resolvedStorageStrategy),
+        originalUrl: resolveImageUrl(image, imageMapByLocalUrl),
         thumbnailUrl: resolveThumbnailUrl(image, imageMapByLocalUrl),
         thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
         name: image.asset?.fileName || image.name,
@@ -632,25 +603,7 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
 
 export async function toGalleryListResponse(galleries: GalleryInput[], storageStrategy?: string) {
   if (galleries.length === 0) return []
-
-  let resolvedStorageStrategy: 'local' | 's3' | 'external' = 'local'
-
-  if (storageStrategy && ['local', 's3', 'external'].includes(storageStrategy)) {
-    resolvedStorageStrategy = storageStrategy as 'local' | 's3' | 'external'
-  } else {
-    try {
-      const storageConfig = await prisma.siteConfig.findUnique({
-        where: { key: 'image_preference' },
-        select: { value: true },
-      })
-      const preference = storageConfig?.value as
-        | { strategy?: 'local' | 's3' | 'external' }
-        | undefined
-      resolvedStorageStrategy = preference?.strategy || 'local'
-    } catch (error) {
-      console.warn('Failed to get storage strategy:', error)
-    }
-  }
+  void storageStrategy
 
   const allLocalUrls: string[] = []
   for (const gallery of galleries) {
@@ -715,7 +668,7 @@ export async function toGalleryListResponse(galleries: GalleryInput[], storageSt
         id: image.id,
         assetId: image.assetId || image.asset?.id || null,
         url: resolveThumbnailUrl(image, imageMapByLocalUrl) || '',
-        originalUrl: resolveImageUrl(image, imageMapByLocalUrl, resolvedStorageStrategy),
+        originalUrl: resolveImageUrl(image, imageMapByLocalUrl),
         thumbnailUrl: resolveThumbnailUrl(image, imageMapByLocalUrl),
         thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
         name: image.asset?.fileName || image.name,

@@ -17,6 +17,8 @@ const mockPrisma = vi.hoisted(() => ({
 const mockAddSongCoverFromUrl = vi.hoisted(() => vi.fn())
 const mockAutoLinkInstrumental = vi.hoisted(() => vi.fn())
 const mockInvalidateByPrefix = vi.hoisted(() => vi.fn())
+const mockGetMusicResourcePreview = vi.hoisted(() => vi.fn())
+const mockResolveCoverUrlCandidates = vi.hoisted(() => vi.fn())
 
 vi.mock('../../../src/server/utils', async () => {
   const actual = await vi.importActual<typeof import('../../../src/server/utils')>(
@@ -33,6 +35,11 @@ vi.mock('../../../src/server/utils', async () => {
     },
   }
 })
+
+vi.mock('../../../src/server/music/metingService', () => ({
+  getMusicResourcePreview: mockGetMusicResourcePreview,
+  resolveCoverUrlCandidates: mockResolveCoverUrlCandidates,
+}))
 
 const validSong = {
   title: '惊鸿',
@@ -103,6 +110,11 @@ describe('song JSON import service', () => {
     mockPrisma.musicTrack.update.mockResolvedValue({})
     mockAddSongCoverFromUrl.mockResolvedValue({})
     mockAutoLinkInstrumental.mockResolvedValue(undefined)
+    mockGetMusicResourcePreview.mockResolvedValue({
+      cover: 'https://example.com/preview.jpg',
+      songs: [{ picId: 'pic-1', cover: 'https://example.com/track.jpg' }],
+    })
+    mockResolveCoverUrlCandidates.mockResolvedValue(['https://example.com/highres.jpg'])
   })
 
   it('parses both top-level array and songs object payloads', async () => {
@@ -240,6 +252,143 @@ describe('song JSON import service', () => {
       true
     )
     expect(mockInvalidateByPrefix).toHaveBeenCalledWith('music_list:')
+  })
+
+  it('resolves platform covers only when requested and does not block song import on cover failure', async () => {
+    mockAddSongCoverFromUrl.mockRejectedValueOnce(new Error('cover download failed'))
+    const { previewSongJsonImport, executeSongJsonImport } = await importService()
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '归来',
+          artists: ['黄诗扶'],
+          platformRecords: [
+            {
+              platform: 'netease',
+              platformId: '524782504',
+              url: 'https://music.163.com/#/song?id=524782504',
+            },
+          ],
+        },
+      ],
+    })
+    const result = await executeSongJsonImport(preview, new Map(), { resolveCovers: true })
+
+    expect(result.summary.created).toBe(1)
+    expect(result.summary.coverFailed).toBe(1)
+    expect(result.items[0].coverError).toBe('cover download failed')
+    expect(mockGetMusicResourcePreview).toHaveBeenCalledWith('netease', 'song', '524782504')
+    expect(mockResolveCoverUrlCandidates).toHaveBeenCalledWith(
+      'netease',
+      'pic-1',
+      'https://example.com/track.jpg'
+    )
+    expect(mockAddSongCoverFromUrl).toHaveBeenCalledWith(
+      'song-doc-new',
+      'https://example.com/highres.jpg',
+      true
+    )
+    expect(mockInvalidateByPrefix).toHaveBeenCalledWith('music_list:')
+  })
+
+  it('tries platform cover candidates until one downloads successfully', async () => {
+    mockAddSongCoverFromUrl
+      .mockRejectedValueOnce(new Error('下载图片失败：404 Not Found'))
+      .mockResolvedValueOnce({})
+    mockResolveCoverUrlCandidates.mockResolvedValue([
+      'https://example.com/missing.jpg',
+      'https://example.com/fallback.jpg',
+    ])
+    const { previewSongJsonImport, executeSongJsonImport } = await importService()
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '归来',
+          artists: ['黄诗扶'],
+          platformRecords: [{ platform: 'tencent', platformId: '004RgKOm4gOIPZ' }],
+        },
+      ],
+    })
+    const result = await executeSongJsonImport(preview, new Map(), { resolveCovers: true })
+
+    expect(result.summary.coversAdded).toBe(1)
+    expect(result.summary.coverFailed).toBe(0)
+    expect(mockAddSongCoverFromUrl).toHaveBeenNthCalledWith(
+      1,
+      'song-doc-new',
+      'https://example.com/missing.jpg',
+      true
+    )
+    expect(mockAddSongCoverFromUrl).toHaveBeenNthCalledWith(
+      2,
+      'song-doc-new',
+      'https://example.com/fallback.jpg',
+      true
+    )
+  })
+
+  it('continues to later platform cover candidates when the first platform fails', async () => {
+    mockAddSongCoverFromUrl
+      .mockRejectedValueOnce(new Error('下载图片失败：404 Not Found'))
+      .mockResolvedValueOnce({})
+    mockGetMusicResourcePreview
+      .mockResolvedValueOnce({
+        cover: '',
+        songs: [{ picId: 'qq-pic', cover: '' }],
+      })
+      .mockResolvedValueOnce({
+        cover: '',
+        songs: [{ picId: 'kugou-pic', cover: 'https://example.com/kugou.jpg' }],
+      })
+    mockResolveCoverUrlCandidates
+      .mockResolvedValueOnce(['https://example.com/tencent-missing.jpg'])
+      .mockResolvedValueOnce(['https://example.com/kugou.jpg'])
+    const { previewSongJsonImport, executeSongJsonImport } = await importService()
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '归来',
+          artists: ['黄诗扶'],
+          platformRecords: [
+            { platform: 'tencent', platformId: '004RgKOm4gOIPZ' },
+            { platform: 'kugou', platformId: 'ABCDEF' },
+          ],
+        },
+      ],
+    })
+    const result = await executeSongJsonImport(preview, new Map(), { resolveCovers: true })
+
+    expect(result.summary.coversAdded).toBe(1)
+    expect(result.summary.coverFailed).toBe(0)
+    expect(mockGetMusicResourcePreview).toHaveBeenCalledWith('tencent', 'song', '004RgKOm4gOIPZ')
+    expect(mockGetMusicResourcePreview).toHaveBeenCalledWith('kugou', 'song', 'ABCDEF')
+    expect(mockAddSongCoverFromUrl).toHaveBeenNthCalledWith(
+      2,
+      'song-doc-new',
+      'https://example.com/kugou.jpg',
+      true
+    )
+  })
+
+  it('does not resolve platform covers during normal import without resolveCovers', async () => {
+    const { previewSongJsonImport, executeSongJsonImport } = await importService()
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '归来',
+          artists: ['黄诗扶'],
+          platformRecords: [{ platform: 'netease', platformId: '524782504' }],
+        },
+      ],
+    })
+    await executeSongJsonImport(preview, new Map())
+
+    expect(mockGetMusicResourcePreview).not.toHaveBeenCalled()
+    expect(mockAddSongCoverFromUrl).not.toHaveBeenCalled()
   })
 
   it('auto-links instrumental relations after creating JSON imported songs', async () => {

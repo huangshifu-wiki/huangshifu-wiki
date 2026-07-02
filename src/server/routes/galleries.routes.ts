@@ -869,7 +869,6 @@ router.post(
 
       const fallbackAssets = await prisma.mediaAsset.findMany({
         where: {
-          ownerUid: req.authUser!.uid,
           status: 'ready',
           publicUrl: {
             in: normalizedImages.map((item) => item.url),
@@ -881,6 +880,10 @@ router.post(
         },
       })
       const assetByUrl = new Map(fallbackAssets.map((item) => [item.publicUrl, item.id]))
+      if (assetByUrl.size !== normalizedImages.length) {
+        res.status(400).json({ error: '图片地址未关联本站媒体资源，请重新上传' })
+        return
+      }
 
       const gallery = await prisma.$transaction(async (tx) => {
         const created = await tx.gallery.create({
@@ -896,7 +899,7 @@ router.post(
             ...galleryStatusData(nextStatus),
             images: {
               create: normalizedImages.map((image, index) => ({
-                assetId: assetByUrl.get(image.url),
+                assetId: assetByUrl.get(image.url)!,
                 url: image.url,
                 name: image.name,
                 sortOrder: index,
@@ -1207,7 +1210,6 @@ router.patch(
                     fileName: true,
                   },
                   where: {
-                    ownerUid: req.authUser!.uid,
                     status: 'ready',
                     publicUrl: {
                       in: urlsInPayload,
@@ -1216,6 +1218,9 @@ router.patch(
                 })
               : []
           const assetByUrl = new Map(urlAssets.map((asset) => [asset.publicUrl, asset]))
+          if (assetByUrl.size !== urlsInPayload.length) {
+            throw new Error('图片地址未关联本站媒体资源，请重新上传')
+          }
 
           const keptIds = new Set(existingIdsInPayload)
           removedImages.push(...existingImages.filter((item) => !keptIds.has(item.id)))
@@ -1243,13 +1248,16 @@ router.patch(
             }
 
             if (instruction.kind === 'url') {
-              const asset = assetByUrl.get(instruction.url) || null
+              const asset = assetByUrl.get(instruction.url)
+              if (!asset) {
+                throw new Error('图片地址未关联本站媒体资源，请重新上传')
+              }
               const created = await tx.galleryImage.create({
                 data: {
                   galleryId: req.params.id,
-                  assetId: asset?.id || null,
-                  url: instruction.url,
-                  name: instruction.name || asset?.fileName || `image-${index + 1}`,
+                  assetId: asset.id,
+                  url: asset.publicUrl,
+                  name: instruction.name || asset.fileName || `image-${index + 1}`,
                   sortOrder: index,
                 },
                 select: { id: true },
@@ -1309,6 +1317,15 @@ router.patch(
       res.json({ gallery: await toGalleryResponse(updated) })
     } catch (error) {
       console.error('Update gallery error:', error)
+      if (
+        error instanceof Error &&
+        (error.message.includes('图片') ||
+          error.message.includes('图集至少需要保留一张图片') ||
+          error.message.includes('排序列表'))
+      ) {
+        res.status(400).json({ error: error.message })
+        return
+      }
       res.status(500).json({ error: '更新图集失败' })
     }
   })

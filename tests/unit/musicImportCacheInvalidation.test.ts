@@ -95,7 +95,7 @@ async function createApp() {
   return app
 }
 
-function mockPreview(songIds: string[]) {
+function mockPreview(songIds: string[], cover = '') {
   mockGetMusicResourcePreview.mockResolvedValue({
     id: 'album-1',
     platform: 'netease',
@@ -103,7 +103,7 @@ function mockPreview(songIds: string[]) {
     title: 'Imported Album',
     artist: 'Imported Artist',
     description: '',
-    cover: '',
+    cover,
     platformUrl: 'https://music.163.com/#/album?id=album-1',
     songs: songIds.map((sourceId) => ({
       sourceId,
@@ -199,5 +199,37 @@ describe('music import album cache invalidation', () => {
       })
     )
     expect(mockInvalidateByPrefix).toHaveBeenCalledWith('album_list:')
+  })
+
+  it('does not fail album import when automatic album cover localization fails', async () => {
+    mockPreview(['song-1'], 'https://example.com/album-cover.jpg')
+    mockAddAlbumCoverFromUrl.mockRejectedValueOnce(new Error('cover unavailable'))
+    mockCreateOrUpdateImportedSong.mockResolvedValue({
+      song: {
+        docId: 'song-doc-1',
+        title: 'Song song-1',
+        artists: ['Imported Artist'],
+      },
+      created: true,
+      linked: false,
+    })
+    mockPrisma.musicExternalSource.findUnique.mockResolvedValue(null)
+    mockPrisma.album.create.mockResolvedValue({
+      docId: 'album-doc-1',
+      title: 'Imported Album',
+    })
+
+    const app = await createApp()
+    const response = await request(app)
+      .post('/api/music/import')
+      .send({ url: 'https://music.163.com/#/album?id=album-1' })
+
+    expect(response.status).toBe(200)
+    expect(mockAddAlbumCoverFromUrl).toHaveBeenCalledWith(
+      'album-doc-1',
+      'https://example.com/album-cover.jpg',
+      true
+    )
+    expect(mockApplyAlbumTracksToRelations).toHaveBeenCalledWith('album-doc-1', expect.any(Array))
   })
 })
