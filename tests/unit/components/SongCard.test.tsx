@@ -95,6 +95,49 @@ describe('SongCard', () => {
     const html = container.innerHTML
     expect(html).toContain('测试歌手')
     expect(html).toContain('测试专辑')
+    expect(container.querySelectorAll('.bg-border.rounded-full')).toHaveLength(1)
+  })
+
+  it('hides album and its separator when display album is disabled', () => {
+    const { container } = renderWithRouter(
+      <SongCard
+        {...defaultProps}
+        song={{
+          ...mockSong,
+          displayAlbum: {
+            mode: 'none',
+            albumDocId: null,
+            title: '',
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('测试歌手')).toBeInTheDocument()
+    expect(screen.queryByText('测试专辑')).not.toBeInTheDocument()
+    expect(container.querySelectorAll('.bg-border.rounded-full')).toHaveLength(0)
+  })
+
+  it('keeps release date separated when album is hidden', () => {
+    const { container } = renderWithRouter(
+      <SongCard
+        {...defaultProps}
+        song={{
+          ...mockSong,
+          releaseDate: '2024-01-02',
+          displayAlbum: {
+            mode: 'none',
+            albumDocId: null,
+            title: '',
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('测试歌手')).toBeInTheDocument()
+    expect(screen.getByText('发行日期：2024-01-02')).toBeInTheDocument()
+    expect(screen.queryByText('测试专辑')).not.toBeInTheDocument()
+    expect(container.querySelectorAll('.bg-border.rounded-full')).toHaveLength(1)
   })
 
   it('has button role with correct aria-label', () => {
@@ -157,6 +200,27 @@ describe('SongCard', () => {
 
   it('keeps compact grid cards from rendering album metadata', () => {
     renderWithRouter(<SongCard {...defaultProps} viewMode="small" />)
+
+    expect(screen.queryByText('测试专辑')).not.toBeInTheDocument()
+    expect(screen.getByText('测试歌手')).toBeInTheDocument()
+  })
+
+  it('does not render an empty album row in grid layout', () => {
+    renderWithRouter(
+      <SongCard
+        {...defaultProps}
+        viewMode="medium"
+        song={{
+          ...mockSong,
+          album: '',
+          displayAlbum: {
+            mode: 'manual',
+            albumDocId: null,
+            title: '',
+          },
+        }}
+      />
+    )
 
     expect(screen.queryByText('测试专辑')).not.toBeInTheDocument()
     expect(screen.getByText('测试歌手')).toBeInTheDocument()

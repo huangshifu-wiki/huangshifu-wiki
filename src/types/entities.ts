@@ -34,6 +34,11 @@ export interface SongItem {
   arrangers?: string[]
   vocals?: string[]
   album: string
+  displayAlbum?: {
+    mode: 'linked' | 'manual' | 'none'
+    albumDocId: string | null
+    title: string
+  }
   cover: string
   audioUrl: string
   releaseDate?: string | null

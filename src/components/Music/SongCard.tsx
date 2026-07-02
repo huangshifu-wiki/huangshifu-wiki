@@ -34,7 +34,9 @@ const SongCard = React.memo(function SongCard({
   const isSmallGrid = viewMode === 'small'
   const artistsText = formatMusicCredits(song.artists, '未知歌手')
   const canPlay = isPlayableSong(song)
+  const albumText = (song.displayAlbum ? song.displayAlbum.title : song.album).trim()
   const releaseDateText = song.releaseDate ? `发行日期：${song.releaseDate}` : null
+  const listMetaItems = [artistsText, albumText, releaseDateText].filter(Boolean)
 
   const handleRowClick = () => {
     navigate(`/music/${song.docId}`)
@@ -140,7 +142,9 @@ const SongCard = React.memo(function SongCard({
           >
             {artistsText}
           </p>
-          {!isSmallGrid && <p className="text-xs text-text-muted/80 truncate">{song.album}</p>}
+          {!isSmallGrid && albumText && (
+            <p className="text-xs text-text-muted/80 truncate">{albumText}</p>
+          )}
           {releaseDateText && (
             <p
               className={clsx(
@@ -208,15 +212,14 @@ const SongCard = React.memo(function SongCard({
           {song.title}
         </p>
         <p className="text-[0.8125rem] text-text-muted truncate mt-0.5 flex items-center gap-2 flex-wrap">
-          {artistsText}
-          <span className="w-[3px] h-[3px] bg-border rounded-full inline-block" />
-          {song.album}
-          {releaseDateText && (
-            <>
-              <span className="w-[3px] h-[3px] bg-border rounded-full inline-block" />
-              <span>{releaseDateText}</span>
-            </>
-          )}
+          {listMetaItems.map((item, index) => (
+            <React.Fragment key={`${index}-${item}`}>
+              {index > 0 && (
+                <span className="w-[3px] h-[3px] bg-border rounded-full inline-block" />
+              )}
+              <span>{item}</span>
+            </React.Fragment>
+          ))}
         </p>
       </div>
 
