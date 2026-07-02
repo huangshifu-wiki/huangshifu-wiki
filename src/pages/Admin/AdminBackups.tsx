@@ -13,26 +13,23 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
-import { apiGet, apiPost, apiUpload, getXsrfToken } from '../../lib/apiClient'
+import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import type {
+  AdminBackup,
+  AdminBackupCreateResponse,
+  AdminBackupNoteResponse,
+  AdminBackupRestoreResponse,
+  AdminBackupsResponse,
+  RestoreMediaReport,
+} from '../../types/api'
 
-type BackupFile = {
-  filename: string
-  size: number
-  sizeFormatted: string
-  createdAt: string
-  note: string
-}
-
-type BackupCreateResponse = { backup: BackupFile }
-type BackupListResponse = { backups: BackupFile[] }
-type BackupNoteResponse = { success: boolean; note: string }
 type DialogType = 'create' | 'restore' | 'restore-existing' | 'delete' | 'note' | null
 
 const AdminBackups = () => {
-  const [backups, setBackups] = useState<BackupFile[]>([])
+  const [backups, setBackups] = useState<AdminBackup[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogType>(null)
@@ -42,6 +39,8 @@ const AdminBackups = () => {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [noteTarget, setNoteTarget] = useState<string | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<string | null>(null)
+  const [lastMediaReport, setLastMediaReport] = useState<RestoreMediaReport | null>(null)
+  const [lastMediaReportError, setLastMediaReportError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastDialogRef = useRef<Exclude<DialogType, null> | null>(null)
   const [restoreFile, setRestoreFile] = useState<File | null>(null)
@@ -58,7 +57,7 @@ const AdminBackups = () => {
     async (showSpinner = true) => {
       if (showSpinner) setLoading(true)
       try {
-        const response = await apiGet<BackupListResponse>('/api/admin/backup/list', undefined, {
+        const response = await apiGet<AdminBackupsResponse>('/api/admin/backup/list', undefined, {
           staleTime: 0,
           swr: false,
         })
@@ -88,13 +87,30 @@ const AdminBackups = () => {
     setRestoreFile(null)
   }
 
+  const handleRestoreSuccess = (response: AdminBackupRestoreResponse) => {
+    setLastMediaReport(response.mediaReport || null)
+    setLastMediaReportError(response.mediaReportError || '')
+    const report = response.mediaReport
+    if (report) {
+      show(
+        `数据库恢复成功，图片清单已生成：缺失 ${report.missingFiles}，孤儿 ${report.orphanFiles}`
+      )
+      return
+    }
+    if (response.mediaReportError) {
+      show(`数据库恢复成功，但${response.mediaReportError}`, { variant: 'error' })
+      return
+    }
+    show('数据库恢复成功')
+  }
+
   const handleCreate = async () => {
     setActionLoading('create')
     try {
       const body = createNote.trim() ? { note: createNote } : undefined
       const response = body
-        ? await apiPost<BackupCreateResponse>('/api/admin/backup/create', body)
-        : await apiPost<BackupCreateResponse>('/api/admin/backup/create')
+        ? await apiPost<AdminBackupCreateResponse>('/api/admin/backup/create', body)
+        : await apiPost<AdminBackupCreateResponse>('/api/admin/backup/create')
       show('备份创建成功')
       closeDialog()
       setBackups((current) => [
@@ -113,7 +129,7 @@ const AdminBackups = () => {
     if (!noteTarget) return
     setActionLoading('note')
     try {
-      const response = await apiPost<BackupNoteResponse>(
+      const response = await apiPost<AdminBackupNoteResponse>(
         `/api/admin/backup/${encodeURIComponent(noteTarget)}/note`,
         { note: editNote }
       )
@@ -131,38 +147,40 @@ const AdminBackups = () => {
     }
   }
 
-  const handleDownload = async (filename: string) => {
-    if (actionLoading) {
-      return
-    }
-    setActionLoading('download')
+  const downloadFile = async (
+    url: string,
+    filename: string,
+    options: { loadingKey: string; successMessage: string; errorMessage: string }
+  ) => {
+    if (actionLoading) return
+    setActionLoading(options.loadingKey)
     try {
-      const xsrfToken = getXsrfToken()
-      const response = await fetch(`/api/admin/backup/${encodeURIComponent(filename)}/download`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {}),
-        },
-      })
+      const response = await apiDownload(url, { method: 'POST' })
       if (!response.ok)
-        throw new Error((await response.json().catch(() => ({}))).error || '下载失败')
+        throw new Error((await response.json().catch(() => ({}))).error || options.errorMessage)
       const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
+      const objectUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url
+      a.href = objectUrl
       a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      show('下载完成', { variant: 'success' })
+      URL.revokeObjectURL(objectUrl)
+      show(options.successMessage, { variant: 'success' })
     } catch (error) {
-      show(error instanceof Error ? error.message : '下载失败', { variant: 'error' })
+      show(error instanceof Error ? error.message : options.errorMessage, { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
+  }
+
+  const handleDownload = async (filename: string) => {
+    await downloadFile(`/api/admin/backup/${encodeURIComponent(filename)}/download`, filename, {
+      loadingKey: 'download',
+      successMessage: '下载完成',
+      errorMessage: '下载失败',
+    })
   }
 
   const handleRestore = async () => {
@@ -178,9 +196,13 @@ const AdminBackups = () => {
       if (legacyPassword !== '') {
         formData.append('legacyPassword', legacyPassword)
       }
-      await apiUpload<{ success: boolean }>('/api/admin/backup/restore', formData)
-      show('数据库恢复成功')
+      const response = await apiUpload<AdminBackupRestoreResponse>(
+        '/api/admin/backup/restore',
+        formData
+      )
+      handleRestoreSuccess(response)
       closeDialog()
+      await fetchBackups(false)
     } catch (error) {
       show(error instanceof Error ? error.message : '恢复失败', { variant: 'error' })
     } finally {
@@ -208,11 +230,11 @@ const AdminBackups = () => {
     if (!restoreTarget) return
     setActionLoading('restore-existing')
     try {
-      await apiPost<{ success: boolean }>(
+      const response = await apiPost<AdminBackupRestoreResponse>(
         `/api/admin/backup/${encodeURIComponent(restoreTarget)}/restore`,
         { confirm: true, ...(legacyPassword !== '' ? { legacyPassword } : {}) }
       )
-      show('数据库恢复成功')
+      handleRestoreSuccess(response)
       closeDialog()
       await fetchBackups(false)
     } catch (error) {
@@ -233,10 +255,22 @@ const AdminBackups = () => {
     setDialog('delete')
   }
 
-  const openNoteDialog = (backup: BackupFile) => {
+  const openNoteDialog = (backup: AdminBackup) => {
     setNoteTarget(backup.filename)
     setEditNote(backup.note || '')
     setDialog('note')
+  }
+
+  const handleDownloadMediaReport = async (filename: string) => {
+    await downloadFile(
+      `/api/admin/backup/media-reports/${encodeURIComponent(filename)}/download`,
+      filename,
+      {
+        loadingKey: 'media-report-download',
+        successMessage: '图片清单下载完成',
+        errorMessage: '下载图片清单失败',
+      }
+    )
   }
 
   if (loading) {
@@ -272,6 +306,31 @@ const AdminBackups = () => {
           </button>
         </div>
       </div>
+
+      {(lastMediaReport || lastMediaReportError) && (
+        <div className="bg-surface border border-border rounded p-4 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-text-primary">最近恢复图片清单</p>
+            {lastMediaReport ? (
+              <p className="text-sm text-text-secondary mt-1">
+                缺失 {lastMediaReport.missingFiles} 个，孤儿 {lastMediaReport.orphanFiles} 个，
+                已扫描 {lastMediaReport.scannedFiles} 个本地文件。
+              </p>
+            ) : (
+              <p className="text-sm theme-text-error mt-1">{lastMediaReportError}</p>
+            )}
+          </div>
+          {lastMediaReport && (
+            <button
+              onClick={() => handleDownloadMediaReport(lastMediaReport.filename)}
+              disabled={actionLoading !== null}
+              className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all inline-flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+            >
+              <Download size={14} /> 下载图片清单
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="bg-surface border border-border rounded overflow-hidden">
         <table className="w-full">

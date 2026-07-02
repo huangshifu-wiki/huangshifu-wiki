@@ -10,6 +10,10 @@ import dotenv from 'dotenv'
 import fs from 'fs/promises'
 import path from 'path'
 import { pathToFileURL } from 'url'
+import {
+  collectReferencedStorageKeys as collectReferencedStorageReferences,
+  scanUploadFiles as scanUploadFilesForReport,
+} from '../src/server/services/mediaRestoreReport.service'
 
 dotenv.config({ path: '.env.local' })
 dotenv.config()
@@ -30,9 +34,6 @@ type Options = {
   limit: number | null
   verbose: boolean
 }
-
-const UPLOAD_URL_PATTERN = /\/uploads\/[^\s"'`)<>\\]+/g
-const MARKDOWN_UPLOAD_URL_PATTERN = /\]\((\/uploads\/[^)\s]+)(?:\s+"[^"]*")?\)/g
 
 function parseArgs(args: string[]): Options {
   const getValue = (name: string) => {
@@ -75,280 +76,28 @@ function parseNumber(value: string | undefined, fallback: number, options: { min
   return Math.max(min, parsed)
 }
 
-function normalizeStorageKey(value: string | null | undefined) {
-  if (!value) return null
-
-  const trimmed = value.trim()
-  if (!trimmed) return null
-
-  const rawKey = extractStorageKeyFromUploadUrl(trimmed) || trimmed
-  const withoutQuery = rawKey.split(/[?#]/, 1)[0]
-  const decoded = safeDecodeURIComponent(withoutQuery)
-  const normalized = decoded
-    .replace(/\\/g, '/')
-    .replace(/^\/+/, '')
-    .split('/')
-    .filter(Boolean)
-    .join('/')
-
-  if (
-    !normalized ||
-    normalized.includes('\0') ||
-    normalized.startsWith('..') ||
-    normalized.includes('/../')
-  ) {
-    return null
-  }
-
-  return normalized
-}
-
-function safeDecodeURIComponent(value: string) {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
-}
-
-function extractStorageKeyFromUploadUrl(value: string) {
-  if (value.startsWith('/uploads/')) {
-    return value.slice('/uploads/'.length)
-  }
-
-  try {
-    const parsed = new URL(value)
-    if (parsed.pathname.startsWith('/uploads/')) {
-      return parsed.pathname.slice('/uploads/'.length)
-    }
-  } catch {
-    return null
-  }
-
-  return null
-}
-
-function addStorageKey(keys: Set<string>, value: string | null | undefined) {
-  const key = normalizeStorageKey(value)
-  if (key) keys.add(key)
-}
-
-function addUploadUrlsFromText(keys: Set<string>, value: string | null | undefined) {
-  if (!value) return
-
-  for (const match of value.matchAll(UPLOAD_URL_PATTERN)) {
-    addStorageKey(keys, match[0])
-  }
-
-  for (const match of value.matchAll(MARKDOWN_UPLOAD_URL_PATTERN)) {
-    addStorageKey(keys, match[1])
-  }
-}
-
 async function collectReferencedStorageKeys() {
-  const keys = new Set<string>()
-
-  const [
-    mediaAssets,
-    imageMaps,
-    users,
-    galleryImages,
-    songCovers,
-    albumCovers,
-    wikiEmbeddings,
-    postEmbeddings,
-  ] = await Promise.all([
-    prisma.mediaAsset.findMany({ select: { storageKey: true, publicUrl: true } }),
-    prisma.imageMap.findMany({ select: { localUrl: true, thumbnailUrl: true } }),
-    prisma.user.findMany({ where: { photoURL: { not: null } }, select: { photoURL: true } }),
-    prisma.galleryImage.findMany({ select: { url: true } }),
-    prisma.songCover.findMany({ select: { storageKey: true, publicUrl: true } }),
-    prisma.albumCover.findMany({ select: { storageKey: true, publicUrl: true } }),
-    prisma.wikiImageEmbedding.findMany({ select: { imageUrl: true } }),
-    prisma.postImageEmbedding.findMany({ select: { imageUrl: true } }),
-  ])
-
-  for (const item of mediaAssets) {
-    addStorageKey(keys, item.storageKey)
-    addStorageKey(keys, item.publicUrl)
-  }
-
-  for (const item of imageMaps) {
-    addStorageKey(keys, item.localUrl)
-    addStorageKey(keys, item.thumbnailUrl)
-  }
-
-  for (const item of users) addStorageKey(keys, item.photoURL)
-  for (const item of galleryImages) addStorageKey(keys, item.url)
-
-  for (const item of songCovers) {
-    addStorageKey(keys, item.storageKey)
-    addStorageKey(keys, item.publicUrl)
-  }
-
-  for (const item of albumCovers) {
-    addStorageKey(keys, item.storageKey)
-    addStorageKey(keys, item.publicUrl)
-  }
-
-  for (const item of wikiEmbeddings) addStorageKey(keys, item.imageUrl)
-  for (const item of postEmbeddings) addStorageKey(keys, item.imageUrl)
-
-  await collectTextReferences(keys)
-
-  return keys
-}
-
-async function collectTextReferences(keys: Set<string>) {
-  const pageSize = 500
-
-  await collectPagedText(
-    (skip) =>
-      prisma.wikiPage.findMany({
-        skip,
-        take: pageSize,
-        select: { content: true },
-        orderBy: { id: 'asc' },
-      }),
-    keys,
-    pageSize
-  )
-
-  await collectPagedText(
-    (skip) =>
-      prisma.wikiRevision.findMany({
-        skip,
-        take: pageSize,
-        select: { content: true },
-        orderBy: { id: 'asc' },
-      }),
-    keys,
-    pageSize
-  )
-
-  await collectPagedText(
-    (skip) =>
-      prisma.post.findMany({
-        skip,
-        take: pageSize,
-        select: { content: true },
-        orderBy: { id: 'asc' },
-      }),
-    keys,
-    pageSize
-  )
-
-  await collectPagedText(
-    (skip) =>
-      prisma.postComment.findMany({
-        skip,
-        take: pageSize,
-        select: { content: true },
-        orderBy: { id: 'asc' },
-      }),
-    keys,
-    pageSize
-  )
-
-  await collectPagedText(
-    (skip) =>
-      prisma.wikiPullRequestComment.findMany({
-        skip,
-        take: pageSize,
-        select: { content: true },
-        orderBy: { id: 'asc' },
-      }),
-    keys,
-    pageSize
-  )
-
-  await collectPagedText(
-    (skip) =>
-      prisma.wikiPullRequest.findMany({
-        skip,
-        take: pageSize,
-        select: { description: true },
-        orderBy: { id: 'asc' },
-      }),
-    keys,
-    pageSize
-  )
-
-  await collectPagedText(
-    (skip) =>
-      prisma.announcement.findMany({
-        skip,
-        take: pageSize,
-        select: { content: true, link: true },
-        orderBy: { id: 'asc' },
-      }),
-    keys,
-    pageSize
-  )
-}
-
-async function collectPagedText<T extends Record<string, string | null>>(
-  load: (skip: number) => Promise<T[]>,
-  keys: Set<string>,
-  pageSize: number
-) {
-  for (let skip = 0; ; skip += pageSize) {
-    const rows = await load(skip)
-    for (const row of rows) {
-      for (const value of Object.values(row)) {
-        addUploadUrlsFromText(keys, value)
-      }
-    }
-
-    if (rows.length < pageSize) break
-  }
+  return new Set((await collectReferencedStorageReferences(prisma)).keys())
 }
 
 async function scanUploadFiles(options: Options) {
-  const files: UploadFile[] = []
-  const cutoffTime = Date.now() - options.olderThanHours * 60 * 60 * 1000
-
-  async function walk(dir: string) {
-    const entries = await fs.readdir(dir, { withFileTypes: true })
-
-    for (const entry of entries) {
-      const absolutePath = path.join(dir, entry.name)
-      const storageKey = path.relative(options.uploadsDir, absolutePath).split(path.sep).join('/')
-
-      if (
-        !options.includeVariants &&
-        (storageKey === 'variants' || storageKey.startsWith('variants/'))
-      ) {
-        continue
-      }
-
-      if (entry.isDirectory()) {
-        await walk(absolutePath)
-        continue
-      }
-
-      if (!entry.isFile()) {
-        continue
-      }
-
-      const stat = await fs.stat(absolutePath)
-      if (stat.mtimeMs > cutoffTime) {
-        continue
-      }
-
-      files.push({ storageKey, absolutePath, sizeBytes: stat.size })
-    }
-  }
-
   try {
     await fs.access(options.uploadsDir)
   } catch {
     throw new Error(`uploads directory not found: ${options.uploadsDir}`)
   }
 
-  await walk(options.uploadsDir)
-  files.sort((a, b) => a.storageKey.localeCompare(b.storageKey))
-  return files
+  const cutoffTime = Date.now() - options.olderThanHours * 60 * 60 * 1000
+  return (
+    await scanUploadFilesForReport(options.uploadsDir, {
+      includeVariants: options.includeVariants,
+      olderThanMs: cutoffTime,
+    })
+  ).map((file) => ({
+    storageKey: file.storageKey,
+    absolutePath: file.absolutePath,
+    sizeBytes: file.sizeBytes,
+  }))
 }
 
 async function deleteOrphanFiles(files: UploadFile[], options: Options) {
@@ -489,13 +238,7 @@ async function main() {
   }
 }
 
-export {
-  collectReferencedStorageKeys,
-  extractStorageKeyFromUploadUrl,
-  normalizeStorageKey,
-  parseArgs,
-  scanUploadFiles,
-}
+export { collectReferencedStorageKeys, parseArgs, scanUploadFiles }
 
 const isExecutedAsScript =
   typeof process.argv[1] === 'string' &&

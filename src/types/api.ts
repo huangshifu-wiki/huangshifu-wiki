@@ -348,12 +348,38 @@ export interface GalleryUploadResponse {
 export interface AdminBackup {
   filename: string
   size: number
+  sizeFormatted?: string
   createdAt: string
   note: string
 }
 
 export interface AdminBackupsResponse {
   backups: AdminBackup[]
+}
+
+export interface AdminBackupCreateResponse {
+  backup: AdminBackup
+}
+
+export interface AdminBackupNoteResponse {
+  success: boolean
+  note: string
+}
+
+export interface RestoreMediaReport {
+  filename: string
+  generatedAt: string
+  referencedKeys: number
+  scannedFiles: number
+  missingFiles: number
+  orphanFiles: number
+  orphanSizeBytes: number
+}
+
+export interface AdminBackupRestoreResponse {
+  success: boolean
+  mediaReport?: RestoreMediaReport
+  mediaReportError?: string
 }
 
 export type AdminReviewQueueType = 'wiki' | 'posts' | 'galleries'

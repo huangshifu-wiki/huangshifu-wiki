@@ -6,15 +6,14 @@ import AdminBackups from '../../../src/pages/Admin/AdminBackups'
 const mockApiGet = vi.hoisted(() => vi.fn())
 const mockApiPost = vi.hoisted(() => vi.fn())
 const mockApiUpload = vi.hoisted(() => vi.fn())
-const mockGetXsrfToken = vi.hoisted(() => vi.fn())
+const mockApiDownload = vi.hoisted(() => vi.fn())
 const mockShow = vi.hoisted(() => vi.fn())
-const mockFetch = vi.hoisted(() => vi.fn())
 
 vi.mock('../../../src/lib/apiClient', () => ({
+  apiDownload: mockApiDownload,
   apiGet: mockApiGet,
   apiPost: mockApiPost,
   apiUpload: mockApiUpload,
-  getXsrfToken: mockGetXsrfToken,
 }))
 
 vi.mock('../../../src/components/Toast', () => ({
@@ -31,20 +30,28 @@ const initialBackup = {
   note: '发布前备份',
 }
 
+const mediaReport = {
+  filename: 'restore-media-report_2026-06-28_10-05-01-000.json',
+  generatedAt: '2026-06-28T10:05:01.000Z',
+  referencedKeys: 10,
+  scannedFiles: 8,
+  missingFiles: 2,
+  orphanFiles: 1,
+  orphanSizeBytes: 1024,
+}
+
 describe('AdminBackups', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubGlobal('fetch', mockFetch)
     vi.stubGlobal('URL', {
       ...URL,
       createObjectURL: vi.fn().mockReturnValue('blob:test'),
       revokeObjectURL: vi.fn(),
     })
-    mockGetXsrfToken.mockReturnValue('token')
     mockApiGet.mockResolvedValue({ backups: [initialBackup] })
     mockApiPost.mockResolvedValue({ backup: initialBackup })
     mockApiUpload.mockResolvedValue({ success: true })
-    mockFetch.mockResolvedValue({
+    mockApiDownload.mockResolvedValue({
       ok: true,
       blob: vi.fn().mockResolvedValue(new Blob(['backup'])),
     })
@@ -65,15 +72,15 @@ describe('AdminBackups', () => {
     fireEvent.click(screen.getByTitle('下载'))
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(mockApiDownload).toHaveBeenCalledTimes(1)
     })
 
     expect(screen.queryByText('下载备份')).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText('请输入备份密码')).not.toBeInTheDocument()
-    expect(mockFetch.mock.calls[0][0]).toBe(
+    expect(mockApiDownload.mock.calls[0][0]).toBe(
       `/api/admin/backup/${encodeURIComponent(initialBackup.filename)}/download`
     )
-    expect(mockFetch.mock.calls[0][1]).not.toHaveProperty('body')
+    expect(mockApiDownload.mock.calls[0][1]).toEqual({ method: 'POST' })
   })
 
   it('creates a backup without sending a password and refreshes the list without cache', async () => {
@@ -236,6 +243,56 @@ describe('AdminBackups', () => {
     })
   })
 
+  it('downloads the restore media report after a successful restore', async () => {
+    mockApiPost.mockResolvedValueOnce({ success: true, mediaReport })
+
+    render(<AdminBackups />)
+
+    await waitFor(() => {
+      expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTitle('恢复'))
+    fireEvent.click(screen.getByText('恢复数据库'))
+
+    await waitFor(() => {
+      expect(screen.getByText('下载图片清单')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('下载图片清单'))
+
+    await waitFor(() => {
+      expect(mockApiDownload).toHaveBeenCalledTimes(1)
+    })
+    expect(mockApiDownload.mock.calls[0][0]).toBe(
+      `/api/admin/backup/media-reports/${encodeURIComponent(mediaReport.filename)}/download`
+    )
+    expect(mockApiDownload.mock.calls[0][1]).toEqual({ method: 'POST' })
+  })
+
+  it('shows restore success even when media report generation fails', async () => {
+    mockApiPost.mockResolvedValueOnce({
+      success: true,
+      mediaReportError: '图片清单生成失败，请查看服务器日志',
+    })
+
+    render(<AdminBackups />)
+
+    await waitFor(() => {
+      expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTitle('恢复'))
+    fireEvent.click(screen.getByText('恢复数据库'))
+
+    await waitFor(() => {
+      expect(screen.getByText('图片清单生成失败，请查看服务器日志')).toBeInTheDocument()
+    })
+    expect(mockShow).toHaveBeenCalledWith('数据库恢复成功，但图片清单生成失败，请查看服务器日志', {
+      variant: 'error',
+    })
+  })
+
   it('passes legacy restore passwords without trimming them', async () => {
     const { container } = render(<AdminBackups />)
 
@@ -262,5 +319,41 @@ describe('AdminBackups', () => {
     const formData = mockApiUpload.mock.calls[0][1] as FormData
     expect(formData.get('legacyPassword')).toBe(' secret ')
     expect(formData.get('confirm')).toBe('true')
+  })
+
+  it('refreshes the backup list after uploading a restore backup', async () => {
+    const preRestoreBackup = {
+      filename: 'backup_2026-06-28_10-06-00-000.zip',
+      size: 4096,
+      sizeFormatted: '4 KB',
+      createdAt: '2026-06-28T10:06:00.000Z',
+      note: '',
+    }
+    mockApiGet
+      .mockResolvedValueOnce({ backups: [initialBackup] })
+      .mockResolvedValueOnce({ backups: [preRestoreBackup, initialBackup] })
+    mockApiUpload.mockResolvedValueOnce({ success: true, mediaReport })
+    const { container } = render(<AdminBackups />)
+
+    await waitFor(() => {
+      expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('上传恢复'))
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(['zip'], 'backup.zip', { type: 'application/zip' })],
+      },
+    })
+    fireEvent.click(screen.getByText('恢复数据库'))
+
+    await waitFor(() => {
+      expect(screen.getByText(preRestoreBackup.filename)).toBeInTheDocument()
+    })
+    expect(mockApiGet).toHaveBeenLastCalledWith('/api/admin/backup/list', undefined, {
+      staleTime: 0,
+      swr: false,
+    })
   })
 })

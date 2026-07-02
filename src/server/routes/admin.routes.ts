@@ -65,6 +65,13 @@ import {
   cleanupUnusedMediaAssetById,
   cleanupUntrackedUploadImageByUrl,
 } from '../services/mediaAssetCleanupService'
+import {
+  generateMediaRestoreReport,
+  isMediaRestoreReportFilename,
+  resolveMediaRestoreReportPath,
+  type MediaRestoreReportSummary,
+  type MediaRestoreSource,
+} from '../services/mediaRestoreReport.service'
 import multer from 'multer'
 import fs from 'fs'
 import path from 'path'
@@ -93,6 +100,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const router = createRouter()
+const BACKUP_RESTORE_RESPONSE_TIMEOUT_MS = 15 * 60 * 1000
 
 function canManageTargetUserRole(
   operatorRole: AuthenticatedRequest['authUser']['role'] | undefined,
@@ -1831,18 +1839,12 @@ router.post(
         return
       }
 
-      res.setHeader('Content-Type', 'application/zip')
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-      const fileStream = fs.createReadStream(filePath)
-      fileStream.on('error', (err) => {
-        logger.error({ err }, 'Backup download stream error')
-        if (!res.headersSent) {
-          res.status(500).json({ error: '下载备份失败' })
-        } else {
-          res.end()
-        }
+      pipeDownloadFile(res, filePath, {
+        filename,
+        contentType: 'application/zip',
+        errorMessage: '下载备份失败',
+        logMessage: 'Backup download stream error',
       })
-      fileStream.pipe(res)
     } catch (error) {
       logger.error({ err: error }, 'Download backup error')
       res.status(500).json({ error: '下载备份失败' })
@@ -1856,13 +1858,35 @@ type RestoreFromZipResult = {
   success: boolean
   error?: string
   statusCode?: number
+  mediaReport?: MediaRestoreReportSummary
+  mediaReportError?: string
+}
+
+function pipeDownloadFile(
+  res: Response,
+  filePath: string,
+  options: { filename: string; contentType: string; errorMessage: string; logMessage: string }
+) {
+  res.setHeader('Content-Type', options.contentType)
+  res.setHeader('Content-Disposition', `attachment; filename="${options.filename}"`)
+  const fileStream = fs.createReadStream(filePath)
+  fileStream.on('error', (err) => {
+    logger.error({ err }, options.logMessage)
+    if (!res.headersSent) {
+      res.status(500).json({ error: options.errorMessage })
+    } else {
+      res.end()
+    }
+  })
+  fileStream.pipe(res)
 }
 
 async function restoreDatabaseFromZip(
   zipFilePath: string,
   dbConfig: { host: string; port: string; user: string; password: string; database: string },
   legacyPassword?: string,
-  sourceBackupFilename?: string
+  sourceBackupFilename?: string,
+  restoreSource: MediaRestoreSource = { type: 'upload' }
 ): Promise<RestoreFromZipResult> {
   let sqlContent: Buffer
   try {
@@ -2059,7 +2083,16 @@ async function restoreDatabaseFromZip(
     await fs.promises.unlink(tempSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'))
   }
 
-  return { success: true }
+  try {
+    const mediaReport = await generateMediaRestoreReport(prisma, restoreSource)
+    return { success: true, mediaReport }
+  } catch (mediaReportError) {
+    logger.error({ err: mediaReportError }, 'Generate restore media report failed')
+    return {
+      success: true,
+      mediaReportError: '图片清单生成失败，请查看服务器日志',
+    }
+  }
 }
 
 // POST /api/admin/backup/restore - Restore backup (upload)
@@ -2069,6 +2102,8 @@ router.post(
   uploadBackup.single('file'),
   validateBody(backupRestoreSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    req.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
+    res.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
     const { legacyPassword, confirm } = req.body as { legacyPassword?: string; confirm?: boolean }
     const file = req.file
 
@@ -2090,14 +2125,22 @@ router.post(
     }
 
     try {
-      const result = await restoreDatabaseFromZip(file.path, dbConfig, legacyPassword)
+      const result = await restoreDatabaseFromZip(file.path, dbConfig, legacyPassword, undefined, {
+        type: 'upload',
+        filename: file.originalname,
+      })
 
       if (!result.success) {
         res.status(result.statusCode).json({ error: result.error })
         return
       }
 
-      res.json({ success: true, message: '数据库恢复成功' })
+      res.json({
+        success: true,
+        message: '数据库恢复成功',
+        mediaReport: result.mediaReport,
+        mediaReportError: result.mediaReportError,
+      })
     } finally {
       await fs.promises.unlink(file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'))
     }
@@ -2110,6 +2153,8 @@ router.post(
   requireSuperAdmin,
   validateBody(backupRestoreSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    req.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
+    res.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
     const { legacyPassword, confirm } = req.body as { legacyPassword?: string; confirm?: boolean }
 
     if (!confirm) {
@@ -2139,7 +2184,10 @@ router.post(
       return
     }
 
-    const result = await restoreDatabaseFromZip(filePath, dbConfig, legacyPassword, normalized)
+    const result = await restoreDatabaseFromZip(filePath, dbConfig, legacyPassword, normalized, {
+      type: 'existing',
+      filename: normalized,
+    })
 
     if (!result.success) {
       res.status(result.statusCode).json({ error: result.error })
@@ -2147,7 +2195,45 @@ router.post(
     }
 
     // Do NOT delete the original backup file
-    res.json({ success: true, message: '数据库恢复成功' })
+    res.json({
+      success: true,
+      message: '数据库恢复成功',
+      mediaReport: result.mediaReport,
+      mediaReportError: result.mediaReportError,
+    })
+  })
+)
+
+// POST /api/admin/backup/media-reports/:filename/download - Download restore media report
+router.post(
+  '/backup/media-reports/:filename/download',
+  requireSuperAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const filename = req.params.filename
+      if (!isMediaRestoreReportFilename(filename)) {
+        res.status(400).json({ error: '无效的文件名' })
+        return
+      }
+
+      const filePath = resolveMediaRestoreReportPath(filename)
+      try {
+        await fs.promises.access(filePath)
+      } catch {
+        res.status(404).json({ error: '图片清单不存在' })
+        return
+      }
+
+      pipeDownloadFile(res, filePath, {
+        filename,
+        contentType: 'application/json; charset=utf-8',
+        errorMessage: '下载图片清单失败',
+        logMessage: 'Restore media report download stream error',
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Download restore media report error')
+      res.status(500).json({ error: '下载图片清单失败' })
+    }
   })
 )
 
