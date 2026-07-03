@@ -32,6 +32,16 @@ export const adminResetUserPasswordSchema = z.object({
   newPassword: passwordSchema,
 })
 
+export const adminUpdateUserRoleSchema = z.object({
+  role: z.enum(['user', 'admin', 'super_admin'], {
+    error: '无效角色',
+  }),
+  currentPassword: z
+    .string({ error: '当前密码必须是字符串' })
+    .min(1, '当前密码不能为空')
+    .optional(),
+})
+
 const adminUserEmailSchema = z
   .string({ error: '邮箱不能为空' })
   .trim()

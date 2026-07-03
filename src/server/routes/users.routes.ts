@@ -17,6 +17,7 @@ import { profileLimiter } from '../middleware/rateLimiter'
 import {
   validateBody,
   adminResetUserPasswordSchema,
+  adminUpdateUserRoleSchema,
   adminUpdateUserSchema,
   passwordSchema,
   userEmailUpdateSchema,
@@ -44,6 +45,7 @@ import {
   getPasswordSaltRounds,
   ensureTextLimit,
   validateUserDisplayName,
+  ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS,
 } from '../utils'
 import type { AuthenticatedRequest, UserStatus } from '../types'
 
@@ -964,33 +966,99 @@ router.get(
 
 const updateUserRoleHandler = asyncHandler(async (req: AuthenticatedRequest, res) => {
   try {
-    const { role } = req.body as { role?: PrismaUserRole }
-    if (!role || !['user', 'admin', 'super_admin'].includes(role)) {
-      res.status(400).json({ error: '无效角色' })
+    const { role, currentPassword } = req.body as {
+      role: PrismaUserRole
+      currentPassword?: string
+    }
+
+    const targetUid = req.params.userId
+    if (!targetUid) {
+      res.status(400).json({ error: '无效用户' })
       return
     }
 
-    const user = await prisma.user.update({
-      where: { uid: req.params.userId },
-      data: { role },
-      select: {
-        uid: true,
-        email: true,
-        displayName: true,
-        photoURL: true,
-        role: true,
-        status: true,
-        banReason: true,
-        bannedAt: true,
-        emailVerifiedAt: true,
-        level: true,
-        signature: true,
-        bio: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    if (req.authUser?.uid === targetUid) {
+      res.status(400).json({ error: '不能修改自己的角色' })
+      return
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { uid: targetUid },
+      select: { role: true, deletedAt: true },
     })
-    clearUserCache(req.params.userId)
+    if (!targetUser || targetUser.deletedAt) {
+      res.status(404).json({ error: '用户不存在' })
+      return
+    }
+
+    if (targetUser.role === role) {
+      const user = await prisma.user.findUnique({
+        where: { uid: targetUid },
+        select: ADMIN_USER_SELECT,
+      })
+      if (!user) {
+        res.status(404).json({ error: '用户不存在' })
+        return
+      }
+      res.json({ user: toUserResponse(user) })
+      return
+    }
+
+    const demotesSuperAdmin = targetUser.role === 'super_admin' && role !== 'super_admin'
+    const touchesSuperAdmin = role === 'super_admin' || demotesSuperAdmin
+    if (touchesSuperAdmin && !ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS) {
+      res.status(403).json({ error: '当前配置不允许变更超级管理员身份' })
+      return
+    }
+
+    if (demotesSuperAdmin) {
+      if (role !== 'admin') {
+        res.status(400).json({ error: '超级管理员只能降为管理员' })
+        return
+      }
+
+      const remainingSuperAdminCount = await prisma.user.count({
+        where: {
+          role: 'super_admin',
+          status: 'active',
+          deletedAt: null,
+          uid: { not: targetUid },
+        },
+      })
+      if (remainingSuperAdminCount < 1) {
+        res.status(400).json({ error: '至少需要保留一名超级管理员' })
+        return
+      }
+    }
+
+    if (touchesSuperAdmin) {
+      if (!currentPassword) {
+        res.status(400).json({ error: '请验证当前账户密码' })
+        return
+      }
+
+      const operator = await prisma.user.findUnique({
+        where: { uid: req.authUser!.uid },
+        select: { passwordHash: true },
+      })
+      if (!operator?.passwordHash) {
+        res.status(400).json({ error: '当前账户未设置密码，请先在个人设置中设置登录密码' })
+        return
+      }
+
+      const validPassword = await bcrypt.compare(currentPassword, operator.passwordHash)
+      if (!validPassword) {
+        res.status(401).json({ error: '当前密码不正确' })
+        return
+      }
+    }
+
+    const user = await prisma.user.update({
+      where: { uid: targetUid },
+      data: { role },
+      select: ADMIN_USER_SELECT,
+    })
+    clearUserCache(targetUid)
 
     res.json({ user: toUserResponse(user) })
   } catch (error) {
@@ -1001,8 +1069,8 @@ const updateUserRoleHandler = asyncHandler(async (req: AuthenticatedRequest, res
 
 router
   .route('/:userId/role')
-  .put(requireSuperAdmin, updateUserRoleHandler)
-  .patch(requireSuperAdmin, updateUserRoleHandler)
+  .put(requireSuperAdmin, validateBody(adminUpdateUserRoleSchema), updateUserRoleHandler)
+  .patch(requireSuperAdmin, validateBody(adminUpdateUserRoleSchema), updateUserRoleHandler)
 
 router.patch(
   '/:userId',

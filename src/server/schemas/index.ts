@@ -28,6 +28,7 @@ export {
   backupNoteSchema,
   backupRestoreSchema,
   adminResetUserPasswordSchema,
+  adminUpdateUserRoleSchema,
   adminUpdateUserSchema,
   adminBatchGalleryImagesSchema,
   adminBatchSongCoversSchema,

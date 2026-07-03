@@ -5,6 +5,7 @@ import type { AuthenticatedRequest } from '../types'
 import {
   prisma,
   GALLERY_ADMIN_ONLY,
+  ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS,
   getEmailVerificationConfig,
   setEmailVerificationConfig,
   toEmailVerificationPublicConfig,
@@ -52,6 +53,18 @@ router.get('/features', async (_req, res) => {
   } catch (error) {
     console.error('Get public features error:', error)
     res.status(500).json({ error: '获取站点功能配置失败' })
+  }
+})
+
+// GET /api/config/admin-permissions - Get admin UI permission flags
+router.get('/admin-permissions', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    res.json({
+      allowSuperAdminRoleChanges: ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS,
+    })
+  } catch (error) {
+    console.error('Get admin permissions error:', error)
+    res.status(500).json({ error: '获取后台权限配置失败' })
   }
 })
 

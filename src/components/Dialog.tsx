@@ -23,6 +23,7 @@ type ConfirmOptions = {
 type PromptOptions = ConfirmOptions & {
   defaultValue?: string
   placeholder?: string
+  inputType?: 'text' | 'password'
   multiline?: boolean
   maxLength?: number
   onConfirm?: (value: string) => Promise<boolean>
@@ -116,11 +117,12 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
     />
   ) : promptState ? (
     <input
-      type="text"
+      type={promptState.inputType ?? 'text'}
       value={promptState.value}
       onChange={handlePromptValueChange}
       placeholder={promptState.placeholder}
       maxLength={promptState.maxLength}
+      autoComplete={promptState.inputType === 'password' ? 'current-password' : undefined}
       className={PROMPT_FIELD_CLASS}
     />
   ) : null

@@ -33,6 +33,10 @@ fs.mkdirSync(backupsDir, { recursive: true })
 export const BACKUP_PASSWORD = process.env.BACKUP_PASSWORD || ''
 export const BACKUP_RETAIN_COUNT = Math.max(1, Number(process.env.BACKUP_RETAIN_COUNT || 20))
 export const GALLERY_ADMIN_ONLY = process.env.GALLERY_ADMIN_ONLY === 'true'
+export const ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS = parseBoolean(
+  process.env.ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS,
+  false
+)
 export const WECHAT_MP_APPID = process.env.WECHAT_MP_APPID || process.env.WECHAT_APP_ID || ''
 export const WECHAT_MP_APP_SECRET =
   process.env.WECHAT_MP_APP_SECRET ||

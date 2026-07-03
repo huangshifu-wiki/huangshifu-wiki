@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import type { FocusEvent } from 'react'
 import {
   Trash2,
   CheckCircle,
@@ -6,12 +7,15 @@ import {
   AlertTriangle,
   RefreshCw,
   Pencil,
+  MoreVertical,
+  ShieldCheck,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { CharacterCount } from '../../components/CharacterCount'
 import {
   DANGER_BUTTON_CLASSES,
   INFO_BUTTON_CLASSES,
+  SECONDARY_BUTTON_CLASSES,
   SUCCESS_BUTTON_CLASSES,
   WARNING_BUTTON_CLASSES,
 } from '../../lib/buttonClasses'
@@ -30,6 +34,7 @@ import { DEFAULT_AVATAR } from '../../lib/defaultAvatar'
 import { formatAdminRole } from '../../lib/formatUtils'
 import { FormModal } from '../../components/Modal'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/passwordRules'
+import { useDismissableLayer } from '../../hooks/useClickOutside'
 import {
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   PROFILE_SIGNATURE_MAX_LENGTH,
@@ -38,6 +43,7 @@ import {
 import type { AdminDataItem } from '../../types/entities'
 
 const ADMIN_USERS_API_PREFIX = '/api/admin/users'
+const ADMIN_PERMISSIONS_API_PATH = '/api/config/admin-permissions'
 
 type AdminUserEditForm = {
   displayName: string
@@ -47,6 +53,14 @@ type AdminUserEditForm = {
   bio: string
   newPassword: string
   confirmPassword: string
+}
+
+type AdminPermissionConfig = {
+  allowSuperAdminRoleChanges: boolean
+}
+
+const DEFAULT_ADMIN_PERMISSIONS: AdminPermissionConfig = {
+  allowSuperAdminRoleChanges: false,
 }
 
 const EMPTY_EDIT_FORM: AdminUserEditForm = {
@@ -67,13 +81,40 @@ export const AdminUsers = () => {
   const [editTarget, setEditTarget] = useState<AdminDataItem | null>(null)
   const [editForm, setEditForm] = useState<AdminUserEditForm>(EMPTY_EDIT_FORM)
   const [editLoading, setEditLoading] = useState(false)
+  const [openMenuUid, setOpenMenuUid] = useState<string | null>(null)
+  const [adminPermissions, setAdminPermissions] =
+    useState<AdminPermissionConfig>(DEFAULT_ADMIN_PERMISSIONS)
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null)
   const dialog = useDialog()
   const { show } = useToast()
 
+  const closeActionsMenu = useCallback(() => setOpenMenuUid(null), [])
   const invalidateAdminUsersCache = () => invalidateApiCacheByPrefix(ADMIN_USERS_API_PREFIX)
   const isCurrentUser = (uid?: string) => Boolean(uid && uid === currentUser?.uid)
+  const applyUserUpdate = (user: AdminDataItem) => {
+    invalidateAdminUsersCache()
+    setData((prev) => prev.map((item) => (item.uid === user.uid ? { ...item, ...user } : item)))
+  }
+
+  useDismissableLayer(actionsMenuRef, closeActionsMenu, Boolean(openMenuUid))
 
   const getNextRole = (role?: string) => (role === 'admin' ? 'user' : 'admin')
+  const canManageSuperAdminRole = (target: AdminDataItem) =>
+    Boolean(
+      isSuperAdmin &&
+      target.uid &&
+      !isCurrentUser(target.uid) &&
+      adminPermissions.allowSuperAdminRoleChanges
+    )
+  const getSuperAdminRoleAction = (target: AdminDataItem) => {
+    if (!canManageSuperAdminRole(target)) {
+      return null
+    }
+
+    return target.role === 'super_admin'
+      ? ({ role: 'admin', label: '降为管理员' } as const)
+      : ({ role: 'super_admin', label: '设为超级管理员' } as const)
+  }
   const canManageUser = (target: AdminDataItem) => {
     if (!target.uid || isCurrentUser(target.uid)) {
       return false
@@ -87,13 +128,24 @@ export const AdminUsers = () => {
   }
 
   const fetchData = async () => {
+    closeActionsMenu()
     setLoading(true)
     try {
-      const result = await apiGet<{ data: AdminDataItem[] }>(ADMIN_USERS_API_PREFIX)
+      const permissionsRequest = isSuperAdmin
+        ? apiGet<AdminPermissionConfig>(ADMIN_PERMISSIONS_API_PATH).catch(
+            () => DEFAULT_ADMIN_PERMISSIONS
+          )
+        : Promise.resolve(DEFAULT_ADMIN_PERMISSIONS)
+      const [result, permissions] = await Promise.all([
+        apiGet<{ data: AdminDataItem[] }>(ADMIN_USERS_API_PREFIX),
+        permissionsRequest,
+      ])
       setData(result.data || [])
+      setAdminPermissions(permissions)
     } catch (e) {
       console.error(e)
       setData([])
+      setAdminPermissions(DEFAULT_ADMIN_PERMISSIONS)
     } finally {
       setLoading(false)
     }
@@ -104,6 +156,7 @@ export const AdminUsers = () => {
   }, [])
 
   const toggleBan = async (target: AdminDataItem) => {
+    closeActionsMenu()
     if (!canManageUser(target)) {
       show('当前权限不能管理该用户', { variant: 'error' })
       return
@@ -129,10 +182,7 @@ export const AdminUsers = () => {
             endpoint,
             shouldUnban ? { note: value } : { reason: value }
           )
-          invalidateAdminUsersCache()
-          setData((prev) =>
-            prev.map((item) => (item.uid === target.uid ? { ...item, ...result.user } : item))
-          )
+          applyUserUpdate(result.user)
           show(shouldUnban ? '已解封' : '已封禁', { variant: 'success' })
           return true
         } catch {
@@ -144,6 +194,7 @@ export const AdminUsers = () => {
   }
 
   const toggleRole = async (target: AdminDataItem) => {
+    closeActionsMenu()
     if (!isSuperAdmin) {
       show('只有超级管理员可以更改权限', { variant: 'error' })
       return
@@ -157,18 +208,55 @@ export const AdminUsers = () => {
     })
     if (!confirmed) return
     try {
-      await apiPut(`/api/users/${target.uid}/role`, { role: newRole })
-      invalidateAdminUsersCache()
-      setData((prev) =>
-        prev.map((item) => (item.uid === target.uid ? { ...item, role: newRole } : item))
-      )
+      const result = await apiPut<{ user: AdminDataItem }>(`/api/users/${target.uid}/role`, {
+        role: newRole,
+      })
+      applyUserUpdate(result.user)
       show('角色已更新', { variant: 'success' })
     } catch (e) {
       show('更新角色失败', { variant: 'error' })
     }
   }
 
+  const updateRoleWithPassword = async (target: AdminDataItem, role: 'admin' | 'super_admin') => {
+    if (!canManageSuperAdminRole(target)) {
+      show('只有超级管理员可以更改超级管理员身份', { variant: 'error' })
+      return
+    }
+
+    const actionLabel = role === 'super_admin' ? '设为超级管理员' : '降为管理员'
+    closeActionsMenu()
+    await dialog.prompt({
+      title: actionLabel,
+      message: `请输入当前账户密码，将 ${target.displayName || target.uid} ${actionLabel}。`,
+      placeholder: '当前账户密码',
+      inputType: 'password',
+      confirmText: '确认更改',
+      variant: role === 'super_admin' ? 'warning' : 'danger',
+      onConfirm: async (value) => {
+        if (!value) {
+          show('请输入当前账户密码', { variant: 'error' })
+          return false
+        }
+
+        try {
+          const result = await apiPut<{ user: AdminDataItem }>(`/api/users/${target.uid}/role`, {
+            role,
+            currentPassword: value,
+          })
+          applyUserUpdate(result.user)
+          show('角色已更新', { variant: 'success' })
+          return true
+        } catch (error) {
+          show(error instanceof Error ? error.message : '更新角色失败', { variant: 'error' })
+          return false
+        }
+      },
+    })
+  }
+
   const handleDeleteUser = async (target: AdminDataItem) => {
+    closeActionsMenu()
     if (!canManageUser(target)) {
       show('当前权限不能删除该用户', { variant: 'error' })
       return
@@ -204,6 +292,7 @@ export const AdminUsers = () => {
   }
 
   const openEditModal = (target: AdminDataItem) => {
+    closeActionsMenu()
     if (!canManageUser(target)) {
       show('当前权限不能编辑该用户', { variant: 'error' })
       return
@@ -219,6 +308,12 @@ export const AdminUsers = () => {
       newPassword: '',
       confirmPassword: '',
     })
+  }
+
+  const handleActionsMenuBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      closeActionsMenu()
+    }
   }
 
   const updateEditForm = <K extends keyof AdminUserEditForm>(
@@ -350,110 +445,159 @@ export const AdminUsers = () => {
                   </tr>
                 ))
               ) : data.length > 0 ? (
-                data.map((item) => (
-                  <tr key={item.uid} className="hover:bg-surface-alt transition-colors">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <SmartImage
-                          src={item.photoURL || DEFAULT_AVATAR}
-                          alt=""
-                          className="w-10 h-10 rounded-full object-cover bg-surface-alt"
-                        />
-                        <div>
-                          <p className="text-sm font-medium text-text-primary">
-                            {item.displayName || item.uid}
-                          </p>
-                          <p className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                            <span>{item.email}</span>
-                            <span
-                              className={clsx(
-                                'rounded px-1.5 py-0.5 text-[10px] font-medium',
-                                item.emailVerified
-                                  ? 'theme-status-success'
-                                  : 'bg-surface-alt text-text-muted'
-                              )}
-                            >
-                              {item.emailVerified ? '已验证' : '未验证'}
-                            </span>
-                          </p>
+                data.map((item) => {
+                  const superAdminRoleAction = getSuperAdminRoleAction(item)
+                  return (
+                    <tr key={item.uid} className="hover:bg-surface-alt transition-colors">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <SmartImage
+                            src={item.photoURL || DEFAULT_AVATAR}
+                            alt=""
+                            className="w-10 h-10 rounded-full object-cover bg-surface-alt"
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-text-primary">
+                              {item.displayName || item.uid}
+                            </p>
+                            <p className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                              <span>{item.email}</span>
+                              <span
+                                className={clsx(
+                                  'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                                  item.emailVerified
+                                    ? 'theme-status-success'
+                                    : 'bg-surface-alt text-text-muted'
+                                )}
+                              >
+                                {item.emailVerified ? '已验证' : '未验证'}
+                              </span>
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span
-                        className={clsx(
-                          'px-2 py-0.5 rounded text-[10px] font-medium',
-                          item.role === 'super_admin'
-                            ? 'bg-brand-gold/15 text-brand-gold'
-                            : item.role === 'admin'
-                              ? 'theme-status-error'
-                              : 'bg-surface-alt text-brand-gold'
-                        )}
-                      >
-                        {formatAdminRole(item.role)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span
-                        className={clsx(
-                          'px-2 py-0.5 rounded text-[10px] font-medium',
-                          item.status === 'banned' ? 'theme-status-error' : 'theme-status-success'
-                        )}
-                      >
-                        {item.status === 'banned' ? '已封禁' : '正常'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-left">
-                      <div className="flex items-center justify-start gap-2">
-                        {canManageUser(item) && (
-                          <button
-                            onClick={() => openEditModal(item)}
-                            className={INFO_BUTTON_CLASSES}
-                          >
-                            <Pencil size={14} />
-                            编辑
-                          </button>
-                        )}
-                        {isSuperAdmin && !isCurrentUser(item.uid) && (
-                          <button onClick={() => toggleRole(item)} className={INFO_BUTTON_CLASSES}>
-                            {getNextRole(item.role) === 'admin' ? (
-                              <CheckCircle size={14} />
-                            ) : (
-                              <XCircle size={14} />
+                      </td>
+                      <td className="px-5 py-4">
+                        <span
+                          className={clsx(
+                            'px-2 py-0.5 rounded text-[10px] font-medium',
+                            item.role === 'super_admin'
+                              ? 'bg-brand-gold/15 text-brand-gold'
+                              : item.role === 'admin'
+                                ? 'theme-status-error'
+                                : 'bg-surface-alt text-brand-gold'
+                          )}
+                        >
+                          {formatAdminRole(item.role)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span
+                          className={clsx(
+                            'px-2 py-0.5 rounded text-[10px] font-medium',
+                            item.status === 'banned' ? 'theme-status-error' : 'theme-status-success'
+                          )}
+                        >
+                          {item.status === 'banned' ? '已封禁' : '正常'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-left">
+                        <div className="flex items-center justify-start gap-2">
+                          {canManageUser(item) && (
+                            <button
+                              onClick={() => openEditModal(item)}
+                              className={INFO_BUTTON_CLASSES}
+                            >
+                              <Pencil size={14} />
+                              编辑
+                            </button>
+                          )}
+                          {isSuperAdmin &&
+                            !isCurrentUser(item.uid) &&
+                            item.role !== 'super_admin' && (
+                              <button
+                                onClick={() => toggleRole(item)}
+                                className={INFO_BUTTON_CLASSES}
+                              >
+                                {getNextRole(item.role) === 'admin' ? (
+                                  <CheckCircle size={14} />
+                                ) : (
+                                  <XCircle size={14} />
+                                )}
+                                {getNextRole(item.role) === 'admin' ? '升为管理员' : '降为普通'}
+                              </button>
                             )}
-                            {getNextRole(item.role) === 'admin' ? '升为管理员' : '降为普通'}
-                          </button>
-                        )}
-                        {canManageUser(item) && (
-                          <button
-                            onClick={() => toggleBan(item)}
-                            className={
-                              item.status === 'banned'
-                                ? SUCCESS_BUTTON_CLASSES
-                                : WARNING_BUTTON_CLASSES
-                            }
-                          >
-                            {item.status === 'banned' ? (
-                              <CheckCircle size={14} />
-                            ) : (
-                              <AlertTriangle size={14} />
-                            )}
-                            {item.status === 'banned' ? '解封' : '封禁'}
-                          </button>
-                        )}
-                        {canManageUser(item) && (
-                          <button
-                            onClick={() => void handleDeleteUser(item)}
-                            className={DANGER_BUTTON_CLASSES}
-                          >
-                            <Trash2 size={14} />
-                            删除
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {canManageUser(item) && (
+                            <button
+                              onClick={() => toggleBan(item)}
+                              className={
+                                item.status === 'banned'
+                                  ? SUCCESS_BUTTON_CLASSES
+                                  : WARNING_BUTTON_CLASSES
+                              }
+                            >
+                              {item.status === 'banned' ? (
+                                <CheckCircle size={14} />
+                              ) : (
+                                <AlertTriangle size={14} />
+                              )}
+                              {item.status === 'banned' ? '解封' : '封禁'}
+                            </button>
+                          )}
+                          {canManageUser(item) && (
+                            <button
+                              onClick={() => void handleDeleteUser(item)}
+                              className={DANGER_BUTTON_CLASSES}
+                            >
+                              <Trash2 size={14} />
+                              删除
+                            </button>
+                          )}
+                          {superAdminRoleAction && (
+                            <div
+                              ref={openMenuUid === item.uid ? actionsMenuRef : undefined}
+                              onBlur={handleActionsMenuBlur}
+                              className="relative"
+                            >
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenMenuUid((current) =>
+                                    current === item.uid ? null : item.uid!
+                                  )
+                                }
+                                className={SECONDARY_BUTTON_CLASSES}
+                                aria-haspopup="menu"
+                                aria-expanded={openMenuUid === item.uid}
+                                aria-label={`${item.displayName || item.uid} 的其他选项`}
+                              >
+                                <MoreVertical size={14} />
+                                更多
+                              </button>
+                              {openMenuUid === item.uid && (
+                                <div
+                                  role="menu"
+                                  className="absolute right-0 z-20 mt-2 min-w-44 overflow-hidden rounded-lg border border-border bg-surface p-1 shadow-xl"
+                                >
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() =>
+                                      void updateRoleWithPassword(item, superAdminRoleAction.role)
+                                    }
+                                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-text-secondary transition-colors hover:bg-surface-alt hover:text-brand-gold"
+                                  >
+                                    <ShieldCheck size={14} />
+                                    {superAdminRoleAction.label}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               ) : (
                 <tr>
                   <td colSpan={4} className="px-5 py-16 text-center text-text-muted italic">
