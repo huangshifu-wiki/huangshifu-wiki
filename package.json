@@ -49,6 +49,7 @@
     "uploads:cleanup": "tsx scripts/cleanup-orphan-uploads.ts",
     "songs:import": "tsx scripts/import-songs.ts",
     "regions:import": "tsx scripts/import-regions.ts",
+    "super-admin:manage": "tsx scripts/manage-super-admin.ts",
     "validate:migrations": "tsx scripts/validate-migrations.ts",
     "check:build": "tsx scripts/check-build-size.ts"
   },

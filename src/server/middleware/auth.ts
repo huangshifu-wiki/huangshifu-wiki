@@ -37,6 +37,10 @@ type SessionUser = {
   passwordHash: string
 }
 
+type AuthenticatedRequestWithSession = AuthenticatedRequest & {
+  authSessionVersion?: string
+}
+
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   throw new Error(
     `Invalid JWT_SECRET: length must be >= 32 characters. ` +
@@ -166,7 +170,7 @@ function clearUserCache(uid: string): void {
 }
 
 async function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const authReq = req as AuthenticatedRequest
+  const authReq = req as AuthenticatedRequestWithSession
   const token = getTokenFromRequest(req)
   if (!token) {
     next()
@@ -175,6 +179,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as SessionJwtPayload
+    authReq.authSessionVersion = payload.sessionVersion
 
     // 尝试从缓存获取用户
     const cacheKey = getUserCacheKey(payload.uid)
@@ -228,6 +233,50 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   next()
 }
 
+async function refreshAuthUserForAuthorization(req: Request, res: Response) {
+  const authReq = req as AuthenticatedRequestWithSession
+  const uid = authReq.authUser?.uid
+  if (!uid) {
+    return undefined
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { uid },
+  })
+
+  if (!user || user.deletedAt) {
+    if (user?.deletedAt) {
+      logger.info({ uid: user.uid }, 'Rejecting token for soft-deleted user')
+    }
+    clearUserCache(uid)
+    clearAuthCookie(req, res)
+    authReq.authUser = undefined
+    return undefined
+  }
+
+  const currentSessionVersion = createSessionVersion(user.passwordHash)
+  if (authReq.authSessionVersion && authReq.authSessionVersion !== currentSessionVersion) {
+    logger.info({ uid: user.uid }, 'Rejecting token with stale session version')
+    clearUserCache(uid)
+    clearAuthCookie(req, res)
+    authReq.authUser = undefined
+    return undefined
+  }
+
+  const apiUser = userToApiUser(user)
+  authReq.authUser = apiUser
+  enhancedCache.set(
+    getUserCacheKey(uid),
+    {
+      apiUser,
+      sessionVersion: currentSessionVersion,
+    },
+    CACHE_TTL_SEC.AUTH_USER
+  )
+
+  return apiUser
+}
+
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   const authReq = req as AuthenticatedRequest
   if (!authReq.authUser) {
@@ -259,26 +308,26 @@ function requireActiveUser(req: Request, res: Response, next: NextFunction) {
   next()
 }
 
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const authReq = req as AuthenticatedRequest
-  if (!authReq.authUser || !isAdminRole(authReq.authUser.role)) {
+async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const authUser = await refreshAuthUserForAuthorization(req, res)
+  if (!authUser || !isAdminRole(authUser.role)) {
     res.status(403).json({ error: '需要管理员权限' })
     return
   }
-  if (authReq.authUser.status === 'banned') {
+  if (authUser.status === 'banned') {
     res.status(403).json({ error: '账号已被封禁，无法执行管理操作' })
     return
   }
   next()
 }
 
-function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
-  const authReq = req as AuthenticatedRequest
-  if (!authReq.authUser || authReq.authUser.role !== 'super_admin') {
+async function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  const authUser = await refreshAuthUserForAuthorization(req, res)
+  if (!authUser || authUser.role !== 'super_admin') {
     res.status(403).json({ error: '需要超级管理员权限' })
     return
   }
-  if (authReq.authUser.status === 'banned') {
+  if (authUser.status === 'banned') {
     res.status(403).json({ error: '账号已被封禁，无法执行管理操作' })
     return
   }
