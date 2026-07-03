@@ -105,6 +105,28 @@ CREATE FUNCTION "trigger_function"() RETURNS trigger AS $$ BEGIN RETURN NEW; END
     expect(result.reason).toContain('COPY')
   })
 
+  it('should allow pg_dump COPY FROM stdin data blocks', () => {
+    const sql = `
+COPY public."User" (id, email) FROM stdin;
+1	test@test.com
+2	value; with semicolon
+\\.
+SELECT pg_catalog.setval('public.user_id_seq', 2, true);
+`
+    const result = validateSqlContent(sql)
+    expect(result.valid).toBe(true)
+  })
+
+  it('should reject unterminated pg_dump COPY FROM stdin data blocks', () => {
+    const sql = `
+COPY public."User" (id, email) FROM stdin;
+1	test@test.com
+`
+    const result = validateSqlContent(sql)
+    expect(result.valid).toBe(false)
+    expect(result.reason).toContain('COPY')
+  })
+
   it('should reject EXECUTE statements', () => {
     const sql = `EXECUTE some_prepared_stmt('arg');`
     const result = validateSqlContent(sql)
@@ -145,6 +167,55 @@ CREATE FUNCTION "trigger_function"() RETURNS trigger AS $$ BEGIN RETURN NEW; END
 
   it('should validate each statement independently', () => {
     const sql = `CREATE TABLE "User" ("id" TEXT); DROP TABLE "Post";`
+    const result = validateSqlContent(sql)
+    expect(result.valid).toBe(false)
+    expect(result.reason).toContain('DROP')
+  })
+
+  it('should allow pg_dump comments before statements', () => {
+    const sql = `
+--
+-- PostgreSQL database dump
+--
+
+/* dumped from database version 16.0 */
+SET statement_timeout = 0;
+
+--
+-- Name: User; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public."User" (
+    id text NOT NULL,
+    email text NOT NULL
+);
+`
+    const result = validateSqlContent(sql)
+    expect(result.valid).toBe(true)
+  })
+
+  it('should ignore dangerous words inside comments', () => {
+    const sql = `
+-- DROP TABLE public."User";
+/* DELETE FROM public."User"; */
+CREATE TABLE public."User" (id text NOT NULL);
+`
+    const result = validateSqlContent(sql)
+    expect(result.valid).toBe(true)
+  })
+
+  it('should allow pg_dump clean statements with IF EXISTS', () => {
+    const sql = `
+DROP INDEX IF EXISTS public."User_email_key";
+DROP TABLE IF EXISTS public."User";
+DROP SEQUENCE IF EXISTS public."User_id_seq";
+`
+    const result = validateSqlContent(sql)
+    expect(result.valid).toBe(true)
+  })
+
+  it('should reject DROP statements without IF EXISTS', () => {
+    const sql = `DROP TABLE public."User";`
     const result = validateSqlContent(sql)
     expect(result.valid).toBe(false)
     expect(result.reason).toContain('DROP')

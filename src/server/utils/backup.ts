@@ -173,6 +173,8 @@ export function parseBackupMetadata(content: Buffer | undefined): BackupArchiveM
 }
 
 const SQL_ALLOWED_PREFIXES = [
+  '\\RESTRICT',
+  '\\UNRESTRICT',
   'CREATE TABLE',
   'INSERT INTO',
   'ALTER TABLE',
@@ -180,30 +182,216 @@ const SQL_ALLOWED_PREFIXES = [
   'SELECT',
   'COMMENT',
   'CREATE INDEX',
+  'CREATE UNIQUE INDEX',
   'CREATE SEQUENCE',
   'ALTER SEQUENCE',
   'SELECT SETVAL',
   'CREATE FUNCTION',
+  'CREATE EXTENSION',
+  'ALTER EXTENSION',
+  'CREATE TYPE',
+  'ALTER TYPE',
+  'CREATE VIEW',
+  'CREATE TRIGGER',
+  'CREATE RULE',
+  'CREATE POLICY',
+  'ALTER POLICY',
+  'COPY',
+  'DROP',
 ]
 
-const SQL_REJECTED_PREFIXES = [
-  'DROP',
-  'DELETE',
-  'TRUNCATE',
-  'GRANT',
-  'REVOKE',
-  'COPY',
-  'EXECUTE',
-  'DO',
+const SQL_REJECTED_PREFIXES = ['DELETE', 'TRUNCATE', 'GRANT', 'REVOKE', 'EXECUTE', 'DO']
+
+const SQL_ALLOWED_DROP_OBJECTS = [
+  'AGGREGATE',
+  'COLLATION',
+  'CONSTRAINT',
+  'DOMAIN',
+  'EVENT TRIGGER',
+  'EXTENSION',
+  'FUNCTION',
+  'INDEX',
+  'MATERIALIZED VIEW',
+  'OPERATOR',
+  'POLICY',
+  'RULE',
+  'SCHEMA',
+  'SEQUENCE',
+  'TABLE',
+  'TRIGGER',
+  'TYPE',
+  'VIEW',
 ]
+
+function readDollarQuoteTag(sql: string, index: number): string | null {
+  const match = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/.exec(sql.slice(index))
+  return match?.[0] ?? null
+}
+
+function isPgDumpCopyFromStdinStatement(statement: string): boolean {
+  const normalized = statement.replace(/\s+/g, ' ').trim().toUpperCase()
+  return normalized.startsWith('COPY ') && /\bFROM\s+STDIN\b/.test(normalized)
+}
+
+function findCopyDataEnd(sql: string, index: number): number | null {
+  let cursor = index
+
+  while (cursor < sql.length) {
+    const lineEnd = sql.indexOf('\n', cursor)
+    const end = lineEnd === -1 ? sql.length : lineEnd
+    const line = sql.slice(cursor, end).replace(/\r$/, '')
+
+    if (line === '\\.') {
+      return lineEnd === -1 ? sql.length : lineEnd + 1
+    }
+
+    cursor = lineEnd === -1 ? sql.length : lineEnd + 1
+  }
+
+  return null
+}
+
+function isPsqlDumpMetaCommand(sql: string, index: number): boolean {
+  if (index > 0 && sql[index - 1] !== '\n') return false
+  return /^\\(?:restrict|unrestrict)\b/i.test(sql.slice(index))
+}
+
+function splitSqlDumpStatements(sql: string): { statements: string[]; error?: string } {
+  const statements: string[] = []
+  let current = ''
+  let singleQuoted = false
+  let doubleQuoted = false
+  let blockComment = false
+  let dollarQuoteTag: string | null = null
+
+  const pushCurrent = () => {
+    const trimmed = current.trim()
+    if (trimmed.replace(/;+$/g, '').trim()) {
+      statements.push(trimmed)
+    }
+    current = ''
+  }
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index]
+    const next = sql[index + 1]
+
+    if (blockComment) {
+      if (char === '*' && next === '/') {
+        blockComment = false
+        index += 1
+      }
+      continue
+    }
+
+    if (dollarQuoteTag) {
+      current += char
+      if (sql.startsWith(dollarQuoteTag, index)) {
+        current += sql.slice(index + 1, index + dollarQuoteTag.length)
+        index += dollarQuoteTag.length - 1
+        dollarQuoteTag = null
+      }
+      continue
+    }
+
+    if (singleQuoted) {
+      current += char
+      if (char === "'" && next === "'") {
+        current += next
+        index += 1
+      } else if (char === "'") {
+        singleQuoted = false
+      }
+      continue
+    }
+
+    if (doubleQuoted) {
+      current += char
+      if (char === '"' && next === '"') {
+        current += next
+        index += 1
+      } else if (char === '"') {
+        doubleQuoted = false
+      }
+      continue
+    }
+
+    if (isPsqlDumpMetaCommand(sql, index)) {
+      const lineEnd = sql.indexOf('\n', index)
+      current += '\n'
+      index = lineEnd === -1 ? sql.length : lineEnd
+      continue
+    }
+
+    if (char === '-' && next === '-') {
+      const lineEnd = sql.indexOf('\n', index)
+      current += '\n'
+      index = lineEnd === -1 ? sql.length : lineEnd
+      continue
+    }
+
+    if (char === '/' && next === '*') {
+      blockComment = true
+      index += 1
+      continue
+    }
+
+    if (char === "'") {
+      singleQuoted = true
+      current += char
+      continue
+    }
+
+    if (char === '"') {
+      doubleQuoted = true
+      current += char
+      continue
+    }
+
+    if (char === '$') {
+      const tag = readDollarQuoteTag(sql, index)
+      if (tag) {
+        dollarQuoteTag = tag
+        current += tag
+        index += tag.length - 1
+        continue
+      }
+    }
+
+    current += char
+
+    if (char === ';') {
+      const statement = current.trim()
+      pushCurrent()
+
+      if (isPgDumpCopyFromStdinStatement(statement)) {
+        const copyDataEnd = findCopyDataEnd(sql, index + 1)
+        if (copyDataEnd === null) {
+          return { statements, error: 'SQL COPY 数据块缺少结束标记' }
+        }
+        index = copyDataEnd - 1
+      }
+    }
+  }
+
+  pushCurrent()
+
+  return { statements }
+}
+
+function isAllowedDropStatement(statement: string): boolean {
+  const upper = statement.replace(/\s+/g, ' ').trim().toUpperCase()
+  if (!upper.startsWith('DROP ')) return false
+  if (!/\bIF\s+EXISTS\b/.test(upper)) return false
+
+  return SQL_ALLOWED_DROP_OBJECTS.some((objectType) => upper.startsWith(`DROP ${objectType} `))
+}
 
 export function validateSqlContent(sqlContent: string): { valid: boolean; reason?: string } {
-  const stripped = sqlContent.replace(/\$\$[\s\S]*?\$\$/g, '$$')
-
-  const statements = stripped
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
+  const { statements, error } = splitSqlDumpStatements(sqlContent)
+  if (error) {
+    return { valid: false, reason: error }
+  }
 
   for (const stmt of statements) {
     const firstLine = stmt.split('\n')[0].trim()
@@ -213,6 +401,14 @@ export function validateSqlContent(sqlContent: string): { valid: boolean; reason
     if (isRejected) {
       const keyword = SQL_REJECTED_PREFIXES.find((prefix) => upper.startsWith(prefix))!
       return { valid: false, reason: `SQL 语句包含不允许的操作: ${keyword}` }
+    }
+
+    if (upper.startsWith('COPY ') && !isPgDumpCopyFromStdinStatement(stmt)) {
+      return { valid: false, reason: 'SQL 语句包含不允许的操作: COPY' }
+    }
+
+    if (upper.startsWith('DROP ') && !isAllowedDropStatement(stmt)) {
+      return { valid: false, reason: 'SQL 语句包含不允许的操作: DROP' }
     }
 
     const isAllowed = SQL_ALLOWED_PREFIXES.some((prefix) => upper.startsWith(prefix))
