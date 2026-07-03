@@ -31,6 +31,7 @@ import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { SmartImage } from '../../components/SmartImage'
 import { MusicImportModal } from '../../components/MusicImportModal'
+import { SongFormModal } from '../../components/SongFormModal'
 import Pagination from '../../components/Pagination'
 import { usePagination } from '../../hooks/usePagination'
 import type { ContentStatus } from '../../types/common'
@@ -492,6 +493,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const [batchDisplayOpen, setBatchDisplayOpen] = useState(false)
   const [batchDisplaySaving, setBatchDisplaySaving] = useState(false)
   const [musicImportOpen, setMusicImportOpen] = useState(false)
+  const [songCreateOpen, setSongCreateOpen] = useState(false)
   const [batchDisplayForm, setBatchDisplayForm] = useState({
     displayAlbumMode: 'linked' as 'linked' | 'manual' | 'none',
     manualAlbumName: '',
@@ -739,13 +741,6 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           link: newItem.link?.trim() || null,
           active: newItem.active ?? true,
         })
-      } else if (type === 'music') {
-        await apiPost('/api/music', {
-          title: newItem.title?.trim(),
-          artists: newItem.artists?.trim(),
-          album: newItem.album?.trim() || '',
-          audioUrl: newItem.audioUrl?.trim() || '',
-        })
       }
       setNewItem({})
       await fetchData()
@@ -863,12 +858,20 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           </h1>
           <div className="flex items-center gap-2">
             {type === 'music' && (
-              <button
-                onClick={() => setMusicImportOpen(true)}
-                className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
-              >
-                <Plus size={14} className="mr-1 inline" /> 导入音乐
-              </button>
+              <>
+                <button
+                  onClick={() => setSongCreateOpen(true)}
+                  className="rounded theme-button-primary px-4 py-2 text-sm transition-all"
+                >
+                  <Plus size={14} className="mr-1 inline" /> 添加音乐
+                </button>
+                <button
+                  onClick={() => setMusicImportOpen(true)}
+                  className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
+                >
+                  <Plus size={14} className="mr-1 inline" /> 导入音乐
+                </button>
+              </>
             )}
             <button
               onClick={handleToggleDeleted}
@@ -1021,38 +1024,6 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                   />
                 </>
               )}
-              {type === 'music' && (
-                <>
-                  <input
-                    type="text"
-                    placeholder="歌曲标题"
-                    value={newItem.title || ''}
-                    onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="艺人，多个用逗号分隔"
-                    value={newItem.artists || ''}
-                    onChange={(e) => setNewItem({ ...newItem, artists: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="专辑（可选）"
-                    value={newItem.album || ''}
-                    onChange={(e) => setNewItem({ ...newItem, album: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="音频链接（可选）"
-                    value={newItem.audioUrl || ''}
-                    onChange={(e) => setNewItem({ ...newItem, audioUrl: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                </>
-              )}
               <button
                 onClick={handleCreate}
                 className="rounded bg-brand-gold-dark px-5 py-2 text-sm font-medium text-white transition-all hover:bg-brand-gold"
@@ -1168,14 +1139,25 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         </div>
       </div>
       {type === 'music' && (
-        <MusicImportModal
-          open={musicImportOpen}
-          onClose={() => setMusicImportOpen(false)}
-          onImported={() => {
-            setMusicImportOpen(false)
-            void fetchData()
-          }}
-        />
+        <>
+          <SongFormModal
+            open={songCreateOpen}
+            onClose={() => setSongCreateOpen(false)}
+            onSuccess={() => {
+              setSongCreateOpen(false)
+              void fetchData()
+            }}
+            mode="create"
+          />
+          <MusicImportModal
+            open={musicImportOpen}
+            onClose={() => setMusicImportOpen(false)}
+            onImported={() => {
+              setMusicImportOpen(false)
+              void fetchData()
+            }}
+          />
+        </>
       )}
     </>
   )

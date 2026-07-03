@@ -347,6 +347,7 @@ router.post(
       const releaseDate = hasReleaseDate ? normalizeOptionalDateOnly(body.releaseDate) : null
       const durationMs = hasDurationMs ? normalizeOptionalDurationMs(body.durationMs) : null
       const sources = normalizeMusicExternalSourceInputs(body.sources)
+      const customPlatformLinks = normalizeSongCustomPlatformLinks(body.customPlatformLinks)
       if (!ensureMusicTextLimits(res, body)) {
         return
       }
@@ -358,6 +359,33 @@ router.post(
       if (!title || !artists.length) {
         res.status(400).json({ error: '缺少歌曲信息' })
         return
+      }
+
+      if (sources.length) {
+        const conflict = await prisma.musicExternalSource.findFirst({
+          where: {
+            resourceType: 'song',
+            OR: sources.map((source) => ({
+              platform: source.platform,
+              sourceId: source.sourceId,
+            })),
+          },
+          include: {
+            song: { select: { docId: true, title: true, artists: true } },
+          },
+        })
+        if (conflict?.song) {
+          res.status(409).json({
+            error: `该平台来源已被歌曲「${conflict.song.title}」使用`,
+            conflict: true,
+            conflictingSong: {
+              docId: conflict.song.docId,
+              title: conflict.song.title,
+              artists: conflict.song.artists,
+            },
+          })
+          return
+        }
       }
 
       const song = await prisma.musicTrack.create({
@@ -374,6 +402,9 @@ router.post(
           description: description ?? null,
           releaseDate,
           durationMs,
+          customPlatformLinks: customPlatformLinks.length
+            ? (customPlatformLinks as unknown as Prisma.InputJsonValue)
+            : undefined,
           ...(sources.length
             ? {
                 externalSources: {
