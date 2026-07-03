@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef } from 'react'
+import React, { useCallback, useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Loader2 } from '@/src/components/icons'
 import clsx from 'clsx'
@@ -66,13 +66,18 @@ export const ConfirmModal = ({
   // 保存打开前的活动元素（用于关闭时恢复焦点）
   const previousActiveElement = useRef<HTMLElement | null>(null)
 
+  const handleClose = useCallback(() => {
+    if (loading) return
+    onClose()
+  }, [loading, onClose])
+
   // Escape 键关闭 + Tab 焦点循环
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation()
-        onClose()
+        handleClose()
         return
       }
       if (e.key === 'Tab') {
@@ -104,7 +109,7 @@ export const ConfirmModal = ({
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose])
+  }, [handleClose, open])
 
   // 焦点管理：打开时聚焦到取消按钮，关闭时恢复到触发元素
   useEffect(() => {
@@ -139,7 +144,7 @@ export const ConfirmModal = ({
       )}
       data-open={open ? 'true' : 'false'}
       data-state={presence.state}
-      onClick={onClose}
+      onClick={handleClose}
       aria-hidden={!open}
     >
       <div
@@ -181,7 +186,7 @@ export const ConfirmModal = ({
             <button
               ref={cancelButtonRef}
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               disabled={loading}
               className="px-5 py-2.5 rounded-lg theme-button-secondary transition-all disabled:opacity-50 text-sm font-medium"
               aria-label="取消"

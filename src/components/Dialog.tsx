@@ -25,6 +25,7 @@ type PromptOptions = ConfirmOptions & {
   placeholder?: string
   multiline?: boolean
   maxLength?: number
+  onConfirm?: (value: string) => Promise<boolean>
 }
 
 type DialogContextValue = {
@@ -39,6 +40,7 @@ type ConfirmState = ConfirmOptions & {
 type PromptState = PromptOptions & {
   open: boolean
   value: string
+  loading: boolean
 }
 
 const DialogContext = createContext<DialogContextValue | undefined>(undefined)
@@ -80,7 +82,7 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
     confirmResolveRef.current?.(false)
     confirmResolveRef.current = null
     setConfirmState(null)
-    setPromptState({ ...options, open: true, value: options.defaultValue ?? '' })
+    setPromptState({ ...options, open: true, value: options.defaultValue ?? '', loading: false })
     return new Promise<string | null>((resolve) => {
       promptResolveRef.current = resolve
     })
@@ -94,6 +96,9 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
       promptResolveRef.current?.(null)
     }
   }, [])
+
+  const setPromptLoading = (loading: boolean) =>
+    setPromptState((prev) => (prev ? { ...prev, loading } : prev))
 
   const handlePromptValueChange = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -137,12 +142,29 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
         <ConfirmModal
           open={promptState.open}
           onClose={() => closePrompt(null)}
-          onConfirm={() => closePrompt(promptState.value)}
+          onConfirm={async () => {
+            if (promptState.onConfirm) {
+              setPromptLoading(true)
+              try {
+                const shouldClose = await promptState.onConfirm(promptState.value)
+                if (shouldClose) {
+                  closePrompt(promptState.value)
+                } else {
+                  setPromptLoading(false)
+                }
+              } catch {
+                setPromptLoading(false)
+              }
+            } else {
+              closePrompt(promptState.value)
+            }
+          }}
           title={promptState.title}
           message={promptState.message}
           confirmText={promptState.confirmText ?? '确认'}
           cancelText={promptState.cancelText}
           variant={promptState.variant}
+          loading={promptState.loading}
           initialFocus="firstField"
         >
           {promptField}

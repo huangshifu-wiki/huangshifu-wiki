@@ -1219,7 +1219,11 @@ router.put(
       ) {
         return
       }
-      const finalReason = reasonRaw || noteRaw || '违反社区规范'
+      const finalReason = reasonRaw || noteRaw
+      if (!finalReason) {
+        res.status(400).json({ error: '请输入封禁原因' })
+        return
+      }
 
       const targetUser = await prisma.user.findUnique({
         where: { uid: targetUid },

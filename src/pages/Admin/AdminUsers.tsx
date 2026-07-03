@@ -110,42 +110,37 @@ export const AdminUsers = () => {
     }
 
     const shouldUnban = target.status === 'banned'
-    const note = await dialog.prompt({
+    const endpoint = shouldUnban ? `/api/users/${target.uid}/unban` : `/api/users/${target.uid}/ban`
+
+    await dialog.prompt({
       title: shouldUnban ? '解封备注' : '封禁原因',
       message: shouldUnban ? '解封备注（可选）' : '封禁原因',
       defaultValue: '',
-      confirmText: '确认',
+      confirmText: shouldUnban ? '解封' : '封禁',
       variant: shouldUnban ? 'info' : 'warning',
       multiline: true,
+      onConfirm: async (value) => {
+        if (!shouldUnban && !value.trim()) {
+          show('请输入封禁原因', { variant: 'error' })
+          return false
+        }
+        try {
+          const result = await apiPut<{ user: AdminDataItem }>(
+            endpoint,
+            shouldUnban ? { note: value } : { reason: value }
+          )
+          invalidateAdminUsersCache()
+          setData((prev) =>
+            prev.map((item) => (item.uid === target.uid ? { ...item, ...result.user } : item))
+          )
+          show(shouldUnban ? '已解封' : '已封禁', { variant: 'success' })
+          return true
+        } catch {
+          show(shouldUnban ? '解封失败' : '封禁失败', { variant: 'error' })
+          return false
+        }
+      },
     })
-    if (note === null) return
-    if (!shouldUnban && !note.trim()) {
-      show('请输入封禁原因', { variant: 'error' })
-      return
-    }
-    const confirmed = await dialog.confirm({
-      title: shouldUnban ? '解封用户' : '封禁用户',
-      message: `确定要${shouldUnban ? '解封' : '封禁'} ${target.displayName || target.uid} 吗？`,
-      confirmText: shouldUnban ? '解封' : '封禁',
-      variant: shouldUnban ? 'warning' : 'danger',
-    })
-    if (!confirmed) return
-    try {
-      const endpoint = shouldUnban
-        ? `/api/users/${target.uid}/unban`
-        : `/api/users/${target.uid}/ban`
-      const result = await apiPut<{ user: AdminDataItem }>(
-        endpoint,
-        shouldUnban ? { note } : { reason: note, note }
-      )
-      invalidateAdminUsersCache()
-      setData((prev) =>
-        prev.map((item) => (item.uid === target.uid ? { ...item, ...result.user } : item))
-      )
-      show(shouldUnban ? '已解封' : '已封禁', { variant: 'success' })
-    } catch (e) {
-      show(shouldUnban ? '解封失败' : '封禁失败', { variant: 'error' })
-    }
   }
 
   const toggleRole = async (target: AdminDataItem) => {
