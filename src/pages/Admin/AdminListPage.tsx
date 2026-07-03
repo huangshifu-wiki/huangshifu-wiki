@@ -674,6 +674,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         await apiDelete(deletePath)
       }
       show('已删除', { variant: 'success' })
+      invalidateApiCacheByPrefix(`/api/admin/${cfg.apiPath}`)
     } catch (e) {
       setData(previousData)
       show(e instanceof Error ? e.message : '删除失败', { variant: 'error' })
@@ -696,6 +697,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         )
       )
       show('已恢复', { variant: 'success' })
+      invalidateApiCacheByPrefix(`/api/admin/${cfg.apiPath}`)
     } catch (e) {
       setData(previousData)
       show(e instanceof Error ? e.message : '恢复失败', { variant: 'error' })
@@ -719,6 +721,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     try {
       await apiDelete(`/api/admin/${cfg.apiPath}/${id}/permanent`)
       show('已彻底删除', { variant: 'success' })
+      invalidateApiCacheByPrefix(`/api/admin/${cfg.apiPath}`)
     } catch (e) {
       setData(previousData)
       show(e instanceof Error ? e.message : '彻底删除失败', { variant: 'error' })
@@ -1145,6 +1148,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             onClose={() => setSongCreateOpen(false)}
             onSuccess={() => {
               setSongCreateOpen(false)
+              invalidateApiCacheByPrefix('/api/admin/music')
               void fetchData()
             }}
             mode="create"
@@ -1154,6 +1158,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             onClose={() => setMusicImportOpen(false)}
             onImported={() => {
               setMusicImportOpen(false)
+              invalidateApiCacheByPrefix('/api/admin/music')
               void fetchData()
             }}
           />
