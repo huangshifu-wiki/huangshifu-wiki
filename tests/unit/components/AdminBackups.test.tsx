@@ -69,7 +69,7 @@ describe('AdminBackups', () => {
     })
     expect(screen.getByText(initialBackup.note)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByTitle('下载'))
+    fireEvent.click(screen.getByText('下载'))
 
     await waitFor(() => {
       expect(mockApiDownload).toHaveBeenCalledTimes(1)
@@ -160,7 +160,7 @@ describe('AdminBackups', () => {
       expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByTitle('编辑备注'))
+    fireEvent.click(screen.getByRole('button', { name: '备注' }))
     fireEvent.change(screen.getByLabelText('备份备注'), {
       target: { value: '新的备注' },
     })
@@ -190,7 +190,7 @@ describe('AdminBackups', () => {
       expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByTitle('删除'))
+    fireEvent.click(screen.getByText('删除'))
     fireEvent.click(screen.getByText('确认删除'))
 
     await waitFor(() => {
@@ -224,7 +224,7 @@ describe('AdminBackups', () => {
       expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByTitle('恢复'))
+    fireEvent.click(screen.getByText('恢复'))
     fireEvent.click(screen.getByText('恢复数据库'))
 
     await waitFor(() => {
@@ -252,7 +252,7 @@ describe('AdminBackups', () => {
       expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByTitle('恢复'))
+    fireEvent.click(screen.getByText('恢复'))
     fireEvent.click(screen.getByText('恢复数据库'))
 
     await waitFor(() => {
@@ -282,7 +282,7 @@ describe('AdminBackups', () => {
       expect(screen.getByText(initialBackup.filename)).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByTitle('恢复'))
+    fireEvent.click(screen.getByText('恢复'))
     fireEvent.click(screen.getByText('恢复数据库'))
 
     await waitFor(() => {

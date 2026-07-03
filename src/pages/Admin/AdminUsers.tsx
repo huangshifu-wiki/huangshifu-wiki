@@ -10,6 +10,12 @@ import {
 import { clsx } from 'clsx'
 import { CharacterCount } from '../../components/CharacterCount'
 import {
+  DANGER_BUTTON_CLASSES,
+  INFO_BUTTON_CLASSES,
+  SUCCESS_BUTTON_CLASSES,
+  WARNING_BUTTON_CLASSES,
+} from '../../lib/buttonClasses'
+import {
   apiDelete,
   apiGet,
   apiPatch,
@@ -68,9 +74,6 @@ export const AdminUsers = () => {
   const isCurrentUser = (uid?: string) => Boolean(uid && uid === currentUser?.uid)
 
   const getNextRole = (role?: string) => (role === 'admin' ? 'user' : 'admin')
-  const getRoleToggleTitle = (role?: string) =>
-    getNextRole(role) === 'admin' ? '设为管理员' : '设为普通用户'
-
   const canManageUser = (target: AdminDataItem) => {
     if (!target.uid || isCurrentUser(target.uid)) {
       return false
@@ -170,10 +173,6 @@ export const AdminUsers = () => {
     }
   }
 
-  const canEditUser = (target: AdminDataItem) => {
-    return canManageUser(target)
-  }
-
   const handleDeleteUser = async (target: AdminDataItem) => {
     if (!canManageUser(target)) {
       show('当前权限不能删除该用户', { variant: 'error' })
@@ -210,7 +209,7 @@ export const AdminUsers = () => {
   }
 
   const openEditModal = (target: AdminDataItem) => {
-    if (!canEditUser(target)) {
+    if (!canManageUser(target)) {
       show('当前权限不能编辑该用户', { variant: 'error' })
       return
     }
@@ -357,7 +356,7 @@ export const AdminUsers = () => {
                 ))
               ) : data.length > 0 ? (
                 data.map((item) => (
-                  <tr key={item.uid} className="hover:bg-surface-alt transition-colors group">
+                  <tr key={item.uid} className="hover:bg-surface-alt transition-colors">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <SmartImage
@@ -409,55 +408,51 @@ export const AdminUsers = () => {
                         {item.status === 'banned' ? '已封禁' : '正常'}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {canEditUser(item) && (
+                    <td className="px-5 py-4 text-left">
+                      <div className="flex items-center justify-start gap-2">
+                        {canManageUser(item) && (
                           <button
                             onClick={() => openEditModal(item)}
-                            className="p-1.5 text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded transition-all"
-                            title="编辑用户"
+                            className={INFO_BUTTON_CLASSES}
                           >
-                            <Pencil size={16} />
+                            <Pencil size={14} />
+                            编辑
                           </button>
                         )}
                         {isSuperAdmin && !isCurrentUser(item.uid) && (
-                          <button
-                            onClick={() => toggleRole(item)}
-                            className="p-1.5 text-brand-gold hover:bg-surface-alt rounded transition-all"
-                            title={getRoleToggleTitle(item.role)}
-                          >
+                          <button onClick={() => toggleRole(item)} className={INFO_BUTTON_CLASSES}>
                             {getNextRole(item.role) === 'admin' ? (
-                              <CheckCircle size={16} />
+                              <CheckCircle size={14} />
                             ) : (
-                              <XCircle size={16} />
+                              <XCircle size={14} />
                             )}
+                            {getNextRole(item.role) === 'admin' ? '升为管理员' : '降为普通'}
                           </button>
                         )}
                         {canManageUser(item) && (
                           <button
                             onClick={() => toggleBan(item)}
-                            className={clsx(
-                              'p-1.5 rounded transition-all',
+                            className={
                               item.status === 'banned'
-                                ? 'theme-text-success hover:bg-surface-alt'
-                                : 'theme-icon-button-warning hover:bg-surface-alt'
-                            )}
-                            title={item.status === 'banned' ? '解封' : '封禁'}
+                                ? SUCCESS_BUTTON_CLASSES
+                                : WARNING_BUTTON_CLASSES
+                            }
                           >
                             {item.status === 'banned' ? (
-                              <CheckCircle size={16} />
+                              <CheckCircle size={14} />
                             ) : (
-                              <AlertTriangle size={16} />
+                              <AlertTriangle size={14} />
                             )}
+                            {item.status === 'banned' ? '解封' : '封禁'}
                           </button>
                         )}
                         {canManageUser(item) && (
                           <button
                             onClick={() => void handleDeleteUser(item)}
-                            className="p-1.5 theme-icon-button-danger hover:bg-surface-alt rounded transition-all"
-                            title="删除"
+                            className={DANGER_BUTTON_CLASSES}
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={14} />
+                            删除
                           </button>
                         )}
                       </div>

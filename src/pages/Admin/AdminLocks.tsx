@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Lock, RefreshCw, Trash2 } from '@/src/components/icons'
+import { WARNING_BUTTON_CLASSES } from '../../lib/buttonClasses'
 import { apiDelete, apiGet } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'
 import { useDialog } from '../../components/Dialog'
@@ -157,7 +158,7 @@ export const AdminLocks = () => {
                 ))
               ) : data.length > 0 ? (
                 data.map((item) => (
-                  <tr key={item.id} className="hover:bg-surface-alt transition-colors group">
+                  <tr key={item.id} className="hover:bg-surface-alt transition-colors">
                     <td className="px-5 py-4">
                       <input
                         type="checkbox"
@@ -178,13 +179,10 @@ export const AdminLocks = () => {
                     <td className="px-5 py-4 text-xs text-text-muted">
                       {formatDateTime(item.expiresAt, 'N/A')}
                     </td>
-                    <td className="px-5 py-4 text-right">
-                      <button
-                        onClick={() => releaseLock(item)}
-                        className="p-1.5 theme-icon-button-warning hover:bg-surface-alt rounded transition-all opacity-0 group-hover:opacity-100"
-                        title="强制释放"
-                      >
-                        <Lock size={16} />
+                    <td className="px-5 py-4 text-left">
+                      <button onClick={() => releaseLock(item)} className={WARNING_BUTTON_CLASSES}>
+                        <Lock size={14} />
+                        强制释放
                       </button>
                     </td>
                   </tr>

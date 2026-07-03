@@ -99,7 +99,7 @@ describe('AdminListPage', () => {
 
     expect(await screen.findByText('测试版块')).toBeInTheDocument()
 
-    const deleteButton = screen.getByTitle('删除')
+    const deleteButton = screen.getByText('删除')
     await user.click(deleteButton)
 
     await waitFor(() => {

@@ -23,6 +23,11 @@ import {
   apiPost,
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
+import {
+  DANGER_BUTTON_CLASSES,
+  SUCCESS_BUTTON_CLASSES,
+  WARNING_BUTTON_CLASSES,
+} from '../../lib/buttonClasses'
 import { formatDateTime } from '../../lib/dateUtils'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -78,7 +83,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'metrics', label: '数据', className: 'min-w-[180px]' },
       { key: 'tags', label: '标签/位置', className: 'min-w-[180px]' },
       { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
-      { key: 'actions', label: '操作', className: 'min-w-[110px] text-right' },
+      { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
   },
@@ -92,7 +97,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'relations', label: '专辑', className: 'min-w-[180px]' },
       { key: 'ids', label: '平台 ID', className: 'min-w-[220px]' },
       { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
-      { key: 'actions', label: '操作', className: 'min-w-[110px] text-right' },
+      { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
   },
@@ -107,7 +112,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'metrics', label: '数据', className: 'min-w-[210px]' },
       { key: 'relations', label: '关联', className: 'min-w-[180px]' },
       { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
-      { key: 'actions', label: '操作', className: 'min-w-[110px] text-right' },
+      { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
   },
@@ -122,7 +127,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'media', label: '图片/版权', className: 'min-w-[170px]' },
       { key: 'tags', label: '标签/位置', className: 'min-w-[180px]' },
       { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
-      { key: 'actions', label: '操作', className: 'min-w-[110px] text-right' },
+      { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
   },
@@ -134,7 +139,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'details', label: '版块', className: 'min-w-[260px]' },
       { key: 'order', label: '排序', className: 'min-w-[90px]' },
       { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
-      { key: 'actions', label: '操作', className: 'min-w-[110px] text-right' },
+      { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: true,
   },
@@ -147,7 +152,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'link', label: '链接', className: 'min-w-[200px]' },
       { key: 'status', label: '状态', className: 'min-w-[110px]' },
       { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
-      { key: 'actions', label: '操作', className: 'min-w-[120px] text-right' },
+      { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: true,
   },
@@ -772,85 +777,67 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     }
   }
 
-  const renderActions = (item: AdminDataItem, rowId: string) =>
-    (() => {
-      const pendingAction = pendingActions[rowId]
-      const isPending = Boolean(pendingAction)
+  const renderActions = (item: AdminDataItem, rowId: string) => {
+    const pendingAction = pendingActions[rowId]
+    const isPending = Boolean(pendingAction)
 
-      return (
-        <div className="flex items-center justify-end gap-2">
-          {pendingAction === 'delete' && (
+    return (
+      <div className="flex items-center justify-start gap-2">
+        {pendingAction && (
+          <button
+            disabled
+            className={pendingAction === 'restore' ? SUCCESS_BUTTON_CLASSES : DANGER_BUTTON_CLASSES}
+          >
+            <RefreshCw size={14} className="animate-spin" />
+            {pendingAction === 'delete'
+              ? '删除中...'
+              : pendingAction === 'restore'
+                ? '恢复中...'
+                : '永久删除中...'}
+          </button>
+        )}
+        {type === 'announcements' && !item.isDeleted && (
+          <button
+            onClick={() => toggleAnnouncement(item)}
+            disabled={isPending}
+            className={WARNING_BUTTON_CLASSES}
+          >
+            {item.active ? <CheckCircle size={14} /> : <XCircle size={14} />}
+            {item.active ? '禁用' : '启用'}
+          </button>
+        )}
+        {!isPending && item.isDeleted ? (
+          <>
             <button
-              disabled
-              className="theme-icon-button-danger rounded p-1.5 transition-all disabled:cursor-wait disabled:opacity-50"
-              title="删除中"
-            >
-              <RefreshCw size={16} className="animate-spin" />
-            </button>
-          )}
-          {pendingAction === 'restore' && (
-            <button
-              disabled
-              className="rounded p-1.5 text-brand-gold transition-all disabled:cursor-wait disabled:opacity-50"
-              title="恢复中"
-            >
-              <RefreshCw size={16} className="animate-spin" />
-            </button>
-          )}
-          {pendingAction === 'permanentDelete' && (
-            <button
-              disabled
-              className="theme-icon-button-danger rounded p-1.5 transition-all disabled:cursor-wait disabled:opacity-50"
-              title="彻底删除中"
-            >
-              <RefreshCw size={16} className="animate-spin" />
-            </button>
-          )}
-          {type === 'announcements' && !item.isDeleted && (
-            <button
-              onClick={() => toggleAnnouncement(item)}
+              onClick={() => handleRestore(rowId)}
               disabled={isPending}
-              className={clsx(
-                'rounded p-1.5 transition-all hover:bg-surface-alt disabled:cursor-wait disabled:opacity-50',
-                item.active ? 'theme-text-success' : 'text-text-muted'
-              )}
-              title={item.active ? '禁用' : '启用'}
+              className={SUCCESS_BUTTON_CLASSES}
             >
-              {item.active ? <CheckCircle size={16} /> : <XCircle size={16} />}
+              <RotateCcw size={14} />
+              恢复
             </button>
-          )}
-          {!isPending && item.isDeleted ? (
-            <>
-              <button
-                onClick={() => handleRestore(rowId)}
-                disabled={isPending}
-                className="rounded p-1.5 text-brand-gold transition-all hover:bg-surface-alt disabled:cursor-wait disabled:opacity-50"
-                title="恢复"
-              >
-                <RotateCcw size={16} />
-              </button>
-              <button
-                onClick={() => handlePermanentDelete(rowId)}
-                disabled={isPending}
-                className="theme-icon-button-danger rounded p-1.5 transition-all hover:bg-surface-alt disabled:cursor-wait disabled:opacity-50"
-                title="彻底删除"
-              >
-                <Trash2 size={16} />
-              </button>
-            </>
-          ) : !isPending ? (
             <button
-              onClick={() => handleDelete(rowId)}
+              onClick={() => handlePermanentDelete(rowId)}
               disabled={isPending}
-              className="theme-icon-button-danger rounded p-1.5 transition-all hover:bg-surface-alt disabled:cursor-wait disabled:opacity-50"
-              title="删除"
+              className={DANGER_BUTTON_CLASSES}
             >
-              <Trash2 size={16} />
+              <Trash2 size={14} />
+              永久删除
             </button>
-          ) : null}
-        </div>
-      )
-    })()
+          </>
+        ) : !isPending ? (
+          <button
+            onClick={() => handleDelete(rowId)}
+            disabled={isPending}
+            className={DANGER_BUTTON_CLASSES}
+          >
+            <Trash2 size={14} />
+            删除
+          </button>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
     <>
@@ -1105,7 +1092,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                             key={col.key}
                             className={clsx(
                               'px-5 py-4 align-top',
-                              col.key === 'actions' && 'text-right'
+                              col.key === 'actions' && 'text-left'
                             )}
                           >
                             {col.key === 'actions'

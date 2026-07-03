@@ -167,7 +167,7 @@ describe('AdminUsers', () => {
       expect(screen.getByText('user@example.com')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByTitle('编辑用户'))
+    fireEvent.click(screen.getByText('编辑'))
 
     expect(screen.getByRole('dialog', { name: '编辑用户' })).toBeInTheDocument()
     expect(screen.getByLabelText(/昵称/)).toHaveValue('普通用户')
@@ -231,7 +231,7 @@ describe('AdminUsers', () => {
       expect(screen.getByText('user@example.com')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByTitle('编辑用户'))
+    fireEvent.click(screen.getByText('编辑'))
     fireEvent.click(screen.getByText('保存修改'))
 
     await waitFor(() => {
@@ -252,7 +252,7 @@ describe('AdminUsers', () => {
       expect(screen.getByText('admin2@example.com')).toBeInTheDocument()
     })
 
-    expect(screen.getAllByTitle('编辑用户')).toHaveLength(1)
+    expect(screen.getAllByText('编辑')).toHaveLength(1)
     expect(screen.queryByText('为 管理员 设置新的登录密码')).not.toBeInTheDocument()
   })
 
@@ -263,8 +263,8 @@ describe('AdminUsers', () => {
       expect(screen.getByText('admin2@example.com')).toBeInTheDocument()
     })
 
-    expect(screen.getAllByTitle('封禁')).toHaveLength(1)
-    expect(screen.getAllByTitle('删除')).toHaveLength(1)
+    expect(screen.getAllByText('封禁')).toHaveLength(1)
+    expect(screen.getAllByText('删除')).toHaveLength(1)
   })
 
   it('allows super admin to manage admin targets except themselves', async () => {
@@ -279,8 +279,8 @@ describe('AdminUsers', () => {
       expect(screen.getByText('super@example.com')).toBeInTheDocument()
     })
 
-    expect(screen.getAllByTitle('编辑用户')).toHaveLength(2)
-    expect(screen.getAllByTitle('封禁')).toHaveLength(2)
-    expect(screen.getAllByTitle('删除')).toHaveLength(2)
+    expect(screen.getAllByText('编辑')).toHaveLength(2)
+    expect(screen.getAllByText('封禁')).toHaveLength(2)
+    expect(screen.getAllByText('删除')).toHaveLength(2)
   })
 })

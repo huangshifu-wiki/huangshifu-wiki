@@ -76,6 +76,7 @@
   /* 文字色 (Text) */
   --color-text-primary: #2c2c2c;
   --color-text-secondary: #6b6560;
+  --color-text-secondary-rgb: 107, 101, 96;
   --color-text-muted: #9e968e;
   --color-text-antique: #2c2c2c;
   --color-text-antique-muted: #9e968e;
@@ -92,12 +93,16 @@
 
   /* 功能色 (Functional) */
   --color-success: #22c55e;
+  --color-success-rgb: 34, 197, 94;
   --color-success-hover: #16a34a;
   --color-warning: #f59e0b;
+  --color-warning-rgb: 245, 158, 11;
   --color-warning-hover: #d97706;
   --color-error: #ef4444;
+  --color-error-rgb: 239, 68, 68;
   --color-error-hover: #dc2626;
   --color-info: #3b82f6;
+  --color-info-rgb: 59, 130, 246;
   --color-info-hover: #2563eb;
 
   /* Liquid Glass 玻璃质感核心变量 */
@@ -139,6 +144,38 @@
   --hover-scale: 0.95;
 
   /* 超大字体排版 */
+}
+
+/* Admin button background utilities */
+.btn-danger-bg {
+  background: rgba(var(--color-error-rgb), 0.08);
+}
+.btn-danger-bg:hover {
+  background: rgba(var(--color-error-rgb), 0.14);
+}
+.btn-success-bg {
+  background: rgba(var(--color-success-rgb), 0.08);
+}
+.btn-success-bg:hover {
+  background: rgba(var(--color-success-rgb), 0.14);
+}
+.btn-warning-bg {
+  background: rgba(var(--color-warning-rgb), 0.08);
+}
+.btn-warning-bg:hover {
+  background: rgba(var(--color-warning-rgb), 0.14);
+}
+.btn-info-bg {
+  background: rgba(var(--color-info-rgb), 0.08);
+}
+.btn-info-bg:hover {
+  background: rgba(var(--color-info-rgb), 0.14);
+}
+.btn-secondary-bg {
+  background: rgba(var(--color-text-secondary-rgb), 0.08);
+}
+.btn-secondary-bg:hover {
+  background: rgba(var(--color-text-secondary-rgb), 0.14);
 }
 
 .mention-highlight {
@@ -184,6 +221,7 @@ a.mention-highlight:hover {
   --color-border-light: #67584a;
   --color-text-primary: #efe6d8;
   --color-text-secondary: #d0c1ac;
+  --color-text-secondary-rgb: 208, 193, 172;
   --color-text-muted: #b8ab9a;
   --color-text-antique: #efe6d8;
   --color-text-antique-muted: #b8ab9a;

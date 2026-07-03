@@ -14,6 +14,12 @@ import {
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'
+import {
+  DANGER_BUTTON_CLASSES,
+  INFO_BUTTON_CLASSES,
+  SECONDARY_BUTTON_CLASSES,
+  SUCCESS_BUTTON_CLASSES,
+} from '../../lib/buttonClasses'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -348,7 +354,7 @@ const AdminBackups = () => {
               <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
                 大小
               </th>
-              <th className="px-5 py-3 text-right text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
                 操作
               </th>
             </tr>
@@ -379,34 +385,34 @@ const AdminBackups = () => {
                   </td>
                   <td className="px-5 py-4 text-sm text-text-secondary">{backup.sizeFormatted}</td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-start gap-2">
                       <button
                         onClick={() => openNoteDialog(backup)}
-                        className="p-2 text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded transition-all"
-                        title="编辑备注"
+                        className={INFO_BUTTON_CLASSES}
                       >
-                        <Pencil size={18} />
+                        <Pencil size={14} />
+                        备注
                       </button>
                       <button
                         onClick={() => handleDownload(backup.filename)}
-                        className="p-2 text-brand-gold hover:bg-surface-alt rounded transition-all"
-                        title="下载"
+                        className={SECONDARY_BUTTON_CLASSES}
                       >
-                        <Download size={18} />
+                        <Download size={14} />
+                        下载
                       </button>
                       <button
                         onClick={() => openRestoreExistingDialog(backup.filename)}
-                        className="p-2 text-text-secondary hover:text-red-500 hover:bg-surface-alt rounded transition-all"
-                        title="恢复"
+                        className={SUCCESS_BUTTON_CLASSES}
                       >
-                        <RotateCcw size={18} />
+                        <RotateCcw size={14} />
+                        恢复
                       </button>
                       <button
                         onClick={() => openDeleteDialog(backup.filename)}
-                        className="p-2 theme-icon-button-danger hover:bg-surface-alt rounded transition-all"
-                        title="删除"
+                        className={DANGER_BUTTON_CLASSES}
                       >
-                        <Trash2 size={18} />
+                        <Trash2 size={14} />
+                        删除
                       </button>
                     </div>
                   </td>
