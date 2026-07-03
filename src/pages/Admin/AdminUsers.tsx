@@ -113,7 +113,7 @@ export const AdminUsers = () => {
     const note = await dialog.prompt({
       title: shouldUnban ? '解封备注' : '封禁原因',
       message: shouldUnban ? '解封备注（可选）' : '封禁原因',
-      defaultValue: shouldUnban ? '' : '违反社区规范',
+      defaultValue: '',
       confirmText: '确认',
       variant: shouldUnban ? 'info' : 'warning',
       multiline: true,
