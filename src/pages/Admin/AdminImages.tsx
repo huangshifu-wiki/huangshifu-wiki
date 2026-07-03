@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   Download,
   Upload,
@@ -10,6 +10,7 @@ import {
   Settings,
   RefreshCw,
   Sparkles,
+  Search,
 } from '@/src/components/icons'
 import { apiGet, apiPatch, apiDelete, apiPost, apiDownload } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
@@ -19,6 +20,15 @@ import { clsx } from 'clsx'
 import { SmartImage } from '../../components/SmartImage'
 import { clearImagePreferenceCache } from '../../services/imageService'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import type {
+  MediaHealthBlockReason,
+  MediaHealthCleanupApiResponse,
+  MediaHealthCleanupTarget,
+  MediaHealthRecordType,
+  MediaHealthScanResponse,
+  MediaHealthScanMode,
+  MediaHealthScanResult,
+} from '../../types/api'
 
 interface ImageMap {
   id: string
@@ -43,6 +53,23 @@ interface ImagePreference {
   fallback: boolean
 }
 
+type MediaHealthItem = {
+  recordType: MediaHealthRecordType
+  id: string
+  label: string
+  storageKey?: string
+  localUrl?: string
+  canCleanup: boolean
+  blockedReasons: MediaHealthBlockReason[]
+  kinds: Array<'missing' | 'unused'>
+  referencesCount?: number
+}
+
+const MEDIA_HEALTH_MODE_OPTIONS: Array<{ value: MediaHealthScanMode; label: string }> = [
+  { value: 'strict', label: '严格' },
+  { value: 'business', label: '业务内容' },
+]
+
 const getStrategyLabel = (strategy: string) => {
   const labels: Record<string, string> = {
     local: '本地服务器',
@@ -64,6 +91,76 @@ const getStorageBadge = (type?: string) => {
   )
 }
 
+const mediaHealthKey = (recordType: MediaHealthRecordType, id: string) => `${recordType}:${id}`
+
+const getRecordTypeLabel = (recordType: MediaHealthRecordType) =>
+  recordType === 'mediaAsset' ? '上传资源' : '图片映射'
+
+const getBlockedReasonLabel = (reason: MediaHealthBlockReason) => {
+  const labels: Record<MediaHealthBlockReason, string> = {
+    referenced: '仍有引用',
+    shared_image_map: '共享映射',
+    processing: '正在处理',
+    not_found: '记录不存在',
+    already_deleted: '已删除',
+    active_upload_session: '上传会话进行中',
+  }
+  return labels[reason] || reason
+}
+
+const buildMediaHealthItems = (mediaHealth: MediaHealthScanResult | null): MediaHealthItem[] => {
+  if (!mediaHealth) return []
+
+  const items = new Map<string, MediaHealthItem>()
+  const upsert = (item: MediaHealthItem) => {
+    const key = mediaHealthKey(item.recordType, item.id)
+    const existing = items.get(key)
+    if (!existing) {
+      items.set(key, item)
+      return
+    }
+
+    items.set(key, {
+      ...existing,
+      label: existing.label || item.label,
+      storageKey: existing.storageKey || item.storageKey,
+      localUrl: existing.localUrl || item.localUrl,
+      canCleanup: existing.canCleanup && item.canCleanup,
+      blockedReasons: [...new Set([...existing.blockedReasons, ...item.blockedReasons])],
+      kinds: [...new Set([...existing.kinds, ...item.kinds])],
+      referencesCount: Math.max(existing.referencesCount || 0, item.referencesCount || 0),
+    })
+  }
+
+  for (const item of mediaHealth.missingLocalFiles) {
+    upsert({
+      recordType: item.recordType,
+      id: item.id,
+      label: item.label,
+      storageKey: item.storageKey,
+      canCleanup: item.canCleanup,
+      blockedReasons: item.blockedReasons,
+      kinds: ['missing'],
+      referencesCount: item.references.length,
+    })
+  }
+
+  for (const item of mediaHealth.unusedMediaRecords) {
+    upsert({
+      recordType: item.recordType,
+      id: item.id,
+      label: item.label,
+      storageKey: item.storageKey,
+      localUrl: item.localUrl,
+      canCleanup: item.canCleanup,
+      blockedReasons: item.blockedReasons,
+      kinds: ['unused'],
+    })
+  }
+
+  return [...items.values()]
+}
+
 const AdminImages: React.FC = () => {
   const [images, setImages] = useState<ImageMap[]>([])
   const [stats, setStats] = useState<ImageStats | null>(null)
@@ -77,6 +174,11 @@ const AdminImages: React.FC = () => {
     strategy: 'local',
     fallback: true,
   })
+  const [mediaHealthMode, setMediaHealthMode] = useState<MediaHealthScanMode>('strict')
+  const [mediaHealth, setMediaHealth] = useState<MediaHealthScanResult | null>(null)
+  const [mediaHealthLoading, setMediaHealthLoading] = useState(false)
+  const [mediaHealthCleaning, setMediaHealthCleaning] = useState(false)
+  const [selectedHealthItems, setSelectedHealthItems] = useState<string[]>([])
   const dialog = useDialog()
   const { show } = useToast()
 
@@ -199,6 +301,69 @@ const AdminImages: React.FC = () => {
     }
   }
 
+  const handleScanMediaHealth = async (mode = mediaHealthMode) => {
+    setMediaHealthLoading(true)
+    try {
+      const response = await apiGet<MediaHealthScanResponse>(
+        '/api/admin/media-health/scan',
+        { mode, limit: 500 },
+        { staleTime: 0, swr: false }
+      )
+      setMediaHealth(response.data)
+      setSelectedHealthItems([])
+    } catch (error) {
+      show(error instanceof Error ? error.message : '媒体健康扫描失败', { variant: 'error' })
+    } finally {
+      setMediaHealthLoading(false)
+    }
+  }
+
+  const mediaHealthItems = useMemo(() => buildMediaHealthItems(mediaHealth), [mediaHealth])
+  const selectedHealthItemSet = useMemo(() => new Set(selectedHealthItems), [selectedHealthItems])
+
+  const cleanupTargets = useMemo<MediaHealthCleanupTarget[]>(
+    () =>
+      mediaHealthItems
+        .filter((item) => selectedHealthItemSet.has(mediaHealthKey(item.recordType, item.id)))
+        .map((item) => ({ recordType: item.recordType, id: item.id })),
+    [mediaHealthItems, selectedHealthItemSet]
+  )
+
+  const toggleHealthItem = (item: MediaHealthItem) => {
+    if (!item.canCleanup) return
+    const key = mediaHealthKey(item.recordType, item.id)
+    setSelectedHealthItems((current) =>
+      current.includes(key) ? current.filter((value) => value !== key) : [...current, key]
+    )
+  }
+
+  const handleCleanupMediaHealth = async () => {
+    if (cleanupTargets.length === 0) return
+    const confirmed = await dialog.confirm({
+      title: '清理媒体数据库记录',
+      message: `确定软清理 ${cleanupTargets.length} 条媒体记录吗？数据库行不会被硬删除。`,
+      confirmText: '软清理',
+      variant: 'warning',
+    })
+    if (!confirmed) return
+
+    setMediaHealthCleaning(true)
+    try {
+      const response = await apiPost<MediaHealthCleanupApiResponse>(
+        '/api/admin/media-health/cleanup',
+        { mode: mediaHealthMode, targets: cleanupTargets }
+      )
+      show(`已清理 ${response.data.cleaned} 条，跳过 ${response.data.skipped} 条`, {
+        variant: response.data.skipped > 0 ? 'error' : 'success',
+      })
+      await Promise.all([handleScanMediaHealth(mediaHealthMode), fetchImages(), fetchStats()])
+    } catch (error) {
+      show(error instanceof Error ? error.message : '媒体记录清理失败', { variant: 'error' })
+    } finally {
+      setMediaHealthCleaning(false)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -242,6 +407,145 @@ const AdminImages: React.FC = () => {
           </div>
         </div>
       )}
+
+      <div className="bg-surface border border-border rounded p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary">媒体健康检查</h3>
+            <p className="text-xs text-text-muted mt-1">
+              扫描缺失本地文件和未被内容使用的媒体数据库记录
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {MEDIA_HEALTH_MODE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => {
+                  const nextMode = option.value
+                  setMediaHealthMode(nextMode)
+                  if (mediaHealth) void handleScanMediaHealth(nextMode)
+                }}
+                className={clsx(
+                  'px-3 py-1.5 rounded text-xs font-medium transition-all',
+                  mediaHealthMode === option.value
+                    ? 'bg-brand-gold-dark text-white'
+                    : 'bg-surface-alt text-text-secondary hover:text-brand-gold'
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+            <button
+              onClick={() => handleScanMediaHealth()}
+              disabled={mediaHealthLoading}
+              className="px-3 py-1.5 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-xs transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {mediaHealthLoading ? (
+                <RefreshCw size={14} className="animate-spin" />
+              ) : (
+                <Search size={14} />
+              )}
+              扫描
+            </button>
+            <button
+              onClick={handleCleanupMediaHealth}
+              disabled={mediaHealthCleaning || cleanupTargets.length === 0}
+              className="px-3 py-1.5 bg-brand-gold-dark text-white rounded text-xs font-medium hover:bg-brand-gold transition-all disabled:opacity-50 inline-flex items-center gap-1.5"
+            >
+              <Trash2 size={14} />
+              软清理 {cleanupTargets.length || ''}
+            </button>
+          </div>
+        </div>
+
+        {mediaHealth ? (
+          <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {[
+                { label: '缺失本地文件', value: mediaHealth.summary.missingLocalFiles },
+                { label: '未用上传资源', value: mediaHealth.summary.unusedMediaAssets },
+                { label: '未用图片映射', value: mediaHealth.summary.unusedImageMaps },
+                { label: '可清理', value: mediaHealth.summary.cleanupCandidates },
+                { label: '被阻止', value: mediaHealth.summary.blockedRecords },
+              ].map((item) => (
+                <div key={item.label} className="bg-surface-alt rounded p-3">
+                  <p className="text-[11px] text-text-muted">{item.label}</p>
+                  <p className="text-lg font-bold text-text-primary">{item.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {mediaHealthItems.length > 0 ? (
+              <div className="max-h-96 overflow-y-auto border border-border rounded divide-y divide-border">
+                {mediaHealthItems.slice(0, 80).map((item) => {
+                  const key = mediaHealthKey(item.recordType, item.id)
+                  const selected = selectedHealthItemSet.has(key)
+                  return (
+                    <div
+                      role={item.canCleanup ? 'button' : undefined}
+                      tabIndex={item.canCleanup ? 0 : undefined}
+                      key={key}
+                      onClick={() => toggleHealthItem(item)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return
+                        event.preventDefault()
+                        toggleHealthItem(item)
+                      }}
+                      className={clsx(
+                        'w-full text-left p-3 transition-colors',
+                        item.canCleanup ? 'hover:bg-surface-alt' : 'cursor-not-allowed opacity-70',
+                        selected && 'bg-brand-gold/10'
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          disabled={!item.canCleanup}
+                          onChange={() => toggleHealthItem(item)}
+                          onClick={(event) => event.stopPropagation()}
+                          className="mt-1 h-4 w-4 accent-brand-gold"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-text-primary break-all">
+                              {item.label}
+                            </span>
+                            {item.kinds.map((kind) => (
+                              <span
+                                key={kind}
+                                className="px-2 py-0.5 rounded text-[10px] theme-tag"
+                              >
+                                {kind === 'missing' ? '缺失文件' : '未使用'}
+                              </span>
+                            ))}
+                            <span className="px-2 py-0.5 rounded text-[10px] bg-surface border border-border text-text-secondary">
+                              {getRecordTypeLabel(item.recordType)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-text-muted mt-1 break-all">
+                            {item.storageKey || item.localUrl || item.id}
+                          </p>
+                          {!item.canCleanup ? (
+                            <p className="text-xs theme-text-warning mt-1">
+                              {item.blockedReasons.map(getBlockedReasonLabel).join('、')}
+                              {item.referencesCount ? `，引用 ${item.referencesCount} 处` : ''}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-sm text-text-muted bg-surface-alt rounded p-4">
+                没有发现媒体健康问题。
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
 
       <div className="bg-surface border border-border rounded p-5">
         <div className="flex items-center justify-between mb-4">

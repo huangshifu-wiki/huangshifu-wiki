@@ -48,6 +48,7 @@ import { registerSetupRoutes } from './src/server/routes/setup.routes'
 import { UPLOAD_MAX_FILE_SIZE_MB } from './src/lib/uploadLimits'
 import { registerAdminSystemRoutes } from './src/server/routes/admin.system.routes'
 import { registerAdminVariantsRoutes } from './src/server/routes/admin.variants.routes'
+import { registerAdminMediaHealthRoutes } from './src/server/routes/admin.media-health.routes'
 import { cloudSyncService } from './src/server/services/cloudSyncService'
 import { variantGenerator } from './src/server/services/variantGenerator'
 import { isSemanticSearchEnabled } from './src/server/utils'
@@ -328,6 +329,7 @@ if (isSemanticSearchEnabled()) {
 }
 registerAdminSystemRoutes(app)
 registerAdminVariantsRoutes(app)
+registerAdminMediaHealthRoutes(app)
 registerAdminRoutes(app)
 registerNotificationsRoutes(app)
 registerFavoritesRoutes(app)

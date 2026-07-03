@@ -103,6 +103,89 @@ export interface ImagePreference {
   fallback: boolean
 }
 
+export type MediaHealthScanMode = 'strict' | 'business'
+
+export type MediaHealthRecordType = 'mediaAsset' | 'imageMap'
+
+export type MediaHealthBlockReason =
+  | 'referenced'
+  | 'shared_image_map'
+  | 'processing'
+  | 'not_found'
+  | 'already_deleted'
+  | 'active_upload_session'
+
+export interface MediaHealthReference {
+  source: string
+  id?: string
+  field: string
+  value: string
+}
+
+export interface MediaHealthMissingLocalFile {
+  recordType: MediaHealthRecordType
+  id: string
+  storageKey: string
+  publicUrl: string
+  expectedPath: string
+  label: string
+  references: MediaHealthReference[]
+  canCleanup: boolean
+  blockedReasons: MediaHealthBlockReason[]
+}
+
+export interface MediaHealthUnusedRecord {
+  recordType: MediaHealthRecordType
+  id: string
+  storageKey?: string
+  publicUrl?: string
+  localUrl?: string
+  label: string
+  canCleanup: boolean
+  blockedReasons: MediaHealthBlockReason[]
+}
+
+export interface MediaHealthScanResult {
+  generatedAt: string
+  mode: MediaHealthScanMode
+  summary: {
+    missingLocalFiles: number
+    unusedMediaAssets: number
+    unusedImageMaps: number
+    cleanupCandidates: number
+    blockedRecords: number
+  }
+  missingLocalFiles: MediaHealthMissingLocalFile[]
+  unusedMediaRecords: MediaHealthUnusedRecord[]
+}
+
+export interface MediaHealthScanResponse extends ApiResponse<MediaHealthScanResult> {
+  success: boolean
+}
+
+export interface MediaHealthCleanupTarget {
+  recordType: MediaHealthRecordType
+  id: string
+}
+
+export interface MediaHealthCleanupResponse {
+  total: number
+  cleaned: number
+  skipped: number
+  results: Array<{
+    recordType: MediaHealthRecordType
+    id: string
+    success: boolean
+    skipped: boolean
+    blockedReasons: MediaHealthBlockReason[]
+    message: string
+  }>
+}
+
+export interface MediaHealthCleanupApiResponse extends ApiResponse<MediaHealthCleanupResponse> {
+  success: boolean
+}
+
 export interface EmailVerificationPublicConfig {
   enabled: boolean
 }
