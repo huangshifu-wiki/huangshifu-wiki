@@ -878,11 +878,11 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               className={clsx(
                 'rounded border px-4 py-2 text-sm transition-all',
                 showDeleted
-                  ? 'border-brand-gold text-brand-gold'
+                  ? 'border-brand-gold text-brand-gold bg-brand-gold/10'
                   : 'border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
               )}
             >
-              <Ban size={14} className="mr-1 inline" /> {showDeleted ? '隐藏已删除' : '显示已删除'}
+              <Ban size={14} className="mr-1 inline" /> 显示已删除
             </button>
             <button
               onClick={fetchData}
