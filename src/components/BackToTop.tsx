@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronUp } from 'lucide-react'
+import { ChevronUp } from '@/src/components/icons'
 
 export default function BackToTop() {
   const [isVisible, setIsVisible] = useState(false)

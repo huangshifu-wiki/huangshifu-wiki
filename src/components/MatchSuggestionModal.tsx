@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { ExternalLink, Loader2, Search, X, Check, AlertCircle } from 'lucide-react'
+import { ExternalLink, Loader2, Search, X, Check, AlertCircle } from '@/src/components/icons'
 
 import { apiGet } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'

@@ -8,7 +8,7 @@ import {
   Loader2,
   Settings,
   UserRound,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 

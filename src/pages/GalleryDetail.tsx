@@ -11,7 +11,7 @@ import {
   Trash2,
   User as UserIcon,
   Clock,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { SmartImage } from '../components/SmartImage'

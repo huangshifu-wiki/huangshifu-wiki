@@ -12,7 +12,7 @@ import {
   Shield,
   Settings,
   MessageCircle,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { useI18n } from '../../lib/i18n'
 import { DEFAULT_AVATAR, handleAvatarError } from '../../lib/defaultAvatar'

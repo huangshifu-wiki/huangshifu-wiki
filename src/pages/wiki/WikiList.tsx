@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Book, Calendar, Plus } from 'lucide-react'
+import { Book, Calendar, Plus } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { useUserPreferences } from '../../context/UserPreferencesContext'
 import { ViewModeSelector } from '../../components/ViewModeSelector'

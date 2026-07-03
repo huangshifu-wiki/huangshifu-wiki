@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { clsx } from 'clsx'
-import { Image as ImageIcon, Book, MessageSquare, Sparkles, Clock } from 'lucide-react'
+import { Image as ImageIcon, Book, MessageSquare, Sparkles, Clock } from '@/src/components/icons'
 import { SmartImage } from './SmartImage'
 import type { MixedSearchResult, ImageSourceType } from '../hooks/useSearch'
 import type { GalleryItem, WikiItem, PostItem } from '../types/entities'

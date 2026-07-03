@@ -1,6 +1,13 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { Music, Book, MessageSquare, Image as ImageIcon, Search, Home } from 'lucide-react'
+import {
+  Music,
+  Book,
+  MessageSquare,
+  Image as ImageIcon,
+  Search,
+  Home,
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 export const BottomNav = () => {

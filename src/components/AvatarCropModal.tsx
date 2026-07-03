@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react'
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop'
-import { X, Upload, Loader2 } from 'lucide-react'
+import { X, Upload, Loader2 } from '@/src/components/icons'
 
 import { uploadAvatar, type UploadImageResult } from '../services/imageService'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'

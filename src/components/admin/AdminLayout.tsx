@@ -26,7 +26,7 @@ import {
   HardDrive,
   RefreshCw,
   Settings as SettingsIcon,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useAuth } from '../../context/AuthContext'
 import { logoutRequest } from '../../lib/auth'

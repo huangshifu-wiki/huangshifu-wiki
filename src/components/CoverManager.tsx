@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Loader2, Trash2, Star, Upload, X } from 'lucide-react'
+import { Loader2, Trash2, Star, Upload, X } from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPatch, apiPost, invalidateApiCacheByPrefix } from '../lib/apiClient'

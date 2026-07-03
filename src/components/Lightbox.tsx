@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ZoomIn, ZoomOut, Maximize, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize, ChevronLeft, ChevronRight, X } from '@/src/components/icons'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import { getFitScale as getFitScaleUtil, computeNextScale } from '../utils/lightbox'
 

@@ -11,7 +11,7 @@ import {
   Zap,
   Clock,
   BarChart3,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { apiGet, apiPost } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
 import { clsx } from 'clsx'

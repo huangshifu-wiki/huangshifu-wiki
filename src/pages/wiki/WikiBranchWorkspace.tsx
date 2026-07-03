@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { clsx } from 'clsx'
 import { useToast } from '../../components/Toast'

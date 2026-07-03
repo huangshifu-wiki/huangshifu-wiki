@@ -14,7 +14,7 @@ import {
   RotateCcw,
   Trash2,
   XCircle,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 import {
   apiDelete,

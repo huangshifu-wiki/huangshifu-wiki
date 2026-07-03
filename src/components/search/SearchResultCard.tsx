@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { clsx } from 'clsx'
-import { Book, Image as ImageIcon, Music, MessageSquare, Clock } from 'lucide-react'
+import { Book, Image as ImageIcon, Music, MessageSquare, Clock } from '@/src/components/icons'
 import { SmartImage } from '../SmartImage'
 import { CARD } from '../../styles/cardStyles'
 

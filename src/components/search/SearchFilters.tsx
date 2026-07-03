@@ -1,7 +1,7 @@
 import React from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { clsx } from 'clsx'
-import { Tag, Calendar, Book, Sparkles, Filter } from 'lucide-react'
+import { Tag, Calendar, Book, Sparkles, Filter } from '@/src/components/icons'
 import type { SearchFilters as SearchFiltersType } from '../../hooks/useSearchPage'
 
 interface SearchFiltersProps {

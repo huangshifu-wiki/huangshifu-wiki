@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search as SearchIcon, Camera, Clock, Sparkles, Trash2, X } from 'lucide-react'
+import { Search as SearchIcon, Camera, Clock, Sparkles, Trash2, X } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import type { SearchSuggestion } from '../../hooks/useSearch'

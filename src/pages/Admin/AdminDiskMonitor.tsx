@@ -9,7 +9,7 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { apiGet, apiPut, apiPost } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
 

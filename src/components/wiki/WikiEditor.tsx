@@ -15,7 +15,7 @@ import {
 import { normalizeWikiPageSlug } from '../../lib/wikiSlug'
 import { metadataCache } from '../../lib/metadataCache'
 import { getWikiSaveResultText } from '../../lib/wikiWriteText'
-import { Trash2, X } from 'lucide-react'
+import { Trash2, X } from '@/src/components/icons'
 import WikiEditorForm from './WikiEditorForm'
 import WikiEditorRelationPanel from './WikiEditorRelationPanel'
 import WikiEditorMetaSidebar from './WikiEditorMetaSidebar'

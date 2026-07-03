@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { AlertCircle, Loader2, MailCheck } from 'lucide-react'
+import { AlertCircle, Loader2, MailCheck } from '@/src/components/icons'
 import { verifyEmail } from '../lib/auth'
 import { useAuth } from '../context/AuthContext'
 

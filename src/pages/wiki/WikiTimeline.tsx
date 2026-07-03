@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Calendar, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Calendar, ChevronRight } from '@/src/components/icons'
 import { motion } from 'motion/react'
 import { apiGet } from '../../lib/apiClient'
 import type { WikiItem } from './types'

@@ -1,6 +1,6 @@
 import React from 'react'
 import { motion } from 'motion/react'
-import { X, Edit2, Check, Link2 } from 'lucide-react'
+import { X, Edit2, Check, Link2 } from '@/src/components/icons'
 import type { WikiRelationRecord } from './types'
 import type { WikiPageMetadata } from '../../lib/wikiLinkParser'
 import type { WikiItem } from '../../types/entities'

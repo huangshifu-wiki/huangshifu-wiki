@@ -8,7 +8,7 @@ import {
   RefreshCw,
   Trash2,
   XCircle,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiGet, apiPost } from '../../lib/apiClient'

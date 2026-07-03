@@ -1,5 +1,5 @@
 import React from 'react'
-import { ArrowUpDown } from 'lucide-react'
+import { ArrowUpDown } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useI18n } from '../../lib/i18n'
 import { ViewModeSelector } from '../ViewModeSelector'

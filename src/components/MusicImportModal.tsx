@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Loader2, Link2, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Loader2, Link2, X } from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 import { apiPost } from '../lib/apiClient'

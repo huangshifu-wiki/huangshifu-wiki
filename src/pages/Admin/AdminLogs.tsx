@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { FileText, Shield, RefreshCw } from 'lucide-react'
+import { FileText, Shield, RefreshCw } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { apiGet } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'

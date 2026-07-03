@@ -1,5 +1,5 @@
 import React from 'react'
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 interface PaginationProps {

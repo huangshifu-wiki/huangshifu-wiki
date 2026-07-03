@@ -1,6 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Play, Heart } from 'lucide-react'
+import { Play, Heart } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useI18n } from '../../lib/i18n'
 import { formatMusicCredits } from '../../lib/musicCredits'

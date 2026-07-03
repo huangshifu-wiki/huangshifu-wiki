@@ -66,8 +66,32 @@ export default defineConfig(({ mode }) => {
 
               if (pkg === 'echarts' || pkg.startsWith('echarts/')) return 'vendor-echarts'
               if (pkg === 'vis-network' || pkg.startsWith('vis-network/')) return 'vendor-vis'
-              if (pkg === '@uiw/react-md-editor' || pkg.startsWith('@uiw/react-md-editor/'))
+              if (pkg === '@uiw/react-md-editor' || pkg === '@uiw/react-markdown-preview') {
                 return 'vendor-md-editor'
+              }
+              if (pkg === 'lucide-react' || pkg.startsWith('lucide-react/')) return 'vendor-icons'
+              if (['motion', 'motion-dom', 'motion-utils', 'framer-motion'].includes(pkg)) {
+                return 'vendor-motion'
+              }
+              if (
+                pkg === 'react-markdown' ||
+                pkg.startsWith('remark-') ||
+                pkg.startsWith('rehype-') ||
+                pkg === 'unified' ||
+                pkg === 'refractor' ||
+                pkg === 'micromark' ||
+                pkg.startsWith('micromark-') ||
+                pkg.startsWith('mdast-util-') ||
+                pkg.startsWith('hast-util-') ||
+                pkg === 'parse5' ||
+                pkg.startsWith('unist-util-') ||
+                pkg.startsWith('vfile') ||
+                pkg === 'property-information' ||
+                pkg === 'lowlight' ||
+                pkg === 'highlight.js'
+              ) {
+                return 'vendor-markdown'
+              }
 
               return 'vendor'
             }

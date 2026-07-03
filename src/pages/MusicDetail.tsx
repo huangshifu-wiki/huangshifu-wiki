@@ -11,7 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
   Trash2,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 

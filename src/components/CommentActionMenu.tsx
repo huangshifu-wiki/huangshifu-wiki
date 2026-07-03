@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { FocusEvent } from 'react'
-import { Copy, MoreVertical } from 'lucide-react'
+import { Copy, MoreVertical } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useDismissableLayer } from '../hooks/useClickOutside'
 

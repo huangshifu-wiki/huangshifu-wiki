@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react'
-import { Bell } from 'lucide-react'
+import { Bell } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useAuth } from '../../context/AuthContext'
 import { DropdownPanel } from '../DropdownPanel'

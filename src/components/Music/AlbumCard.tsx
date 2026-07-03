@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { List, ChevronRight, Link2 } from 'lucide-react'
+import { List, ChevronRight, Link2 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useI18n } from '../../lib/i18n'
 import { SmartImage } from '../SmartImage'

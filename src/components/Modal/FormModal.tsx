@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Loader2 } from 'lucide-react'
+import { X, Loader2 } from '@/src/components/icons'
 import clsx from 'clsx'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 

@@ -16,7 +16,7 @@ import {
   Shield,
   SlidersHorizontal,
   UserRound,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'

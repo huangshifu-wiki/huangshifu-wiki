@@ -1,5 +1,12 @@
 import React, { useCallback, useRef, useState } from 'react'
-import { Upload, Image as ImageIcon, CheckCircle, AlertCircle, RefreshCw, X } from 'lucide-react'
+import {
+  Upload,
+  Image as ImageIcon,
+  CheckCircle,
+  AlertCircle,
+  RefreshCw,
+  X,
+} from '@/src/components/icons'
 import { useS3Upload } from '../hooks/useS3Upload'
 import { apiGet } from '../lib/apiClient'
 import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimit } from '../lib/uploadLimits'

@@ -8,7 +8,7 @@ import {
   ThumbsUp,
   ShieldCheck,
   Loader2,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiGet, apiPost } from '../lib/apiClient'

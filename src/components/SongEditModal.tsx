@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, ExternalLink, Plus, Search, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, Plus, Search, Trash2 } from '@/src/components/icons'
 
 import { apiPatch } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock, MapPin, Tag, User as UserIcon } from 'lucide-react'
+import { Clock, MapPin, Tag, User as UserIcon } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { Lightbox } from '../../components/Lightbox'
 import MarkdownRenderer from '../../components/MarkdownRenderer'

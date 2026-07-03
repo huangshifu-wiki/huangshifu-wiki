@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { X } from '@/src/components/icons'
 import { useI18n } from '../../lib/i18n'
 import { AuthForm } from '../AuthForm'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'

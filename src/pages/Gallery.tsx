@@ -1,7 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Image as ImageIcon, Plus, Clock, User as UserIcon, Link2, Trash2 } from 'lucide-react'
+import {
+  Image as ImageIcon,
+  Plus,
+  Clock,
+  User as UserIcon,
+  Link2,
+  Trash2,
+} from '@/src/components/icons'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import { ViewModeSelector } from '../components/ViewModeSelector'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'

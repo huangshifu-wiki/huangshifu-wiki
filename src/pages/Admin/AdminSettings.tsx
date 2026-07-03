@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, MailCheck, RefreshCw, Save, Settings, UserPlus } from 'lucide-react'
+import { Loader2, MailCheck, RefreshCw, Save, Settings, UserPlus } from '@/src/components/icons'
 import { apiPatch, apiRequest, clearApiCache, generateApiCacheKey } from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'
 import type { EmailVerificationAdminConfig, RegistrationConfig } from '../../types/api'

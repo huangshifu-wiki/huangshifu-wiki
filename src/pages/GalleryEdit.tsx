@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronDown, Plus, Save, Send, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Plus, Save, Send, Trash2, X } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { CharacterCount } from '../components/CharacterCount'

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Lock, RefreshCw, Trash2 } from 'lucide-react'
+import { Lock, RefreshCw, Trash2 } from '@/src/components/icons'
 import { apiDelete, apiGet } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'
 import { useDialog } from '../../components/Dialog'

@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { Trash2, CheckCircle, XCircle, AlertTriangle, RefreshCw, Pencil } from 'lucide-react'
+import {
+  Trash2,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  RefreshCw,
+  Pencil,
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { CharacterCount } from '../../components/CharacterCount'
 import {

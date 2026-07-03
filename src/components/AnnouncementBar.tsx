@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Megaphone, X, ChevronRight } from 'lucide-react'
+import { Megaphone, X, ChevronRight } from '@/src/components/icons'
 import { motion, AnimatePresence } from 'motion/react'
 import { apiGet } from '../lib/apiClient'
 import type { AnnouncementItem } from '../types/entities'

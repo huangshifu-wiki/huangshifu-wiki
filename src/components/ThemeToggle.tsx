@@ -1,4 +1,4 @@
-import { Sun, Moon, Monitor } from 'lucide-react'
+import { Sun, Moon, Monitor } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import type { ThemeMode } from '../types/userPreferences'

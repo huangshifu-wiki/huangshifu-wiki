@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, BarChart3, ChevronDown, ChevronUp } from 'lucide-react'
+import { X, BarChart3, ChevronDown, ChevronUp } from '@/src/components/icons'
 import { motion, AnimatePresence } from 'motion/react'
 import WikiRelations from './WikiRelations'
 import MiniRelationGraph from './MiniRelationGraph'

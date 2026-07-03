@@ -9,7 +9,7 @@ import {
   Server,
   Settings,
   UserRound,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { useAuth } from '../context/AuthContext'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import { DropdownPanel } from './DropdownPanel'

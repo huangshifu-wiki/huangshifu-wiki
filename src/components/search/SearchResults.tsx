@@ -10,7 +10,7 @@ import {
   Search as SearchIcon,
   Tag,
   FileText,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { VIEW_MODE_CONFIG } from '../../lib/viewModes'
 import { formatMusicCredits } from '../../lib/musicCredits'
 import type { ViewMode } from '../../types/userPreferences'

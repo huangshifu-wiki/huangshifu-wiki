@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Disc3, Image as ImageIcon, Music, Play } from 'lucide-react'
+import { ArrowRight, Disc3, Image as ImageIcon, Music, Play } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { SmartImage } from '../../components/SmartImage'
 import { useMusic } from '../../context/MusicContext'

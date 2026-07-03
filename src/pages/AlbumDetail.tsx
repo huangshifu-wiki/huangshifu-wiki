@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Disc3, Play, Heart, Link2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  Disc3,
+  Play,
+  Heart,
+  Link2,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { MapPin, X, Loader2 } from 'lucide-react'
+import { MapPin, X, Loader2 } from '@/src/components/icons'
 import { MapPickerModal, type PickedLocation } from './MapPickerModal'
 import { apiGet, apiPost } from '../lib/apiClient'
 import { resolveLocationTagInputEnterSelectionIndex } from '../lib/locationTagInput'

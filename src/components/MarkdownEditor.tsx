@@ -1,5 +1,5 @@
 import React from 'react'
-import MDEditor from '@uiw/react-md-editor'
+import MDEditor from '@uiw/react-md-editor/nohighlight'
 import '@uiw/react-md-editor/markdown-editor.css'
 import { handleMarkdownTextPasteCapture } from '../lib/markdownEditorPaste'
 import { useUserPreferences } from '../context/UserPreferencesContext'
@@ -36,7 +36,6 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         value={value}
         onChange={(val) => onChange(val || '')}
         height={parseInt(height)}
-        highlightEnable={resolvedTheme !== 'dark'}
         preview="live"
         components={{
           preview: (source) => (

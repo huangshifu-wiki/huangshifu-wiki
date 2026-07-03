@@ -1,5 +1,5 @@
 import React from 'react'
-import { MapPin, Check, X, Loader2 } from 'lucide-react'
+import { MapPin, Check, X, Loader2 } from '@/src/components/icons'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 
 interface RegionSuggestion {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, RotateCw } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, RotateCw } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { apiPut } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'

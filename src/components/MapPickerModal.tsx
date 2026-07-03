@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { X, MapPin, Search, Loader2 } from 'lucide-react'
+import { X, MapPin, Search, Loader2 } from '@/src/components/icons'
 import { apiGet } from '../lib/apiClient'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 

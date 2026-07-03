@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Cpu, Database, Image, ShieldCheck, Link as LinkIcon } from 'lucide-react'
+import { Cpu, Database, Image, ShieldCheck, Link as LinkIcon } from '@/src/components/icons'
 import { apiPost } from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'
 import AdminEmbeddings from './AdminEmbeddings'

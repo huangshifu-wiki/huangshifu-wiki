@@ -1,5 +1,5 @@
 import React from 'react'
-import { ChevronDown, Save, Send } from 'lucide-react'
+import { ChevronDown, Save, Send } from '@/src/components/icons'
 import { useI18n } from '../../lib/i18n'
 import { getWikiDraftButtonText, getWikiSubmitButtonText } from '../../lib/wikiWriteText'
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Loader2 } from 'lucide-react'
+import { AlertTriangle, Loader2 } from '@/src/components/icons'
 import clsx from 'clsx'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { X, Filter, SortAsc, Search, ChevronDown, ChevronUp } from 'lucide-react'
+import { X, Filter, SortAsc, Search, ChevronDown, ChevronUp } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { apiGet } from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, useRef } from 'react'
-import { ZoomIn, ZoomOut, Maximize } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize } from '@/src/components/icons'
 import type { WikiRelationRecord } from './types'
 import type { WikiPageMetadata } from '../../lib/wikiLinkParser'
 import { RELATION_TYPE_LABELS } from './types'

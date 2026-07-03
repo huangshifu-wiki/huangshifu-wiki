@@ -10,7 +10,7 @@ import {
   Trash2,
   Upload,
   XCircle,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'

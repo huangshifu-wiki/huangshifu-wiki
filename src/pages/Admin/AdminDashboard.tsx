@@ -11,7 +11,7 @@ import {
   Megaphone,
   Lock,
   RefreshCw,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { apiGet } from '../../lib/apiClient'
 import { useAuth } from '../../context/AuthContext'
 

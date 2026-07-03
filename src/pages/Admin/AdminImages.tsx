@@ -10,7 +10,7 @@ import {
   Settings,
   RefreshCw,
   Sparkles,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { apiGet, apiPatch, apiDelete, apiPost, apiDownload } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'

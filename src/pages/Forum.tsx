@@ -30,7 +30,7 @@ import {
   Eye,
   EyeOff,
   ChevronDown,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 import MarkdownEditor from '../components/MarkdownEditor'
 import { CharacterCount } from '../components/CharacterCount'

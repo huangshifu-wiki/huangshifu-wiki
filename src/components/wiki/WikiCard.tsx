@@ -2,7 +2,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import type { WikiItem } from '../../types/entities'
 import { clsx } from 'clsx'
-import { Book, Clock, Heart, Link2, Pin } from 'lucide-react'
+import { Book, Clock, Heart, Link2, Pin } from '@/src/components/icons'
 import { formatDate } from '../../lib/dateUtils'
 import { CARD } from '../../styles/cardStyles'
 

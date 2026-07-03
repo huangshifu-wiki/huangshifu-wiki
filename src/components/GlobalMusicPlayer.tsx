@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
-import { Play, Pause, SkipBack, SkipForward, Volume2, X } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, Volume2, X } from '@/src/components/icons'
 import { useMusic } from '../context/MusicContext'
 import { formatTime } from '../lib/formatUtils'
 import { formatMusicCredits } from '../lib/musicCredits'

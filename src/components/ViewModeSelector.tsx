@@ -1,5 +1,5 @@
 import React from 'react'
-import { LayoutGrid, Grid3X3, Grid2x2, List } from 'lucide-react'
+import { LayoutGrid, Grid3X3, Grid2x2, List } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { ViewMode } from '../types/userPreferences'
 

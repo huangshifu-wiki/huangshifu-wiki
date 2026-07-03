@@ -16,7 +16,7 @@ import {
   ThumbsDown,
   Pin,
   Edit3,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { useI18n } from '../../lib/i18n'
 import { clsx } from 'clsx'
