@@ -38,6 +38,29 @@ const mediaReport = {
   missingFiles: 2,
   orphanFiles: 1,
   orphanSizeBytes: 1024,
+  missingFilePreview: [
+    {
+      storageKey: 'gallery/missing.jpg',
+      publicUrl: '/uploads/gallery/missing.jpg',
+      expectedPath: '/app/uploads/gallery/missing.jpg',
+      references: [
+        {
+          source: 'MediaAsset',
+          id: 'asset-missing',
+          field: 'storageKey',
+          value: 'gallery/missing.jpg',
+        },
+      ],
+    },
+  ],
+  orphanFilePreview: [
+    {
+      storageKey: 'gallery/orphan.jpg',
+      sizeBytes: 1024,
+      mtime: '2026-06-28T10:04:00.000Z',
+    },
+  ],
+  previewLimit: 30,
 }
 
 describe('AdminBackups', () => {
@@ -256,10 +279,12 @@ describe('AdminBackups', () => {
     fireEvent.click(screen.getByText('恢复数据库'))
 
     await waitFor(() => {
-      expect(screen.getByText('下载图片清单')).toBeInTheDocument()
+      expect(screen.getByText('下载完整清单')).toBeInTheDocument()
+      expect(screen.getByText('gallery/missing.jpg')).toBeInTheDocument()
+      expect(screen.getByText('MediaAsset.storageKey #asset-missing')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('下载图片清单'))
+    fireEvent.click(screen.getByText('下载完整清单'))
 
     await waitFor(() => {
       expect(mockApiDownload).toHaveBeenCalledTimes(1)

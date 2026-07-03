@@ -374,6 +374,23 @@ export interface RestoreMediaReport {
   missingFiles: number
   orphanFiles: number
   orphanSizeBytes: number
+  missingFilePreview?: Array<{
+    storageKey: string
+    publicUrl: string
+    expectedPath: string
+    references: Array<{
+      source: string
+      id?: string
+      field: string
+      value: string
+    }>
+  }>
+  orphanFilePreview?: Array<{
+    storageKey: string
+    sizeBytes: number
+    mtime: string
+  }>
+  previewLimit?: number
 }
 
 export interface AdminBackupRestoreResponse {

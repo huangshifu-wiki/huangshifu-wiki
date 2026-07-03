@@ -34,6 +34,15 @@ import type {
 
 type DialogType = 'create' | 'restore' | 'restore-existing' | 'delete' | 'note' | null
 
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const formatMediaReference = (reference: { source: string; id?: string; field: string }) =>
+  `${reference.source}.${reference.field}${reference.id ? ` #${reference.id}` : ''}`
+
 const AdminBackups = () => {
   const [backups, setBackups] = useState<AdminBackup[]>([])
   const [loading, setLoading] = useState(true)
@@ -314,27 +323,89 @@ const AdminBackups = () => {
       </div>
 
       {(lastMediaReport || lastMediaReportError) && (
-        <div className="bg-surface border border-border rounded p-4 flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-text-primary">最近恢复图片清单</p>
-            {lastMediaReport ? (
-              <p className="text-sm text-text-secondary mt-1">
-                缺失 {lastMediaReport.missingFiles} 个，孤儿 {lastMediaReport.orphanFiles} 个，
-                已扫描 {lastMediaReport.scannedFiles} 个本地文件。
-              </p>
-            ) : (
-              <p className="text-sm theme-text-error mt-1">{lastMediaReportError}</p>
+        <div className="bg-surface border border-border rounded p-4 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-text-primary">最近恢复图片清单</p>
+              {lastMediaReport ? (
+                <p className="text-sm text-text-secondary mt-1">
+                  缺失 {lastMediaReport.missingFiles} 个，孤儿 {lastMediaReport.orphanFiles} 个，
+                  已扫描 {lastMediaReport.scannedFiles} 个本地文件。
+                </p>
+              ) : (
+                <p className="text-sm theme-text-error mt-1">{lastMediaReportError}</p>
+              )}
+            </div>
+            {lastMediaReport && (
+              <button
+                onClick={() => handleDownloadMediaReport(lastMediaReport.filename)}
+                disabled={actionLoading !== null}
+                className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all inline-flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+              >
+                <Download size={14} /> 下载完整清单
+              </button>
             )}
           </div>
-          {lastMediaReport && (
-            <button
-              onClick={() => handleDownloadMediaReport(lastMediaReport.filename)}
-              disabled={actionLoading !== null}
-              className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all inline-flex items-center gap-1.5 disabled:opacity-50 shrink-0"
-            >
-              <Download size={14} /> 下载图片清单
-            </button>
-          )}
+
+          {lastMediaReport && lastMediaReport.missingFilePreview?.length ? (
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                  缺失文件
+                </p>
+                {lastMediaReport.missingFiles > lastMediaReport.missingFilePreview.length && (
+                  <p className="text-xs text-text-muted">
+                    仅显示前 {lastMediaReport.missingFilePreview.length} 个，完整内容请下载清单
+                  </p>
+                )}
+              </div>
+              <div className="mt-2 max-h-80 overflow-y-auto border border-border rounded divide-y divide-border">
+                {lastMediaReport.missingFilePreview.map((file) => (
+                  <div key={file.storageKey} className="p-3 bg-surface-alt/40">
+                    <p className="text-sm font-medium text-text-primary break-all">
+                      {file.storageKey}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {file.references.map((reference, index) => (
+                        <span
+                          key={`${file.storageKey}-${reference.source}-${reference.field}-${reference.id || index}`}
+                          className="px-2 py-1 text-xs rounded bg-surface border border-border text-text-secondary break-all"
+                        >
+                          {formatMediaReference(reference)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {lastMediaReport && lastMediaReport.orphanFilePreview?.length ? (
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                  孤儿文件预览
+                </p>
+                <p className="text-xs text-text-muted">
+                  占用约 {formatBytes(lastMediaReport.orphanSizeBytes)}
+                </p>
+              </div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {lastMediaReport.orphanFilePreview.slice(0, 6).map((file) => (
+                  <div
+                    key={file.storageKey}
+                    className="border border-border rounded bg-surface-alt/40 p-2"
+                  >
+                    <p className="text-xs text-text-primary break-all">{file.storageKey}</p>
+                    <p className="text-[11px] text-text-muted mt-1">
+                      {formatBytes(file.sizeBytes)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 

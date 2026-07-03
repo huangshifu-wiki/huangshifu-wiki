@@ -64,9 +64,14 @@ export type MediaRestoreReport = {
   }>
 }
 
+const REPORT_PREVIEW_LIMIT = 30
+
 export type MediaRestoreReportSummary = MediaRestoreReport['summary'] & {
   filename: string
   generatedAt: string
+  missingFilePreview: MediaRestoreReport['missingFiles']
+  orphanFilePreview: MediaRestoreReport['orphanFiles']
+  previewLimit: number
 }
 
 type UploadFile = {
@@ -539,5 +544,8 @@ export async function generateMediaRestoreReport(
     filename,
     generatedAt,
     ...report.summary,
+    missingFilePreview: missingFiles.slice(0, REPORT_PREVIEW_LIMIT),
+    orphanFilePreview: orphanFiles.slice(0, REPORT_PREVIEW_LIMIT),
+    previewLimit: REPORT_PREVIEW_LIMIT,
   } satisfies MediaRestoreReportSummary
 }

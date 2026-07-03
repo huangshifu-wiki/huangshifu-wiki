@@ -120,6 +120,28 @@ describe('media restore report service', () => {
     expect(summary.filename).toBe('restore-media-report_2026-06-28_10-05-01-000.json')
     expect(summary.missingFiles).toBe(1)
     expect(summary.orphanFiles).toBe(1)
+    expect(summary.missingFilePreview).toEqual([
+      expect.objectContaining({
+        storageKey: 'gallery/missing.jpg',
+        references: [
+          expect.objectContaining({
+            source: 'MediaAsset',
+            id: 'missing',
+            field: 'storageKey',
+          }),
+          expect.objectContaining({
+            source: 'MediaAsset',
+            id: 'missing',
+            field: 'publicUrl',
+          }),
+        ],
+      }),
+    ])
+    expect(summary.orphanFilePreview).toEqual([
+      expect.objectContaining({
+        storageKey: 'gallery/orphan.jpg',
+      }),
+    ])
   })
 
   it('scans upload files and validates report filenames', async () => {
