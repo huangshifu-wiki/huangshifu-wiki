@@ -1717,7 +1717,6 @@ router.post(
         '--if-exists',
         '--exclude-table-data=ImageEmbedding',
         '--exclude-table-data=TextEmbeddingChunk',
-        '--exclude-table-data=_prisma_migrations',
         '-f',
         sqlFilePath,
       ]
@@ -1993,7 +1992,6 @@ async function restoreDatabaseFromZip(
       '--if-exists',
       '--exclude-table-data=ImageEmbedding',
       '--exclude-table-data=TextEmbeddingChunk',
-      '--exclude-table-data=_prisma_migrations',
       '-f',
       preRestoreSqlFilePath,
     ]
