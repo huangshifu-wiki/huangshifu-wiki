@@ -1,5 +1,6 @@
 import dotenv from 'dotenv'
 import fs from 'fs/promises'
+import net from 'net'
 import path from 'path'
 import { stdin as input, stdout as output } from 'process'
 import readline from 'readline/promises'
@@ -25,6 +26,10 @@ interface CliOptions {
 
 const DUPLICATE_ACTIONS = new Set<SongDuplicateAction>(['fill', 'overwrite', 'skip'])
 const SONG_COVER_NAMESPACE = 'music-covers/songs'
+const DOCKER_UPLOADS_PATH = '/app/uploads'
+const DISABLE_DOCKER_HOST_ENV_FIX = 'SONGS_IMPORT_DISABLE_DOCKER_HOST_ENV_FIX'
+
+let uploadsDirSourceOverride: string | null = null
 
 type SongImportService = typeof import('../src/server/services/songJsonImport.service')
 type PrismaClientSingleton = typeof import('../src/server/utils').prisma
@@ -133,13 +138,105 @@ function getDefaultUploadsDir() {
   return path.resolve(scriptDir, '..', 'uploads')
 }
 
+function isTruthyEnv(value: string | undefined) {
+  return value === '1' || value === 'true' || value === 'yes'
+}
+
+function isDockerUploadsPath(value: string | undefined) {
+  if (!value) return false
+  return path.resolve(value) === DOCKER_UPLOADS_PATH
+}
+
+async function isRunningInContainer() {
+  try {
+    await fs.access('/.dockerenv')
+    return true
+  } catch {
+    // Continue with cgroup detection.
+  }
+
+  try {
+    const cgroup = await fs.readFile('/proc/1/cgroup', 'utf8')
+    return /docker|containerd|kubepods/i.test(cgroup)
+  } catch {
+    return false
+  }
+}
+
+function canConnectToHost(host: string, port: number, timeoutMs: number) {
+  return new Promise<boolean>((resolve) => {
+    const socket = net.createConnection({ host, port })
+    let settled = false
+
+    const settle = (result: boolean) => {
+      if (settled) return
+      settled = true
+      socket.destroy()
+      resolve(result)
+    }
+
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => settle(true))
+    socket.once('timeout', () => settle(false))
+    socket.once('error', () => settle(false))
+  })
+}
+
+function maybeFixDockerUploadsPath(isContainer: boolean) {
+  if (isContainer || !isDockerUploadsPath(process.env.UPLOADS_PATH)) return
+
+  const uploadsDir = getDefaultUploadsDir()
+  process.env.UPLOADS_PATH = uploadsDir
+  uploadsDirSourceOverride = `自动映射自 Docker 容器路径 ${DOCKER_UPLOADS_PATH}`
+  console.warn(
+    `检测到宿主机正在使用 Docker 容器上传路径 ${DOCKER_UPLOADS_PATH}，已自动改为 ${uploadsDir}`
+  )
+}
+
+async function maybeFixDockerDatabaseUrl(isContainer: boolean) {
+  if (isContainer || !process.env.DATABASE_URL) return
+
+  let parsed: URL
+  try {
+    parsed = new URL(process.env.DATABASE_URL)
+  } catch {
+    return
+  }
+
+  if (parsed.hostname !== 'postgres') return
+
+  const canConnect = await canConnectToHost('127.0.0.1', 5432, 800)
+  if (!canConnect) {
+    throw new Error(
+      '检测到 DATABASE_URL 使用 Docker 服务名 postgres，但当前在宿主机执行脚本，且无法连接 127.0.0.1:5432。请先在 docker-compose.yml 为 postgres 暴露 127.0.0.1:5432:5432，或在应用容器内执行导入。'
+    )
+  }
+
+  parsed.hostname = '127.0.0.1'
+  process.env.DATABASE_URL = parsed.toString()
+  console.warn('检测到宿主机正在使用 Docker 数据库服务名 postgres，已自动改为 127.0.0.1')
+}
+
+async function applyDockerHostEnvironmentFixes(options: { resolveDatabase: boolean }) {
+  if (isTruthyEnv(process.env[DISABLE_DOCKER_HOST_ENV_FIX])) return
+
+  const isContainer = await isRunningInContainer()
+  maybeFixDockerUploadsPath(isContainer)
+
+  if (options.resolveDatabase) {
+    await maybeFixDockerDatabaseUrl(isContainer)
+  }
+}
+
 function getCurrentSongCoverDir(now = new Date()) {
   const uploadsDir = process.env.UPLOADS_PATH || getDefaultUploadsDir()
   const year = String(now.getFullYear())
   const month = String(now.getMonth() + 1).padStart(2, '0')
   return {
     uploadsDir,
-    source: process.env.UPLOADS_PATH ? 'UPLOADS_PATH' : '默认项目 uploads 目录',
+    source:
+      uploadsDirSourceOverride ||
+      (process.env.UPLOADS_PATH ? 'UPLOADS_PATH' : '默认项目 uploads 目录'),
     coverDir: path.join(uploadsDir, SONG_COVER_NAMESPACE, year, month),
     publicUrlPattern: `/uploads/${SONG_COVER_NAMESPACE}/${year}/${month}/<uuid>.<ext>`,
   }
@@ -290,6 +387,7 @@ async function confirmExecution() {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
+  await applyDockerHostEnvironmentFixes({ resolveDatabase: !options.printOutputPath })
 
   if (options.printOutputPath) {
     printOutputPath()
