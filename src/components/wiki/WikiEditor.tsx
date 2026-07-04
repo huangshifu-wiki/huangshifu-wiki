@@ -21,7 +21,8 @@ import WikiEditorRelationPanel from './WikiEditorRelationPanel'
 import WikiEditorMetaSidebar from './WikiEditorMetaSidebar'
 import type { WikiItemWithRelations, WikiRelationRecord } from './types'
 import type { WikiPageMetadata } from '../../lib/wikiLinkParser'
-import { DEFAULT_WIKI_CATEGORY_ID, useWikiCategories } from '../../hooks/useWikiCategories'
+import { DEFAULT_WIKI_CATEGORY_ID } from '../../lib/wikiCategories'
+import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const WikiEditor = () => {
   const { slug } = useParams()

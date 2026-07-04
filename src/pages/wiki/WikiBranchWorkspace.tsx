@@ -9,7 +9,8 @@ import { splitTagsInput } from '../../lib/contentUtils'
 import { formatDate } from '../../lib/dateUtils'
 import type { WikiItem, WikiBranchItem, WikiRevisionItem, WikiPullRequestItem } from './types'
 import { getBranchStatusText } from './types'
-import { DEFAULT_WIKI_CATEGORY_ID, useWikiCategories } from '../../hooks/useWikiCategories'
+import { DEFAULT_WIKI_CATEGORY_ID } from '../../lib/wikiCategories'
+import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const WikiBranchWorkspace = () => {
   const { slug } = useParams()
