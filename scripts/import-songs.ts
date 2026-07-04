@@ -3,6 +3,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import { stdin as input, stdout as output } from 'process'
 import readline from 'readline/promises'
+import { fileURLToPath } from 'url'
 import type {
   SongDuplicateAction,
   SongImportPreview,
@@ -19,9 +20,11 @@ interface CliOptions {
   duplicates: SongDuplicateAction | null
   previewFormat: 'table' | 'markdown'
   resolveCovers: boolean
+  printOutputPath: boolean
 }
 
 const DUPLICATE_ACTIONS = new Set<SongDuplicateAction>(['fill', 'overwrite', 'skip'])
+const SONG_COVER_NAMESPACE = 'music-covers/songs'
 
 type SongImportService = typeof import('../src/server/services/songJsonImport.service')
 type PrismaClientSingleton = typeof import('../src/server/utils').prisma
@@ -44,8 +47,10 @@ function printUsage() {
   npm run songs:import -- ./huangshifu-songs.json --dry-run --markdown
   npm run songs:import -- ./huangshifu-songs.json --yes --duplicates=fill
   npm run songs:import -- ./huangshifu-songs.json --yes --duplicates=fill --resolve-covers
+  npm run songs:import -- --print-output-path
 
 参数:
+  --print-output-path       只输出歌曲封面最终落盘位置，不读取 JSON、不连接数据库
   --dry-run                 只预览，不写入数据库
   --yes                     跳过确认，必须配合 --duplicates
   --duplicates=<action>     重复歌曲策略：fill | overwrite | skip
@@ -63,9 +68,14 @@ function parseArgs(argv: string[]): CliOptions {
     duplicates: null,
     previewFormat: 'table',
     resolveCovers: false,
+    printOutputPath: false,
   }
 
   for (const arg of args) {
+    if (arg === '--print-output-path') {
+      options.printOutputPath = true
+      continue
+    }
     if (arg === '--dry-run') {
       options.dryRun = true
       continue
@@ -108,7 +118,7 @@ function parseArgs(argv: string[]): CliOptions {
     throw new Error(`多余参数：${arg}`)
   }
 
-  if (!options.filePath) {
+  if (!options.filePath && !options.printOutputPath) {
     throw new Error('请提供 JSON 文件路径')
   }
   if (options.yes && !options.duplicates) {
@@ -116,6 +126,33 @@ function parseArgs(argv: string[]): CliOptions {
   }
 
   return options
+}
+
+function getDefaultUploadsDir() {
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+  return path.resolve(scriptDir, '..', 'uploads')
+}
+
+function getCurrentSongCoverDir(now = new Date()) {
+  const uploadsDir = process.env.UPLOADS_PATH || getDefaultUploadsDir()
+  const year = String(now.getFullYear())
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  return {
+    uploadsDir,
+    source: process.env.UPLOADS_PATH ? 'UPLOADS_PATH' : '默认项目 uploads 目录',
+    coverDir: path.join(uploadsDir, SONG_COVER_NAMESPACE, year, month),
+    publicUrlPattern: `/uploads/${SONG_COVER_NAMESPACE}/${year}/${month}/<uuid>.<ext>`,
+  }
+}
+
+function printOutputPath() {
+  const info = getCurrentSongCoverDir()
+  console.log('歌曲封面落盘位置检查')
+  console.log(`上传根目录：${info.uploadsDir}`)
+  console.log(`目录来源：${info.source}`)
+  console.log(`歌曲封面目录：${info.coverDir}`)
+  console.log(`公开 URL 形态：${info.publicUrlPattern}`)
+  console.log('说明：实际文件名是导入时生成的 UUID，扩展名由下载到的图片格式决定。')
 }
 
 async function readJsonFile(filePath: string) {
@@ -252,8 +289,14 @@ async function confirmExecution() {
 }
 
 async function main() {
-  const { executeSongJsonImport, previewSongJsonImport } = await loadRuntimeDependencies()
   const options = parseArgs(process.argv.slice(2))
+
+  if (options.printOutputPath) {
+    printOutputPath()
+    return
+  }
+
+  const { executeSongJsonImport, previewSongJsonImport } = await loadRuntimeDependencies()
   const payload = await readJsonFile(options.filePath)
   const preview = await previewSongJsonImport(payload)
   printPreview(preview, options.previewFormat)
