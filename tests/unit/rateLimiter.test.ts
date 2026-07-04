@@ -31,10 +31,10 @@ describe('rateLimiter', () => {
     ipKeyGeneratorMock.mockClear()
     shutdownMock.mockClear()
     memoryStoreInstances.length = 0
-    vi.stubEnv('NODE_ENV', 'development')
-    vi.stubEnv('DEV_DISABLE_RATE_LIMIT', undefined)
-    vi.stubEnv('VITEST', undefined)
-    vi.stubEnv('VITEST_WORKER_ID', undefined)
+    process.env.NODE_ENV = 'development'
+    delete process.env.DEV_DISABLE_RATE_LIMIT
+    delete process.env.VITEST
+    delete process.env.VITEST_WORKER_ID
   })
 
   afterEach(() => {
@@ -59,15 +59,19 @@ describe('rateLimiter', () => {
     }
   })
 
-  it('skips rate limiting in test runtime', async () => {
+  it('keeps rate limiting enabled by default outside test runtime', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('VITEST', undefined)
+    vi.stubEnv('VITEST_WORKER_ID', undefined)
+
     const { globalLimiter, isRateLimitDisabledInDevelopment } =
       await import('../../src/server/middleware/rateLimiter')
 
     expect(globalLimiter).toBeDefined()
-    expect(isRateLimitDisabledInDevelopment()).toBe(true)
+    expect(isRateLimitDisabledInDevelopment()).toBe(false)
 
     const [{ skip }] = rateLimitMock.mock.calls.at(-1)!
-    expect(skip({}, {})).toBe(true)
+    expect(skip({}, {})).toBe(false)
   })
 
   it('allows disabling rate limiting explicitly in development', async () => {
