@@ -219,7 +219,7 @@ function SongCover({ song, active }: { song: SongItem; active: boolean }) {
 
   return (
     <SmartImage
-      src={song.cover}
+      src={song.coverThumbnail || song.cover}
       alt={`${song.title} 封面`}
       className="h-14 w-14 rounded object-cover"
       loading="lazy"
@@ -492,7 +492,7 @@ export const DefaultHome = () => {
                       <div className="mb-2 aspect-square overflow-hidden rounded bg-surface-alt lg:mb-0 lg:h-16 lg:w-16 lg:flex-shrink-0">
                         {album.cover ? (
                           <SmartImage
-                            src={album.cover}
+                            src={album.coverThumbnail || album.cover}
                             alt={album.title}
                             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
                             loading="lazy"

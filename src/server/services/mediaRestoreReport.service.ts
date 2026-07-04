@@ -202,8 +202,12 @@ export async function collectReferencedStorageKeys(prisma: PrismaClient) {
       select: { uid: true, photoURL: true },
     }),
     prisma.galleryImage.findMany({ select: { id: true, url: true } }),
-    prisma.songCover.findMany({ select: { id: true, storageKey: true, publicUrl: true } }),
-    prisma.albumCover.findMany({ select: { id: true, storageKey: true, publicUrl: true } }),
+    prisma.songCover.findMany({
+      select: { id: true, storageKey: true, publicUrl: true, thumbnailUrl: true },
+    }),
+    prisma.albumCover.findMany({
+      select: { id: true, storageKey: true, publicUrl: true, thumbnailUrl: true },
+    }),
     prisma.wikiImageEmbedding.findMany({ select: { id: true, imageUrl: true } }),
     prisma.postImageEmbedding.findMany({ select: { id: true, imageUrl: true } }),
   ])
@@ -261,6 +265,11 @@ export async function collectReferencedStorageKeys(prisma: PrismaClient) {
       id: item.id,
       field: 'publicUrl',
     })
+    addReference(references, item.thumbnailUrl, {
+      source: 'SongCover',
+      id: item.id,
+      field: 'thumbnailUrl',
+    })
   }
 
   for (const item of albumCovers) {
@@ -273,6 +282,11 @@ export async function collectReferencedStorageKeys(prisma: PrismaClient) {
       source: 'AlbumCover',
       id: item.id,
       field: 'publicUrl',
+    })
+    addReference(references, item.thumbnailUrl, {
+      source: 'AlbumCover',
+      id: item.id,
+      field: 'thumbnailUrl',
     })
   }
 

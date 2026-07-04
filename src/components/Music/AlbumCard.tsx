@@ -20,13 +20,14 @@ const AlbumCard = React.memo(function AlbumCard({
   const { t } = useI18n()
   const albumId = album.docId || ''
   const trackCount = album.trackCount ?? album.tracks?.length ?? 0
+  const coverSrc = album.coverThumbnail || album.cover
 
   if (viewMode === 'list') {
     return (
       <div className="flex gap-4 py-4 px-1 border-b border-border items-center group transition-all hover:bg-surface-alt">
         <div className="relative w-14 h-14 flex-shrink-0">
           <SmartImage
-            src={album.cover}
+            src={coverSrc}
             alt={album.title}
             className="w-full h-full object-cover rounded"
           />
@@ -60,7 +61,7 @@ const AlbumCard = React.memo(function AlbumCard({
       <Link to={`/album/${albumId}`} className="block">
         <div className="relative aspect-square overflow-hidden bg-surface-alt rounded mb-2.5">
           <SmartImage
-            src={album.cover}
+            src={coverSrc}
             alt={album.title}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
           />

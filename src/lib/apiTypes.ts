@@ -109,6 +109,7 @@ export const songSchema = z.object({
   album: z.string().optional(),
   description: z.string().nullable().optional(),
   coverUrl: z.string().optional(),
+  coverThumbnail: z.string().optional(),
   playUrl: z.string().optional(),
   releaseDate: z.string().nullable().optional(),
   durationMs: z.number().nullable().optional(),

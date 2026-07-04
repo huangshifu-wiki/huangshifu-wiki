@@ -91,8 +91,18 @@ describe('music response transformers', () => {
       coverId: 'cover-2',
       coverAlbumDocId: null,
       covers: [
-        { id: 'cover-1', publicUrl: '/uploads/cover-1.jpg', isDefault: true },
-        { id: 'cover-2', publicUrl: '/uploads/cover-2.jpg', isDefault: false },
+        {
+          id: 'cover-1',
+          publicUrl: '/uploads/cover-1.jpg',
+          thumbnailUrl: '/uploads/cover-1-thumb.webp',
+          isDefault: true,
+        },
+        {
+          id: 'cover-2',
+          publicUrl: '/uploads/cover-2.jpg',
+          thumbnailUrl: '/uploads/cover-2-thumb.webp',
+          isDefault: false,
+        },
       ],
       albumRelations: [],
       externalSources: [],
@@ -103,6 +113,7 @@ describe('music response transformers', () => {
     })
 
     expect(response.cover).toBe('/uploads/cover-2.jpg')
+    expect(response.coverThumbnail).toBe('/uploads/cover-2-thumb.webp')
   })
 
   it('resolves inherited album covers in compact music responses', async () => {
@@ -128,6 +139,7 @@ describe('music response transformers', () => {
               {
                 id: 'album-cover-1',
                 publicUrl: '/uploads/album-cover-1.jpg',
+                thumbnailUrl: '/uploads/album-cover-1-thumb.webp',
                 isDefault: true,
               },
             ],
@@ -142,5 +154,6 @@ describe('music response transformers', () => {
     })
 
     expect(response.cover).toBe('/uploads/album-cover-1.jpg')
+    expect(response.coverThumbnail).toBe('/uploads/album-cover-1-thumb.webp')
   })
 })

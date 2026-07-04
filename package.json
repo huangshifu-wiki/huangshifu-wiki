@@ -48,6 +48,7 @@
     "embeddings:enqueue": "tsx scripts/sync-image-embeddings.ts --enqueue-only",
     "uploads:cleanup": "tsx scripts/cleanup-orphan-uploads.ts",
     "songs:import": "tsx scripts/import-songs.ts",
+    "music-covers:thumbnails": "tsx scripts/backfill-music-cover-thumbnails.ts",
     "regions:import": "tsx scripts/import-regions.ts",
     "super-admin:manage": "tsx scripts/manage-super-admin.ts",
     "validate:migrations": "tsx scripts/validate-migrations.ts",

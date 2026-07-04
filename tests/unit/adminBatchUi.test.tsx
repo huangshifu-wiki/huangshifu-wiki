@@ -80,7 +80,10 @@ describe('admin batch UI', () => {
       })
     })
     expect(mockInvalidateApiCacheByPrefix).toHaveBeenCalledWith('/api/music/song-1/covers')
-    expect(onCoverUpdated).toHaveBeenCalledWith('/uploads/cover-2.jpg')
+    expect(onCoverUpdated).toHaveBeenCalledWith({
+      url: '/uploads/cover-2.jpg',
+      thumbnailUrl: null,
+    })
   })
 
   it('batch releases edit locks from AdminLocks', async () => {

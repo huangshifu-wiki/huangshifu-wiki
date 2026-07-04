@@ -339,7 +339,7 @@ export const GlobalMusicPlayer = () => {
       <div className="max-w-[1100px] mx-auto px-6 flex items-center gap-4 py-[10px] px-[24px]">
         {/* Cover */}
         <img
-          src={currentSong.cover}
+          src={currentSong.coverThumbnail || currentSong.cover}
           alt={currentSong?.title + ' 封面' || ''}
           className="w-11 h-11 rounded object-cover flex-shrink-0 bg-surface-alt"
           referrerPolicy="no-referrer"

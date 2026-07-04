@@ -11,6 +11,7 @@ interface Song {
   artists: string[]
   album: string
   cover: string
+  coverThumbnail?: string
   audioUrl: string
   playUrl?: string
   lyric?: string | null
@@ -25,6 +26,7 @@ interface MusicSongApiResponse {
   album?: string
   cover: string
   coverUrl?: string
+  coverThumbnail?: string
   audioUrl: string
   playUrl?: string
   lyric?: string | null
@@ -58,6 +60,7 @@ export const MusicPlayer = ({ songId }: { songId: string }) => {
           artists: apiSong.artists,
           album: apiSong.album || '',
           cover: apiSong.cover || apiSong.coverUrl || '',
+          coverThumbnail: apiSong.coverThumbnail || apiSong.cover || apiSong.coverUrl || '',
           audioUrl: apiSong.playUrl || apiSong.audioUrl || '',
           playUrl: apiSong.playUrl,
           lyric: apiSong.lyric || null,
@@ -92,7 +95,7 @@ export const MusicPlayer = ({ songId }: { songId: string }) => {
     <div className="bg-surface-alt rounded border border-border p-4">
       <div className="flex items-center gap-3 mb-3">
         <img
-          src={song.cover}
+          src={song.coverThumbnail || song.cover}
           alt={song.title + ' 封面'}
           className="w-12 h-12 rounded object-cover bg-surface flex-shrink-0"
           referrerPolicy="no-referrer"

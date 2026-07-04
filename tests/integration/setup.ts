@@ -233,13 +233,25 @@ export interface CreateTestWikiPageInput {
 export async function createTestWikiPage(input: CreateTestWikiPageInput) {
   const slug = input.slug || `test-wiki-${Date.now()}`
   const title = input.title || `Test Wiki Page ${Date.now()}`
+  const category = input.category || 'general'
+
+  const legacyWikiCategoryTable = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+    SELECT to_regclass('"WikiCategory"') IS NOT NULL AS "exists"
+  `
+  if (legacyWikiCategoryTable[0]?.exists) {
+    await prisma.$executeRaw`
+      INSERT INTO "WikiCategory" ("id", "name", "description")
+      VALUES (${category}, ${category}, '')
+      ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name"
+    `
+  }
 
   const page = await prisma.wikiPage.create({
     data: {
       slug,
       title,
       titleKey: title.toLowerCase(),
-      category: input.category || 'general',
+      category,
       content: input.content || '# Test Content\n\nThis is a test wiki page.',
       tags: ['test'],
       status: input.status || 'published',

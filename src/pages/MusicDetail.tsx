@@ -49,6 +49,7 @@ type SongItem = {
   vocals?: string[]
   album: string
   cover: string
+  coverThumbnail?: string
   audioUrl: string
   lyric?: string | null
   description?: string | null
@@ -472,8 +473,16 @@ const MusicDetail = () => {
                     resourceType="song"
                     resourceId={song.docId}
                     currentCover={song.cover}
-                    onCoverUpdated={(newCoverUrl) =>
-                      setSong((prev) => (prev ? { ...prev, cover: newCoverUrl } : prev))
+                    onCoverUpdated={(cover) =>
+                      setSong((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              cover: cover.url,
+                              coverThumbnail: cover.thumbnailUrl || undefined,
+                            }
+                          : prev
+                      )
                     }
                   />
                 </div>

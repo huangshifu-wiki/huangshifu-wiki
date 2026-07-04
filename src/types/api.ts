@@ -393,6 +393,7 @@ export interface MusicDetailResponse {
     album?: string
     description?: string | null
     coverUrl?: string
+    coverThumbnail?: string
     playUrl?: string
     playable?: boolean
     releaseDate?: string | null

@@ -2447,6 +2447,7 @@ router.get(
                 select: {
                   id: true,
                   publicUrl: true,
+                  thumbnailUrl: true,
                   isDefault: true,
                 },
               },
@@ -2461,6 +2462,7 @@ router.get(
                         select: {
                           id: true,
                           publicUrl: true,
+                          thumbnailUrl: true,
                           isDefault: true,
                         },
                       },

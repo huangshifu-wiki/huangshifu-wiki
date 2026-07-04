@@ -12,6 +12,7 @@ import { useFloatingPresence } from '../hooks/useFloatingPresence'
 type CoverItem = {
   id: string
   url: string
+  thumbnailUrl?: string | null
   isDefault: boolean
   createdAt?: string
   sortOrder?: number
@@ -22,6 +23,11 @@ type CoversResponse = {
 }
 
 type ResourceType = 'song' | 'album'
+
+type CoverUpdate = {
+  url: string
+  thumbnailUrl?: string | null
+}
 
 const RESOURCE_CONFIG: Record<
   ResourceType,
@@ -43,7 +49,7 @@ interface CoverManagerProps {
   resourceType: ResourceType
   resourceId: string
   currentCover: string
-  onCoverUpdated?: (newCoverUrl: string) => void
+  onCoverUpdated?: (cover: CoverUpdate) => void
   onSyncToSongs?: () => void
 }
 
@@ -135,7 +141,10 @@ export const CoverManager = ({
       setCovers((prev) => prev.map((c) => ({ ...c, isDefault: c.id === coverId })))
       const newDefaultCover = covers.find((c) => c.id === coverId)
       if (newDefaultCover && onCoverUpdated) {
-        onCoverUpdated(newDefaultCover.url)
+        onCoverUpdated({
+          url: newDefaultCover.url,
+          thumbnailUrl: newDefaultCover.thumbnailUrl || null,
+        })
       }
       show('默认封面已更新')
     } catch (error) {
@@ -167,7 +176,10 @@ export const CoverManager = ({
       const deletedCover = covers.find((cover) => cover.id === coverId)
       if (deletedCover?.url === currentCover && onCoverUpdated) {
         const nextDefaultCover = nextCovers.find((cover) => cover.isDefault) || nextCovers[0]
-        onCoverUpdated(nextDefaultCover?.url || '')
+        onCoverUpdated({
+          url: nextDefaultCover?.url || '',
+          thumbnailUrl: nextDefaultCover?.thumbnailUrl || null,
+        })
       }
       show('封面已删除')
     } catch (error) {
@@ -218,7 +230,10 @@ export const CoverManager = ({
       setSelectedCoverIds(new Set())
       if (removedCurrentCover && onCoverUpdated) {
         const nextDefaultCover = nextCovers.find((cover) => cover.isDefault) || nextCovers[0]
-        onCoverUpdated(nextDefaultCover?.url || '')
+        onCoverUpdated({
+          url: nextDefaultCover?.url || '',
+          thumbnailUrl: nextDefaultCover?.thumbnailUrl || null,
+        })
       }
       show('封面已批量删除')
     } catch (error) {
@@ -378,7 +393,7 @@ export const CoverManager = ({
                   >
                     <div className="aspect-square">
                       <img
-                        src={cover.url}
+                        src={cover.thumbnailUrl || cover.url}
                         alt="封面"
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"

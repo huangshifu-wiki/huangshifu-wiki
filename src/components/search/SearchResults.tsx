@@ -65,7 +65,7 @@ function musicToConfig(track: SongItem): import('./SearchResultCard').SearchResu
     title: track.title,
     subtitle: `${formatMusicCredits(track.artists, '未知歌手')} — ${track.album}`,
     link: `/music/${track.docId}`,
-    image: track.cover || undefined,
+    image: track.coverThumbnail || track.cover || undefined,
     type: 'music',
   }
 }
@@ -76,7 +76,7 @@ function albumToConfig(album: AlbumItem): import('./SearchResultCard').SearchRes
     title: album.title,
     subtitle: album.artist,
     link: `/album/${album.docId}`,
-    image: album.cover || undefined,
+    image: album.coverThumbnail || album.cover || undefined,
     meta: `${album.trackCount} 曲`,
     type: 'album',
   }

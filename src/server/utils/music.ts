@@ -21,6 +21,7 @@ import {
   resolveLyric as resolveMetingLyric,
   resolveCoverUrl as resolveMetingCoverUrl,
 } from '../music/metingService'
+import { generateMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
 import { localizeImageUrlAsMediaAsset } from './remoteImageAsset'
 
 // ─── 显示辅助函数 ───────────────────────────────────────────────
@@ -72,12 +73,22 @@ export function resolveSongDisplayAlbum(song: {
 export function resolveSongCoverUrl(song: {
   coverId: string | null
   coverAlbumDocId: string | null
-  covers: Array<{ id: string; publicUrl: string; isDefault?: boolean }>
+  covers: Array<{
+    id: string
+    publicUrl: string
+    thumbnailUrl?: string | null
+    isDefault?: boolean
+  }>
   albumRelations: Array<{
     album: {
       docId: string
       coverId: string | null
-      covers: Array<{ id: string; publicUrl: string; isDefault?: boolean }>
+      covers: Array<{
+        id: string
+        publicUrl: string
+        thumbnailUrl?: string | null
+        isDefault?: boolean
+      }>
     }
   }>
 }) {
@@ -93,10 +104,52 @@ export function resolveSongCoverUrl(song: {
 
 export function resolveAlbumCoverUrl(album: {
   coverId: string | null
-  covers: Array<{ id: string; publicUrl: string; isDefault?: boolean }>
+  covers: Array<{
+    id: string
+    publicUrl: string
+    thumbnailUrl?: string | null
+    isDefault?: boolean
+  }>
 }) {
   const selected = album.coverId ? album.covers.find((item) => item.id === album.coverId) : null
   return selected?.publicUrl || album.covers.find((item) => item.isDefault)?.publicUrl || ''
+}
+
+export function resolveSongCoverThumbnailUrl(song: Parameters<typeof resolveSongCoverUrl>[0]) {
+  if (song.coverAlbumDocId) {
+    const relation = song.albumRelations.find((item) => item.album.docId === song.coverAlbumDocId)
+    if (!relation) return ''
+    return resolveAlbumCoverThumbnailUrl(relation.album)
+  }
+
+  const selected = song.coverId ? song.covers.find((item) => item.id === song.coverId) : null
+  return (
+    selected?.thumbnailUrl ||
+    selected?.publicUrl ||
+    song.covers.find((item) => item.isDefault)?.thumbnailUrl ||
+    song.covers.find((item) => item.isDefault)?.publicUrl ||
+    ''
+  )
+}
+
+export function resolveAlbumCoverThumbnailUrl(album: Parameters<typeof resolveAlbumCoverUrl>[0]) {
+  const selected = album.coverId ? album.covers.find((item) => item.id === album.coverId) : null
+  return (
+    selected?.thumbnailUrl ||
+    selected?.publicUrl ||
+    album.covers.find((item) => item.isDefault)?.thumbnailUrl ||
+    album.covers.find((item) => item.isDefault)?.publicUrl ||
+    ''
+  )
+}
+
+async function tryGenerateMusicCoverThumbnail(storageKey: string) {
+  try {
+    return await generateMusicCoverThumbnail(storageKey)
+  } catch (error) {
+    console.warn(`Generate music cover thumbnail failed for ${storageKey}:`, error)
+    return null
+  }
 }
 
 // ─── 自定义链接函数 ──────────────────────────────────────────────
@@ -515,6 +568,7 @@ export async function addSongCoverFromAsset(
   }
 
   const currentCount = await prisma.songCover.count({ where: { songDocId } })
+  const thumbnailUrl = await tryGenerateMusicCoverThumbnail(asset.storageKey)
 
   return prisma.$transaction(async (tx) => {
     const cover = await tx.songCover.create({
@@ -523,6 +577,7 @@ export async function addSongCoverFromAsset(
         assetId: asset.id,
         storageKey: asset.storageKey,
         publicUrl: asset.publicUrl,
+        thumbnailUrl,
         sortOrder: currentCount,
         isDefault: markDefault,
       },
@@ -586,6 +641,7 @@ export async function addAlbumCoverFromAsset(
   }
 
   const currentCount = await prisma.albumCover.count({ where: { albumDocId } })
+  const thumbnailUrl = await tryGenerateMusicCoverThumbnail(asset.storageKey)
 
   return prisma.$transaction(async (tx) => {
     const cover = await tx.albumCover.create({
@@ -594,6 +650,7 @@ export async function addAlbumCoverFromAsset(
         assetId: asset.id,
         storageKey: asset.storageKey,
         publicUrl: asset.publicUrl,
+        thumbnailUrl,
         sortOrder: currentCount,
         isDefault: markDefault,
       },
@@ -877,6 +934,7 @@ export async function fetchSongsWithRelations(
         select: {
           id: true,
           publicUrl: true,
+          thumbnailUrl: true,
           isDefault: true,
           sortOrder: true,
         },
@@ -895,6 +953,7 @@ export async function fetchSongsWithRelations(
                 select: {
                   id: true,
                   publicUrl: true,
+                  thumbnailUrl: true,
                   isDefault: true,
                 },
               },
@@ -936,6 +995,7 @@ export async function fetchSongWithRelationsByDocId(songDocId: string) {
         select: {
           id: true,
           publicUrl: true,
+          thumbnailUrl: true,
           isDefault: true,
           sortOrder: true,
         },
@@ -954,6 +1014,7 @@ export async function fetchSongWithRelationsByDocId(songDocId: string) {
                 select: {
                   id: true,
                   publicUrl: true,
+                  thumbnailUrl: true,
                   isDefault: true,
                 },
               },

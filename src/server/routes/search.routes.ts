@@ -919,6 +919,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
               select: {
                 id: true,
                 publicUrl: true,
+                thumbnailUrl: true,
                 isDefault: true,
                 sortOrder: true,
               },
@@ -937,6 +938,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                       select: {
                         id: true,
                         publicUrl: true,
+                        thumbnailUrl: true,
                         isDefault: true,
                       },
                     },
@@ -984,6 +986,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
               select: {
                 id: true,
                 publicUrl: true,
+                thumbnailUrl: true,
                 isDefault: true,
                 sortOrder: true,
               },
@@ -1002,6 +1005,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                       select: {
                         id: true,
                         publicUrl: true,
+                        thumbnailUrl: true,
                         isDefault: true,
                       },
                     },

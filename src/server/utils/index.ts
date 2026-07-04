@@ -149,6 +149,8 @@ export {
   resolveSongDisplayAlbum,
   resolveSongCoverUrl,
   resolveAlbumCoverUrl,
+  resolveSongCoverThumbnailUrl,
+  resolveAlbumCoverThumbnailUrl,
   normalizeSongCustomPlatformLinkUrl,
   normalizeSongCustomPlatformLinks,
   getPlatformSourceId,

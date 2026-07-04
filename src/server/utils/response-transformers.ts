@@ -6,6 +6,8 @@ import {
   resolveSongDisplayAlbum,
   resolveSongCoverUrl,
   resolveAlbumCoverUrl,
+  resolveSongCoverThumbnailUrl,
+  resolveAlbumCoverThumbnailUrl,
   normalizeSongCustomPlatformLinks,
 } from './music'
 
@@ -693,12 +695,22 @@ export function toMusicResponse(track: {
   durationMs?: number | null
   coverId?: string | null
   coverAlbumDocId?: string | null
-  covers?: Array<{ id: string; publicUrl: string; isDefault?: boolean }>
+  covers?: Array<{
+    id: string
+    publicUrl: string
+    thumbnailUrl?: string | null
+    isDefault?: boolean
+  }>
   albumRelations?: Array<{
     album: {
       docId: string
       coverId: string | null
-      covers: Array<{ id: string; publicUrl: string; isDefault?: boolean }>
+      covers: Array<{
+        id: string
+        publicUrl: string
+        thumbnailUrl?: string | null
+        isDefault?: boolean
+      }>
     }
   }>
   externalSources?: MusicExternalSourceRecord[]
@@ -715,6 +727,12 @@ export function toMusicResponse(track: {
     covers: track.covers || [],
     albumRelations: track.albumRelations || [],
   })
+  const coverThumbnail = resolveSongCoverThumbnailUrl({
+    coverId: track.coverId ?? null,
+    coverAlbumDocId: track.coverAlbumDocId ?? null,
+    covers: track.covers || [],
+    albumRelations: track.albumRelations || [],
+  })
 
   return {
     docId: track.docId,
@@ -726,6 +744,7 @@ export function toMusicResponse(track: {
     vocals: normalizeStringListInput(track.vocals),
     album: track.album,
     cover,
+    coverThumbnail,
     audioUrl: track.audioUrl,
     lyric: track.lyric || null,
     releaseDate: formatDateOnly(track.releaseDate),
@@ -845,6 +864,7 @@ export function toSongResponse(
 ) {
   const displayAlbum = resolveSongDisplayAlbum(song)
   const coverUrl = resolveSongCoverUrl(song)
+  const coverThumbnail = resolveSongCoverThumbnailUrl(song)
   const customPlatformLinks = normalizeSongCustomPlatformLinks(song.customPlatformLinks)
 
   const base = {
@@ -857,6 +877,7 @@ export function toSongResponse(
     vocals: normalizeStringListInput(song.vocals),
     album: song.album,
     cover: coverUrl,
+    coverThumbnail,
     audioUrl: song.audioUrl,
     releaseDate: formatDateOnly(song.releaseDate),
     durationMs: song.durationMs ?? null,
@@ -871,6 +892,7 @@ export function toSongResponse(
     covers: song.covers.map((cover) => ({
       id: cover.id,
       url: cover.publicUrl,
+      thumbnailUrl: cover.thumbnailUrl,
       isDefault: cover.isDefault,
       sortOrder: cover.sortOrder,
     })),
@@ -913,6 +935,7 @@ export function toAlbumResponse(album: {
   covers?: Array<{
     id: string
     publicUrl: string
+    thumbnailUrl?: string | null
     isDefault: boolean
     sortOrder: number
   }>
@@ -931,6 +954,7 @@ export function toAlbumResponse(album: {
       covers: Array<{
         id: string
         publicUrl: string
+        thumbnailUrl?: string | null
         isDefault: boolean
       }>
       albumRelations: MusicTrackWithRelations['albumRelations']
@@ -941,12 +965,17 @@ export function toAlbumResponse(album: {
     coverId: album.coverId,
     covers: album.covers || [],
   })
+  const coverThumbnail = resolveAlbumCoverThumbnailUrl({
+    coverId: album.coverId,
+    covers: album.covers || [],
+  })
 
   return {
     docId: album.docId,
     title: album.title,
     artist: album.artist,
     cover: coverUrl,
+    coverThumbnail,
     description: album.description,
     sources: serializeMusicExternalSources(album.externalSources || []),
     releaseDate: formatDateOnly(album.releaseDate),
@@ -958,6 +987,7 @@ export function toAlbumResponse(album: {
     covers: (album.covers || []).map((cover) => ({
       id: cover.id,
       url: cover.publicUrl,
+      thumbnailUrl: cover.thumbnailUrl,
       isDefault: cover.isDefault,
       sortOrder: cover.sortOrder,
     })),
@@ -972,6 +1002,7 @@ export function toAlbumResponse(album: {
             title: relation.song.title,
             artists: normalizeStringListInput(relation.song.artists),
             cover: resolveSongCoverUrl(relation.song),
+            coverThumbnail: resolveSongCoverThumbnailUrl(relation.song),
           }
         : null,
     })),

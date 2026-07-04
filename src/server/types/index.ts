@@ -89,6 +89,7 @@ type MusicTrackWithRelations = {
   covers: Array<{
     id: string
     publicUrl: string
+    thumbnailUrl: string | null
     isDefault: boolean
     sortOrder: number
   }>
@@ -106,6 +107,7 @@ type MusicTrackWithRelations = {
       covers: Array<{
         id: string
         publicUrl: string
+        thumbnailUrl: string | null
         isDefault: boolean
       }>
     }

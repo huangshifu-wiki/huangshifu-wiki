@@ -860,6 +860,7 @@ model SongCover {
   assetId    String?
   storageKey String    @unique
   publicUrl  String
+  thumbnailUrl String?
   isDefault  Boolean   @default(false)
   sortOrder  Int       @default(0)
   createdAt  DateTime  @default(now())
@@ -878,6 +879,7 @@ model AlbumCover {
   assetId    String?
   storageKey String    @unique
   publicUrl  String
+  thumbnailUrl String?
   isDefault  Boolean   @default(false)
   sortOrder  Int       @default(0)
   createdAt  DateTime  @default(now())

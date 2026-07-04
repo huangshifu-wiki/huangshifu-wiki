@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockLocalizeImageUrlAsMediaAsset = vi.hoisted(() => vi.fn())
+const mockGenerateMusicCoverThumbnail = vi.hoisted(() => vi.fn())
 
 const mockPrisma = vi.hoisted(() => ({
   mediaAsset: {
@@ -37,6 +38,10 @@ vi.mock('../../src/server/utils/remoteImageAsset', () => ({
   localizeImageUrlAsMediaAsset: mockLocalizeImageUrlAsMediaAsset,
 }))
 
+vi.mock('../../src/server/services/musicCoverThumbnail.service', () => ({
+  generateMusicCoverThumbnail: mockGenerateMusicCoverThumbnail,
+}))
+
 vi.mock('../../src/server/music/metingService', () => ({
   getMusicResourcePreview: vi.fn(),
   resolveAudioUrl: vi.fn(),
@@ -48,6 +53,7 @@ describe('music cover localization', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockLocalizeImageUrlAsMediaAsset.mockResolvedValue({ assetId: 'asset-1' })
+    mockGenerateMusicCoverThumbnail.mockResolvedValue('/uploads/music-covers/thumbnails/thumb.webp')
     mockPrisma.mediaAsset.findUnique.mockResolvedValue({
       id: 'asset-1',
       storageKey: 'music-covers/songs/cover.jpg',
@@ -69,8 +75,8 @@ describe('music cover localization', () => {
       title: 'Song',
       artists: ['Artist'],
     })
-    mockPrisma.$transaction.mockImplementation(async (callback) =>
-      callback({
+    mockPrisma.$transaction.mockImplementation(async (callback) => {
+      const tx = {
         songCover: {
           create: vi.fn().mockResolvedValue({ id: 'cover-1' }),
           updateMany: vi.fn(),
@@ -85,8 +91,9 @@ describe('music cover localization', () => {
         album: {
           update: vi.fn(),
         },
-      })
-    )
+      }
+      return callback(tx)
+    })
   })
 
   it('localizes remote song covers before creating cover records', async () => {
@@ -101,6 +108,30 @@ describe('music cover localization', () => {
     expect(mockPrisma.mediaAsset.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'asset-1' } })
     )
+    expect(mockGenerateMusicCoverThumbnail).toHaveBeenCalledWith('music-covers/songs/cover.jpg')
+  })
+
+  it('stores generated song cover thumbnails on cover records', async () => {
+    const tx = {
+      songCover: {
+        create: vi.fn().mockResolvedValue({ id: 'cover-1' }),
+        updateMany: vi.fn(),
+      },
+      musicTrack: {
+        update: vi.fn(),
+      },
+    }
+    mockPrisma.$transaction.mockImplementationOnce(async (callback) => callback(tx))
+
+    const { addSongCoverFromUrl } = await import('../../src/server/utils/music')
+
+    await addSongCoverFromUrl('song-1', 'https://example.com/cover.jpg', true)
+
+    expect(tx.songCover.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        thumbnailUrl: '/uploads/music-covers/thumbnails/thumb.webp',
+      }),
+    })
   })
 
   it('localizes remote album covers before creating cover records', async () => {
@@ -112,6 +143,7 @@ describe('music cover localization', () => {
       namespace: 'music-covers/albums',
       fallbackName: 'album-1.jpg',
     })
+    expect(mockGenerateMusicCoverThumbnail).toHaveBeenCalledWith('music-covers/songs/cover.jpg')
   })
 
   it('does not fail automatic song import when cover localization fails', async () => {

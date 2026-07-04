@@ -40,6 +40,7 @@ export interface SongItem {
     title: string
   }
   cover: string
+  coverThumbnail?: string
   audioUrl: string
   releaseDate?: string | null
   durationMs?: number | null
@@ -56,6 +57,7 @@ export interface AlbumItem {
   title: string
   artist: string
   cover: string
+  coverThumbnail?: string
   description?: string | null
   sources?: MusicExternalSource[]
   trackCount?: number

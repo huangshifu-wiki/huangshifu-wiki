@@ -22,6 +22,7 @@ import {
   softDeleteData,
 } from '../utils'
 import { cleanupUnusedMediaAssetById } from '../services/mediaAssetCleanupService'
+import { deleteMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
 import type { AuthenticatedRequest } from '../types'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 
@@ -53,6 +54,7 @@ async function deleteAlbumCoverById(albumDocId: string, coverId: string) {
   if (!cover) return false
 
   await prisma.albumCover.delete({ where: { id: cover.id } })
+  await deleteMusicCoverThumbnail(cover.thumbnailUrl)
 
   if (cover.assetId) {
     await cleanupUnusedMediaAssetById(cover.assetId)
@@ -130,6 +132,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
             select: {
               id: true,
               publicUrl: true,
+              thumbnailUrl: true,
               isDefault: true,
               sortOrder: true,
             },
@@ -600,6 +603,7 @@ router.get('/:docId/covers', async (req, res) => {
         assetId: cover.assetId,
         storageKey: cover.storageKey,
         url: cover.publicUrl,
+        thumbnailUrl: cover.thumbnailUrl,
         isDefault: cover.isDefault,
         sortOrder: cover.sortOrder,
       })),
@@ -636,6 +640,7 @@ router.post('/:docId/covers', requireAdmin, async (req, res) => {
         assetId: cover.assetId,
         storageKey: cover.storageKey,
         url: cover.publicUrl,
+        thumbnailUrl: cover.thumbnailUrl,
         isDefault: cover.isDefault,
         sortOrder: cover.sortOrder,
       },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   RefreshCw,
   Image,
@@ -11,6 +11,7 @@ import {
   Zap,
   Clock,
   BarChart3,
+  Music,
 } from '@/src/components/icons'
 import { apiGet, apiPost } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
@@ -46,14 +47,99 @@ interface RebuildResponse {
   estimatedTimeSeconds?: number
 }
 
+type MusicCoverThumbnailType = 'all' | 'song' | 'album'
+
+interface MusicCoverThumbnailStats {
+  song: {
+    total: number
+    missing: number
+  }
+  album: {
+    total: number
+    missing: number
+  }
+  total: {
+    total: number
+    missing: number
+  }
+}
+
+interface MusicCoverThumbnailBackfillError {
+  type: 'song' | 'album'
+  coverId: string
+  resourceId: string
+  message: string
+}
+
+interface MusicCoverThumbnailBackfillResponse {
+  success: boolean
+  data: {
+    type: MusicCoverThumbnailType
+    batchSize: number
+    processed: number
+    succeeded: number
+    failed: number
+    remaining: number
+    errors: MusicCoverThumbnailBackfillError[]
+  }
+  error?: string
+}
+
+interface MusicCoverThumbnailBackfillProgress {
+  target: number
+  processed: number
+  succeeded: number
+  failed: number
+  remaining: number
+  stopped: boolean
+  errors: MusicCoverThumbnailBackfillError[]
+}
+
+const NO_CACHE_OPTIONS = { staleTime: 0, swr: false }
+const MUSIC_COVER_THUMBNAIL_BATCH_SIZE = 50
+const MAX_MUSIC_COVER_BACKFILL_ERRORS = 5
+
+const MUSIC_COVER_TYPE_OPTIONS: Array<{
+  value: MusicCoverThumbnailType
+  label: string
+  desc: string
+}> = [
+  { value: 'all', label: '全部', desc: '歌曲和专辑封面' },
+  { value: 'song', label: '仅歌曲', desc: '只处理歌曲封面' },
+  { value: 'album', label: '仅专辑', desc: '只处理专辑封面' },
+]
+
+const createMusicCoverBackfillProgress = (target: number): MusicCoverThumbnailBackfillProgress => ({
+  target,
+  processed: 0,
+  succeeded: 0,
+  failed: 0,
+  remaining: target,
+  stopped: false,
+  errors: [],
+})
+
+const getMusicCoverStatsBucket = (stats: MusicCoverThumbnailStats, type: MusicCoverThumbnailType) =>
+  stats[type === 'all' ? 'total' : type]
+
+const getMusicCoverMissingCount = (
+  stats: MusicCoverThumbnailStats | null,
+  type: MusicCoverThumbnailType
+) => (stats ? getMusicCoverStatsBucket(stats, type).missing : 0)
+
 export const AdminVariantManager: React.FC = () => {
   const [variantStats, setVariantStats] = useState<VariantStats | null>(null)
   const [cleanupStats, setCleanupStats] = useState<CleanupStats | null>(null)
+  const [musicCoverStats, setMusicCoverStats] = useState<MusicCoverThumbnailStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [rebuildScope, setRebuildScope] = useState<string>('missing')
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildResult, setRebuildResult] = useState<RebuildResponse | null>(null)
+  const [musicCoverType, setMusicCoverType] = useState<MusicCoverThumbnailType>('all')
+  const [backfillingMusicCovers, setBackfillingMusicCovers] = useState(false)
+  const [musicCoverBackfillProgress, setMusicCoverBackfillProgress] =
+    useState<MusicCoverThumbnailBackfillProgress | null>(null)
   const [cleaning, setCleaning] = useState(false)
   const [cleanupResult, setCleanupResult] = useState<{
     type: string
@@ -61,21 +147,37 @@ export const AdminVariantManager: React.FC = () => {
     deletedCount: number
     errorsCount: number
   } | null>(null)
+  const stopMusicCoverBackfillRef = useRef(false)
   const dialog = useDialog()
+  const selectedMusicCoverOption =
+    MUSIC_COVER_TYPE_OPTIONS.find((option) => option.value === musicCoverType) ??
+    MUSIC_COVER_TYPE_OPTIONS[0]
+  const selectedMusicCoverMissingCount = getMusicCoverMissingCount(musicCoverStats, musicCoverType)
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (options: { clearError?: boolean } = {}) => {
     try {
       setLoading(true)
-      setError(null)
-      const [statsData, cleanupData] = await Promise.all([
+      if (options.clearError !== false) {
+        setError(null)
+      }
+      const [statsData, cleanupData, musicCoverData] = await Promise.all([
         apiGet<{ success: boolean; data: VariantStats }>('/api/admin/variants/stats'),
         apiGet<{ success: boolean; data: CleanupStats }>('/api/admin/cleanup/stats').catch(() => ({
+          success: false,
+          data: null as any,
+        })),
+        apiGet<{ success: boolean; data: MusicCoverThumbnailStats }>(
+          '/api/admin/music-cover-thumbnails/stats',
+          undefined,
+          NO_CACHE_OPTIONS
+        ).catch(() => ({
           success: false,
           data: null as any,
         })),
       ])
       if (statsData.success) setVariantStats(statsData.data)
       if (cleanupData.success) setCleanupStats(cleanupData.data)
+      if (musicCoverData.success) setMusicCoverStats(musicCoverData.data)
     } catch (err) {
       console.error('Failed to fetch stats:', err)
       setError(err instanceof Error ? err.message : '网络错误')
@@ -214,6 +316,85 @@ export const AdminVariantManager: React.FC = () => {
     }
   }
 
+  const handleBackfillMusicCoverThumbnails = async () => {
+    const missingCount = selectedMusicCoverMissingCount
+    if (missingCount === 0) {
+      setMusicCoverBackfillProgress(null)
+      return
+    }
+
+    const confirmed = await dialog.confirm({
+      title: '补齐音乐封面缩略图',
+      message: `确定要补齐当前范围内的 ${missingCount} 张音乐封面缩略图吗？`,
+      confirmText: '补齐',
+      variant: 'warning',
+    })
+    if (!confirmed) return
+
+    stopMusicCoverBackfillRef.current = false
+    setBackfillingMusicCovers(true)
+    const initialProgress = createMusicCoverBackfillProgress(missingCount)
+    setMusicCoverBackfillProgress(initialProgress)
+
+    let nextProgress = initialProgress
+
+    try {
+      while (!stopMusicCoverBackfillRef.current && nextProgress.remaining > 0) {
+        const result = await apiPost<MusicCoverThumbnailBackfillResponse>(
+          '/api/admin/music-cover-thumbnails/backfill',
+          {
+            type: musicCoverType,
+            batchSize: MUSIC_COVER_THUMBNAIL_BATCH_SIZE,
+          }
+        )
+
+        if (!result.success) {
+          throw new Error(result.error || '补齐失败')
+        }
+
+        nextProgress = {
+          target: missingCount,
+          processed: nextProgress.processed + result.data.processed,
+          succeeded: nextProgress.succeeded + result.data.succeeded,
+          failed: nextProgress.failed + result.data.failed,
+          remaining: result.data.remaining,
+          stopped: stopMusicCoverBackfillRef.current,
+          errors: [...result.data.errors, ...nextProgress.errors].slice(
+            0,
+            MAX_MUSIC_COVER_BACKFILL_ERRORS
+          ),
+        }
+        setMusicCoverBackfillProgress(nextProgress)
+
+        if (result.data.processed === 0) {
+          if (result.data.remaining > 0) {
+            throw new Error('本批次没有处理任何封面，已停止继续批处理')
+          }
+          break
+        }
+
+        if (result.data.succeeded === 0 && result.data.remaining > 0) {
+          throw new Error('本批次没有成功生成任何缩略图，已停止继续批处理')
+        }
+      }
+
+      if (stopMusicCoverBackfillRef.current) {
+        setMusicCoverBackfillProgress((prev) => (prev ? { ...prev, stopped: true } : prev))
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '补齐音乐封面缩略图失败')
+      setMusicCoverBackfillProgress((prev) => (prev ? { ...prev, stopped: true } : prev))
+    } finally {
+      await fetchStats({ clearError: false })
+      setBackfillingMusicCovers(false)
+    }
+  }
+
+  const handleStopMusicCoverBackfill = () => {
+    stopMusicCoverBackfillRef.current = true
+    setMusicCoverBackfillProgress((prev) => (prev ? { ...prev, stopped: true } : prev))
+  }
+
   const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return bytes + ' B'
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
@@ -238,6 +419,18 @@ export const AdminVariantManager: React.FC = () => {
     { value: 'failed', label: '重建失败', desc: '仅处理生成失败的图片' },
     { value: 'all', label: '全部重建', desc: '强制重新生成所有变体（慎用）' },
   ]
+
+  const musicCoverCompletionPercent =
+    musicCoverBackfillProgress && musicCoverBackfillProgress.target > 0
+      ? Math.min(
+          100,
+          Math.round(
+            ((musicCoverBackfillProgress.succeeded + musicCoverBackfillProgress.failed) /
+              musicCoverBackfillProgress.target) *
+              100
+          )
+        )
+      : 0
 
   if (loading && !variantStats && !cleanupStats) {
     return (
@@ -265,7 +458,7 @@ export const AdminVariantManager: React.FC = () => {
           <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">变体管理</h1>
         </div>
         <button
-          onClick={fetchStats}
+          onClick={() => fetchStats()}
           disabled={loading}
           className="inline-flex items-center gap-2 px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all disabled:opacity-50"
         >
@@ -380,6 +573,169 @@ export const AdminVariantManager: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {musicCoverStats && (
+        <div className="bg-surface border border-border rounded p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Music size={16} className="text-brand-gold" />
+            <h3 className="text-sm font-semibold text-text-secondary">音乐封面缩略图</h3>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            {[
+              {
+                label: '歌曲缺失',
+                value: musicCoverStats.song.missing,
+                total: musicCoverStats.song.total,
+              },
+              {
+                label: '专辑缺失',
+                value: musicCoverStats.album.missing,
+                total: musicCoverStats.album.total,
+              },
+              {
+                label: '总缺失',
+                value: musicCoverStats.total.missing,
+                total: musicCoverStats.total.total,
+              },
+            ].map((item) => (
+              <div key={item.label} className="bg-surface-alt rounded p-3">
+                <span className="text-[11px] text-text-muted">{item.label}</span>
+                <p
+                  className={clsx(
+                    'text-lg font-bold',
+                    item.value > 0 ? 'theme-text-warning' : 'theme-text-success'
+                  )}
+                >
+                  {item.value}
+                </p>
+                <p className="text-[11px] text-text-muted">共 {item.total}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-4">
+            {MUSIC_COVER_TYPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setMusicCoverType(opt.value)}
+                disabled={backfillingMusicCovers}
+                className={clsx(
+                  'px-3 py-1.5 rounded text-xs font-medium transition-all disabled:opacity-50',
+                  musicCoverType === opt.value
+                    ? 'bg-brand-gold-dark text-white'
+                    : 'bg-surface-alt text-text-secondary hover:bg-bg-tertiary hover:text-brand-gold'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <p className="text-xs text-text-muted mb-4">{selectedMusicCoverOption.desc}</p>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={handleBackfillMusicCoverThumbnails}
+              disabled={backfillingMusicCovers || selectedMusicCoverMissingCount === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
+            >
+              {backfillingMusicCovers ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <RefreshCw size={14} />
+              )}
+              {backfillingMusicCovers ? '正在补齐...' : '补齐缩略图'}
+            </button>
+            {backfillingMusicCovers && (
+              <button
+                onClick={handleStopMusicCoverBackfill}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
+              >
+                <XCircle size={14} /> 停止
+              </button>
+            )}
+          </div>
+
+          {musicCoverBackfillProgress && (
+            <div className="mt-4 p-3 rounded theme-bg-warning-soft border theme-border-warning-soft">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2">
+                  {musicCoverBackfillProgress.remaining === 0 ? (
+                    <CheckCircle size={16} className="theme-text-success" />
+                  ) : musicCoverBackfillProgress.stopped ? (
+                    <XCircle size={16} className="theme-text-warning" />
+                  ) : (
+                    <Loader2 size={16} className="animate-spin text-brand-gold" />
+                  )}
+                  <p className="text-sm font-medium text-text-primary">
+                    {musicCoverBackfillProgress.remaining === 0
+                      ? '补齐完成'
+                      : musicCoverBackfillProgress.stopped
+                        ? '已停止'
+                        : '补齐中'}
+                  </p>
+                </div>
+                <span className="text-xs text-text-muted">{musicCoverCompletionPercent}%</span>
+              </div>
+
+              <div className="h-2 bg-surface-alt rounded overflow-hidden mb-3">
+                <div
+                  className="h-full bg-brand-gold-dark transition-all"
+                  style={{ width: `${musicCoverCompletionPercent}%` }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <span className="text-text-muted">已处理</span>
+                  <p className="font-medium text-text-primary">
+                    {musicCoverBackfillProgress.processed}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-text-muted">成功</span>
+                  <p className="font-medium theme-text-success">
+                    {musicCoverBackfillProgress.succeeded}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-text-muted">失败</span>
+                  <p
+                    className={clsx(
+                      'font-medium',
+                      musicCoverBackfillProgress.failed > 0
+                        ? 'theme-text-error'
+                        : 'text-text-primary'
+                    )}
+                  >
+                    {musicCoverBackfillProgress.failed}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-text-muted">剩余</span>
+                  <p className="font-medium text-text-primary">
+                    {musicCoverBackfillProgress.remaining}
+                  </p>
+                </div>
+              </div>
+
+              {musicCoverBackfillProgress.errors.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {musicCoverBackfillProgress.errors.map((item) => (
+                    <p
+                      key={`${item.type}-${item.coverId}`}
+                      className="text-xs theme-text-error truncate"
+                    >
+                      {item.type === 'song' ? '歌曲' : '专辑'} {item.resourceId}：{item.message}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -30,6 +30,7 @@ type SongItem = {
   artists: string[]
   album: string
   cover: string
+  coverThumbnail?: string
   audioUrl: string
   sourceUrl?: string | null
   lyric?: string | null
@@ -46,6 +47,7 @@ type AlbumResponse = {
     title: string
     artist: string
     cover: string
+    coverThumbnail?: string
     description?: string | null
     tracks: SongItem[]
   }
@@ -230,7 +232,7 @@ const AlbumDetail = () => {
         {/* Detail Header */}
         <div className="flex flex-col md:flex-row gap-5 mb-6 pb-6 border-b border-border">
           <SmartImage
-            src={album.cover}
+            src={album.coverThumbnail || album.cover}
             alt={album.title}
             className="w-40 h-40 md:w-44 md:h-44 object-cover flex-shrink-0 rounded bg-surface-alt"
           />
@@ -377,8 +379,16 @@ const AlbumDetail = () => {
                 resourceType="album"
                 resourceId={albumId}
                 currentCover={album.cover}
-                onCoverUpdated={(newCoverUrl) =>
-                  setAlbum((prev) => (prev ? { ...prev, cover: newCoverUrl } : prev))
+                onCoverUpdated={(cover) =>
+                  setAlbum((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          cover: cover.url,
+                          coverThumbnail: cover.thumbnailUrl || undefined,
+                        }
+                      : prev
+                  )
                 }
               />
               <button

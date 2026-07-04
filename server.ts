@@ -50,6 +50,7 @@ import { UPLOAD_MAX_FILE_SIZE_MB } from './src/lib/uploadLimits'
 import { registerAdminSystemRoutes } from './src/server/routes/admin.system.routes'
 import { registerAdminVariantsRoutes } from './src/server/routes/admin.variants.routes'
 import { registerAdminMediaHealthRoutes } from './src/server/routes/admin.media-health.routes'
+import { registerAdminMusicCoverThumbnailsRoutes } from './src/server/routes/admin.music-cover-thumbnails.routes'
 import { cloudSyncService } from './src/server/services/cloudSyncService'
 import { variantGenerator } from './src/server/services/variantGenerator'
 import { rateLimitConfigService } from './src/server/services/rateLimitConfig.service'
@@ -334,6 +335,7 @@ if (isSemanticSearchEnabled()) {
 registerAdminSystemRoutes(app)
 registerAdminVariantsRoutes(app)
 registerAdminMediaHealthRoutes(app)
+registerAdminMusicCoverThumbnailsRoutes(app)
 registerAdminRoutes(app)
 registerNotificationsRoutes(app)
 registerFavoritesRoutes(app)

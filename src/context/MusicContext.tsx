@@ -8,6 +8,7 @@ interface Song {
   artists: string[]
   album: string
   cover: string
+  coverThumbnail?: string
   audioUrl: string
   playUrl?: string
   lyric?: string | null

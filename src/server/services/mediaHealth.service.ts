@@ -216,10 +216,10 @@ async function collectBusinessReferences(prisma: PrismaClient) {
       select: { id: true, url: true, assetId: true },
     }),
     prisma.songCover.findMany({
-      select: { id: true, storageKey: true, publicUrl: true, assetId: true },
+      select: { id: true, storageKey: true, publicUrl: true, thumbnailUrl: true, assetId: true },
     }),
     prisma.albumCover.findMany({
-      select: { id: true, storageKey: true, publicUrl: true, assetId: true },
+      select: { id: true, storageKey: true, publicUrl: true, thumbnailUrl: true, assetId: true },
     }),
   ])
 
@@ -253,6 +253,11 @@ async function collectBusinessReferences(prisma: PrismaClient) {
       id: item.id,
       field: 'publicUrl',
     })
+    addUrlFieldReference(references, item.thumbnailUrl, {
+      source: 'SongCover',
+      id: item.id,
+      field: 'thumbnailUrl',
+    })
     addMediaAssetReference(references, item.assetId, {
       source: 'SongCover',
       id: item.id,
@@ -269,6 +274,11 @@ async function collectBusinessReferences(prisma: PrismaClient) {
       source: 'AlbumCover',
       id: item.id,
       field: 'publicUrl',
+    })
+    addUrlFieldReference(references, item.thumbnailUrl, {
+      source: 'AlbumCover',
+      id: item.id,
+      field: 'thumbnailUrl',
     })
     addMediaAssetReference(references, item.assetId, {
       source: 'AlbumCover',

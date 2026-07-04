@@ -37,6 +37,7 @@ const SongCard = React.memo(function SongCard({
   const albumText = (song.displayAlbum ? song.displayAlbum.title : song.album).trim()
   const releaseDateText = song.releaseDate ? `发行日期：${song.releaseDate}` : null
   const listMetaItems = [artistsText, albumText, releaseDateText].filter(Boolean)
+  const coverSrc = song.coverThumbnail || song.cover
 
   const handleRowClick = () => {
     navigate(`/music/${song.docId}`)
@@ -111,7 +112,7 @@ const SongCard = React.memo(function SongCard({
       >
         <div className="relative aspect-square overflow-hidden bg-surface-alt rounded mb-2.5">
           <SmartImage
-            src={song.cover}
+            src={coverSrc}
             alt={song.title + ' 封面'}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
             lazy={false}
@@ -193,7 +194,7 @@ const SongCard = React.memo(function SongCard({
       {/* Cover */}
       <div className="relative w-14 h-14 flex-shrink-0 overflow-hidden rounded">
         <SmartImage
-          src={song.cover}
+          src={coverSrc}
           alt={song.title + ' 封面'}
           className="w-full h-full object-cover rounded"
           lazy={false}

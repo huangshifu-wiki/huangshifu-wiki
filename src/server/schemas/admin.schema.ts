@@ -156,3 +156,18 @@ export const adminBatchMusicDisplaySchema = z
       })
     }
   })
+
+export const adminMusicCoverThumbnailBackfillSchema = z.preprocess(
+  (value) => value ?? {},
+  z
+    .object({
+      type: z.enum(['all', 'song', 'album'], { error: '处理范围无效' }).default('all'),
+      batchSize: z
+        .number({ error: '批量大小必须是数字' })
+        .int('批量大小必须是整数')
+        .min(1, '批量大小至少为 1')
+        .max(100, '批量大小最多为 100')
+        .default(50),
+    })
+    .strip()
+)
