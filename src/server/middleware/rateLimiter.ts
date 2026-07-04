@@ -5,7 +5,7 @@ import rateLimit, {
   type ValueDeterminingMiddleware,
 } from 'express-rate-limit'
 import type { NextFunction, RequestHandler, Response } from 'express'
-import type { AuthenticatedRequest } from './auth'
+import { isAdminRole, type AuthenticatedRequest } from './auth'
 import { isProductionRuntime, isTestRuntime } from '../utils/runtimeEnv'
 import {
   DEFAULT_RATE_LIMIT_CONFIG,
@@ -34,6 +34,14 @@ const rateLimitBucketDefinitions: Record<RateLimitBucketId, RateLimitBucketDefin
   galleryWrite: { keyGenerator: extractUidOrIp },
   profile: { keyGenerator: extractUidOrIp },
 }
+const ADMIN_EXEMPT_BUCKETS = new Set<RateLimitBucketId>([
+  'search',
+  'upload',
+  'wikiWrite',
+  'postWrite',
+  'galleryWrite',
+  'profile',
+])
 
 let currentRateLimitConfig: RateLimitAdminConfig = cloneRateLimitConfig(DEFAULT_RATE_LIMIT_CONFIG)
 const limiterInstances = new Map<
@@ -56,6 +64,12 @@ function extractUidOrIp(req: RateLimitRequest): string {
 export function isRateLimitDisabledInDevelopment(): boolean {
   return (
     isTestRuntime() || (!isProductionRuntime() && process.env.DEV_DISABLE_RATE_LIMIT === 'true')
+  )
+}
+
+function isAdminExemptRequest(bucket: RateLimitBucketId, req: RateLimitRequest) {
+  return (
+    ADMIN_EXEMPT_BUCKETS.has(bucket) && isAdminRole((req as AuthenticatedRequest).authUser?.role)
   )
 }
 
@@ -88,6 +102,10 @@ function createRateLimiter(bucket: RateLimitBucketId) {
       ...options,
       skip: (req, res) => {
         if (isRateLimitDisabledInDevelopment()) {
+          return true
+        }
+
+        if (isAdminExemptRequest(bucket, req)) {
           return true
         }
 

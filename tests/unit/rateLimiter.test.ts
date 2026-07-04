@@ -31,13 +31,14 @@ describe('rateLimiter', () => {
     ipKeyGeneratorMock.mockClear()
     shutdownMock.mockClear()
     memoryStoreInstances.length = 0
-    process.env.NODE_ENV = 'development'
-    delete process.env.DEV_DISABLE_RATE_LIMIT
-    delete process.env.VITEST
-    delete process.env.VITEST_WORKER_ID
+    vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('DEV_DISABLE_RATE_LIMIT', undefined)
+    vi.stubEnv('VITEST', undefined)
+    vi.stubEnv('VITEST_WORKER_ID', undefined)
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     process.env.NODE_ENV = originalNodeEnv
     if (originalDevDisableRateLimit === undefined) {
       delete process.env.DEV_DISABLE_RATE_LIMIT
@@ -58,15 +59,15 @@ describe('rateLimiter', () => {
     }
   })
 
-  it('keeps rate limiting enabled by default in development', async () => {
+  it('skips rate limiting in test runtime', async () => {
     const { globalLimiter, isRateLimitDisabledInDevelopment } =
       await import('../../src/server/middleware/rateLimiter')
 
     expect(globalLimiter).toBeDefined()
-    expect(isRateLimitDisabledInDevelopment()).toBe(false)
+    expect(isRateLimitDisabledInDevelopment()).toBe(true)
 
     const [{ skip }] = rateLimitMock.mock.calls.at(-1)!
-    expect(skip({}, {})).toBe(false)
+    expect(skip({}, {})).toBe(true)
   })
 
   it('allows disabling rate limiting explicitly in development', async () => {
@@ -122,6 +123,32 @@ describe('rateLimiter', () => {
 
     const [{ skip }] = rateLimitMock.mock.calls.at(-1)!
     expect(skip({}, {})).toBe(true)
+  })
+
+  it('skips business rate limiters for admin users only', async () => {
+    const { searchLimiter } = await import('../../src/server/middleware/rateLimiter')
+
+    expect(searchLimiter).toBeDefined()
+
+    const [{ skip }] = rateLimitMock.mock.calls.at(-1)!
+    expect(skip({ authUser: { role: 'admin' } }, {})).toBe(true)
+    expect(skip({ authUser: { role: 'super_admin' } }, {})).toBe(true)
+    expect(skip({ authUser: { role: 'user' } }, {})).toBe(false)
+  })
+
+  it('does not skip global or auth rate limiters for admin users', async () => {
+    await import('../../src/server/middleware/rateLimiter')
+
+    const limiterOptions = rateLimitMock.mock.calls.map(([options]) => options)
+    const authOptions = limiterOptions.find(
+      (options) => options.message?.error === '请求过于频繁，请15分钟后再试'
+    )
+    const globalOptions = limiterOptions.find(
+      (options) => options.message?.error === '请求过于频繁，请稍后再试'
+    )
+
+    expect(authOptions?.skip({ authUser: { role: 'admin' } }, {})).toBe(false)
+    expect(globalOptions?.skip({ authUser: { role: 'admin' } }, {})).toBe(false)
   })
 
   it('uses separate limiter instances for password reset request and confirmation', async () => {
