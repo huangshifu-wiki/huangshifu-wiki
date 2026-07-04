@@ -1,6 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, MailCheck, RefreshCw, Save, Settings, UserPlus } from '@/src/components/icons'
-import { apiPatch, apiRequest, clearApiCache, generateApiCacheKey } from '../../lib/apiClient'
+import {
+  Loader2,
+  MailCheck,
+  RefreshCw,
+  Save,
+  Settings,
+  Shield,
+  UserPlus,
+} from '@/src/components/icons'
+import {
+  RATE_LIMIT_BUCKET_LABELS,
+  type RateLimitAdminConfig,
+  type RateLimitBucketId,
+} from '../../lib/rateLimitConfig'
+import {
+  apiGet,
+  apiPatch,
+  apiPost,
+  apiRequest,
+  clearApiCache,
+  generateApiCacheKey,
+} from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'
 import type { EmailVerificationAdminConfig, RegistrationConfig } from '../../types/api'
 
@@ -51,6 +71,9 @@ const REGISTRATION_ADMIN_CONFIG_CACHE_KEY = generateApiCacheKey(
   'GET',
   REGISTRATION_ADMIN_CONFIG_PATH
 )
+const RATE_LIMIT_ADMIN_CONFIG_PATH = '/api/admin/rate-limits/config'
+const RATE_LIMIT_ADMIN_CONFIG_CACHE_KEY = generateApiCacheKey('GET', RATE_LIMIT_ADMIN_CONFIG_PATH)
+const NO_CACHE_OPTIONS = { staleTime: 0, swr: false }
 
 function toForm(config: EmailVerificationAdminConfig): EmailVerificationForm {
   return {
@@ -58,6 +81,12 @@ function toForm(config: EmailVerificationAdminConfig): EmailVerificationForm {
     smtpPass: '',
     clearSmtpPass: false,
   }
+}
+
+function parsePositiveInteger(value: string) {
+  if (!value) return null
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : null
 }
 
 const AdminSettings = () => {
@@ -72,6 +101,11 @@ const AdminSettings = () => {
   const [registrationLoading, setRegistrationLoading] = useState(true)
   const [registrationLoadError, setRegistrationLoadError] = useState(false)
   const [registrationSaving, setRegistrationSaving] = useState(false)
+  const [rateLimitConfig, setRateLimitConfig] = useState<RateLimitAdminConfig | null>(null)
+  const [rateLimitLoading, setRateLimitLoading] = useState(true)
+  const [rateLimitLoadError, setRateLimitLoadError] = useState(false)
+  const [rateLimitSaving, setRateLimitSaving] = useState(false)
+  const [rateLimitResetting, setRateLimitResetting] = useState(false)
 
   const loadConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
@@ -144,6 +178,40 @@ const AdminSettings = () => {
     }
   }, [loadRegistrationConfig])
 
+  const loadRateLimitConfig = useCallback(
+    async (isActive: () => boolean = () => true) => {
+      setRateLimitLoading(true)
+      setRateLimitLoadError(false)
+
+      try {
+        const response = await apiGet<{
+          success: boolean
+          data: RateLimitAdminConfig
+        }>(RATE_LIMIT_ADMIN_CONFIG_PATH, undefined, NO_CACHE_OPTIONS)
+
+        if (!isActive()) return
+        setRateLimitConfig(response.data)
+      } catch (error) {
+        if (!isActive()) return
+        console.error('Load rate limit config failed:', error)
+        setRateLimitLoadError(true)
+        show('请求限流配置加载失败', { variant: 'error' })
+      } finally {
+        if (isActive()) setRateLimitLoading(false)
+      }
+    },
+    [show]
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    void loadRateLimitConfig(() => !cancelled)
+
+    return () => {
+      cancelled = true
+    }
+  }, [loadRateLimitConfig])
+
   const saveConfig = async () => {
     if (loading || loadError) {
       show('请先成功加载站点设置后再保存', { variant: 'error' })
@@ -209,11 +277,73 @@ const AdminSettings = () => {
     }
   }
 
+  const saveRateLimitConfig = async () => {
+    if (!rateLimitConfig || rateLimitLoading || rateLimitLoadError) {
+      show('请先成功加载请求限流配置后再保存', { variant: 'error' })
+      return
+    }
+
+    setRateLimitSaving(true)
+    try {
+      const response = await apiPatch<{
+        success: boolean
+        data: RateLimitAdminConfig
+      }>(RATE_LIMIT_ADMIN_CONFIG_PATH, rateLimitConfig)
+
+      clearApiCache(RATE_LIMIT_ADMIN_CONFIG_CACHE_KEY)
+      setRateLimitConfig(response.data)
+      show('请求限流配置已保存')
+    } catch (error) {
+      console.error('Save rate limit config failed:', error)
+      show(error instanceof Error ? error.message : '请求限流配置保存失败', { variant: 'error' })
+    } finally {
+      setRateLimitSaving(false)
+    }
+  }
+
+  const resetRateLimitConfig = async () => {
+    setRateLimitResetting(true)
+    try {
+      const response = await apiPost<{
+        success: boolean
+        data: RateLimitAdminConfig
+      }>('/api/admin/rate-limits/config/reset')
+
+      clearApiCache(RATE_LIMIT_ADMIN_CONFIG_CACHE_KEY)
+      setRateLimitConfig(response.data)
+      setRateLimitLoadError(false)
+      show('请求限流配置已恢复默认')
+    } catch (error) {
+      console.error('Reset rate limit config failed:', error)
+      show(error instanceof Error ? error.message : '请求限流配置重置失败', { variant: 'error' })
+    } finally {
+      setRateLimitResetting(false)
+    }
+  }
+
   const setField = <K extends keyof EmailVerificationForm>(
     key: K,
     value: EmailVerificationForm[K]
   ) => {
     setForm((current) => ({ ...current, [key]: value }))
+  }
+
+  const setRateLimitField = <K extends keyof RateLimitAdminConfig[RateLimitBucketId]>(
+    bucket: RateLimitBucketId,
+    key: K,
+    value: RateLimitAdminConfig[RateLimitBucketId][K]
+  ) => {
+    setRateLimitConfig((current) =>
+      current
+        ? {
+            ...current,
+            [bucket]: {
+              ...current[bucket],
+              [key]: value,
+            },
+          }
+        : current
+    )
   }
 
   return (
@@ -291,6 +421,145 @@ const AdminSettings = () => {
                   <Save size={14} />
                 )}
                 {registrationSaving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-5 border border-border bg-surface p-5">
+        <div className="flex items-center gap-2 border-b border-border pb-3">
+          <Shield size={18} className="text-brand-gold" />
+          <h2 className="text-base font-semibold text-text-primary">请求限流</h2>
+        </div>
+
+        {rateLimitLoading ? (
+          <div className="flex items-center gap-2 text-sm text-text-secondary">
+            <Loader2 size={16} className="animate-spin" />
+            正在加载请求限流配置...
+          </div>
+        ) : rateLimitLoadError || !rateLimitConfig ? (
+          <div className="flex flex-col gap-3 text-sm text-text-secondary" role="alert">
+            <p>请求限流配置加载失败，未加载成功前无法保存设置。</p>
+            <button
+              type="button"
+              onClick={() => void loadRateLimitConfig()}
+              className="theme-button-secondary inline-flex w-fit items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
+            >
+              <RefreshCw size={14} />
+              重试
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-text-secondary">
+              修改后会立即替换当前进程内的限流窗口；如部署多实例，需要分别生效或配合后续共享存储。
+            </p>
+
+            <div className="grid gap-3">
+              {RATE_LIMIT_BUCKET_LABELS.map((bucket) => {
+                const config = rateLimitConfig[bucket.id]
+                return (
+                  <div
+                    key={bucket.id}
+                    className="grid gap-3 border border-border p-4 lg:grid-cols-12"
+                  >
+                    <div className="lg:col-span-3">
+                      <p className="text-sm font-semibold text-text-primary">{bucket.label}</p>
+                      <p className="mt-1 text-xs leading-5 text-text-muted">{bucket.description}</p>
+                    </div>
+
+                    <label className="flex items-center gap-2 text-sm text-text-secondary lg:col-span-2">
+                      <input
+                        type="checkbox"
+                        checked={config.enabled}
+                        onChange={(event) =>
+                          setRateLimitField(bucket.id, 'enabled', event.target.checked)
+                        }
+                        className="h-4 w-4 rounded border-border"
+                      />
+                      启用
+                    </label>
+
+                    <label className="block lg:col-span-2">
+                      <span className="mb-1 block text-xs font-medium text-text-muted">
+                        窗口（秒）
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={Math.round(config.windowMs / 1000)}
+                        onChange={(event) => {
+                          const value = parsePositiveInteger(event.target.value)
+                          if (value) setRateLimitField(bucket.id, 'windowMs', value * 1000)
+                        }}
+                        step={1}
+                        className="theme-input w-full rounded px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block lg:col-span-2">
+                      <span className="mb-1 block text-xs font-medium text-text-muted">
+                        最大请求数
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={config.max}
+                        onChange={(event) => {
+                          const value = parsePositiveInteger(event.target.value)
+                          if (value) setRateLimitField(bucket.id, 'max', value)
+                        }}
+                        step={1}
+                        className="theme-input w-full rounded px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block lg:col-span-3">
+                      <span className="mb-1 block text-xs font-medium text-text-muted">
+                        429 提示
+                      </span>
+                      <input
+                        type="text"
+                        value={config.message}
+                        onChange={(event) =>
+                          setRateLimitField(bucket.id, 'message', event.target.value)
+                        }
+                        className="theme-input w-full rounded px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="flex flex-col gap-3 md:flex-row md:justify-end">
+              <button
+                type="button"
+                onClick={resetRateLimitConfig}
+                disabled={rateLimitResetting || rateLimitSaving}
+                className="theme-button-secondary inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+              >
+                {rateLimitResetting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={14} />
+                )}
+                {rateLimitResetting ? '重置中...' : '恢复默认'}
+              </button>
+
+              <button
+                type="button"
+                onClick={saveRateLimitConfig}
+                disabled={rateLimitSaving || rateLimitResetting}
+                className="theme-button-primary inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+              >
+                {rateLimitSaving ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Save size={14} />
+                )}
+                {rateLimitSaving ? '保存中...' : '保存请求限流'}
               </button>
             </div>
           </div>

@@ -11,12 +11,83 @@
 
 import { Router } from 'express'
 import { prisma } from '../prisma'
-import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/auth'
+import {
+  requireAuth,
+  requireAdmin,
+  requireSuperAdmin,
+  AuthenticatedRequest,
+} from '../middleware/auth'
+import { applyRateLimitConfig } from '../middleware/rateLimiter'
 import { diskMonitor } from '../services/diskMonitor.service'
 import { variantGenerator } from '../services/variantGenerator'
 import { cloudSyncService } from '../services/cloudSyncService'
+import {
+  RateLimitConfigValidationError,
+  rateLimitConfigService,
+} from '../services/rateLimitConfig.service'
 
 const router = Router()
+
+// ============================================================================
+// 请求限流 API（支持动态配置）
+// ============================================================================
+
+router.get('/rate-limits/config', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: rateLimitConfigService.getConfig(),
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('[Admin/RateLimit] Error getting config:', error)
+    res.status(500).json({ success: false, error: '获取请求限流配置失败' })
+  }
+})
+
+router.patch(
+  '/rate-limits/config',
+  requireAuth,
+  requireSuperAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const config = await rateLimitConfigService.updateConfig(req.body)
+      applyRateLimitConfig(config)
+
+      console.log(`[Admin/RateLimit] Config updated by super admin: ${req.authUser?.uid}`)
+
+      res.json({
+        success: true,
+        data: config,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      if (error instanceof RateLimitConfigValidationError) {
+        res.status(400).json({ success: false, error: error.message })
+        return
+      }
+
+      console.error('[Admin/RateLimit] Error updating config:', error)
+      res.status(500).json({ success: false, error: '更新请求限流配置失败' })
+    }
+  }
+)
+
+router.post('/rate-limits/config/reset', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    const config = await rateLimitConfigService.resetConfig()
+    applyRateLimitConfig(config)
+
+    res.json({
+      success: true,
+      data: config,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('[Admin/RateLimit] Error resetting config:', error)
+    res.status(500).json({ success: false, error: '重置请求限流配置失败' })
+  }
+})
 
 // ============================================================================
 // 📊 磁盘监控 API（支持动态配置）

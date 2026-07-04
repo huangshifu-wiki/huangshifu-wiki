@@ -1,13 +1,48 @@
 import rateLimit, {
+  MemoryStore,
   ipKeyGenerator,
   type Options as RateLimitLibraryOptions,
   type ValueDeterminingMiddleware,
 } from 'express-rate-limit'
+import type { NextFunction, RequestHandler, Response } from 'express'
 import type { AuthenticatedRequest } from './auth'
 import { isProductionRuntime, isTestRuntime } from '../utils/runtimeEnv'
+import {
+  DEFAULT_RATE_LIMIT_CONFIG,
+  RATE_LIMIT_BUCKETS,
+  type RateLimitAdminConfig,
+  type RateLimitBucketId,
+} from '../../lib/rateLimitConfig'
 
 type RateLimitOptions = Partial<RateLimitLibraryOptions>
 type RateLimitRequest = Parameters<ValueDeterminingMiddleware<string>>[0]
+
+type RateLimitBucketDefinition = {
+  keyGenerator?: RateLimitOptions['keyGenerator']
+}
+
+const rateLimitBucketDefinitions: Record<RateLimitBucketId, RateLimitBucketDefinition> = {
+  auth: { keyGenerator: extractUidOrIp },
+  emailVerification: { keyGenerator: extractUidOrIp },
+  passwordResetRequest: { keyGenerator: extractUidOrIp },
+  passwordResetConfirm: { keyGenerator: extractUidOrIp },
+  global: { keyGenerator: extractUidOrIp },
+  search: {},
+  upload: { keyGenerator: extractUidOrIp },
+  wikiWrite: { keyGenerator: extractUidOrIp },
+  postWrite: { keyGenerator: extractUidOrIp },
+  galleryWrite: { keyGenerator: extractUidOrIp },
+  profile: { keyGenerator: extractUidOrIp },
+}
+
+let currentRateLimitConfig: RateLimitAdminConfig = cloneRateLimitConfig(DEFAULT_RATE_LIMIT_CONFIG)
+const limiterInstances = new Map<
+  RateLimitBucketId,
+  {
+    handler: RequestHandler
+    store: MemoryStore
+  }
+>()
 
 function extractUidOrIp(req: RateLimitRequest): string {
   const authReq = req as AuthenticatedRequest
@@ -24,127 +59,102 @@ export function isRateLimitDisabledInDevelopment(): boolean {
   )
 }
 
-function createRateLimiter(options: RateLimitOptions) {
-  return rateLimit({
-    ...options,
-    skip: (req, res) => {
-      if (isRateLimitDisabledInDevelopment()) {
-        return true
-      }
-
-      return options.skip?.(req, res) ?? false
-    },
-  })
+function cloneRateLimitConfig(config: RateLimitAdminConfig): RateLimitAdminConfig {
+  return RATE_LIMIT_BUCKETS.reduce((result, bucket) => {
+    result[bucket] = { ...config[bucket] }
+    return result
+  }, {} as RateLimitAdminConfig)
 }
 
-export const authRateLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { error: '请求过于频繁，请15分钟后再试' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: extractUidOrIp,
-})
+function createRateLimiter(bucket: RateLimitBucketId) {
+  const config = currentRateLimitConfig[bucket]
+  const definition = rateLimitBucketDefinitions[bucket]
+  const store = new MemoryStore()
+  const options: RateLimitOptions = {
+    windowMs: config.windowMs,
+    max: config.max,
+    message: { error: config.message },
+    standardHeaders: true,
+    legacyHeaders: false,
+    store,
+    ...(definition.keyGenerator ? { keyGenerator: definition.keyGenerator } : {}),
+    handler: (_req, res) => {
+      res.status(429).json({ error: config.message })
+    },
+  }
 
-export const emailVerificationLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: '邮箱验证请求过于频繁，请15分钟后再试' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: extractUidOrIp,
-})
+  return {
+    handler: rateLimit({
+      ...options,
+      skip: (req, res) => {
+        if (isRateLimitDisabledInDevelopment()) {
+          return true
+        }
 
-export const passwordResetRequestLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: '密码找回请求过于频繁，请15分钟后再试' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: extractUidOrIp,
-})
+        if (!currentRateLimitConfig[bucket].enabled) {
+          return true
+        }
 
-export const passwordResetConfirmLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { error: '密码重置确认过于频繁，请15分钟后再试' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: extractUidOrIp,
-})
+        return options.skip?.(req, res) ?? false
+      },
+    }),
+    store,
+  }
+}
 
-export const globalLimiter = createRateLimiter({
-  windowMs: 60 * 1000,
-  max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: extractUidOrIp,
-  handler: (_req, res) => {
-    res.status(429).json({ error: '请求过于频繁，请稍后再试' })
-  },
-})
+function shouldRebuildLimiter(bucket: RateLimitBucketId, nextConfig: RateLimitAdminConfig) {
+  const current = currentRateLimitConfig[bucket]
+  const next = nextConfig[bucket]
 
-export const searchLimiter = createRateLimiter({
-  windowMs: 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (_req, res) => {
-    res.status(429).json({ error: '搜索过于频繁，请稍后再试' })
-  },
-})
+  return (
+    current.enabled !== next.enabled ||
+    current.windowMs !== next.windowMs ||
+    current.max !== next.max ||
+    current.message !== next.message
+  )
+}
 
-export const uploadLimiter = createRateLimiter({
-  windowMs: 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: extractUidOrIp,
-  handler: (_req, res) => {
-    res.status(429).json({ error: '上传过于频繁，请稍后再试' })
-  },
-})
+function rebuildLimiter(bucket: RateLimitBucketId) {
+  limiterInstances.get(bucket)?.store.shutdown()
+  limiterInstances.set(bucket, createRateLimiter(bucket))
+}
 
-export const wikiWriteLimiter = createRateLimiter({
-  windowMs: 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: extractUidOrIp,
-  handler: (_req, res) => {
-    res.status(429).json({ error: 'Wiki 编辑过于频繁，请稍后再试' })
-  },
-})
+function createRateLimiterProxy(bucket: RateLimitBucketId): RequestHandler {
+  return ((req: RateLimitRequest, res: Response, next: NextFunction) => {
+    const limiter = limiterInstances.get(bucket)
+    if (!limiter) {
+      next()
+      return
+    }
 
-export const postWriteLimiter = createRateLimiter({
-  windowMs: 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: extractUidOrIp,
-  handler: (_req, res) => {
-    res.status(429).json({ error: '发帖过于频繁，请稍后再试' })
-  },
-})
+    return limiter.handler(req, res, next)
+  }) as RequestHandler
+}
 
-export const galleryWriteLimiter = createRateLimiter({
-  windowMs: 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: extractUidOrIp,
-  handler: (_req, res) => {
-    res.status(429).json({ error: '图集操作过于频繁，请稍后再试' })
-  },
-})
+export function applyRateLimitConfig(config: RateLimitAdminConfig): RateLimitAdminConfig {
+  const nextConfig = cloneRateLimitConfig(config)
+  const bucketsToRebuild = RATE_LIMIT_BUCKETS.filter(
+    (bucket) => !limiterInstances.has(bucket) || shouldRebuildLimiter(bucket, nextConfig)
+  )
 
-export const profileLimiter = createRateLimiter({
-  windowMs: 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: extractUidOrIp,
-  handler: (_req, res) => {
-    res.status(429).json({ error: '资料修改过于频繁，请稍后再试' })
-  },
-})
+  currentRateLimitConfig = nextConfig
+  for (const bucket of bucketsToRebuild) {
+    rebuildLimiter(bucket)
+  }
+
+  return cloneRateLimitConfig(currentRateLimitConfig)
+}
+
+applyRateLimitConfig(DEFAULT_RATE_LIMIT_CONFIG)
+
+export const authRateLimiter = createRateLimiterProxy('auth')
+export const emailVerificationLimiter = createRateLimiterProxy('emailVerification')
+export const passwordResetRequestLimiter = createRateLimiterProxy('passwordResetRequest')
+export const passwordResetConfirmLimiter = createRateLimiterProxy('passwordResetConfirm')
+export const globalLimiter = createRateLimiterProxy('global')
+export const searchLimiter = createRateLimiterProxy('search')
+export const uploadLimiter = createRateLimiterProxy('upload')
+export const wikiWriteLimiter = createRateLimiterProxy('wikiWrite')
+export const postWriteLimiter = createRateLimiterProxy('postWrite')
+export const galleryWriteLimiter = createRateLimiterProxy('galleryWrite')
+export const profileLimiter = createRateLimiterProxy('profile')

@@ -211,6 +211,12 @@ export interface RegistrationConfig {
   enabled: boolean
 }
 
+export type {
+  RateLimitAdminConfig,
+  RateLimitBucketConfig,
+  RateLimitBucketId,
+} from '../lib/rateLimitConfig'
+
 // ============================================================================
 // 错误类型定义
 // ============================================================================

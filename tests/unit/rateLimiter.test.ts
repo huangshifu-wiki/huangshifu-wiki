@@ -2,9 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const rateLimitMock = vi.fn((options) => options)
 const ipKeyGeneratorMock = vi.fn((ip: string) => ip)
+const shutdownMock = vi.fn()
+const memoryStoreInstances: Array<{ shutdown: ReturnType<typeof vi.fn> }> = []
+
+class MemoryStoreMock {
+  shutdown = shutdownMock
+
+  constructor() {
+    memoryStoreInstances.push(this)
+  }
+}
 
 vi.mock('express-rate-limit', () => ({
   default: rateLimitMock,
+  MemoryStore: MemoryStoreMock,
   ipKeyGenerator: ipKeyGeneratorMock,
 }))
 
@@ -18,6 +29,8 @@ describe('rateLimiter', () => {
     vi.resetModules()
     rateLimitMock.mockClear()
     ipKeyGeneratorMock.mockClear()
+    shutdownMock.mockClear()
+    memoryStoreInstances.length = 0
     process.env.NODE_ENV = 'development'
     delete process.env.DEV_DISABLE_RATE_LIMIT
     delete process.env.VITEST
@@ -129,5 +142,40 @@ describe('rateLimiter', () => {
     expect(requestLimiterOptions).toBeDefined()
     expect(confirmLimiterOptions).toBeDefined()
     expect(requestLimiterOptions).not.toBe(confirmLimiterOptions)
+  })
+
+  it('shuts down replaced memory stores when config changes', async () => {
+    const { applyRateLimitConfig } = await import('../../src/server/middleware/rateLimiter')
+    const { DEFAULT_RATE_LIMIT_CONFIG } = await import('../../src/lib/rateLimitConfig')
+
+    expect(memoryStoreInstances).toHaveLength(11)
+
+    applyRateLimitConfig({
+      ...DEFAULT_RATE_LIMIT_CONFIG,
+      global: {
+        ...DEFAULT_RATE_LIMIT_CONFIG.global,
+        max: DEFAULT_RATE_LIMIT_CONFIG.global.max + 1,
+      },
+    })
+
+    expect(memoryStoreInstances).toHaveLength(12)
+    expect(shutdownMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('rebuilds limiters when enabled changes so counters reset on re-enable', async () => {
+    const { applyRateLimitConfig } = await import('../../src/server/middleware/rateLimiter')
+    const { DEFAULT_RATE_LIMIT_CONFIG } = await import('../../src/lib/rateLimitConfig')
+
+    applyRateLimitConfig({
+      ...DEFAULT_RATE_LIMIT_CONFIG,
+      global: {
+        ...DEFAULT_RATE_LIMIT_CONFIG.global,
+        enabled: false,
+      },
+    })
+    applyRateLimitConfig(DEFAULT_RATE_LIMIT_CONFIG)
+
+    expect(memoryStoreInstances).toHaveLength(13)
+    expect(shutdownMock).toHaveBeenCalledTimes(2)
   })
 })

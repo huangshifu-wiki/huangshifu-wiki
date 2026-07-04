@@ -21,6 +21,7 @@ import { authMiddleware } from './src/server/middleware/auth'
 import { csrfMiddleware } from './src/server/middleware/csrf'
 import { requestLoggerMiddleware } from './src/server/middleware/requestLogger'
 import {
+  applyRateLimitConfig,
   globalLimiter,
   isRateLimitDisabledInDevelopment,
 } from './src/server/middleware/rateLimiter'
@@ -51,6 +52,7 @@ import { registerAdminVariantsRoutes } from './src/server/routes/admin.variants.
 import { registerAdminMediaHealthRoutes } from './src/server/routes/admin.media-health.routes'
 import { cloudSyncService } from './src/server/services/cloudSyncService'
 import { variantGenerator } from './src/server/services/variantGenerator'
+import { rateLimitConfigService } from './src/server/services/rateLimitConfig.service'
 import { isSemanticSearchEnabled } from './src/server/utils'
 import {
   injectHtmlBootstrapState,
@@ -217,6 +219,8 @@ if (CORS_ORIGIN) {
     })
   )
 }
+
+applyRateLimitConfig(await rateLimitConfigService.loadConfigFromDB())
 
 app.use(globalLimiter)
 
