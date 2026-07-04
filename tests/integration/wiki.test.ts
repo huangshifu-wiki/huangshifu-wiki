@@ -17,7 +17,13 @@
 import { describe, beforeEach, afterEach, it, expect } from 'vitest'
 import request from 'supertest'
 import { app } from '../../server'
-import { prisma, createTestUser, createTestToken, createTestWikiPage } from './setup'
+import {
+  prisma,
+  createTestUser,
+  createTestToken,
+  createTestWikiPage,
+  ensureTestWikiCategory,
+} from './setup'
 import type { CreateTestWikiPageInput } from './setup'
 
 describe('Wiki API - 百科接口测试', () => {
@@ -99,6 +105,8 @@ describe('Wiki API - 百科接口测试', () => {
     // 创建认证 token
     userToken = await createTestToken(testUser.user.uid, testUser.user.role)
     adminToken = await createTestToken(adminUser.user.uid, adminUser.user.role)
+
+    await ensureTestWikiCategory('general', 'General')
   })
 
   /**
@@ -279,6 +287,8 @@ describe('Wiki API - 百科接口测试', () => {
      * 预期结果：只包含指定标签的页面
      */
     it('应该支持按标签筛选', async () => {
+      await ensureTestWikiCategory('tech', 'Tech')
+
       // 创建带标签的页面
       await prisma.wikiPage.create({
         data: {
@@ -606,6 +616,34 @@ describe('Wiki API - 百科接口测试', () => {
       expect(adminResponse.status).toBe(201)
       expect(userResponse.body.page.status).toBe('draft')
       expect(adminResponse.body.page.status).toBe('published')
+    })
+
+    it('普通用户不能提交后续改为仅管理员编辑分类的草稿', async () => {
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        testUser.user.email,
+        testUser.plainPassword
+      )
+      const categoryId = 'test-admin-only-submit'
+      await ensureTestWikiCategory(categoryId, 'Submit Admin Only')
+      const wikiPage = await createCurrentUserWikiPage({
+        slug: 'test-admin-only-submit-page',
+        title: 'Admin Only Submit Page',
+        category: categoryId,
+        status: 'draft',
+      })
+      await prisma.wikiCategory.update({
+        where: { id: categoryId },
+        data: { requiresAdminEdit: true },
+      })
+
+      const response = await agent
+        .post(`/api/wiki/${wikiPage.slug}/submit`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+
+      expect(response.status).toBe(403)
+      expect(response.body.error).toBe('只有管理员可以编辑该分类内容')
+      const unchangedPage = await prisma.wikiPage.findUnique({ where: { slug: wikiPage.slug } })
+      expect(unchangedPage?.status).toBe('draft')
     })
 
     /**
@@ -1213,6 +1251,35 @@ describe('Wiki API - 百科接口测试', () => {
       )
       expect(deletedItem).toBeDefined()
       expect(deletedItem.deletionReason).toBe('后台管理删除重复条目')
+    })
+
+    it('分类下只有回收站页面时也不能删除分类', async () => {
+      const { agent, xsrfToken } = await createAuthenticatedAgent(
+        adminUser.user.email,
+        adminUser.plainPassword
+      )
+      const categoryId = 'test-soft-deleted-page-category'
+      await ensureTestWikiCategory(categoryId, 'Soft Deleted Page Category')
+      const wikiPage = await createTestWikiPage({
+        slug: 'test-soft-deleted-category-page',
+        title: 'Soft Deleted Category Page',
+        category: categoryId,
+        authorUid: testUser.user.uid,
+        status: 'published',
+      })
+      await prisma.wikiPage.update({
+        where: { id: wikiPage.id },
+        data: { deletedAt: new Date(), deletedBy: adminUser.user.uid },
+      })
+
+      const response = await agent
+        .delete(`/api/admin/wiki-categories/${categoryId}`)
+        .set('X-XSRF-TOKEN', xsrfToken)
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('包括回收站')
+      const category = await prisma.wikiCategory.findUnique({ where: { id: categoryId } })
+      expect(category?.deletedAt).toBeNull()
     })
   })
 

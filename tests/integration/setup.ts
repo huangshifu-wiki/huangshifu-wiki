@@ -137,6 +137,7 @@ export async function cleanupDatabase() {
     'EmailVerificationToken',
     'Post',
     'WikiPage',
+    'WikiCategory',
     'User',
   ]
 
@@ -230,21 +231,30 @@ export interface CreateTestWikiPageInput {
   authorUid: string
 }
 
+export async function ensureTestWikiCategory(id: string, name?: string) {
+  return prisma.wikiCategory.upsert({
+    where: { id },
+    update: {
+      ...(name === undefined ? {} : { name }),
+      deletedAt: null,
+      deletedBy: null,
+    },
+    create: {
+      id,
+      name: name ?? id,
+      description: '',
+      order: 1000,
+      requiresAdminEdit: false,
+    },
+  })
+}
+
 export async function createTestWikiPage(input: CreateTestWikiPageInput) {
   const slug = input.slug || `test-wiki-${Date.now()}`
   const title = input.title || `Test Wiki Page ${Date.now()}`
   const category = input.category || 'general'
 
-  const legacyWikiCategoryTable = await prisma.$queryRaw<Array<{ exists: boolean }>>`
-    SELECT to_regclass('"WikiCategory"') IS NOT NULL AS "exists"
-  `
-  if (legacyWikiCategoryTable[0]?.exists) {
-    await prisma.$executeRaw`
-      INSERT INTO "WikiCategory" ("id", "name", "description")
-      VALUES (${category}, ${category}, '')
-      ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name"
-    `
-  }
+  await ensureTestWikiCategory(category)
 
   const page = await prisma.wikiPage.create({
     data: {

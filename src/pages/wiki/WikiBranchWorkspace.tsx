@@ -9,10 +9,12 @@ import { splitTagsInput } from '../../lib/contentUtils'
 import { formatDate } from '../../lib/dateUtils'
 import type { WikiItem, WikiBranchItem, WikiRevisionItem, WikiPullRequestItem } from './types'
 import { getBranchStatusText } from './types'
+import { DEFAULT_WIKI_CATEGORY_ID, useWikiCategories } from '../../hooks/useWikiCategories'
 
 const WikiBranchWorkspace = () => {
   const { slug } = useParams()
   const { user, isAdmin, isBanned } = useAuth()
+  const { categories, canEditCategory } = useWikiCategories()
 
   const [page, setPage] = useState<WikiItem | null>(null)
   const [branch, setBranch] = useState<WikiBranchItem | null>(null)
@@ -27,7 +29,7 @@ const WikiBranchWorkspace = () => {
   const { show } = useToast()
 
   const [title, setTitle] = useState('')
-  const [category, setCategory] = useState('biography')
+  const [category, setCategory] = useState(DEFAULT_WIKI_CATEGORY_ID)
   const [eventDate, setEventDate] = useState('')
   const [tags, setTags] = useState('')
   const [content, setContent] = useState('')
@@ -40,7 +42,7 @@ const WikiBranchWorkspace = () => {
   ) => {
     if (revision) {
       setTitle(revision.title || '')
-      setCategory(revision.category || fallbackPage?.category || 'biography')
+      setCategory(revision.category || fallbackPage?.category || DEFAULT_WIKI_CATEGORY_ID)
       setEventDate(revision.eventDate || '')
       setTags((revision.tags || []).join(', '))
       setContent(revision.content || '')
@@ -48,7 +50,7 @@ const WikiBranchWorkspace = () => {
     }
     if (fallbackPage) {
       setTitle(fallbackPage.title || '')
-      setCategory(fallbackPage.category || 'biography')
+      setCategory(fallbackPage.category || DEFAULT_WIKI_CATEGORY_ID)
       setEventDate(fallbackPage.eventDate || '')
       setTags((fallbackPage.tags || []).join(', '))
       setContent(fallbackPage.content || '')
@@ -128,6 +130,10 @@ const WikiBranchWorkspace = () => {
       show('请先填写标题、分类和内容', { variant: 'error' })
       return
     }
+    if (!canEditCategory(category, isAdmin)) {
+      show('该分类仅管理员可编辑', { variant: 'error' })
+      return
+    }
     try {
       setSavingRevision(true)
       await apiPost(`/api/wiki/branches/${branch.id}/revisions`, {
@@ -175,6 +181,10 @@ const WikiBranchWorkspace = () => {
     if (!branch || branch.status !== 'conflict' || resolvingConflict || isBanned) return
     if (!title.trim() || !content.trim() || !category.trim()) {
       show('请先填写标题、分类和内容', { variant: 'error' })
+      return
+    }
+    if (!canEditCategory(category, isAdmin)) {
+      show('该分类仅管理员可编辑', { variant: 'error' })
       return
     }
     try {
@@ -314,11 +324,11 @@ const WikiBranchWorkspace = () => {
                   onChange={(event) => setCategory(event.target.value)}
                   className="theme-input w-full mt-1 px-4 py-3 rounded text-sm"
                 >
-                  <option value="biography">人物介绍</option>
-                  <option value="music">音乐作品</option>
-                  <option value="album">专辑一览</option>
-                  <option value="timeline">时间轴</option>
-                  <option value="event">活动记录</option>
+                  {categories.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

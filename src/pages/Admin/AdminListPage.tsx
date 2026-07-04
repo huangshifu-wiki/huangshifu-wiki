@@ -4,6 +4,7 @@ import {
   Ban,
   Book,
   CheckCircle,
+  Edit3,
   Image as ImageIcon,
   Layers,
   Megaphone,
@@ -42,7 +43,14 @@ import { usePagination } from '../../hooks/usePagination'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
 
-type ListType = 'wiki' | 'music' | 'posts' | 'galleries' | 'sections' | 'announcements'
+type ListType =
+  | 'wiki'
+  | 'wiki-categories'
+  | 'music'
+  | 'posts'
+  | 'galleries'
+  | 'sections'
+  | 'announcements'
 
 type ColumnKey =
   | 'details'
@@ -56,6 +64,7 @@ type ColumnKey =
   | 'order'
   | 'ids'
   | 'lifecycle'
+  | 'permissions'
   | 'actions'
 
 type ListConfig = {
@@ -70,6 +79,9 @@ type AdminListResponse = {
   data: AdminDataItem[]
   total?: number
 }
+
+const WIKI_CATEGORIES_ADMIN_PATH = '/api/admin/wiki-categories'
+const WIKI_CATEGORIES_PUBLIC_PATH = '/api/wiki/categories'
 
 const configMap: Record<ListType, ListConfig> = {
   wiki: {
@@ -86,6 +98,19 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
+  },
+  'wiki-categories': {
+    title: '百科分类',
+    icon: Layers,
+    apiPath: 'wiki-categories',
+    columns: [
+      { key: 'details', label: '分类', className: 'min-w-[260px]' },
+      { key: 'order', label: '排序', className: 'min-w-[90px]' },
+      { key: 'permissions', label: '权限', className: 'min-w-[140px]' },
+      { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
+      { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
+    ],
+    hasCreate: true,
   },
   music: {
     title: '音乐管理',
@@ -309,6 +334,7 @@ const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementT
           {type === 'galleries' && `ID: ${toText(item.id)}`}
           {type === 'music' && `docId: ${toText(item.docId)}`}
           {type === 'sections' && `ID: ${toText(item.id)}`}
+          {type === 'wiki-categories' && `ID: ${toText(item.id)}`}
           {type === 'announcements' && `ID: ${toText(item.id)}`}
         </p>
       </div>
@@ -478,12 +504,28 @@ const renderCell = (
   if (key === 'link') return renderLink(item)
   if (key === 'order')
     return <span className="text-sm font-medium text-text-primary">{toNumber(item.order)}</span>
+  if (key === 'permissions')
+    return item.requiresAdminEdit
+      ? renderBadge('仅管理员编辑', 'theme-status-warning')
+      : renderBadge('开放协作', 'theme-status-success')
   if (key === 'ids') return renderExternalSources(item)
   if (key === 'lifecycle') return renderDateBlock(item)
   return null
 }
 
 const getAdminItemId = (item: AdminDataItem) => String(item.docId || item.id || item.uid || '')
+
+const getWikiCategoryPayload = (item: AdminDataItem) => ({
+  name: item.name?.trim(),
+  description: item.description?.trim(),
+  order: Number.isFinite(item.order) ? item.order : 0,
+  requiresAdminEdit: Boolean(item.requiresAdminEdit),
+})
+
+const invalidateWikiCategoryCaches = () => {
+  invalidateApiCacheByPrefix(WIKI_CATEGORIES_ADMIN_PATH)
+  invalidateApiCacheByPrefix(WIKI_CATEGORIES_PUBLIC_PATH)
+}
 
 export const AdminListPage = ({ type }: { type: ListType }) => {
   const cfg = configMap[type]
@@ -499,6 +541,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const [batchDisplaySaving, setBatchDisplaySaving] = useState(false)
   const [musicImportOpen, setMusicImportOpen] = useState(false)
   const [songCreateOpen, setSongCreateOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<AdminDataItem | null>(null)
   const [batchDisplayForm, setBatchDisplayForm] = useState({
     displayAlbumMode: 'linked' as 'linked' | 'manual' | 'none',
     manualAlbumName: '',
@@ -510,6 +553,15 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const [newItem, setNewItem] = useState<any>({})
   const isMusicList = type === 'music'
   const musicPagination = usePagination({ totalCount: musicTotal, defaultPageSize: 50 })
+
+  const invalidateCurrentDataCaches = () => {
+    if (type === 'wiki-categories') {
+      invalidateWikiCategoryCaches()
+      return
+    }
+
+    invalidateApiCacheByPrefix(`/api/admin/${cfg.apiPath}`)
+  }
 
   const fetchData = async () => {
     setLoading(true)
@@ -679,7 +731,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         await apiDelete(deletePath)
       }
       show('已删除', { variant: 'success' })
-      invalidateApiCacheByPrefix(`/api/admin/${cfg.apiPath}`)
+      invalidateCurrentDataCaches()
     } catch (e) {
       setData(previousData)
       show(e instanceof Error ? e.message : '删除失败', { variant: 'error' })
@@ -702,7 +754,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         )
       )
       show('已恢复', { variant: 'success' })
-      invalidateApiCacheByPrefix(`/api/admin/${cfg.apiPath}`)
+      invalidateCurrentDataCaches()
     } catch (e) {
       setData(previousData)
       show(e instanceof Error ? e.message : '恢复失败', { variant: 'error' })
@@ -726,7 +778,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     try {
       await apiDelete(`/api/admin/${cfg.apiPath}/${id}/permanent`)
       show('已彻底删除', { variant: 'success' })
-      invalidateApiCacheByPrefix(`/api/admin/${cfg.apiPath}`)
+      invalidateCurrentDataCaches()
     } catch (e) {
       setData(previousData)
       show(e instanceof Error ? e.message : '彻底删除失败', { variant: 'error' })
@@ -743,6 +795,11 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           description: newItem.description?.trim(),
           order: Number.isFinite(newItem.order) ? newItem.order : 0,
         })
+      } else if (type === 'wiki-categories') {
+        await apiPost(WIKI_CATEGORIES_ADMIN_PATH, {
+          id: newItem.id?.trim(),
+          ...getWikiCategoryPayload(newItem),
+        })
       } else if (type === 'announcements') {
         await apiPost('/api/announcements', {
           content: newItem.content?.trim(),
@@ -751,10 +808,28 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         })
       }
       setNewItem({})
+      if (type === 'wiki-categories') {
+        invalidateCurrentDataCaches()
+      }
       await fetchData()
       show('创建成功', { variant: 'success' })
     } catch (e) {
       show('创建失败', { variant: 'error' })
+    }
+  }
+
+  const handleUpdateWikiCategory = async () => {
+    if (type !== 'wiki-categories' || !editingCategory?.id) return
+    try {
+      await apiPatch(`${WIKI_CATEGORIES_ADMIN_PATH}/${editingCategory.id}`, {
+        ...getWikiCategoryPayload(editingCategory),
+      })
+      setEditingCategory(null)
+      invalidateCurrentDataCaches()
+      await fetchData()
+      show('更新成功', { variant: 'success' })
+    } catch (e) {
+      show(e instanceof Error ? e.message : '更新失败', { variant: 'error' })
     }
   }
 
@@ -804,6 +879,16 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           >
             {item.active ? <CheckCircle size={14} /> : <XCircle size={14} />}
             {item.active ? '禁用' : '启用'}
+          </button>
+        )}
+        {type === 'wiki-categories' && !item.isDeleted && !isPending && (
+          <button
+            onClick={() => setEditingCategory(item)}
+            disabled={isPending}
+            className={WARNING_BUTTON_CLASSES}
+          >
+            <Edit3 size={14} />
+            编辑
           </button>
         )}
         {!isPending && item.isDeleted ? (
@@ -996,6 +1081,49 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                   />
                 </>
               )}
+              {type === 'wiki-categories' && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="分类 ID"
+                    value={newItem.id || ''}
+                    onChange={(e) => setNewItem({ ...newItem, id: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="名称"
+                    value={newItem.name || ''}
+                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="描述"
+                    value={newItem.description || ''}
+                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                  <input
+                    type="number"
+                    placeholder="排序"
+                    value={newItem.order || 0}
+                    onChange={(e) => setNewItem({ ...newItem, order: Number(e.target.value) })}
+                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  />
+                  <label className="flex items-center gap-2 rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(newItem.requiresAdminEdit)}
+                      onChange={(e) =>
+                        setNewItem({ ...newItem, requiresAdminEdit: e.target.checked })
+                      }
+                      className="accent-brand-gold"
+                    />
+                    仅管理员编辑
+                  </label>
+                </>
+              )}
               {type === 'announcements' && (
                 <>
                   <input
@@ -1019,6 +1147,68 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                 className="rounded bg-brand-gold-dark px-5 py-2 text-sm font-medium text-white transition-all hover:bg-brand-gold"
               >
                 添加
+              </button>
+            </div>
+          </div>
+        )}
+
+        {type === 'wiki-categories' && editingCategory && (
+          <div className="rounded border border-border bg-surface p-5">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <Edit3 size={16} /> 编辑分类
+            </h3>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_120px_160px_auto_auto]">
+              <input
+                type="text"
+                value={editingCategory.name || ''}
+                onChange={(event) =>
+                  setEditingCategory({ ...editingCategory, name: event.target.value })
+                }
+                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+              />
+              <input
+                type="text"
+                value={editingCategory.description || ''}
+                onChange={(event) =>
+                  setEditingCategory({ ...editingCategory, description: event.target.value })
+                }
+                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+              />
+              <input
+                type="number"
+                value={toNumber(editingCategory.order)}
+                onChange={(event) =>
+                  setEditingCategory({ ...editingCategory, order: Number(event.target.value) })
+                }
+                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+              />
+              <label className="flex items-center gap-2 rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-secondary">
+                <input
+                  type="checkbox"
+                  checked={Boolean(editingCategory.requiresAdminEdit)}
+                  onChange={(event) =>
+                    setEditingCategory({
+                      ...editingCategory,
+                      requiresAdminEdit: event.target.checked,
+                    })
+                  }
+                  className="accent-brand-gold"
+                />
+                仅管理员编辑
+              </label>
+              <button
+                type="button"
+                onClick={() => void handleUpdateWikiCategory()}
+                className="rounded theme-button-primary px-4 py-2 text-sm transition-all"
+              >
+                保存
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingCategory(null)}
+                className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
+              >
+                取消
               </button>
             </div>
           </div>

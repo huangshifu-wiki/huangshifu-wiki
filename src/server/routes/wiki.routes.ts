@@ -64,6 +64,18 @@ const wikiPageResponseInclude = {
   location: true,
 } satisfies Prisma.WikiPageInclude
 
+const wikiCategoryResponseSelect = {
+  id: true,
+  name: true,
+  description: true,
+  order: true,
+  requiresAdminEdit: true,
+} satisfies Prisma.WikiCategorySelect
+
+const wikiCategoryWriteSelect = {
+  requiresAdminEdit: true,
+} satisfies Prisma.WikiCategorySelect
+
 function sendWikiUniqueConflict(error: unknown, res: Response) {
   const message = getWikiUniqueConflictMessage(error)
   if (!message) {
@@ -83,6 +95,26 @@ function clearWikiListCaches() {
   enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`)
   enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`)
   enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_TIMELINE}:`)
+}
+
+async function resolveWritableWikiCategory(
+  categoryId: string,
+  authUser: NonNullable<AuthenticatedRequest['authUser']>
+) {
+  const category = await prisma.wikiCategory.findFirst({
+    where: { id: categoryId, deletedAt: null },
+    select: wikiCategoryWriteSelect,
+  })
+
+  if (!category) {
+    return { ok: false as const, status: 400, error: '分类不存在' }
+  }
+
+  if (category.requiresAdminEdit && !isAdminRole(authUser.role)) {
+    return { ok: false as const, status: 403, error: '只有管理员可以编辑该分类内容' }
+  }
+
+  return { ok: true as const, category }
 }
 
 async function updateWikiPinState(req: AuthenticatedRequest, res: Response, isPinned: boolean) {
@@ -551,6 +583,24 @@ router.get(
     } catch (error) {
       logger.error({ err: error }, 'Fetch wiki recommended error')
       res.status(500).json({ error: '获取推荐百科失败' })
+    }
+  })
+)
+
+router.get(
+  '/categories',
+  asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    try {
+      const categories = await prisma.wikiCategory.findMany({
+        where: { deletedAt: null },
+        orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+        select: wikiCategoryResponseSelect,
+      })
+
+      res.json({ categories })
+    } catch (error) {
+      logger.error({ err: error }, 'Fetch wiki categories error')
+      res.status(500).json({ error: '获取百科分类失败' })
     }
   })
 )
@@ -1071,6 +1121,7 @@ router.post(
         where: { slug },
         select: {
           slug: true,
+          category: true,
           lastEditorUid: true,
           status: true,
         },
@@ -1084,6 +1135,12 @@ router.post(
       const isOwner = page.lastEditorUid === req.authUser!.uid
       if (!isOwner && !isAdminRole(req.authUser!.role)) {
         res.status(403).json({ error: '无权提交该页面' })
+        return
+      }
+
+      const categoryResult = await resolveWritableWikiCategory(page.category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 
@@ -1196,8 +1253,9 @@ router.post(
         return
       }
 
-      if (category === 'music' && req.authUser?.role === 'user') {
-        res.status(403).json({ error: '只有管理员可以编辑音乐分类内容' })
+      const categoryResult = await resolveWritableWikiCategory(category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 
@@ -1346,6 +1404,12 @@ router.put(
       })
       if (!page) {
         res.status(404).json({ error: '页面未找到' })
+        return
+      }
+
+      const categoryResult = await resolveWritableWikiCategory(category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 
@@ -1524,6 +1588,12 @@ router.post(
       const page = await prisma.wikiPage.findUnique({ where: { slug: pageSlug } })
       if (!page || !canViewWikiPage(page, req.authUser)) {
         res.status(404).json({ error: '页面未找到' })
+        return
+      }
+
+      const categoryResult = await resolveWritableWikiCategory(page.category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 
@@ -1776,6 +1846,12 @@ router.post(
 
       if (!title || !content || !category) {
         res.status(400).json({ error: '缺少必要字段' })
+        return
+      }
+
+      const categoryResult = await resolveWritableWikiCategory(category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 
@@ -2389,6 +2465,12 @@ router.post(
       }
       if (!payload.title || !payload.content || !payload.category) {
         res.status(400).json({ error: '缺少必要字段' })
+        return
+      }
+
+      const categoryResult = await resolveWritableWikiCategory(payload.category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 

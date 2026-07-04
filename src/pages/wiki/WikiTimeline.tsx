@@ -4,10 +4,12 @@ import { ArrowLeft, Calendar, ChevronRight } from '@/src/components/icons'
 import { motion } from 'motion/react'
 import { apiGet } from '../../lib/apiClient'
 import type { WikiItem } from './types'
+import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const WikiTimeline = () => {
   const [events, setEvents] = useState<WikiItem[]>([])
   const [loading, setLoading] = useState(true)
+  const { getCategoryLabel } = useWikiCategories()
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -79,17 +81,7 @@ const WikiTimeline = () => {
                   </div>
                   <div className="flex items-center gap-2 mb-3">
                     <span className="px-2 py-1 bg-surface-alt text-brand-gold text-[10px] font-bold uppercase tracking-wider rounded">
-                      {event.category === 'biography'
-                        ? '人物介绍'
-                        : event.category === 'music'
-                          ? '音乐作品'
-                          : event.category === 'album'
-                            ? '专辑一览'
-                            : event.category === 'timeline'
-                              ? '时间轴'
-                              : event.category === 'event'
-                                ? '活动记录'
-                                : event.category}
+                      {getCategoryLabel(event.category)}
                     </span>
                   </div>
                   <h3 className="text-2xl font-serif font-bold text-text-primary group-hover:text-brand-gold transition-colors mb-4">

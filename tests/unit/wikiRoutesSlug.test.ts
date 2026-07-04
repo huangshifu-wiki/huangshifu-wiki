@@ -4,11 +4,18 @@ import type { AddressInfo } from 'node:net'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockPrisma = vi.hoisted(() => ({
-  $transaction: vi.fn(async (fn) => fn(mockPrisma)),
+  $transaction: vi.fn(async (input) =>
+    Array.isArray(input) ? Promise.all(input) : input(mockPrisma)
+  ),
   wikiPage: {
     create: vi.fn(),
+    findUnique: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
+  },
+  wikiCategory: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
   },
   wikiRevision: {
     create: vi.fn(),
@@ -79,7 +86,7 @@ async function postJson(app: express.Express, path: string, body: unknown) {
 
 async function requestJson(
   app: express.Express,
-  method: 'DELETE' | 'POST',
+  method: 'DELETE' | 'GET' | 'POST',
   path: string,
   body?: unknown
 ) {
@@ -151,8 +158,22 @@ describe('wiki routes slug normalization', () => {
     }))
     mockPrisma.wikiRevision.create.mockResolvedValue({ id: 'revision_1' })
     mockPrisma.wikiBranch.create.mockResolvedValue({ id: 'branch_1' })
+    mockPrisma.wikiPage.findUnique.mockResolvedValue({
+      slug: 'test-page',
+      category: 'biography',
+      lastEditorUid: 'user_1',
+      status: 'draft',
+    })
     mockPrisma.wikiPage.update.mockResolvedValue({})
     mockPrisma.wikiPage.updateMany.mockResolvedValue({ count: 1 })
+    mockPrisma.wikiCategory.findFirst.mockResolvedValue({
+      id: 'biography',
+      name: '人物介绍',
+      description: '',
+      order: 10,
+      requiresAdminEdit: false,
+    })
+    mockPrisma.wikiCategory.findMany.mockResolvedValue([])
   })
 
   it('canonicalizes created wiki page slugs before writing', async () => {
@@ -189,6 +210,127 @@ describe('wiki routes slug normalization', () => {
         data: expect.objectContaining({
           pageSlug: 'test-page-name',
         }),
+      })
+    )
+  })
+
+  it('lists dynamic wiki categories', async () => {
+    mockPrisma.wikiCategory.findMany.mockResolvedValue([
+      {
+        id: 'music',
+        name: '音乐作品',
+        description: '',
+        order: 20,
+        requiresAdminEdit: true,
+      },
+    ])
+    const app = await createApp(null)
+
+    const response = await requestJson(app, 'GET', '/api/wiki/categories')
+
+    expect(response.status).toBe(200)
+    expect(response.body).toEqual({
+      categories: [
+        {
+          id: 'music',
+          name: '音乐作品',
+          description: '',
+          order: 20,
+          requiresAdminEdit: true,
+        },
+      ],
+    })
+    expect(mockPrisma.wikiCategory.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deletedAt: null },
+      })
+    )
+  })
+
+  it('rejects non-admin writes to admin-only wiki categories', async () => {
+    mockPrisma.wikiCategory.findFirst.mockResolvedValue({
+      id: 'music',
+      name: '音乐作品',
+      description: '',
+      order: 20,
+      requiresAdminEdit: true,
+    })
+    const app = await createApp({ uid: 'user_1', role: 'user', displayName: 'Tester' })
+
+    const response = await postJson(app, '/api/wiki', {
+      title: 'Music Page',
+      slug: 'music-page',
+      category: 'music',
+      content: 'Body',
+      tags: [],
+      relations: [],
+      status: 'draft',
+    })
+
+    expect(response.status).toBe(403)
+    expect(response.body).toEqual({ error: '只有管理员可以编辑该分类内容' })
+    expect(mockPrisma.wikiPage.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-admin submit review for admin-only wiki categories', async () => {
+    mockPrisma.wikiPage.findUnique.mockResolvedValue({
+      slug: 'music-page',
+      category: 'music',
+      lastEditorUid: 'user_1',
+      status: 'draft',
+    })
+    mockPrisma.wikiCategory.findFirst.mockResolvedValue({
+      id: 'music',
+      name: '音乐作品',
+      description: '',
+      order: 20,
+      requiresAdminEdit: true,
+    })
+    const app = await createApp({ uid: 'user_1', role: 'user', displayName: 'Tester' })
+
+    const response = await postJson(app, '/api/wiki/music-page/submit', {})
+
+    expect(response.status).toBe(403)
+    expect(response.body).toEqual({ error: '只有管理员可以编辑该分类内容' })
+    expect(mockPrisma.wikiPage.update).not.toHaveBeenCalled()
+    expect(mockPrisma.moderationLog.create).not.toHaveBeenCalled()
+  })
+
+  it('allows admin submit review for admin-only wiki categories', async () => {
+    mockPrisma.wikiPage.findUnique.mockResolvedValue({
+      slug: 'music-page',
+      category: 'music',
+      lastEditorUid: 'user_1',
+      status: 'draft',
+    })
+    mockPrisma.wikiPage.update.mockResolvedValue({
+      slug: 'music-page',
+      category: 'music',
+      status: 'published',
+    })
+    mockPrisma.wikiCategory.findFirst.mockResolvedValue({
+      id: 'music',
+      name: '音乐作品',
+      description: '',
+      order: 20,
+      requiresAdminEdit: true,
+    })
+    const app = await createApp({ uid: 'admin_1', role: 'admin', displayName: 'Admin' })
+
+    const response = await postJson(app, '/api/wiki/music-page/submit', {})
+
+    expect(response.status).toBe(200)
+    expect(response.body).toEqual({
+      page: {
+        slug: 'music-page',
+        category: 'music',
+        status: 'published',
+      },
+    })
+    expect(mockPrisma.wikiPage.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { slug: 'music-page' },
+        data: expect.objectContaining({ status: 'published' }),
       })
     )
   })

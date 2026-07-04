@@ -7,25 +7,24 @@ import { SmartImage } from '../../components/SmartImage'
 import WikiMarkdown from '../wiki/WikiMarkdown'
 import { formatDate, formatDateTime } from '../../lib/dateUtils'
 import type { AdminReviewQueueMergedItem } from '../../types/api'
+import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 type AdminReviewContentPreviewProps = {
   item: AdminReviewQueueMergedItem
 }
 
-const wikiCategoryLabels: Record<string, string> = {
-  biography: '人物',
-  music: '音乐',
-  album: '专辑',
-  timeline: '时间线',
-  event: '事件',
-}
-
 const formatDateValue = (value: string | undefined, pattern: string) =>
   value ? formatDate(value, pattern) : 'N/A'
 
+const WikiCategoryLabel = ({ category }: { category?: string }) => {
+  const { getCategoryLabel } = useWikiCategories()
+
+  return <>{category ? getCategoryLabel(category) : '百科'}</>
+}
+
 const getContentLabel = (item: AdminReviewQueueMergedItem) => {
   if (item.reviewType === 'wiki') {
-    return wikiCategoryLabels[item.category || ''] || item.category || '百科'
+    return <WikiCategoryLabel category={item.category} />
   }
 
   if (item.reviewType === 'gallery') {
