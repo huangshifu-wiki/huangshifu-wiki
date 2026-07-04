@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useEffect, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Ban,
   Book,
@@ -39,7 +39,7 @@ import { SmartImage } from '../../components/SmartImage'
 import { MusicImportModal } from '../../components/MusicImportModal'
 import { SongFormModal } from '../../components/SongFormModal'
 import Pagination from '../../components/Pagination'
-import { usePagination } from '../../hooks/usePagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
 
@@ -79,6 +79,8 @@ type AdminListResponse = {
   data: AdminDataItem[]
   total?: number
 }
+
+const MUSIC_PAGE_SIZE_OPTIONS = [25, 50, 100]
 
 const WIKI_CATEGORIES_ADMIN_PATH = '/api/admin/wiki-categories'
 const WIKI_CATEGORIES_PUBLIC_PATH = '/api/wiki/categories'
@@ -528,10 +530,11 @@ const invalidateWikiCategoryCaches = () => {
 }
 
 export const AdminListPage = ({ type }: { type: ListType }) => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const cfg = configMap[type]
   const Icon = cfg.icon
   const [data, setData] = useState<AdminDataItem[]>([])
-  const [musicTotal, setMusicTotal] = useState(0)
+  const [musicTotal, setMusicTotal] = useState<number>()
   const [loading, setLoading] = useState(true)
   const [pendingActions, setPendingActions] = useState<
     Record<string, 'delete' | 'restore' | 'permanentDelete'>
@@ -547,12 +550,18 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     manualAlbumName: '',
     displayAlbumDocId: '',
   })
-  const [showDeleted, setShowDeleted] = useState(false)
+  const showDeleted = searchParams.get('includeDeleted') === 'true'
   const dialog = useDialog()
   const { show } = useToast()
   const [newItem, setNewItem] = useState<any>({})
   const isMusicList = type === 'music'
-  const musicPagination = usePagination({ totalCount: musicTotal, defaultPageSize: 50 })
+  const previousTypeRef = useRef(type)
+  const musicPagination = useRoutedPagination({
+    totalCount: musicTotal,
+    defaultPageSize: 50,
+    pageSizeOptions: MUSIC_PAGE_SIZE_OPTIONS,
+    enabled: isMusicList,
+  })
 
   const invalidateCurrentDataCaches = () => {
     if (type === 'wiki-categories') {
@@ -616,17 +625,28 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   useEffect(() => {
     setSelectedRowIds(new Set())
     setBatchDisplayOpen(false)
-    musicPagination.setPage(1)
+    if (previousTypeRef.current !== type) {
+      previousTypeRef.current = type
+      if (isMusicList) {
+        musicPagination.setPage(1)
+      }
+    }
   }, [type])
 
   const isSelectableList = isMusicList
   const selectedCount = selectedRowIds.size
 
   const handleToggleDeleted = () => {
-    if (isMusicList) {
-      musicPagination.setPage(1)
-    }
-    setShowDeleted((value) => !value)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('page')
+      if (showDeleted) {
+        next.delete('includeDeleted')
+      } else {
+        next.set('includeDeleted', 'true')
+      }
+      return next
+    })
   }
 
   const toggleSelectedRow = (rowId: string) => {
@@ -1313,6 +1333,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               onPageChange={musicPagination.handlePageChange}
               pageSize={musicPagination.pageSize}
               onPageSizeChange={musicPagination.handlePageSizeChange}
+              pageSizeOptions={MUSIC_PAGE_SIZE_OPTIONS}
               showPageSizeSelector
             />
           )}

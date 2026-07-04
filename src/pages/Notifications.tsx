@@ -14,6 +14,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiGet, apiPost } from '../lib/apiClient'
 import { getNotificationLink, getNotificationText } from '../lib/notifications'
 import Pagination from '../components/Pagination'
+import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import type { NotificationItem } from '../types/entities'
 
 type NotificationType = NotificationItem['type']
@@ -75,9 +76,8 @@ const Notifications = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const rawFilter = searchParams.get('filter')
   const filter: NotificationFilter = isNotificationFilter(rawFilter) ? rawFilter : 'all'
-  const page = Math.max(Number(searchParams.get('page') || '1'), 1)
-
   const [loading, setLoading] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [markingAllRead, setMarkingAllRead] = useState(false)
   const [data, setData] = useState<NotificationsResponse>({
     notifications: [],
@@ -86,12 +86,19 @@ const Notifications = () => {
     page: 1,
     limit: PAGE_SIZE,
   })
+  const pagination = useRoutedPagination({
+    totalCount: data.total,
+    totalKnown: loaded,
+    defaultPageSize: PAGE_SIZE,
+    pageSizeParam: null,
+    showPageSizeSelector: false,
+  })
 
   const fetchData = React.useCallback(async () => {
     setLoading(true)
     try {
       const query: Record<string, string | number | boolean> = {
-        page,
+        page: pagination.page,
         limit: PAGE_SIZE,
       }
       if (filter === 'unread') {
@@ -112,23 +119,54 @@ const Notifications = () => {
         ...response,
         notifications: response.notifications,
       })
+      setLoaded(true)
     } catch (error) {
       console.error('Fetch notifications error:', error)
     } finally {
       setLoading(false)
     }
-  }, [filter, page])
+  }, [filter, pagination.page])
 
   React.useEffect(() => {
     fetchData()
   }, [fetchData])
 
-  const totalPages = Math.max(1, Math.ceil((data.total || 0) / PAGE_SIZE))
+  React.useEffect(() => {
+    if (rawFilter && !isNotificationFilter(rawFilter)) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('filter')
+          return next
+        },
+        { replace: true }
+      )
+    }
+
+    if (rawFilter === 'all') {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('filter')
+          return next
+        },
+        { replace: true }
+      )
+    }
+  }, [rawFilter, setSearchParams])
 
   const updateQuery = (nextFilter: NotificationFilter, nextPage = 1) => {
     const next = new URLSearchParams(searchParams)
-    next.set('filter', nextFilter)
-    next.set('page', String(nextPage))
+    if (nextFilter === 'all') {
+      next.delete('filter')
+    } else {
+      next.set('filter', nextFilter)
+    }
+    if (nextPage > 1) {
+      next.set('page', String(nextPage))
+    } else {
+      next.delete('page')
+    }
     setSearchParams(next)
   }
 
@@ -298,10 +336,10 @@ const Notifications = () => {
           )}
         </div>
 
-        {totalPages > 1 && (
+        {pagination.totalPages > 1 && (
           <Pagination
-            page={page}
-            totalPages={totalPages}
+            page={pagination.page}
+            totalPages={pagination.totalPages}
             onPageChange={(newPage) => updateQuery(filter, newPage)}
             showPageSizeSelector={false}
           />

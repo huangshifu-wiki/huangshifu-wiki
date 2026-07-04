@@ -115,9 +115,9 @@ const mockGalleries: GalleryItem[] = [
   },
 ]
 
-const renderWithRouter = () =>
+const renderWithRouter = (initialEntry = '/gallery') =>
   render(
-    <MemoryRouter initialEntries={['/gallery']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <GalleryList />
     </MemoryRouter>
   )
@@ -184,6 +184,22 @@ describe('GalleryList', () => {
     })
 
     expect(legacyVirtualScrollContainer).toBeUndefined()
+  })
+
+  it('uses routed page and page size params on first load', async () => {
+    renderWithRouter('/gallery?page=2&pageSize=48')
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith(
+        '/api/galleries',
+        expect.objectContaining({
+          page: 2,
+          limit: 48,
+        }),
+        undefined,
+        undefined
+      )
+    })
   })
 
   it('waits for pending thumbnails without using the original image as the cover', async () => {

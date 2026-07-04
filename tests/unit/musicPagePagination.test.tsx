@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Music from '../../src/pages/Music'
 
@@ -89,6 +90,13 @@ const pageOneSong = {
   playable: false,
 }
 
+const renderMusic = (initialEntry = '/music') =>
+  render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Music />
+    </MemoryRouter>
+  )
+
 describe('Music page pagination', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -114,7 +122,7 @@ describe('Music page pagination', () => {
   })
 
   it('uses API totals for counts instead of current page lengths', async () => {
-    render(<Music />)
+    renderMusic()
 
     await screen.findByText('第一页歌曲')
 
@@ -131,7 +139,7 @@ describe('Music page pagination', () => {
   })
 
   it('keeps the content column shrinkable so the stats sidebar stays in the grid', async () => {
-    render(<Music />)
+    renderMusic()
 
     await screen.findByText('第一页歌曲')
 
@@ -142,7 +150,7 @@ describe('Music page pagination', () => {
 
   it('requests the next server page when pagination changes', async () => {
     const user = userEvent.setup()
-    render(<Music />)
+    renderMusic()
 
     await screen.findByText('第一页歌曲')
     await user.click(screen.getAllByLabelText('下一页')[0])
@@ -155,6 +163,52 @@ describe('Music page pagination', () => {
         sortBy: 'releaseDate',
         sortOrder: 'desc',
       })
+    })
+  })
+
+  it('uses routed music pagination params on first load', async () => {
+    renderMusic('/music?musicPage=3&musicPageSize=25')
+
+    await screen.findByText('第一页歌曲')
+
+    expect(mockApiGet).toHaveBeenCalledWith('/api/music', {
+      limit: 25,
+      page: 3,
+      includeInstrumentals: false,
+      sortBy: 'releaseDate',
+      sortOrder: 'desc',
+    })
+  })
+
+  it('uses routed album tab and album page params on first load', async () => {
+    mockApiGet.mockImplementation((url: string, params?: { page?: number }) => {
+      if (url === '/api/albums') {
+        return Promise.resolve({
+          albums: [
+            { docId: `album-${params?.page ?? 1}`, title: `第 ${params?.page ?? 1} 页专辑` },
+          ],
+          total: 123,
+          page: params?.page ?? 1,
+          limit: 24,
+          hasMore: true,
+        })
+      }
+      return Promise.resolve({
+        songs: [pageOneSong],
+        total: 213,
+        page: 1,
+        limit: 50,
+        hasMore: true,
+      })
+    })
+
+    renderMusic('/music?tab=albums&albumPage=2')
+
+    await screen.findByText('第 2 页专辑')
+
+    expect(mockApiGet).toHaveBeenCalledWith('/api/albums', {
+      limit: 24,
+      page: 2,
     })
   })
 
@@ -186,7 +240,7 @@ describe('Music page pagination', () => {
       })
     })
 
-    render(<Music />)
+    renderMusic()
 
     await screen.findByText('第 1 页歌曲')
     expect(screen.getByTestId('song-sequence')).toHaveTextContent('1')

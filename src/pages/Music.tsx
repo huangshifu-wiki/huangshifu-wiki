@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import { useMusic } from '../context/MusicContext'
@@ -7,7 +8,7 @@ import { useToast } from '../components/Toast'
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import Pagination from '../components/Pagination'
-import { usePagination } from '../hooks/usePagination'
+import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { useI18n } from '../lib/i18n'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { SongCard } from '../components/Music/SongCard'
@@ -18,15 +19,19 @@ import { isPlayableSong } from '../lib/musicPlayback'
 import type { SongItem, AlbumItem } from '../types/entities'
 import type { AlbumListResponse, MusicListResponse } from '../types/api'
 
+const MUSIC_PAGE_SIZE_OPTIONS = [25, 50, 100]
+
 const Music = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [songs, setSongs] = useState<SongItem[]>([])
-  const [songTotal, setSongTotal] = useState(0)
+  const [songTotal, setSongTotal] = useState<number>()
   const [loading, setLoading] = useState(true)
   const [favoriting, setFavoriting] = useState<string | null>(null)
   const [albums, setAlbums] = useState<AlbumItem[]>([])
-  const [albumTotal, setAlbumTotal] = useState(0)
+  const [albumTotal, setAlbumTotal] = useState<number>()
   const [loadingAlbums, setLoadingAlbums] = useState(false)
-  const [activeTab, setActiveTab] = useState<'music' | 'albums'>('music')
+  const tabParam = searchParams.get('tab')
+  const activeTab: 'music' | 'albums' = tabParam === 'albums' ? 'albums' : 'music'
   const { user } = useAuth()
   const { currentSong, setCurrentSong, setIsPlaying, setPlaylist, playSongAtIndex } = useMusic()
   const { preferences, setViewMode } = useUserPreferences()
@@ -39,9 +44,46 @@ const Music = () => {
 
   const playableSongs = useMemo(() => songs.filter(isPlayableSong), [songs])
 
-  const musicPagination = usePagination({ totalCount: songTotal, defaultPageSize: 50 })
-  const albumPagination = usePagination({ totalCount: albumTotal, defaultPageSize: 24 })
+  const musicPagination = useRoutedPagination({
+    totalCount: songTotal,
+    defaultPageSize: 50,
+    pageParam: 'musicPage',
+    pageSizeParam: 'musicPageSize',
+    pageSizeOptions: MUSIC_PAGE_SIZE_OPTIONS,
+  })
+  const albumPagination = useRoutedPagination({
+    totalCount: albumTotal,
+    defaultPageSize: 24,
+    pageParam: 'albumPage',
+    pageSizeParam: null,
+    showPageSizeSelector: false,
+  })
   const [showAccompaniments, setShowAccompaniments] = useState(false)
+
+  useEffect(() => {
+    if (tabParam && tabParam !== 'albums') {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('tab')
+          return next
+        },
+        { replace: true }
+      )
+    }
+  }, [setSearchParams, tabParam])
+
+  const handleTabChange = (tab: 'music' | 'albums') => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (tab === 'albums') {
+        next.set('tab', 'albums')
+      } else {
+        next.delete('tab')
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -196,7 +238,7 @@ const Music = () => {
           <div className="min-w-0">
             <MusicFilters
               activeTab={activeTab}
-              onTabChange={setActiveTab}
+              onTabChange={handleTabChange}
               sortBy={sortBy}
               onSortByChange={(value) => {
                 setSortBy(value)
@@ -212,8 +254,8 @@ const Music = () => {
                 setShowAccompaniments(value)
                 musicPagination.setPage(1)
               }}
-              musicCount={songTotal}
-              albumCount={albumTotal}
+              musicCount={songTotal ?? 0}
+              albumCount={albumTotal ?? 0}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
             />
@@ -258,6 +300,7 @@ const Music = () => {
                           onPageChange={musicPagination.handlePageChange}
                           pageSize={musicPagination.pageSize}
                           onPageSizeChange={musicPagination.handlePageSizeChange}
+                          pageSizeOptions={MUSIC_PAGE_SIZE_OPTIONS}
                           showPageSizeSelector
                         />
                       </div>
@@ -336,11 +379,11 @@ const Music = () => {
               <div className="flex flex-col gap-2.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">单曲</span>
-                  <span className="text-text-primary font-medium">{songTotal}</span>
+                  <span className="text-text-primary font-medium">{songTotal ?? 0}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">专辑</span>
-                  <span className="text-text-primary font-medium">{albumTotal}</span>
+                  <span className="text-text-primary font-medium">{albumTotal ?? 0}</span>
                 </div>
               </div>
             </div>

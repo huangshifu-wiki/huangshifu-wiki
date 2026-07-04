@@ -13,15 +13,17 @@ import WikiCard from '../../components/wiki/WikiCard'
 import Pagination from '../../components/Pagination'
 import type { WikiItem } from './types'
 import { DEFAULT_PAGE_SIZE } from './types'
-import { usePagination } from '../../hooks/usePagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 
 const WikiList = () => {
   const [searchParams] = useSearchParams()
   const category = searchParams.get('category') || 'all'
   const tag = searchParams.get('tag')
   const [pages, setPages] = useState<WikiItem[]>([])
-  const [total, setTotal] = useState(0)
+  const [total, setTotal] = useState<number>()
   const [loading, setLoading] = useState(true)
   const { user, isBanned } = useAuth()
   const { show } = useToast()
@@ -29,14 +31,11 @@ const WikiList = () => {
   const viewMode = preferences.viewMode
   const { categories, getCategoryLabel } = useWikiCategories()
 
-  const pagination = usePagination({
+  const pagination = useRoutedPagination({
     totalCount: total,
     defaultPageSize: DEFAULT_PAGE_SIZE,
+    pageSizeOptions: PAGE_SIZE_OPTIONS,
   })
-
-  useEffect(() => {
-    pagination.setPage(1)
-  }, [category, tag])
 
   useEffect(() => {
     let cancelled = false
@@ -63,6 +62,18 @@ const WikiList = () => {
       cancelled = true
     }
   }, [category, tag, pagination.page, pagination.pageSize])
+
+  const getCategoryUrl = (nextCategory: string) => {
+    const params = new URLSearchParams(searchParams)
+    params.delete('page')
+    if (nextCategory === 'all') {
+      params.delete('category')
+    } else {
+      params.set('category', nextCategory)
+    }
+    const query = params.toString()
+    return query ? `/wiki?${query}` : '/wiki'
+  }
 
   const handleCopyWikiLink = async (event: React.MouseEvent<HTMLButtonElement>, slug: string) => {
     event.preventDefault()
@@ -101,7 +112,7 @@ const WikiList = () => {
             {['all', ...categories.map((item) => item.id)].map((cat) => (
               <Link
                 key={cat}
-                to={`/wiki?category=${cat}`}
+                to={getCategoryUrl(cat)}
                 className={clsx(
                   'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
                   category === cat
@@ -171,6 +182,7 @@ const WikiList = () => {
                 onPageChange={pagination.handlePageChange}
                 pageSize={pagination.pageSize}
                 onPageSizeChange={pagination.handlePageSizeChange}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
                 showPageSizeSelector
               />
             )}

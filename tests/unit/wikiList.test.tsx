@@ -88,9 +88,9 @@ const mockPages: WikiItem[] = [
   },
 ]
 
-const renderWithRouter = () =>
+const renderWithRouter = (initialEntry = '/wiki') =>
   render(
-    <MemoryRouter initialEntries={['/wiki']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <WikiList />
     </MemoryRouter>
   )
@@ -157,5 +157,19 @@ describe('WikiList', () => {
     })
 
     expect(legacyVirtualScrollContainer).toBeUndefined()
+  })
+
+  it('uses routed page and page size params on first load', async () => {
+    renderWithRouter('/wiki?page=2&pageSize=50')
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith(
+        '/api/wiki',
+        expect.objectContaining({
+          page: 2,
+          pageSize: 50,
+        })
+      )
+    })
   })
 })

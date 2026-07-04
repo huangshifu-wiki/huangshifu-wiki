@@ -43,7 +43,7 @@ import { formatDate } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import { LocationTagInput } from '../components/LocationTagInput'
 import Pagination from '../components/Pagination'
-import { usePagination } from '../hooks/usePagination'
+import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { RouteGuard } from '../components/RouteGuard'
 import { CommentActionMenu } from '../components/CommentActionMenu'
@@ -199,33 +199,20 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
 
 const PostList = () => {
   const { t } = useI18n()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const section = searchParams.get('section') || 'all'
   const sort = searchParams.get('sort') || 'latest'
-  const pageParam = Number(searchParams.get('page')) || 1
   const [posts, setPosts] = useState<PostItem[]>([])
   const [sections, setSections] = useState<SectionItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(pageParam)
-  const [totalPages, setTotalPages] = useState(1)
+  const [totalPages, setTotalPages] = useState<number>()
   const { user, profile, isBanned } = useAuth()
   const { show } = useToast()
-  const pagination = usePagination({
+  const pagination = useRoutedPagination({
     serverTotalPages: totalPages,
     defaultPageSize: 20,
-    onPageChange: (newPage) => {
-      setPage(newPage)
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev)
-        if (newPage > 1) {
-          next.set('page', String(newPage))
-        } else {
-          next.delete('page')
-        }
-        return next
-      })
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    },
+    pageSizeParam: null,
+    showPageSizeSelector: false,
   })
 
   useEffect(() => {
@@ -248,7 +235,7 @@ const PostList = () => {
         const data = await apiGet<{ posts: PostItem[]; totalPages: number }>('/api/posts', {
           section,
           sort,
-          page,
+          page: pagination.page,
           limit: DEFAULT_PAGE_SIZE,
         })
         setPosts(data.posts || [])
@@ -261,7 +248,29 @@ const PostList = () => {
     }
 
     fetchPosts()
-  }, [section, sort, page])
+  }, [section, sort, pagination.page])
+
+  const getListUrl = (nextValues: { section?: string; sort?: string }) => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
+    const nextSection = nextValues.section ?? section
+    const nextSort = nextValues.sort ?? sort
+
+    if (nextSection === 'all') {
+      next.delete('section')
+    } else {
+      next.set('section', nextSection)
+    }
+
+    if (nextSort === 'latest') {
+      next.delete('sort')
+    } else {
+      next.set('sort', nextSort)
+    }
+
+    const query = next.toString()
+    return query ? `/forum?${query}` : '/forum'
+  }
 
   const handleCopyPostLink = async (event: React.MouseEvent<HTMLButtonElement>, postId: string) => {
     event.preventDefault()
@@ -304,7 +313,7 @@ const PostList = () => {
         <div className="flex items-end justify-between border-b border-border mb-5">
           <div className="flex gap-5 flex-wrap">
             <Link
-              to="/forum?section=all"
+              to={getListUrl({ section: 'all' })}
               className={clsx(
                 'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
                 section === 'all'
@@ -317,7 +326,7 @@ const PostList = () => {
             {sections.map((sec) => (
               <Link
                 key={sec.id}
-                to={`/forum?section=${sec.id}`}
+                to={getListUrl({ section: sec.id })}
                 className={clsx(
                   'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
                   section === sec.id
@@ -332,11 +341,9 @@ const PostList = () => {
 
           <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
             {(['latest', 'hot', 'recommended'] as const).map((s) => (
-              <button
+              <Link
                 key={s}
-                onClick={() => {
-                  setSearchParams()
-                }}
+                to={getListUrl({ sort: s })}
                 className={clsx(
                   'transition-colors',
                   sort === s ? 'text-brand-gold font-medium' : 'hover:text-brand-gold'
@@ -347,7 +354,7 @@ const PostList = () => {
                   : s === 'hot'
                     ? t('forum.sortHot')
                     : t('forum.sortRecommended')}
-              </button>
+              </Link>
             ))}
           </div>
         </div>
@@ -368,7 +375,7 @@ const PostList = () => {
             </div>
             {pagination.totalPages > 1 && (
               <Pagination
-                page={page}
+                page={pagination.page}
                 totalPages={pagination.totalPages}
                 onPageChange={pagination.handlePageChange}
               />

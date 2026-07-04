@@ -167,6 +167,69 @@ describe('AdminListPage', () => {
     })
   })
 
+  it('音乐管理应从路由读取分页和已删除筛选参数', async () => {
+    mockApiGet.mockResolvedValue(makeMusicListResponse())
+
+    render(
+      <MemoryRouter initialEntries={['/admin/music?page=2&pageSize=25&includeDeleted=true']}>
+        <AdminListPage type="music" />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText('测试歌曲')).toBeInTheDocument()
+    expect(mockApiGet).toHaveBeenCalledWith('/api/admin/music', {
+      includeDeleted: 'true',
+      page: 2,
+      limit: 25,
+    })
+  })
+
+  it('音乐管理直达分页时不应在首屏重置页码', async () => {
+    mockApiGet.mockResolvedValue(
+      makeMusicListResponse([makeMusicItem({ title: '第二页歌曲' })], {
+        total: 100,
+        page: 2,
+        totalPages: 2,
+      })
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/admin/music?page=2']}>
+        <AdminListPage type="music" />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText('第二页歌曲')).toBeInTheDocument()
+    expect(mockApiGet).toHaveBeenCalledTimes(1)
+    expect(mockApiGet).toHaveBeenCalledWith('/api/admin/music', {
+      includeDeleted: undefined,
+      page: 2,
+      limit: 50,
+    })
+  })
+
+  it('切换已删除筛选时应重置音乐管理页码', async () => {
+    const user = userEvent.setup()
+    mockApiGet.mockResolvedValue(makeMusicListResponse())
+
+    render(
+      <MemoryRouter initialEntries={['/admin/music?page=2']}>
+        <AdminListPage type="music" />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText('测试歌曲')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /显示已删除/ }))
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenLastCalledWith('/api/admin/music', {
+        includeDeleted: 'true',
+        page: 1,
+        limit: 50,
+      })
+    })
+  })
+
   it('音乐管理超过一页时应显示分页并支持翻页', async () => {
     const user = userEvent.setup()
     mockApiGet

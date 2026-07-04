@@ -29,13 +29,14 @@ import {
   THUMBNAIL_POLL_MAX_ATTEMPTS,
 } from '../lib/galleryThumbnails'
 import Pagination from '../components/Pagination'
-import { usePagination } from '../hooks/usePagination'
+import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import type { GalleryItem } from '../types/entities'
 import type { GalleryListResponse } from '../types/api'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 
 const DEFAULT_PAGE_SIZE = 24
+const PAGE_SIZE_OPTIONS = [12, 24, 48, 96]
 
 interface GalleryCoverProps {
   gallery: GalleryItem
@@ -230,7 +231,7 @@ const GalleryList = () => {
   const lastGalleryToDeleteRef = useRef<{ id: string; title: string } | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deletingGalleryId, setDeletingGalleryId] = useState<string | null>(null)
-  const [totalGalleries, setTotalGalleries] = useState(0)
+  const [totalGalleries, setTotalGalleries] = useState<number>()
   const { show } = useToast()
 
   if (galleryToDelete) {
@@ -242,9 +243,10 @@ const GalleryList = () => {
   const navigate = useNavigate()
   const viewMode = preferences.viewMode
 
-  const galleryPagination = usePagination({
+  const galleryPagination = useRoutedPagination({
     totalCount: totalGalleries,
     defaultPageSize: DEFAULT_PAGE_SIZE,
+    pageSizeOptions: PAGE_SIZE_OPTIONS,
   })
   const hasPendingThumbnails = galleries.some(shouldWaitForGalleryThumbnail)
 
@@ -447,6 +449,7 @@ const GalleryList = () => {
                   onPageChange={galleryPagination.handlePageChange}
                   pageSize={galleryPagination.pageSize}
                   onPageSizeChange={galleryPagination.handlePageSizeChange}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
                   showPageSizeSelector
                 />
               </div>
