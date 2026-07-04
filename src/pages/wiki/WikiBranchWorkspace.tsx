@@ -9,7 +9,6 @@ import { splitTagsInput } from '../../lib/contentUtils'
 import { formatDate } from '../../lib/dateUtils'
 import type { WikiItem, WikiBranchItem, WikiRevisionItem, WikiPullRequestItem } from './types'
 import { getBranchStatusText } from './types'
-import { DEFAULT_WIKI_CATEGORY_ID } from '../../lib/wikiCategories'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const WikiBranchWorkspace = () => {
@@ -30,7 +29,7 @@ const WikiBranchWorkspace = () => {
   const { show } = useToast()
 
   const [title, setTitle] = useState('')
-  const [category, setCategory] = useState(DEFAULT_WIKI_CATEGORY_ID)
+  const [category, setCategory] = useState('')
   const [eventDate, setEventDate] = useState('')
   const [tags, setTags] = useState('')
   const [content, setContent] = useState('')
@@ -43,7 +42,7 @@ const WikiBranchWorkspace = () => {
   ) => {
     if (revision) {
       setTitle(revision.title || '')
-      setCategory(revision.category || fallbackPage?.category || DEFAULT_WIKI_CATEGORY_ID)
+      setCategory(revision.category || fallbackPage?.category || '')
       setEventDate(revision.eventDate || '')
       setTags((revision.tags || []).join(', '))
       setContent(revision.content || '')
@@ -51,7 +50,7 @@ const WikiBranchWorkspace = () => {
     }
     if (fallbackPage) {
       setTitle(fallbackPage.title || '')
-      setCategory(fallbackPage.category || DEFAULT_WIKI_CATEGORY_ID)
+      setCategory(fallbackPage.category || '')
       setEventDate(fallbackPage.eventDate || '')
       setTags((fallbackPage.tags || []).join(', '))
       setContent(fallbackPage.content || '')

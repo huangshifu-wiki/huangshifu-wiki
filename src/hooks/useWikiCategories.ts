@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DEFAULT_WIKI_CATEGORIES, getDefaultWikiCategoryLabel } from '../lib/wikiCategories'
 import { apiGet } from '../lib/apiClient'
 import type { WikiCategoryItem } from '../types/entities'
 
@@ -8,21 +7,18 @@ let wikiCategoriesCache: WikiCategoryItem[] | null = null
 function fetchWikiCategories() {
   return apiGet<{ categories: WikiCategoryItem[] }>('/api/wiki/categories')
     .then((data) => {
-      const nextCategories = data.categories ?? DEFAULT_WIKI_CATEGORIES
+      const nextCategories = data.categories ?? []
       wikiCategoriesCache = nextCategories
       return nextCategories
     })
     .catch((error) => {
       console.error('Fetch wiki categories error:', error)
-      wikiCategoriesCache = DEFAULT_WIKI_CATEGORIES
-      return DEFAULT_WIKI_CATEGORIES
+      return wikiCategoriesCache ?? []
     })
 }
 
 export function useWikiCategories() {
-  const [categories, setCategories] = useState<WikiCategoryItem[]>(
-    wikiCategoriesCache || DEFAULT_WIKI_CATEGORIES
-  )
+  const [categories, setCategories] = useState<WikiCategoryItem[]>(wikiCategoriesCache || [])
   const [loading, setLoading] = useState(!wikiCategoriesCache)
 
   useEffect(() => {
@@ -50,14 +46,14 @@ export function useWikiCategories() {
   )
 
   const getCategoryLabel = useCallback(
-    (category: string) => categoryMap.get(category)?.name || getDefaultWikiCategoryLabel(category),
+    (category: string) => categoryMap.get(category)?.name || category,
     [categoryMap]
   )
 
   const canEditCategory = useCallback(
     (category: string, isAdmin: boolean) => {
       const config = categoryMap.get(category)
-      return !config?.requiresAdminEdit || isAdmin
+      return Boolean(config) && (!config.requiresAdminEdit || isAdmin)
     },
     [categoryMap]
   )

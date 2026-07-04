@@ -21,7 +21,6 @@ import WikiEditorRelationPanel from './WikiEditorRelationPanel'
 import WikiEditorMetaSidebar from './WikiEditorMetaSidebar'
 import type { WikiItemWithRelations, WikiRelationRecord } from './types'
 import type { WikiPageMetadata } from '../../lib/wikiLinkParser'
-import { DEFAULT_WIKI_CATEGORY_ID } from '../../lib/wikiCategories'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const WikiEditor = () => {
@@ -36,7 +35,7 @@ const WikiEditor = () => {
   const [formData, setFormData] = useState({
     title: '',
     slug: '',
-    category: DEFAULT_WIKI_CATEGORY_ID,
+    category: '',
     content: '',
     tags: '',
     eventDate: '',
@@ -115,17 +114,16 @@ const WikiEditor = () => {
       return
     }
 
-    if (!canEditCategory(formData.category, isAdmin)) {
-      show('该分类仅管理员可编辑', { variant: 'error' })
-      return
-    }
-
     if (!formData.title.trim()) {
       show(t('wiki.titleRequired'), { variant: 'error' })
       return
     }
     if (!formData.category) {
       show(t('wiki.categoryRequired'), { variant: 'error' })
+      return
+    }
+    if (!canEditCategory(formData.category, isAdmin)) {
+      show('该分类不可编辑或不存在', { variant: 'error' })
       return
     }
     if (!formData.content.trim()) {

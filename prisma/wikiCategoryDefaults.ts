@@ -28,13 +28,3 @@ export const DEFAULT_WIKI_CATEGORIES = [
     requiresAdminEdit: false,
   },
 ]
-
-export const DEFAULT_WIKI_CATEGORY_ID = DEFAULT_WIKI_CATEGORIES[0].id
-
-const DEFAULT_WIKI_CATEGORY_MAP = new Map(
-  DEFAULT_WIKI_CATEGORIES.map((category) => [category.id, category])
-)
-
-export function getDefaultWikiCategoryLabel(category: string) {
-  return DEFAULT_WIKI_CATEGORY_MAP.get(category)?.name || category
-}

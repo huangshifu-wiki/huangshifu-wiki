@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client'
-import { DEFAULT_WIKI_CATEGORIES } from '../src/lib/wikiCategories'
+import { DEFAULT_WIKI_CATEGORIES } from './wikiCategoryDefaults'
 
 const prisma = new PrismaClient()
 
