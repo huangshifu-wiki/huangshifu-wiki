@@ -24,6 +24,7 @@ import { useToggleInteraction } from '../hooks/useToggleInteraction'
 import { useI18n } from '../lib/i18n'
 import { CoverManager } from '../components/CoverManager'
 import { SmartImage } from '../components/SmartImage'
+import { Lightbox } from '../components/Lightbox'
 import { SongEditModal } from '../components/SongEditModal'
 import { LyricsDisplay } from '../components/LyricsDisplay'
 import MarkdownRenderer from '../components/MarkdownRenderer'
@@ -96,6 +97,7 @@ const MusicDetail = () => {
   const [descExpanded, setDescExpanded] = useState(false)
   const [lyricsExpanded, setLyricsExpanded] = useState(false)
   const [lyricsCopied, setLyricsCopied] = useState(false)
+  const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
   const { user, isAdmin } = useAuth()
   const { setCurrentSong, setIsPlaying, setPlaylist } = useMusic()
   const dialog = useDialog()
@@ -228,6 +230,7 @@ const MusicDetail = () => {
   const artistsText = formatMusicCredits(song.artists, '未知歌手')
   const externalUrl = getSongExternalUrl(song)
   const canPlay = isPlayableSong(song)
+  const coverPreviewSrc = song.coverThumbnail || song.cover
   const creditRows = [
     { label: '作词', value: formatMusicCredits(song.lyricists) },
     { label: '作曲', value: formatMusicCredits(song.composers) },
@@ -250,11 +253,18 @@ const MusicDetail = () => {
           <div>
             {/* Detail Header */}
             <div className="flex flex-col md:flex-row gap-5 mb-6 pb-6 border-b border-border">
-              <SmartImage
-                src={song.cover}
-                alt={song.title}
-                className="w-40 h-40 md:w-44 md:h-44 object-cover flex-shrink-0 rounded bg-surface-alt"
-              />
+              <button
+                type="button"
+                onClick={() => setCoverLightboxOpen(true)}
+                className="w-40 h-40 md:w-44 md:h-44 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                aria-label={`查看 ${song.title} 封面原图`}
+              >
+                <SmartImage
+                  src={coverPreviewSrc}
+                  alt={song.title}
+                  className="w-full h-full object-cover"
+                />
+              </button>
               <div className="flex-1 flex flex-col justify-center min-w-0">
                 <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em] mb-1.5">
                   {song.title}
@@ -549,6 +559,20 @@ const MusicDetail = () => {
           song={song}
         />
       )}
+
+      <Lightbox
+        open={coverLightboxOpen}
+        images={[
+          {
+            id: song.docId,
+            url: coverPreviewSrc,
+            originalUrl: song.cover,
+            name: `${song.title} 封面`,
+          },
+        ]}
+        initialIndex={0}
+        onClose={() => setCoverLightboxOpen(false)}
+      />
     </div>
   )
 }

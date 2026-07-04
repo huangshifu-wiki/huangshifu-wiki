@@ -19,6 +19,7 @@ import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
 import { CoverManager } from '../components/CoverManager'
 import { SmartImage } from '../components/SmartImage'
+import { Lightbox } from '../components/Lightbox'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { isPlayableSong } from '../lib/musicPlayback'
@@ -65,6 +66,7 @@ const AlbumDetail = () => {
   const [isDeleting, setIsDeleting] = useState(false)
   const [descExpanded, setDescExpanded] = useState(false)
   const [descNeedExpand, setDescNeedExpand] = useState(false)
+  const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
   const descRef = useRef<HTMLDivElement>(null)
   const { user, isAdmin } = useAuth()
   const dialog = useDialog()
@@ -219,6 +221,8 @@ const AlbumDetail = () => {
     )
   }
 
+  const coverPreviewSrc = album.coverThumbnail || album.cover
+
   return (
     <div className="min-h-screen antique-detail text-[var(--color-text-antique)] bg-bg-primary">
       <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
@@ -231,11 +235,18 @@ const AlbumDetail = () => {
 
         {/* Detail Header */}
         <div className="flex flex-col md:flex-row gap-5 mb-6 pb-6 border-b border-border">
-          <SmartImage
-            src={album.coverThumbnail || album.cover}
-            alt={album.title}
-            className="w-40 h-40 md:w-44 md:h-44 object-cover flex-shrink-0 rounded bg-surface-alt"
-          />
+          <button
+            type="button"
+            onClick={() => setCoverLightboxOpen(true)}
+            className="w-40 h-40 md:w-44 md:h-44 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+            aria-label={`查看 ${album.title} 封面原图`}
+          >
+            <SmartImage
+              src={coverPreviewSrc}
+              alt={album.title}
+              className="w-full h-full object-cover"
+            />
+          </button>
           <div className="flex-1 flex flex-col justify-center min-w-0">
             <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em] mb-1.5">
               {album.title}
@@ -402,6 +413,20 @@ const AlbumDetail = () => {
           </div>
         )}
       </div>
+
+      <Lightbox
+        open={coverLightboxOpen}
+        images={[
+          {
+            id: album.docId,
+            url: coverPreviewSrc,
+            originalUrl: album.cover,
+            name: `${album.title} 封面`,
+          },
+        ]}
+        initialIndex={0}
+        onClose={() => setCoverLightboxOpen(false)}
+      />
     </div>
   )
 }
