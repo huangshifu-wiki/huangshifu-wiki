@@ -72,6 +72,7 @@ vi.mock('../../src/context/UserPreferencesContext', () => ({
   useUserPreferences: () => ({
     preferences: {
       theme: 'system',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
       publicFavorites: false,
       publicHistory: false,
@@ -273,6 +274,14 @@ describe('Settings', () => {
     await userEvent.click(toggle)
 
     expect(mockUpdatePreferences).toHaveBeenCalledWith({ showCharacterCount: true })
+  })
+
+  it('can switch list load mode from appearance section', async () => {
+    renderSettings('/settings/appearance')
+
+    await userEvent.click(screen.getByRole('button', { name: '分段加载' }))
+
+    expect(mockUpdatePreferences).toHaveBeenCalledWith({ listLoadMode: 'incremental' })
   })
 
   it('renders section navigation as routes', () => {

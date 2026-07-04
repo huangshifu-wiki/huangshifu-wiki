@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   Image as ImageIcon,
@@ -29,6 +29,8 @@ import {
   THUMBNAIL_POLL_MAX_ATTEMPTS,
 } from '../lib/galleryThumbnails'
 import Pagination from '../components/Pagination'
+import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
+import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import type { GalleryItem } from '../types/entities'
 import type { GalleryListResponse } from '../types/api'
@@ -222,6 +224,7 @@ const GalleryCard = React.memo(
 )
 
 const GalleryList = () => {
+  const [, setSearchParams] = useSearchParams()
   const [galleries, setGalleries] = useState<GalleryItem[]>([])
   const { user, isAdmin, isBanned } = useAuth()
   const [isGalleryAdminOnly, setIsGalleryAdminOnly] = useState(false)
@@ -231,7 +234,7 @@ const GalleryList = () => {
   const lastGalleryToDeleteRef = useRef<{ id: string; title: string } | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deletingGalleryId, setDeletingGalleryId] = useState<string | null>(null)
-  const [totalGalleries, setTotalGalleries] = useState<number>()
+  const [totalGalleries, setTotalGalleries] = useState(0)
   const { show } = useToast()
 
   if (galleryToDelete) {
@@ -242,33 +245,75 @@ const GalleryList = () => {
   const { preferences, setViewMode } = useUserPreferences()
   const navigate = useNavigate()
   const viewMode = preferences.viewMode
+  const isIncrementalMode = preferences.listLoadMode === 'incremental'
 
   const galleryPagination = useRoutedPagination({
     totalCount: totalGalleries,
     defaultPageSize: DEFAULT_PAGE_SIZE,
     pageSizeOptions: PAGE_SIZE_OPTIONS,
+    enabled: !isIncrementalMode,
   })
-  const hasPendingThumbnails = galleries.some(shouldWaitForGalleryThumbnail)
+  const pageSize = isIncrementalMode ? DEFAULT_PAGE_SIZE : galleryPagination.pageSize
+  const fetchGalleryPage = useCallback(
+    async (
+      page: number,
+      options?: { bypassCache?: boolean; signal?: AbortSignal }
+    ): Promise<{ items: GalleryItem[]; total: number }> => {
+      const query = {
+        page,
+        limit: pageSize,
+        refreshThumbnails: options?.bypassCache ? true : undefined,
+      }
+      const data = await apiGet<GalleryListResponse>(
+        '/api/galleries',
+        query,
+        options?.bypassCache ? THUMBNAIL_POLL_DEDUP_OPTIONS : undefined,
+        options?.signal
+      )
+      if (options?.bypassCache) {
+        invalidateApiCacheByPrefix('/api/galleries')
+      }
+
+      return {
+        items: data.galleries || [],
+        total: data.total ?? 0,
+      }
+    },
+    [pageSize]
+  )
+  const incrementalList = useIncrementalListLoader({
+    enabled: isIncrementalMode,
+    pageSize,
+    resetKey: 'gallery',
+    fetchPage: (page, signal) => fetchGalleryPage(page, { signal }),
+    getItemKey: (gallery) => gallery.id,
+  })
+  const visibleGalleries = isIncrementalMode ? incrementalList.items : galleries
+  const visibleTotal = isIncrementalMode ? incrementalList.total : totalGalleries
+  const hasPendingThumbnails =
+    !isIncrementalMode && visibleGalleries.some(shouldWaitForGalleryThumbnail)
+
+  useEffect(() => {
+    if (!isIncrementalMode) return
+    setSearchParams(
+      (prev) => {
+        if (!prev.has('page') && !prev.has('pageSize')) return prev
+        const next = new URLSearchParams(prev)
+        next.delete('page')
+        next.delete('pageSize')
+        return next
+      },
+      { replace: true }
+    )
+  }, [isIncrementalMode, setSearchParams])
 
   const fetchGalleries = useCallback(
     async (options?: { bypassCache?: boolean; signal?: AbortSignal }) => {
+      if (isIncrementalMode) return
       try {
-        const query = {
-          page: galleryPagination.page,
-          limit: galleryPagination.pageSize,
-          refreshThumbnails: options?.bypassCache ? true : undefined,
-        }
-        const data = await apiGet<GalleryListResponse>(
-          '/api/galleries',
-          query,
-          options?.bypassCache ? THUMBNAIL_POLL_DEDUP_OPTIONS : undefined,
-          options?.signal
-        )
-        setGalleries(data.galleries || [])
-        setTotalGalleries(data.total ?? 0)
-        if (options?.bypassCache) {
-          invalidateApiCacheByPrefix('/api/galleries')
-        }
+        const data = await fetchGalleryPage(galleryPagination.page, options)
+        setGalleries(data.items)
+        setTotalGalleries(data.total)
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           return
@@ -280,7 +325,7 @@ const GalleryList = () => {
         }
       }
     },
-    [galleryPagination.page, galleryPagination.pageSize]
+    [fetchGalleryPage, galleryPagination.page, isIncrementalMode]
   )
 
   useEffect(() => {
@@ -361,7 +406,7 @@ const GalleryList = () => {
   const handleConfirmDeleteGallery = async () => {
     if (!galleryToDelete || deletingGalleryId) return
 
-    const target = galleries.find((gallery) => gallery.id === galleryToDelete.id)
+    const target = visibleGalleries.find((gallery) => gallery.id === galleryToDelete.id)
     const isSelfDelete = Boolean(target && user && target.authorUid === user.uid)
     const reason = isSelfDelete ? '' : deleteReason.trim()
     if (!isSelfDelete && !reason) {
@@ -372,15 +417,19 @@ const GalleryList = () => {
     try {
       setDeletingGalleryId(galleryToDelete.id)
       await apiDelete(`/api/galleries/${galleryToDelete.id}`, reason ? { reason } : {})
-      setGalleries((prev) => {
-        const next = prev.filter((gallery) => gallery.id !== galleryToDelete.id)
+      const removeDeletedGallery = (prev: GalleryItem[]) =>
+        prev.filter((gallery) => gallery.id !== galleryToDelete.id)
+      if (isIncrementalMode) {
+        incrementalList.setItems(removeDeletedGallery)
+        incrementalList.setTotal((prev) => Math.max(0, prev - 1))
+      } else {
+        setGalleries(removeDeletedGallery)
+        setTotalGalleries((prev) => Math.max(0, prev - 1))
         // 如果当前页删空了且不是第一页，自动回退一页
-        if (next.length === 0 && galleryPagination.page > 1) {
+        if (visibleGalleries.length === 1 && galleryPagination.page > 1) {
           galleryPagination.setPage(galleryPagination.page - 1)
         }
-        return next
-      })
-      setTotalGalleries((prev) => Math.max(0, prev - 1))
+      }
       show('图集已删除')
       setGalleryToDelete(null)
       setDeleteReason('')
@@ -420,7 +469,7 @@ const GalleryList = () => {
         </header>
 
         {/* Content */}
-        {galleries.length > 0 ? (
+        {visibleGalleries.length > 0 ? (
           <>
             <div
               className={clsx(
@@ -429,7 +478,7 @@ const GalleryList = () => {
                 VIEW_MODE_CONFIG[viewMode].gap
               )}
             >
-              {galleries.map((gallery) => (
+              {visibleGalleries.map((gallery) => (
                 <GalleryCard
                   key={gallery.id}
                   gallery={gallery}
@@ -441,7 +490,16 @@ const GalleryList = () => {
                 />
               ))}
             </div>
-            {galleryPagination.totalPages > 1 && (
+            {isIncrementalMode ? (
+              <IncrementalLoadFooter
+                hasMore={incrementalList.hasMore}
+                loading={incrementalList.loadingMore}
+                total={visibleTotal || 0}
+                loaded={visibleGalleries.length}
+                onLoadMore={incrementalList.loadMore}
+                sentinelRef={incrementalList.sentinelRef}
+              />
+            ) : galleryPagination.totalPages > 1 ? (
               <div className="mt-8">
                 <Pagination
                   page={galleryPagination.page}
@@ -453,7 +511,7 @@ const GalleryList = () => {
                   showPageSizeSelector
                 />
               </div>
-            )}
+            ) : null}
           </>
         ) : (
           <div className="py-20 text-center text-text-muted italic tracking-[0.1em]">
@@ -477,7 +535,7 @@ const GalleryList = () => {
                 您确定要删除图集《{deleteTarget.title}》吗？此操作无法撤销。
               </p>
               {(() => {
-                const target = galleries.find((gallery) => gallery.id === deleteTarget.id)
+                const target = visibleGalleries.find((gallery) => gallery.id === deleteTarget.id)
                 const requiresReason = Boolean(target && user && target.authorUid !== user.uid)
                 return requiresReason ? (
                   <label className="mb-6 block text-sm font-medium text-text-secondary">

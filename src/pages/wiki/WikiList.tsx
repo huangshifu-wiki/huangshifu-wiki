@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Book, Calendar, Plus } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
@@ -11,15 +11,17 @@ import { copyToClipboard, toAbsoluteInternalUrl } from '../../lib/copyLink'
 import { apiGet } from '../../lib/apiClient'
 import WikiCard from '../../components/wiki/WikiCard'
 import Pagination from '../../components/Pagination'
+import { IncrementalLoadFooter } from '../../components/IncrementalLoadFooter'
 import type { WikiItem } from './types'
 import { DEFAULT_PAGE_SIZE } from './types'
+import { useIncrementalListLoader } from '../../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 
 const WikiList = () => {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const category = searchParams.get('category') || 'all'
   const tag = searchParams.get('tag')
   const [pages, setPages] = useState<WikiItem[]>([])
@@ -29,28 +31,72 @@ const WikiList = () => {
   const { show } = useToast()
   const { preferences, setViewMode } = useUserPreferences()
   const viewMode = preferences.viewMode
+  const isIncrementalMode = preferences.listLoadMode === 'incremental'
   const { categories, getCategoryLabel } = useWikiCategories()
 
   const pagination = useRoutedPagination({
     totalCount: total,
     defaultPageSize: DEFAULT_PAGE_SIZE,
     pageSizeOptions: PAGE_SIZE_OPTIONS,
+    enabled: !isIncrementalMode,
   })
+  const pageSize = isIncrementalMode ? DEFAULT_PAGE_SIZE : pagination.pageSize
+  const fetchWikiPage = useCallback(
+    async (page: number, signal?: AbortSignal) => {
+      const data = await apiGet<{ pages: WikiItem[]; total: number }>(
+        '/api/wiki',
+        {
+          category: category !== 'all' ? category : undefined,
+          tag: tag || undefined,
+          page,
+          pageSize,
+        },
+        undefined,
+        signal
+      )
+
+      return {
+        items: data.pages || [],
+        total: data.total || 0,
+      }
+    },
+    [category, pageSize, tag]
+  )
+  const incrementalList = useIncrementalListLoader({
+    enabled: isIncrementalMode,
+    pageSize,
+    resetKey: `${category}:${tag || ''}`,
+    fetchPage: fetchWikiPage,
+    getItemKey: (page) => page.id,
+  })
+  const visiblePages = isIncrementalMode ? incrementalList.items : pages
+  const visibleTotal = isIncrementalMode ? incrementalList.total : total || 0
+  const isInitialLoading = isIncrementalMode ? incrementalList.loadingInitial : loading
 
   useEffect(() => {
+    if (!isIncrementalMode) return
+    setSearchParams(
+      (prev) => {
+        if (!prev.has('page') && !prev.has('pageSize')) return prev
+        const next = new URLSearchParams(prev)
+        next.delete('page')
+        next.delete('pageSize')
+        return next
+      },
+      { replace: true }
+    )
+  }, [isIncrementalMode, setSearchParams])
+
+  useEffect(() => {
+    if (isIncrementalMode) return
     let cancelled = false
     const fetchPages = async () => {
       setLoading(true)
       try {
-        const data = await apiGet<{ pages: WikiItem[]; total: number }>('/api/wiki', {
-          category: category !== 'all' ? category : undefined,
-          tag: tag || undefined,
-          page: pagination.page,
-          pageSize: pagination.pageSize,
-        })
+        const data = await fetchWikiPage(pagination.page)
         if (cancelled) return
-        setPages(data.pages || [])
-        setTotal(data.total || 0)
+        setPages(data.items)
+        setTotal(data.total)
       } catch (e) {
         if (cancelled) return
         console.error('Error fetching wiki pages:', e)
@@ -61,7 +107,7 @@ const WikiList = () => {
     return () => {
       cancelled = true
     }
-  }, [category, tag, pagination.page, pagination.pageSize])
+  }, [fetchWikiPage, isIncrementalMode, pagination.page])
 
   const getCategoryUrl = (nextCategory: string) => {
     const params = new URLSearchParams(searchParams)
@@ -133,11 +179,11 @@ const WikiList = () => {
 
           <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
             <ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
-            <span className="text-text-muted">{pages.length} 个页面</span>
+            <span className="text-text-muted">{visibleTotal} 个页面</span>
           </div>
         </div>
 
-        {loading ? (
+        {isInitialLoading ? (
           <div
             className={clsx(
               'grid',
@@ -155,7 +201,7 @@ const WikiList = () => {
               ></div>
             ))}
           </div>
-        ) : pages.length > 0 ? (
+        ) : visiblePages.length > 0 ? (
           <>
             <div
               className={clsx(
@@ -164,7 +210,7 @@ const WikiList = () => {
                 VIEW_MODE_CONFIG[viewMode].gap
               )}
             >
-              {pages.map((page) => (
+              {visiblePages.map((page) => (
                 <WikiCard
                   key={page.id}
                   page={page}
@@ -175,7 +221,16 @@ const WikiList = () => {
                 />
               ))}
             </div>
-            {(import.meta.env.DEV || pagination.totalPages > 1) && (
+            {isIncrementalMode ? (
+              <IncrementalLoadFooter
+                hasMore={incrementalList.hasMore}
+                loading={incrementalList.loadingMore}
+                total={visibleTotal}
+                loaded={visiblePages.length}
+                onLoadMore={incrementalList.loadMore}
+                sentinelRef={incrementalList.sentinelRef}
+              />
+            ) : import.meta.env.DEV || pagination.totalPages > 1 ? (
               <Pagination
                 page={pagination.page}
                 totalPages={pagination.totalPages}
@@ -185,7 +240,7 @@ const WikiList = () => {
                 pageSizeOptions={PAGE_SIZE_OPTIONS}
                 showPageSizeSelector
               />
-            )}
+            ) : null}
           </>
         ) : (
           <div className="bg-surface p-20 rounded border border-border text-center">

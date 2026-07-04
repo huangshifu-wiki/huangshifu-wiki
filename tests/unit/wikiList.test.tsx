@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { VIEW_MODE_CONFIG } from '../../src/lib/viewModes'
 import WikiList from '../../src/pages/wiki/WikiList'
@@ -9,6 +10,7 @@ import { DEFAULT_PAGE_SIZE, type WikiItem } from '../../src/pages/wiki/types'
 const mockApiGet = vi.hoisted(() => vi.fn())
 const mockSetViewMode = vi.hoisted(() => vi.fn())
 const mockShowToast = vi.hoisted(() => vi.fn())
+const mockListLoadMode = vi.hoisted(() => vi.fn(() => 'pagination'))
 
 const mockCategories = [
   {
@@ -42,6 +44,7 @@ vi.mock('../../src/context/UserPreferencesContext', () => ({
   useUserPreferences: () => ({
     preferences: {
       viewMode: 'medium',
+      listLoadMode: mockListLoadMode(),
     },
     setViewMode: mockSetViewMode,
   }),
@@ -98,6 +101,7 @@ const renderWithRouter = (initialEntry = '/wiki') =>
 describe('WikiList', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockListLoadMode.mockReturnValue('pagination')
     mockApiGet.mockImplementation((path: string) => {
       if (path === '/api/wiki/categories') {
         return Promise.resolve({
@@ -121,7 +125,9 @@ describe('WikiList', () => {
         expect.objectContaining({
           page: 1,
           pageSize: DEFAULT_PAGE_SIZE,
-        })
+        }),
+        undefined,
+        undefined
       )
     })
 
@@ -168,8 +174,49 @@ describe('WikiList', () => {
         expect.objectContaining({
           page: 2,
           pageSize: 50,
-        })
+        }),
+        undefined,
+        undefined
       )
     })
+  })
+
+  it('appends the next page in incremental load mode', async () => {
+    mockListLoadMode.mockReturnValue('incremental')
+    mockApiGet.mockImplementation((path: string, params?: { page?: number }) => {
+      if (path === '/api/wiki/categories') {
+        return Promise.resolve({
+          categories: mockCategories,
+        })
+      }
+      return Promise.resolve({
+        pages: [
+          {
+            ...mockPages[0],
+            id: `wiki-${params?.page ?? 1}`,
+            title: `第 ${params?.page ?? 1} 页百科`,
+          },
+        ],
+        total: 2,
+      })
+    })
+
+    renderWithRouter('/wiki?page=3&pageSize=50')
+
+    expect(await screen.findByText('第 1 页百科')).toBeInTheDocument()
+    expect(screen.queryByLabelText('分页导航')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: '加载更多' }))
+
+    expect(await screen.findByText('第 2 页百科')).toBeInTheDocument()
+    expect(mockApiGet).toHaveBeenCalledWith(
+      '/api/wiki',
+      expect.objectContaining({
+        page: 2,
+        pageSize: DEFAULT_PAGE_SIZE,
+      }),
+      undefined,
+      expect.any(AbortSignal)
+    )
   })
 })

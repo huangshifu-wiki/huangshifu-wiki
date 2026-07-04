@@ -69,6 +69,7 @@ describe('theme helpers', () => {
     ).toEqual({
       viewMode: 'large',
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: true,
       publicFavorites: false,
       publicHistory: false,
@@ -80,6 +81,7 @@ describe('theme helpers', () => {
     expect(hasStoredPreferenceValues({})).toBe(false)
     expect(hasStoredPreferenceValues({ theme: 'dark' })).toBe(true)
     expect(hasStoredPreferenceValues({ viewMode: 'small' })).toBe(true)
+    expect(hasStoredPreferenceValues({ listLoadMode: 'incremental' })).toBe(true)
     expect(hasStoredPreferenceValues({ showCharacterCount: false })).toBe(true)
     expect(hasStoredPreferenceValues({ publicFavorites: false })).toBe(true)
     expect(hasStoredPreferenceValues({ theme: 'sepia' })).toBe(false)
@@ -100,6 +102,7 @@ describe('theme helpers', () => {
     ).toEqual({
       viewMode: 'small',
       theme: 'default',
+      listLoadMode: 'pagination',
       showCharacterCount: true,
       publicFavorites: false,
       publicHistory: false,
@@ -117,6 +120,7 @@ describe('theme helpers', () => {
       guest: {
         viewMode: 'small',
         theme: 'dark',
+        listLoadMode: 'pagination',
         showCharacterCount: true,
         publicFavorites: false,
         publicHistory: false,
@@ -139,6 +143,7 @@ describe('theme helpers', () => {
     expect(readStoredPreferences('user-1')).toEqual({
       viewMode: 'list',
       theme: 'default',
+      listLoadMode: 'pagination',
       showCharacterCount: true,
       publicFavorites: false,
       publicHistory: false,
@@ -148,6 +153,7 @@ describe('theme helpers', () => {
         'user-1': {
           viewMode: 'list',
           theme: 'default',
+          listLoadMode: 'pagination',
           showCharacterCount: true,
           publicFavorites: false,
           publicHistory: false,
@@ -168,6 +174,7 @@ describe('theme helpers', () => {
     expect(readStoredPreferences()).toEqual({
       viewMode: 'small',
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
       publicFavorites: false,
       publicHistory: false,
@@ -186,6 +193,7 @@ describe('theme helpers', () => {
     expect(readStoredPreferences('user-1', { includeLegacyFallback: true })).toEqual({
       viewMode: 'small',
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
       publicFavorites: false,
       publicHistory: false,

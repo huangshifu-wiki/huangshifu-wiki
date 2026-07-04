@@ -208,6 +208,7 @@ describe('UserPreferencesProvider', () => {
     expect(readStoredPreferences('user-2')).toEqual({
       viewMode: 'medium',
       theme: 'system',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
       publicFavorites: false,
       publicHistory: false,
@@ -215,6 +216,7 @@ describe('UserPreferencesProvider', () => {
     expect(readStoredPreferences()).toEqual({
       viewMode: 'small',
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
       publicFavorites: false,
       publicHistory: false,
@@ -258,6 +260,7 @@ describe('UserPreferencesProvider', () => {
     expect(readStoredPreferences('user-3')).toEqual({
       viewMode: 'small',
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
       publicFavorites: false,
       publicHistory: false,
@@ -265,6 +268,7 @@ describe('UserPreferencesProvider', () => {
     expect(readStoredPreferences()).toEqual({
       viewMode: 'small',
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
       publicFavorites: false,
       publicHistory: false,

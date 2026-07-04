@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Routes,
   Route,
@@ -9,6 +9,7 @@ import {
   useLocation,
 } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useUserPreferences } from '../context/UserPreferencesContext'
 import {
   MessageSquare,
   Heart,
@@ -43,6 +44,8 @@ import { formatDate } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import { LocationTagInput } from '../components/LocationTagInput'
 import Pagination from '../components/Pagination'
+import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
+import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { RouteGuard } from '../components/RouteGuard'
@@ -199,7 +202,7 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
 
 const PostList = () => {
   const { t } = useI18n()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const section = searchParams.get('section') || 'all'
   const sort = searchParams.get('sort') || 'latest'
   const [posts, setPosts] = useState<PostItem[]>([])
@@ -207,13 +210,54 @@ const PostList = () => {
   const [loading, setLoading] = useState(true)
   const [totalPages, setTotalPages] = useState<number>()
   const { user, profile, isBanned } = useAuth()
+  const { preferences } = useUserPreferences()
+  const isIncrementalMode = preferences.listLoadMode === 'incremental'
   const { show } = useToast()
   const pagination = useRoutedPagination({
     serverTotalPages: totalPages,
     defaultPageSize: 20,
     pageSizeParam: null,
     showPageSizeSelector: false,
+    enabled: !isIncrementalMode,
   })
+  const fetchPostPage = useCallback(
+    async (page: number) => {
+      const data = await apiGet<{ posts: PostItem[]; totalPages: number }>('/api/posts', {
+        section,
+        sort,
+        page,
+        limit: DEFAULT_PAGE_SIZE,
+      })
+
+      return {
+        items: data.posts || [],
+        totalPages: data.totalPages || 1,
+        total: Math.max(0, (data.totalPages || 1) * DEFAULT_PAGE_SIZE),
+        hasMore: page < (data.totalPages || 1),
+      }
+    },
+    [section, sort]
+  )
+  const incrementalList = useIncrementalListLoader({
+    enabled: isIncrementalMode,
+    pageSize: DEFAULT_PAGE_SIZE,
+    resetKey: `${section}:${sort}`,
+    fetchPage: fetchPostPage,
+    getItemKey: (post) => post.id,
+  })
+  const visiblePosts = isIncrementalMode ? incrementalList.items : posts
+
+  useEffect(() => {
+    if (!isIncrementalMode) return
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('page')
+        return next
+      },
+      { replace: true }
+    )
+  }, [isIncrementalMode, setSearchParams])
 
   useEffect(() => {
     const fetchSections = async () => {
@@ -229,17 +273,13 @@ const PostList = () => {
   }, [])
 
   useEffect(() => {
+    if (isIncrementalMode) return
     const fetchPosts = async () => {
       try {
         setLoading(true)
-        const data = await apiGet<{ posts: PostItem[]; totalPages: number }>('/api/posts', {
-          section,
-          sort,
-          page: pagination.page,
-          limit: DEFAULT_PAGE_SIZE,
-        })
-        setPosts(data.posts || [])
-        setTotalPages(data.totalPages || 1)
+        const data = await fetchPostPage(pagination.page)
+        setPosts(data.items)
+        setTotalPages(data.totalPages)
       } catch (error) {
         console.error('Error fetching posts:', error)
       } finally {
@@ -248,7 +288,7 @@ const PostList = () => {
     }
 
     fetchPosts()
-  }, [section, sort, pagination.page])
+  }, [fetchPostPage, isIncrementalMode, pagination.page])
 
   const getListUrl = (nextValues: { section?: string; sort?: string }) => {
     const next = new URLSearchParams(searchParams)
@@ -359,12 +399,12 @@ const PostList = () => {
           </div>
         </div>
 
-        {loading ? (
+        {(isIncrementalMode ? incrementalList.loadingInitial : loading) ? (
           <PageSkeleton variant="forum" />
-        ) : posts.length > 0 ? (
+        ) : visiblePosts.length > 0 ? (
           <>
             <div className="space-y-3">
-              {posts.map((post) => (
+              {visiblePosts.map((post) => (
                 <PostCard
                   key={post.id}
                   post={post}
@@ -373,13 +413,22 @@ const PostList = () => {
                 />
               ))}
             </div>
-            {pagination.totalPages > 1 && (
+            {isIncrementalMode ? (
+              <IncrementalLoadFooter
+                hasMore={incrementalList.hasMore}
+                loading={incrementalList.loadingMore}
+                total={incrementalList.total}
+                loaded={visiblePosts.length}
+                onLoadMore={incrementalList.loadMore}
+                sentinelRef={incrementalList.sentinelRef}
+              />
+            ) : pagination.totalPages > 1 ? (
               <Pagination
                 page={pagination.page}
                 totalPages={pagination.totalPages}
                 onPageChange={pagination.handlePageChange}
               />
-            )}
+            ) : null}
           </>
         ) : (
           <div className="bg-surface p-20 rounded border border-border text-center">

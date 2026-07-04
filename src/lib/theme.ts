@@ -1,5 +1,9 @@
 import {
   DEFAULT_PREFERENCES,
+  LIST_LOAD_MODES,
+  THEME_MODES,
+  VIEW_MODES,
+  type ListLoadMode,
   type ThemeMode,
   type UserPreferences,
   type ViewMode,
@@ -17,8 +21,12 @@ type ThemeStorageState = {
   users: Record<string, Partial<UserPreferences>>
 }
 
+function isOneOf<const T extends readonly string[]>(values: T, value: unknown): value is T[number] {
+  return typeof value === 'string' && values.includes(value)
+}
+
 export function isThemeMode(value: unknown): value is ThemeMode {
-  return value === 'default' || value === 'dark' || value === 'system'
+  return isOneOf(THEME_MODES, value)
 }
 
 export function normalizeThemeMode(value: unknown): ThemeMode {
@@ -30,7 +38,7 @@ export function normalizeThemeMode(value: unknown): ThemeMode {
 }
 
 export function isViewMode(value: unknown): value is ViewMode {
-  return value === 'large' || value === 'medium' || value === 'small' || value === 'list'
+  return isOneOf(VIEW_MODES, value)
 }
 
 export function normalizeViewMode(value: unknown): ViewMode {
@@ -39,6 +47,18 @@ export function normalizeViewMode(value: unknown): ViewMode {
   }
 
   return DEFAULT_PREFERENCES.viewMode
+}
+
+export function isListLoadMode(value: unknown): value is ListLoadMode {
+  return isOneOf(LIST_LOAD_MODES, value)
+}
+
+export function normalizeListLoadMode(value: unknown): ListLoadMode {
+  if (isListLoadMode(value)) {
+    return value
+  }
+
+  return DEFAULT_PREFERENCES.listLoadMode
 }
 
 export function isBooleanPreference(value: unknown): value is boolean {
@@ -52,6 +72,7 @@ export function normalizeStoredPreferences(
     ...DEFAULT_PREFERENCES,
     viewMode: normalizeViewMode(value?.viewMode),
     theme: normalizeThemeMode(value?.theme),
+    listLoadMode: normalizeListLoadMode(value?.listLoadMode),
     showCharacterCount: isBooleanPreference(value?.showCharacterCount)
       ? value.showCharacterCount
       : DEFAULT_PREFERENCES.showCharacterCount,
@@ -74,6 +95,7 @@ export function hasStoredPreferenceValues(
   return (
     isViewMode(value.viewMode) ||
     isThemeMode(value.theme) ||
+    isListLoadMode(value.listLoadMode) ||
     isBooleanPreference(value.showCharacterCount) ||
     isBooleanPreference(value.publicFavorites) ||
     isBooleanPreference(value.publicHistory)
@@ -92,6 +114,9 @@ export function mergeStoredPreferences(
   return {
     viewMode: isViewMode(value.viewMode) ? value.viewMode : normalizedBase.viewMode,
     theme: isThemeMode(value.theme) ? value.theme : normalizedBase.theme,
+    listLoadMode: isListLoadMode(value.listLoadMode)
+      ? value.listLoadMode
+      : normalizedBase.listLoadMode,
     showCharacterCount: isBooleanPreference(value.showCharacterCount)
       ? value.showCharacterCount
       : normalizedBase.showCharacterCount,

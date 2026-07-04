@@ -20,7 +20,7 @@ vi.mock('../../src/context/AuthContext', () => ({
 
 vi.mock('../../src/context/UserPreferencesContext', () => ({
   useUserPreferences: () => ({
-    preferences: { viewMode: 'list' },
+    preferences: { viewMode: 'list', listLoadMode: 'pagination' },
     setViewMode: vi.fn(),
   }),
 }))

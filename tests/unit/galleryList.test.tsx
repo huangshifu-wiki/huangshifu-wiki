@@ -38,6 +38,7 @@ vi.mock('../../src/context/UserPreferencesContext', () => ({
   useUserPreferences: () => ({
     preferences: {
       viewMode: 'medium',
+      listLoadMode: 'pagination',
     },
     setViewMode: mockSetViewMode,
   }),

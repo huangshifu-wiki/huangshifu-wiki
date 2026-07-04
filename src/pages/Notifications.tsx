@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import {
   Bell,
   CheckCheck,
@@ -12,8 +12,11 @@ import {
 import { clsx } from 'clsx'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiGet, apiPost } from '../lib/apiClient'
+import { useUserPreferences } from '../context/UserPreferencesContext'
 import { getNotificationLink, getNotificationText } from '../lib/notifications'
 import Pagination from '../components/Pagination'
+import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
+import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import type { NotificationItem } from '../types/entities'
 
@@ -79,6 +82,8 @@ const Notifications = () => {
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [markingAllRead, setMarkingAllRead] = useState(false)
+  const { preferences } = useUserPreferences()
+  const isIncrementalMode = preferences.listLoadMode === 'incremental'
   const [data, setData] = useState<NotificationsResponse>({
     notifications: [],
     total: 0,
@@ -92,13 +97,12 @@ const Notifications = () => {
     defaultPageSize: PAGE_SIZE,
     pageSizeParam: null,
     showPageSizeSelector: false,
+    enabled: !isIncrementalMode,
   })
-
-  const fetchData = React.useCallback(async () => {
-    setLoading(true)
-    try {
+  const buildNotificationQuery = useCallback(
+    (page: number) => {
       const query: Record<string, string | number | boolean> = {
-        page: pagination.page,
+        page,
         limit: PAGE_SIZE,
       }
       if (filter === 'unread') {
@@ -112,12 +116,66 @@ const Notifications = () => {
       ) {
         query.type = filter
       }
+      return query
+    },
+    [filter]
+  )
+  const fetchNotificationPage = useCallback(
+    async (page: number) => {
+      const response = await apiGet<NotificationsResponse>(
+        '/api/notifications',
+        buildNotificationQuery(page)
+      )
 
-      const response = await apiGet<NotificationsResponse>('/api/notifications', query)
+      return {
+        items: response.notifications,
+        total: response.total,
+        response,
+      }
+    },
+    [buildNotificationQuery]
+  )
+  const incrementalList = useIncrementalListLoader({
+    enabled: isIncrementalMode,
+    pageSize: PAGE_SIZE,
+    resetKey: filter,
+    fetchPage: async (page) => {
+      const result = await fetchNotificationPage(page)
+      setData((prev) => ({
+        ...prev,
+        total: result.response.total,
+        unreadCount: result.response.unreadCount,
+        page: result.response.page,
+        limit: result.response.limit,
+      }))
+      setLoaded(true)
+      return result
+    },
+    getItemKey: (notification) => notification.id,
+  })
+  const visibleNotifications = isIncrementalMode ? incrementalList.items : data.notifications
+
+  React.useEffect(() => {
+    if (!isIncrementalMode) return
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('page')
+        return next
+      },
+      { replace: true }
+    )
+  }, [isIncrementalMode, setSearchParams])
+
+  const fetchData = React.useCallback(async () => {
+    if (isIncrementalMode) return
+    setLoading(true)
+    try {
+      const result = await fetchNotificationPage(pagination.page)
 
       setData({
-        ...response,
-        notifications: response.notifications,
+        ...result.response,
+        notifications: result.response.notifications,
       })
       setLoaded(true)
     } catch (error) {
@@ -125,7 +183,7 @@ const Notifications = () => {
     } finally {
       setLoading(false)
     }
-  }, [filter, pagination.page])
+  }, [fetchNotificationPage, isIncrementalMode, pagination.page])
 
   React.useEffect(() => {
     fetchData()
@@ -173,6 +231,11 @@ const Notifications = () => {
   const markNotificationRead = async (id: string) => {
     try {
       await apiPost('/api/notifications/' + id + '/read')
+      if (isIncrementalMode) {
+        incrementalList.setItems((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, isRead: true } : item))
+        )
+      }
       setData((prev) => ({
         ...prev,
         unreadCount: Math.max(0, prev.unreadCount - 1),
@@ -189,6 +252,14 @@ const Notifications = () => {
     setMarkingAllRead(true)
     try {
       await apiPost('/api/notifications/read-all')
+      if (isIncrementalMode) {
+        incrementalList.setItems((prev) =>
+          prev.map((item) => ({
+            ...item,
+            isRead: true,
+          }))
+        )
+      }
       setData((prev) => ({
         ...prev,
         unreadCount: 0,
@@ -229,7 +300,8 @@ const Notifications = () => {
               通知中心
             </h1>
             <p className="text-sm text-text-muted mt-1">
-              未读 {data.unreadCount} 条，共 {data.total} 条
+              未读 {data.unreadCount} 条，共{' '}
+              {isIncrementalMode ? incrementalList.total : data.total} 条
             </p>
           </div>
           <button
@@ -265,18 +337,18 @@ const Notifications = () => {
 
         {/* List */}
         <div className="bg-surface border border-border rounded overflow-hidden min-h-[360px]">
-          {loading ? (
+          {(isIncrementalMode ? incrementalList.loadingInitial : loading) ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 size={24} className="animate-spin text-brand-gold" />
             </div>
-          ) : data.notifications.length === 0 ? (
+          ) : visibleNotifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-text-muted">
               <Bell size={36} className="mb-3 opacity-50" />
               <p>当前筛选下暂无通知</p>
             </div>
           ) : (
             <ul>
-              {data.notifications.map((notif) => {
+              {visibleNotifications.map((notif) => {
                 const link = getNotificationLink(notif)
                 return (
                   <li
@@ -336,14 +408,23 @@ const Notifications = () => {
           )}
         </div>
 
-        {pagination.totalPages > 1 && (
+        {isIncrementalMode ? (
+          <IncrementalLoadFooter
+            hasMore={incrementalList.hasMore}
+            loading={incrementalList.loadingMore}
+            total={incrementalList.total}
+            loaded={visibleNotifications.length}
+            onLoadMore={incrementalList.loadMore}
+            sentinelRef={incrementalList.sentinelRef}
+          />
+        ) : pagination.totalPages > 1 ? (
           <Pagination
             page={pagination.page}
             totalPages={pagination.totalPages}
             onPageChange={(newPage) => updateQuery(filter, newPage)}
             showPageSizeSelector={false}
           />
-        )}
+        ) : null}
       </div>
     </div>
   )

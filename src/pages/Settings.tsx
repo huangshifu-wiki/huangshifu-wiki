@@ -46,6 +46,7 @@ import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import type { CommentItem, GalleryItem, PostItem } from '../types/entities'
 import type { ContentStatus } from '../types/common'
 import type { EmailVerificationPublicConfig } from '../types/api'
+import type { ListLoadMode } from '../types/userPreferences'
 
 type PublicProfileForm = {
   displayName: string
@@ -105,6 +106,11 @@ const SECTION_NAV = [
 const CONTENT_SECTION_NAV = [
   { id: 'content', label: '内容管理', icon: FileText, path: '/settings/content' },
 ] as const
+
+const LIST_LOAD_MODE_OPTIONS: Array<{ value: ListLoadMode; label: string }> = [
+  { value: 'pagination', label: '分页模式' },
+  { value: 'incremental', label: '分段加载' },
+]
 
 const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'profile',
@@ -1315,6 +1321,35 @@ const Settings = () => {
 
                 <div className="max-w-3xl">
                   <ThemeToggle compact />
+                </div>
+
+                <div className="flex max-w-3xl items-center justify-between gap-4 border-t border-border pt-6">
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">列表加载方式</p>
+                    <p className="mt-1 text-xs text-text-muted">
+                      分段加载会在滚动到底部时继续追加内容
+                    </p>
+                  </div>
+                  <div
+                    className="inline-flex rounded border border-border bg-surface p-1"
+                    role="group"
+                    aria-label="列表加载方式"
+                  >
+                    {LIST_LOAD_MODE_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => void updatePreferences({ listLoadMode: option.value })}
+                        className={`rounded px-3 py-1.5 text-sm transition-colors ${
+                          preferences.listLoadMode === option.value
+                            ? 'bg-[var(--color-theme-accent)] text-white'
+                            : 'text-text-secondary hover:text-brand-gold'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex max-w-3xl items-center justify-between gap-4 border-t border-border pt-6">

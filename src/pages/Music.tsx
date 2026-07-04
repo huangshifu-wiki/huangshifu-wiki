@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
@@ -8,6 +8,8 @@ import { useToast } from '../components/Toast'
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import Pagination from '../components/Pagination'
+import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
+import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { useI18n } from '../lib/i18n'
 import { PageSkeleton } from '../components/PageSkeleton'
@@ -36,13 +38,12 @@ const Music = () => {
   const { currentSong, setCurrentSong, setIsPlaying, setPlaylist, playSongAtIndex } = useMusic()
   const { preferences, setViewMode } = useUserPreferences()
   const viewMode = preferences.viewMode
+  const isIncrementalMode = preferences.listLoadMode === 'incremental'
   const { show } = useToast()
   const { t } = useI18n()
 
   const [sortBy, setSortBy] = useState<SortBy>('releaseDate')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-
-  const playableSongs = useMemo(() => songs.filter(isPlayableSong), [songs])
 
   const musicPagination = useRoutedPagination({
     totalCount: songTotal,
@@ -50,6 +51,7 @@ const Music = () => {
     pageParam: 'musicPage',
     pageSizeParam: 'musicPageSize',
     pageSizeOptions: MUSIC_PAGE_SIZE_OPTIONS,
+    enabled: !isIncrementalMode,
   })
   const albumPagination = useRoutedPagination({
     totalCount: albumTotal,
@@ -57,8 +59,73 @@ const Music = () => {
     pageParam: 'albumPage',
     pageSizeParam: null,
     showPageSizeSelector: false,
+    enabled: !isIncrementalMode,
   })
   const [showAccompaniments, setShowAccompaniments] = useState(false)
+  const fetchSongPage = useCallback(
+    async (page: number) => {
+      const data = await apiGet<MusicListResponse>('/api/music', {
+        limit: musicPagination.pageSize,
+        page,
+        includeInstrumentals: showAccompaniments,
+        sortBy,
+        sortOrder,
+      })
+
+      return {
+        items: data.songs || [],
+        total: data.total || 0,
+      }
+    },
+    [musicPagination.pageSize, showAccompaniments, sortBy, sortOrder]
+  )
+  const fetchAlbumPage = useCallback(
+    async (page: number) => {
+      const data = await apiGet<AlbumListResponse>('/api/albums', {
+        limit: albumPagination.pageSize,
+        page,
+      })
+
+      return {
+        items: data.albums || [],
+        total: data.total || 0,
+      }
+    },
+    [albumPagination.pageSize]
+  )
+  const incrementalSongs = useIncrementalListLoader({
+    enabled: isIncrementalMode,
+    pageSize: musicPagination.pageSize,
+    resetKey: `songs:${showAccompaniments}:${sortBy}:${sortOrder}`,
+    fetchPage: fetchSongPage,
+    getItemKey: (song) => song.docId,
+  })
+  const incrementalAlbums = useIncrementalListLoader({
+    enabled: isIncrementalMode,
+    pageSize: albumPagination.pageSize,
+    resetKey: 'albums',
+    fetchPage: fetchAlbumPage,
+    getItemKey: (album) => album.docId,
+  })
+  const visibleSongs = isIncrementalMode ? incrementalSongs.items : songs
+  const visibleAlbums = isIncrementalMode ? incrementalAlbums.items : albums
+  const visibleSongTotal = isIncrementalMode ? incrementalSongs.total : songTotal || 0
+  const visibleAlbumTotal = isIncrementalMode ? incrementalAlbums.total : albumTotal || 0
+  const playableSongs = useMemo(() => visibleSongs.filter(isPlayableSong), [visibleSongs])
+
+  useEffect(() => {
+    if (!isIncrementalMode) return
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('musicPage')
+        next.delete('musicPageSize')
+        next.delete('albumPage')
+        return next
+      },
+      { replace: true }
+    )
+  }, [isIncrementalMode, setSearchParams])
 
   useEffect(() => {
     if (tabParam && tabParam !== 'albums') {
@@ -86,21 +153,16 @@ const Music = () => {
   }
 
   useEffect(() => {
+    if (isIncrementalMode) return
     let cancelled = false
 
     const fetchSongs = async () => {
       setLoading(true)
       try {
-        const data = await apiGet<MusicListResponse>('/api/music', {
-          limit: musicPagination.pageSize,
-          page: musicPagination.page,
-          includeInstrumentals: showAccompaniments,
-          sortBy,
-          sortOrder,
-        })
+        const data = await fetchSongPage(musicPagination.page)
         if (cancelled) return
-        setSongs(data.songs || [])
-        setSongTotal(data.total || 0)
+        setSongs(data.items)
+        setSongTotal(data.total)
       } catch (e) {
         if (cancelled) return
         console.error('Fetch songs error:', e)
@@ -116,25 +178,23 @@ const Music = () => {
     return () => {
       cancelled = true
     }
-  }, [showAccompaniments, sortBy, sortOrder, musicPagination.page, musicPagination.pageSize])
+  }, [fetchSongPage, isIncrementalMode, musicPagination.page])
 
   useEffect(() => {
-    setPlaylist(songs)
-  }, [songs, setPlaylist])
+    setPlaylist(visibleSongs)
+  }, [setPlaylist, visibleSongs])
 
   useEffect(() => {
+    if (isIncrementalMode) return
     let cancelled = false
 
     const fetchAlbums = async () => {
       setLoadingAlbums(true)
       try {
-        const data = await apiGet<AlbumListResponse>('/api/albums', {
-          limit: albumPagination.pageSize,
-          page: albumPagination.page,
-        })
+        const data = await fetchAlbumPage(albumPagination.page)
         if (cancelled) return
-        setAlbums(data.albums || [])
-        setAlbumTotal(data.total || 0)
+        setAlbums(data.items)
+        setAlbumTotal(data.total)
       } catch (error) {
         if (cancelled) return
         console.error('Fetch albums error:', error)
@@ -150,7 +210,7 @@ const Music = () => {
     return () => {
       cancelled = true
     }
-  }, [albumPagination.page, albumPagination.pageSize])
+  }, [albumPagination.page, fetchAlbumPage, isIncrementalMode])
 
   const playSong = (song: SongItem) => {
     if (!isPlayableSong(song)) {
@@ -188,19 +248,26 @@ const Music = () => {
     if (favoriting === song.docId) return
     setFavoriting(song.docId)
     try {
+      const updateFavorite = (favoritedByMe: boolean) => (prev: SongItem[]) =>
+        prev.map((item) => (item.docId === song.docId ? { ...item, favoritedByMe } : item))
+      const setFavoriteInCurrentList = (favoritedByMe: boolean) => {
+        const updater = updateFavorite(favoritedByMe)
+        if (isIncrementalMode) {
+          incrementalSongs.setItems(updater)
+          return
+        }
+        setSongs(updater)
+      }
+
       if (song.favoritedByMe) {
         await apiDelete(`/api/favorites/music/${song.docId}`)
-        setSongs((prev) =>
-          prev.map((item) => (item.docId === song.docId ? { ...item, favoritedByMe: false } : item))
-        )
+        setFavoriteInCurrentList(false)
       } else {
         await apiPost('/api/favorites', {
           targetType: 'music',
           targetId: song.docId,
         })
-        setSongs((prev) =>
-          prev.map((item) => (item.docId === song.docId ? { ...item, favoritedByMe: true } : item))
-        )
+        setFavoriteInCurrentList(true)
       }
     } catch (error) {
       console.error('Toggle music favorite error:', error)
@@ -210,7 +277,7 @@ const Music = () => {
     }
   }
 
-  if (loading) {
+  if (isIncrementalMode ? incrementalSongs.loadingInitial : loading) {
     return <PageSkeleton variant="music" />
   }
 
@@ -254,8 +321,8 @@ const Music = () => {
                 setShowAccompaniments(value)
                 musicPagination.setPage(1)
               }}
-              musicCount={songTotal ?? 0}
-              albumCount={albumTotal ?? 0}
+              musicCount={visibleSongTotal}
+              albumCount={visibleAlbumTotal}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
             />
@@ -263,7 +330,7 @@ const Music = () => {
             {/* Content */}
             {activeTab === 'music' ? (
               <div className="flex flex-col mt-6">
-                {songs.length > 0 ? (
+                {visibleSongs.length > 0 ? (
                   <>
                     <div
                       className={clsx(
@@ -276,12 +343,14 @@ const Music = () => {
                             )
                       )}
                     >
-                      {songs.map((song, index) => (
+                      {visibleSongs.map((song, index) => (
                         <SongCard
                           key={song.docId}
                           song={song}
                           sequenceNumber={
-                            (musicPagination.page - 1) * musicPagination.pageSize + index + 1
+                            isIncrementalMode
+                              ? index + 1
+                              : (musicPagination.page - 1) * musicPagination.pageSize + index + 1
                           }
                           viewMode={viewMode}
                           isCurrentSong={currentSong?.docId === song.docId}
@@ -292,7 +361,16 @@ const Music = () => {
                       ))}
                     </div>
 
-                    {musicPagination.totalPages > 1 && (
+                    {isIncrementalMode ? (
+                      <IncrementalLoadFooter
+                        hasMore={incrementalSongs.hasMore}
+                        loading={incrementalSongs.loadingMore}
+                        total={visibleSongTotal}
+                        loaded={visibleSongs.length}
+                        onLoadMore={incrementalSongs.loadMore}
+                        sentinelRef={incrementalSongs.sentinelRef}
+                      />
+                    ) : musicPagination.totalPages > 1 ? (
                       <div className="mt-8">
                         <Pagination
                           page={musicPagination.page}
@@ -304,7 +382,7 @@ const Music = () => {
                           showPageSizeSelector
                         />
                       </div>
-                    )}
+                    ) : null}
                   </>
                 ) : (
                   <div className="py-20 text-center text-text-muted italic tracking-[0.1em]">
@@ -314,7 +392,7 @@ const Music = () => {
               </div>
             ) : (
               <div className="mt-6">
-                {loadingAlbums ? (
+                {!isIncrementalMode && loadingAlbums ? (
                   <div
                     className={clsx(
                       'grid',
@@ -330,7 +408,7 @@ const Music = () => {
                       </div>
                     ))}
                   </div>
-                ) : albums.length > 0 ? (
+                ) : visibleAlbums.length > 0 ? (
                   <>
                     <div
                       className={clsx(
@@ -339,7 +417,7 @@ const Music = () => {
                         VIEW_MODE_CONFIG[viewMode].gap
                       )}
                     >
-                      {albums.map((album) => (
+                      {visibleAlbums.map((album) => (
                         <AlbumCard
                           key={album.docId}
                           album={album}
@@ -348,7 +426,16 @@ const Music = () => {
                         />
                       ))}
                     </div>
-                    {albumPagination.totalPages > 1 && (
+                    {isIncrementalMode ? (
+                      <IncrementalLoadFooter
+                        hasMore={incrementalAlbums.hasMore}
+                        loading={incrementalAlbums.loadingMore}
+                        total={visibleAlbumTotal}
+                        loaded={visibleAlbums.length}
+                        onLoadMore={incrementalAlbums.loadMore}
+                        sentinelRef={incrementalAlbums.sentinelRef}
+                      />
+                    ) : albumPagination.totalPages > 1 ? (
                       <div className="mt-8">
                         <Pagination
                           page={albumPagination.page}
@@ -358,7 +445,7 @@ const Music = () => {
                           showPageSizeSelector={false}
                         />
                       </div>
-                    )}
+                    ) : null}
                   </>
                 ) : (
                   <div className="py-20 text-center text-text-muted italic tracking-[0.1em]">
@@ -379,11 +466,11 @@ const Music = () => {
               <div className="flex flex-col gap-2.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">单曲</span>
-                  <span className="text-text-primary font-medium">{songTotal ?? 0}</span>
+                  <span className="text-text-primary font-medium">{visibleSongTotal}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">专辑</span>
-                  <span className="text-text-primary font-medium">{albumTotal ?? 0}</span>
+                  <span className="text-text-primary font-medium">{visibleAlbumTotal}</span>
                 </div>
               </div>
             </div>
