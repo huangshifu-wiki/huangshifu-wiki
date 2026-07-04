@@ -253,7 +253,6 @@
     "saving": "保存中...",
     "saveDraft": "保存草稿",
     "bannedCannotEdit": "账号已被封禁，无法编辑百科",
-    "musicCategoryAdminOnly": "只有管理员可以修改音乐分类的内容",
     "titleRequired": "请填写标题（*为必填项）",
     "categoryRequired": "请选择分类（*为必填项）",
     "contentRequired": "请填写内容（*为必填项）",

@@ -34,6 +34,7 @@ import RelationGraph from '../../components/wiki/RelationGraph'
 import type { RelationGraphData } from '../../components/wiki/RelationGraph'
 import { RELATION_TYPE_LABELS } from '../../components/wiki/types'
 import type { WikiItem, WikiRelationResolved, WikiRelationDisplayItem } from './types'
+import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const hasExpandableRelationGraph = (graph: RelationGraphData | null, currentSlug?: string) => {
   if (!graph || graph.edges.length === 0) return false
@@ -73,6 +74,7 @@ const WikiPageView = () => {
   const { user, isAdmin, isBanned } = useAuth()
   const { t } = useI18n()
   const { show } = useToast()
+  const { getCategoryLabel, canEditCategory } = useWikiCategories()
   const [backlinks, setBacklinks] = useState<WikiItem[]>([])
   const [submittingReview, setSubmittingReview] = useState(false)
   const {
@@ -149,6 +151,7 @@ const WikiPageView = () => {
 
   const isOwner = Boolean(user && page?.lastEditorUid === user.uid)
   const canEditPage = Boolean(!isBanned && (isOwner || isAdmin))
+  const canEditPageCategory = canEditCategory(page.category, isAdmin)
   const displayedRelations: WikiRelationDisplayItem[] =
     resolvedRelations.length > 0 ? resolvedRelations : page.relations || []
   const directRelationGraph = buildDirectRelationGraph(page, displayedRelations)
@@ -157,7 +160,11 @@ const WikiPageView = () => {
     : directRelationGraph
   const canShowRelationGraph = hasExpandableRelationGraph(expandableRelationGraph, slug)
   const canSubmitReview = Boolean(
-    !isBanned && canEditPage && page && (page.status === 'draft' || page.status === 'rejected')
+    !isBanned &&
+    canEditPage &&
+    canEditPageCategory &&
+    page &&
+    (page.status === 'draft' || page.status === 'rejected')
   )
   const submitButtonText = getWikiSubmitButtonText(t, isAdmin, submittingReview)
 
@@ -172,7 +179,12 @@ const WikiPageView = () => {
   }
 
   const handleSubmitReview = async () => {
-    if (!slug || !canSubmitReview || submittingReview) return
+    if (!slug || submittingReview) return
+    if (!canEditPageCategory) {
+      show('该分类仅管理员可编辑', { variant: 'error' })
+      return
+    }
+    if (!canSubmitReview) return
     setSubmittingReview(true)
     try {
       const data = await apiPost<{ page: WikiItem }>(`/api/wiki/${slug}/submit`)
@@ -208,7 +220,7 @@ const WikiPageView = () => {
               {page.title}
             </h1>
             <div className="flex flex-wrap gap-2">
-              {canEditPage && (page.category !== 'music' || isAdmin) && (
+              {canEditPage && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/edit`}
                   className="px-4 py-2 text-[0.9375rem] rounded theme-button-primary transition-all flex items-center gap-2"
@@ -216,7 +228,7 @@ const WikiPageView = () => {
                   <Edit3 size={16} /> {t('wiki.edit')}
                 </Link>
               )}
-              {canEditPage && (page.category !== 'music' || isAdmin) && (
+              {canEditPage && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/history`}
                   className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
@@ -224,7 +236,7 @@ const WikiPageView = () => {
                   <History size={16} /> {t('wiki.history')}
                 </Link>
               )}
-              {user && !isBanned && (
+              {user && !isBanned && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/branches`}
                   className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
@@ -247,17 +259,7 @@ const WikiPageView = () => {
         <div className="flex items-end justify-between border-b border-border mb-5">
           <div className="flex gap-5 items-center">
             <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
-              {page.category === 'biography'
-                ? t('wiki.category.biography')
-                : page.category === 'music'
-                  ? t('wiki.category.music')
-                  : page.category === 'album'
-                    ? t('wiki.category.album')
-                    : page.category === 'timeline'
-                      ? t('wiki.category.timeline')
-                      : page.category === 'event'
-                        ? t('wiki.category.event')
-                        : page.category}
+              {getCategoryLabel(page.category)}
             </span>
             {canSubmitReview && (
               <button

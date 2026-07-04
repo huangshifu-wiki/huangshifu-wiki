@@ -252,6 +252,22 @@ model Section {
   @@index([deletedAt])
 }
 
+model WikiCategory {
+  id                String     @id
+  name              String
+  description       String     @default("")
+  order             Int        @default(0)
+  requiresAdminEdit Boolean    @default(false)
+  deletedAt         DateTime?
+  deletedBy         String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  pages             WikiPage[]
+
+  @@index([order, createdAt])
+  @@index([deletedAt])
+}
+
 model Post {
   id            String        @id @default(cuid())
   title         String
@@ -378,6 +394,7 @@ model WikiPage {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   lastEditor    User           @relation("WikiLastEditor", fields: [lastEditorUid], references: [uid], onDelete: Cascade)
+  categoryRef   WikiCategory   @relation(fields: [category], references: [id], onDelete: Restrict)
   location      Region?        @relation(fields: [locationCode], references: [code])
   revisions     WikiRevision[]
   branches      WikiBranch[]

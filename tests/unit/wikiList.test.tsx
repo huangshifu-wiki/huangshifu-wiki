@@ -10,6 +10,23 @@ const mockApiGet = vi.hoisted(() => vi.fn())
 const mockSetViewMode = vi.hoisted(() => vi.fn())
 const mockShowToast = vi.hoisted(() => vi.fn())
 
+const mockCategories = [
+  {
+    id: 'biography',
+    name: '人物介绍',
+    description: '',
+    order: 10,
+    requiresAdminEdit: false,
+  },
+  {
+    id: 'music',
+    name: '音乐作品',
+    description: '',
+    order: 20,
+    requiresAdminEdit: true,
+  },
+]
+
 vi.mock('../../src/lib/apiClient', () => ({
   apiGet: mockApiGet,
 }))
@@ -81,9 +98,16 @@ const renderWithRouter = () =>
 describe('WikiList', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockApiGet.mockResolvedValue({
-      pages: mockPages,
-      total: mockPages.length,
+    mockApiGet.mockImplementation((path: string) => {
+      if (path === '/api/wiki/categories') {
+        return Promise.resolve({
+          categories: mockCategories,
+        })
+      }
+      return Promise.resolve({
+        pages: mockPages,
+        total: mockPages.length,
+      })
     })
   })
 

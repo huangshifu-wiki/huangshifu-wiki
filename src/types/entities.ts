@@ -120,6 +120,14 @@ export interface SectionItem {
   order: number
 }
 
+export interface WikiCategoryItem {
+  id: string
+  name: string
+  description?: string
+  order: number
+  requiresAdminEdit: boolean
+}
+
 export interface WikiItem {
   id: string
   slug: string

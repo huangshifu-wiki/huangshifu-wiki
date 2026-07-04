@@ -321,7 +321,7 @@ function invalidateSoftDeleteCaches(
 ) {
   enhancedCache.invalidateByPrefix('search:')
 
-  if (tab === 'wiki') {
+  if (tab === 'wiki' || tab === 'wiki-categories') {
     if (identifiers.slug) {
       enhancedCache.delete(`${CACHE_KEYS.WIKI_PAGE}:${identifiers.slug}`)
     }
@@ -2246,6 +2246,100 @@ router.post('/backup/:filename/delete', requireSuperAdmin, asyncHandler(handleBa
 // DELETE /api/admin/backups/:filename - Delete backup
 router.post('/backups/:filename/delete', requireSuperAdmin, asyncHandler(handleBackupDelete))
 
+router.post(
+  '/wiki-categories',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id, name, description, order, requiresAdminEdit } = req.body as {
+        id?: string
+        name?: string
+        description?: string
+        order?: number
+        requiresAdminEdit?: boolean
+      }
+      const categoryId = id?.trim()
+      const categoryName = name?.trim()
+      const categoryDescription = description?.trim() || ''
+
+      if (!categoryId || !categoryName) {
+        res.status(400).json({ error: '分类 ID 和名称不能为空' })
+        return
+      }
+
+      if (
+        !ensureTextLimit(res, categoryId, '分类 ID', CONTENT_LIMITS.wiki.category) ||
+        !ensureTextLimit(res, categoryName, '分类名称', CONTENT_LIMITS.wiki.title) ||
+        !ensureTextLimit(res, categoryDescription, '分类描述', CONTENT_LIMITS.section.description)
+      ) {
+        return
+      }
+
+      const category = await prisma.wikiCategory.create({
+        data: {
+          id: categoryId,
+          name: categoryName,
+          description: categoryDescription,
+          order: typeof order === 'number' && Number.isFinite(order) ? order : 0,
+          requiresAdminEdit: Boolean(requiresAdminEdit),
+        },
+      })
+
+      invalidateSoftDeleteCaches('wiki-categories')
+      res.status(201).json({ category })
+    } catch (error) {
+      logger.error({ err: error }, 'Create wiki category error')
+      res.status(500).json({ error: '创建百科分类失败' })
+    }
+  })
+)
+
+router.patch(
+  '/wiki-categories/:id',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = req.params.id
+      const { name, description, order, requiresAdminEdit } = req.body as {
+        name?: string
+        description?: string
+        order?: number
+        requiresAdminEdit?: boolean
+      }
+      const categoryName = name?.trim()
+      const categoryDescription = description?.trim() || ''
+
+      if (!categoryName) {
+        res.status(400).json({ error: '分类名称不能为空' })
+        return
+      }
+
+      if (
+        !ensureTextLimit(res, categoryName, '分类名称', CONTENT_LIMITS.wiki.title) ||
+        !ensureTextLimit(res, categoryDescription, '分类描述', CONTENT_LIMITS.section.description)
+      ) {
+        return
+      }
+
+      const category = await prisma.wikiCategory.update({
+        where: { id },
+        data: {
+          name: categoryName,
+          description: categoryDescription,
+          order: typeof order === 'number' && Number.isFinite(order) ? order : 0,
+          requiresAdminEdit: Boolean(requiresAdminEdit),
+        },
+      })
+
+      invalidateSoftDeleteCaches('wiki-categories')
+      res.json({ category })
+    } catch (error) {
+      logger.error({ err: error }, 'Update wiki category error')
+      res.status(500).json({ error: '更新百科分类失败' })
+    }
+  })
+)
+
 /**
  * ==========================
  * Admin Panel Stats & Data
@@ -2501,6 +2595,16 @@ router.get(
         const data = await prisma.section.findMany({
           where: activeWhere,
           orderBy: { order: 'asc' },
+          take: 100,
+        })
+        res.json({ data })
+        return
+      }
+
+      if (tab === 'wiki-categories') {
+        const data = await prisma.wikiCategory.findMany({
+          where: activeWhere,
+          orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
           take: 100,
         })
         res.json({ data })
@@ -2805,6 +2909,20 @@ router.delete(
         res.json({ success: true })
         return
       }
+      if (tab === 'wiki-categories') {
+        const pageCount = await prisma.wikiPage.count({ where: { category: id } })
+        if (pageCount > 0) {
+          res.status(400).json({
+            error: `该分类下还有 ${pageCount} 个百科页面（包括回收站），请先处理页面后再删除分类`,
+          })
+          return
+        }
+
+        await prisma.wikiCategory.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
       if (tab === 'image-maps') {
         await prisma.imageMap.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
         invalidateSoftDeleteCaches(tab)
@@ -2950,6 +3068,12 @@ router.post(
         res.json({ success: true })
         return
       }
+      if (tab === 'wiki-categories') {
+        await prisma.wikiCategory.update({ where: { id }, data: restoreDeleteData })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
       if (tab === 'image-maps') {
         await prisma.imageMap.update({ where: { id }, data: restoreDeleteData })
         invalidateSoftDeleteCaches(tab)
@@ -3050,6 +3174,18 @@ router.delete(
       }
       if (tab === 'sections') {
         await prisma.section.delete({ where: { id } })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'wiki-categories') {
+        const pageCount = await prisma.wikiPage.count({ where: { category: id } })
+        if (pageCount > 0) {
+          res.status(400).json({ error: `该分类下还有 ${pageCount} 个百科页面，不能彻底删除` })
+          return
+        }
+
+        await prisma.wikiCategory.delete({ where: { id } })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return

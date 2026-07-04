@@ -54,6 +54,7 @@ const mobileUtilityNav: AdminNavItem[] = [{ id: 'home', label: '返回主页', p
 
 const contentNav: AdminNavItem[] = [
   { id: 'wiki', label: '百科管理', path: '/admin/wiki', icon: Book },
+  { id: 'wiki-categories', label: '百科分类', path: '/admin/wiki-categories', icon: Layers },
   { id: 'music', label: '音乐管理', path: '/admin/music', icon: Music },
   { id: 'posts', label: '帖子管理', path: '/admin/posts', icon: MessageSquare },
   { id: 'galleries', label: '图集管理', path: '/admin/galleries', icon: ImageIcon },

@@ -17,6 +17,7 @@ import { useAuth } from '../../context/AuthContext'
 
 const cards = [
   { key: 'wiki', label: '百科', path: '/admin/wiki', icon: Book },
+  { key: 'wiki-categories', label: '百科分类', path: '/admin/wiki-categories', icon: Layers },
   { key: 'music', label: '音乐', path: '/admin/music', icon: Music },
   { key: 'posts', label: '帖子', path: '/admin/posts', icon: MessageSquare },
   {

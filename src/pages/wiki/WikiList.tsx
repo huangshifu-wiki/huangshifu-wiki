@@ -14,6 +14,7 @@ import Pagination from '../../components/Pagination'
 import type { WikiItem } from './types'
 import { DEFAULT_PAGE_SIZE } from './types'
 import { usePagination } from '../../hooks/usePagination'
+import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const WikiList = () => {
   const [searchParams] = useSearchParams()
@@ -26,6 +27,7 @@ const WikiList = () => {
   const { show } = useToast()
   const { preferences, setViewMode } = useUserPreferences()
   const viewMode = preferences.viewMode
+  const { categories, getCategoryLabel } = useWikiCategories()
 
   const pagination = usePagination({
     totalCount: total,
@@ -96,7 +98,7 @@ const WikiList = () => {
 
         <div className="flex items-end justify-between border-b border-border mb-5">
           <div className="flex gap-5">
-            {['all', 'biography', 'music', 'album', 'timeline', 'event'].map((cat) => (
+            {['all', ...categories.map((item) => item.id)].map((cat) => (
               <Link
                 key={cat}
                 to={`/wiki?category=${cat}`}
@@ -107,19 +109,7 @@ const WikiList = () => {
                     : 'text-text-muted hover:text-brand-gold'
                 )}
               >
-                {cat === 'all'
-                  ? '全部'
-                  : cat === 'biography'
-                    ? '人物介绍'
-                    : cat === 'music'
-                      ? '音乐作品'
-                      : cat === 'album'
-                        ? '专辑一览'
-                        : cat === 'timeline'
-                          ? '时间轴'
-                          : cat === 'event'
-                            ? '活动记录'
-                            : cat}
+                {cat === 'all' ? '全部' : getCategoryLabel(cat)}
               </Link>
             ))}
             <Link
@@ -169,6 +159,7 @@ const WikiList = () => {
                   page={page}
                   viewMode={viewMode}
                   cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
+                  categoryLabel={getCategoryLabel(page.category)}
                   onCopyLink={handleCopyWikiLink}
                 />
               ))}

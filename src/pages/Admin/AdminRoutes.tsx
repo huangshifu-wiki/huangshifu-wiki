@@ -48,6 +48,7 @@ export const AdminRoutes = () => (
       <Route path="reviews" element={<AdminReviews />} />
       <Route path="reviews/workbench" element={<AdminReviewWorkbench />} />
       <Route path="wiki" element={<AdminListPage type="wiki" />} />
+      <Route path="wiki-categories" element={<AdminListPage type="wiki-categories" />} />
       <Route path="music" element={<AdminListPage type="music" />} />
       <Route path="posts" element={<AdminListPage type="posts" />} />
       <Route path="galleries" element={<AdminListPage type="galleries" />} />

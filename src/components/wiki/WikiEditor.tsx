@@ -21,6 +21,7 @@ import WikiEditorRelationPanel from './WikiEditorRelationPanel'
 import WikiEditorMetaSidebar from './WikiEditorMetaSidebar'
 import type { WikiItemWithRelations, WikiRelationRecord } from './types'
 import type { WikiPageMetadata } from '../../lib/wikiLinkParser'
+import { DEFAULT_WIKI_CATEGORY_ID, useWikiCategories } from '../../hooks/useWikiCategories'
 
 const WikiEditor = () => {
   const { slug } = useParams()
@@ -29,11 +30,12 @@ const WikiEditor = () => {
   const { user, isAdmin, isBanned } = useAuth()
   const { t } = useI18n()
   const dialog = useDialog()
+  const { categories, canEditCategory } = useWikiCategories()
 
   const [formData, setFormData] = useState({
     title: '',
     slug: '',
-    category: 'biography',
+    category: DEFAULT_WIKI_CATEGORY_ID,
     content: '',
     tags: '',
     eventDate: '',
@@ -49,6 +51,12 @@ const WikiEditor = () => {
 
   // 图谱预览状态（由子组件内部管理，此处保留 metadataMap）
   const [metadataMap, setMetadataMap] = useState<Map<string, WikiPageMetadata>>(new Map())
+
+  useEffect(() => {
+    if (isNew && categories.length && !categories.some((item) => item.id === formData.category)) {
+      setFormData((prev) => ({ ...prev, category: categories[0].id }))
+    }
+  }, [categories, formData.category, isNew])
 
   useEffect(() => {
     if (!isNew) {
@@ -106,8 +114,8 @@ const WikiEditor = () => {
       return
     }
 
-    if (formData.category === 'music' && !isAdmin) {
-      show(t('wiki.musicCategoryAdminOnly'), { variant: 'error' })
+    if (!canEditCategory(formData.category, isAdmin)) {
+      show('该分类仅管理员可编辑', { variant: 'error' })
       return
     }
 
@@ -245,7 +253,11 @@ const WikiEditor = () => {
           }}
           className="space-y-6"
         >
-          <WikiEditorForm formData={formData} onFormDataChange={handleFormDataChange} />
+          <WikiEditorForm
+            formData={formData}
+            categories={categories}
+            onFormDataChange={handleFormDataChange}
+          />
 
           <WikiEditorRelationPanel
             relations={formData.relations}
