@@ -76,7 +76,13 @@ type EditableTicketPrice = {
   price: string
 }
 
-type JsonField = 'timeSlots' | 'ticketPrices' | 'saleTimes' | 'lineup' | 'externalLinks'
+type JsonField =
+  | 'timeSlots'
+  | 'ticketPrices'
+  | 'saleTimes'
+  | 'lineup'
+  | 'externalLinks'
+  | 'relatedLinks'
 
 type JsonEditorState = {
   mode: 'form' | 'json'
@@ -91,6 +97,7 @@ type EventDraft = {
   saleTimes: EventSaleTime[]
   lineup: string[]
   externalLinks: EventExternalLink[]
+  relatedLinks: EventExternalLink[]
   coverAssetId: string | null
   coverUrl: string | null
   posters: EditablePoster[]
@@ -102,6 +109,7 @@ const JSON_FIELDS: JsonField[] = [
   'saleTimes',
   'lineup',
   'externalLinks',
+  'relatedLinks',
 ]
 
 const createJsonEditorStates = (): Record<JsonField, JsonEditorState> =>
@@ -121,6 +129,7 @@ const createEmptyDraft = (): EventDraft => ({
   saleTimes: [],
   lineup: [''],
   externalLinks: [],
+  relatedLinks: [],
   coverAssetId: null,
   coverUrl: null,
   posters: [],
@@ -154,7 +163,8 @@ const createDraftFromEvent = (event: EventItem): EventDraft => ({
     : [createEmptyTicketPrice()],
   saleTimes: event.saleTimes,
   lineup: event.lineup.length ? event.lineup : [''],
-  externalLinks: event.externalLinks,
+  externalLinks: event.externalLinks || [],
+  relatedLinks: event.relatedLinks || [],
   coverAssetId: event.coverAssetId,
   coverUrl: getEventCoverSrc(event),
   posters: event.posters.map(toEditablePoster),
@@ -298,6 +308,7 @@ const JSON_FIELD_NORMALIZERS = {
   saleTimes: (value: unknown) => ({ saleTimes: normalizeJsonSaleTimes(value) }),
   lineup: (value: unknown) => ({ lineup: normalizeJsonLineup(value) }),
   externalLinks: (value: unknown) => ({ externalLinks: normalizeJsonExternalLinks(value) }),
+  relatedLinks: (value: unknown) => ({ relatedLinks: normalizeJsonExternalLinks(value) }),
 } satisfies Record<JsonField, (value: unknown) => Partial<EventDraft>>
 
 const POSTER_UPLOAD_CONCURRENCY = 3
@@ -766,6 +777,7 @@ const AdminEventEdit = () => {
       saleTimes: normalizeSaleTimes(draft.saleTimes),
       lineup: normalizeStringList(draft.lineup),
       externalLinks: normalizeExternalLinks(draft.externalLinks),
+      relatedLinks: normalizeExternalLinks(draft.relatedLinks),
       coverAssetId: draft.coverAssetId,
       posters: draft.posters.flatMap<PosterSaveInstruction>((poster) => {
         if (poster.imageId) return [{ imageId: poster.imageId }]
@@ -1001,64 +1013,31 @@ const AdminEventEdit = () => {
             </div>
           </JsonEditableSection>
 
-          <JsonEditableSection
+          <EventLinksEditor
             title="外部链接"
+            deleteLabel="删除链接"
             field="externalLinks"
+            values={draft.externalLinks}
+            onChange={(externalLinks) => patchDraft({ externalLinks })}
             state={jsonEditors.externalLinks}
             getJsonText={getJsonEditorText}
             onOpenJson={openJsonEditor}
             onCloseJson={closeJsonEditor}
             onApplyJson={applyJsonEditor}
-          >
-            <ListHeader
-              title="外部链接"
-              onAdd={() =>
-                patchDraft({
-                  externalLinks: [...draft.externalLinks, { label: '', url: '' }],
-                })
-              }
-            />
-            <div className="space-y-3">
-              {draft.externalLinks.map((item, index) => (
-                <div key={index} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
-                  <input
-                    value={item.label}
-                    onChange={(event) =>
-                      patchDraft({
-                        externalLinks: draft.externalLinks.map((link, currentIndex) =>
-                          currentIndex === index ? { ...link, label: event.target.value } : link
-                        ),
-                      })
-                    }
-                    placeholder="链接名称"
-                    className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
-                  />
-                  <input
-                    value={item.url}
-                    onChange={(event) =>
-                      patchDraft({
-                        externalLinks: draft.externalLinks.map((link, currentIndex) =>
-                          currentIndex === index ? { ...link, url: event.target.value } : link
-                        ),
-                      })
-                    }
-                    placeholder="https://"
-                    className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
-                  />
-                  <IconButton
-                    label="删除链接"
-                    onClick={() =>
-                      patchDraft({
-                        externalLinks: draft.externalLinks.filter(
-                          (_, currentIndex) => currentIndex !== index
-                        ),
-                      })
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-          </JsonEditableSection>
+          />
+
+          <EventLinksEditor
+            title="其他相关链接"
+            field="relatedLinks"
+            deleteLabel="删除相关链接"
+            values={draft.relatedLinks}
+            onChange={(relatedLinks) => patchDraft({ relatedLinks })}
+            state={jsonEditors.relatedLinks}
+            getJsonText={getJsonEditorText}
+            onOpenJson={openJsonEditor}
+            onCloseJson={closeJsonEditor}
+            onApplyJson={applyJsonEditor}
+          />
         </div>
 
         <aside className="space-y-5">
@@ -1443,6 +1422,73 @@ const TicketPriceEditor = ({
             />
             <IconButton
               label="删除票价"
+              onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
+            />
+          </div>
+        ))}
+      </div>
+    </JsonEditableSection>
+  )
+}
+
+const EventLinksEditor = ({
+  title,
+  field,
+  values,
+  deleteLabel,
+  onChange,
+  state,
+  getJsonText,
+  onOpenJson,
+  onCloseJson,
+  onApplyJson,
+}: {
+  title: string
+  field: JsonField
+  values: EventExternalLink[]
+  deleteLabel: string
+  onChange: (values: EventExternalLink[]) => void
+  state: JsonEditorState
+  getJsonText: (field: JsonField) => string
+  onOpenJson: (field: JsonField) => void
+  onCloseJson: (field: JsonField) => void
+  onApplyJson: (field: JsonField, text: string) => string | null
+}) => {
+  const appendItem = () => onChange([...values, { label: '', url: '' }])
+  const updateItem = (index: number, patch: Partial<EventExternalLink>) => {
+    onChange(
+      values.map((item, currentIndex) => (currentIndex === index ? { ...item, ...patch } : item))
+    )
+  }
+
+  return (
+    <JsonEditableSection
+      title={title}
+      field={field}
+      state={state}
+      getJsonText={getJsonText}
+      onOpenJson={onOpenJson}
+      onCloseJson={onCloseJson}
+      onApplyJson={onApplyJson}
+    >
+      <ListHeader title={title} onAdd={appendItem} />
+      <div className="space-y-3">
+        {values.map((item, index) => (
+          <div key={index} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+            <input
+              value={item.label}
+              onChange={(event) => updateItem(index, { label: event.target.value })}
+              placeholder="链接名称"
+              className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+            />
+            <input
+              value={item.url}
+              onChange={(event) => updateItem(index, { url: event.target.value })}
+              placeholder="https://"
+              className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+            />
+            <IconButton
+              label={deleteLabel}
               onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
             />
           </div>

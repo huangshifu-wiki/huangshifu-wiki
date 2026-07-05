@@ -156,6 +156,7 @@ describe('AdminEventEdit 上传体验', () => {
         saleTimes: [],
         lineup: [],
         externalLinks: [],
+        relatedLinks: [],
         coverAssetId: 'cover-asset-1',
         posters: [{ assetId: 'poster-asset-1' }],
       })

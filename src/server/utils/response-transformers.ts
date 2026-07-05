@@ -728,6 +728,7 @@ type EventInput = {
   saleTimes: unknown
   lineup: unknown
   externalLinks: unknown
+  relatedLinks: unknown
   sortStart?: string | null
   sortEnd?: string | null
   coverAssetId?: string | null
@@ -832,6 +833,7 @@ function toEventResponseWithImageMaps(
     saleTimes: arrayJson(event.saleTimes),
     lineup: arrayJson(event.lineup),
     externalLinks: arrayJson(event.externalLinks),
+    relatedLinks: arrayJson(event.relatedLinks),
     sortStart: event.sortStart || null,
     sortEnd: event.sortEnd || null,
     coverAssetId: event.coverAssetId || null,

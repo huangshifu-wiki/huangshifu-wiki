@@ -21,6 +21,7 @@ describe('eventWriteSchema', () => {
       saleTimes: [{ time: '2025-08-01T12:00', note: '预售' }],
       lineup: ['黄诗扶'],
       externalLinks: [{ label: '购票', url: 'https://example.com/ticket' }],
+      relatedLinks: [{ label: '官宣', url: 'https://example.com/news' }],
       coverAssetId: 'asset-1',
       posters: [{ assetId: 'asset-2' }],
     })
@@ -33,6 +34,13 @@ describe('eventWriteSchema', () => {
     ])
     expect(result.saleTimes[0]).toEqual({ time: '2025-08-01T12:00', note: '预售' })
     expect(result.externalLinks[0]?.label).toBe('购票')
+    expect(result.relatedLinks[0]?.label).toBe('官宣')
+  })
+
+  it('defaults related links to an empty array', () => {
+    const result = eventWriteSchema.parse({ title: '默认链接活动' })
+
+    expect(result.relatedLinks).toEqual([])
   })
 
   it('rejects mismatched date type values', () => {
@@ -49,6 +57,15 @@ describe('eventWriteSchema', () => {
       eventWriteSchema.parse({
         title: '错误活动',
         externalLinks: [{ label: '购票', url: 'not-a-url' }],
+      })
+    ).toThrow(ZodError)
+  })
+
+  it('rejects invalid related links', () => {
+    expect(() =>
+      eventWriteSchema.parse({
+        title: '错误活动',
+        relatedLinks: [{ label: '官宣', url: 'not-a-url' }],
       })
     ).toThrow(ZodError)
   })

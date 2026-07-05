@@ -758,6 +758,7 @@ model Event {
   saleTimes    Json     @default("[]")
   lineup       Json     @default("[]")
   externalLinks Json    @default("[]")
+  relatedLinks Json     @default("[]")
   sortStart    String?
   sortEnd      String?
   coverAssetId String?

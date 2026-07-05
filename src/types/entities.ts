@@ -245,6 +245,7 @@ export interface EventItem {
   saleTimes: EventSaleTime[]
   lineup: string[]
   externalLinks: EventExternalLink[]
+  relatedLinks: EventExternalLink[]
   sortStart: string | null
   sortEnd: string | null
   coverAssetId: string | null

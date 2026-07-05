@@ -18,6 +18,40 @@ type EventPosterImage = {
   name?: string | null
 }
 
+const EventLinkPanel = ({
+  title,
+  emptyText,
+  links,
+}: {
+  title: string
+  emptyText: string
+  links: EventItem['externalLinks']
+}) => (
+  <div className="rounded border border-border bg-surface p-5">
+    <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+      <ExternalLink size={16} className="text-brand-gold" />
+      {title}
+    </h2>
+    {links.length ? (
+      <div className="space-y-2">
+        {links.map((link) => (
+          <a
+            key={link.url}
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block text-sm text-brand-gold hover:underline"
+          >
+            {link.label}
+          </a>
+        ))}
+      </div>
+    ) : (
+      <p className="text-sm text-text-muted">{emptyText}</p>
+    )}
+  </div>
+)
+
 const EventDetail = () => {
   const { slug } = useParams()
   const [event, setEvent] = useState<EventItem | null>(null)
@@ -203,29 +237,12 @@ const EventDetail = () => {
             )}
           </div>
 
-          <div className="rounded border border-border bg-surface p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
-              <ExternalLink size={16} className="text-brand-gold" />
-              外部链接
-            </h2>
-            {event.externalLinks.length ? (
-              <div className="space-y-2">
-                {event.externalLinks.map((link) => (
-                  <a
-                    key={link.url}
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-sm text-brand-gold hover:underline"
-                  >
-                    {link.label}
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-text-muted">暂无外部链接</p>
-            )}
-          </div>
+          <EventLinkPanel title="外部链接" emptyText="暂无外部链接" links={event.externalLinks} />
+          <EventLinkPanel
+            title="其他相关链接"
+            emptyText="暂无其他相关链接"
+            links={event.relatedLinks}
+          />
         </section>
 
         {posterImages.length ? (

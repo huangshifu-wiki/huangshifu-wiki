@@ -54,6 +54,9 @@ const externalLinkSchema = z
     url: value.url,
   }))
 
+const createEventLinksSchema = () =>
+  z.array(externalLinkSchema).max(CONTENT_LIMITS.event.externalLinks).optional().default([])
+
 const ticketPriceSchema = z
   .object({
     description: optionalLimitedString('票价描述', CONTENT_LIMITS.event.ticketPriceDescription),
@@ -92,11 +95,8 @@ export const eventWriteSchema = z.object({
     .max(CONTENT_LIMITS.event.lineup)
     .optional()
     .default([]),
-  externalLinks: z
-    .array(externalLinkSchema)
-    .max(CONTENT_LIMITS.event.externalLinks)
-    .optional()
-    .default([]),
+  externalLinks: createEventLinksSchema(),
+  relatedLinks: createEventLinksSchema(),
   coverAssetId: z.string().trim().min(1).nullable().optional(),
   posters: z.array(imageInstructionSchema).optional().default([]),
 })
