@@ -486,14 +486,14 @@ const AdminSettings = () => {
                         窗口（秒）
                       </span>
                       <input
-                        type="number"
-                        min={1}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         value={Math.round(config.windowMs / 1000)}
                         onChange={(event) => {
                           const value = parsePositiveInteger(event.target.value)
                           if (value) setRateLimitField(bucket.id, 'windowMs', value * 1000)
                         }}
-                        step={1}
                         className="theme-input w-full rounded px-3 py-2 text-sm"
                       />
                     </label>
@@ -503,14 +503,14 @@ const AdminSettings = () => {
                         最大请求数
                       </span>
                       <input
-                        type="number"
-                        min={1}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         value={config.max}
                         onChange={(event) => {
                           const value = parsePositiveInteger(event.target.value)
                           if (value) setRateLimitField(bucket.id, 'max', value)
                         }}
-                        step={1}
                         className="theme-input w-full rounded px-3 py-2 text-sm"
                       />
                     </label>

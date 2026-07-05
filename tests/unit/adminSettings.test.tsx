@@ -123,4 +123,13 @@ describe('AdminSettings', () => {
     expect(mockClearApiCache).toHaveBeenCalledWith('GET|/api/admin/rate-limits/config|')
     expect(mockShow).toHaveBeenCalledWith('请求限流配置已保存')
   })
+
+  it('renders rate limit numeric fields as text inputs to avoid wheel increments', async () => {
+    render(<AdminSettings />)
+
+    const globalMaxInput = await screen.findByDisplayValue('200')
+
+    expect(globalMaxInput).toHaveAttribute('type', 'text')
+    expect(globalMaxInput).toHaveAttribute('inputmode', 'numeric')
+  })
 })
