@@ -1,21 +1,29 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Disc3, Image as ImageIcon, Music, Play } from '@/src/components/icons'
+import { Calendar, Disc3, Image as ImageIcon, Music, Pause, Play } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { SmartImage } from '../../components/SmartImage'
 import { useMusic } from '../../context/MusicContext'
 import { apiGet } from '../../lib/apiClient'
-import { formatMusicCredits } from '../../lib/musicCredits'
+import { formatEventListDate, getEventCoverSrc } from '../../lib/eventFormat'
 import {
   getFirstGalleryImage,
   getGalleryThumbnailPlaceholderLabel,
 } from '../../lib/galleryThumbnails'
-import type { GalleryListResponse } from '../../types/api'
-import type { AlbumItem, GalleryImageItem, GalleryItem, SongItem } from '../../types/entities'
+import { formatMusicCredits } from '../../lib/musicCredits'
+import type { EventListResponse, GalleryListResponse } from '../../types/api'
+import type {
+  AlbumItem,
+  EventItem,
+  GalleryImageItem,
+  GalleryItem,
+  SongItem,
+} from '../../types/entities'
 
 type LoadState = 'loading' | 'ready' | 'error'
 
 interface HomeLoadState {
+  events: LoadState
   galleries: LoadState
   songs: LoadState
   albums: LoadState
@@ -37,62 +45,65 @@ interface SongsResponse {
   hasMore?: boolean
 }
 
-const HOME_SERIF_FONT =
-  "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif"
-
 const initialLoadState: HomeLoadState = {
+  events: 'loading',
   galleries: 'loading',
   songs: 'loading',
   albums: 'loading',
 }
 
+function useRevealOnScroll(refreshKey: number) {
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') {
+      document.querySelectorAll('.home-reveal').forEach((element) => {
+        element.classList.add('is-visible')
+      })
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible')
+            observer.unobserve(entry.target)
+          }
+        })
+      },
+      { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
+    )
+
+    document.querySelectorAll('.home-reveal').forEach((element) => {
+      observer.observe(element)
+    })
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [refreshKey])
+}
+
 function SectionHeader({
-  icon,
   title,
   to,
   actionLabel,
 }: {
-  icon: React.ReactNode
   title: string
   to: string
   actionLabel: string
 }) {
   return (
-    <div className="mb-5 flex items-end justify-between gap-4 border-b border-border">
-      <h2 className="relative flex items-center gap-2 pb-2 text-[1.0625rem] font-semibold tracking-[0.05em] text-brand-gold after:absolute after:bottom-0 after:left-0 after:h-[2px] after:w-full after:rounded-[1px] after:bg-brand-gold">
-        {icon}
-        {title}
-      </h2>
-      <Link
-        to={to}
-        className="flex items-center gap-1 pb-2 text-[0.8125rem] font-medium text-brand-gold transition-colors hover:text-brand-gold/90"
-      >
-        {actionLabel} <ArrowRight size={14} />
+    <div className="home-section-hd">
+      <h2>{title}</h2>
+      <Link to={to} className="home-section-link">
+        {actionLabel} <span aria-hidden="true">→</span>
       </Link>
     </div>
   )
 }
 
-function EmptyState({
-  label,
-  to,
-  actionLabel,
-}: {
-  label: string
-  to: string
-  actionLabel: string
-}) {
-  return (
-    <div className="border-y border-border py-10 text-center">
-      <p className="mb-3 text-sm text-text-muted">{label}</p>
-      <Link
-        to={to}
-        className="inline-flex items-center gap-1 text-sm font-medium text-brand-gold transition-colors hover:text-brand-gold/90"
-      >
-        {actionLabel} <ArrowRight size={14} />
-      </Link>
-    </div>
-  )
+function EmptyState({ label }: { label: string }) {
+  return <div className="home-empty">{label}</div>
 }
 
 function CoverFallback({
@@ -105,14 +116,9 @@ function CoverFallback({
   className?: string
 }) {
   return (
-    <div
-      className={clsx(
-        'flex h-full w-full flex-col items-center justify-center gap-2 bg-surface-alt text-text-muted',
-        className
-      )}
-    >
-      <span className="text-brand-gold/55">{icon}</span>
-      <span className="px-2 text-center text-[0.6875rem] leading-tight">{label}</span>
+    <div className={clsx('home-cover-fallback', className)}>
+      <span>{icon}</span>
+      <span>{label}</span>
     </div>
   )
 }
@@ -120,20 +126,18 @@ function CoverFallback({
 function GalleryImage({
   gallery,
   image,
-  className,
   eager = false,
 }: {
   gallery: GalleryItem
   image?: GalleryImageItem
-  className?: string
   eager?: boolean
 }) {
-  if (image?.thumbnailUrl) {
+  if (image?.thumbnailUrl || image?.url) {
     return (
       <SmartImage
-        src={image.thumbnailUrl}
+        src={image.thumbnailUrl || image.url}
         alt={gallery.title}
-        className={clsx('h-full w-full object-cover transition-transform duration-500', className)}
+        className="home-gallery-img"
         loading={eager ? 'eager' : 'lazy'}
         fetchpriority={eager ? 'high' : 'auto'}
       />
@@ -144,130 +148,174 @@ function GalleryImage({
     <CoverFallback
       icon={<ImageIcon size={22} />}
       label={getGalleryThumbnailPlaceholderLabel(image)}
-      className={className}
+      className="home-gallery-fallback"
     />
   )
 }
 
-function GalleryTile({ gallery, featured = false }: { gallery: GalleryItem; featured?: boolean }) {
+function GalleryTile({ gallery, index }: { gallery: GalleryItem; index: number }) {
   const image = getFirstGalleryImage(gallery)
-  const imageCount = Array.isArray(gallery.images) ? gallery.images.length : 0
+  const meta = gallery.publishedAt?.slice(0, 10) || gallery.locationName || '图集'
 
   return (
     <Link
       to={`/gallery/${gallery.slug || gallery.id}`}
-      className={clsx(
-        'group relative block overflow-hidden rounded bg-surface-alt',
-        featured ? 'min-h-[320px] sm:min-h-[420px]' : 'aspect-[4/3] min-h-[132px]'
-      )}
+      className={clsx('home-gallery-item home-reveal', `home-reveal-d${Math.min(index + 1, 4)}`)}
     >
-      <GalleryImage
-        gallery={gallery}
-        image={image}
-        className="group-hover:scale-[1.04]"
-        eager={featured}
-      />
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/72 via-black/28 to-transparent px-4 pb-4 pt-12 text-white">
-        <div className="mb-1 flex items-center gap-2 text-[0.6875rem] text-white/75">
-          <ImageIcon size={12} />
-          <span>{imageCount} 张</span>
-        </div>
-        <h3
-          className={clsx(
-            'truncate font-semibold tracking-[0.03em]',
-            featured ? 'text-[1.25rem]' : 'text-[0.9375rem]'
-          )}
-        >
-          {gallery.title}
-        </h3>
-        {featured ? (
-          <p className="mt-1 line-clamp-2 text-[0.8125rem] leading-6 text-white/78">
-            {gallery.description || '暂无描述'}
-          </p>
-        ) : null}
+      <GalleryImage gallery={gallery} image={image} eager={index === 0} />
+      <div className="home-gallery-info">
+        <h3>{gallery.title}</h3>
+        <p>{meta}</p>
       </div>
     </Link>
   )
 }
 
-function GallerySkeleton() {
+function EventCover({ event }: { event: EventItem }) {
+  const src = getEventCoverSrc(event)
+
+  if (src) {
+    return <SmartImage src={src} alt={event.title} className="home-list-cover-img" loading="lazy" />
+  }
+
+  return <CoverFallback icon={<Calendar size={18} />} label="暂无封面" />
+}
+
+function EventRow({ event }: { event: EventItem }) {
+  const date = formatEventListDate(event.timeSlots)
+
   return (
-    <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr]" aria-label="图集加载中" role="status">
-      <div className="min-h-[320px] animate-pulse rounded bg-surface-alt sm:min-h-[420px]" />
-      <div className="grid grid-cols-2 gap-3">
-        {[1, 2, 3, 4].map((item) => (
-          <div
-            key={item}
-            className="aspect-[4/3] min-h-[132px] animate-pulse rounded bg-surface-alt"
-          />
-        ))}
+    <Link to={`/events/${event.slug}`} className="home-list-item">
+      <div className="home-list-cover">
+        <EventCover event={event} />
       </div>
-    </div>
+      <div className="home-list-info">
+        <div className="home-list-name">{event.title}</div>
+        <div className="home-list-meta">
+          {date || '时间待定'}
+          {event.location ? ` · ${event.location}` : ''}
+        </div>
+      </div>
+    </Link>
   )
 }
 
 function SongCover({ song, active }: { song: SongItem; active: boolean }) {
-  if (!song.cover) {
+  if (song.cover) {
     return (
-      <CoverFallback
-        icon={<Music size={18} />}
-        label="无封面"
-        className={clsx('h-14 w-14 rounded', active && 'text-brand-gold')}
+      <SmartImage
+        src={song.coverThumbnail || song.cover}
+        alt={`${song.title} 封面`}
+        className="home-list-cover-img"
+        loading="lazy"
       />
     )
   }
 
   return (
-    <SmartImage
-      src={song.coverThumbnail || song.cover}
-      alt={`${song.title} 封面`}
-      className="h-14 w-14 rounded object-cover"
-      loading="lazy"
+    <CoverFallback
+      icon={<Music size={18} />}
+      label="无封面"
+      className={clsx(active && 'home-cover-fallback-active')}
     />
   )
 }
 
-function SongsSkeleton() {
+function SongRow({
+  song,
+  active,
+  playing,
+  onPlay,
+}: {
+  song: SongItem
+  active: boolean
+  playing: boolean
+  onPlay: () => void
+}) {
   return (
-    <div className="border-y border-border" aria-label="曲目加载中" role="status">
-      {[1, 2, 3, 4, 5].map((item) => (
-        <div
-          key={item}
-          className="flex items-center gap-4 border-b border-border py-4 last:border-b-0"
-        >
-          <div className="h-14 w-14 animate-pulse rounded bg-surface-alt" />
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="h-4 w-1/2 animate-pulse rounded bg-border" />
-            <div className="h-3 w-1/3 animate-pulse rounded bg-border" />
+    <div className={clsx('home-list-item', active && 'home-list-item-active')}>
+      <Link to={`/music/${song.slug || song.docId}`} className="home-list-cover">
+        <SongCover song={song} active={active} />
+      </Link>
+      <Link to={`/music/${song.slug || song.docId}`} className="home-list-info">
+        <div className="home-list-name">{song.title}</div>
+        <div className="home-list-meta">
+          {formatMusicCredits(song.artists, '未知歌手')}
+          {song.album ? ` · ${song.album}` : ''}
+        </div>
+      </Link>
+      <button
+        type="button"
+        className={clsx('home-track-play', active && playing && 'home-track-play-active')}
+        onClick={onPlay}
+        aria-label={`播放 ${song.title}`}
+        title={`播放 ${song.title}`}
+      >
+        {active && playing ? (
+          <Pause size={13} fill="currentColor" />
+        ) : (
+          <Play size={13} fill="currentColor" />
+        )}
+      </button>
+    </div>
+  )
+}
+
+function AlbumFeature({ album }: { album: AlbumItem }) {
+  const albumSlug = album.slug || album.docId || ''
+
+  return (
+    <Link to={`/album/${albumSlug}`} className="home-album-item">
+      <div className="home-album-cover">
+        {album.cover ? (
+          <SmartImage
+            src={album.coverThumbnail || album.cover}
+            alt={album.title}
+            className="home-list-cover-img"
+            loading="lazy"
+          />
+        ) : (
+          <CoverFallback icon={<Disc3 size={20} />} label="无封面" />
+        )}
+      </div>
+      <div className="home-album-info">
+        <div className="home-album-name">{album.title}</div>
+        <div className="home-album-desc">
+          {album.description || (album.trackCount ? `${album.trackCount} 首` : album.artist)}
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+function ListSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div className="home-list" aria-label="内容加载中" role="status">
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className="home-list-item">
+          <div className="home-list-cover home-skeleton" />
+          <div className="home-list-info">
+            <div className="home-skeleton home-skeleton-line" />
+            <div className="home-skeleton home-skeleton-line home-skeleton-line-sm" />
           </div>
-          <div className="h-9 w-9 animate-pulse rounded-full bg-surface-alt" />
         </div>
       ))}
     </div>
   )
 }
 
-function AlbumSkeleton() {
+function GallerySkeleton() {
   return (
-    <div
-      className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-1"
-      aria-label="专辑加载中"
-      role="status"
-    >
-      {[1, 2, 3, 4].map((item) => (
-        <div key={item} className="flex gap-3 lg:items-center">
-          <div className="aspect-square w-full max-w-[120px] animate-pulse rounded bg-surface-alt lg:h-16 lg:w-16" />
-          <div className="hidden min-w-0 flex-1 space-y-2 lg:block">
-            <div className="h-4 w-2/3 animate-pulse rounded bg-border" />
-            <div className="h-3 w-1/2 animate-pulse rounded bg-border" />
-          </div>
-        </div>
+    <div className="home-gallery-grid" aria-label="图集加载中" role="status">
+      {Array.from({ length: 5 }, (_, index) => (
+        <div key={index} className="home-gallery-item home-skeleton" />
       ))}
     </div>
   )
 }
 
 export const DefaultHome = () => {
+  const [events, setEvents] = useState<EventItem[]>([])
   const [galleries, setGalleries] = useState<GalleryItem[]>([])
   const [songs, setSongs] = useState<SongItem[]>([])
   const [albums, setAlbums] = useState<AlbumItem[]>([])
@@ -280,37 +328,26 @@ export const DefaultHome = () => {
     const loadHomeContent = async () => {
       setLoadState(initialLoadState)
 
-      const [galleryResult, songResult, albumResult] = await Promise.allSettled([
-        apiGet<GalleryListResponse>('/api/galleries', { page: 1, limit: 6 }),
+      const [eventResult, galleryResult, songResult, albumResult] = await Promise.allSettled([
+        apiGet<EventListResponse>('/api/events', { page: 1, limit: 4 }),
+        apiGet<GalleryListResponse>('/api/galleries', { page: 1, limit: 5 }),
         apiGet<SongsResponse>('/api/music', {
           page: 1,
-          limit: 8,
+          limit: 3,
           includeInstrumentals: false,
         }),
-        apiGet<AlbumsResponse>('/api/albums', { page: 1, limit: 4 }),
+        apiGet<AlbumsResponse>('/api/albums', { page: 1, limit: 1 }),
       ])
 
       if (cancelled) return
 
-      if (galleryResult.status === 'fulfilled') {
-        setGalleries(galleryResult.value.galleries || [])
-      } else {
-        setGalleries([])
-      }
-
-      if (songResult.status === 'fulfilled') {
-        setSongs(songResult.value.songs || [])
-      } else {
-        setSongs([])
-      }
-
-      if (albumResult.status === 'fulfilled') {
-        setAlbums(albumResult.value.albums || [])
-      } else {
-        setAlbums([])
-      }
+      setEvents(eventResult.status === 'fulfilled' ? eventResult.value.events || [] : [])
+      setGalleries(galleryResult.status === 'fulfilled' ? galleryResult.value.galleries || [] : [])
+      setSongs(songResult.status === 'fulfilled' ? songResult.value.songs || [] : [])
+      setAlbums(albumResult.status === 'fulfilled' ? albumResult.value.albums || [] : [])
 
       setLoadState({
+        events: eventResult.status === 'fulfilled' ? 'ready' : 'error',
         galleries: galleryResult.status === 'fulfilled' ? 'ready' : 'error',
         songs: songResult.status === 'fulfilled' ? 'ready' : 'error',
         albums: albumResult.status === 'fulfilled' ? 'ready' : 'error',
@@ -324,199 +361,130 @@ export const DefaultHome = () => {
     }
   }, [])
 
-  const featuredGallery = galleries[0]
-  const secondaryGalleries = useMemo(() => galleries.slice(1, 6), [galleries])
+  const displayedGalleries = useMemo(() => galleries.slice(0, 5), [galleries])
+  const featuredAlbum = albums[0]
+
+  useRevealOnScroll(displayedGalleries.length)
 
   const handlePlaySong = useCallback(
     (song: SongItem) => {
       const songIndex = songs.findIndex((item) => item.docId === song.docId)
-      playAlbumTracks('home-latest', '首页最新曲目', songs, songIndex >= 0 ? songIndex : 0)
+      playAlbumTracks('home-latest', '首页新近曲目', songs, songIndex >= 0 ? songIndex : 0)
     },
     [playAlbumTracks, songs]
   )
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: HOME_SERIF_FONT,
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="home-page mx-auto max-w-[1100px] px-6 py-10 pb-32">
-        <header className="mb-14 grid gap-8 border-b border-border pb-10 lg:grid-cols-[1fr_360px] lg:items-end">
-          <div>
-            <p className="mb-3 text-sm tracking-[0.22em] text-brand-gold">诗扶小筑</p>
-            <p className="max-w-[34rem] text-[1rem] leading-8 tracking-[0.08em] text-text-secondary sm:text-[1.125rem]">
-              人生难得一知音
-            </p>
-          </div>
-
-          <div className="flex flex-wrap justify-start gap-3 lg:justify-end">
-            <Link
-              to="/gallery"
-              className="flex items-center gap-2 rounded border border-border px-5 py-2.5 text-[0.9375rem] text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
-            >
-              <ImageIcon size={16} /> 画廊
+    <div className="home-shell">
+      <section className="home-hero" aria-labelledby="home-title">
+        <div className="home-hero-bg" />
+        <div className="home-hero-pattern" />
+        <div className="home-hero-content">
+          <h1 id="home-title" className="home-hero-title">
+            黄诗扶
+          </h1>
+          <p className="home-hero-subtitle">人生难得一知音</p>
+          <div className="home-hero-actions">
+            <Link to="/gallery" className="home-btn home-btn-fill">
+              浏览图集
             </Link>
-            <Link
-              to="/music"
-              className="flex items-center gap-2 rounded border border-border px-5 py-2.5 text-[0.9375rem] text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
-            >
-              <Music size={16} /> 曲库
+            <Link to="/music" className="home-btn home-btn-ghost">
+              探索音乐
             </Link>
           </div>
-        </header>
+        </div>
+      </section>
 
-        <section className="mb-14">
-          <SectionHeader
-            icon={<ImageIcon size={18} />}
-            title="最近图集"
-            to="/gallery"
-            actionLabel="进入画廊"
-          />
-          {loadState.galleries === 'loading' ? (
-            <GallerySkeleton />
-          ) : loadState.galleries === 'error' ? (
-            <EmptyState label="图集暂时无法加载" to="/gallery" actionLabel="进入画廊" />
-          ) : featuredGallery ? (
-            <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr]">
-              <GalleryTile gallery={featuredGallery} featured />
-              <div className="grid grid-cols-2 gap-3">
-                {secondaryGalleries.map((gallery) => (
-                  <GalleryTile key={gallery.id} gallery={gallery} />
-                ))}
+      <main>
+        <section className="home-section" id="music">
+          <div className="home-container">
+            <div className="home-music-grid">
+              <div className="home-reveal">
+                <SectionHeader title="最近活动" to="/events" actionLabel="全部活动" />
+                {loadState.events === 'loading' ? (
+                  <ListSkeleton />
+                ) : loadState.events === 'error' ? (
+                  <EmptyState label="活动暂时无法加载" />
+                ) : events.length > 0 ? (
+                  <div className="home-list">
+                    {events.map((event) => (
+                      <EventRow key={event.id} event={event} />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState label="暂无活动" />
+                )}
+              </div>
+
+              <div className="home-reveal home-reveal-d1">
+                <SectionHeader title="新近曲目" to="/music" actionLabel="进入曲库" />
+                {loadState.songs === 'loading' ? (
+                  <ListSkeleton count={3} />
+                ) : loadState.songs === 'error' ? (
+                  <EmptyState label="曲目暂时无法加载" />
+                ) : songs.length > 0 ? (
+                  <div className="home-list">
+                    {songs.map((song) => {
+                      const active = currentSong?.docId === song.docId
+                      return (
+                        <SongRow
+                          key={song.docId}
+                          song={song}
+                          active={active}
+                          playing={active && isPlaying}
+                          onPlay={() => handlePlaySong(song)}
+                        />
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState label="暂无曲目" />
+                )}
+
+                <div className="home-sub-heading">最新专辑</div>
+                {loadState.albums === 'loading' ? (
+                  <ListSkeleton count={1} />
+                ) : loadState.albums === 'error' ? (
+                  <EmptyState label="专辑暂时无法加载" />
+                ) : featuredAlbum ? (
+                  <div className="home-albums-list">
+                    <AlbumFeature album={featuredAlbum} />
+                  </div>
+                ) : (
+                  <EmptyState label="暂无专辑" />
+                )}
               </div>
             </div>
-          ) : (
-            <EmptyState label="暂无已发布图集" to="/gallery" actionLabel="进入画廊" />
-          )}
+          </div>
         </section>
 
-        <section className="grid gap-10 lg:grid-cols-[1fr_300px] lg:items-start">
-          <div>
-            <SectionHeader
-              icon={<Music size={18} />}
-              title="最新曲目"
-              to="/music"
-              actionLabel="进入曲库"
-            />
-            {loadState.songs === 'loading' ? (
-              <SongsSkeleton />
-            ) : loadState.songs === 'error' ? (
-              <EmptyState label="曲目暂时无法加载" to="/music" actionLabel="进入曲库" />
-            ) : songs.length > 0 ? (
-              <div className="border-y border-border">
-                {songs.map((song) => {
-                  const active = currentSong?.docId === song.docId
-                  return (
-                    <div
-                      key={song.docId}
-                      className={clsx(
-                        'flex items-center gap-4 border-b border-border py-4 last:border-b-0',
-                        active && 'bg-brand-gold/10'
-                      )}
-                    >
-                      <SongCover song={song} active={active} />
-                      <Link
-                        to={`/music/${song.slug || song.docId}`}
-                        className="min-w-0 flex-1 group"
-                      >
-                        <h3
-                          className={clsx(
-                            'truncate text-[1rem] font-semibold tracking-[0.03em] transition-colors group-hover:text-brand-gold',
-                            active ? 'text-brand-gold' : 'text-text-primary'
-                          )}
-                        >
-                          {song.title}
-                        </h3>
-                        <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[0.8125rem] text-text-muted">
-                          <span className="truncate">
-                            {formatMusicCredits(song.artists, '未知歌手')}
-                          </span>
-                          {song.album ? (
-                            <>
-                              <span className="h-[3px] w-[3px] rounded-full bg-border" />
-                              <span className="truncate">{song.album}</span>
-                            </>
-                          ) : null}
-                        </p>
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => handlePlaySong(song)}
-                        className={clsx(
-                          'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
-                          active && isPlaying
-                            ? 'border-brand-gold bg-brand-gold text-white'
-                            : 'border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
-                        )}
-                        aria-label={`播放 ${song.title}`}
-                        title={`播放 ${song.title}`}
-                      >
-                        <Play size={16} fill="currentColor" />
-                      </button>
-                    </div>
-                  )
-                })}
+        <div className="home-divider home-reveal" />
+
+        <section className="home-section" id="gallery">
+          <div className="home-container">
+            <div className="home-reveal">
+              <SectionHeader title="最近图集" to="/gallery" actionLabel="进入图集" />
+            </div>
+            {loadState.galleries === 'loading' ? (
+              <GallerySkeleton />
+            ) : loadState.galleries === 'error' ? (
+              <EmptyState label="图集暂时无法加载" />
+            ) : displayedGalleries.length > 0 ? (
+              <div className="home-gallery-grid">
+                {displayedGalleries.map((gallery, index) => (
+                  <GalleryTile key={gallery.id} gallery={gallery} index={index} />
+                ))}
               </div>
             ) : (
-              <EmptyState label="暂无曲目" to="/music" actionLabel="进入曲库" />
+              <EmptyState label="暂无已发布图集" />
             )}
           </div>
-
-          <aside>
-            <SectionHeader
-              icon={<Disc3 size={18} />}
-              title="新近专辑"
-              to="/music"
-              actionLabel="更多"
-            />
-            {loadState.albums === 'loading' ? (
-              <AlbumSkeleton />
-            ) : loadState.albums === 'error' ? (
-              <EmptyState label="专辑暂时无法加载" to="/music" actionLabel="进入曲库" />
-            ) : albums.length > 0 ? (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-1">
-                {albums.map((album) => {
-                  const albumId = album.docId || ''
-                  const albumSlug = album.slug || album.docId || ''
-                  return (
-                    <Link
-                      key={albumId}
-                      to={`/album/${albumSlug}`}
-                      className="group min-w-0 lg:flex lg:items-center lg:gap-3"
-                    >
-                      <div className="mb-2 aspect-square overflow-hidden rounded bg-surface-alt lg:mb-0 lg:h-16 lg:w-16 lg:flex-shrink-0">
-                        {album.cover ? (
-                          <SmartImage
-                            src={album.coverThumbnail || album.cover}
-                            alt={album.title}
-                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <CoverFallback icon={<Disc3 size={18} />} label="无封面" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="truncate text-[0.9375rem] font-semibold text-text-primary transition-colors group-hover:text-brand-gold">
-                          {album.title}
-                        </h3>
-                        <p className="truncate text-xs text-text-muted">
-                          {album.trackCount ? `${album.trackCount} 首` : album.artist}
-                        </p>
-                      </div>
-                    </Link>
-                  )
-                })}
-              </div>
-            ) : (
-              <EmptyState label="暂无专辑" to="/music" actionLabel="进入曲库" />
-            )}
-          </aside>
         </section>
-      </div>
+      </main>
+
+      <footer className="home-footer" role="contentinfo" aria-label="首页底部">
+        <p>黄诗扶 Wiki</p>
+      </footer>
     </div>
   )
 }

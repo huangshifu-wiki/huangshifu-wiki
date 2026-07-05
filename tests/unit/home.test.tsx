@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { DefaultHome } from '../../src/pages/home/DefaultHome'
-import type { AlbumItem, GalleryItem, SongItem } from '../../src/types/entities'
+import type { AlbumItem, EventItem, GalleryItem, SongItem } from '../../src/types/entities'
 
 const mockApiGet = vi.hoisted(() => vi.fn())
 const mockPlayAlbumTracks = vi.hoisted(() => vi.fn())
@@ -123,14 +123,54 @@ const mockAlbums: AlbumItem[] = [
   },
 ]
 
+const mockEvents: EventItem[] = [
+  {
+    id: 'event-1',
+    slug: 'event-1',
+    title: '苏州园林采风',
+    location: '苏州',
+    content: '',
+    timeSlots: [{ type: 'date', start: '2024-03-01' }],
+    ticketPrices: [],
+    saleTimes: [],
+    lineup: [],
+    tags: [],
+    externalLinks: [],
+    relatedLinks: [],
+    sortStart: '2024-03-01',
+    sortEnd: null,
+    coverAssetId: null,
+    coverUrl: '/uploads/event-1.jpg',
+    coverName: 'event-1.jpg',
+    createdByUid: 'user-1',
+    createdByName: '作者一',
+    updatedByUid: null,
+    updatedByName: null,
+    createdAt: '2024-03-01T00:00:00.000Z',
+    updatedAt: '2024-03-01T00:00:00.000Z',
+    posters: [],
+  },
+]
+
 function mockSuccessfulHomeRequests() {
   mockApiGet.mockImplementation((path: string) => {
+    if (path === '/api/events') {
+      return Promise.resolve({
+        events: mockEvents,
+        total: mockEvents.length,
+        page: 1,
+        limit: 4,
+        totalPages: 1,
+        hasMore: false,
+      })
+    }
+
     if (path === '/api/galleries') {
       return Promise.resolve({
         galleries: mockGalleries,
         total: mockGalleries.length,
         page: 1,
-        limit: 6,
+        limit: 5,
         hasMore: false,
       })
     }
@@ -140,7 +180,7 @@ function mockSuccessfulHomeRequests() {
         songs: mockSongs,
         total: mockSongs.length,
         page: 1,
-        limit: 8,
+        limit: 3,
         hasMore: false,
       })
     }
@@ -150,7 +190,7 @@ function mockSuccessfulHomeRequests() {
         albums: mockAlbums,
         total: mockAlbums.length,
         page: 1,
-        limit: 4,
+        limit: 1,
         hasMore: false,
       })
     }
@@ -179,34 +219,46 @@ describe('DefaultHome', () => {
     cleanup()
   })
 
-  it('requests latest galleries, songs, and albums with home-sized limits', async () => {
+  it('requests latest events, galleries, songs, and albums with home-sized limits', async () => {
     renderHome()
 
     await waitFor(() => {
-      expect(mockApiGet).toHaveBeenCalledTimes(3)
+      expect(mockApiGet).toHaveBeenCalledTimes(4)
     })
 
-    expect(mockApiGet).toHaveBeenCalledWith('/api/galleries', { page: 1, limit: 6 })
+    expect(mockApiGet).toHaveBeenCalledWith('/api/events', { page: 1, limit: 4 })
+    expect(mockApiGet).toHaveBeenCalledWith('/api/galleries', { page: 1, limit: 5 })
     expect(mockApiGet).toHaveBeenCalledWith('/api/music', {
       page: 1,
-      limit: 8,
+      limit: 3,
       includeInstrumentals: false,
     })
-    expect(mockApiGet).toHaveBeenCalledWith('/api/albums', { page: 1, limit: 4 })
+    expect(mockApiGet).toHaveBeenCalledWith('/api/albums', { page: 1, limit: 1 })
   })
 
   it('renders live gallery, music, and album content without the old static stats', async () => {
     renderHome()
 
+    expect(await screen.findByText('苏州园林采风')).toBeInTheDocument()
     expect(await screen.findByText('现场图集')).toBeInTheDocument()
     expect(screen.getByText('舞台图集')).toBeInTheDocument()
     expect(screen.getByText('吹梦到西洲')).toBeInTheDocument()
     expect(screen.getAllByText('九万字').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('精选专辑')).toBeInTheDocument()
+    expect(screen.getByRole('contentinfo', { name: '首页底部' })).toHaveTextContent('黄诗扶 Wiki')
+    expect(screen.getByText('全部活动').querySelector('span')).toHaveTextContent('→')
     expect(screen.queryByText('进入百科')).not.toBeInTheDocument()
     expect(screen.queryByText('1,240+')).not.toBeInTheDocument()
     expect(screen.queryByText('收录曲目')).not.toBeInTheDocument()
     expect(screen.queryByText(/毕业于英国布里斯托大学/)).not.toBeInTheDocument()
+  })
+
+  it('makes asynchronously loaded gallery reveal items visible without IntersectionObserver', async () => {
+    renderHome()
+
+    const gallery = await screen.findByText('现场图集')
+    const galleryItem = gallery.closest('.home-gallery-item')
+    expect(galleryItem).toHaveClass('is-visible')
   })
 
   it('plays the selected song through the global music context', async () => {
@@ -216,11 +268,22 @@ describe('DefaultHome', () => {
     const playSecondSong = await screen.findByRole('button', { name: '播放 九万字' })
     await user.click(playSecondSong)
 
-    expect(mockPlayAlbumTracks).toHaveBeenCalledWith('home-latest', '首页最新曲目', mockSongs, 1)
+    expect(mockPlayAlbumTracks).toHaveBeenCalledWith('home-latest', '首页新近曲目', mockSongs, 1)
   })
 
   it('keeps other sections visible when one section fails', async () => {
     mockApiGet.mockImplementation((path: string) => {
+      if (path === '/api/events') {
+        return Promise.resolve({
+          events: mockEvents,
+          total: mockEvents.length,
+          page: 1,
+          limit: 4,
+          totalPages: 1,
+          hasMore: false,
+        })
+      }
+
       if (path === '/api/galleries') {
         return Promise.reject(new Error('gallery failed'))
       }
@@ -230,7 +293,7 @@ describe('DefaultHome', () => {
           songs: mockSongs,
           total: mockSongs.length,
           page: 1,
-          limit: 8,
+          limit: 3,
           hasMore: false,
         })
       }
@@ -240,7 +303,7 @@ describe('DefaultHome', () => {
           albums: mockAlbums,
           total: mockAlbums.length,
           page: 1,
-          limit: 4,
+          limit: 1,
           hasMore: false,
         })
       }

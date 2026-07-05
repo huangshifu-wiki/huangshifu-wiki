@@ -1,27 +1,23 @@
 import { Link, NavLink } from 'react-router-dom'
 import {
   Bookmark,
-  Music,
-  Book,
   FileText,
   History,
-  MessageSquare,
-  Image as ImageIcon,
-  Calendar,
   LogIn,
   LogOut,
+  MessageCircle,
+  MessageSquare,
   Shield,
   Settings,
-  MessageCircle,
 } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
-import { useI18n } from '../../lib/i18n'
 import { DEFAULT_AVATAR, handleAvatarError } from '../../lib/defaultAvatar'
 import { ThemeToggle } from '../ThemeToggle'
 import accountMenuStyles from '../AccountMenu.module.css'
 import { usePendingReviewCount } from '../../hooks/usePendingReviewCount'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import type { AuthMode } from './types'
+import styles from '../Navbar.module.css'
 
 interface MobileMenuProps {
   open: boolean
@@ -39,7 +35,6 @@ export const MobileMenu = ({
   allowRegister = true,
 }: MobileMenuProps) => {
   const { user, profile, isAdmin, isBanned } = useAuth()
-  const { t } = useI18n()
   const pendingReviewCount = usePendingReviewCount(open && isAdmin && !isBanned)
   const hasPendingReviews = pendingReviewCount > 0
   const presence = useFloatingPresence(open)
@@ -48,60 +43,38 @@ export const MobileMenu = ({
 
   return (
     <div
-      className="floating-expand grid md:hidden bg-surface border-b border-border"
+      className={`${styles.siteMobileMenu} floating-expand`}
       data-state={presence.state}
       aria-hidden={!open}
     >
       <div>
-        <div className="px-4 py-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <NavLink
-              to="/wiki"
-              onClick={onClose}
-              className="flex flex-col items-center gap-2 p-4 bg-surface-alt rounded text-brand-gold"
-            >
-              <Book size={24} />
-              <span className="text-xs font-bold">{t('nav.wiki')}</span>
+        <div className={styles.siteMobileMenuInner}>
+          <div className={styles.siteMobileLinks}>
+            <NavLink to="/music" onClick={onClose} className={styles.siteMobileLink}>
+              音乐
             </NavLink>
-            <NavLink
-              to="/forum"
-              onClick={onClose}
-              className="flex flex-col items-center gap-2 p-4 bg-surface-alt rounded text-brand-gold"
-            >
-              <MessageSquare size={24} />
-              <span className="text-xs font-bold">{t('nav.forum')}</span>
+            <NavLink to="/gallery" onClick={onClose} className={styles.siteMobileLink}>
+              画廊
             </NavLink>
-            <NavLink
-              to="/gallery"
-              onClick={onClose}
-              className="flex flex-col items-center gap-2 p-4 bg-surface-alt rounded text-brand-gold"
-            >
-              <ImageIcon size={24} />
-              <span className="text-xs font-bold">{t('nav.gallery')}</span>
+            <NavLink to="/events" onClick={onClose} className={styles.siteMobileLink}>
+              游记
             </NavLink>
-            <NavLink
-              to="/music"
-              onClick={onClose}
-              className="flex flex-col items-center gap-2 p-4 bg-surface-alt rounded text-brand-gold"
-            >
-              <Music size={24} />
-              <span className="text-xs font-bold">{t('nav.music')}</span>
+            <NavLink to="/wiki" onClick={onClose} className={styles.siteMobileLink}>
+              百科
             </NavLink>
-            <NavLink
-              to="/events"
-              onClick={onClose}
-              className="flex flex-col items-center gap-2 p-4 bg-surface-alt rounded text-brand-gold"
-            >
-              <Calendar size={24} />
-              <span className="text-xs font-bold">{t('nav.events')}</span>
+            <NavLink to="/forum" onClick={onClose} className={styles.siteMobileLink}>
+              论坛
+            </NavLink>
+            <NavLink to="/search" onClick={onClose} className={styles.siteMobileLink}>
+              搜索
             </NavLink>
           </div>
 
-          <div className="pt-2">
+          <div className={styles.siteMobileTheme}>
             <ThemeToggle fullWidth />
           </div>
 
-          <div className="pt-4 border-t border-border">
+          <div className={styles.siteMobileAccount}>
             {user ? (
               <div className="space-y-4">
                 {isBanned && (
@@ -183,7 +156,7 @@ export const MobileMenu = ({
                   <Link
                     to="/admin"
                     onClick={onClose}
-                    className="flex items-center gap-3 p-3 bg-surface-alt rounded text-text-secondary"
+                    className="flex items-center gap-3 p-3 bg-[var(--home-bg-surface)] text-[var(--home-text-2)]"
                   >
                     <Shield size={20} />
                     <span className="text-sm font-medium">管理后台</span>
@@ -200,7 +173,7 @@ export const MobileMenu = ({
                   onClick={() => {
                     onLogout()
                   }}
-                  className="w-full flex items-center gap-3 p-3 theme-status-error rounded"
+                  className="w-full flex items-center gap-3 p-3 theme-status-error"
                 >
                   <LogOut size={20} />
                   <span className="text-sm font-medium">退出登录</span>

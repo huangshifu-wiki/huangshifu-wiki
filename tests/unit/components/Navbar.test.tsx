@@ -77,18 +77,20 @@ describe('Navbar', () => {
     expect(navs[0]).toHaveAttribute('aria-label', '主导航')
   })
 
-  it('renders site title "诗扶小筑"', () => {
+  it('renders site title "黄诗扶"', () => {
     const { container } = renderWithRouter(<Navbar />)
-    expect(container.innerHTML).toContain('诗扶小筑')
+    expect(container.innerHTML).toContain('黄诗扶')
+    expect(container.innerHTML).toContain('Wiki')
   })
 
   it('renders navigation links', () => {
     const { container } = renderWithRouter(<Navbar />)
     const html = container.innerHTML
-    expect(html).toContain('nav.wiki')
-    expect(html).toContain('nav.forum')
-    expect(html).toContain('nav.gallery')
-    expect(html).toContain('nav.music')
+    expect(html).toContain('百科')
+    expect(html).toContain('论坛')
+    expect(html).toContain('画廊')
+    expect(html).toContain('音乐')
+    expect(html).toContain('游记')
     expect(html).toContain('搜索')
   })
 

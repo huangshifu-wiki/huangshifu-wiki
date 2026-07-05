@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { Menu, X } from '@/src/components/icons'
 import { logoutRequest } from '../lib/auth'
-import { useI18n } from '../lib/i18n'
 import { HeaderUserControls } from './HeaderUserControls'
 import { useToast } from './Toast'
 import { AuthModal } from './Navbar/AuthModal'
@@ -12,13 +11,25 @@ import styles from './Navbar.module.css'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
 
 export const Navbar = () => {
-  const { t } = useI18n()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authInitialMode, setAuthInitialMode] = useState<AuthMode>('login')
+  const [isScrolled, setIsScrolled] = useState(false)
   const { show } = useToast()
   const { features } = usePublicFeatures()
   const allowRegister = features.registrationEnabled
+
+  useEffect(() => {
+    const updateScrolled = () => {
+      setIsScrolled(window.scrollY > 40)
+    }
+
+    updateScrolled()
+    window.addEventListener('scroll', updateScrolled, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', updateScrolled)
+    }
+  }, [])
 
   const openAuthModal = (mode: AuthMode) => {
     setAuthInitialMode(mode === 'register' && !allowRegister ? 'login' : mode)
@@ -37,51 +48,33 @@ export const Navbar = () => {
 
   return (
     <nav
-      className="sticky top-0 z-[100] border-b border-border bg-bg-primary/92 backdrop-blur-md"
+      className={styles.siteNav}
+      data-scrolled={isScrolled ? 'true' : 'false'}
       role="navigation"
       aria-label="主导航"
     >
-      <div
-        className="max-w-[1100px] mx-auto px-6"
-        style={{
-          height: '60px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div className="flex items-center gap-7">
-          <Link
-            to="/"
-            className="flex items-center gap-2 group"
-            style={{ textDecoration: 'none', color: 'inherit' }}
-          >
-            <div className="w-7 h-7 flex items-center justify-center text-white text-sm bg-brand-gold rounded">
-              诗
-            </div>
-            <span
-              className="font-semibold text-text-primary"
-              style={{ fontSize: '1.25rem', letterSpacing: '0.15em' }}
-            >
-              诗扶小筑
-            </span>
+      <div className={styles.siteNavInner}>
+        <div className={styles.siteNavLeft}>
+          <Link to="/" className={styles.siteBrand}>
+            <span className={styles.siteBrandName}>黄诗扶</span>
+            <small>Wiki</small>
           </Link>
 
-          <div className="hidden md:flex items-center" style={{ gap: '28px' }}>
+          <div className={styles.siteNavLinks}>
             <NavLink to="/music" className={styles.navLink}>
-              {t('nav.music')}
+              音乐
             </NavLink>
             <NavLink to="/gallery" className={styles.navLink}>
-              {t('nav.gallery')}
+              画廊
             </NavLink>
             <NavLink to="/events" className={styles.navLink}>
-              {t('nav.events')}
+              游记
             </NavLink>
             <NavLink to="/wiki" className={styles.navLink}>
-              {t('nav.wiki')}
+              百科
             </NavLink>
             <NavLink to="/forum" className={styles.navLink}>
-              {t('nav.forum')}
+              论坛
             </NavLink>
             <NavLink to="/search" className={styles.navLink}>
               搜索
@@ -89,8 +82,8 @@ export const Navbar = () => {
           </div>
         </div>
 
-        <div className="flex items-center" style={{ gap: '16px' }}>
-          <div className="hidden md:block">
+        <div className={styles.siteNavRight}>
+          <div className={styles.siteDesktopControls}>
             <HeaderUserControls
               onLogout={handleLogout}
               onOpenAuth={openAuthModal}
@@ -101,7 +94,7 @@ export const Navbar = () => {
           <button
             type="button"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden p-2 text-text-muted hover:text-brand-gold transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+            className={styles.siteNavToggle}
             aria-label={isMenuOpen ? '关闭菜单' : '打开菜单'}
           >
             {isMenuOpen ? <X size={24} /> : <Menu size={24} />}

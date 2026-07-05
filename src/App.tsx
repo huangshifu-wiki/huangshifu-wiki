@@ -141,7 +141,11 @@ const MainLayout = () => {
       </a>
       <Navbar />
       <main
-        className={clsx('flex-grow', currentSong ? 'pb-36 md:pb-20' : 'pb-20 md:pb-0')}
+        className={clsx(
+          'flex-grow',
+          path === '/' ? '' : 'site-main-offset',
+          currentSong ? 'pb-36 md:pb-20' : 'pb-20 md:pb-0'
+        )}
         role="main"
         id="main-content"
       >
@@ -185,14 +189,16 @@ const MainLayout = () => {
       </main>
       <GlobalMusicPlayer />
       <BottomNav />
-      <footer
-        className="hidden md:block text-center border-t border-border bg-surface-alt py-10 px-6 text-text-muted text-[0.8125rem] tracking-[0.08em]"
-        role="contentinfo"
-        aria-label="页面底部"
-        style={{ marginBottom: currentSong ? '80px' : '0' }}
-      >
-        <p>黄诗扶 Wiki</p>
-      </footer>
+      {path === '/' ? null : (
+        <footer
+          className="hidden md:block text-center border-t border-border bg-surface-alt py-10 px-6 text-text-muted text-[0.8125rem] tracking-[0.08em]"
+          role="contentinfo"
+          aria-label="页面底部"
+          style={{ marginBottom: currentSong ? '80px' : '0' }}
+        >
+          <p>黄诗扶 Wiki</p>
+        </footer>
+      )}
     </div>
   )
 }
