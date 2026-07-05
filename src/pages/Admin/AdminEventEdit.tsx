@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { clsx } from 'clsx'
 import {
   ArrowLeft,
   Calendar,
@@ -288,6 +289,7 @@ const AdminEventEdit = () => {
   const [loading, setLoading] = useState(!isCreating)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [draggingPosterIndex, setDraggingPosterIndex] = useState<number | null>(null)
   const [jsonEditors, setJsonEditors] = useState(createJsonEditorStates)
   const coverInputRef = useRef<HTMLInputElement>(null)
   const postersInputRef = useRef<HTMLInputElement>(null)
@@ -409,6 +411,30 @@ const AdminEventEdit = () => {
     } finally {
       setUploading(false)
     }
+  }
+
+  const reorderPosters = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return
+
+    const nextPosters = [...draft.posters]
+    const [moved] = nextPosters.splice(fromIndex, 1)
+    if (!moved) return
+    nextPosters.splice(toIndex, 0, moved)
+    patchDraft({ posters: nextPosters })
+  }
+
+  const handlePosterDragStart = (event: React.DragEvent<HTMLDivElement>, index: number) => {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(index))
+    setDraggingPosterIndex(index)
+  }
+
+  const handlePosterDrop = (targetIndex: number) => {
+    if (draggingPosterIndex === null) return
+
+    const sourceIndex = draggingPosterIndex
+    setDraggingPosterIndex(null)
+    reorderPosters(sourceIndex, targetIndex)
   }
 
   const updateTimeSlot = (index: number, patch: Partial<EventTimeSlot>) => {
@@ -810,7 +836,21 @@ const AdminEventEdit = () => {
               {draft.posters.map((poster, index) => (
                 <div
                   key={poster.clientId}
-                  className="group relative aspect-[3/4] overflow-hidden rounded bg-surface-alt"
+                  draggable={!uploading}
+                  onDragStart={(event) => handlePosterDragStart(event, index)}
+                  onDragEnd={() => setDraggingPosterIndex(null)}
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    handlePosterDrop(index)
+                  }}
+                  className={clsx(
+                    'group relative aspect-[3/4] cursor-grab overflow-hidden rounded bg-surface-alt active:cursor-grabbing',
+                    draggingPosterIndex === index && 'opacity-60'
+                  )}
                 >
                   <SmartImage
                     src={poster.url}
