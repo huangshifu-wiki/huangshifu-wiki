@@ -838,8 +838,8 @@ const AdminEventEdit = () => {
         </button>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-5">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-5">
           <section className="rounded border border-border bg-surface p-5">
             <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <Calendar size={16} className="text-brand-gold" />
@@ -893,7 +893,10 @@ const AdminEventEdit = () => {
             />
             <div className="space-y-3">
               {draft.timeSlots.map((slot, index) => (
-                <div key={index} className="grid gap-2 md:grid-cols-[120px_1fr_1fr_auto]">
+                <div
+                  key={index}
+                  className="grid min-w-0 gap-2 md:grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_auto]"
+                >
                   <select
                     value={slot.type}
                     onChange={(event) =>
@@ -971,7 +974,10 @@ const AdminEventEdit = () => {
             />
             <div className="space-y-3">
               {draft.saleTimes.map((item, index) => (
-                <div key={index} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                <div
+                  key={index}
+                  className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                >
                   <input
                     type="datetime-local"
                     value={item.time}
@@ -1042,8 +1048,8 @@ const AdminEventEdit = () => {
           />
         </div>
 
-        <aside className="space-y-5">
-          <section className="rounded border border-border bg-surface p-5">
+        <aside className="grid min-w-0 gap-5 md:grid-cols-2 xl:block xl:space-y-5">
+          <section className="min-w-0 rounded border border-border bg-surface p-5">
             <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <ImageIcon size={16} className="text-brand-gold" />
               封面
@@ -1112,7 +1118,7 @@ const AdminEventEdit = () => {
             />
           </section>
 
-          <section className="rounded border border-border bg-surface p-5">
+          <section className="min-w-0 rounded border border-border bg-surface p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <ImageIcon size={16} className="text-brand-gold" />
@@ -1397,7 +1403,7 @@ const TicketPriceEditor = ({
       <ListHeader title="票价" onAdd={() => insertItem(values.length)} />
       <div className="space-y-3">
         {values.map((value, index) => (
-          <div key={index} className="grid gap-2 md:grid-cols-[1fr_160px_auto]">
+          <div key={index} className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_160px_auto]">
             <input
               value={value.description}
               onChange={(event) => updateItem(index, { description: event.target.value })}
@@ -1476,7 +1482,10 @@ const EventLinksEditor = ({
       <ListHeader title={title} onAdd={appendItem} />
       <div className="space-y-3">
         {values.map((item, index) => (
-          <div key={index} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+          <div
+            key={index}
+            className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+          >
             <input
               value={item.label}
               onChange={(event) => updateItem(index, { label: event.target.value })}
@@ -1548,7 +1557,7 @@ const StringListEditor = ({
       <ListHeader title={title} onAdd={appendItem} />
       <div className="space-y-3">
         {values.map((value, index) => (
-          <div key={index} className="grid gap-2 md:grid-cols-[1fr_auto]">
+          <div key={index} className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
             <input
               ref={(element) => {
                 inputRefs.current[index] = element
