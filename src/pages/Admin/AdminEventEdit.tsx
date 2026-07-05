@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Calendar,
   Image as ImageIcon,
+  Loader2,
   Plus,
   Save,
   Trash2,
@@ -38,6 +39,7 @@ import type {
   EventTicketPrice,
   EventTimeSlot,
 } from '../../types/entities'
+import { runInBatches } from '../../utils/asyncBatch'
 
 type EditablePoster = {
   clientId: string
@@ -45,7 +47,29 @@ type EditablePoster = {
   assetId?: string
   url: string
   name: string
+  uploadStatus?: UploadStatus
+  progress?: number
+  error?: string
+  previewUrl?: string
 }
+
+type UploadStatus = 'uploading' | 'processing' | 'ready' | 'error'
+
+type CoverUploadState = {
+  previewUrl: string
+  progress: number
+  status: UploadStatus
+  error?: string
+}
+
+type QueuedPosterUpload = {
+  clientId: string
+  file: File
+  previewUrl: string
+}
+
+type PosterUploadResult = 'uploaded' | 'failed' | 'cancelled'
+type PosterSaveInstruction = { imageId: string } | { assetId: string }
 
 type EditableTicketPrice = {
   description: string
@@ -276,6 +300,16 @@ const JSON_FIELD_NORMALIZERS = {
   externalLinks: (value: unknown) => ({ externalLinks: normalizeJsonExternalLinks(value) }),
 } satisfies Record<JsonField, (value: unknown) => Partial<EventDraft>>
 
+const POSTER_UPLOAD_CONCURRENCY = 3
+
+const isBusyUploadStatus = (status?: UploadStatus) =>
+  status === 'uploading' || status === 'processing'
+
+const toUploadProgress = (progress: number) => {
+  const normalized = Math.max(1, Math.min(100, Math.round(progress)))
+  return normalized >= 100 ? 95 : Math.min(normalized, 95)
+}
+
 const AdminEventEdit = () => {
   const { eventId } = useParams()
   const isCreating = !eventId
@@ -284,11 +318,39 @@ const AdminEventEdit = () => {
   const [draft, setDraft] = useState<EventDraft>(createEmptyDraft)
   const [loading, setLoading] = useState(!isCreating)
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [coverUpload, setCoverUpload] = useState<CoverUploadState | null>(null)
   const [draggingPosterIndex, setDraggingPosterIndex] = useState<number | null>(null)
   const [jsonEditors, setJsonEditors] = useState(createJsonEditorStates)
   const coverInputRef = useRef<HTMLInputElement>(null)
   const postersInputRef = useRef<HTMLInputElement>(null)
+  const objectUrlsRef = useRef<Set<string>>(new Set())
+  const coverUploadControllerRef = useRef<AbortController | null>(null)
+  const posterUploadControllersRef = useRef<Map<string, AbortController>>(new Map())
+  const cancelledPosterUploadsRef = useRef<Set<string>>(new Set())
+  const unmountedRef = useRef(false)
+
+  const createObjectUrl = (file: File) => {
+    const url = URL.createObjectURL(file)
+    objectUrlsRef.current.add(url)
+    return url
+  }
+
+  const revokeObjectUrl = (url?: string | null) => {
+    if (!url || !objectUrlsRef.current.has(url)) return
+    URL.revokeObjectURL(url)
+    objectUrlsRef.current.delete(url)
+  }
+
+  useEffect(() => {
+    unmountedRef.current = false
+    return () => {
+      unmountedRef.current = true
+      coverUploadControllerRef.current?.abort()
+      posterUploadControllersRef.current.forEach((controller) => controller.abort())
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+      objectUrlsRef.current.clear()
+    }
+  }, [])
 
   useEffect(() => {
     if (!eventId) {
@@ -321,6 +383,34 @@ const AdminEventEdit = () => {
     setDraft((prev) => ({ ...prev, ...patch }))
   }
 
+  const updatePosterUpload = (clientId: string, patch: Partial<EditablePoster>) => {
+    setDraft((prev) => ({
+      ...prev,
+      posters: prev.posters.map((poster) =>
+        poster.clientId === clientId ? { ...poster, ...patch } : poster
+      ),
+    }))
+  }
+
+  const removePoster = (clientId: string) => {
+    const controller = posterUploadControllersRef.current.get(clientId)
+    if (controller) {
+      controller.abort()
+      posterUploadControllersRef.current.delete(clientId)
+    }
+    setDraft((prev) => {
+      const removed = prev.posters.find((poster) => poster.clientId === clientId)
+      if (isBusyUploadStatus(removed?.uploadStatus)) {
+        cancelledPosterUploadsRef.current.add(clientId)
+      }
+      revokeObjectUrl(removed?.previewUrl)
+      return {
+        ...prev,
+        posters: prev.posters.filter((poster) => poster.clientId !== clientId),
+      }
+    })
+  }
+
   const openJsonEditor = (field: JsonField) => {
     setJsonEditors((prev) => ({
       ...prev,
@@ -351,14 +441,26 @@ const AdminEventEdit = () => {
     }
   }
 
-  const uploadImageFile = async (file: File) => {
+  const validateImageFile = (file: File) => {
     if (!EVENT_ALLOWED_IMAGE_TYPES.includes(file.type)) {
       throw new Error('请选择 jpg、png、gif、webp 或 bmp 图片')
     }
     if (file.size > UPLOAD_MAX_FILE_SIZE_BYTES) {
       throw new Error(`图片大小不能超过 ${formatUploadLimitWithSize()}`)
     }
-    return uploadImageWithStrategy(file, { type: 'cover', reuseExisting: false })
+  }
+
+  const uploadImageFile = async (
+    file: File,
+    options: { onProgress?: (progress: number) => void; signal?: AbortSignal } = {}
+  ) => {
+    validateImageFile(file)
+    return uploadImageWithStrategy(file, {
+      type: 'cover',
+      reuseExisting: false,
+      onProgress: options.onProgress,
+      signal: options.signal,
+    })
   }
 
   const handleCoverChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -366,41 +468,225 @@ const AdminEventEdit = () => {
     event.target.value = ''
     if (!file) return
 
-    setUploading(true)
+    let previewUrl = ''
+    let controller: AbortController | null = null
     try {
-      const result = await uploadImageFile(file)
+      validateImageFile(file)
+      coverUploadControllerRef.current?.abort()
+      if (coverUpload) revokeObjectUrl(coverUpload.previewUrl)
+      previewUrl = createObjectUrl(file)
+      controller = new AbortController()
+      coverUploadControllerRef.current = controller
+      setCoverUpload({ previewUrl, progress: 1, status: 'uploading' })
+
+      const result = await uploadImageFile(file, {
+        signal: controller.signal,
+        onProgress: (progress) => {
+          if (
+            !controller ||
+            controller.signal.aborted ||
+            coverUploadControllerRef.current !== controller ||
+            unmountedRef.current
+          ) {
+            return
+          }
+          setCoverUpload((prev) =>
+            prev?.previewUrl === previewUrl
+              ? {
+                  ...prev,
+                  progress: toUploadProgress(progress),
+                  status: progress >= 100 ? 'processing' : 'uploading',
+                }
+              : prev
+          )
+        },
+      })
+      if (
+        controller.signal.aborted ||
+        coverUploadControllerRef.current !== controller ||
+        unmountedRef.current
+      ) {
+        revokeObjectUrl(previewUrl)
+        return
+      }
+      setCoverUpload((prev) =>
+        prev?.previewUrl === previewUrl ? { ...prev, progress: 100, status: 'ready' } : prev
+      )
       patchDraft({ coverAssetId: result.assetId, coverUrl: result.url })
+      window.setTimeout(() => {
+        revokeObjectUrl(previewUrl)
+        if (unmountedRef.current) return
+        setCoverUpload((prev) => (prev?.previewUrl === previewUrl ? null : prev))
+      }, 600)
       show('封面已上传')
     } catch (error) {
+      if (
+        !controller ||
+        controller.signal.aborted ||
+        coverUploadControllerRef.current !== controller ||
+        unmountedRef.current
+      ) {
+        revokeObjectUrl(previewUrl)
+        return
+      }
+      if (previewUrl) {
+        setCoverUpload({
+          previewUrl,
+          progress: 0,
+          status: 'error',
+          error: error instanceof Error ? error.message : '上传封面失败',
+        })
+      }
       show(error instanceof Error ? error.message : '上传封面失败', { variant: 'error' })
     } finally {
-      setUploading(false)
+      if (controller && coverUploadControllerRef.current === controller) {
+        coverUploadControllerRef.current = null
+      }
     }
   }
 
-  const handlePostersChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadPoster = async ({
+    clientId,
+    file,
+    previewUrl,
+  }: QueuedPosterUpload): Promise<PosterUploadResult> => {
+    if (unmountedRef.current) {
+      revokeObjectUrl(previewUrl)
+      return 'cancelled'
+    }
+    if (cancelledPosterUploadsRef.current.delete(clientId)) {
+      revokeObjectUrl(previewUrl)
+      return 'cancelled'
+    }
+
+    const controller = new AbortController()
+    posterUploadControllersRef.current.set(clientId, controller)
+    try {
+      const result = await uploadImageFile(file, {
+        signal: controller.signal,
+        onProgress: (progress) => {
+          if (
+            controller.signal.aborted ||
+            cancelledPosterUploadsRef.current.has(clientId) ||
+            unmountedRef.current
+          ) {
+            return
+          }
+          updatePosterUpload(clientId, {
+            progress: toUploadProgress(progress),
+            uploadStatus: progress >= 100 ? 'processing' : 'uploading',
+          })
+        },
+      })
+
+      if (
+        controller.signal.aborted ||
+        unmountedRef.current ||
+        cancelledPosterUploadsRef.current.delete(clientId)
+      ) {
+        revokeObjectUrl(previewUrl)
+        return 'cancelled'
+      }
+      setDraft((prev) => ({
+        ...prev,
+        posters: prev.posters.map((poster) => {
+          if (poster.clientId !== clientId) return poster
+          return {
+            ...poster,
+            assetId: result.assetId,
+            url: result.url,
+            uploadStatus: 'ready',
+            progress: 100,
+            error: undefined,
+            previewUrl: undefined,
+          }
+        }),
+      }))
+      revokeObjectUrl(previewUrl)
+      return 'uploaded'
+    } catch (error) {
+      if (controller.signal.aborted) {
+        cancelledPosterUploadsRef.current.delete(clientId)
+        revokeObjectUrl(previewUrl)
+        return 'cancelled'
+      }
+      if (unmountedRef.current) {
+        cancelledPosterUploadsRef.current.delete(clientId)
+        revokeObjectUrl(previewUrl)
+        return 'cancelled'
+      }
+      cancelledPosterUploadsRef.current.delete(clientId)
+      updatePosterUpload(clientId, {
+        uploadStatus: 'error',
+        progress: 0,
+        error: error instanceof Error ? error.message : '上传海报失败',
+      })
+      return 'failed'
+    } finally {
+      cancelledPosterUploadsRef.current.delete(clientId)
+      posterUploadControllersRef.current.delete(clientId)
+    }
+  }
+
+  const uploadPosterQueue = async (items: QueuedPosterUpload[]) => {
+    let successCount = 0
+    let failedCount = 0
+
+    await runInBatches(items, POSTER_UPLOAD_CONCURRENCY, async (item) => {
+      const result = await uploadPoster(item)
+      if (result === 'uploaded') {
+        successCount += 1
+      } else if (result === 'failed') {
+        failedCount += 1
+      }
+    })
+
+    if (unmountedRef.current) return
+    if (successCount > 0 && failedCount === 0) {
+      show(`已上传 ${successCount} 张海报`)
+    } else if (successCount > 0 || failedCount > 0) {
+      show(`海报上传完成：成功 ${successCount} 张，失败 ${failedCount} 张`, {
+        variant: failedCount > 0 ? 'error' : 'success',
+      })
+    }
+  }
+
+  const handlePostersChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     if (!files.length) return
 
-    setUploading(true)
-    try {
-      const uploaded: EditablePoster[] = []
-      for (const file of files) {
-        const result = await uploadImageFile(file)
-        uploaded.push({
-          clientId: `asset-${result.assetId}-${Math.random().toString(36).slice(2, 8)}`,
-          assetId: result.assetId,
-          url: result.url,
+    const queued: QueuedPosterUpload[] = []
+    const placeholders: EditablePoster[] = []
+    const invalidMessages: string[] = []
+
+    for (const file of files) {
+      try {
+        validateImageFile(file)
+        const previewUrl = createObjectUrl(file)
+        const clientId = `poster-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        cancelledPosterUploadsRef.current.delete(clientId)
+        queued.push({ clientId, file, previewUrl })
+        placeholders.push({
+          clientId,
+          url: previewUrl,
+          previewUrl,
           name: file.name,
+          uploadStatus: 'uploading',
+          progress: 1,
         })
+      } catch (error) {
+        invalidMessages.push(`${file.name}: ${error instanceof Error ? error.message : '文件无效'}`)
       }
-      setDraft((prev) => ({ ...prev, posters: [...prev.posters, ...uploaded] }))
-      show(`已上传 ${uploaded.length} 张海报`)
-    } catch (error) {
-      show(error instanceof Error ? error.message : '上传海报失败', { variant: 'error' })
-    } finally {
-      setUploading(false)
+    }
+
+    if (placeholders.length > 0) {
+      setDraft((prev) => ({ ...prev, posters: [...prev.posters, ...placeholders] }))
+      void uploadPosterQueue(queued)
+    }
+
+    if (invalidMessages.length > 0) {
+      show(invalidMessages[0] || '部分图片无法上传', { variant: 'error' })
     }
   }
 
@@ -442,6 +728,22 @@ const AdminEventEdit = () => {
   }
 
   const save = async () => {
+    const hasPendingUploads =
+      isBusyUploadStatus(coverUpload?.status) ||
+      draft.posters.some((poster) => isBusyUploadStatus(poster.uploadStatus))
+    const hasFailedUploads =
+      coverUpload?.status === 'error' ||
+      draft.posters.some((poster) => poster.uploadStatus === 'error')
+    const hasUnsavedPoster = draft.posters.some((poster) => !poster.imageId && !poster.assetId)
+
+    if (hasPendingUploads) {
+      show('请等待图片上传完成后再保存', { variant: 'error' })
+      return
+    }
+    if (hasFailedUploads || hasUnsavedPoster) {
+      show('请先删除或重新上传失败的图片', { variant: 'error' })
+      return
+    }
     if (!draft.title.trim()) {
       show('活动标题不能为空', { variant: 'error' })
       return
@@ -465,9 +767,11 @@ const AdminEventEdit = () => {
       lineup: normalizeStringList(draft.lineup),
       externalLinks: normalizeExternalLinks(draft.externalLinks),
       coverAssetId: draft.coverAssetId,
-      posters: draft.posters.map((poster) =>
-        poster.imageId ? { imageId: poster.imageId } : { assetId: poster.assetId }
-      ),
+      posters: draft.posters.flatMap<PosterSaveInstruction>((poster) => {
+        if (poster.imageId) return [{ imageId: poster.imageId }]
+        if (poster.assetId) return [{ assetId: poster.assetId }]
+        return []
+      }),
     }
 
     setSaving(true)
@@ -488,6 +792,12 @@ const AdminEventEdit = () => {
 
   if (loading) return <PageSkeleton />
 
+  const isCoverUploading = isBusyUploadStatus(coverUpload?.status)
+  const hasPendingUploads =
+    isCoverUploading || draft.posters.some((poster) => isBusyUploadStatus(poster.uploadStatus))
+  const coverDisplayUrl =
+    coverUpload && coverUpload.status !== 'error' ? coverUpload.previewUrl : draft.coverUrl
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -506,7 +816,7 @@ const AdminEventEdit = () => {
         <button
           type="button"
           onClick={() => void save()}
-          disabled={saving || uploading}
+          disabled={saving || hasPendingUploads}
           className="rounded theme-button-primary px-4 py-2 text-sm transition-all disabled:cursor-wait disabled:opacity-60"
         >
           <Save size={14} className="mr-1 inline" />
@@ -757,10 +1067,10 @@ const AdminEventEdit = () => {
               <ImageIcon size={16} className="text-brand-gold" />
               封面
             </h2>
-            <div className="mb-3 aspect-[4/3] overflow-hidden rounded bg-surface-alt">
-              {draft.coverUrl ? (
+            <div className="relative mb-3 aspect-[4/3] overflow-hidden rounded bg-surface-alt">
+              {coverDisplayUrl ? (
                 <SmartImage
-                  src={draft.coverUrl}
+                  src={coverDisplayUrl}
                   alt="封面"
                   className="h-full w-full object-cover"
                 />
@@ -769,21 +1079,43 @@ const AdminEventEdit = () => {
                   暂无封面
                 </div>
               )}
+              {coverUpload && coverUpload.status !== 'error' && (
+                <UploadProgressOverlay
+                  label={coverUpload.status === 'ready' ? '封面上传完成' : '封面上传中'}
+                  progress={coverUpload.progress}
+                  status={coverUpload.status}
+                />
+              )}
             </div>
+            {coverUpload?.status === 'error' && (
+              <UploadErrorMessage
+                message={coverUpload.error || '封面上传失败'}
+                onDismiss={() => {
+                  revokeObjectUrl(coverUpload.previewUrl)
+                  setCoverUpload(null)
+                }}
+              />
+            )}
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => coverInputRef.current?.click()}
-                disabled={uploading}
+                disabled={saving || isCoverUploading}
                 className="flex-1 rounded theme-button-secondary px-3 py-2 text-sm"
               >
                 <Upload size={14} className="mr-1 inline" />
-                上传
+                {isCoverUploading ? '上传中...' : '上传'}
               </button>
               {draft.coverUrl && (
                 <button
                   type="button"
-                  onClick={() => patchDraft({ coverAssetId: null, coverUrl: null })}
+                  onClick={() => {
+                    coverUploadControllerRef.current?.abort()
+                    coverUploadControllerRef.current = null
+                    if (coverUpload) revokeObjectUrl(coverUpload.previewUrl)
+                    setCoverUpload(null)
+                    patchDraft({ coverAssetId: null, coverUrl: null })
+                  }}
                   className="rounded border border-border px-3 py-2 text-sm text-text-muted hover:text-brand-gold"
                 >
                   <X size={14} />
@@ -808,7 +1140,7 @@ const AdminEventEdit = () => {
               <button
                 type="button"
                 onClick={() => postersInputRef.current?.click()}
-                disabled={uploading}
+                disabled={saving}
                 className="rounded theme-button-secondary px-3 py-1.5 text-xs"
               >
                 <Upload size={13} className="mr-1 inline" />
@@ -819,7 +1151,7 @@ const AdminEventEdit = () => {
               {draft.posters.map((poster, index) => (
                 <div
                   key={poster.clientId}
-                  draggable={!uploading}
+                  draggable={!isBusyUploadStatus(poster.uploadStatus)}
                   onDragStart={(event) => handlePosterDragStart(event, index)}
                   onDragEnd={() => setDraggingPosterIndex(null)}
                   onDragOver={(event) => {
@@ -840,13 +1172,23 @@ const AdminEventEdit = () => {
                     alt={poster.name}
                     className="h-full w-full object-cover"
                   />
+                  {poster.uploadStatus && poster.uploadStatus !== 'ready' && (
+                    <UploadProgressOverlay
+                      label={
+                        poster.uploadStatus === 'error'
+                          ? '海报上传失败'
+                          : poster.uploadStatus === 'processing'
+                            ? '海报处理中'
+                            : '海报上传中'
+                      }
+                      progress={poster.progress || 0}
+                      status={poster.uploadStatus}
+                      error={poster.error}
+                    />
+                  )}
                   <button
                     type="button"
-                    onClick={() =>
-                      patchDraft({
-                        posters: draft.posters.filter((_, currentIndex) => currentIndex !== index),
-                      })
-                    }
+                    onClick={() => removePoster(poster.clientId)}
                     className="absolute right-1 top-1 rounded bg-surface/90 p-1 text-text-muted hover:text-brand-gold"
                     aria-label="删除海报"
                   >
@@ -895,6 +1237,51 @@ const IconButton = ({ label, onClick }: { label: string; onClick: () => void }) 
   >
     <Trash2 size={14} />
   </button>
+)
+
+const UploadProgressOverlay = ({
+  label,
+  progress,
+  status,
+  error,
+}: {
+  label: string
+  progress: number
+  status: UploadStatus
+  error?: string
+}) => (
+  <div className="absolute inset-x-0 bottom-0 bg-surface/90 p-2 text-xs text-text-primary backdrop-blur-sm">
+    <div className="mb-1 flex items-center justify-between gap-2">
+      <span className="flex min-w-0 items-center gap-1 truncate">
+        {isBusyUploadStatus(status) && <Loader2 size={12} className="shrink-0 animate-spin" />}
+        <span className="truncate">{error || label}</span>
+      </span>
+      {status !== 'error' && <span className="shrink-0 tabular-nums">{progress}%</span>}
+    </div>
+    <div className="h-1.5 overflow-hidden rounded-full bg-surface-alt" role="progressbar">
+      <div
+        className={clsx(
+          'h-full rounded-full transition-all',
+          status === 'error' ? 'bg-red-500' : 'bg-brand-gold'
+        )}
+        style={{ width: `${status === 'error' ? 100 : progress}%` }}
+      />
+    </div>
+  </div>
+)
+
+const UploadErrorMessage = ({ message, onDismiss }: { message: string; onDismiss: () => void }) => (
+  <div className="mb-3 flex items-center justify-between gap-2 rounded border theme-border-error-soft theme-bg-error-soft px-3 py-2 text-xs theme-text-error">
+    <span className="min-w-0 break-words">{message}</span>
+    <button
+      type="button"
+      onClick={onDismiss}
+      className="shrink-0 rounded p-1 text-text-muted hover:text-brand-gold"
+      aria-label="关闭上传错误"
+    >
+      <X size={12} />
+    </button>
+  </div>
 )
 
 const JsonEditableSection = ({
