@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Calendar, MapPin, Ticket } from '@/src/components/icons'
+import { Calendar, MapPin } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { SmartImage } from '../components/SmartImage'
 import Pagination from '../components/Pagination'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { apiGet } from '../lib/apiClient'
-import { formatEventTicketPrices, formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
+import {
+  formatEventListDate,
+  formatEventTicketPriceRange,
+  getEventCoverSrc,
+  getEventListDayOffset,
+} from '../lib/eventFormat'
 import type { EventListResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
 
@@ -33,8 +38,10 @@ const EventCover = ({ event, className }: { event: EventItem; className?: string
 }
 
 const EventCard = ({ event }: { event: EventItem }) => {
-  const firstSlot = event.timeSlots[0]
-  const ticketPrices = formatEventTicketPrices(event.ticketPrices)
+  const eventDate = formatEventListDate(event.timeSlots)
+  const dayOffset = getEventListDayOffset(event.timeSlots)
+  const isFutureOrToday = dayOffset !== null && dayOffset >= 0
+  const ticketPriceRange = formatEventTicketPriceRange(event.ticketPrices)
 
   return (
     <Link
@@ -48,23 +55,34 @@ const EventCard = ({ event }: { event: EventItem }) => {
         />
       </div>
       <div className="space-y-3 p-4">
-        <h2 className="truncate text-base font-semibold text-text-primary transition-colors group-hover:text-brand-gold">
-          {event.title}
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            {dayOffset !== null && (
+              <span
+                className={clsx(
+                  'shrink-0 text-xs font-semibold tabular-nums',
+                  isFutureOrToday ? 'theme-text-success' : 'theme-text-error'
+                )}
+              >
+                {isFutureOrToday ? `+${dayOffset}` : dayOffset}
+              </span>
+            )}
+            <h2 className="truncate text-base font-semibold text-text-primary transition-colors group-hover:text-brand-gold">
+              {event.title}
+            </h2>
+          </div>
+          <span className="shrink-0 text-right text-sm font-medium text-text-secondary tabular-nums">
+            {ticketPriceRange || '票价待定'}
+          </span>
+        </div>
         <div className="space-y-2 text-xs text-text-muted">
           <p className="flex items-center gap-1.5">
             <Calendar size={13} className="text-brand-gold" />
-            <span className="truncate">
-              {firstSlot ? formatEventTimeSlot(firstSlot) : '时间待定'}
-            </span>
+            <span className="truncate">{eventDate || '时间待定'}</span>
           </p>
           <p className="flex items-center gap-1.5">
             <MapPin size={13} className="text-brand-gold" />
             <span className="truncate">{event.location || '地点待定'}</span>
-          </p>
-          <p className="flex items-center gap-1.5">
-            <Ticket size={13} className="text-brand-gold" />
-            <span className="truncate">{ticketPrices || '票价待定'}</span>
           </p>
         </div>
       </div>
