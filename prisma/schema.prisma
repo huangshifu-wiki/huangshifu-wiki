@@ -757,6 +757,7 @@ model Event {
   ticketPrices Json     @default("[]")
   saleTimes    Json     @default("[]")
   lineup       Json     @default("[]")
+  tags         Json     @default("[]")
   externalLinks Json    @default("[]")
   relatedLinks Json     @default("[]")
   sortStart    String?
@@ -781,6 +782,7 @@ model Event {
   @@index([deletedAt])
   @@index([coverAssetId])
   @@index([createdByUid])
+  @@index([tags], map: "Event_tags_gin", type: Gin)
   @@index([slug(ops: raw("gin_trgm_ops"))], map: "Event_slug_trgm_idx", type: Gin)
   @@index([title(ops: raw("gin_trgm_ops"))], map: "Event_title_trgm_idx", type: Gin)
 }

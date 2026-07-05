@@ -62,6 +62,8 @@ export const CONTENT_LIMITS = {
     saleTimeNote: 100,
     lineupItem: 100,
     lineup: 50,
+    tag: 50,
+    tags: 30,
     externalLinkLabel: 80,
     externalLinks: 20,
     imageName: 255,

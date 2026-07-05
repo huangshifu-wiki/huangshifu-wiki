@@ -244,6 +244,7 @@ export interface EventItem {
   ticketPrices: unknown[]
   saleTimes: EventSaleTime[]
   lineup: string[]
+  tags: string[]
   externalLinks: EventExternalLink[]
   relatedLinks: EventExternalLink[]
   sortStart: string | null

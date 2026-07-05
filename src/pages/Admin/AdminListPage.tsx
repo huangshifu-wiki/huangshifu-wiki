@@ -169,6 +169,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'status', label: '公开', className: 'min-w-[110px]' },
       { key: 'owner', label: '创建者', className: 'min-w-[140px]' },
       { key: 'media', label: '图片/地点', className: 'min-w-[170px]' },
+      { key: 'tags', label: '标签', className: 'min-w-[180px]' },
       { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
       { key: 'actions', label: '操作', className: 'min-w-[260px] text-left' },
     ],
@@ -285,22 +286,23 @@ const renderTagsAndLocation = (item: AdminDataItem) => {
   const tags = getTags(item)
   return (
     <div className="space-y-2 text-xs">
-      {tags.length > 0 ? (
-        <div className="flex max-w-[220px] flex-wrap gap-1">
-          {tags
-            .slice(0, 4)
-            .map((tag) => renderKeyedBadge(tag, tag, 'bg-surface-alt text-brand-gold'))}
-          {tags.length > 4 && renderBadge(`+${tags.length - 4}`, 'bg-surface-alt text-text-muted')}
-        </div>
-      ) : (
-        <span className="text-text-muted">无标签</span>
-      )}
+      {renderTagBadges(tags)}
       <p className="truncate text-text-muted">
         {toOptionalText(item.locationName) || toOptionalText(item.locationDetail) || '未设置位置'}
       </p>
     </div>
   )
 }
+
+const renderTagBadges = (tags: string[]) =>
+  tags.length > 0 ? (
+    <div className="flex max-w-[220px] flex-wrap gap-1 text-xs">
+      {tags.slice(0, 4).map((tag) => renderKeyedBadge(tag, tag, 'bg-surface-alt text-brand-gold'))}
+      {tags.length > 4 && renderBadge(`+${tags.length - 4}`, 'bg-surface-alt text-text-muted')}
+    </div>
+  ) : (
+    <span className="text-xs text-text-muted">无标签</span>
+  )
 
 const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementType) => {
   const href = getItemHref(type, item)
@@ -543,7 +545,8 @@ const renderCell = (
   if (key === 'owner') return renderOwner(type, item)
   if (key === 'metrics') return renderMetrics(type, item)
   if (key === 'relations') return renderRelations(type, item)
-  if (key === 'tags') return renderTagsAndLocation(item)
+  if (key === 'tags')
+    return type === 'events' ? renderTagBadges(getTags(item)) : renderTagsAndLocation(item)
   if (key === 'media') return renderMedia(item)
   if (key === 'link') return renderLink(item)
   if (key === 'order')

@@ -6,6 +6,7 @@ import { asyncHandler } from '../middleware/asyncHandler'
 import { validateBody, eventWriteSchema } from '../schemas'
 import type { AuthenticatedRequest } from '../types'
 import { prisma } from '../prisma'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import {
   parsePagination,
   softDeleteData,
@@ -85,6 +86,12 @@ async function cleanupRemovedAssetReferences(
 
 function isString(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.length > 0
+}
+
+function parseEventTagQuery(value: unknown) {
+  if (typeof value !== 'string') return ''
+  const tag = value.trim()
+  return tag.length > CONTENT_LIMITS.event.tag ? null : tag
 }
 
 async function syncAssetsToImageMap(assetIds: string[]) {
@@ -179,7 +186,15 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { limit, page, offset: skip } = parsePagination(req.query)
-    const where = { deletedAt: null }
+    const tag = parseEventTagQuery(req.query.tag)
+    if (tag === null) {
+      res.status(400).json({ error: `标签不能超过${CONTENT_LIMITS.event.tag}个字符` })
+      return
+    }
+    const where: Prisma.EventWhereInput = {
+      deletedAt: null,
+      ...(tag ? { tags: { array_contains: [tag] } } : {}),
+    }
     const [total, events] = await Promise.all([
       prisma.event.count({ where }),
       prisma.event.findMany({
@@ -199,6 +214,23 @@ router.get(
       totalPages: Math.max(1, Math.ceil(total / limit)),
       hasMore: skip + events.length < total,
     })
+  })
+)
+
+router.get(
+  '/tags',
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.$queryRaw<Array<{ tag: string }>>`
+      SELECT DISTINCT event_tag.tag AS tag
+      FROM "Event"
+      CROSS JOIN LATERAL jsonb_array_elements_text("Event"."tags") AS event_tag(tag)
+      WHERE "Event"."deletedAt" IS NULL AND btrim(event_tag.tag) <> ''
+    `
+    const tags = rows
+      .map((row) => row.tag)
+      .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+
+    res.json({ tags })
   })
 )
 
@@ -254,6 +286,7 @@ router.post(
           ticketPrices: input.ticketPrices,
           saleTimes: input.saleTimes,
           lineup: input.lineup,
+          tags: input.tags,
           externalLinks: input.externalLinks,
           relatedLinks: input.relatedLinks,
           ...sortFields,
@@ -336,6 +369,7 @@ router.put(
           ticketPrices: input.ticketPrices,
           saleTimes: input.saleTimes,
           lineup: input.lineup,
+          tags: input.tags,
           externalLinks: input.externalLinks,
           relatedLinks: input.relatedLinks,
           ...sortFields,

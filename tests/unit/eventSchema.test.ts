@@ -20,6 +20,7 @@ describe('eventWriteSchema', () => {
       ],
       saleTimes: [{ time: '2025-08-01T12:00', note: '预售' }],
       lineup: ['黄诗扶'],
+      tags: [' 演出 ', '巡演', '演出'],
       externalLinks: [{ label: '购票', url: 'https://example.com/ticket' }],
       relatedLinks: [{ label: '官宣', url: 'https://example.com/news' }],
       coverAssetId: 'asset-1',
@@ -33,6 +34,7 @@ describe('eventWriteSchema', () => {
       { description: '学生票', price: 99.5 },
     ])
     expect(result.saleTimes[0]).toEqual({ time: '2025-08-01T12:00', note: '预售' })
+    expect(result.tags).toEqual(['演出', '巡演'])
     expect(result.externalLinks[0]?.label).toBe('购票')
     expect(result.relatedLinks[0]?.label).toBe('官宣')
   })
@@ -40,6 +42,7 @@ describe('eventWriteSchema', () => {
   it('defaults related links to an empty array', () => {
     const result = eventWriteSchema.parse({ title: '默认链接活动' })
 
+    expect(result.tags).toEqual([])
     expect(result.relatedLinks).toEqual([])
   })
 

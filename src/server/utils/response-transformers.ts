@@ -727,6 +727,7 @@ type EventInput = {
   ticketPrices: unknown
   saleTimes: unknown
   lineup: unknown
+  tags: unknown
   externalLinks: unknown
   relatedLinks: unknown
   sortStart?: string | null
@@ -832,6 +833,7 @@ function toEventResponseWithImageMaps(
     ticketPrices: arrayJson(event.ticketPrices),
     saleTimes: arrayJson(event.saleTimes),
     lineup: arrayJson(event.lineup),
+    tags: serializeTags(event.tags),
     externalLinks: arrayJson(event.externalLinks),
     relatedLinks: arrayJson(event.relatedLinks),
     sortStart: event.sortStart || null,

@@ -1,6 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Calendar, ExternalLink, MapPin, Ticket, Users } from '@/src/components/icons'
+import {
+  ArrowLeft,
+  Calendar,
+  ExternalLink,
+  MapPin,
+  Tag,
+  Ticket,
+  Users,
+} from '@/src/components/icons'
 import { SmartImage } from '../components/SmartImage'
 import { Lightbox } from '../components/Lightbox'
 import MarkdownRenderer from '../components/MarkdownRenderer'
@@ -172,6 +180,20 @@ const EventDetail = () => {
                 <MapPin size={16} className="text-brand-gold" />
                 {event.location || '地点待定'}
               </p>
+              {event.tags.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Tag size={16} className="text-brand-gold" />
+                  {event.tags.map((tag) => (
+                    <Link
+                      key={tag}
+                      to={`/events?tag=${encodeURIComponent(tag)}`}
+                      className="rounded px-2 py-0.5 text-xs theme-tag"
+                    >
+                      {tag}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </header>

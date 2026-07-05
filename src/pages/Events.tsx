@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Calendar, MapPin } from '@/src/components/icons'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Calendar, MapPin, Tag } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { SmartImage } from '../components/SmartImage'
 import Pagination from '../components/Pagination'
@@ -17,6 +17,16 @@ import type { EventListResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
 
 const DEFAULT_PAGE_SIZE = 12
+const TAG_FILTER_BASE_CLASS = 'relative pb-2 text-sm tracking-[0.05em] transition-colors'
+
+const getTagFilterClassName = (active: boolean, withIcon = false) =>
+  clsx(
+    TAG_FILTER_BASE_CLASS,
+    withIcon && 'flex items-center gap-1.5',
+    active
+      ? 'font-semibold text-brand-gold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:rounded-[1px] after:bg-[var(--color-theme-accent)]'
+      : 'text-text-muted hover:text-brand-gold'
+  )
 
 const EventCover = ({ event, className }: { event: EventItem; className?: string }) => {
   const src = getEventCoverSrc(event)
@@ -76,6 +86,15 @@ const EventCard = ({ event }: { event: EventItem }) => {
           </span>
         </div>
         <div className="space-y-2 text-xs text-text-muted">
+          {event.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {event.tags.slice(0, 3).map((tag) => (
+                <span key={tag} className="rounded px-2 py-0.5 text-[10px] theme-tag">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
           <p className="flex items-center gap-1.5">
             <Calendar size={13} className="text-brand-gold" />
             <span className="truncate">{eventDate || '时间待定'}</span>
@@ -91,7 +110,10 @@ const EventCard = ({ event }: { event: EventItem }) => {
 }
 
 const Events = () => {
+  const [searchParams] = useSearchParams()
+  const selectedTag = searchParams.get('tag') || ''
   const [events, setEvents] = useState<EventItem[]>([])
+  const [tags, setTags] = useState<string[]>([])
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const { page, handlePageChange } = useRoutedPagination({
@@ -103,8 +125,28 @@ const Events = () => {
 
   useEffect(() => {
     let cancelled = false
+    apiGet<{ tags: string[] }>('/api/events/tags')
+      .then((data) => {
+        if (!cancelled) setTags(data.tags || [])
+      })
+      .catch((error) => {
+        console.error('Fetch event tags failed:', error)
+        if (!cancelled) setTags([])
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
     setLoading(true)
-    apiGet<EventListResponse>('/api/events', { page, limit: DEFAULT_PAGE_SIZE })
+    apiGet<EventListResponse>('/api/events', {
+      page,
+      limit: DEFAULT_PAGE_SIZE,
+      ...(selectedTag ? { tag: selectedTag } : {}),
+    })
       .then((data) => {
         if (cancelled) return
         setEvents(data.events || [])
@@ -124,7 +166,19 @@ const Events = () => {
     return () => {
       cancelled = true
     }
-  }, [page])
+  }, [page, selectedTag])
+
+  const getTagUrl = (tag: string) => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
+    if (tag) {
+      next.set('tag', tag)
+    } else {
+      next.delete('tag')
+    }
+    const query = next.toString()
+    return query ? `/events?${query}` : '/events'
+  }
 
   if (loading) return <PageSkeleton />
 
@@ -136,6 +190,24 @@ const Events = () => {
           活动
         </h1>
       </div>
+
+      {tags.length > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-4 border-b border-border">
+          <Link to={getTagUrl('')} className={getTagFilterClassName(!selectedTag, true)}>
+            <Tag size={14} />
+            全部标签
+          </Link>
+          {tags.map((tag) => (
+            <Link
+              key={tag}
+              to={getTagUrl(tag)}
+              className={getTagFilterClassName(selectedTag === tag)}
+            >
+              {tag}
+            </Link>
+          ))}
+        </div>
+      )}
 
       {events.length > 0 ? (
         <>

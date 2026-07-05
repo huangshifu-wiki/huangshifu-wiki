@@ -18,6 +18,7 @@ import { SmartImage } from '../../components/SmartImage'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { splitTagsInput } from '../../lib/contentUtils'
 import {
   EVENT_ALLOWED_IMAGE_TYPES,
   EVENT_IMAGE_ACCEPT,
@@ -96,6 +97,7 @@ type EventDraft = {
   ticketPrices: EditableTicketPrice[]
   saleTimes: EventSaleTime[]
   lineup: string[]
+  tagsText: string
   externalLinks: EventExternalLink[]
   relatedLinks: EventExternalLink[]
   coverAssetId: string | null
@@ -128,6 +130,7 @@ const createEmptyDraft = (): EventDraft => ({
   ticketPrices: [createEmptyTicketPrice()],
   saleTimes: [],
   lineup: [''],
+  tagsText: '',
   externalLinks: [],
   relatedLinks: [],
   coverAssetId: null,
@@ -163,6 +166,7 @@ const createDraftFromEvent = (event: EventItem): EventDraft => ({
     : [createEmptyTicketPrice()],
   saleTimes: event.saleTimes,
   lineup: event.lineup.length ? event.lineup : [''],
+  tagsText: (event.tags || []).join(', '),
   externalLinks: event.externalLinks || [],
   relatedLinks: event.relatedLinks || [],
   coverAssetId: event.coverAssetId,
@@ -776,6 +780,7 @@ const AdminEventEdit = () => {
       ticketPrices: normalizeTicketPrices(draft.ticketPrices),
       saleTimes: normalizeSaleTimes(draft.saleTimes),
       lineup: normalizeStringList(draft.lineup),
+      tags: splitTagsInput(draft.tagsText),
       externalLinks: normalizeExternalLinks(draft.externalLinks),
       relatedLinks: normalizeExternalLinks(draft.relatedLinks),
       coverAssetId: draft.coverAssetId,
@@ -858,6 +863,12 @@ const AdminEventEdit = () => {
                 onChange={(event) => patchDraft({ location: event.target.value })}
                 maxLength={CONTENT_LIMITS.event.location}
                 placeholder="地点"
+                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none"
+              />
+              <input
+                value={draft.tagsText}
+                onChange={(event) => patchDraft({ tagsText: event.target.value })}
+                placeholder="标签，逗号分隔"
                 className="rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none"
               />
             </div>

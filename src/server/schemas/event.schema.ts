@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
-import { limitedString, optionalLimitedString } from '../utils/textLimits'
+import { limitedString, limitedStringArray, optionalLimitedString } from '../utils/textLimits'
 
 const localDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const localDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
@@ -94,6 +94,9 @@ export const eventWriteSchema = z.object({
     .array(limitedString('阵容', CONTENT_LIMITS.event.lineupItem).trim().min(1, '阵容不能为空'))
     .max(CONTENT_LIMITS.event.lineup)
     .optional()
+    .default([]),
+  tags: limitedStringArray('标签', CONTENT_LIMITS.event.tag, CONTENT_LIMITS.event.tags)
+    .transform((items) => [...new Set(items?.map((item) => item.trim()).filter(Boolean) || [])])
     .default([]),
   externalLinks: createEventLinksSchema(),
   relatedLinks: createEventLinksSchema(),
