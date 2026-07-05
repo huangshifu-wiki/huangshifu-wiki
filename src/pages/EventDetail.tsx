@@ -11,6 +11,13 @@ import { formatEventTicketPrices, formatEventTimeSlot, getEventCoverSrc } from '
 import type { EventDetailResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
 
+type EventPosterImage = {
+  id: string
+  url: string
+  originalUrl?: string | null
+  name?: string | null
+}
+
 const EventDetail = () => {
   const { slug } = useParams()
   const [event, setEvent] = useState<EventItem | null>(null)
@@ -39,15 +46,31 @@ const EventDetail = () => {
     }
   }, [slug])
 
-  const lightboxImages = useMemo(
-    () =>
-      (event?.posters || []).map((poster) => ({
+  const posterImages = useMemo<EventPosterImage[]>(() => {
+    if (!event) return []
+
+    const coverUrl = getEventCoverSrc(event, true)
+    const coverImage = coverUrl
+      ? [
+          {
+            id: `${event.id}-cover`,
+            url: getEventCoverSrc(event),
+            originalUrl: coverUrl,
+            name: `${event.title} 封面`,
+          },
+        ]
+      : []
+
+    return [
+      ...coverImage,
+      ...event.posters.map((poster) => ({
         id: poster.id,
-        url: poster.originalUrl || poster.url,
+        url: poster.url,
+        originalUrl: poster.originalUrl || poster.url,
         name: poster.name,
       })),
-    [event?.posters]
-  )
+    ]
+  }, [event])
 
   if (loading) return <PageSkeleton />
 
@@ -206,11 +229,11 @@ const EventDetail = () => {
           </div>
         </section>
 
-        {event.posters.length ? (
+        {posterImages.length ? (
           <section>
             <h2 className="mb-4 text-base font-semibold text-text-primary">海报</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {event.posters.map((poster, index) => (
+              {posterImages.map((poster, index) => (
                 <button
                   key={poster.id}
                   type="button"
@@ -233,7 +256,7 @@ const EventDetail = () => {
       </article>
 
       <Lightbox
-        images={lightboxImages}
+        images={posterImages}
         initialIndex={lightboxIndex}
         open={lightboxOpen}
         onClose={() => setLightboxOpen(false)}
