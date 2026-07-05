@@ -10,24 +10,24 @@ describe('getI18n', () => {
 
     it('always returns default locale', () => {
       const locale = getI18n()
-      expect(locale.t('nav.home')).toBe('首页')
+      expect(locale.t('nav.music')).toBe('音乐')
     })
   })
 
   describe('nested value retrieval', () => {
-    it('retrieves top-level values', () => {
+    it('retrieves section values', () => {
       const { t } = getI18n()
-      expect(t('app.title')).toBe('黄诗扶wiki')
+      expect(t('forum.title')).toBe('论坛')
     })
 
     it('retrieves nested values using dot notation', () => {
       const { t } = getI18n()
-      expect(t('nav.home')).toBe('首页')
+      expect(t('nav.music')).toBe('音乐')
     })
 
     it('retrieves deeply nested values', () => {
       const { t } = getI18n()
-      expect(t('home.hero.title')).toBe('欢迎来到黄诗扶wiki')
+      expect(t('music.unit.song')).toBe('首歌曲')
     })
 
     it('returns the key itself if not found', () => {
@@ -39,34 +39,27 @@ describe('getI18n', () => {
   describe('parameter replacement', () => {
     it('replaces single parameter', () => {
       const { t } = getI18n()
-      expect(t('music.selectedCount', { count: 5 })).toBe('已选择 5 首歌曲')
+      expect(t('gallery.imageCount', { count: 5 })).toBe('5 张图片')
     })
 
     it('replaces parameter with zero', () => {
       const { t } = getI18n()
-      expect(t('music.selectedCount', { count: 0 })).toBe('已选择 0 首歌曲')
+      expect(t('gallery.imageCount', { count: 0 })).toBe('0 张图片')
     })
 
     it('replaces parameter with string value', () => {
       const { t } = getI18n()
-      expect(t('music.selectedCount', { count: '10' })).toBe('已选择 10 首歌曲')
-    })
-
-    it('replaces multiple parameters in same string', () => {
-      const { t } = getI18n()
-      expect(t('music.confirmDeleteBatch', { count: 3 })).toBe(
-        '您确定要删除选中的 3 首歌曲吗？此操作无法撤销。'
-      )
+      expect(t('gallery.imageCount', { count: '10' })).toBe('10 张图片')
     })
 
     it('keeps original placeholder for unknown parameter', () => {
       const { t } = getI18n()
-      expect(t('music.selectedCount', { unknown: 5 })).toBe('已选择 {{count}} 首歌曲')
+      expect(t('gallery.imageCount', { unknown: 5 })).toBe('{{count}} 张图片')
     })
 
     it('handles missing params object gracefully', () => {
       const { t } = getI18n()
-      expect(t('music.selectedCount')).toBe('已选择 {{count}} 首歌曲')
+      expect(t('gallery.imageCount')).toBe('{{count}} 张图片')
     })
   })
 })

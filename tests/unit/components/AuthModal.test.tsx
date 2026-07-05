@@ -42,7 +42,6 @@ vi.mock('../../../src/lib/i18n', () => ({
         'auth.backToLogin': '返回登录',
         'auth.mockCodeHint': 'mock code hint',
         'auth.loginFailed': '登录失败',
-        'auth.anonymousUser': '匿名用户',
       }
       return map[key] || key
     },

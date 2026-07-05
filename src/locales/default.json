@@ -1,91 +1,15 @@
 {
-  "app": {
-    "title": "黄诗扶wiki",
-    "subtitle": "诗情画意，扶摇直上"
-  },
   "nav": {
-    "home": "首页",
     "wiki": "百科",
     "forum": "论坛",
     "music": "音乐",
     "gallery": "画廊",
-    "events": "游记",
-    "profile": "个人中心",
-    "admin": "管理"
-  },
-  "home": {
-    "hero": {
-      "title": "欢迎来到黄诗扶wiki",
-      "subtitle": "探索诗扶的音乐世界",
-      "cta": "开始探索"
-    },
-    "sections": {
-      "music": "音乐作品",
-      "gallery": "精美图集",
-      "wiki": "百科知识",
-      "events": "演出动态"
-    },
-    "recruit": {
-      "link": "前往招募与培养",
-      "description": "点击前往「招募与培养」"
-    }
-  },
-  "recruit": {
-    "title": "招募与培养",
-    "subtitle": "加入我们，一起成长",
-    "overview": "我们正在招募志同道合的伙伴。",
-    "admissionRequirements": "加入要求",
-    "trainingRequirements": "培养计划",
-    "coreSubjects": "核心技能",
-    "comprehensiveAbility": "综合能力",
-    "employmentRate": "就业成功率",
-    "employmentNote": "我们提供完善的培训和职业发展路径。",
-    "fiveScenes": "五大部门",
-    "fiveScenesDesc": "多个方向，总有一款适合你。",
-    "backToHome": "返回首页",
-    "courses": {
-      "music": "音乐组",
-      "art": "美术组",
-      "literature": "文学组",
-      "crafts": "技艺组",
-      "dream": "特别项目组"
-    },
-    "lecturers": "导师"
+    "events": "游记"
   },
   "music": {
-    "title": "音乐作品",
-    "description": "诗扶之声 · 记录每一首动人的旋律",
-    "play_count": "播放量",
-    "albums": "专辑",
-    "songs": "歌曲",
-    "batchExit": "退出批量",
-    "batchManage": "批量管理",
-    "linkImport": "链接导入",
-    "cancelAdd": "取消添加",
-    "addMusic": "添加音乐",
-    "linkManage": "关联管理",
-    "inputMusicId": "输入音乐 ID 或链接 (支持批量，用空格或逗号分隔)",
-    "selectPlatform": "选择平台",
-    "platforms": {
-      "netease": "网易云音乐",
-      "tencent": "QQ音乐",
-      "kugou": "酷狗音乐",
-      "baidu": "百度音乐",
-      "kuwo": "酷我音乐",
-      "all": "全部平台"
-    },
-    "inputPlaceholder": "输入",
-    "idOrLinkList": "音乐 ID 或链接列表",
-    "processing": "正在处理...",
-    "getAndAdd": "获取并添加",
+    "title": "音乐",
     "tabMusic": "音乐",
     "tabAlbums": "专辑",
-    "createAlbum": "创建专辑",
-    "sortBy": {
-      "createdAt": "按添加时间",
-      "title": "按歌名",
-      "artist": "按歌手"
-    },
     "sortOrder": {
       "asc": "升序",
       "desc": "降序"
@@ -95,51 +19,18 @@
       "song": "首歌曲",
       "album": "张专辑"
     },
-    "selectedCount": "已选择 {{count}} 首歌曲",
-    "cancelSelect": "取消选择",
-    "batchDelete": "批量删除",
-    "confirmDelete": "确认删除",
-    "confirmDeleteSingle": "您确定要删除这首歌曲吗？此操作无法撤销。",
-    "confirmDeleteBatch": "您确定要删除选中的 {{count}} 首歌曲吗？此操作无法撤销。",
-    "cancel": "取消",
-    "confirmDeleteButton": "确定删除",
-    "relatedPosts": "相关乐评",
-    "loading": "加载中...",
-    "noPosts": "暂无乐评",
     "play": "播放",
     "favorite": "收藏",
-    "detail": "详情",
-    "select": "选择",
-    "selected": "已选",
-    "selectSong": "选择歌曲",
-    "playSong": "播放歌曲",
-    "viewSongDetail": "查看歌曲详情",
-    "openOriginalLink": "打开原始链接",
-    "copyInternalLink": "复制内链",
-    "viewPosts": "查看乐评",
-    "deleteSong": "删除歌曲",
     "noMusic": "暂无音乐，快去添加吧",
-    "view": "查看",
     "viewAlbum": "查看专辑",
     "copyAlbumLink": "复制专辑内链",
     "noAlbums": "暂无专辑，快去创建吧",
-    "playing": "正在播放",
-    "selectSongToPlay": "选择一首歌曲开始播放",
-    "tips": {
-      "title": "音乐小贴士",
-      "content": "您可以直接输入网易云音乐的歌曲 ID 或链接来添加音乐。系统会自动获取封面、歌词和音频地址。",
-      "learnMore": "了解更多"
-    }
+    "playing": "正在播放"
   },
   "gallery": {
-    "title": "精美图集",
-    "photos": "照片",
-    "artworks": "二创作品",
     "linkCopied": "图集内链已复制",
     "linkCopyFailed": "复制链接失败，请稍后重试",
     "atLeastOneImage": "图集至少需要保留一张图片",
-    "changesSaved": "图集修改已保存",
-    "saveFailed": "保存失败，请稍后重试",
     "saveDraftFailed": "保存失败，请稍后重试",
     "draftSaved": "草稿已保存",
     "galleryUpdated": "图集已保存",
@@ -167,14 +58,7 @@
     "publishing": "发布中...",
     "publishGallery": "发布",
     "saveDraft": "保存草稿",
-    "saveChanges": "保存修改",
     "cancelEdit": "取消编辑",
-    "enterEditMode": "打开编辑模式",
-    "setDraft": "设为草稿",
-    "setPublish": "设为发布",
-    "published": "已发布",
-    "draft": "草稿中",
-    "draftBadge": "草稿",
     "copyInternalLink": "复制内链",
     "titleLabel": "图集标题",
     "titlePlaceholder": "图集标题",
@@ -198,9 +82,7 @@
     "deleteGalleryFailed": "删除图集失败，请稍后重试",
     "deleteOtherReasonRequired": "删除他人图集必须填写删除理由",
     "imageCount": "{{count}} 张图片",
-    "editMode": "编辑模式",
     "publishedAt": "发布于",
-    "editImageHint": "直接拖拽图片可调整顺序，点击图片左上角的删除按钮可移除。也可以把图片拖到整个页面中加入待上传列表。",
     "viewFullSize": "查看大图",
     "deleteImage": "删除图片",
     "pendingUpload": "待上传",
@@ -235,17 +117,10 @@
     "noComments": "暂无评论，快来抢沙发吧！"
   },
   "wiki": {
-    "title": "百科知识",
-    "entries": "词条",
-    "categories": "分类",
     "loading": "加载中...",
     "notFound": "页面未找到",
     "linkCopied": "链接已复制，可直接分享给好友",
     "linkCopyFailed": "复制链接失败，请手动复制地址栏链接",
-    "likeFailed": "点赞操作失败，请稍后重试",
-    "dislikeFailed": "踩操作失败，请稍后重试",
-    "pinFailed": "置顶操作失败，请稍后重试",
-    "favoriteFailed": "收藏操作失败，请稍后重试",
     "reviewSubmitted": "已提交审核，请等待管理员处理",
     "reviewSubmitFailed": "提交审核失败，请稍后重试",
     "pagePublished": "百科已发布",
@@ -282,11 +157,6 @@
     "unfavorite": "取消收藏",
     "favoritePage": "收藏页面",
     "share": "分享",
-    "category": {
-      "biography": "人物介绍",
-      "music": "音乐作品",
-      "album": "专辑一览"
-    },
     "submitting": "提交中...",
     "submitReview": "提交审核",
     "publishing": "发布中...",
@@ -310,14 +180,11 @@
     "favorite": "收藏",
     "pinned": "已置顶",
     "pin": "置顶",
-    "generating": "生成中...",
     "collapseGraph": "收起图谱",
     "expandGraph": "展开图谱"
   },
   "forum": {
     "title": "论坛",
-    "posts": "帖子",
-    "replies": "回复",
     "pinned": "已置顶",
     "copyInternalLink": "复制内链",
     "copyPostInternalLink": "复制帖子内链",
@@ -333,8 +200,6 @@
     "onlyPublishedCanComment": "仅已发布内容可评论",
     "commentFailed": "发表评论失败，请稍后重试",
     "postNotFound": "帖子未找到",
-    "operationFailed": "操作失败，请稍后重试",
-    "favoriteFailed": "收藏操作失败，请稍后重试",
     "reviewSubmitted": "已提交审核，请等待管理员处理",
     "submitReviewFailed": "提交审核失败，请稍后重试",
     "linkCopiedShare": "链接已复制，可直接分享给好友",
@@ -422,7 +287,6 @@
     "publishFailed": "发布失败，请稍后重试"
   },
   "auth": {
-    "anonymousUser": "匿名用户",
     "loginFailed": "登录失败",
     "dialogLabel": "登录或注册",
     "wechatLogin": "微信登录",
@@ -455,22 +319,8 @@
     "switchToAccount": "改用账号密码",
     "switchToWechat": "改用微信登录"
   },
-  "profile": {
-    "title": "个人中心",
-    "my_profile": "我的资料",
-    "my_favorites": "我的收藏"
-  },
-  "admin": {
-    "title": "管理后台",
-    "users": "用户管理",
-    "content": "内容管理"
-  },
   "common": {
     "loginRequired": "请先登录后操作",
     "bannedUser": "账号已被封禁，无法操作"
-  },
-  "footer": {
-    "copyright": "© 2026 诗扶小筑 - 黄诗扶粉丝Wiki与社区",
-    "powered_by": "本站由免费云加速（FreeCDN）提供网站加速和攻击防御服务"
   }
 }
