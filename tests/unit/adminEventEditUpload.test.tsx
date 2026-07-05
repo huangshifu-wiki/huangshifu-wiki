@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import AdminEventEdit from '../../src/pages/Admin/AdminEventEdit'
 
+const mockApiGet = vi.hoisted(() => vi.fn())
 const mockApiPost = vi.hoisted(() => vi.fn())
 const mockApiPut = vi.hoisted(() => vi.fn())
 const mockInvalidateApiCacheByPrefix = vi.hoisted(() => vi.fn())
@@ -13,7 +14,7 @@ const mockShowToast = vi.hoisted(() => vi.fn())
 const mockUploadImageWithStrategy = vi.hoisted(() => vi.fn())
 
 vi.mock('../../src/lib/apiClient', () => ({
-  apiGet: vi.fn(),
+  apiGet: mockApiGet,
   apiPost: mockApiPost,
   apiPut: mockApiPut,
   invalidateApiCacheByPrefix: mockInvalidateApiCacheByPrefix,
@@ -51,8 +52,19 @@ const renderCreatePage = () =>
   render(
     <MemoryRouter initialEntries={['/admin/events/new']}>
       <Routes>
+        <Route path="/admin/events" element={<div>活动列表</div>} />
         <Route path="/admin/events/new" element={<AdminEventEdit />} />
-        <Route path="/admin/events/:eventId/edit" element={<div>saved</div>} />
+        <Route path="/admin/events/:eventId/edit" element={<AdminEventEdit />} />
+      </Routes>
+    </MemoryRouter>
+  )
+
+const renderEditPage = () =>
+  render(
+    <MemoryRouter initialEntries={['/admin/events/event-1/edit']}>
+      <Routes>
+        <Route path="/admin/events" element={<div>活动列表</div>} />
+        <Route path="/admin/events/:eventId/edit" element={<AdminEventEdit />} />
       </Routes>
     </MemoryRouter>
   )
@@ -72,6 +84,38 @@ describe('AdminEventEdit 上传体验', () => {
     mockApiPost.mockResolvedValue({
       event: {
         id: 'event-1',
+      },
+    })
+    mockApiPut.mockResolvedValue({
+      event: {
+        id: 'event-1',
+      },
+    })
+    mockApiGet.mockResolvedValue({
+      item: {
+        id: 'event-1',
+        slug: 'test-event',
+        title: '旧活动',
+        location: '',
+        content: '',
+        timeSlots: [],
+        ticketPrices: [],
+        saleTimes: [],
+        lineup: [],
+        externalLinks: [],
+        relatedLinks: [],
+        sortStart: null,
+        sortEnd: null,
+        coverAssetId: null,
+        coverUrl: null,
+        coverName: null,
+        createdByUid: 'admin',
+        createdByName: null,
+        updatedByUid: null,
+        updatedByName: null,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        posters: [],
       },
     })
   })
@@ -161,6 +205,35 @@ describe('AdminEventEdit 上传体验', () => {
         posters: [{ assetId: 'poster-asset-1' }],
       })
     })
+    expect(await screen.findByText('活动列表')).toBeInTheDocument()
+  })
+
+  it('编辑已有活动保存成功后返回活动列表', async () => {
+    const user = userEvent.setup()
+
+    renderEditPage()
+
+    const titleInput = await screen.findByPlaceholderText('活动标题')
+    await user.clear(titleInput)
+    await user.type(titleInput, '更新活动')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => {
+      expect(mockApiPut).toHaveBeenCalledWith('/api/events/event-1', {
+        title: '更新活动',
+        location: '',
+        content: '',
+        timeSlots: [],
+        ticketPrices: [],
+        saleTimes: [],
+        lineup: [],
+        externalLinks: [],
+        relatedLinks: [],
+        coverAssetId: null,
+        posters: [],
+      })
+    })
+    expect(await screen.findByText('活动列表')).toBeInTheDocument()
   })
 
   it('海报上传失败时阻止保存，直到删除失败项', async () => {

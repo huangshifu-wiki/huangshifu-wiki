@@ -788,13 +788,15 @@ const AdminEventEdit = () => {
 
     setSaving(true)
     try {
-      const result = isCreating
-        ? await apiPost<EventCreateResponse>('/api/events', payload)
-        : await apiPut<EventDetailResponse>(`/api/events/${eventId}`, payload)
+      if (isCreating) {
+        await apiPost<EventCreateResponse>('/api/events', payload)
+      } else {
+        await apiPut<EventDetailResponse>(`/api/events/${eventId}`, payload)
+      }
       invalidateApiCacheByPrefix('/api/events')
       invalidateApiCacheByPrefix('/api/admin/events')
       show('活动已保存', { variant: 'success' })
-      navigate(`/admin/events/${result.event.id}/edit`, { replace: true })
+      navigate('/admin/events', { replace: true })
     } catch (error) {
       show(error instanceof Error ? error.message : '保存活动失败', { variant: 'error' })
     } finally {
