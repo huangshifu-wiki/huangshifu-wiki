@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Calendar, MapPin, Tag } from '@/src/components/icons'
+import { Calendar, MapPin } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { SmartImage } from '../components/SmartImage'
 import Pagination from '../components/Pagination'
@@ -17,12 +17,12 @@ import type { EventListResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
 
 const DEFAULT_PAGE_SIZE = 12
-const TAG_FILTER_BASE_CLASS = 'relative pb-2 text-sm tracking-[0.05em] transition-colors'
+const TAG_FILTER_BASE_CLASS =
+  'relative pb-2 text-[1.125rem] tracking-[0.05em] transition-all cursor-pointer'
 
-const getTagFilterClassName = (active: boolean, withIcon = false) =>
+const getTagFilterClassName = (active: boolean) =>
   clsx(
     TAG_FILTER_BASE_CLASS,
-    withIcon && 'flex items-center gap-1.5',
     active
       ? 'font-semibold text-brand-gold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:rounded-[1px] after:bg-[var(--color-theme-accent)]'
       : 'text-text-muted hover:text-brand-gold'
@@ -183,48 +183,56 @@ const Events = () => {
   if (loading) return <PageSkeleton />
 
   return (
-    <div className="mx-auto max-w-[1100px] px-6 py-8">
-      <div className="mb-7 flex items-end justify-between gap-4 border-b border-border">
-        <h1 className="relative flex items-center gap-2 pb-2 text-[1.25rem] font-semibold tracking-[0.08em] text-brand-gold after:absolute after:bottom-0 after:left-0 after:h-[2px] after:w-full after:rounded-[1px] after:bg-brand-gold">
-          <Calendar size={20} />
-          活动
-        </h1>
-      </div>
-
-      {tags.length > 0 && (
-        <div className="mb-6 flex flex-wrap items-center gap-4 border-b border-border">
-          <Link to={getTagUrl('')} className={getTagFilterClassName(!selectedTag, true)}>
-            <Tag size={14} />
-            全部标签
-          </Link>
-          {tags.map((tag) => (
-            <Link
-              key={tag}
-              to={getTagUrl(tag)}
-              className={getTagFilterClassName(selectedTag === tag)}
-            >
-              {tag}
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {events.length > 0 ? (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {events.map((event) => (
-              <EventCard key={event.id} event={event} />
-            ))}
+    <div
+      className="min-h-[calc(100vh-60px)] bg-bg-primary"
+      style={{
+        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
+        lineHeight: 1.8,
+      }}
+    >
+      <div className="mx-auto max-w-[1100px] px-6 py-8 pb-32">
+        <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+          <div>
+            <h1 className="text-[1.75rem] font-bold tracking-[0.12em] text-text-primary">活动</h1>
           </div>
-          {totalPages > 1 && (
-            <Pagination page={page} totalPages={totalPages} onPageChange={handlePageChange} />
-          )}
-        </>
-      ) : (
-        <div className="border-y border-border py-16 text-center text-sm text-text-muted">
-          暂无活动
         </div>
-      )}
+
+        {tags.length > 0 && (
+          <div className="mb-5 flex items-end justify-between border-b border-border">
+            <div className="flex flex-wrap gap-5">
+              <Link to={getTagUrl('')} className={getTagFilterClassName(!selectedTag)}>
+                全部标签
+              </Link>
+              {tags.map((tag) => (
+                <Link
+                  key={tag}
+                  to={getTagUrl(tag)}
+                  className={getTagFilterClassName(selectedTag === tag)}
+                >
+                  {tag}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {events.length > 0 ? (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {events.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <Pagination page={page} totalPages={totalPages} onPageChange={handlePageChange} />
+            )}
+          </>
+        ) : (
+          <div className="border-y border-border py-16 text-center text-sm text-text-muted">
+            暂无活动
+          </div>
+        )}
+      </div>
     </div>
   )
 }
