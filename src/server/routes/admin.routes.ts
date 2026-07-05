@@ -135,7 +135,6 @@ function invalidateWikiContentCaches() {
   enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_PAGE}:`)
   enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`)
   enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`)
-  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_TIMELINE}:`)
   clearWikiRelationCache()
 }
 
@@ -369,7 +368,6 @@ function invalidateSoftDeleteCaches(
     }
     enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`)
     enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`)
-    enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_TIMELINE}:`)
     clearWikiRelationCache()
     return
   }

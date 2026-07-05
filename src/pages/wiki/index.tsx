@@ -3,7 +3,6 @@ import { Routes, Route } from 'react-router-dom'
 import { RouteGuard } from '../../components/RouteGuard'
 import WikiEditorComponent from '../../components/wiki/WikiEditor'
 import WikiList from './WikiList'
-import WikiTimeline from './WikiTimeline'
 import WikiPageView from './WikiPageView'
 import WikiBranchWorkspace from './WikiBranchWorkspace'
 import WikiPullRequestList from './WikiPullRequestList'
@@ -26,7 +25,6 @@ const Wiki = () => {
           </RouteGuard>
         }
       />
-      <Route path="/timeline" element={<WikiTimeline />} />
       <Route path="/:slug" element={<WikiPageView />} />
       <Route
         path="/:slug/branches"

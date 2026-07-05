@@ -95,7 +95,6 @@ function clearWikiPageCache(slug: string) {
 function clearWikiListCaches() {
   enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`)
   enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`)
-  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_TIMELINE}:`)
 }
 
 async function resolveWritableWikiCategory(
@@ -418,83 +417,6 @@ mpWikiRouter.get('/', async (req: AuthenticatedRequest, res) => {
     res.status(500).json({ error: '获取小程序百科失败' })
   }
 })
-
-router.get(
-  '/timeline',
-  asyncHandler(async (req: AuthenticatedRequest, res) => {
-    try {
-      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500)
-      const page = Math.max(Number(req.query.page) || 1, 1)
-      const skip = (page - 1) * limit
-
-      const where = {
-        ...buildWikiVisibilityWhere(req.authUser),
-        eventDate: {
-          not: null,
-        },
-      }
-
-      const [pages, total] = await Promise.all([
-        prisma.wikiPage.findMany({
-          where,
-          orderBy: {
-            eventDate: 'asc',
-          },
-          take: limit,
-          skip,
-          select: {
-            id: true,
-            slug: true,
-            title: true,
-            category: true,
-            tags: true,
-            eventDate: true,
-            status: true,
-            favoritesCount: true,
-            isPinned: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        }),
-        prisma.wikiPage.count({ where }),
-      ])
-
-      const favoritedWikiSet = new Set<string>()
-      if (req.authUser && pages.length) {
-        const favorites = await prisma.favorite.findMany({
-          where: {
-            userUid: req.authUser.uid,
-            targetType: 'wiki',
-            targetId: { in: pages.map((item) => item.slug) },
-          },
-          select: { targetId: true },
-        })
-        favorites.forEach((item) => favoritedWikiSet.add(item.targetId))
-      }
-
-      res.json({
-        events: pages.map((page) => ({
-          slug: page.slug,
-          title: page.title,
-          category: page.category,
-          tags: serializeTags(page.tags),
-          eventDate: page.eventDate,
-          status: page.status,
-          favoritesCount: page.favoritesCount,
-          favoritedByMe: favoritedWikiSet.has(page.slug),
-          createdAt: page.createdAt.toISOString(),
-          updatedAt: page.updatedAt.toISOString(),
-        })),
-        total,
-        page,
-        limit,
-      })
-    } catch (error) {
-      logger.error({ err: error }, 'Fetch wiki timeline error')
-      res.status(500).json({ error: '获取时间轴失败' })
-    }
-  })
-)
 
 router.get(
   '/recommended',

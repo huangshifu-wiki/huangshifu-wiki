@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Book, Calendar, Plus } from '@/src/components/icons'
+import { Book, Plus } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { useUserPreferences } from '../../context/UserPreferencesContext'
 import { ViewModeSelector } from '../../components/ViewModeSelector'
@@ -167,12 +167,6 @@ const WikiList = () => {
                 {cat === 'all' ? '全部' : getCategoryLabel(cat)}
               </Link>
             ))}
-            <Link
-              to={'/wiki/timeline'}
-              className="text-[0.8125rem] text-brand-gold font-medium hover:text-brand-gold/80 transition-colors flex items-center gap-1 self-center mb-1 cursor-pointer"
-            >
-              <Calendar size={14} /> 时间轴
-            </Link>
           </div>
 
           <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">

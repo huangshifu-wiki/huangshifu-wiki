@@ -133,6 +133,7 @@ describe('WikiList', () => {
 
     expect(await screen.findByText('测试页面一')).toBeInTheDocument()
     expect(screen.getByText('测试页面二')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /时间轴/ })).not.toBeInTheDocument()
 
     const articles = container.querySelectorAll<HTMLElement>('[role="article"]')
     expect(articles).toHaveLength(2)

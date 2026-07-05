@@ -96,7 +96,6 @@ vi.mock('../../src/server/utils', async () => {
       WIKI_PAGE: 'wiki_page',
       WIKI_LIST: 'wiki_list',
       WIKI_RECOMMENDED: 'wiki_recommended',
-      WIKI_TIMELINE: 'wiki_timeline',
     },
   }
 })
@@ -151,11 +150,10 @@ describe('admin wiki links sync cache invalidation', () => {
       ],
       { dryRun: undefined }
     )
-    expect(mockInvalidateByPrefix).toHaveBeenCalledTimes(4)
+    expect(mockInvalidateByPrefix).toHaveBeenCalledTimes(3)
     expect(mockInvalidateByPrefix).toHaveBeenNthCalledWith(1, 'wiki_page:')
     expect(mockInvalidateByPrefix).toHaveBeenNthCalledWith(2, 'wiki_list:')
     expect(mockInvalidateByPrefix).toHaveBeenNthCalledWith(3, 'wiki_recommended:')
-    expect(mockInvalidateByPrefix).toHaveBeenNthCalledWith(4, 'wiki_timeline:')
     expect(mockClearWikiRelationCache).toHaveBeenCalledOnce()
   })
 

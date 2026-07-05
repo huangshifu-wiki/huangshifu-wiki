@@ -120,7 +120,6 @@ const inferRelationType = (displayText: string): WikiRelationType => {
 const inferTypeFromPath = (path: string): WikiRelationType => {
   if (path.includes('/music/')) return 'work_relation'
   if (path.includes('/album/')) return 'work_relation'
-  if (path.includes('/timeline/')) return 'timeline_relation'
   if (path.includes('/event/')) return 'timeline_relation'
   return 'related_person'
 }
@@ -139,7 +138,7 @@ const parseExternalLink = (input: string): { slug: string; type: WikiRelationTyp
     const url = new URL(input)
     const pathParts = url.pathname.split('/').filter(Boolean)
 
-    // 支持的路径格式：/wiki/slug, /music/slug, /album/slug, /timeline/slug, /event/slug
+    // 支持的路径格式：/wiki/slug, /music/slug, /album/slug, /event/slug
     if (pathParts.length >= 2) {
       const category = pathParts[0]
       const slug = pathParts[pathParts.length - 1]

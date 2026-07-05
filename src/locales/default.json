@@ -285,9 +285,7 @@
     "category": {
       "biography": "人物介绍",
       "music": "音乐作品",
-      "album": "专辑一览",
-      "timeline": "时间轴",
-      "event": "活动记录"
+      "album": "专辑一览"
     },
     "submitting": "提交中...",
     "submitReview": "提交审核",

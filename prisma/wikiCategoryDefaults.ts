@@ -20,11 +20,4 @@ export const DEFAULT_WIKI_CATEGORIES = [
     order: 30,
     requiresAdminEdit: false,
   },
-  {
-    id: 'event',
-    name: '活动记录',
-    description: '活动与演出相关百科页面',
-    order: 50,
-    requiresAdminEdit: false,
-  },
 ]
