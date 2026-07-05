@@ -457,7 +457,7 @@ const GalleryList = () => {
         {/* Header */}
         <header className="mb-7">
           <div className="flex items-end justify-between flex-wrap gap-3">
-            <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">图集馆</h1>
+            <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">画廊</h1>
             <div className="flex items-center gap-3">
               <ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
               {user && !isBanned && galleryAccessLoaded && (!isGalleryAdminOnly || isAdmin) && (

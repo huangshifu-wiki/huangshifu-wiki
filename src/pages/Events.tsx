@@ -193,7 +193,7 @@ const Events = () => {
       <div className="mx-auto max-w-[1100px] px-6 py-8 pb-32">
         <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
           <div>
-            <h1 className="text-[1.75rem] font-bold tracking-[0.12em] text-text-primary">活动</h1>
+            <h1 className="text-[1.75rem] font-bold tracking-[0.12em] text-text-primary">游记</h1>
           </div>
         </div>
 

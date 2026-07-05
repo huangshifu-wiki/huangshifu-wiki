@@ -15,9 +15,9 @@ export const BottomNav = () => {
   const items = [
     { to: '/', icon: Home, label: '首页' },
     { to: '/wiki', icon: Book, label: '百科' },
-    { to: '/forum', icon: MessageSquare, label: '社区' },
-    { to: '/gallery', icon: ImageIcon, label: '图集' },
-    { to: '/events', icon: Calendar, label: '活动' },
+    { to: '/forum', icon: MessageSquare, label: '论坛' },
+    { to: '/gallery', icon: ImageIcon, label: '画廊' },
+    { to: '/events', icon: Calendar, label: '游记' },
     { to: '/music', icon: Music, label: '音乐' },
     { to: '/search', icon: Search, label: '搜索' },
   ]

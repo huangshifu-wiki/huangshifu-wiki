@@ -8,8 +8,8 @@
     "wiki": "百科",
     "forum": "论坛",
     "music": "音乐",
-    "gallery": "图集",
-    "events": "活动",
+    "gallery": "画廊",
+    "events": "游记",
     "profile": "个人中心",
     "admin": "管理"
   },
@@ -317,7 +317,7 @@
     "expandGraph": "展开图谱"
   },
   "forum": {
-    "title": "社区论坛",
+    "title": "论坛",
     "posts": "帖子",
     "replies": "回复",
     "pinned": "已置顶",
