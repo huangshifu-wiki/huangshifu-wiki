@@ -138,7 +138,6 @@ const EventDetail = () => {
                 <MapPin size={16} className="text-brand-gold" />
                 {event.location || '地点待定'}
               </p>
-              <p className="text-xs text-text-muted">更新于 {formatDateTime(event.updatedAt)}</p>
             </div>
           </div>
         </header>
