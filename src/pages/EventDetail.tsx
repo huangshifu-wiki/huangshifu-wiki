@@ -213,9 +213,7 @@ const EventDetail = () => {
               <p className="text-sm text-text-muted">暂无起售信息</p>
             )}
           </div>
-        </section>
 
-        <section className="grid gap-4 md:grid-cols-2">
           <div className="rounded border border-border bg-surface p-5">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <Users size={16} className="text-brand-gold" />
