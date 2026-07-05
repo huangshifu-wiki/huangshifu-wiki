@@ -1030,37 +1030,6 @@ img {
   min-height: 0;
 }
 
-/* prefers-reduced-motion 支持 */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-
-  .liquidGlass-wrapper,
-  .liquidGlass-wrapper:hover,
-  .liquidGlass-text,
-  .liquidGlass-wrapper:hover .liquidGlass-text {
-    transition: none;
-    transform: none;
-    animation: none;
-  }
-
-  .floating-overlay,
-  .floating-panel,
-  .floating-dropdown,
-  .floating-popover-up,
-  .floating-expand {
-    transition: none;
-    transform: none;
-    animation: none;
-  }
-}
-
 /* 平滑滚动 */
 html {
   scroll-behavior: smooth;
