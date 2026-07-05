@@ -277,11 +277,6 @@ const MusicDetail = () => {
                 </p>
                 <div className="flex flex-wrap gap-x-5 gap-y-2 mb-4 text-sm text-text-muted">
                   <span>专辑：{song.album}</span>
-                  {song.sources?.[0] && (
-                    <span>
-                      来源：{song.sources[0].platform} / {song.sources[0].sourceId}
-                    </span>
-                  )}
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <button
