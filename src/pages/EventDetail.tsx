@@ -236,11 +236,13 @@ const EventDetail = () => {
           </div>
 
           <EventLinkPanel title="外部链接" emptyText="暂无外部链接" links={event.externalLinks} />
-          <EventLinkPanel
-            title="其他相关链接"
-            emptyText="暂无其他相关链接"
-            links={event.relatedLinks}
-          />
+          {event.relatedLinks.length ? (
+            <EventLinkPanel
+              title="其他相关链接"
+              emptyText="暂无其他相关链接"
+              links={event.relatedLinks}
+            />
+          ) : null}
         </section>
 
         {posterImages.length ? (
