@@ -103,7 +103,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
           albumDocId: true,
           createdAt: true,
           updatedAt: true,
-          author: { select: { displayName: true } },
+          author: { select: { publicId: true, displayName: true } },
         },
       }),
       prisma.post.count({ where }),
@@ -342,7 +342,7 @@ router.get('/:slug', async (req: AuthenticatedRequest, res) => {
 
     const post = await prisma.post.findUnique({
       where: { slug: req.params.slug },
-      include: { author: { select: { displayName: true } } },
+      include: { author: { select: { publicId: true, displayName: true } } },
     })
 
     if (!post || !canViewPost(post, req.authUser)) {
@@ -772,13 +772,13 @@ router.post(
         },
         include: {
           author: {
-            select: { displayName: true, photoURL: true },
+            select: { publicId: true, displayName: true, photoURL: true },
           },
           replyTo: {
             select: {
               authorUid: true,
               author: {
-                select: { displayName: true },
+                select: { publicId: true, displayName: true },
               },
             },
           },

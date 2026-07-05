@@ -218,7 +218,7 @@ export default function MentionTextarea({
               )}
             >
               <span className="min-w-0 flex-1 truncate">{suggestion.displayName}</span>
-              <span className="text-xs opacity-75">{suggestion.uid.slice(0, 8)}</span>
+              <span className="text-xs opacity-75">#{suggestion.publicId}</span>
             </button>
           ))}
           {loading && <div className="px-3 py-2 text-xs text-text-muted">搜索中...</div>}

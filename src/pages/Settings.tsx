@@ -212,6 +212,7 @@ const Settings = () => {
   const activeSection = resolveSettingsSection(section)
   const activeContentTab = resolveContentTab(searchParams.get('tab'))
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
+  const userPublicId = user?.publicId
   const [profileForm, setProfileForm] = useState<PublicProfileForm>({
     displayName: '',
     signature: '',
@@ -281,14 +282,14 @@ const Settings = () => {
   }, [activeSection, user?.uid])
 
   useEffect(() => {
-    if (!user || activeSection !== 'content') return
+    if (!userPublicId || activeSection !== 'content') return
 
     let cancelled = false
     const run = async () => {
       setContentLoading(true)
       try {
         if (activeContentTab === 'posts') {
-          const data = await apiGet<{ posts: PostItem[] }>(`/api/users/${user.uid}/posts`, {
+          const data = await apiGet<{ posts: PostItem[] }>(`/api/users/${userPublicId}/posts`, {
             limit: 50,
           })
           if (!cancelled) setMyPosts(data.posts || [])
@@ -296,7 +297,7 @@ const Settings = () => {
         }
 
         if (activeContentTab === 'wiki') {
-          const data = await apiGet<{ pages: UserWikiItem[] }>(`/api/users/${user.uid}/wiki`, {
+          const data = await apiGet<{ pages: UserWikiItem[] }>(`/api/users/${userPublicId}/wiki`, {
             limit: 50,
           })
           if (!cancelled) setMyWikiPages(data.pages || [])
@@ -305,7 +306,7 @@ const Settings = () => {
 
         if (activeContentTab === 'galleries') {
           const data = await apiGet<{ galleries: GalleryItem[] }>(
-            `/api/users/${user.uid}/galleries`,
+            `/api/users/${userPublicId}/galleries`,
             {
               limit: 50,
             }
@@ -315,7 +316,7 @@ const Settings = () => {
         }
 
         const data = await apiGet<{ comments: UserCommentItem[] }>(
-          `/api/users/${user.uid}/comments`,
+          `/api/users/${userPublicId}/comments`,
           {
             limit: 50,
           }
@@ -333,11 +334,11 @@ const Settings = () => {
     return () => {
       cancelled = true
     }
-  }, [activeContentTab, activeSection, show, user])
+  }, [activeContentTab, activeSection, show, userPublicId])
 
   useEffect(() => {
     if (
-      !user ||
+      !userPublicId ||
       activeSection !== 'content' ||
       activeContentTab !== 'galleries' ||
       !hasPendingGalleryThumbnails
@@ -354,7 +355,7 @@ const Settings = () => {
       attempts += 1
       try {
         const data = await apiGet<{ galleries: GalleryItem[] }>(
-          `/api/users/${user.uid}/galleries`,
+          `/api/users/${userPublicId}/galleries`,
           {
             limit: 50,
           },
@@ -382,7 +383,7 @@ const Settings = () => {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [activeContentTab, activeSection, hasPendingGalleryThumbnails, user])
+  }, [activeContentTab, activeSection, hasPendingGalleryThumbnails, userPublicId])
 
   if (!activeSection) {
     return <Navigate to="/settings/profile" replace />

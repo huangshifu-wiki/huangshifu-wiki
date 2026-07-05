@@ -162,6 +162,7 @@ interface WechatCodeSessionResponse {
 
 interface ApiUser {
   uid: string
+  publicId: string
   email: string
   displayName: string
   photoURL: string | null

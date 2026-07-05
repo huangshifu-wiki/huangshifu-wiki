@@ -314,12 +314,17 @@ export function toPostResponse(post: {
   musicDocId?: string | null
   albumDocId?: string | null
   content: string
-  mentionTargets?: Array<{ uid: string; displayName: string; photoURL?: string | null }>
+  mentionTargets?: Array<{
+    uid: string
+    publicId?: string
+    displayName: string
+    photoURL?: string | null
+  }>
   tags: unknown
   locationCode?: string | null
   locationDetail?: string | null
   authorUid: string
-  author?: { displayName: string } | null
+  author?: { publicId?: string; displayName: string } | null
   status: ContentStatus
   reviewNote?: string | null
   reviewedBy?: string | null
@@ -340,6 +345,7 @@ export function toPostResponse(post: {
   const { pendingReviewBaseContent: _pendingReviewBaseContent, ...publicPost } = post
   return {
     ...publicPost,
+    authorPublicId: post.author?.publicId || null,
     authorName: post.author?.displayName || null,
     locationCode: post.locationCode || null,
     locationName: post.location?.fullName || null,
@@ -366,7 +372,12 @@ type CommentResponseInput = {
   galleryId?: string | null
   authorUid: string
   content: string
-  mentionTargets?: Array<{ uid: string; displayName: string; photoURL?: string | null }>
+  mentionTargets?: Array<{
+    uid: string
+    publicId?: string
+    displayName: string
+    photoURL?: string | null
+  }>
   parentId: string | null
   replyToId?: string | null
   deletedAt?: Date | null
@@ -378,6 +389,7 @@ type CommentResponseInput = {
   // author 关系是可选的——评论查询时如果忘记 include 就回退到 null/匿名，
   // 而不是直接抛 TS 错误。生产路径都应该 include 关系。
   author?: {
+    publicId?: string
     displayName: string
     photoURL: string | null
   } | null
@@ -405,6 +417,7 @@ export function toCommentResponse(
     postId: comment.postId ?? null,
     galleryId: comment.galleryId ?? null,
     authorUid: comment.authorUid,
+    authorPublicId: comment.author?.publicId ?? null,
     authorName: hideDeletedAuthor ? null : (comment.author?.displayName ?? '匿名用户'),
     authorPhoto: hideDeletedAuthor ? null : (comment.author?.photoURL ?? null),
     content:
@@ -430,6 +443,7 @@ type GalleryInput = {
   title: string
   description: string
   authorUid: string
+  author?: { publicId?: string; displayName?: string | null } | null
   authorName: string
   tags: unknown
   locationCode?: string | null
@@ -567,6 +581,7 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
     title: gallery.title,
     description: gallery.description,
     authorUid: gallery.authorUid,
+    authorPublicId: gallery.author?.publicId || null,
     authorName: gallery.authorName,
     tags: serializeTags(gallery.tags),
     locationCode: gallery.locationCode || null,
@@ -645,6 +660,7 @@ export async function toGalleryListResponse(galleries: GalleryInput[], storageSt
     title: gallery.title,
     description: gallery.description,
     authorUid: gallery.authorUid,
+    authorPublicId: gallery.author?.publicId || null,
     authorName: gallery.authorName,
     tags: serializeTags(gallery.tags),
     locationCode: gallery.locationCode || null,
@@ -950,6 +966,7 @@ export function toEditLockResponse(lock: {
 
 export function toUserResponse(user: {
   uid: string
+  publicId: string
   email: string
   displayName: string
   photoURL: string | null

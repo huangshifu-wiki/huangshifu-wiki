@@ -165,6 +165,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const profile = user
     ? {
         uid: user.uid,
+        publicId: user.publicId,
         displayName: user.displayName,
         photoURL: user.photoURL || '',
         email: user.email,

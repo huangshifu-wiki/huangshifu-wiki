@@ -10,6 +10,7 @@ export interface AuthProviderInfo {
 
 export interface User {
   uid: string
+  publicId: string
   email: string
   displayName: string
   photoURL: string | null

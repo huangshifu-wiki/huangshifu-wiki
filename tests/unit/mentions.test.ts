@@ -53,14 +53,18 @@ describe('mentions', () => {
 
   it('links only uniquely resolved mention targets', () => {
     const segments = splitMentionText('hi @Alice and @Bob', [
-      { uid: 'u1', displayName: 'Alice' },
-      { uid: 'u2', displayName: 'Bob' },
-      { uid: 'u3', displayName: 'Bob' },
+      { uid: 'u1', publicId: '1', displayName: 'Alice' },
+      { uid: 'u2', publicId: '2', displayName: 'Bob' },
+      { uid: 'u3', publicId: '3', displayName: 'Bob' },
     ])
 
     expect(segments).toEqual([
       { type: 'text', text: 'hi ' },
-      { type: 'mention', text: '@Alice', target: { uid: 'u1', displayName: 'Alice' } },
+      {
+        type: 'mention',
+        text: '@Alice',
+        target: { uid: 'u1', publicId: '1', displayName: 'Alice' },
+      },
       { type: 'text', text: ' and ' },
       { type: 'mention', text: '@Bob', target: null },
     ])
@@ -69,14 +73,22 @@ describe('mentions', () => {
   it('resolves internal punctuation and keeps unmatched trailing punctuation as text', () => {
     expect(
       splitMentionText('hi @alice.bob and @Alice!', [
-        { uid: 'u1', displayName: 'alice.bob' },
-        { uid: 'u2', displayName: 'Alice' },
+        { uid: 'u1', publicId: '1', displayName: 'alice.bob' },
+        { uid: 'u2', publicId: '2', displayName: 'Alice' },
       ])
     ).toEqual([
       { type: 'text', text: 'hi ' },
-      { type: 'mention', text: '@alice.bob', target: { uid: 'u1', displayName: 'alice.bob' } },
+      {
+        type: 'mention',
+        text: '@alice.bob',
+        target: { uid: 'u1', publicId: '1', displayName: 'alice.bob' },
+      },
       { type: 'text', text: ' and ' },
-      { type: 'mention', text: '@Alice', target: { uid: 'u2', displayName: 'Alice' } },
+      {
+        type: 'mention',
+        text: '@Alice',
+        target: { uid: 'u2', publicId: '2', displayName: 'Alice' },
+      },
       { type: 'text', text: '!' },
     ])
   })
@@ -84,29 +96,39 @@ describe('mentions', () => {
   it('prefers exact punctuation display names over stripped candidates', () => {
     expect(
       splitMentionText('hi @Alice! ', [
-        { uid: 'u1', displayName: 'Alice' },
-        { uid: 'u2', displayName: 'Alice!' },
+        { uid: 'u1', publicId: '1', displayName: 'Alice' },
+        { uid: 'u2', publicId: '2', displayName: 'Alice!' },
       ])
     ).toEqual([
       { type: 'text', text: 'hi ' },
-      { type: 'mention', text: '@Alice!', target: { uid: 'u2', displayName: 'Alice!' } },
+      {
+        type: 'mention',
+        text: '@Alice!',
+        target: { uid: 'u2', publicId: '2', displayName: 'Alice!' },
+      },
       { type: 'text', text: ' ' },
     ])
   })
 
   it('can resolve a mention followed by Chinese punctuation without whitespace', () => {
     expect(
-      splitMentionText(`@黄诗扶，${'也'.repeat(60)}`, [{ uid: 'u1', displayName: '黄诗扶' }])
+      splitMentionText(`@黄诗扶，${'也'.repeat(60)}`, [
+        { uid: 'u1', publicId: '1', displayName: '黄诗扶' },
+      ])
     ).toEqual([
-      { type: 'mention', text: '@黄诗扶', target: { uid: 'u1', displayName: '黄诗扶' } },
+      {
+        type: 'mention',
+        text: '@黄诗扶',
+        target: { uid: 'u1', publicId: '1', displayName: '黄诗扶' },
+      },
       { type: 'text', text: `，${'也'.repeat(60)}` },
     ])
   })
 
   it('continues parsing mentions separated by punctuation without whitespace', () => {
     const targets = [
-      { uid: 'u1', displayName: 'Alice' },
-      { uid: 'u2', displayName: 'Bob' },
+      { uid: 'u1', publicId: '1', displayName: 'Alice' },
+      { uid: 'u2', publicId: '2', displayName: 'Bob' },
     ]
 
     expect(extractMentionMatches('@Alice,@Bob')).toEqual([

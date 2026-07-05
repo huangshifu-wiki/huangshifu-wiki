@@ -894,7 +894,7 @@ describe('Users API - 用户接口测试', () => {
         authorUid: testUser.user.uid,
       })
 
-      const response = await request(app).get(`/api/users/${testUser.user.uid}/posts`)
+      const response = await request(app).get(`/api/users/${testUser.user.publicId}/posts`)
 
       expect(response.status).toBe(200)
       expect(response.body).toHaveProperty('posts')
@@ -949,7 +949,7 @@ describe('Users API - 用户接口测试', () => {
 
       // 请求第一页
       const response1 = await request(app)
-        .get(`/api/users/${testUser.user.uid}/posts`)
+        .get(`/api/users/${testUser.user.publicId}/posts`)
         .query({ page: 1, limit: 10 })
 
       expect(response1.status).toBe(200)
@@ -958,7 +958,7 @@ describe('Users API - 用户接口测试', () => {
 
       // 请求第二页
       const response2 = await request(app)
-        .get(`/api/users/${testUser.user.uid}/posts`)
+        .get(`/api/users/${testUser.user.publicId}/posts`)
         .query({ page: 2, limit: 10 })
 
       expect(response2.status).toBe(200)
@@ -987,7 +987,7 @@ describe('Users API - 用户接口测试', () => {
 
       // 用户查看自己的文章
       const response = await request(app)
-        .get(`/api/users/${testUser.user.uid}/posts`)
+        .get(`/api/users/${testUser.user.publicId}/posts`)
         .set('Authorization', `Bearer ${userToken}`)
 
       expect(response.status).toBe(200)
@@ -1010,7 +1010,7 @@ describe('Users API - 用户接口测试', () => {
       })
 
       const response = await request(app)
-        .get(`/api/users/${testUser.user.uid}/posts`)
+        .get(`/api/users/${testUser.user.publicId}/posts`)
         .set('Authorization', `Bearer ${userToken}`)
 
       expect(response.status).toBe(200)
@@ -1019,7 +1019,7 @@ describe('Users API - 用户接口测试', () => {
       expect(rejectedPost.reviewNote).toBe('内容不符合要求')
       expect(rejectedPost.status).toBe('rejected')
 
-      const publicResponse = await request(app).get(`/api/users/${testUser.user.uid}/posts`)
+      const publicResponse = await request(app).get(`/api/users/${testUser.user.publicId}/posts`)
       expect(publicResponse.status).toBe(200)
       const publicRejectedPost = publicResponse.body.posts.find(
         (item: { id: string }) => item.id === post.id
@@ -1038,7 +1038,7 @@ describe('Users API - 用户接口测试', () => {
         data: { reviewNote: '内部审核备注' },
       })
 
-      const publicResponse = await request(app).get(`/api/users/${testUser.user.uid}/posts`)
+      const publicResponse = await request(app).get(`/api/users/${testUser.user.publicId}/posts`)
       expect(publicResponse.status).toBe(200)
       const publicPost = publicResponse.body.posts.find(
         (item: { id: string }) => item.id === post.id
@@ -1047,7 +1047,7 @@ describe('Users API - 用户接口测试', () => {
       expect(publicPost.reviewNote).toBeNull()
 
       const ownerResponse = await request(app)
-        .get(`/api/users/${testUser.user.uid}/posts`)
+        .get(`/api/users/${testUser.user.publicId}/posts`)
         .set('Authorization', `Bearer ${userToken}`)
       expect(ownerResponse.status).toBe(200)
       const ownerPost = ownerResponse.body.posts.find((item: { id: string }) => item.id === post.id)
@@ -1058,13 +1058,14 @@ describe('Users API - 用户接口测试', () => {
 
   describe('GET /api/users/:userId/profile - 获取公开个人资料', () => {
     it('应该返回公开资料且不泄露敏感字段', async () => {
-      const response = await request(app).get(`/api/users/${testUser.user.uid}/profile`)
+      const response = await request(app).get(`/api/users/${testUser.user.publicId}/profile`)
 
       expect(response.status).toBe(200)
-      expect(response.body.user.uid).toBe(testUser.user.uid)
+      expect(response.body.user.publicId).toBe(testUser.user.publicId)
       expect(response.body.user).toHaveProperty('displayName')
       expect(response.body.user).toHaveProperty('canViewFavorites', false)
       expect(response.body.user).toHaveProperty('canViewHistory', false)
+      expect(response.body.user).not.toHaveProperty('uid')
       expect(response.body.user).not.toHaveProperty('email')
       expect(response.body.user).not.toHaveProperty('preferences')
       expect(response.body.user).not.toHaveProperty('role')
@@ -1087,7 +1088,7 @@ describe('Users API - 用户接口测试', () => {
       })
 
       const publicResponse = await request(app)
-        .get(`/api/users/${testUser.user.uid}/galleries`)
+        .get(`/api/users/${testUser.user.publicId}/galleries`)
         .query({
           visibility: 'public',
         })
@@ -1103,7 +1104,7 @@ describe('Users API - 用户接口测试', () => {
       ).toBeUndefined()
 
       const selfResponse = await request(app)
-        .get(`/api/users/${testUser.user.uid}/galleries`)
+        .get(`/api/users/${testUser.user.publicId}/galleries`)
         .set('Authorization', `Bearer ${userToken}`)
 
       expect(selfResponse.status).toBe(200)
@@ -1156,7 +1157,7 @@ describe('Users API - 用户接口测试', () => {
       })
 
       const response = await request(app)
-        .get(`/api/users/${testUser.user.uid}/wiki`)
+        .get(`/api/users/${testUser.user.publicId}/wiki`)
         .set('Authorization', `Bearer ${userToken}`)
 
       expect(response.status).toBe(200)
@@ -1184,7 +1185,7 @@ describe('Users API - 用户接口测试', () => {
         authorUid: testUser.user.uid,
       })
 
-      const response = await request(app).get(`/api/users/${testUser.user.uid}/wiki`)
+      const response = await request(app).get(`/api/users/${testUser.user.publicId}/wiki`)
 
       expect(response.status).toBe(200)
       expect(response.body.pages.map((page: { slug: string }) => page.slug)).toContain(
@@ -1208,7 +1209,7 @@ describe('Users API - 用户接口测试', () => {
       }
 
       const response = await request(app)
-        .get(`/api/users/${testUser.user.uid}/wiki`)
+        .get(`/api/users/${testUser.user.publicId}/wiki`)
         .query({ page: 1, limit: 2 })
         .set('Authorization', `Bearer ${userToken}`)
 
@@ -1250,7 +1251,7 @@ describe('Users API - 用户接口测试', () => {
         },
       })
 
-      const response = await request(app).get(`/api/users/${testUser.user.uid}/comments`)
+      const response = await request(app).get(`/api/users/${testUser.user.publicId}/comments`)
 
       expect(response.status).toBe(200)
       expect(response.body).toHaveProperty('comments')
@@ -1290,7 +1291,7 @@ describe('Users API - 用户接口测试', () => {
       // 创建一个新用户（没有任何评论）
       const newUser = await createTestUser()
 
-      const response = await request(app).get(`/api/users/${newUser.user.uid}/comments`)
+      const response = await request(app).get(`/api/users/${newUser.user.publicId}/comments`)
 
       expect(response.status).toBe(200)
       expect(response.body.comments).toEqual([])
@@ -1320,7 +1321,7 @@ describe('Users API - 用户接口测试', () => {
 
       // 请求第一页
       const response1 = await request(app)
-        .get(`/api/users/${testUser.user.uid}/comments`)
+        .get(`/api/users/${testUser.user.publicId}/comments`)
         .query({ page: 1, limit: 10 })
 
       expect(response1.status).toBe(200)
@@ -1329,7 +1330,7 @@ describe('Users API - 用户接口测试', () => {
 
       // 请求第二页
       const response2 = await request(app)
-        .get(`/api/users/${testUser.user.uid}/comments`)
+        .get(`/api/users/${testUser.user.publicId}/comments`)
         .query({ page: 2, limit: 10 })
 
       expect(response2.status).toBe(200)
@@ -1367,7 +1368,7 @@ describe('Users API - 用户接口测试', () => {
         },
       })
 
-      const response = await request(app).get(`/api/users/${testUser.user.uid}/comments`)
+      const response = await request(app).get(`/api/users/${testUser.user.publicId}/comments`)
 
       expect(response.status).toBe(200)
 
@@ -1398,7 +1399,7 @@ describe('Users API - 用户接口测试', () => {
         },
       })
 
-      const response = await request(app).get(`/api/users/${testUser.user.uid}/comments`)
+      const response = await request(app).get(`/api/users/${testUser.user.publicId}/comments`)
 
       expect(response.status).toBe(200)
       const item = response.body.comments.find((entry: { id: string }) => entry.id === comment.id)
@@ -1424,7 +1425,7 @@ describe('Users API - 用户接口测试', () => {
         },
       })
 
-      const response = await request(app).get(`/api/users/${testUser.user.uid}/comments`)
+      const response = await request(app).get(`/api/users/${testUser.user.publicId}/comments`)
 
       expect(response.status).toBe(200)
       const item = response.body.comments.find((entry: { id: string }) => entry.id === comment.id)
@@ -1452,7 +1453,7 @@ describe('Users API - 用户接口测试', () => {
         },
       })
 
-      const response = await request(app).get(`/api/users/${testUser.user.uid}/comments`)
+      const response = await request(app).get(`/api/users/${testUser.user.publicId}/comments`)
 
       expect(response.status).toBe(200)
       const item = response.body.comments.find((entry: { id: string }) => entry.id === comment.id)
@@ -1498,7 +1499,7 @@ describe('Users API - 用户接口测试', () => {
       })
 
       const userResponse = await request(app)
-        .get(`/api/users/${testUser.user.uid}/comments`)
+        .get(`/api/users/${testUser.user.publicId}/comments`)
         .set('Authorization', `Bearer ${userToken}`)
       expect(userResponse.status).toBe(200)
       const userItem = userResponse.body.comments.find(
@@ -1509,7 +1510,7 @@ describe('Users API - 用户接口测试', () => {
       expect(userItem.content).toBe('评论已删除')
       expect(userItem.deletionReason).toBe('评论违规')
 
-      const publicResponse = await request(app).get(`/api/users/${testUser.user.uid}/comments`)
+      const publicResponse = await request(app).get(`/api/users/${testUser.user.publicId}/comments`)
       expect(publicResponse.status).toBe(200)
       const publicItem = publicResponse.body.comments.find(
         (entry: { id: string }) => entry.id === comment.id
@@ -1520,7 +1521,7 @@ describe('Users API - 用户接口测试', () => {
       expect(publicItem.deletionReason).toBeNull()
 
       const adminResponse = await request(app)
-        .get(`/api/users/${testUser.user.uid}/comments`)
+        .get(`/api/users/${testUser.user.publicId}/comments`)
         .set('Authorization', `Bearer ${adminToken}`)
 
       expect(adminResponse.status).toBe(200)
@@ -1549,7 +1550,9 @@ describe('Users API - 用户接口测试', () => {
         },
       })
 
-      const deniedResponse = await request(app).get(`/api/users/${testUser.user.uid}/favorites`)
+      const deniedResponse = await request(app).get(
+        `/api/users/${testUser.user.publicId}/favorites`
+      )
       expect(deniedResponse.status).toBe(403)
 
       await prisma.user.update({
@@ -1557,7 +1560,7 @@ describe('Users API - 用户接口测试', () => {
         data: { preferences: { publicFavorites: true } },
       })
 
-      const response = await request(app).get(`/api/users/${testUser.user.uid}/favorites`)
+      const response = await request(app).get(`/api/users/${testUser.user.publicId}/favorites`)
       expect(response.status).toBe(200)
       expect(response.body.favorites[0]).toMatchObject({
         targetType: 'post',
@@ -1599,7 +1602,7 @@ describe('Users API - 用户接口测试', () => {
       })
 
       const response = await request(app)
-        .get(`/api/users/${testUser.user.uid}/favorites`)
+        .get(`/api/users/${testUser.user.publicId}/favorites`)
         .query({ page: 1, limit: 1 })
 
       expect(response.status).toBe(200)
@@ -1623,7 +1626,7 @@ describe('Users API - 用户接口测试', () => {
         },
       })
 
-      const deniedResponse = await request(app).get(`/api/users/${testUser.user.uid}/history`)
+      const deniedResponse = await request(app).get(`/api/users/${testUser.user.publicId}/history`)
       expect(deniedResponse.status).toBe(403)
 
       await prisma.user.update({
@@ -1631,7 +1634,7 @@ describe('Users API - 用户接口测试', () => {
         data: { preferences: { publicHistory: true } },
       })
 
-      const response = await request(app).get(`/api/users/${testUser.user.uid}/history`)
+      const response = await request(app).get(`/api/users/${testUser.user.publicId}/history`)
       expect(response.status).toBe(200)
       expect(response.body.history[0]).toMatchObject({
         targetType: 'post',
@@ -1673,7 +1676,7 @@ describe('Users API - 用户接口测试', () => {
       })
 
       const response = await request(app)
-        .get(`/api/users/${testUser.user.uid}/history`)
+        .get(`/api/users/${testUser.user.publicId}/history`)
         .query({ page: 1, limit: 1 })
 
       expect(response.status).toBe(200)

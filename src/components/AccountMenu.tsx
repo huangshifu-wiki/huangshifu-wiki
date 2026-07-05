@@ -118,7 +118,7 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
             {isAuthenticated ? (
               <>
                 <Link
-                  to={`/users/${user.uid}`}
+                  to={`/users/${user.publicId}`}
                   className={styles.profileSummary}
                   onClick={closeAccountMenu}
                 >
@@ -155,7 +155,7 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
                     <span>我的评论</span>
                   </Link>
                   <Link
-                    to={`/users/${user.uid}/history`}
+                    to={`/users/${user.publicId}/history`}
                     className={styles.menuAction}
                     onClick={closeAccountMenu}
                   >
@@ -163,7 +163,7 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
                     <span>浏览历史</span>
                   </Link>
                   <Link
-                    to={`/users/${user.uid}/favorites`}
+                    to={`/users/${user.publicId}/favorites`}
                     className={styles.menuAction}
                     onClick={closeAccountMenu}
                   >

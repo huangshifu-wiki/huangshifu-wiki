@@ -12,6 +12,7 @@ import { beforeAll, afterAll } from 'vitest'
 import dotenv from 'dotenv'
 import { PrismaClient } from '@prisma/client'
 import { getPasswordSaltRounds } from '../../src/server/utils/password'
+import { allocateUserPublicId } from '../../src/server/utils/userPublicId'
 
 // 加载测试环境变量
 dotenv.config({ path: '.env.test' })
@@ -178,16 +179,20 @@ export async function createTestUser(overrides?: {
 
   const passwordHash = await bcrypt.hash(password, PASSWORD_SALT_ROUNDS)
 
-  const user = await prisma.user.create({
-    data: {
-      email: email.toLowerCase().trim(),
-      passwordHash,
-      displayName,
-      role,
-      signature: '',
-      bio: '',
-      status: 'active',
-    },
+  const user = await prisma.$transaction(async (tx) => {
+    const publicId = await allocateUserPublicId(tx)
+    return tx.user.create({
+      data: {
+        publicId,
+        email: email.toLowerCase().trim(),
+        passwordHash,
+        displayName,
+        role,
+        signature: '',
+        bio: '',
+        status: 'active',
+      },
+    })
   })
 
   return {

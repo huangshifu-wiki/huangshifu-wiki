@@ -49,6 +49,7 @@ vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => ({
     user: {
       uid: 'user-1',
+      publicId: '1',
       email: mockAuthEmail(),
       displayName: '测试用户',
       photoURL: '',
@@ -349,7 +350,7 @@ describe('Settings', () => {
     expect(commentLink).toHaveAttribute('href', '/gallery/gallery-1#comment-comment-1')
     expect(commentLink).toHaveAttribute('target', '_blank')
     expect(commentLink).toHaveAttribute('rel', 'noopener noreferrer')
-    expect(mockApiGet).toHaveBeenCalledWith('/api/users/user-1/comments', { limit: 50 })
+    expect(mockApiGet).toHaveBeenCalledWith('/api/users/1/comments', { limit: 50 })
   })
 
   it('loads content management wiki tab', async () => {
@@ -385,7 +386,7 @@ describe('Settings', () => {
     expect(wikiLink).toHaveAttribute('rel', 'noopener noreferrer')
     expect(screen.getByText('人物')).toBeInTheDocument()
     expect(screen.getByText('待审核')).toBeInTheDocument()
-    expect(mockApiGet).toHaveBeenCalledWith('/api/users/user-1/wiki', { limit: 50 })
+    expect(mockApiGet).toHaveBeenCalledWith('/api/users/1/wiki', { limit: 50 })
   })
 
   it('labels replies separately in content management comments tab', async () => {
@@ -514,7 +515,7 @@ describe('Settings', () => {
 
   it('opens content management post and gallery links in new tabs', async () => {
     mockApiGet.mockImplementation(async (path: string) => {
-      if (path === '/api/users/user-1/posts') {
+      if (path === '/api/users/1/posts') {
         return {
           posts: [
             {
@@ -534,7 +535,7 @@ describe('Settings', () => {
         }
       }
 
-      if (path === '/api/users/user-1/galleries') {
+      if (path === '/api/users/1/galleries') {
         return {
           galleries: [
             {
@@ -580,7 +581,7 @@ describe('Settings', () => {
 
   it('only shows content status badges for unpublished content', async () => {
     mockApiGet.mockImplementation(async (path: string) => {
-      if (path === '/api/users/user-1/posts') {
+      if (path === '/api/users/1/posts') {
         return {
           posts: [
             {
@@ -601,7 +602,7 @@ describe('Settings', () => {
         }
       }
 
-      if (path === '/api/users/user-1/galleries') {
+      if (path === '/api/users/1/galleries') {
         return {
           galleries: [
             {

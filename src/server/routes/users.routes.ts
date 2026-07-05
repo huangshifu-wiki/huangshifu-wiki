@@ -1,4 +1,4 @@
-import type { Router } from 'express'
+import type { Response, Router } from 'express'
 import { createRouter } from '../utils/typed-router'
 import { EmailVerificationPurpose, Prisma, UserRole as PrismaUserRole } from '@prisma/client'
 import bcrypt from 'bcryptjs'
@@ -46,6 +46,7 @@ import {
   ensureTextLimit,
   validateUserDisplayName,
   ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS,
+  isUserPublicId,
 } from '../utils'
 import type { AuthenticatedRequest, UserStatus } from '../types'
 
@@ -88,6 +89,7 @@ const DEFAULT_PUBLIC_PROFILE_PREFERENCES: PublicProfilePreferences = {
 
 const ADMIN_USER_SELECT = {
   uid: true,
+  publicId: true,
   email: true,
   displayName: true,
   photoURL: true,
@@ -153,6 +155,7 @@ function getPublicVisibilityWhere(
 function toPublicUserProfile(
   user: {
     uid: string
+    publicId: string
     displayName: string
     photoURL: string | null
     signature: string
@@ -168,7 +171,7 @@ function toPublicUserProfile(
   const isAdmin = authUser?.role === 'admin' || authUser?.role === 'super_admin'
 
   return {
-    uid: user.uid,
+    publicId: user.publicId,
     displayName: user.displayName,
     photoURL: user.photoURL,
     signature: user.signature,
@@ -181,6 +184,24 @@ function toPublicUserProfile(
     publicFavorites: preferences.publicFavorites,
     publicHistory: preferences.publicHistory,
   }
+}
+
+async function resolvePublicProfileUser(publicId: string) {
+  if (!isUserPublicId(publicId)) return null
+  return prisma.user.findUnique({
+    where: { publicId },
+    select: { uid: true, preferences: true, deletedAt: true },
+  })
+}
+
+async function resolveExistingPublicProfileUser(publicId: string, res: Response) {
+  const targetUser = await resolvePublicProfileUser(publicId)
+  if (!targetUser || targetUser.deletedAt) {
+    res.status(404).json({ error: '用户不存在' })
+    return null
+  }
+
+  return targetUser
 }
 
 async function resolveProfileContentTargets(
@@ -391,6 +412,7 @@ router.get(
         where: { uid: req.authUser!.uid },
         select: {
           uid: true,
+          publicId: true,
           email: true,
           displayName: true,
           photoURL: true,
@@ -461,6 +483,7 @@ router.put(
         data: updateData,
         select: {
           uid: true,
+          publicId: true,
           email: true,
           displayName: true,
           photoURL: true,
@@ -518,6 +541,7 @@ router.put(
         data: { displayName: displayNameResult.displayName },
         select: {
           uid: true,
+          publicId: true,
           email: true,
           displayName: true,
           photoURL: true,
@@ -561,6 +585,7 @@ router.put(
         where: { uid: req.authUser!.uid },
         select: {
           uid: true,
+          publicId: true,
           email: true,
           displayName: true,
           passwordHash: true,
@@ -699,6 +724,7 @@ router.put(
           data: { passwordHash },
           select: {
             uid: true,
+            publicId: true,
             email: true,
             displayName: true,
             photoURL: true,
@@ -748,6 +774,7 @@ router.get(
         where: { uid: req.authUser!.uid },
         select: {
           uid: true,
+          publicId: true,
           email: true,
           displayName: true,
           signature: true,
@@ -942,6 +969,7 @@ router.get(
         take: 100,
         select: {
           uid: true,
+          publicId: true,
           email: true,
           displayName: true,
           photoURL: true,
@@ -1472,6 +1500,7 @@ router.get(
         },
         select: {
           uid: true,
+          publicId: true,
           displayName: true,
           photoURL: true,
         },
@@ -1493,9 +1522,10 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
       const user = await prisma.user.findUnique({
-        where: { uid: req.params.userId },
+        where: { publicId: req.params.userId },
         select: {
           uid: true,
+          publicId: true,
           displayName: true,
           photoURL: true,
           signature: true,
@@ -1524,7 +1554,10 @@ router.get(
   '/:userId/posts',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const uid = req.params.userId
+      const targetUser = await resolveExistingPublicProfileUser(req.params.userId, res)
+      if (!targetUser) return
+
+      const uid = targetUser.uid
       const { limit, page, offset: skip } = parsePagination(req.query)
       const forcePublic = req.query.visibility === 'public'
       const canViewPrivateUserContent = Boolean(
@@ -1640,7 +1673,10 @@ router.get(
   '/:userId/galleries',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const uid = req.params.userId
+      const targetUser = await resolveExistingPublicProfileUser(req.params.userId, res)
+      if (!targetUser) return
+
+      const uid = targetUser.uid
       const { limit, page, offset: skip } = parsePagination(req.query)
       const forcePublic = req.query.visibility === 'public'
       const visibilityWhere = buildGalleryVisibilityWhere(
@@ -1688,7 +1724,10 @@ router.get(
   '/:userId/wiki',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const uid = req.params.userId
+      const targetUser = await resolveExistingPublicProfileUser(req.params.userId, res)
+      if (!targetUser) return
+
+      const uid = targetUser.uid
       const { limit, page, offset: skip } = parsePagination(req.query)
       const isAdmin = req.authUser?.role === 'admin' || req.authUser?.role === 'super_admin'
       const canViewPrivateUserContent = Boolean(
@@ -1835,7 +1874,10 @@ router.get(
   '/:userId/comments',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const uid = req.params.userId
+      const targetUser = await resolveExistingPublicProfileUser(req.params.userId, res)
+      if (!targetUser) return
+
+      const uid = targetUser.uid
       const { limit, page, offset: skip } = parsePagination(req.query)
       const isAdmin = req.authUser?.role === 'admin' || req.authUser?.role === 'super_admin'
       const canViewPrivateUserContent = Boolean(
@@ -1856,13 +1898,13 @@ router.get(
           skip,
           include: {
             author: {
-              select: { displayName: true, photoURL: true },
+              select: { publicId: true, displayName: true, photoURL: true },
             },
             replyTo: {
               select: {
                 authorUid: true,
                 author: {
-                  select: { displayName: true },
+                  select: { publicId: true, displayName: true },
                 },
               },
             },
@@ -1976,23 +2018,16 @@ router.get(
   '/:userId/favorites',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const uid = req.params.userId
+      const targetUser = await resolveExistingPublicProfileUser(req.params.userId, res)
+      if (!targetUser) return
+
+      const uid = targetUser.uid
       const rawType = req.query.type
       const requestedType = parseFavoriteType(rawType)
       const { limit, page, offset: skip } = parsePagination(req.query)
 
       if (rawType !== undefined && rawType !== null && rawType !== '' && !requestedType) {
         res.status(400).json({ error: '无效收藏类型' })
-        return
-      }
-
-      const targetUser = await prisma.user.findUnique({
-        where: { uid },
-        select: { uid: true, preferences: true, deletedAt: true },
-      })
-
-      if (!targetUser || targetUser.deletedAt) {
-        res.status(404).json({ error: '用户不存在' })
         return
       }
 
@@ -2040,22 +2075,15 @@ router.get(
   '/:userId/history',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const uid = req.params.userId
+      const targetUser = await resolveExistingPublicProfileUser(req.params.userId, res)
+      if (!targetUser) return
+
+      const uid = targetUser.uid
       const { limit, page, offset: skip } = parsePagination(req.query)
       const type = req.query.type
 
       if (type && !['wiki', 'post', 'music'].includes(String(type))) {
         res.status(400).json({ error: '无效历史类型' })
-        return
-      }
-
-      const targetUser = await prisma.user.findUnique({
-        where: { uid },
-        select: { uid: true, preferences: true, deletedAt: true },
-      })
-
-      if (!targetUser || targetUser.deletedAt) {
-        res.status(404).json({ error: '用户不存在' })
         return
       }
 
@@ -2104,7 +2132,10 @@ router.get(
   requireAuth,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const uid = req.params.userId
+      const targetUser = await resolveExistingPublicProfileUser(req.params.userId, res)
+      if (!targetUser) return
+
+      const uid = targetUser.uid
       const { limit, page, offset: skip } = parsePagination(req.query)
 
       // Users can only see their own likes unless they're admin

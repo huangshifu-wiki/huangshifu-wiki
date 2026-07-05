@@ -75,6 +75,7 @@ type PostItem = {
   locationName?: string | null
   locationDetail?: string | null
   authorUid: string
+  authorPublicId?: string | null
   authorName?: string | null
   status?: ContentStatus
   reviewNote?: string | null
@@ -102,6 +103,7 @@ type CommentItem = {
   id: string
   postId: string
   authorUid: string
+  authorPublicId?: string | null
   authorName: string
   authorPhoto: string | null
   content: string
@@ -184,7 +186,8 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
               <UserIcon size={10} className="text-text-muted" />
             </div>
             <span className="text-xs text-text-muted">
-              {post.authorName || post.authorUid?.substring(0, 6)}
+              {post.authorName ||
+                (post.authorPublicId ? `#${post.authorPublicId}` : t('forum.anonymous'))}
             </span>
           </div>
         </div>
@@ -1213,7 +1216,8 @@ const PostDetail = () => {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">{t('forum.author')}</span>
                   <span className="text-text-primary font-medium">
-                    {post.authorName || post.authorUid?.substring(0, 8) || t('forum.anonymous')}
+                    {post.authorName ||
+                      (post.authorPublicId ? `#${post.authorPublicId}` : t('forum.anonymous'))}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">

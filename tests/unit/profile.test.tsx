@@ -27,6 +27,7 @@ vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => ({
     user: {
       uid: 'user-1',
+      publicId: '1',
       displayName: '测试用户',
       photoURL: '',
       role: 'user',
@@ -55,7 +56,7 @@ describe('UserProfile', () => {
     cleanup()
   })
 
-  const renderProfile = (path = '/users/user-1') =>
+  const renderProfile = (path = '/users/1') =>
     render(
       <MemoryRouter initialEntries={[path]}>
         <Routes>
@@ -66,10 +67,10 @@ describe('UserProfile', () => {
 
   it('opens on the profile tab and hides comments tab', async () => {
     mockApiGet.mockImplementation(async (path: string) => {
-      if (path === '/api/users/user-1/profile') {
+      if (path === '/api/users/1/profile') {
         return {
           user: {
-            uid: 'user-1',
+            publicId: '1',
             displayName: '测试用户',
             photoURL: '',
             signature: '',
@@ -101,10 +102,10 @@ describe('UserProfile', () => {
 
   it('renders public posts on the posts tab', async () => {
     mockApiGet.mockImplementation(async (path: string) => {
-      if (path === '/api/users/user-1/profile') {
+      if (path === '/api/users/1/profile') {
         return {
           user: {
-            uid: 'user-1',
+            publicId: '1',
             displayName: '测试用户',
             photoURL: '',
             signature: '',
@@ -120,7 +121,7 @@ describe('UserProfile', () => {
         }
       }
 
-      if (path === '/api/users/user-1/posts') {
+      if (path === '/api/users/1/posts') {
         return {
           posts: [
             {
@@ -143,12 +144,12 @@ describe('UserProfile', () => {
       return { galleries: [], favorites: [], history: [] }
     })
 
-    renderProfile('/users/user-1/posts')
+    renderProfile('/users/1/posts')
 
     expect(await screen.findByText('公开帖子')).toBeInTheDocument()
 
     await waitFor(() => {
-      expect(mockApiGet).toHaveBeenCalledWith('/api/users/user-1/posts', {
+      expect(mockApiGet).toHaveBeenCalledWith('/api/users/1/posts', {
         limit: 50,
         visibility: 'public',
       })
@@ -157,10 +158,10 @@ describe('UserProfile', () => {
 
   it('allows the owner to edit the signature inline', async () => {
     mockApiGet.mockImplementation(async (path: string) => {
-      if (path === '/api/users/user-1/profile') {
+      if (path === '/api/users/1/profile') {
         return {
           user: {
-            uid: 'user-1',
+            publicId: '1',
             displayName: '测试用户',
             photoURL: '',
             signature: '旧签名',
@@ -197,10 +198,10 @@ describe('UserProfile', () => {
 
   it('does not show private tabs when the profile keeps them private', async () => {
     mockApiGet.mockImplementation(async (path: string) => {
-      if (path === '/api/users/user-2/profile') {
+      if (path === '/api/users/2/profile') {
         return {
           user: {
-            uid: 'user-2',
+            publicId: '2',
             displayName: '其他用户',
             photoURL: '',
             signature: '',
@@ -216,14 +217,14 @@ describe('UserProfile', () => {
         }
       }
 
-      if (path === '/api/users/user-2/posts') {
+      if (path === '/api/users/2/posts') {
         return { posts: [] }
       }
 
       return {}
     })
 
-    renderProfile('/users/user-2')
+    renderProfile('/users/2')
 
     expect(await screen.findByText('其他用户')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '收藏' })).not.toBeInTheDocument()

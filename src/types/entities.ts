@@ -2,6 +2,7 @@ import type { ContentStatus, FavoriteTargetType, AdminRole, UserStatus, Platform
 
 export interface UserProfile {
   uid: string
+  publicId: string
   displayName: string
   photoURL: string
   email: string | null
@@ -78,6 +79,7 @@ export interface PostItem {
   locationName?: string | null
   locationDetail?: string | null
   authorUid: string
+  authorPublicId?: string | null
   status?: ContentStatus
   reviewNote?: string | null
   reviewedBy?: string | null
@@ -99,6 +101,7 @@ export interface CommentItem {
   id: string
   postId: string
   authorUid: string
+  authorPublicId?: string | null
   authorName: string
   authorPhoto: string | null
   content: string
@@ -167,6 +170,7 @@ export interface GalleryItem {
   title: string
   description: string
   authorUid: string
+  authorPublicId?: string | null
   authorName: string
   tags: string[]
   locationCode: string | null
@@ -277,6 +281,7 @@ export interface NotificationItem {
 
 export interface MentionTarget {
   uid: string
+  publicId: string
   displayName: string
   photoURL?: string | null
 }

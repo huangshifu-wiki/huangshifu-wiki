@@ -65,6 +65,7 @@ export {
 } from './textLimits'
 
 export { allocateNumericSlug, isNumericSlug, withNumericSlugTransaction } from './numericSlug'
+export { allocateUserPublicId, isUserPublicId } from './userPublicId'
 
 export {
   buildUniqueDisplayNameFallback,

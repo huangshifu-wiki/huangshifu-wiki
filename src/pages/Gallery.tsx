@@ -137,7 +137,9 @@ const GalleryCard = React.memo(
                     : '刚刚'}
                 </span>
                 <span className="flex items-center gap-1">
-                  <UserIcon size={10} /> {gallery.authorUid?.substring(0, 6)}
+                  <UserIcon size={10} />{' '}
+                  {gallery.authorName ||
+                    (gallery.authorPublicId ? `#${gallery.authorPublicId}` : '匿名')}
                 </span>
               </div>
             </div>
@@ -188,7 +190,9 @@ const GalleryCard = React.memo(
                     : '刚刚'}
                 </span>
                 <span className="flex items-center gap-1">
-                  <UserIcon size={10} /> {gallery.authorUid?.substring(0, 6)}
+                  <UserIcon size={10} />{' '}
+                  {gallery.authorName ||
+                    (gallery.authorPublicId ? `#${gallery.authorPublicId}` : '匿名')}
                 </span>
               </div>
             </div>

@@ -162,12 +162,12 @@ describe('htmlSanitizer', () => {
           createElement(MarkdownRenderer, {
             content: '正文 @黄诗扶 `@代码` @未知',
             enableMentions: true,
-            mentionTargets: [{ uid: 'user-1', displayName: '黄诗扶' }],
+            mentionTargets: [{ uid: 'user-1', publicId: '1', displayName: '黄诗扶' }],
           })
         )
       )
 
-      expect(output).toContain('href="/users/user-1"')
+      expect(output).toContain('href="/users/1"')
       expect(output).toContain('class="mention-highlight"')
       expect(output).toContain('<code>@代码</code>')
       expect(output).toContain('<span class="mention-highlight">@未知</span>')

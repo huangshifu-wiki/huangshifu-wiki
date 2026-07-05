@@ -6,6 +6,7 @@ type User = import('../../src/lib/auth').User
 function createMockUser(overrides?: Partial<User>): User {
   return {
     uid: 'u_1',
+    publicId: '1',
     email: 'test@example.com',
     displayName: '测试用户',
     photoURL: null,

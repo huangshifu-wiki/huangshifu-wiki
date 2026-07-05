@@ -136,6 +136,7 @@ describe('users routes password update', () => {
       data: { passwordHash: 'hashed-new-password' },
       select: {
         uid: true,
+        publicId: true,
         email: true,
         displayName: true,
         photoURL: true,

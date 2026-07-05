@@ -16,7 +16,11 @@ export default function MentionText({ text, targets = [] }: MentionTextProps) {
 
         if (segment.target) {
           return (
-            <Link key={index} to={`/users/${segment.target.uid}`} className="mention-highlight">
+            <Link
+              key={index}
+              to={`/users/${segment.target.publicId}`}
+              className="mention-highlight"
+            >
               {segment.text}
             </Link>
           )

@@ -271,6 +271,7 @@ export interface SuccessResponse {
 export interface AuthMeResponse {
   user: {
     uid: string
+    publicId: string
     nickname: string
     avatarUrl?: string
     role: 'user' | 'admin' | 'super_admin'
@@ -314,6 +315,7 @@ export interface UserUpdateRequest {
 export interface UserResponse {
   user: {
     uid: string
+    publicId: string
     nickname: string
     avatarUrl?: string
     role: string

@@ -34,6 +34,7 @@ import {
 describe('parsers', () => {
   const makeUser = (role: 'admin' | 'user') => ({
     uid: role === 'admin' ? 'admin' : 'user1',
+    publicId: role === 'admin' ? '1' : '2',
     email: `${role}@test.com`,
     displayName: role,
     photoURL: null as string | null,

@@ -1,5 +1,6 @@
 export interface MentionTarget {
   uid: string
+  publicId: string
   displayName: string
   photoURL?: string | null
 }

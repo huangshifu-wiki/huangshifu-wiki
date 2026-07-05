@@ -146,6 +146,7 @@ enum WikiPullRequestStatus {
 
 model User {
   uid           String         @id @default(cuid())
+  publicId      String         @unique
   email         String         @unique
   passwordHash  String
   displayName   String

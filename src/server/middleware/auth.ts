@@ -21,6 +21,7 @@ type CachedAuthUser = {
 
 type SessionUser = {
   uid: string
+  publicId: string
   email: string
   displayName: string
   photoURL: string | null
@@ -50,6 +51,7 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 
 function userToApiUser(user: {
   uid: string
+  publicId: string
   email: string
   displayName: string
   photoURL: string | null
@@ -65,6 +67,7 @@ function userToApiUser(user: {
 }): ApiUser {
   return {
     uid: user.uid,
+    publicId: user.publicId,
     email: user.email,
     displayName: user.displayName,
     photoURL: user.photoURL,

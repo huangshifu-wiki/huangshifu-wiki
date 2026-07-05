@@ -2519,6 +2519,7 @@ router.get(
           take: 100,
           select: {
             uid: true,
+            publicId: true,
             email: true,
             displayName: true,
             photoURL: true,
@@ -2746,6 +2747,7 @@ router.get(
           where: { uid: id },
           select: {
             uid: true,
+            publicId: true,
             email: true,
             displayName: true,
             photoURL: true,

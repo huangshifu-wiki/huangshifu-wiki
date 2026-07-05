@@ -34,6 +34,7 @@ async function findMentionUsersByNames(names: string[]) {
     },
     select: {
       uid: true,
+      publicId: true,
       displayName: true,
       photoURL: true,
     },
@@ -64,6 +65,7 @@ function collectCandidateNames(matches: MentionMatch[]) {
 function toMentionTarget(user: MentionUser): MentionTarget {
   return {
     uid: user.uid,
+    publicId: user.publicId,
     displayName: user.displayName,
     photoURL: user.photoURL,
   }

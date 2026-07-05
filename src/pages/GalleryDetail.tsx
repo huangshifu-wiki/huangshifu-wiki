@@ -888,7 +888,9 @@ const GalleryDetail = () => {
               <Clock size={14} /> {formatDateTime(gallery.createdAt)}
             </span>
             <span className="flex items-center gap-1">
-              <UserIcon size={14} /> {gallery.authorName || gallery.authorUid?.slice(0, 8)}
+              <UserIcon size={14} />{' '}
+              {gallery.authorName ||
+                (gallery.authorPublicId ? `#${gallery.authorPublicId}` : '匿名')}
             </span>
             {gallery.publishedAt ? (
               <span>

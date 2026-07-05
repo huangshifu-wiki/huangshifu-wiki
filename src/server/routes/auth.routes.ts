@@ -30,6 +30,7 @@ import {
   normalizeDisplayNameFallback,
   validateUserDisplayName,
   isRegistrationOpen,
+  allocateUserPublicId,
 } from '../utils'
 import { prisma } from '../prisma'
 import {
@@ -177,15 +178,19 @@ router.post(
 
       logger.info({ email: normalizedEmail, role: 'user' }, 'Creating user')
 
-      const user = await prisma.user.create({
-        data: {
-          email: normalizedEmail,
-          passwordHash,
-          displayName: name,
-          role: 'user',
-          signature: '',
-          bio: '',
-        },
+      const user = await prisma.$transaction(async (tx) => {
+        const publicId = await allocateUserPublicId(tx)
+        return tx.user.create({
+          data: {
+            publicId,
+            email: normalizedEmail,
+            passwordHash,
+            displayName: name,
+            role: 'user',
+            signature: '',
+            bio: '',
+          },
+        })
       })
 
       let verificationEmailSent = false
@@ -285,6 +290,7 @@ router.post(
         where: { email: normalizedEmail },
         select: {
           uid: true,
+          publicId: true,
           email: true,
           displayName: true,
           emailVerifiedAt: true,
@@ -336,6 +342,7 @@ router.post(
           where: { email: normalizedEmail },
           select: {
             uid: true,
+            publicId: true,
             email: true,
             displayName: true,
             deletedAt: true,
@@ -383,6 +390,7 @@ router.post(
           user: {
             select: {
               uid: true,
+              publicId: true,
               email: true,
               emailVerifiedAt: true,
               deletedAt: true,
@@ -573,17 +581,21 @@ router.post(
 
         logger.info({ generatedEmail, displayName }, 'Creating new WeChat user')
 
-        user = await prisma.user.create({
-          data: {
-            email: generatedEmail,
-            passwordHash,
-            displayName,
-            photoURL: photoURLRaw || null,
-            signature: '',
-            bio: '',
-            wechatOpenId: openId,
-            wechatUnionId: unionId,
-          },
+        user = await prisma.$transaction(async (tx) => {
+          const publicId = await allocateUserPublicId(tx)
+          return tx.user.create({
+            data: {
+              publicId,
+              email: generatedEmail,
+              passwordHash,
+              displayName,
+              photoURL: photoURLRaw || null,
+              signature: '',
+              bio: '',
+              wechatOpenId: openId,
+              wechatUnionId: unionId,
+            },
+          })
         })
       } else {
         let nextDisplayName: string | undefined

@@ -28,7 +28,7 @@ import {
 import type { FavoriteItem, GalleryItem, HistoryItem, PostItem } from '../types/entities'
 
 type PublicUser = {
-  uid: string
+  publicId: string
   displayName: string
   photoURL: string | null
   signature: string
@@ -146,6 +146,9 @@ export default function UserProfile() {
   const signatureInputRef = useRef<HTMLDivElement | null>(null)
   const signatureComposingRef = useRef(false)
   const signatureClickPointRef = useRef<{ x: number; y: number } | null>(null)
+  const profileLoaded = Boolean(profile)
+  const canViewFavorites = Boolean(profile?.canViewFavorites)
+  const canViewHistory = Boolean(profile?.canViewHistory)
   const hasPendingGalleryThumbnails = galleries.some(shouldWaitForGalleryThumbnail)
 
   useEffect(() => {
@@ -286,7 +289,7 @@ export default function UserProfile() {
   }
 
   useEffect(() => {
-    if (!userId || !profile) return
+    if (!userId || !profileLoaded) return
     if (activeTab === 'profile') {
       setContentLoading(false)
       return
@@ -317,7 +320,7 @@ export default function UserProfile() {
           return
         }
 
-        if (activeTab === 'favorites' && profile.canViewFavorites) {
+        if (activeTab === 'favorites' && canViewFavorites) {
           const data = await apiGet<{ favorites: FavoriteItem[] }>(
             `/api/users/${userId}/favorites`,
             {
@@ -328,7 +331,7 @@ export default function UserProfile() {
           return
         }
 
-        if (activeTab === 'history' && profile.canViewHistory) {
+        if (activeTab === 'history' && canViewHistory) {
           const data = await apiGet<{ history: HistoryItem[] }>(`/api/users/${userId}/history`, {
             limit: 50,
           })
@@ -346,7 +349,7 @@ export default function UserProfile() {
     return () => {
       cancelled = true
     }
-  }, [activeTab, profile, userId])
+  }, [activeTab, canViewFavorites, canViewHistory, profileLoaded, userId])
 
   useEffect(() => {
     if (!userId || activeTab !== 'galleries' || !hasPendingGalleryThumbnails) {
@@ -454,7 +457,7 @@ export default function UserProfile() {
     )
   }
 
-  const isSelf = Boolean(authUser && authUser.uid === profile.uid)
+  const isSelf = Boolean(authUser && authUser.publicId === profile.publicId)
   const avatarSrc = profile.photoURL || DEFAULT_AVATAR
   const bio = profile.bio?.trim()
   const displaySignature = profile.signature?.trim()

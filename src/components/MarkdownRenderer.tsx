@@ -176,7 +176,7 @@ const remarkMentions = (targets: MentionTarget[]) => (tree: MdastNode) => {
         if (segment.target) {
           return {
             type: 'link',
-            url: `/users/${segment.target.uid}`,
+            url: `/users/${segment.target.publicId}`,
             children: [{ type: 'text', value: segment.text }],
           }
         }

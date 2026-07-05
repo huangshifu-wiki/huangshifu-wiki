@@ -7,13 +7,13 @@ import { toCommentResponse } from './response-transformers'
 
 const commentInclude = {
   author: {
-    select: { displayName: true, photoURL: true },
+    select: { publicId: true, displayName: true, photoURL: true },
   },
   replyTo: {
     select: {
       authorUid: true,
       author: {
-        select: { displayName: true },
+        select: { publicId: true, displayName: true },
       },
     },
   },
