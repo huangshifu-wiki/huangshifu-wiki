@@ -7,7 +7,7 @@ import MarkdownRenderer from '../components/MarkdownRenderer'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { apiGet } from '../lib/apiClient'
 import { formatDateTime } from '../lib/dateUtils'
-import { formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
+import { formatEventTicketPrices, formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
 import type { EventDetailResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
 
@@ -63,6 +63,7 @@ const EventDetail = () => {
   }
 
   const coverSrc = getEventCoverSrc(event, true)
+  const ticketPrices = formatEventTicketPrices(event.ticketPrices)
 
   return (
     <div className="mx-auto max-w-[1000px] px-6 py-8">
@@ -131,12 +132,8 @@ const EventDetail = () => {
               <Ticket size={16} className="text-brand-gold" />
               票价
             </h2>
-            {event.ticketPrices.length ? (
-              <ul className="space-y-2 text-sm text-text-secondary">
-                {event.ticketPrices.map((price, index) => (
-                  <li key={`${price}-${index}`}>{price}</li>
-                ))}
-              </ul>
+            {ticketPrices ? (
+              <p className="text-sm text-text-secondary">{ticketPrices}</p>
             ) : (
               <p className="text-sm text-text-muted">暂无票价信息</p>
             )}

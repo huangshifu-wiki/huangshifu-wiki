@@ -1,5 +1,5 @@
 import { formatDate } from './dateUtils'
-import type { EventTimeSlot } from '../types/entities'
+import type { EventTicketPrice, EventTimeSlot } from '../types/entities'
 
 export const EVENT_IMAGE_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,image/bmp'
 export const EVENT_ALLOWED_IMAGE_TYPES = EVENT_IMAGE_ACCEPT.split(',')
@@ -26,3 +26,24 @@ export const getEventCoverSrc = (
   preferOriginal
     ? event.coverUrl || event.coverThumbnailUrl || ''
     : event.coverThumbnailUrl || event.coverUrl || ''
+
+export function formatEventTicketPrice(ticketPrice: EventTicketPrice) {
+  const description = ticketPrice.description?.trim()
+  return description ? `${description} ¥${ticketPrice.price}` : `¥${ticketPrice.price}`
+}
+
+export function isEventTicketPrice(value: unknown): value is EventTicketPrice {
+  if (!value || typeof value !== 'object' || !('price' in value)) return false
+  const record = value as { price?: unknown; description?: unknown }
+  const price = record.price
+  if (record.description !== undefined && typeof record.description !== 'string') return false
+  return typeof price === 'number' && Number.isFinite(price) && price >= 0
+}
+
+export function formatEventTicketPrices(ticketPrices: readonly unknown[]) {
+  const formatted: string[] = []
+  for (const ticketPrice of ticketPrices) {
+    if (isEventTicketPrice(ticketPrice)) formatted.push(formatEventTicketPrice(ticketPrice))
+  }
+  return formatted.join(' / ')
+}

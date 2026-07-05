@@ -20,6 +20,7 @@ import {
   EVENT_ALLOWED_IMAGE_TYPES,
   EVENT_IMAGE_ACCEPT,
   getEventCoverSrc,
+  isEventTicketPrice,
 } from '../../lib/eventFormat'
 import { formatUploadLimitWithSize, UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
 import { normalizeWikiPageSlug } from '../../lib/wikiSlug'
@@ -34,6 +35,7 @@ import type {
   EventItem,
   EventPosterItem,
   EventSaleTime,
+  EventTicketPrice,
   EventTimeSlot,
 } from '../../types/entities'
 
@@ -45,13 +47,24 @@ type EditablePoster = {
   name: string
 }
 
+type EditableTicketPrice = {
+  description: string
+  price: string
+}
+
+type JsonField = 'timeSlots' | 'ticketPrices' | 'saleTimes' | 'lineup' | 'externalLinks'
+
+type JsonEditorState = {
+  mode: 'form' | 'json'
+}
+
 type EventDraft = {
   title: string
   slug: string
   location: string
   content: string
   timeSlots: EventTimeSlot[]
-  ticketPrices: string[]
+  ticketPrices: EditableTicketPrice[]
   saleTimes: EventSaleTime[]
   lineup: string[]
   externalLinks: EventExternalLink[]
@@ -60,13 +73,29 @@ type EventDraft = {
   posters: EditablePoster[]
 }
 
+const JSON_FIELDS: JsonField[] = [
+  'timeSlots',
+  'ticketPrices',
+  'saleTimes',
+  'lineup',
+  'externalLinks',
+]
+
+const createJsonEditorStates = (): Record<JsonField, JsonEditorState> =>
+  Object.fromEntries(JSON_FIELDS.map((field) => [field, { mode: 'form' }])) as Record<
+    JsonField,
+    JsonEditorState
+  >
+
+const createEmptyTicketPrice = (): EditableTicketPrice => ({ description: '', price: '' })
+
 const createEmptyDraft = (): EventDraft => ({
   title: '',
   slug: '',
   location: '',
   content: '',
   timeSlots: [{ type: 'datetime', start: '', end: '' }],
-  ticketPrices: [''],
+  ticketPrices: [createEmptyTicketPrice()],
   saleTimes: [],
   lineup: [''],
   externalLinks: [],
@@ -83,13 +112,25 @@ const toEditablePoster = (poster: EventPosterItem): EditablePoster => ({
   name: poster.name,
 })
 
+const toEditableTicketPrice = (ticketPrice: unknown): EditableTicketPrice => {
+  if (typeof ticketPrice === 'string') {
+    return { description: ticketPrice, price: '' }
+  }
+  if (isEventTicketPrice(ticketPrice)) {
+    return { description: ticketPrice.description || '', price: String(ticketPrice.price) }
+  }
+  return createEmptyTicketPrice()
+}
+
 const createDraftFromEvent = (event: EventItem): EventDraft => ({
   title: event.title,
   slug: event.slug,
   location: event.location || '',
   content: event.content || '',
   timeSlots: event.timeSlots.length ? event.timeSlots : [{ type: 'datetime', start: '', end: '' }],
-  ticketPrices: event.ticketPrices.length ? event.ticketPrices : [''],
+  ticketPrices: event.ticketPrices.length
+    ? event.ticketPrices.map(toEditableTicketPrice)
+    : [createEmptyTicketPrice()],
   saleTimes: event.saleTimes,
   lineup: event.lineup.length ? event.lineup : [''],
   externalLinks: event.externalLinks,
@@ -99,6 +140,35 @@ const createDraftFromEvent = (event: EventItem): EventDraft => ({
 })
 
 const normalizeStringList = (items: string[]) => items.map((item) => item.trim()).filter(Boolean)
+
+const toEventTicketPriceInput = (item: EditableTicketPrice): EventTicketPrice | null => {
+  const description = item.description.trim()
+  const price = item.price.trim()
+  if (!description && !price) return null
+
+  const numericPrice = Number(price)
+  if (price === '' || !Number.isFinite(numericPrice) || numericPrice < 0) return null
+
+  return {
+    ...(description ? { description } : {}),
+    price: numericPrice,
+  }
+}
+
+const normalizeTicketPrices = (items: EditableTicketPrice[]) =>
+  items
+    .filter((item) => item.description.trim() || item.price.trim())
+    .flatMap((item) => {
+      const ticketPrice = toEventTicketPriceInput(item)
+      return ticketPrice ? [ticketPrice] : []
+    })
+
+const hasInvalidTicketPrice = (items: EditableTicketPrice[]) =>
+  items.some((item) => {
+    const price = item.price.trim()
+    if (!item.description.trim() && !price) return false
+    return !toEventTicketPriceInput(item)
+  })
 
 const normalizeSaleTimes = (items: EventSaleTime[]) =>
   items
@@ -119,6 +189,96 @@ const normalizeTimeSlots = (items: EventTimeSlot[]) =>
     }))
     .filter((item) => item.start)
 
+const stringifyJson = (value: unknown) => JSON.stringify(value, null, 2)
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
+const jsonValueFromDraft = (draft: EventDraft, field: JsonField) => {
+  if (field === 'ticketPrices') {
+    return draft.ticketPrices
+      .map((item) => {
+        const ticketPrice = toEventTicketPriceInput(item)
+        if (ticketPrice) return ticketPrice
+        return {
+          ...(item.description.trim() ? { description: item.description.trim() } : {}),
+          price: item.price.trim(),
+        }
+      })
+      .filter((item) => item.description || item.price !== '')
+  }
+  if (field === 'lineup') return normalizeStringList(draft.lineup)
+  return draft[field]
+}
+
+const normalizeJsonTimeSlots = (value: unknown): EventTimeSlot[] => {
+  if (!Array.isArray(value)) throw new Error('时间段必须是数组')
+  return value.map((item) => {
+    if (!isRecord(item)) throw new Error('时间段每一项必须是对象')
+    const type = item.type === 'date' || item.type === 'datetime' ? item.type : null
+    if (!type || typeof item.start !== 'string') {
+      throw new Error('时间段必须包含 type 和 start')
+    }
+    return {
+      type,
+      start: item.start,
+      ...(typeof item.end === 'string' && item.end ? { end: item.end } : {}),
+    }
+  })
+}
+
+const normalizeJsonTicketPrices = (value: unknown): EditableTicketPrice[] => {
+  if (!Array.isArray(value)) throw new Error('票价必须是数组')
+  if (value.length === 0) return [createEmptyTicketPrice()]
+  return value.map((item) => {
+    if (!isEventTicketPrice(item)) {
+      throw new Error('票价 price 必须是非负数字')
+    }
+    return {
+      description: item.description || '',
+      price: String(item.price),
+    }
+  })
+}
+
+const normalizeJsonSaleTimes = (value: unknown): EventSaleTime[] => {
+  if (!Array.isArray(value)) throw new Error('起售时间必须是数组')
+  return value.map((item) => {
+    if (!isRecord(item) || typeof item.time !== 'string') {
+      throw new Error('起售时间每一项必须包含 time')
+    }
+    return {
+      time: item.time,
+      ...(typeof item.note === 'string' && item.note ? { note: item.note } : {}),
+    }
+  })
+}
+
+const normalizeJsonLineup = (value: unknown): string[] => {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new Error('阵容必须是字符串数组')
+  }
+  return value.length ? value : ['']
+}
+
+const normalizeJsonExternalLinks = (value: unknown): EventExternalLink[] => {
+  if (!Array.isArray(value)) throw new Error('外部链接必须是数组')
+  return value.map((item) => {
+    if (!isRecord(item) || typeof item.label !== 'string' || typeof item.url !== 'string') {
+      throw new Error('外部链接每一项必须包含 label 和 url')
+    }
+    return { label: item.label, url: item.url }
+  })
+}
+
+const JSON_FIELD_NORMALIZERS = {
+  timeSlots: (value: unknown) => ({ timeSlots: normalizeJsonTimeSlots(value) }),
+  ticketPrices: (value: unknown) => ({ ticketPrices: normalizeJsonTicketPrices(value) }),
+  saleTimes: (value: unknown) => ({ saleTimes: normalizeJsonSaleTimes(value) }),
+  lineup: (value: unknown) => ({ lineup: normalizeJsonLineup(value) }),
+  externalLinks: (value: unknown) => ({ externalLinks: normalizeJsonExternalLinks(value) }),
+} satisfies Record<JsonField, (value: unknown) => Partial<EventDraft>>
+
 const AdminEventEdit = () => {
   const { eventId } = useParams()
   const isCreating = !eventId
@@ -128,6 +288,7 @@ const AdminEventEdit = () => {
   const [loading, setLoading] = useState(!isCreating)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [jsonEditors, setJsonEditors] = useState(createJsonEditorStates)
   const coverInputRef = useRef<HTMLInputElement>(null)
   const postersInputRef = useRef<HTMLInputElement>(null)
 
@@ -165,6 +326,36 @@ const AdminEventEdit = () => {
 
   const patchDraft = (patch: Partial<EventDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }))
+  }
+
+  const openJsonEditor = (field: JsonField) => {
+    setJsonEditors((prev) => ({
+      ...prev,
+      [field]: { mode: 'json' },
+    }))
+  }
+
+  const closeJsonEditor = (field: JsonField) => {
+    setJsonEditors((prev) => ({
+      ...prev,
+      [field]: { mode: 'form' },
+    }))
+  }
+
+  const getJsonEditorText = (field: JsonField) => stringifyJson(jsonValueFromDraft(draft, field))
+
+  const applyJsonEditor = (field: JsonField, text: string) => {
+    try {
+      const value = JSON.parse(text) as unknown
+      patchDraft(JSON_FIELD_NORMALIZERS[field](value))
+      setJsonEditors((prev) => ({
+        ...prev,
+        [field]: { mode: 'form' },
+      }))
+      return null
+    } catch (error) {
+      return error instanceof Error ? error.message : 'JSON 格式无效'
+    }
   }
 
   const uploadImageFile = async (file: File) => {
@@ -238,6 +429,14 @@ const AdminEventEdit = () => {
       show('活动标题不能为空', { variant: 'error' })
       return
     }
+    if (hasInvalidTicketPrice(draft.ticketPrices)) {
+      show('票价必须填写有效的非负数字', { variant: 'error' })
+      return
+    }
+    if (JSON_FIELDS.some((field) => jsonEditors[field].mode === 'json')) {
+      show('请先应用或关闭 JSON 编辑内容', { variant: 'error' })
+      return
+    }
 
     const payload = {
       title: draft.title.trim(),
@@ -245,7 +444,7 @@ const AdminEventEdit = () => {
       location: draft.location.trim(),
       content: draft.content,
       timeSlots: normalizeTimeSlots(draft.timeSlots),
-      ticketPrices: normalizeStringList(draft.ticketPrices),
+      ticketPrices: normalizeTicketPrices(draft.ticketPrices),
       saleTimes: normalizeSaleTimes(draft.saleTimes),
       lineup: normalizeStringList(draft.lineup),
       externalLinks: normalizeExternalLinks(draft.externalLinks),
@@ -342,7 +541,15 @@ const AdminEventEdit = () => {
             />
           </section>
 
-          <section className="rounded border border-border bg-surface p-5">
+          <JsonEditableSection
+            title="时间段"
+            field="timeSlots"
+            state={jsonEditors.timeSlots}
+            getJsonText={getJsonEditorText}
+            onOpenJson={openJsonEditor}
+            onCloseJson={closeJsonEditor}
+            onApplyJson={applyJsonEditor}
+          >
             <ListHeader
               title="时间段"
               onAdd={() =>
@@ -391,22 +598,40 @@ const AdminEventEdit = () => {
                 </div>
               ))}
             </div>
-          </section>
+          </JsonEditableSection>
 
-          <StringListEditor
-            title="票价"
+          <TicketPriceEditor
             values={draft.ticketPrices}
-            placeholder="如：看台 280 / 内场 480"
             onChange={(ticketPrices) => patchDraft({ ticketPrices })}
+            field="ticketPrices"
+            state={jsonEditors.ticketPrices}
+            getJsonText={getJsonEditorText}
+            onOpenJson={openJsonEditor}
+            onCloseJson={closeJsonEditor}
+            onApplyJson={applyJsonEditor}
           />
           <StringListEditor
             title="阵容"
+            field="lineup"
             values={draft.lineup}
             placeholder="阵容成员"
             onChange={(lineup) => patchDraft({ lineup })}
+            state={jsonEditors.lineup}
+            getJsonText={getJsonEditorText}
+            onOpenJson={openJsonEditor}
+            onCloseJson={closeJsonEditor}
+            onApplyJson={applyJsonEditor}
           />
 
-          <section className="rounded border border-border bg-surface p-5">
+          <JsonEditableSection
+            title="起售时间"
+            field="saleTimes"
+            state={jsonEditors.saleTimes}
+            getJsonText={getJsonEditorText}
+            onOpenJson={openJsonEditor}
+            onCloseJson={closeJsonEditor}
+            onApplyJson={applyJsonEditor}
+          >
             <ListHeader
               title="起售时间"
               onAdd={() => patchDraft({ saleTimes: [...draft.saleTimes, { time: '', note: '' }] })}
@@ -455,9 +680,17 @@ const AdminEventEdit = () => {
                 </div>
               ))}
             </div>
-          </section>
+          </JsonEditableSection>
 
-          <section className="rounded border border-border bg-surface p-5">
+          <JsonEditableSection
+            title="外部链接"
+            field="externalLinks"
+            state={jsonEditors.externalLinks}
+            getJsonText={getJsonEditorText}
+            onOpenJson={openJsonEditor}
+            onCloseJson={closeJsonEditor}
+            onApplyJson={applyJsonEditor}
+          >
             <ListHeader
               title="外部链接"
               onAdd={() =>
@@ -506,7 +739,7 @@ const AdminEventEdit = () => {
                 </div>
               ))}
             </div>
-          </section>
+          </JsonEditableSection>
         </div>
 
         <aside className="space-y-5">
@@ -616,11 +849,11 @@ const AdminEventEdit = () => {
 }
 
 const ListHeader = ({ title, onAdd }: { title: string; onAdd: () => void }) => (
-  <div className="mb-4 flex items-center justify-between gap-3">
-    <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
+  <div className="mb-4 flex justify-end">
     <button
       type="button"
       onClick={onAdd}
+      aria-label={`添加${title}`}
       className="rounded theme-button-secondary px-3 py-1.5 text-xs"
     >
       <Plus size={13} className="mr-1 inline" />
@@ -641,16 +874,196 @@ const IconButton = ({ label, onClick }: { label: string; onClick: () => void }) 
   </button>
 )
 
+const JsonEditableSection = ({
+  title,
+  field,
+  state,
+  getJsonText,
+  onOpenJson,
+  onCloseJson,
+  onApplyJson,
+  children,
+}: {
+  title: string
+  field: JsonField
+  state: JsonEditorState
+  getJsonText: (field: JsonField) => string
+  onOpenJson: (field: JsonField) => void
+  onCloseJson: (field: JsonField) => void
+  onApplyJson: (field: JsonField, text: string) => string | null
+  children: React.ReactNode
+}) => {
+  const [jsonText, setJsonText] = useState('')
+  const [jsonError, setJsonError] = useState<string | null>(null)
+
+  const applyJson = () => {
+    const error = onApplyJson(field, jsonText)
+    setJsonError(error)
+  }
+
+  const openJson = () => {
+    setJsonText(getJsonText(field))
+    setJsonError(null)
+    onOpenJson(field)
+  }
+
+  return (
+    <section className="rounded border border-border bg-surface p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
+        {state.mode === 'json' ? (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={applyJson}
+              className="rounded theme-button-secondary px-3 py-1.5 text-xs"
+            >
+              应用 JSON
+            </button>
+            <button
+              type="button"
+              onClick={() => onCloseJson(field)}
+              className="rounded border border-border px-3 py-1.5 text-xs text-text-muted hover:text-brand-gold"
+            >
+              表单
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={openJson}
+            className="rounded border border-border px-3 py-1.5 text-xs text-text-muted hover:text-brand-gold"
+          >
+            JSON
+          </button>
+        )}
+      </div>
+      {state.mode === 'json' ? (
+        <div className="space-y-2">
+          <textarea
+            value={jsonText}
+            onChange={(event) => {
+              setJsonText(event.target.value)
+              setJsonError(null)
+            }}
+            spellCheck={false}
+            className="min-h-[180px] w-full rounded border border-border bg-surface-alt px-3 py-2 font-mono text-xs text-text-primary focus:border-brand-gold focus:outline-none"
+          />
+          {jsonError && <p className="text-xs theme-text-error">{jsonError}</p>}
+        </div>
+      ) : (
+        children
+      )}
+    </section>
+  )
+}
+
+const TicketPriceEditor = ({
+  values,
+  onChange,
+  field,
+  state,
+  getJsonText,
+  onOpenJson,
+  onCloseJson,
+  onApplyJson,
+}: {
+  values: EditableTicketPrice[]
+  onChange: (values: EditableTicketPrice[]) => void
+  field: JsonField
+  state: JsonEditorState
+  getJsonText: (field: JsonField) => string
+  onOpenJson: (field: JsonField) => void
+  onCloseJson: (field: JsonField) => void
+  onApplyJson: (field: JsonField, text: string) => string | null
+}) => {
+  const priceRefs = useRef<Array<HTMLInputElement | null>>([])
+  const focusPrice = (index: number) => {
+    window.requestAnimationFrame(() => priceRefs.current[index]?.focus())
+  }
+  const insertItem = (index: number) => {
+    const next = [...values]
+    next.splice(index, 0, { description: '', price: '' })
+    onChange(next)
+    focusPrice(index)
+  }
+  const updateItem = (index: number, patch: Partial<EditableTicketPrice>) => {
+    onChange(
+      values.map((item, currentIndex) => (currentIndex === index ? { ...item, ...patch } : item))
+    )
+  }
+
+  return (
+    <JsonEditableSection
+      title="票价"
+      field={field}
+      state={state}
+      getJsonText={getJsonText}
+      onOpenJson={onOpenJson}
+      onCloseJson={onCloseJson}
+      onApplyJson={onApplyJson}
+    >
+      <ListHeader title="票价" onAdd={() => insertItem(values.length)} />
+      <div className="space-y-3">
+        {values.map((value, index) => (
+          <div key={index} className="grid gap-2 md:grid-cols-[1fr_160px_auto]">
+            <input
+              value={value.description}
+              onChange={(event) => updateItem(index, { description: event.target.value })}
+              maxLength={CONTENT_LIMITS.event.ticketPriceDescription}
+              placeholder="描述，可选"
+              className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+            />
+            <input
+              ref={(element) => {
+                priceRefs.current[index] = element
+              }}
+              type="number"
+              min="0"
+              step="0.01"
+              value={value.price}
+              onChange={(event) => updateItem(index, { price: event.target.value })}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+                event.preventDefault()
+                insertItem(index + 1)
+              }}
+              placeholder="价格"
+              className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+            />
+            <IconButton
+              label="删除票价"
+              onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
+            />
+          </div>
+        ))}
+      </div>
+    </JsonEditableSection>
+  )
+}
+
 const StringListEditor = ({
   title,
+  field,
   values,
   placeholder,
   onChange,
+  state,
+  getJsonText,
+  onOpenJson,
+  onCloseJson,
+  onApplyJson,
 }: {
   title: string
+  field: JsonField
   values: string[]
   placeholder: string
   onChange: (values: string[]) => void
+  state: JsonEditorState
+  getJsonText: (field: JsonField) => string
+  onOpenJson: (field: JsonField) => void
+  onCloseJson: (field: JsonField) => void
+  onApplyJson: (field: JsonField, text: string) => string | null
 }) => {
   const inputRefs = useRef<Array<HTMLInputElement | null>>([])
   const focusInput = (index: number) => {
@@ -665,7 +1078,15 @@ const StringListEditor = ({
   const appendItem = () => insertItem(values.length)
 
   return (
-    <section className="rounded border border-border bg-surface p-5">
+    <JsonEditableSection
+      title={title}
+      field={field}
+      state={state}
+      getJsonText={getJsonText}
+      onOpenJson={onOpenJson}
+      onCloseJson={onCloseJson}
+      onApplyJson={onApplyJson}
+    >
       <ListHeader title={title} onAdd={appendItem} />
       <div className="space-y-3">
         {values.map((value, index) => (
@@ -697,7 +1118,7 @@ const StringListEditor = ({
           </div>
         ))}
       </div>
-    </section>
+    </JsonEditableSection>
   )
 }
 

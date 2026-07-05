@@ -7,7 +7,7 @@ import Pagination from '../components/Pagination'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { apiGet } from '../lib/apiClient'
-import { formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
+import { formatEventTicketPrices, formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
 import type { EventListResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
 
@@ -34,7 +34,7 @@ const EventCover = ({ event, className }: { event: EventItem; className?: string
 
 const EventCard = ({ event }: { event: EventItem }) => {
   const firstSlot = event.timeSlots[0]
-  const firstPrice = event.ticketPrices[0]
+  const ticketPrices = formatEventTicketPrices(event.ticketPrices)
 
   return (
     <Link
@@ -64,7 +64,7 @@ const EventCard = ({ event }: { event: EventItem }) => {
           </p>
           <p className="flex items-center gap-1.5">
             <Ticket size={13} className="text-brand-gold" />
-            <span className="truncate">{firstPrice || '票价待定'}</span>
+            <span className="truncate">{ticketPrices || '票价待定'}</span>
           </p>
         </div>
       </div>

@@ -216,6 +216,11 @@ export interface EventExternalLink {
   url: string
 }
 
+export interface EventTicketPrice {
+  description?: string
+  price: number
+}
+
 export interface EventPosterItem extends Pick<
   GalleryImageItem,
   'id' | 'assetId' | 'url' | 'originalUrl' | 'thumbnailUrl' | 'thumbnailStatus' | 'name'
@@ -228,7 +233,7 @@ export interface EventItem {
   location: string
   content: string
   timeSlots: EventTimeSlot[]
-  ticketPrices: string[]
+  ticketPrices: unknown[]
   saleTimes: EventSaleTime[]
   lineup: string[]
   externalLinks: EventExternalLink[]

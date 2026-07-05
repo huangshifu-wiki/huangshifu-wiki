@@ -54,6 +54,23 @@ const externalLinkSchema = z
     url: value.url,
   }))
 
+const ticketPriceSchema = z
+  .object({
+    description: optionalLimitedString('票价描述', CONTENT_LIMITS.event.ticketPriceDescription),
+    price: z
+      .number({ error: '票价必须是数字' })
+      .finite('票价必须是有效数字')
+      .min(0, '票价不能小于 0'),
+  })
+  .strict()
+  .transform(({ description, price }) => {
+    const trimmedDescription = description?.trim()
+    return {
+      ...(trimmedDescription ? { description: trimmedDescription } : {}),
+      price,
+    }
+  })
+
 const imageInstructionSchema = z.union([
   z.object({ imageId: z.string().trim().min(1) }),
   z.object({ assetId: z.string().trim().min(1) }),
@@ -66,7 +83,7 @@ export const eventWriteSchema = z.object({
   content: limitedString('活动内容', CONTENT_LIMITS.event.content).optional().default(''),
   timeSlots: z.array(timeSlotSchema).max(CONTENT_LIMITS.event.timeSlots).optional().default([]),
   ticketPrices: z
-    .array(limitedString('票价', CONTENT_LIMITS.event.ticketPrice).trim().min(1, '票价不能为空'))
+    .array(ticketPriceSchema)
     .max(CONTENT_LIMITS.event.ticketPrices)
     .optional()
     .default([]),

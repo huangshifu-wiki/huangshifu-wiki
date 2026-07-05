@@ -56,7 +56,7 @@ export const CONTENT_LIMITS = {
     location: 200,
     content: 500 * 1024,
     timeSlots: 30,
-    ticketPrice: 100,
+    ticketPriceDescription: 100,
     ticketPrices: 30,
     saleTimes: 30,
     saleTimeNote: 100,
