@@ -357,7 +357,7 @@ export const DefaultHome = () => {
               to="/gallery"
               className="flex items-center gap-2 rounded border border-border px-5 py-2.5 text-[0.9375rem] text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
             >
-              <ImageIcon size={16} /> 图集馆
+              <ImageIcon size={16} /> 画廊
             </Link>
             <Link
               to="/music"
@@ -373,12 +373,12 @@ export const DefaultHome = () => {
             icon={<ImageIcon size={18} />}
             title="最近图集"
             to="/gallery"
-            actionLabel="进入图集馆"
+            actionLabel="进入画廊"
           />
           {loadState.galleries === 'loading' ? (
             <GallerySkeleton />
           ) : loadState.galleries === 'error' ? (
-            <EmptyState label="图集暂时无法加载" to="/gallery" actionLabel="进入图集馆" />
+            <EmptyState label="图集暂时无法加载" to="/gallery" actionLabel="进入画廊" />
           ) : featuredGallery ? (
             <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr]">
               <GalleryTile gallery={featuredGallery} featured />
@@ -389,7 +389,7 @@ export const DefaultHome = () => {
               </div>
             </div>
           ) : (
-            <EmptyState label="暂无已发布图集" to="/gallery" actionLabel="进入图集馆" />
+            <EmptyState label="暂无已发布图集" to="/gallery" actionLabel="进入画廊" />
           )}
         </section>
 

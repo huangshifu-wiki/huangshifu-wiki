@@ -366,7 +366,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                     className="space-y-4"
                   >
                     <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
-                      <ImageIcon size={14} className="text-brand-gold" /> 图集馆
+                      <ImageIcon size={14} className="text-brand-gold" /> 画廊
                     </h2>
                     <div className={resultGridClassName}>
                       {results.galleries.map((gallery) => (

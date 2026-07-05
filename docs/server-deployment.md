@@ -1256,7 +1256,7 @@ pm2 restart huangshifu-wiki --update-env
   - **部署注意**：需执行 `npm run download:sensitive-words` 下载敏感词库
 - **新增用户视图偏好设置**：用户可以选择四种内容展示模式（大图标、中图标、小图标、列表），偏好设置存储在 `User.preferences` 字段（JSON 类型），支持以下页面：
   - 百科页面（Wiki）
-  - 图集馆（Gallery）
+  - 画廊（Gallery）
   - 音乐页面（Music）
   - 搜索结果（Search）
 - **API 变更**：`PATCH /api/users/me` 新增支持 `preferences` 字段，可更新用户偏好设置
