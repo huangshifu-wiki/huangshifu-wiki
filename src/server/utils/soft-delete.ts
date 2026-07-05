@@ -5,6 +5,7 @@ export const SOFT_DELETE_TABS = [
   'wiki',
   'posts',
   'galleries',
+  'events',
   'users',
   'music',
   'albums',

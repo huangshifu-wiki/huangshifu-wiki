@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   Ban,
   Book,
+  Calendar,
   CheckCircle,
   Edit3,
   Image as ImageIcon,
@@ -49,6 +50,7 @@ type ListType =
   | 'music'
   | 'posts'
   | 'galleries'
+  | 'events'
   | 'sections'
   | 'announcements'
 
@@ -158,6 +160,20 @@ const configMap: Record<ListType, ListConfig> = {
     ],
     hasCreate: false,
   },
+  events: {
+    title: '活动管理',
+    icon: Calendar,
+    apiPath: 'events',
+    columns: [
+      { key: 'details', label: '活动', className: 'min-w-[280px]' },
+      { key: 'status', label: '公开', className: 'min-w-[110px]' },
+      { key: 'owner', label: '创建者', className: 'min-w-[140px]' },
+      { key: 'media', label: '图片/地点', className: 'min-w-[170px]' },
+      { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
+      { key: 'actions', label: '操作', className: 'min-w-[260px] text-left' },
+    ],
+    hasCreate: false,
+  },
   sections: {
     title: '版块管理',
     icon: Layers,
@@ -241,6 +257,7 @@ const getItemHref = (type: ListType, item: AdminDataItem) => {
   if (type === 'wiki' && item.slug) return `/wiki/${item.slug}`
   if (type === 'posts' && item.id) return `/forum/${item.id}`
   if (type === 'galleries' && item.id) return `/gallery/${item.id}`
+  if (type === 'events' && item.slug) return `/events/${item.slug}`
   if (type === 'music' && item.docId) return `/music/${item.docId}`
   return null
 }
@@ -295,9 +312,13 @@ const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementT
 
   return (
     <div className="flex items-center gap-3">
-      {type === 'galleries' ? (
+      {type === 'galleries' || type === 'events' ? (
         <SmartImage
-          src={(getImages(item)[0] as { thumbnailUrl?: string } | undefined)?.thumbnailUrl || ''}
+          src={
+            type === 'events'
+              ? String(item.coverThumbnailUrl || item.coverUrl || '')
+              : (getImages(item)[0] as { thumbnailUrl?: string } | undefined)?.thumbnailUrl || ''
+          }
           alt=""
           className="h-11 w-11 rounded bg-surface-alt object-cover"
         />
@@ -334,6 +355,7 @@ const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementT
           {type === 'wiki' && `slug: ${toText(item.slug)}`}
           {type === 'posts' && `ID: ${toText(item.id)}`}
           {type === 'galleries' && `ID: ${toText(item.id)}`}
+          {type === 'events' && `slug: ${toText(item.slug)}`}
           {type === 'music' && `docId: ${toText(item.docId)}`}
           {type === 'sections' && `ID: ${toText(item.id)}`}
           {type === 'wiki-categories' && `ID: ${toText(item.id)}`}
@@ -351,6 +373,9 @@ const renderStatus = (type: ListType, item: AdminDataItem) => {
       item.active ? '启用中' : '已禁用',
       item.active ? 'theme-status-success' : 'bg-surface-alt text-text-muted'
     )
+  }
+  if (type === 'events') {
+    return renderBadge('公开', 'theme-status-success')
   }
   if (type === 'galleries') {
     const status = toOptionalText(item.status) as ContentStatus | null
@@ -392,6 +417,14 @@ const renderOwner = (type: ListType, item: AdminDataItem) => {
       <div className="space-y-1 text-xs">
         <p className="font-medium text-text-primary">{toText(item.lastEditorName, '匿名')}</p>
         <p className="text-text-muted">{toText(item.lastEditorUid)}</p>
+      </div>
+    )
+  }
+  if (type === 'events') {
+    return (
+      <div className="space-y-1 text-xs">
+        <p className="font-medium text-text-primary">{toText(item.createdByName, '匿名')}</p>
+        <p className="text-text-muted">{toText(item.createdByUid)}</p>
       </div>
     )
   }
@@ -471,8 +504,17 @@ const renderExternalSources = (item: AdminDataItem) => {
 
 const renderMedia = (item: AdminDataItem) => (
   <div className="space-y-1 text-xs text-text-muted">
-    <p>图片：{getImages(item).length}</p>
-    <p className="truncate">版权：{toText(item.copyright, '未填写')}</p>
+    {'posters' in item ? (
+      <>
+        <p>海报：{Array.isArray(item.posters) ? item.posters.length : 0}</p>
+        <p className="truncate">地点：{toText(item.location, '未填写')}</p>
+      </>
+    ) : (
+      <>
+        <p>图片：{getImages(item).length}</p>
+        <p className="truncate">版权：{toText(item.copyright, '未填写')}</p>
+      </>
+    )}
   </div>
 )
 
@@ -911,6 +953,12 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             编辑
           </button>
         )}
+        {type === 'events' && !item.isDeleted && !isPending && item.id && (
+          <Link to={`/admin/events/${item.id}/edit`} className={WARNING_BUTTON_CLASSES}>
+            <Edit3 size={14} />
+            编辑
+          </Link>
+        )}
         {!isPending && item.isDeleted ? (
           <>
             <button
@@ -967,6 +1015,14 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                   <Plus size={14} className="mr-1 inline" /> 导入音乐
                 </button>
               </>
+            )}
+            {type === 'events' && (
+              <Link
+                to="/admin/events/new"
+                className="rounded theme-button-primary px-4 py-2 text-sm transition-all"
+              >
+                <Plus size={14} className="mr-1 inline" /> 新增活动
+              </Link>
             )}
             <button
               onClick={handleToggleDeleted}

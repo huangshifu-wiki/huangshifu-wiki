@@ -186,16 +186,69 @@ export interface GalleryItem {
   images: GalleryImageItem[]
 }
 
+export type ThumbnailStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
 export interface GalleryImageItem {
   id: string
   assetId: string | null
   url: string
   originalUrl?: string | null
   thumbnailUrl?: string | null
-  thumbnailStatus?: 'pending' | 'processing' | 'completed' | 'failed' | null
+  thumbnailStatus?: ThumbnailStatus | null
   name: string
   mimeType: string | null
   sizeBytes: number | null
+}
+
+export interface EventTimeSlot {
+  type: 'date' | 'datetime'
+  start: string
+  end?: string
+}
+
+export interface EventSaleTime {
+  time: string
+  note?: string
+}
+
+export interface EventExternalLink {
+  label: string
+  url: string
+}
+
+export interface EventPosterItem extends Pick<
+  GalleryImageItem,
+  'id' | 'assetId' | 'url' | 'originalUrl' | 'thumbnailUrl' | 'thumbnailStatus' | 'name'
+> {}
+
+export interface EventItem {
+  id: string
+  slug: string
+  title: string
+  location: string
+  content: string
+  timeSlots: EventTimeSlot[]
+  ticketPrices: string[]
+  saleTimes: EventSaleTime[]
+  lineup: string[]
+  externalLinks: EventExternalLink[]
+  sortStart: string | null
+  sortEnd: string | null
+  coverAssetId: string | null
+  coverUrl: string | null
+  coverName: string | null
+  coverThumbnailUrl?: string | null
+  coverThumbnailStatus?: ThumbnailStatus | null
+  createdByUid: string
+  createdByName: string | null
+  updatedByUid: string | null
+  updatedByName: string | null
+  deletedAt?: string | null
+  deletedBy?: string | null
+  isDeleted?: boolean
+  createdAt: string
+  updatedAt: string
+  posters: EventPosterItem[]
 }
 
 export interface AnnouncementItem {

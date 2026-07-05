@@ -23,6 +23,8 @@ import {
   toPostResponse,
   toGalleryResponse,
   toGalleryListResponse,
+  toEventResponse,
+  toEventListResponse,
   toUserResponse,
   toEditLockResponse,
   toMusicResponse,
@@ -101,6 +103,18 @@ const __dirname = path.dirname(__filename)
 
 const router = createRouter()
 const BACKUP_RESTORE_RESPONSE_TIMEOUT_MS = 15 * 60 * 1000
+
+const adminEventInclude = {
+  coverAsset: true,
+  createdBy: { select: { displayName: true } },
+  updatedBy: { select: { displayName: true } },
+  posters: {
+    include: {
+      asset: true,
+    },
+    orderBy: { sortOrder: 'asc' as const },
+  },
+}
 
 function canManageTargetUserRole(
   operatorRole: AuthenticatedRequest['authUser']['role'] | undefined,
@@ -311,6 +325,34 @@ async function permanentlyDeleteGalleryById(id: string) {
 
   await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
   await Promise.all(imagesWithoutAsset.map((image) => cleanupUntrackedUploadImageByUrl(image.url)))
+
+  return true
+}
+
+async function permanentlyDeleteEventById(id: string) {
+  const event = await prisma.event.findUnique({
+    where: { id },
+    include: { posters: true },
+  })
+  if (!event) return false
+
+  const assetIds = [
+    ...new Set(
+      [event.coverAssetId, ...event.posters.map((poster) => poster.assetId)].filter(isString)
+    ),
+  ]
+  const imageUrlsWithoutAsset = [
+    ...event.posters
+      .filter((poster) => !poster.assetId)
+      .map((poster) => poster.url)
+      .filter(isString),
+    ...(event.coverAssetId ? [] : [event.coverUrl].filter(isString)),
+  ]
+
+  await prisma.event.delete({ where: { id } })
+
+  await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
+  await Promise.all(imageUrlsWithoutAsset.map((url) => cleanupUntrackedUploadImageByUrl(url)))
 
   return true
 }
@@ -2459,6 +2501,17 @@ router.get(
         return
       }
 
+      if (tab === 'events') {
+        const data = await prisma.event.findMany({
+          where: activeWhere,
+          include: adminEventInclude,
+          orderBy: { updatedAt: 'desc' },
+          take: 100,
+        })
+        res.json({ data: await toEventListResponse(data) })
+        return
+      }
+
       if (tab === 'users') {
         const data = await prisma.user.findMany({
           where: activeWhere,
@@ -2674,6 +2727,19 @@ router.get(
         return
       }
 
+      if (tab === 'events') {
+        const item = await prisma.event.findUnique({
+          where: { id },
+          include: adminEventInclude,
+        })
+        if (!item) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        res.json({ item: await toEventResponse(item) })
+        return
+      }
+
       if (tab === 'users') {
         const item = await prisma.user.findUnique({
           where: { uid: id },
@@ -2882,6 +2948,25 @@ router.delete(
         res.json({ success: true })
         return
       }
+
+      if (tab === 'events') {
+        const event = await prisma.event.findUnique({
+          where: { id },
+          select: { id: true, deletedAt: true },
+        })
+        if (!event || event.deletedAt) {
+          res.status(404).json({ error: '活动不存在' })
+          return
+        }
+
+        await prisma.event.update({
+          where: { id: event.id },
+          data: softDeleteData(req.authUser!.uid),
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
       if (tab === 'music') {
         await prisma.musicTrack.update({
           where: { docId: id },
@@ -3044,6 +3129,24 @@ router.post(
         res.json({ success: true })
         return
       }
+      if (tab === 'events') {
+        const event = await prisma.event.findUnique({
+          where: { id },
+          select: { id: true },
+        })
+        if (!event) {
+          res.status(404).json({ error: '活动不存在' })
+          return
+        }
+
+        await prisma.event.update({
+          where: { id: event.id },
+          data: { ...restoreDeleteData, updatedByUid: req.authUser!.uid },
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
       if (tab === 'music') {
         await prisma.musicTrack.update({ where: { docId: id }, data: restoreDeleteData })
         invalidateSoftDeleteCaches(tab)
@@ -3140,6 +3243,16 @@ router.delete(
         const deleted = await permanentlyDeleteGalleryById(id)
         if (!deleted) {
           res.status(404).json({ error: '图集不存在' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'events') {
+        const deleted = await permanentlyDeleteEventById(id)
+        if (!deleted) {
+          res.status(404).json({ error: '活动不存在' })
           return
         }
         invalidateSoftDeleteCaches(tab)

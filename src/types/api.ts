@@ -1,4 +1,4 @@
-import type { AlbumItem, GalleryItem, SongItem } from './entities'
+import type { AlbumItem, EventItem, GalleryItem, SongItem } from './entities'
 
 export interface ApiResponse<T> {
   data: T
@@ -87,6 +87,25 @@ export interface UploadFileResponse {
 
 export interface GalleryCreateResponse {
   gallery: GalleryItem
+}
+
+export interface EventListResponse {
+  events: EventItem[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  hasMore: boolean
+}
+
+export interface EventDetailResponse {
+  event: EventItem
+}
+
+export interface EventCreateResponse extends EventDetailResponse {}
+
+export interface AdminEventDetailResponse {
+  item: EventItem
 }
 
 export interface ImageStats {

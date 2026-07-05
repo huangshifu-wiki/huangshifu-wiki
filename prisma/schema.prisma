@@ -175,6 +175,8 @@ model User {
   wikiReviewedPullRequests WikiPullRequest[] @relation("WikiPullRequestReviewer")
   wikiPullRequestComments WikiPullRequestComment[] @relation("WikiPRCommentAuthor")
   galleries     Gallery[]      @relation("UserGalleries")
+  createdEvents Event[]        @relation("EventCreator")
+  updatedEvents Event[]        @relation("EventUpdater")
   postLikes     PostLike[]
   postDislikes  PostDislike[] @relation("UserDislikes")
   wikiLikes     WikiLike[]
@@ -718,6 +720,8 @@ model MediaAsset {
   owner      User            @relation(fields: [ownerUid], references: [uid], onDelete: Cascade)
   session    UploadSession?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   galleryImages GalleryImage[] @relation("GalleryImageAsset")
+  eventCovers Event[]         @relation("EventCoverAsset")
+  eventPosters EventPoster[]  @relation("EventPosterAsset")
   songCovers SongCover[]     @relation("SongCoverAsset")
   albumCovers AlbumCover[]   @relation("AlbumCoverAsset")
 
@@ -737,6 +741,57 @@ model GalleryImage {
   embedding ImageEmbedding?
 
   @@index([galleryId, sortOrder])
+  @@index([assetId])
+}
+
+model Event {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  title        String
+  location     String
+  content      String
+  timeSlots    Json     @default("[]")
+  ticketPrices Json     @default("[]")
+  saleTimes    Json     @default("[]")
+  lineup       Json     @default("[]")
+  externalLinks Json    @default("[]")
+  sortStart    String?
+  sortEnd      String?
+  coverAssetId String?
+  coverUrl     String?
+  coverName    String?
+  createdByUid String
+  updatedByUid String?
+  deletedAt    DateTime?
+  deletedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  coverAsset   MediaAsset? @relation("EventCoverAsset", fields: [coverAssetId], references: [id], onDelete: SetNull)
+  createdBy    User     @relation("EventCreator", fields: [createdByUid], references: [uid], onDelete: Cascade)
+  updatedBy    User?    @relation("EventUpdater", fields: [updatedByUid], references: [uid], onDelete: SetNull)
+  posters      EventPoster[]
+
+  @@index([sortStart])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([deletedAt])
+  @@index([coverAssetId])
+  @@index([createdByUid])
+  @@index([slug(ops: raw("gin_trgm_ops"))], map: "Event_slug_trgm_idx", type: Gin)
+  @@index([title(ops: raw("gin_trgm_ops"))], map: "Event_title_trgm_idx", type: Gin)
+}
+
+model EventPoster {
+  id        String   @id @default(cuid())
+  eventId   String
+  assetId   String?
+  url       String
+  name      String
+  sortOrder Int      @default(0)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  asset     MediaAsset? @relation("EventPosterAsset", fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, sortOrder])
   @@index([assetId])
 }
 

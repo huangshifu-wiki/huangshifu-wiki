@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockMediaAssetFindUnique = vi.fn()
-const mockMediaAssetCount = vi.fn()
+const mockMediaAssetFindMany = vi.fn()
 const mockMediaAssetUpdate = vi.fn()
-const mockGalleryImageCount = vi.fn()
-const mockSongCoverCount = vi.fn()
-const mockAlbumCoverCount = vi.fn()
+const mockGalleryImageFindFirst = vi.fn()
+const mockEventFindFirst = vi.fn()
+const mockEventPosterFindFirst = vi.fn()
+const mockSongCoverFindFirst = vi.fn()
+const mockAlbumCoverFindFirst = vi.fn()
 const mockImageMapFindMany = vi.fn()
-const mockImageMapDelete = vi.fn()
 const mockImageMapUpdate = vi.fn()
 const mockSafeDeleteUploadFileByStorageKey = vi.fn()
 const mockSafeDeleteUploadFileByUrl = vi.fn()
@@ -17,21 +18,26 @@ vi.mock('../../../src/server/prisma', () => ({
   prisma: {
     mediaAsset: {
       findUnique: mockMediaAssetFindUnique,
-      count: mockMediaAssetCount,
+      findMany: mockMediaAssetFindMany,
       update: mockMediaAssetUpdate,
     },
     galleryImage: {
-      count: mockGalleryImageCount,
+      findFirst: mockGalleryImageFindFirst,
+    },
+    event: {
+      findFirst: mockEventFindFirst,
+    },
+    eventPoster: {
+      findFirst: mockEventPosterFindFirst,
     },
     songCover: {
-      count: mockSongCoverCount,
+      findFirst: mockSongCoverFindFirst,
     },
     albumCover: {
-      count: mockAlbumCoverCount,
+      findFirst: mockAlbumCoverFindFirst,
     },
     imageMap: {
       findMany: mockImageMapFindMany,
-      delete: mockImageMapDelete,
       update: mockImageMapUpdate,
     },
   },
@@ -61,14 +67,15 @@ beforeEach(() => {
     storageKey: 'galleries/test.jpg',
     publicUrl: '/uploads/galleries/test.jpg',
   })
-  mockGalleryImageCount.mockResolvedValue(0)
-  mockSongCoverCount.mockResolvedValue(0)
-  mockAlbumCoverCount.mockResolvedValue(0)
-  mockMediaAssetCount.mockResolvedValue(0)
+  mockGalleryImageFindFirst.mockResolvedValue(null)
+  mockEventFindFirst.mockResolvedValue(null)
+  mockEventPosterFindFirst.mockResolvedValue(null)
+  mockSongCoverFindFirst.mockResolvedValue(null)
+  mockAlbumCoverFindFirst.mockResolvedValue(null)
+  mockMediaAssetFindMany.mockResolvedValue([])
   mockImageMapFindMany.mockResolvedValue([
     { id: 'image-map-1', localUrl: '/uploads/galleries/test.jpg' },
   ])
-  mockImageMapDelete.mockResolvedValue({ id: 'image-map-1' })
   mockImageMapUpdate.mockResolvedValue({ id: 'image-map-1' })
   mockMediaAssetUpdate.mockResolvedValue({ id: 'asset-1', status: 'deleted' })
   mockSafeDeleteUploadFileByStorageKey.mockResolvedValue(undefined)
@@ -78,7 +85,7 @@ beforeEach(() => {
 
 describe('mediaAssetCleanupService', () => {
   it('资产仍被业务引用时不删除原图和变体', async () => {
-    mockGalleryImageCount.mockResolvedValue(1)
+    mockGalleryImageFindFirst.mockResolvedValue({ id: 'gallery-image-1' })
 
     const { cleanupUnusedMediaAssetById } =
       await import('../../../src/server/services/mediaAssetCleanupService')
@@ -88,7 +95,20 @@ describe('mediaAssetCleanupService', () => {
     expect(result.skippedReason).toBe('still_referenced')
     expect(mockSafeDeleteUploadFileByStorageKey).not.toHaveBeenCalled()
     expect(mockVariantCleanupByImageMapId).not.toHaveBeenCalled()
-    expect(mockImageMapDelete).not.toHaveBeenCalled()
+    expect(mockMediaAssetUpdate).not.toHaveBeenCalled()
+  })
+
+  it('资产被活动封面或海报引用时不删除', async () => {
+    mockEventFindFirst.mockResolvedValue({ id: 'event-1' })
+    mockEventPosterFindFirst.mockResolvedValue({ id: 'event-poster-1' })
+
+    const { cleanupUnusedMediaAssetById } =
+      await import('../../../src/server/services/mediaAssetCleanupService')
+
+    const result = await cleanupUnusedMediaAssetById('asset-1')
+
+    expect(result.skippedReason).toBe('still_referenced')
+    expect(mockSafeDeleteUploadFileByStorageKey).not.toHaveBeenCalled()
     expect(mockMediaAssetUpdate).not.toHaveBeenCalled()
   })
 

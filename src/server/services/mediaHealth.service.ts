@@ -207,12 +207,20 @@ async function collectPagedText<T extends Record<string, string | null>>(
 
 async function collectBusinessReferences(prisma: PrismaClient) {
   const references = createReferenceIndex()
-  const [users, galleryImages, songCovers, albumCovers] = await Promise.all([
+  const [users, galleryImages, events, eventPosters, songCovers, albumCovers] = await Promise.all([
     prisma.user.findMany({
       where: { photoURL: { not: null }, deletedAt: null },
       select: { uid: true, photoURL: true },
     }),
     prisma.galleryImage.findMany({
+      select: { id: true, url: true, assetId: true },
+    }),
+    prisma.event.findMany({
+      where: { deletedAt: null },
+      select: { id: true, coverUrl: true, coverAssetId: true },
+    }),
+    prisma.eventPoster.findMany({
+      where: { event: { deletedAt: null } },
       select: { id: true, url: true, assetId: true },
     }),
     prisma.songCover.findMany({
@@ -238,6 +246,30 @@ async function collectBusinessReferences(prisma: PrismaClient) {
     })
     addMediaAssetReference(references, item.assetId, {
       source: 'GalleryImage',
+      id: item.id,
+      field: 'assetId',
+    })
+  }
+  for (const item of events) {
+    addUrlFieldReference(references, item.coverUrl, {
+      source: 'Event',
+      id: item.id,
+      field: 'coverUrl',
+    })
+    addMediaAssetReference(references, item.coverAssetId, {
+      source: 'Event',
+      id: item.id,
+      field: 'coverAssetId',
+    })
+  }
+  for (const item of eventPosters) {
+    addUrlFieldReference(references, item.url, {
+      source: 'EventPoster',
+      id: item.id,
+      field: 'url',
+    })
+    addMediaAssetReference(references, item.assetId, {
+      source: 'EventPoster',
       id: item.id,
       field: 'assetId',
     })
@@ -363,6 +395,21 @@ async function collectCurrentTextReferences(prisma: PrismaClient, references: Re
     pageSize,
     ['content'],
     (row, field) => ({ source: 'Post', id: row.id, field: String(field) })
+  )
+
+  await collectPagedText(
+    (skip) =>
+      prisma.event.findMany({
+        skip,
+        take: pageSize,
+        where: { deletedAt: null },
+        select: { id: true, content: true },
+        orderBy: { id: 'asc' },
+      }),
+    references,
+    pageSize,
+    ['content'],
+    (row, field) => ({ source: 'Event', id: row.id, field: String(field) })
   )
 
   await collectPagedText(

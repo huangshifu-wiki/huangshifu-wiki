@@ -30,14 +30,16 @@ function getAssetLocalUrls(asset: Pick<MediaAssetRecord, 'storageKey' | 'publicU
   return uniqueValues([asset.publicUrl, buildUploadPublicUrl(asset.storageKey)])
 }
 
-async function countStructuredMediaAssetReferences(assetId: string) {
-  const [galleryImages, songCovers, albumCovers] = await Promise.all([
-    prisma.galleryImage.count({ where: { assetId } }),
-    prisma.songCover.count({ where: { assetId } }),
-    prisma.albumCover.count({ where: { assetId } }),
+async function hasStructuredMediaAssetReferences(assetId: string) {
+  const references = await Promise.all([
+    prisma.galleryImage.findFirst({ where: { assetId }, select: { id: true } }),
+    prisma.event.findFirst({ where: { coverAssetId: assetId }, select: { id: true } }),
+    prisma.eventPoster.findFirst({ where: { assetId }, select: { id: true } }),
+    prisma.songCover.findFirst({ where: { assetId }, select: { id: true } }),
+    prisma.albumCover.findFirst({ where: { assetId }, select: { id: true } }),
   ])
 
-  return galleryImages + songCovers + albumCovers
+  return references.some(Boolean)
 }
 
 async function cleanupImageMapsByLocalUrls(localUrls: string[], assetId?: string) {
@@ -49,21 +51,24 @@ async function cleanupImageMapsByLocalUrls(localUrls: string[], assetId?: string
     where: { localUrl: { in: localUrls }, deletedAt: null },
     select: { id: true, localUrl: true },
   })
+  const sharedAssets = imageMaps.length
+    ? await prisma.mediaAsset.findMany({
+        where: {
+          publicUrl: { in: uniqueValues(imageMaps.map((imageMap) => imageMap.localUrl)) },
+          status: { not: 'deleted' },
+          ...(assetId ? { id: { not: assetId } } : {}),
+        },
+        select: { publicUrl: true },
+      })
+    : []
+  const sharedLocalUrls = new Set(sharedAssets.map((asset) => asset.publicUrl))
 
   const deletedImageMapIds: string[] = []
   let skippedShared = false
   let skippedProcessing = false
 
   for (const imageMap of imageMaps) {
-    const otherAssetCount = await prisma.mediaAsset.count({
-      where: {
-        publicUrl: imageMap.localUrl,
-        status: { not: 'deleted' },
-        ...(assetId ? { id: { not: assetId } } : {}),
-      },
-    })
-
-    if (otherAssetCount > 0) {
+    if (sharedLocalUrls.has(imageMap.localUrl)) {
       skippedShared = true
       continue
     }
@@ -115,10 +120,10 @@ export async function cleanupUnusedMediaAssetById(
     }
   }
 
-  const referenceCount = await countStructuredMediaAssetReferences(asset.id)
+  const hasReferences = await hasStructuredMediaAssetReferences(asset.id)
   const localUrls = getAssetLocalUrls(asset)
 
-  if (referenceCount > 0) {
+  if (hasReferences) {
     return {
       assetId: asset.id,
       localUrls,

@@ -1,0 +1,248 @@
+import React, { useEffect, useMemo, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { ArrowLeft, Calendar, ExternalLink, MapPin, Ticket, Users } from '@/src/components/icons'
+import { SmartImage } from '../components/SmartImage'
+import { Lightbox } from '../components/Lightbox'
+import MarkdownRenderer from '../components/MarkdownRenderer'
+import { PageSkeleton } from '../components/PageSkeleton'
+import { apiGet } from '../lib/apiClient'
+import { formatDateTime } from '../lib/dateUtils'
+import { formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
+import type { EventDetailResponse } from '../types/api'
+import type { EventItem } from '../types/entities'
+
+const EventDetail = () => {
+  const { slug } = useParams()
+  const [event, setEvent] = useState<EventItem | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
+
+  useEffect(() => {
+    if (!slug) return
+    let cancelled = false
+    setLoading(true)
+    apiGet<EventDetailResponse>(`/api/events/${slug}`)
+      .then((data) => {
+        if (!cancelled) setEvent(data.event)
+      })
+      .catch((error) => {
+        console.error('Fetch event detail failed:', error)
+        if (!cancelled) setEvent(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [slug])
+
+  const lightboxImages = useMemo(
+    () =>
+      (event?.posters || []).map((poster) => ({
+        id: poster.id,
+        url: poster.originalUrl || poster.url,
+        name: poster.name,
+      })),
+    [event?.posters]
+  )
+
+  if (loading) return <PageSkeleton />
+
+  if (!event) {
+    return (
+      <div className="mx-auto max-w-[900px] px-6 py-16 text-center">
+        <p className="mb-4 text-text-muted">活动不存在或已删除</p>
+        <Link to="/events" className="text-sm text-brand-gold hover:underline">
+          返回活动列表
+        </Link>
+      </div>
+    )
+  }
+
+  const coverSrc = getEventCoverSrc(event, true)
+
+  return (
+    <div className="mx-auto max-w-[1000px] px-6 py-8">
+      <Link
+        to="/events"
+        className="mb-6 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
+      >
+        <ArrowLeft size={16} />
+        返回活动
+      </Link>
+
+      <article className="space-y-8">
+        <header className="grid gap-6 lg:grid-cols-[360px_1fr]">
+          <div className="aspect-[4/3] overflow-hidden rounded bg-surface-alt">
+            {coverSrc ? (
+              <SmartImage
+                src={coverSrc}
+                alt={event.title}
+                className="h-full w-full object-cover"
+                loading="eager"
+                fetchpriority="high"
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text-muted">
+                <Calendar size={32} className="text-brand-gold/60" />
+                <span className="text-sm">暂无封面</span>
+              </div>
+            )}
+          </div>
+
+          <div className="min-w-0 space-y-5">
+            <h1 className="text-3xl font-bold tracking-[0.08em] text-text-primary">
+              {event.title}
+            </h1>
+            <div className="space-y-3 text-sm text-text-secondary">
+              <div className="flex gap-2">
+                <Calendar size={16} className="mt-0.5 shrink-0 text-brand-gold" />
+                <div className="space-y-1">
+                  {event.timeSlots.length ? (
+                    event.timeSlots.map((slot, index) => (
+                      <p key={`${slot.start}-${index}`}>{formatEventTimeSlot(slot)}</p>
+                    ))
+                  ) : (
+                    <p>时间待定</p>
+                  )}
+                </div>
+              </div>
+              <p className="flex items-center gap-2">
+                <MapPin size={16} className="text-brand-gold" />
+                {event.location || '地点待定'}
+              </p>
+              <p className="text-xs text-text-muted">更新于 {formatDateTime(event.updatedAt)}</p>
+            </div>
+          </div>
+        </header>
+
+        {event.content ? (
+          <section className="prose prose-lg max-w-none font-body leading-relaxed text-text-primary">
+            <MarkdownRenderer content={event.content} />
+          </section>
+        ) : null}
+
+        <section className="grid gap-4 md:grid-cols-2">
+          <div className="rounded border border-border bg-surface p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <Ticket size={16} className="text-brand-gold" />
+              票价
+            </h2>
+            {event.ticketPrices.length ? (
+              <ul className="space-y-2 text-sm text-text-secondary">
+                {event.ticketPrices.map((price, index) => (
+                  <li key={`${price}-${index}`}>{price}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-text-muted">暂无票价信息</p>
+            )}
+          </div>
+
+          <div className="rounded border border-border bg-surface p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <Calendar size={16} className="text-brand-gold" />
+              起售时间
+            </h2>
+            {event.saleTimes.length ? (
+              <ul className="space-y-2 text-sm text-text-secondary">
+                {event.saleTimes.map((saleTime, index) => (
+                  <li key={`${saleTime.time}-${index}`}>
+                    {formatDateTime(saleTime.time)}
+                    {saleTime.note ? ` · ${saleTime.note}` : ''}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-text-muted">暂无起售信息</p>
+            )}
+          </div>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2">
+          <div className="rounded border border-border bg-surface p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <Users size={16} className="text-brand-gold" />
+              阵容
+            </h2>
+            {event.lineup.length ? (
+              <div className="flex flex-wrap gap-2">
+                {event.lineup.map((item, index) => (
+                  <span
+                    key={`${item}-${index}`}
+                    className="rounded bg-surface-alt px-2 py-1 text-xs text-brand-gold"
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-text-muted">暂无阵容信息</p>
+            )}
+          </div>
+
+          <div className="rounded border border-border bg-surface p-5">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <ExternalLink size={16} className="text-brand-gold" />
+              外部链接
+            </h2>
+            {event.externalLinks.length ? (
+              <div className="space-y-2">
+                {event.externalLinks.map((link) => (
+                  <a
+                    key={link.url}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-sm text-brand-gold hover:underline"
+                  >
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-text-muted">暂无外部链接</p>
+            )}
+          </div>
+        </section>
+
+        {event.posters.length ? (
+          <section>
+            <h2 className="mb-4 text-base font-semibold text-text-primary">海报</h2>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {event.posters.map((poster, index) => (
+                <button
+                  key={poster.id}
+                  type="button"
+                  onClick={() => {
+                    setLightboxIndex(index)
+                    setLightboxOpen(true)
+                  }}
+                  className="aspect-[3/4] overflow-hidden rounded bg-surface-alt"
+                >
+                  <SmartImage
+                    src={poster.url}
+                    alt={poster.name}
+                    className="h-full w-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </article>
+
+      <Lightbox
+        images={lightboxImages}
+        initialIndex={lightboxIndex}
+        open={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+      />
+    </div>
+  )
+}
+
+export default EventDetail

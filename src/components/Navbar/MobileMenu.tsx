@@ -7,6 +7,7 @@ import {
   History,
   MessageSquare,
   Image as ImageIcon,
+  Calendar,
   LogIn,
   LogOut,
   Shield,
@@ -85,6 +86,14 @@ export const MobileMenu = ({
             >
               <Music size={24} />
               <span className="text-xs font-bold">{t('nav.music')}</span>
+            </NavLink>
+            <NavLink
+              to="/events"
+              onClick={onClose}
+              className="flex flex-col items-center gap-2 p-4 bg-surface-alt rounded text-brand-gold"
+            >
+              <Calendar size={24} />
+              <span className="text-xs font-bold">{t('nav.events')}</span>
             </NavLink>
           </div>
 

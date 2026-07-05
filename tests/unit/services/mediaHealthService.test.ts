@@ -51,6 +51,8 @@ function createPrismaMock(data: Record<string, unknown[]> = {}) {
     },
     user: { findMany: findMany('user', data) },
     galleryImage: { findMany: findMany('galleryImage', data) },
+    event: { findMany: findMany('event', data) },
+    eventPoster: { findMany: findMany('eventPoster', data) },
     songCover: { findMany: findMany('songCover', data) },
     albumCover: { findMany: findMany('albumCover', data) },
     wikiImageEmbedding: { findMany: findMany('wikiImageEmbedding', data) },

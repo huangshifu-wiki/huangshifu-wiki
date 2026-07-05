@@ -680,6 +680,171 @@ export async function toGalleryListResponse(galleries: GalleryInput[], storageSt
   }))
 }
 
+type EventImageInput = {
+  id: string
+  url: string
+  name: string
+  sortOrder: number
+  assetId?: string | null
+  asset?: {
+    id: string
+    publicUrl: string
+    fileName: string
+    mimeType: string
+    sizeBytes: number
+    status: string
+    storageKey: string
+  } | null
+}
+
+type EventInput = {
+  id: string
+  slug: string
+  title: string
+  location: string
+  content: string
+  timeSlots: unknown
+  ticketPrices: unknown
+  saleTimes: unknown
+  lineup: unknown
+  externalLinks: unknown
+  sortStart?: string | null
+  sortEnd?: string | null
+  coverAssetId?: string | null
+  coverUrl?: string | null
+  coverName?: string | null
+  coverAsset?: EventImageInput['asset']
+  createdByUid: string
+  updatedByUid?: string | null
+  deletedAt?: Date | null
+  deletedBy?: string | null
+  createdAt: Date
+  updatedAt: Date
+  createdBy?: { displayName: string } | null
+  updatedBy?: { displayName: string } | null
+  posters: EventImageInput[]
+}
+
+function arrayJson(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : []
+}
+
+function resolveEventCoverImage(event: EventInput): EventImageInput | null {
+  if (!event.coverUrl && !event.coverAsset?.publicUrl) return null
+  return {
+    id: event.coverAssetId || 'cover',
+    assetId: event.coverAssetId || null,
+    url: event.coverUrl || event.coverAsset?.publicUrl || '',
+    name: event.coverName || event.coverAsset?.fileName || 'cover',
+    sortOrder: 0,
+    asset: event.coverAsset || null,
+  }
+}
+
+function collectEventImageMaps(events: EventInput[]) {
+  const localUrls: string[] = []
+  for (const event of events) {
+    const cover = resolveEventCoverImage(event)
+    if (cover) {
+      const coverLocalUrl = resolveGalleryImageLocalUrl(cover)
+      if (coverLocalUrl) localUrls.push(coverLocalUrl)
+    }
+    for (const poster of event.posters) {
+      const localUrl = resolveGalleryImageLocalUrl(poster)
+      if (localUrl) localUrls.push(localUrl)
+    }
+  }
+  return localUrls
+}
+
+async function loadImageMapsByLocalUrl(localUrls: string[]) {
+  if (localUrls.length === 0) return new Map<string, GalleryImageMapEntry>()
+  const uniqueLocalUrls = [...new Set(localUrls)]
+  const imageMaps = await prisma.imageMap.findMany({
+    where: {
+      deletedAt: null,
+      localUrl: { in: uniqueLocalUrls },
+    },
+    select: {
+      localUrl: true,
+      externalUrl: true,
+      s3Url: true,
+      thumbnailUrl: true,
+      variantStatus: true,
+    },
+  })
+  return new Map(imageMaps.map((im) => [im.localUrl, im]))
+}
+
+function toEventPosterResponse(
+  image: EventImageInput,
+  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
+) {
+  const thumbnailUrl = resolveThumbnailUrl(image, imageMapByLocalUrl)
+  const originalUrl = resolveImageUrl(image, imageMapByLocalUrl)
+
+  return {
+    id: image.id,
+    assetId: image.assetId || image.asset?.id || null,
+    url: thumbnailUrl || originalUrl,
+    originalUrl,
+    thumbnailUrl,
+    thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
+    name: image.asset?.fileName || image.name,
+  }
+}
+
+function toEventResponseWithImageMaps(
+  event: EventInput,
+  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
+) {
+  const cover = resolveEventCoverImage(event)
+  const coverResponse = cover ? toEventPosterResponse(cover, imageMapByLocalUrl) : null
+
+  return {
+    id: event.id,
+    slug: event.slug,
+    title: event.title,
+    location: event.location,
+    content: event.content,
+    timeSlots: arrayJson(event.timeSlots),
+    ticketPrices: arrayJson(event.ticketPrices),
+    saleTimes: arrayJson(event.saleTimes),
+    lineup: arrayJson(event.lineup),
+    externalLinks: arrayJson(event.externalLinks),
+    sortStart: event.sortStart || null,
+    sortEnd: event.sortEnd || null,
+    coverAssetId: event.coverAssetId || null,
+    coverUrl: coverResponse?.originalUrl || event.coverUrl || null,
+    coverName: event.coverName || event.coverAsset?.fileName || null,
+    coverThumbnailUrl: coverResponse?.thumbnailUrl || null,
+    coverThumbnailStatus: coverResponse?.thumbnailStatus || null,
+    createdByUid: event.createdByUid,
+    createdByName: event.createdBy?.displayName || null,
+    updatedByUid: event.updatedByUid || null,
+    updatedByName: event.updatedBy?.displayName || null,
+    isDeleted: Boolean(event.deletedAt),
+    deletedAt: event.deletedAt ? event.deletedAt.toISOString() : null,
+    deletedBy: event.deletedBy || null,
+    createdAt: event.createdAt.toISOString(),
+    updatedAt: event.updatedAt.toISOString(),
+    posters: [...event.posters]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((poster) => toEventPosterResponse(poster, imageMapByLocalUrl)),
+  }
+}
+
+export async function toEventResponse(event: EventInput) {
+  const imageMapByLocalUrl = await loadImageMapsByLocalUrl(collectEventImageMaps([event]))
+  return toEventResponseWithImageMaps(event, imageMapByLocalUrl)
+}
+
+export async function toEventListResponse(events: EventInput[]) {
+  if (events.length === 0) return []
+  const imageMapByLocalUrl = await loadImageMapsByLocalUrl(collectEventImageMaps(events))
+  return events.map((event) => toEventResponseWithImageMaps(event, imageMapByLocalUrl))
+}
+
 export function toMusicResponse(track: {
   docId: string
   title: string

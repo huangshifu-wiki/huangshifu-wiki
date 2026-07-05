@@ -184,6 +184,8 @@ export async function collectReferencedStorageKeys(prisma: PrismaClient) {
     imageMaps,
     users,
     galleryImages,
+    events,
+    eventPosters,
     songCovers,
     albumCovers,
     wikiEmbeddings,
@@ -202,6 +204,14 @@ export async function collectReferencedStorageKeys(prisma: PrismaClient) {
       select: { uid: true, photoURL: true },
     }),
     prisma.galleryImage.findMany({ select: { id: true, url: true } }),
+    prisma.event.findMany({
+      where: { deletedAt: null },
+      select: { id: true, coverUrl: true },
+    }),
+    prisma.eventPoster.findMany({
+      where: { event: { deletedAt: null } },
+      select: { id: true, url: true },
+    }),
     prisma.songCover.findMany({
       select: { id: true, storageKey: true, publicUrl: true, thumbnailUrl: true },
     }),
@@ -249,6 +259,22 @@ export async function collectReferencedStorageKeys(prisma: PrismaClient) {
   for (const item of galleryImages) {
     addReference(references, item.url, {
       source: 'GalleryImage',
+      id: item.id,
+      field: 'url',
+    })
+  }
+
+  for (const item of events) {
+    addReference(references, item.coverUrl, {
+      source: 'Event',
+      id: item.id,
+      field: 'coverUrl',
+    })
+  }
+
+  for (const item of eventPosters) {
+    addReference(references, item.url, {
+      source: 'EventPoster',
       id: item.id,
       field: 'url',
     })
@@ -326,6 +352,21 @@ async function collectTextReferences(prisma: PrismaClient, references: Reference
     pageSize,
     ['content'],
     (row, field) => ({ source: 'WikiPage', id: row.id, field: String(field) })
+  )
+
+  await collectPagedText(
+    (skip) =>
+      prisma.event.findMany({
+        skip,
+        take: pageSize,
+        where: { deletedAt: null },
+        select: { id: true, content: true },
+        orderBy: { id: 'asc' },
+      }),
+    references,
+    pageSize,
+    ['content'],
+    (row, field) => ({ source: 'Event', id: row.id, field: String(field) })
   )
 
   await collectPagedText(

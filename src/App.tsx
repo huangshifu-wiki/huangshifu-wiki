@@ -27,6 +27,8 @@ const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m
 const Forum = lazy(() => import('./pages/Forum').then((m) => ({ default: m.default })))
 const Music = lazy(() => import('./pages/Music').then((m) => ({ default: m.default })))
 const Gallery = lazy(() => import('./pages/Gallery').then((m) => ({ default: m.default })))
+const Events = lazy(() => import('./pages/Events').then((m) => ({ default: m.default })))
+const EventDetail = lazy(() => import('./pages/EventDetail').then((m) => ({ default: m.default })))
 const GalleryDetail = lazy(() =>
   import('./pages/GalleryDetail').then((m) => ({ default: m.default }))
 )
@@ -153,6 +155,8 @@ const MainLayout = () => {
               <Route path="/gallery/new" element={<GalleryEdit />} />
               <Route path="/gallery/:galleryId/edit" element={<GalleryEdit />} />
               <Route path="/gallery/:galleryId" element={<GalleryDetail />} />
+              <Route path="/events" element={<Events />} />
+              <Route path="/events/:slug" element={<EventDetail />} />
               <Route path="/music" element={<Music />} />
               <Route path="/music/links" element={<Navigate to="/admin/music" replace />} />
               <Route path="/music/:songId" element={<MusicDetail />} />

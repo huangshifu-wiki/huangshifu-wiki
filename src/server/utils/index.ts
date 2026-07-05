@@ -123,6 +123,8 @@ export {
   toCommentResponse,
   toGalleryResponse,
   toGalleryListResponse,
+  toEventResponse,
+  toEventListResponse,
   toMusicResponse,
   toEditLockResponse,
   toUserResponse,

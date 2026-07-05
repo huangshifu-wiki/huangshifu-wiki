@@ -5,6 +5,7 @@ import {
   Book,
   MessageSquare,
   Image as ImageIcon,
+  Calendar,
   Search,
   Home,
 } from '@/src/components/icons'
@@ -16,6 +17,7 @@ export const BottomNav = () => {
     { to: '/wiki', icon: Book, label: '百科' },
     { to: '/forum', icon: MessageSquare, label: '社区' },
     { to: '/gallery', icon: ImageIcon, label: '图集' },
+    { to: '/events', icon: Calendar, label: '活动' },
     { to: '/music', icon: Music, label: '音乐' },
     { to: '/search', icon: Search, label: '搜索' },
   ]

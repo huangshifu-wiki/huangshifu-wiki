@@ -13,6 +13,7 @@ import {
   Megaphone,
   Lock,
   FileText,
+  Calendar,
   Shield,
   Database,
   Cpu,
@@ -58,6 +59,7 @@ const contentNav: AdminNavItem[] = [
   { id: 'music', label: '音乐管理', path: '/admin/music', icon: Music },
   { id: 'posts', label: '帖子管理', path: '/admin/posts', icon: MessageSquare },
   { id: 'galleries', label: '图集管理', path: '/admin/galleries', icon: ImageIcon },
+  { id: 'events', label: '活动管理', path: '/admin/events', icon: Calendar },
   { id: 'sections', label: '版块管理', path: '/admin/sections', icon: Layers },
   { id: 'announcements', label: '公告管理', path: '/admin/announcements', icon: Megaphone },
 ]

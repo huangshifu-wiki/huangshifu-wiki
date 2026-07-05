@@ -18,6 +18,8 @@ function createPrismaMock(overrides: Record<string, unknown[]> = {}) {
     imageMap: { findMany: findMany('imageMap') },
     user: { findMany: findMany('user') },
     galleryImage: { findMany: findMany('galleryImage') },
+    event: { findMany: findMany('event') },
+    eventPoster: { findMany: findMany('eventPoster') },
     songCover: { findMany: findMany('songCover') },
     albumCover: { findMany: findMany('albumCover') },
     wikiImageEmbedding: { findMany: findMany('wikiImageEmbedding') },

@@ -23,6 +23,7 @@ export {
   postCommentSchema,
 } from './post.schema'
 export { galleryDeleteSchema } from './gallery.schema'
+export { eventWriteSchema } from './event.schema'
 export {
   backupCreateSchema,
   backupNoteSchema,
