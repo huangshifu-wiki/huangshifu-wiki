@@ -347,12 +347,6 @@ export const DefaultHome = () => {
         <header className="mb-14 grid gap-8 border-b border-border pb-10 lg:grid-cols-[1fr_360px] lg:items-end">
           <div>
             <p className="mb-3 text-sm tracking-[0.22em] text-brand-gold">诗扶小筑</p>
-            <h1
-              className="mb-4 text-[3.5rem] font-bold leading-tight tracking-[0.15em] text-text-primary sm:text-[5rem]"
-              style={{ fontFamily: HOME_SERIF_FONT }}
-            >
-              黄诗扶
-            </h1>
             <p className="max-w-[34rem] text-[1rem] leading-8 tracking-[0.08em] text-text-secondary sm:text-[1.125rem]">
               人生难得一知音
             </p>
