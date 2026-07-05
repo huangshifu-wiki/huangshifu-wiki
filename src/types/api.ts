@@ -358,6 +358,7 @@ export interface WikiListResponse extends PaginatedResponse<WikiDetailResponse['
 export interface PostDetailResponse {
   post: {
     id: string
+    slug: string
     title: string
     content: string
     sectionId: string
@@ -403,6 +404,7 @@ export interface AlbumListResponse {
 export interface MusicDetailResponse {
   song: {
     docId: string
+    slug: string
     title: string
     artists: string[]
     lyricists?: string[]
@@ -592,21 +594,27 @@ export type TextSearchResult =
       sourceId: string
       score: number
       chunkPreview: string
-      entity: { id: string; title?: string; [key: string]: unknown }
+      entity: { id: string; slug?: string; title?: string; [key: string]: unknown }
     }
   | {
       sourceType: 'music'
       sourceId: string
       score: number
       chunkPreview: string
-      entity: { id: string; title?: string; artists?: string[]; [key: string]: unknown }
+      entity: {
+        id: string
+        slug?: string
+        title?: string
+        artists?: string[]
+        [key: string]: unknown
+      }
     }
   | {
       sourceType: 'album'
       sourceId: string
       score: number
       chunkPreview: string
-      entity: { id: string; title?: string; artist?: string; [key: string]: unknown }
+      entity: { id: string; slug?: string; title?: string; artist?: string; [key: string]: unknown }
     }
 
 export interface TextSearchResponse {

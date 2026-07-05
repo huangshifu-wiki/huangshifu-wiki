@@ -64,6 +64,8 @@ export {
   trimText,
 } from './textLimits'
 
+export { allocateNumericSlug, isNumericSlug, withNumericSlugTransaction } from './numericSlug'
+
 export {
   buildUniqueDisplayNameFallback,
   normalizeDisplayNameFallback,

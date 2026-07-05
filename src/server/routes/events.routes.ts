@@ -12,8 +12,9 @@ import {
   restoreDeleteData,
   toEventResponse,
   toEventListResponse,
+  allocateNumericSlug,
+  isNumericSlug,
 } from '../utils'
-import { normalizeWikiPageSlug } from '../../lib/wikiSlug'
 import { syncGalleryImageToImageMapWithVariant } from '../services/galleryImageSyncService'
 import {
   cleanupUnusedMediaAssetById,
@@ -33,23 +34,6 @@ const eventInclude = {
     },
     orderBy: { sortOrder: 'asc' as const },
   },
-}
-
-function normalizeEventSlug(value: unknown) {
-  return normalizeWikiPageSlug(value).replace(/^-+|-+$/g, '')
-}
-
-async function buildUniqueEventSlug(title: string, slug: string | undefined, currentId?: string) {
-  const base = normalizeEventSlug(slug || title) || `event-${Date.now()}`
-  for (let index = 0; index < 100; index += 1) {
-    const candidate = index === 0 ? base : `${base}-${index + 1}`
-    const existing = await prisma.event.findUnique({
-      where: { slug: candidate },
-      select: { id: true },
-    })
-    if (!existing || existing.id === currentId) return candidate
-  }
-  return `${base}-${Date.now()}`
 }
 
 function deriveEventSortFields(timeSlots: EventWriteInput['timeSlots']) {
@@ -221,6 +205,11 @@ router.get(
 router.get(
   '/:slug',
   asyncHandler(async (req, res) => {
+    if (!isNumericSlug(req.params.slug)) {
+      res.status(404).json({ error: '活动不存在' })
+      return
+    }
+
     const event = await prisma.event.findFirst({
       where: { slug: req.params.slug, deletedAt: null },
       include: eventInclude,
@@ -241,7 +230,6 @@ router.post(
   validateBody(eventWriteSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const input = req.body as EventWriteInput
-    const slug = await buildUniqueEventSlug(input.title, input.slug)
     const coverAsset = await resolveAsset(input.coverAssetId, req.authUser!.uid)
     if (input.coverAssetId && !coverAsset) {
       res.status(400).json({ error: '封面资源无效或无权限' })
@@ -251,6 +239,7 @@ router.post(
 
     let createdAssetIds: string[] = []
     const event = await prisma.$transaction(async (tx) => {
+      const slug = await allocateNumericSlug(tx, 'Event')
       const posterCreateData = await buildPosterCreateData(input.posters, req.authUser!.uid, tx)
       createdAssetIds = posterCreateData
         .map((poster) => poster.assetId)
@@ -307,7 +296,6 @@ router.put(
       return
     }
 
-    const slug = await buildUniqueEventSlug(input.title, input.slug || current.slug, current.id)
     const coverAsset = await resolveAsset(
       input.coverAssetId,
       req.authUser!.uid,
@@ -340,7 +328,6 @@ router.put(
       return tx.event.update({
         where: { id: current.id },
         data: {
-          slug,
           title: input.title,
           location: input.location,
           content: input.content,

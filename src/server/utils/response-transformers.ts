@@ -308,6 +308,7 @@ export function toWikiPullRequestResponse(pr: WikiPullRequestWithRelations) {
 
 export function toPostResponse(post: {
   id: string
+  slug?: string
   title: string
   section: string
   musicDocId?: string | null
@@ -425,6 +426,7 @@ export function toCommentResponse(
 
 type GalleryInput = {
   id: string
+  slug?: string
   title: string
   description: string
   authorUid: string
@@ -561,6 +563,7 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
 
   return {
     id: gallery.id,
+    slug: gallery.slug || gallery.id,
     title: gallery.title,
     description: gallery.description,
     authorUid: gallery.authorUid,
@@ -638,6 +641,7 @@ export async function toGalleryListResponse(galleries: GalleryInput[], storageSt
 
   return galleries.map((gallery) => ({
     id: gallery.id,
+    slug: gallery.slug || gallery.id,
     title: gallery.title,
     description: gallery.description,
     authorUid: gallery.authorUid,
@@ -847,6 +851,7 @@ export async function toEventListResponse(events: EventInput[]) {
 
 export function toMusicResponse(track: {
   docId: string
+  slug?: string
   title: string
   artists: string[]
   lyricists?: string[]
@@ -901,6 +906,7 @@ export function toMusicResponse(track: {
 
   return {
     docId: track.docId,
+    slug: track.slug || track.docId,
     title: track.title,
     artists: normalizeStringListInput(track.artists),
     lyricists: normalizeStringListInput(track.lyricists),
@@ -1034,6 +1040,7 @@ export function toSongResponse(
 
   const base = {
     docId: song.docId,
+    slug: song.slug || song.docId,
     title: song.title,
     artists: normalizeStringListInput(song.artists),
     lyricists: normalizeStringListInput(song.lyricists),
@@ -1064,6 +1071,7 @@ export function toSongResponse(
     linkedAlbums: song.albumRelations.map((relation) => ({
       albumDocId: relation.albumDocId,
       albumId: relation.album.docId,
+      albumSlug: relation.album.slug,
       title: relation.album.title,
       artist: relation.album.artist,
       discNumber: relation.discNumber,
@@ -1087,6 +1095,7 @@ export function toSongResponse(
 
 export function toAlbumResponse(album: {
   docId: string
+  slug?: string
   title: string
   artist: string
   description: string | null
@@ -1112,6 +1121,7 @@ export function toAlbumResponse(album: {
     isDisplay: boolean
     song?: {
       docId: string
+      slug?: string
       title: string
       artists: string[]
       coverId: string | null
@@ -1137,6 +1147,7 @@ export function toAlbumResponse(album: {
 
   return {
     docId: album.docId,
+    slug: album.slug || album.docId,
     title: album.title,
     artist: album.artist,
     cover: coverUrl,
@@ -1164,6 +1175,7 @@ export function toAlbumResponse(album: {
       song: relation.song
         ? {
             docId: relation.song.docId,
+            slug: relation.song.slug || relation.song.docId,
             title: relation.song.title,
             artists: normalizeStringListInput(relation.song.artists),
             cover: resolveSongCoverUrl(relation.song),

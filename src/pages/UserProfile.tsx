@@ -77,7 +77,7 @@ function formatTime(value: string) {
 
 function getFavoriteLink(item: FavoriteItem | HistoryItem) {
   if (item.targetType === 'wiki') return `/wiki/${item.target?.slug || item.targetId}`
-  if (item.targetType === 'post') return `/forum/${item.target?.id || item.targetId}`
+  if (item.targetType === 'post') return `/forum/${item.target?.slug || item.targetId}`
   return '/music'
 }
 
@@ -595,7 +595,7 @@ export default function UserProfile() {
               <ul>
                 {posts.map((post) => (
                   <li key={post.id} className="border-b border-border last:border-b-0">
-                    <Link to={`/forum/${post.id}`} className="group block py-3">
+                    <Link to={`/forum/${post.slug || post.id}`} className="group block py-3">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
@@ -624,7 +624,10 @@ export default function UserProfile() {
               <ul>
                 {galleries.map((gallery) => (
                   <li key={gallery.id} className="border-b border-border last:border-b-0">
-                    <Link to={`/gallery/${gallery.id}`} className="group flex gap-3 py-3">
+                    <Link
+                      to={`/gallery/${gallery.slug || gallery.id}`}
+                      className="group flex gap-3 py-3"
+                    >
                       <div className="h-16 w-16 shrink-0 overflow-hidden rounded bg-surface-alt">
                         {gallery.images?.[0]?.thumbnailUrl ? (
                           <img

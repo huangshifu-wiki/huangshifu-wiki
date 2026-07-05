@@ -5,6 +5,7 @@ interface ReviewNotificationPayload {
   action?: 'deleted' | 'restored'
   targetType?: 'wiki' | 'post' | 'gallery'
   targetId?: string
+  targetSlug?: string
   title?: string
   note?: string | null
   status?: 'draft' | 'pending' | 'published' | 'rejected' | string | null
@@ -13,7 +14,7 @@ interface ReviewNotificationPayload {
 
 const RESTORED_WIKI_LINKABLE_STATUSES = new Set(['draft', 'pending', 'published'])
 
-type ReplyTarget = { kind: 'post' | 'gallery'; id: string }
+type ReplyTarget = { kind: 'post' | 'gallery'; id: string; slug?: string }
 
 function getPayloadText(payload: NotificationItem['payload'], key: string) {
   const value = payload[key]
@@ -24,11 +25,13 @@ function getPayloadText(payload: NotificationItem['payload'], key: string) {
 // 单一来源，供文案与链接共用，避免两处判定不一致。
 function resolveReplyTarget(payload: NotificationItem['payload']): ReplyTarget | null {
   const galleryId = typeof payload.galleryId === 'string' ? payload.galleryId : null
+  const gallerySlug = typeof payload.gallerySlug === 'string' ? payload.gallerySlug : undefined
   const postId = typeof payload.postId === 'string' ? payload.postId : null
+  const postSlug = typeof payload.postSlug === 'string' ? payload.postSlug : undefined
   if (payload.targetType === 'gallery' || (!payload.targetType && galleryId)) {
-    return galleryId ? { kind: 'gallery', id: galleryId } : null
+    return galleryId ? { kind: 'gallery', id: galleryId, slug: gallerySlug } : null
   }
-  return postId ? { kind: 'post', id: postId } : null
+  return postId ? { kind: 'post', id: postId, slug: postSlug } : null
 }
 
 export function getNotificationText(notif: NotificationItem) {
@@ -92,7 +95,8 @@ export function getNotificationLink(notif: NotificationItem) {
   if (notif.type === 'reply' || notif.type === 'like' || notif.type === 'mention') {
     const target = resolveReplyTarget(notif.payload)
     if (!target) return null
-    const base = target.kind === 'gallery' ? `/gallery/${target.id}` : `/forum/${target.id}`
+    const publicId = target.slug || target.id
+    const base = target.kind === 'gallery' ? `/gallery/${publicId}` : `/forum/${publicId}`
     const commentId = getPayloadText(notif.payload, 'commentId')
     return commentId ? `${base}#comment-${commentId}` : base
   }
@@ -103,7 +107,7 @@ export function getNotificationLink(notif: NotificationItem) {
     if (payload.targetType === 'wiki' && typeof payload.targetId === 'string') {
       if (payload.action === 'restored') {
         if (typeof payload.linkable === 'boolean') {
-          return payload.linkable ? `/wiki/${payload.targetId}` : null
+          return payload.linkable ? `/wiki/${payload.targetSlug || payload.targetId}` : null
         }
 
         if (!RESTORED_WIKI_LINKABLE_STATUSES.has(String(payload.status || ''))) {
@@ -115,7 +119,7 @@ export function getNotificationLink(notif: NotificationItem) {
         return null
       }
 
-      return `/wiki/${payload.targetId}`
+      return `/wiki/${payload.targetSlug || payload.targetId}`
     }
 
     if (payload.targetType === 'post' && typeof payload.targetId === 'string') {
@@ -124,10 +128,10 @@ export function getNotificationLink(notif: NotificationItem) {
       }
 
       if (payload.action === 'restored' && typeof payload.linkable === 'boolean') {
-        return payload.linkable ? `/forum/${payload.targetId}` : null
+        return payload.linkable ? `/forum/${payload.targetSlug || payload.targetId}` : null
       }
 
-      return `/forum/${payload.targetId}`
+      return `/forum/${payload.targetSlug || payload.targetId}`
     }
 
     if (payload.targetType === 'gallery' && typeof payload.targetId === 'string') {
@@ -135,7 +139,7 @@ export function getNotificationLink(notif: NotificationItem) {
         return null
       }
 
-      return `/gallery/${payload.targetId}`
+      return `/gallery/${payload.targetSlug || payload.targetId}`
     }
   }
 

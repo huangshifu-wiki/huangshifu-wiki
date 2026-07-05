@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
@@ -24,7 +24,6 @@ import {
   isEventTicketPrice,
 } from '../../lib/eventFormat'
 import { formatUploadLimitWithSize, UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
-import { normalizeWikiPageSlug } from '../../lib/wikiSlug'
 import { uploadImageWithStrategy } from '../../services/imageService'
 import type {
   AdminEventDetailResponse,
@@ -61,7 +60,6 @@ type JsonEditorState = {
 
 type EventDraft = {
   title: string
-  slug: string
   location: string
   content: string
   timeSlots: EventTimeSlot[]
@@ -92,7 +90,6 @@ const createEmptyTicketPrice = (): EditableTicketPrice => ({ description: '', pr
 
 const createEmptyDraft = (): EventDraft => ({
   title: '',
-  slug: '',
   location: '',
   content: '',
   timeSlots: [{ type: 'datetime', start: '', end: '' }],
@@ -125,7 +122,6 @@ const toEditableTicketPrice = (ticketPrice: unknown): EditableTicketPrice => {
 
 const createDraftFromEvent = (event: EventItem): EventDraft => ({
   title: event.title,
-  slug: event.slug,
   location: event.location || '',
   content: event.content || '',
   timeSlots: event.timeSlots.length ? event.timeSlots : [{ type: 'datetime', start: '', end: '' }],
@@ -321,11 +317,6 @@ const AdminEventEdit = () => {
     }
   }, [eventId, navigate, show])
 
-  const derivedSlug = useMemo(
-    () => normalizeWikiPageSlug(draft.slug || draft.title).replace(/^-+|-+$/g, ''),
-    [draft.slug, draft.title]
-  )
-
   const patchDraft = (patch: Partial<EventDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }))
   }
@@ -466,7 +457,6 @@ const AdminEventEdit = () => {
 
     const payload = {
       title: draft.title.trim(),
-      slug: derivedSlug,
       location: draft.location.trim(),
       content: draft.content,
       timeSlots: normalizeTimeSlots(draft.timeSlots),
@@ -537,13 +527,6 @@ const AdminEventEdit = () => {
                 onChange={(event) => patchDraft({ title: event.target.value })}
                 maxLength={CONTENT_LIMITS.event.title}
                 placeholder="活动标题"
-                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none"
-              />
-              <input
-                value={draft.slug}
-                onChange={(event) => patchDraft({ slug: event.target.value })}
-                maxLength={CONTENT_LIMITS.event.slug}
-                placeholder={`路径：${derivedSlug || '根据标题生成'}`}
                 className="rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none"
               />
               <input

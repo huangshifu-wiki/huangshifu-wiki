@@ -155,7 +155,7 @@ function GalleryTile({ gallery, featured = false }: { gallery: GalleryItem; feat
 
   return (
     <Link
-      to={`/gallery/${gallery.id}`}
+      to={`/gallery/${gallery.slug || gallery.id}`}
       className={clsx(
         'group relative block overflow-hidden rounded bg-surface-alt',
         featured ? 'min-h-[320px] sm:min-h-[420px]' : 'aspect-[4/3] min-h-[132px]'
@@ -424,7 +424,10 @@ export const DefaultHome = () => {
                       )}
                     >
                       <SongCover song={song} active={active} />
-                      <Link to={`/music/${song.docId}`} className="min-w-0 flex-1 group">
+                      <Link
+                        to={`/music/${song.slug || song.docId}`}
+                        className="min-w-0 flex-1 group"
+                      >
                         <h3
                           className={clsx(
                             'truncate text-[1rem] font-semibold tracking-[0.03em] transition-colors group-hover:text-brand-gold',
@@ -483,10 +486,11 @@ export const DefaultHome = () => {
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-1">
                 {albums.map((album) => {
                   const albumId = album.docId || ''
+                  const albumSlug = album.slug || album.docId || ''
                   return (
                     <Link
                       key={albumId}
-                      to={`/album/${albumId}`}
+                      to={`/album/${albumSlug}`}
                       className="group min-w-0 lg:flex lg:items-center lg:gap-3"
                     >
                       <div className="mb-2 aspect-square overflow-hidden rounded bg-surface-alt lg:mb-0 lg:h-16 lg:w-16 lg:flex-shrink-0">

@@ -72,6 +72,12 @@ export const prisma = new PrismaClient({
   },
 })
 
+let testNumericSlugCounter = Date.now() * 1000
+
+export function nextTestNumericSlug() {
+  return String((testNumericSlugCounter += 1))
+}
+
 /**
  * 全局设置：在所有测试前执行
  */
@@ -301,6 +307,7 @@ export async function createTestPost(input: CreateTestPostInput) {
 
   const post = await prisma.post.create({
     data: {
+      slug: nextTestNumericSlug(),
       title,
       section,
       content: input.content || 'This is a test post content.',
@@ -331,6 +338,7 @@ export async function createTestGallery(input: CreateTestGalleryInput) {
 
   return prisma.gallery.create({
     data: {
+      slug: nextTestNumericSlug(),
       title,
       description,
       authorUid: input.authorUid,

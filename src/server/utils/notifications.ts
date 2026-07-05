@@ -29,16 +29,57 @@ export async function createNotification(
   payload: Record<string, unknown>
 ) {
   try {
+    const enrichedPayload = await enrichNotificationPayload(payload)
     await prisma.notification.create({
       data: {
         userUid,
         type,
-        payload: payload as unknown as Prisma.InputJsonValue,
+        payload: enrichedPayload as unknown as Prisma.InputJsonValue,
       },
     })
   } catch (error) {
     console.error('Create notification error:', error)
   }
+}
+
+async function enrichNotificationPayload(payload: Record<string, unknown>) {
+  const next = { ...payload }
+  const targetType = typeof next.targetType === 'string' ? next.targetType : null
+  const targetId = typeof next.targetId === 'string' ? next.targetId : null
+  const postId = typeof next.postId === 'string' ? next.postId : null
+  const galleryId = typeof next.galleryId === 'string' ? next.galleryId : null
+
+  if (targetType === 'wiki' && targetId) {
+    next.targetSlug = targetId
+  }
+
+  if (targetType === 'post' && targetId && !next.targetSlug) {
+    const post = await prisma.post.findUnique({ where: { id: targetId }, select: { slug: true } })
+    if (post) next.targetSlug = post.slug
+  }
+
+  if (targetType === 'gallery' && targetId && !next.targetSlug) {
+    const gallery = await prisma.gallery.findUnique({
+      where: { id: targetId },
+      select: { slug: true },
+    })
+    if (gallery) next.targetSlug = gallery.slug
+  }
+
+  if (postId && !next.postSlug) {
+    const post = await prisma.post.findUnique({ where: { id: postId }, select: { slug: true } })
+    if (post) next.postSlug = post.slug
+  }
+
+  if (galleryId && !next.gallerySlug) {
+    const gallery = await prisma.gallery.findUnique({
+      where: { id: galleryId },
+      select: { slug: true },
+    })
+    if (gallery) next.gallerySlug = gallery.slug
+  }
+
+  return next
 }
 
 // 评论回复通知：顶层评论通知内容作者，回复评论通知被回复者；不给自己发。

@@ -25,6 +25,7 @@ import {
   createTestPost,
   createTestGallery,
   createTestWikiPage,
+  nextTestNumericSlug,
 } from './setup'
 import type { CreateTestPostInput } from './setup'
 import { WIKI_MAX_CONTENT_SIZE } from '../../src/lib/contentLimits'
@@ -1117,19 +1118,19 @@ describe('Users API - 用户接口测试', () => {
   describe('GET /api/users/:userId/wiki - 获取用户编辑过的百科列表', () => {
     it('本人应该看到自己最后编辑和历史修订过的百科', async () => {
       const lastEditedPage = await createTestWikiPage({
-        slug: `test-user-last-edited-${Date.now()}`,
+        slug: nextTestNumericSlug(),
         title: 'Test User Last Edited Wiki',
         status: 'published',
         authorUid: testUser.user.uid,
       })
       const revisionPage = await createTestWikiPage({
-        slug: `test-user-revision-edited-${Date.now()}`,
+        slug: nextTestNumericSlug(),
         title: 'Test User Revision Edited Wiki',
         status: 'published',
         authorUid: adminUser.user.uid,
       })
       const draftRevisionPage = await createTestWikiPage({
-        slug: `test-user-draft-revision-${Date.now()}`,
+        slug: nextTestNumericSlug(),
         title: 'Test User Draft Revision Wiki',
         status: 'draft',
         authorUid: testUser.user.uid,
@@ -1171,13 +1172,13 @@ describe('Users API - 用户接口测试', () => {
 
     it('访客只应该看到用户编辑过的已发布百科', async () => {
       const publishedPage = await createTestWikiPage({
-        slug: `test-public-user-wiki-${Date.now()}`,
+        slug: nextTestNumericSlug(),
         title: 'Test Public User Wiki',
         status: 'published',
         authorUid: testUser.user.uid,
       })
       await createTestWikiPage({
-        slug: `test-private-user-wiki-${Date.now()}`,
+        slug: nextTestNumericSlug(),
         title: 'Test Private User Wiki',
         status: 'draft',
         authorUid: testUser.user.uid,
@@ -1197,10 +1198,9 @@ describe('Users API - 用户接口测试', () => {
     })
 
     it('应该在数据库层按分页返回用户编辑过的百科', async () => {
-      const timestamp = Date.now()
       for (let index = 0; index < 5; index += 1) {
         await createTestWikiPage({
-          slug: `test-paginated-user-wiki-${timestamp}-${index}`,
+          slug: nextTestNumericSlug(),
           title: `Test Paginated User Wiki ${index}`,
           status: 'published',
           authorUid: testUser.user.uid,

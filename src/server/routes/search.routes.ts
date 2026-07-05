@@ -816,6 +816,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
           },
           select: {
             id: true,
+            slug: true,
             title: true,
             section: true,
             musicDocId: true,
@@ -896,6 +897,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
           },
           select: {
             docId: true,
+            slug: true,
             title: true,
             artists: true,
             lyricists: true,
@@ -929,6 +931,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                 album: {
                   select: {
                     docId: true,
+                    slug: true,
                     title: true,
                     artist: true,
                     releaseDate: true,
@@ -972,6 +975,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
           },
           select: {
             docId: true,
+            slug: true,
             title: true,
             artist: true,
             description: true,
@@ -996,6 +1000,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                 song: {
                   select: {
                     docId: true,
+                    slug: true,
                     title: true,
                     artists: true,
                     coverId: true,
@@ -1358,7 +1363,7 @@ router.get('/suggest', searchLimiter, async (req: AuthenticatedRequest, res) => 
           },
           orderBy: { updatedAt: 'desc' },
           take: 3,
-          select: { id: true, title: true, section: true },
+          select: { slug: true, title: true, section: true },
         }),
         prisma.musicTrack.findMany({
           where: {
@@ -1371,7 +1376,7 @@ router.get('/suggest', searchLimiter, async (req: AuthenticatedRequest, res) => 
           },
           orderBy: { updatedAt: 'desc' },
           take: 3,
-          select: { docId: true, title: true, artists: true },
+          select: { slug: true, title: true, artists: true },
         }),
         prisma.album.findMany({
           where: {
@@ -1380,7 +1385,7 @@ router.get('/suggest', searchLimiter, async (req: AuthenticatedRequest, res) => 
           },
           orderBy: { updatedAt: 'desc' },
           take: 3,
-          select: { docId: true, title: true, artist: true },
+          select: { slug: true, title: true, artist: true },
         }),
       ])
 
@@ -1400,7 +1405,7 @@ router.get('/suggest', searchLimiter, async (req: AuthenticatedRequest, res) => 
     })
 
     postMatches.forEach((p) => {
-      suggestions.push({ type: 'post', text: p.title, subtext: p.section, id: p.id })
+      suggestions.push({ type: 'post', text: p.title, subtext: p.section, id: p.slug })
     })
 
     musicMatches.forEach((m) => {
@@ -1408,12 +1413,12 @@ router.get('/suggest', searchLimiter, async (req: AuthenticatedRequest, res) => 
         type: 'music',
         text: m.title,
         subtext: formatMusicCredits(m.artists, '未知歌手'),
-        id: m.docId,
+        id: m.slug,
       })
     })
 
     albumMatches.forEach((a) => {
-      suggestions.push({ type: 'album', text: a.title, subtext: a.artist, id: a.docId })
+      suggestions.push({ type: 'album', text: a.title, subtext: a.artist, id: a.slug })
     })
 
     res.json({ suggestions })

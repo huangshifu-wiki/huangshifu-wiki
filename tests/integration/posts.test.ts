@@ -492,7 +492,7 @@ describe('Posts API - 文章接口测试', () => {
         ],
       })
 
-      const response = await request(app).get(`/api/posts/${post.id}`)
+      const response = await request(app).get(`/api/posts/${post.slug}`)
 
       expect(response.status).toBe(200)
 
@@ -538,7 +538,7 @@ describe('Posts API - 文章接口测试', () => {
       })
 
       // 第一次访问
-      const response1 = await request(app).get(`/api/posts/${post.id}`)
+      const response1 = await request(app).get(`/api/posts/${post.slug}`)
       expect(response1.status).toBe(200)
 
       // 从数据库获取更新后的浏览次数
@@ -577,7 +577,7 @@ describe('Posts API - 文章接口测试', () => {
 
       // 已认证用户访问
       const response = await request(app)
-        .get(`/api/posts/${post.id}`)
+        .get(`/api/posts/${post.slug}`)
         .set('Authorization', `Bearer ${userToken}`)
 
       expect(response.status).toBe(200)
@@ -598,7 +598,7 @@ describe('Posts API - 文章接口测试', () => {
       })
 
       // 未认证用户尝试访问草稿
-      const response = await request(app).get(`/api/posts/${draftPost.id}`)
+      const response = await request(app).get(`/api/posts/${draftPost.slug}`)
 
       expect(response.status).toBe(404)
       expect(response.body).toHaveProperty('error')
@@ -618,7 +618,7 @@ describe('Posts API - 文章接口测试', () => {
 
       // 作者访问自己的草稿
       const response = await request(app)
-        .get(`/api/posts/${draftPost.id}`)
+        .get(`/api/posts/${draftPost.slug}`)
         .set('Authorization', `Bearer ${userToken}`)
 
       expect(response.status).toBe(200)
@@ -654,7 +654,7 @@ describe('Posts API - 文章接口测试', () => {
         },
       })
 
-      const response = await request(app).get(`/api/posts/${post.id}`)
+      const response = await request(app).get(`/api/posts/${post.slug}`)
 
       expect(response.status).toBe(200)
       expect(response.body.comments.length).toBe(2)
@@ -903,7 +903,7 @@ describe('Posts API - 文章接口测试', () => {
       expect(dbChild?.deletedAt).toBeNull()
       expect(dbChild?.parentId).toBe(parent.id)
 
-      const publicResponse = await request(app).get(`/api/posts/${post.id}`)
+      const publicResponse = await request(app).get(`/api/posts/${post.slug}`)
       expect(publicResponse.status).toBe(200)
       expect(publicResponse.body.comments).toHaveLength(2)
       const publicParent = publicResponse.body.comments.find(
@@ -924,7 +924,7 @@ describe('Posts API - 文章接口测试', () => {
       })
 
       const adminResponse = await request(app)
-        .get(`/api/posts/${post.id}`)
+        .get(`/api/posts/${post.slug}`)
         .set('Authorization', `Bearer ${adminToken}`)
       expect(adminResponse.status).toBe(200)
       expect(adminResponse.body.comments[0].content).toBe('评论已删除')
@@ -932,7 +932,7 @@ describe('Posts API - 文章接口测试', () => {
       expect(adminResponse.body.comments[0].deletedByName).toBeNull()
 
       const adminWithDeletedResponse = await request(app)
-        .get(`/api/posts/${post.id}?includeDeleted=true`)
+        .get(`/api/posts/${post.slug}?includeDeleted=true`)
         .set('Authorization', `Bearer ${adminToken}`)
       expect(adminWithDeletedResponse.status).toBe(200)
       expect(adminWithDeletedResponse.body.comments[0].content).toBe('Parent comment content')
@@ -1070,14 +1070,14 @@ describe('Posts API - 文章接口测试', () => {
         .set('X-XSRF-TOKEN', xsrfToken)
       expect(deleteResponse.status).toBe(200)
 
-      const publicResponse = await request(app).get(`/api/posts/${post.id}`)
+      const publicResponse = await request(app).get(`/api/posts/${post.slug}`)
       expect(publicResponse.status).toBe(200)
       expect(publicResponse.body.comments.map((comment: { id: string }) => comment.id)).toEqual([
         parent.id,
       ])
 
       const adminWithDeletedResponse = await request(app)
-        .get(`/api/posts/${post.id}?includeDeleted=true`)
+        .get(`/api/posts/${post.slug}?includeDeleted=true`)
         .set('Authorization', `Bearer ${adminToken}`)
       expect(adminWithDeletedResponse.status).toBe(200)
       expect(
@@ -1167,7 +1167,7 @@ describe('Posts API - 文章接口测试', () => {
       expect(duplicateLikeResponse.status).toBe(200)
       expect(duplicateLikeResponse.body).toMatchObject({ likedByMe: true, likesCount: 1 })
 
-      const detailResponse = await agent.get(`/api/posts/${post.id}`)
+      const detailResponse = await agent.get(`/api/posts/${post.slug}`)
 
       expect(detailResponse.status).toBe(200)
       expect(detailResponse.body.comments[0]).toMatchObject({

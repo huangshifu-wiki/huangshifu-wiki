@@ -32,6 +32,8 @@ import {
   createNotification,
   notifyMentionUsers,
   resolveMentionTargetsForText,
+  allocateNumericSlug,
+  isNumericSlug,
 } from '../utils'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
@@ -396,11 +398,16 @@ router.get(
 )
 
 router.get(
-  '/:id',
+  '/:slug',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
+      if (!isNumericSlug(req.params.slug)) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
       const gallery = await prisma.gallery.findUnique({
-        where: { id: req.params.id },
+        where: { slug: req.params.slug },
         include: {
           images: {
             include: {
@@ -767,8 +774,10 @@ router.post(
           .filter((asset): asset is (typeof assets)[number] => Boolean(asset))
 
         const gallery = await prisma.$transaction(async (tx) => {
+          const slug = await allocateNumericSlug(tx, 'Gallery')
           const created = await tx.gallery.create({
             data: {
+              slug,
               title: finalTitle,
               description: finalDescription,
               authorUid: req.authUser!.uid,
@@ -886,8 +895,10 @@ router.post(
       }
 
       const gallery = await prisma.$transaction(async (tx) => {
+        const slug = await allocateNumericSlug(tx, 'Gallery')
         const created = await tx.gallery.create({
           data: {
+            slug,
             title: normalizedTitle,
             description: normalizedDescription,
             authorUid: req.authUser!.uid,

@@ -51,7 +51,7 @@ function galleryToConfig(
     id: gallery.id,
     title: gallery.title,
     description: gallery.description || undefined,
-    link: `/gallery/${gallery.id}`,
+    link: `/gallery/${gallery.slug || gallery.id}`,
     image: image?.thumbnailUrl || undefined,
     imagePlaceholder: shouldWaitForGalleryThumbnail(gallery) ? '生成中...' : undefined,
     meta: `${Array.isArray(gallery.images) ? gallery.images.length : 0} 张图片`,
@@ -64,7 +64,7 @@ function musicToConfig(track: SongItem): import('./SearchResultCard').SearchResu
     id: track.docId,
     title: track.title,
     subtitle: `${formatMusicCredits(track.artists, '未知歌手')} — ${track.album}`,
-    link: `/music/${track.docId}`,
+    link: `/music/${track.slug || track.docId}`,
     image: track.coverThumbnail || track.cover || undefined,
     type: 'music',
   }
@@ -75,7 +75,7 @@ function albumToConfig(album: AlbumItem): import('./SearchResultCard').SearchRes
     id: album.docId || album.title,
     title: album.title,
     subtitle: album.artist,
-    link: `/album/${album.docId}`,
+    link: `/album/${album.slug || album.docId}`,
     image: album.coverThumbnail || album.cover || undefined,
     meta: `${album.trackCount} 曲`,
     type: 'album',
@@ -87,7 +87,7 @@ function postToConfig(post: PostItem): import('./SearchResultCard').SearchResult
     id: post.id,
     title: post.title,
     description: (post.content || '').replace(/[#*`]/g, '').substring(0, 80),
-    link: `/forum/${post.id}`,
+    link: `/forum/${post.slug || post.id}`,
     tags: [post.section],
     meta: toDateValue(post.updatedAt) ? format(toDateValue(post.updatedAt)!, 'yyyy-MM-dd') : '刚刚',
     type: 'post',
@@ -106,11 +106,11 @@ function getTextSemanticLink(result: TextSearchResult): string {
     case 'wiki':
       return `/wiki/${result.entity.slug || result.sourceId}`
     case 'post':
-      return `/forum/${result.sourceId}`
+      return `/forum/${result.entity.slug || result.sourceId}`
     case 'music':
-      return `/music/${result.sourceId}`
+      return `/music/${result.entity.slug || result.sourceId}`
     case 'album':
-      return `/album/${result.sourceId}`
+      return `/album/${result.entity.slug || result.sourceId}`
     default:
       return '#'
   }

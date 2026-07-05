@@ -71,8 +71,8 @@ type ContentTab = 'posts' | 'wiki' | 'galleries' | 'comments'
 
 type UserCommentItem = CommentItem & {
   targetType?: 'post' | 'gallery'
-  target?: { id: string; title: string; status?: string; published?: boolean } | null
-  gallery?: { id: string; title: string; published: boolean } | null
+  target?: { id: string; slug?: string; title: string; status?: string; published?: boolean } | null
+  gallery?: { id: string; slug?: string; title: string; published: boolean } | null
   deletionReason?: string | null
 }
 
@@ -562,7 +562,7 @@ const Settings = () => {
           {myPosts.map((post) => (
             <li key={post.id} className="border-b border-border last:border-b-0">
               <Link
-                to={`/forum/${post.id}`}
+                to={`/forum/${post.slug || post.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={clsx(CONTENT_ITEM_LINK_CLASS, 'py-3')}
@@ -654,7 +654,7 @@ const Settings = () => {
           {myGalleries.map((gallery) => (
             <li key={gallery.id} className="border-b border-border last:border-b-0">
               <Link
-                to={`/gallery/${gallery.id}`}
+                to={`/gallery/${gallery.slug || gallery.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={clsx(CONTENT_ITEM_LINK_CLASS, 'flex gap-3 py-3')}
@@ -717,8 +717,8 @@ const Settings = () => {
           const canOpenComment = Boolean(target && (!comment.isDeleted || isAdmin))
           const sourceHref = target
             ? isGalleryComment
-              ? `/gallery/${target.id}`
-              : `/forum/${target.id}`
+              ? `/gallery/${target.slug || target.id}`
+              : `/forum/${target.slug || target.id}`
             : '#'
           const commentHref = canOpenComment ? `${sourceHref}#comment-${comment.id}` : '#'
           return (

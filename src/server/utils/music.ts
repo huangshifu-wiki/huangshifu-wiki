@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { prisma, PLAY_URL_CACHE_TTL_MS, DEFAULT_MUSIC_PLATFORMS } from './config'
 import { enhancedCache, CACHE_KEYS } from './cache'
 import { parseInteger } from './parsers'
+import { withNumericSlugTransaction } from './numericSlug'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { firstMusicCredit, normalizeStringListInput } from '../../lib/musicCredits'
 import type {
@@ -821,24 +822,27 @@ export async function createOrUpdateImportedSong(params: {
     }
   }
 
-  const song = await prisma.musicTrack.create({
-    data: {
-      title,
-      artists,
-      album,
-      audioUrl: resolvedAudioUrl || '',
-      lyric: resolvedLyric || null,
-      description: null,
-      externalSources: {
-        create: {
-          resourceType: 'song',
-          platform,
-          sourceId: platformId,
-          sourceUrl: track.sourceUrl || null,
-          isPrimary: true,
+  const song = await withNumericSlugTransaction(prisma, 'MusicTrack', async (tx, slug) => {
+    return tx.musicTrack.create({
+      data: {
+        slug,
+        title,
+        artists,
+        album,
+        audioUrl: resolvedAudioUrl || '',
+        lyric: resolvedLyric || null,
+        description: null,
+        externalSources: {
+          create: {
+            resourceType: 'song',
+            platform,
+            sourceId: platformId,
+            sourceUrl: track.sourceUrl || null,
+            isPrimary: true,
+          },
         },
       },
-    },
+    })
   })
   if (resolvedCover) {
     await maybeAddImportedSongCover(song.docId, resolvedCover, true)
@@ -944,6 +948,7 @@ export async function fetchSongsWithRelations(
           album: {
             select: {
               docId: true,
+              slug: true,
               title: true,
               artist: true,
               releaseDate: true,
@@ -1005,6 +1010,7 @@ export async function fetchSongWithRelationsByDocId(songDocId: string) {
           album: {
             select: {
               docId: true,
+              slug: true,
               title: true,
               artist: true,
               releaseDate: true,

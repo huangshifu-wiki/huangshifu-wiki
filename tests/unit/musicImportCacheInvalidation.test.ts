@@ -58,6 +58,9 @@ vi.mock('../../src/server/utils', () => ({
   createOrUpdateImportedSong: mockCreateOrUpdateImportedSong,
   addAlbumCoverFromUrl: mockAddAlbumCoverFromUrl,
   applyAlbumTracksToRelations: mockApplyAlbumTracksToRelations,
+  withNumericSlugTransaction: vi.fn(async (prismaLike, _table, callback) =>
+    callback(prismaLike, '1')
+  ),
   ensureTextLimit: vi.fn(() => true),
   parseInteger: vi.fn((_value, fallback) => fallback),
   parseBoolean: vi.fn((_value, fallback) => fallback),

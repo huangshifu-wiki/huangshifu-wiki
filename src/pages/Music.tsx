@@ -226,12 +226,9 @@ const Music = () => {
     setIsPlaying(true)
   }
 
-  const handleCopyAlbumLink = async (
-    event: React.MouseEvent<HTMLButtonElement>,
-    albumId: string
-  ) => {
+  const handleCopyAlbumLink = async (event: React.MouseEvent<HTMLButtonElement>, slug: string) => {
     event.stopPropagation()
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/album/${albumId}`))
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/album/${slug}`))
     if (copied) {
       show('专辑内链已复制')
       return

@@ -1,7 +1,7 @@
 import { describe, beforeEach, afterEach, it, expect } from 'vitest'
 import request from 'supertest'
 import { app } from '../../server'
-import { prisma, createTestUser } from './setup'
+import { prisma, createTestUser, nextTestNumericSlug } from './setup'
 import { applyAlbumTracksToRelations } from '../../src/server/utils/music'
 
 describe('Music API - 音乐接口测试', () => {
@@ -103,6 +103,7 @@ describe('Music API - 音乐接口测试', () => {
   it('更新歌曲描述时应保留 Markdown 源文本首尾空白', async () => {
     const song = await prisma.musicTrack.create({
       data: {
+        slug: nextTestNumericSlug(),
         title: 'Markdown Description Test Song',
         artists: ['Markdown Description Test Artist'],
         album: '',
@@ -213,18 +214,21 @@ describe('Music API - 音乐接口测试', () => {
     const [album, displaySong, normalSong] = await Promise.all([
       prisma.album.create({
         data: {
+          slug: nextTestNumericSlug(),
           title: 'Display Relation Album',
           artist: 'Batch Artist',
         },
       }),
       prisma.musicTrack.create({
         data: {
+          slug: nextTestNumericSlug(),
           title: 'Display Relation Song Display',
           artists: ['Batch Artist'],
         },
       }),
       prisma.musicTrack.create({
         data: {
+          slug: nextTestNumericSlug(),
           title: 'Display Relation Song Normal',
           artists: ['Batch Artist'],
         },
@@ -276,6 +280,7 @@ describe('Music API - 音乐接口测试', () => {
   it('音乐搜索和搜索建议支持艺术家名称部分匹配', async () => {
     const song = await prisma.musicTrack.create({
       data: {
+        slug: nextTestNumericSlug(),
         title: 'Artist Partial Search Test Song',
         artists: ['黄诗扶'],
         album: '',
@@ -294,7 +299,7 @@ describe('Music API - 音乐接口测试', () => {
     expect(suggestResponse.status).toBe(200)
     expect(
       suggestResponse.body.suggestions.some(
-        (item: { type: string; id?: string }) => item.type === 'music' && item.id === song.docId
+        (item: { type: string; id?: string }) => item.type === 'music' && item.id === song.slug
       )
     ).toBe(true)
   })
@@ -310,6 +315,7 @@ describe('Music API - 音乐接口测试', () => {
       ].map((song) =>
         prisma.musicTrack.create({
           data: {
+            slug: nextTestNumericSlug(),
             title: `${song.title} ${suffix}`,
             artists: song.artists,
             album: '',
@@ -369,6 +375,7 @@ describe('Music API - 音乐接口测试', () => {
       ].map((song) =>
         prisma.musicTrack.create({
           data: {
+            slug: nextTestNumericSlug(),
             title: `${song.title} ${suffix}`,
             artists: ['发行时间排序测试'],
             album: '',

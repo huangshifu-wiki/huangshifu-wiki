@@ -105,6 +105,8 @@ const createEmptyDraft = (): GalleryDraft => ({
   images: [],
 })
 
+const getGalleryPublicId = (gallery: GalleryItem) => gallery.slug || gallery.id
+
 const mergeServerImagesIntoDraft = (
   draft: GalleryDraft,
   serverImages: GalleryImageItem[]
@@ -546,9 +548,12 @@ const GalleryEdit = () => {
         }
 
         invalidateApiCacheByPrefix('/api/galleries')
-        redirectTarget = `/gallery/${savedGallery.id}`
+        redirectTarget = `/gallery/${getGalleryPublicId(savedGallery)}`
       } else {
-        const result = await apiPatch<GalleryDetailResponse>(`/api/galleries/${galleryId}`, {
+        if (!gallery?.id) {
+          throw new Error('Gallery id missing')
+        }
+        const result = await apiPatch<GalleryDetailResponse>(`/api/galleries/${gallery.id}`, {
           ...galleryMetadataPayload,
           images: imagesPayload,
         })
@@ -566,7 +571,7 @@ const GalleryEdit = () => {
         }
 
         invalidateApiCacheByPrefix('/api/galleries')
-        redirectTarget = `/gallery/${savedGallery.id}`
+        redirectTarget = `/gallery/${getGalleryPublicId(savedGallery)}`
       }
     } catch (error) {
       console.error('Save gallery error:', error)
@@ -587,7 +592,7 @@ const GalleryEdit = () => {
   }
 
   const handleCancel = () => {
-    navigate(galleryId ? `/gallery/${galleryId}` : '/gallery')
+    navigate(gallery ? `/gallery/${getGalleryPublicId(gallery)}` : '/gallery')
   }
 
   const handleDelete = async () => {
@@ -611,7 +616,7 @@ const GalleryEdit = () => {
 
     setIsDeleting(true)
     try {
-      await apiDelete(`/api/galleries/${galleryId}`, reason ? { reason } : {})
+      await apiDelete(`/api/galleries/${gallery.id}`, reason ? { reason } : {})
       invalidateApiCacheByPrefix('/api/galleries')
       show(t('gallery.galleryDeleted'), { variant: 'success' })
       navigate('/gallery')

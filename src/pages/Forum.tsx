@@ -64,6 +64,7 @@ import type { MentionTarget } from '../lib/mentions'
 
 type PostItem = {
   id: string
+  slug?: string
   title: string
   section: string
   content?: string
@@ -126,7 +127,7 @@ const HIGHLIGHTED_COMMENT_CLASS =
 interface PostCardProps {
   post: PostItem
   sectionName: string
-  onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, postId: string) => void
+  onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, slug: string) => void
 }
 
 const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) => {
@@ -138,7 +139,7 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
         post.isPinned && 'border-l-[3px] border-l-[var(--color-theme-accent)]'
       )}
     >
-      <Link to={`/forum/${post.id}`} className="block">
+      <Link to={`/forum/${post.slug || post.id}`} className="block">
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           {post.isPinned && (
             <span className="flex items-center gap-1 px-2 py-0.5 theme-tag text-[10px] font-bold uppercase tracking-wider rounded">
@@ -189,7 +190,7 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
         </div>
       </Link>
       <button
-        onClick={(event) => onCopyLink(event, post.id)}
+        onClick={(event) => onCopyLink(event, post.slug || post.id)}
         className="absolute top-4 right-4 p-2 rounded border border-border bg-surface/90 text-text-muted hover:text-brand-gold hover:border-brand-gold transition-all"
         title={t('forum.copyInternalLink')}
         aria-label={t('forum.copyPostInternalLink')}
@@ -312,10 +313,10 @@ const PostList = () => {
     return query ? `/forum?${query}` : '/forum'
   }
 
-  const handleCopyPostLink = async (event: React.MouseEvent<HTMLButtonElement>, postId: string) => {
+  const handleCopyPostLink = async (event: React.MouseEvent<HTMLButtonElement>, slug: string) => {
     event.preventDefault()
     event.stopPropagation()
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/forum/${postId}`))
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/forum/${slug}`))
     if (copied) {
       show(t('forum.postLinkCopied'))
       return
@@ -483,7 +484,7 @@ const PostDetail = () => {
     isBanned,
     isAdmin,
     apiBase: '/api/posts',
-    entityId: postId,
+    entityId: post?.id,
     toast: { show },
     t,
   })
@@ -554,7 +555,7 @@ const PostDetail = () => {
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!postId || !user || !newComment.trim() || submittingComment) return
+    if (!post?.id || !user || !newComment.trim() || submittingComment) return
     if (isBanned) {
       show(t('forum.bannedCannotComment'), { variant: 'error' })
       return
@@ -566,7 +567,7 @@ const PostDetail = () => {
 
     try {
       setSubmittingComment(true)
-      const data = await apiPost<{ comment: CommentItem }>(`/api/posts/${postId}/comments`, {
+      const data = await apiPost<{ comment: CommentItem }>(`/api/posts/${post.id}/comments`, {
         content: newComment,
         parentId: replyTo?.id || null,
       })
@@ -720,6 +721,7 @@ const PostDetail = () => {
   )
   const canEditPost = Boolean(!isBanned && (isOwner || isAdmin))
   const canComment = post.status === 'published'
+  const postPublicId = post.slug || post.id
   const canDeleteComment = (comment: CommentItem) =>
     Boolean(user && !comment.isDeleted && (comment.authorUid === user.uid || isAdmin))
   const canReplyComment = (comment: CommentItem) =>
@@ -807,10 +809,10 @@ const PostDetail = () => {
   }
 
   const handleSubmitReview = async () => {
-    if (!post || !postId || !canSubmitReview || submittingReview) return
+    if (!post || !canSubmitReview || submittingReview) return
     setSubmittingReview(true)
     try {
-      const data = await apiPost<{ post: PostItem }>(`/api/posts/${postId}/submit`)
+      const data = await apiPost<{ post: PostItem }>(`/api/posts/${post.id}/submit`)
       setPost((prev) => (prev ? { ...prev, ...data.post } : prev))
       show(t('forum.reviewSubmitted'))
     } catch (error) {
@@ -822,8 +824,7 @@ const PostDetail = () => {
   }
 
   const handleShare = async () => {
-    if (!postId) return
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/forum/${postId}`))
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/forum/${postPublicId}`))
     if (copied) {
       show(t('forum.linkCopiedShare'))
       return
@@ -832,9 +833,8 @@ const PostDetail = () => {
   }
 
   const handleCopyCommentLink = async (comment: CommentItem) => {
-    if (!postId) return
     const copied = await copyToClipboard(
-      toAbsoluteInternalUrl(`/forum/${postId}#comment-${comment.id}`)
+      toAbsoluteInternalUrl(`/forum/${postPublicId}#comment-${comment.id}`)
     )
     if (copied) {
       show(t('forum.commentLinkCopied'))
@@ -874,7 +874,7 @@ const PostDetail = () => {
               </button>
               {canEditPost && (
                 <Link
-                  to={`/forum/${post.id}/edit`}
+                  to={`/forum/${postPublicId}/edit`}
                   className="px-4 py-2 text-[0.9375rem] rounded theme-button-primary active:scale-[0.98] transition-all flex items-center gap-2"
                 >
                   <Edit3 size={16} /> {t('forum.edit')}
@@ -1292,6 +1292,7 @@ const PostEditor = () => {
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
   const [editablePostAuthorUid, setEditablePostAuthorUid] = useState<string | null>(null)
+  const [editablePostId, setEditablePostId] = useState<string | null>(null)
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const dialog = useDialog()
   const { show } = useToast()
@@ -1344,6 +1345,7 @@ const PostEditor = () => {
         }
 
         setEditablePostAuthorUid(data.post.authorUid)
+        setEditablePostId(data.post.id)
         setFormData({
           title: data.post.title,
           section: data.post.section,
@@ -1395,8 +1397,8 @@ const PostEditor = () => {
       }
 
       const data =
-        isEditing && postId
-          ? await apiPut<{ post: PostItem }>(`/api/posts/${postId}`, payload)
+        isEditing && editablePostId
+          ? await apiPut<{ post: PostItem }>(`/api/posts/${editablePostId}`, payload)
           : await apiPost<{ post: PostItem }>('/api/posts', payload)
 
       const savedPost = data.post
@@ -1411,7 +1413,7 @@ const PostEditor = () => {
 
       if (isEditing || savedPost.status === 'pending' || savedPost.status === 'published') {
         invalidateApiCacheByPrefix('/api/posts')
-        redirectTarget = `/forum/${savedPost.id}`
+        redirectTarget = `/forum/${savedPost.slug || savedPost.id}`
       }
     } catch (error) {
       console.error('Error saving post:', error)
@@ -1433,7 +1435,7 @@ const PostEditor = () => {
   }
 
   const handleDelete = async () => {
-    if (!postId || !isEditing || !editablePostAuthorUid || isDeleting) return
+    if (!postId || !isEditing || !editablePostAuthorUid || !editablePostId || isDeleting) return
     if (!user || (editablePostAuthorUid !== user.uid && !isAdmin)) return
 
     const isSelfDelete = editablePostAuthorUid === user.uid
@@ -1455,7 +1457,7 @@ const PostEditor = () => {
 
     setIsDeleting(true)
     try {
-      await apiDelete(`/api/posts/${postId}`, reason ? { reason } : {})
+      await apiDelete(`/api/posts/${editablePostId}`, reason ? { reason } : {})
       invalidateApiCacheByPrefix('/api/posts')
       show(t('forum.postDeleted'), { variant: 'success' })
       navigate('/forum')

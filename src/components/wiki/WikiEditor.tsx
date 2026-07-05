@@ -12,7 +12,6 @@ import {
   invalidateApiCache,
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
-import { normalizeWikiPageSlug } from '../../lib/wikiSlug'
 import { metadataCache } from '../../lib/metadataCache'
 import { getWikiSaveResultText } from '../../lib/wikiWriteText'
 import { Trash2, X } from '@/src/components/icons'
@@ -131,20 +130,10 @@ const WikiEditor = () => {
       return
     }
 
-    const pageSlug = normalizeWikiPageSlug(
-      isNew ? formData.slug || formData.title : slug || formData.slug
-    )
-
-    if (!pageSlug) {
-      show(t('wiki.slugRequired'), { variant: 'error' })
-      return
-    }
-
     setSavingMode(status)
 
     const pageData = {
       title: formData.title,
-      slug: pageSlug,
       category: formData.category,
       content: formData.content,
       tags: formData.tags
@@ -160,20 +149,27 @@ const WikiEditor = () => {
 
     try {
       if (isNew) {
-        const data = await apiPost<{ page: { status: string } }>('/api/wiki', pageData)
+        const data = await apiPost<{ page: { slug: string; status: string } }>(
+          '/api/wiki',
+          pageData
+        )
         show(getWikiSaveResultText(t, data.page.status as 'draft' | 'pending' | 'published'), {
           variant: 'success',
         })
-        navigate(`/wiki/${pageSlug}`)
+        navigate(`/wiki/${data.page.slug}`)
         return
       }
 
-      const data = await apiPut<{ page: { status: string } }>(`/api/wiki/${pageSlug}`, pageData)
+      const pageSlug = slug || formData.slug
+      const data = await apiPut<{ page: { slug: string; status: string } }>(
+        `/api/wiki/${pageSlug}`,
+        pageData
+      )
       show(getWikiSaveResultText(t, data.page.status as 'draft' | 'pending' | 'published'), {
         variant: 'success',
       })
       invalidateApiCache(`GET|/api/wiki/${pageSlug}|`)
-      navigate(`/wiki/${pageSlug}`)
+      navigate(`/wiki/${data.page.slug}`)
       return
     } catch (e) {
       console.error('Error saving wiki page:', e)
@@ -186,7 +182,7 @@ const WikiEditor = () => {
   const handleDelete = async () => {
     if (isNew || !isAdmin || isDeleting) return
 
-    const pageSlug = normalizeWikiPageSlug(slug || formData.slug)
+    const pageSlug = slug || formData.slug
     if (!pageSlug) {
       show(t('wiki.slugRequired'), { variant: 'error' })
       return

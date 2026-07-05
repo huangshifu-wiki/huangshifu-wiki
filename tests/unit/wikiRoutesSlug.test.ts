@@ -59,6 +59,8 @@ vi.mock('../../src/server/utils', () => ({
   hasTag: vi.fn(() => false),
   buildWikiRelationBundle: vi.fn(),
   clearWikiRelationCache: vi.fn(),
+  allocateNumericSlug: vi.fn(async () => '1'),
+  isNumericSlug: vi.fn((value) => /^[1-9]\d*$/.test(String(value))),
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }))
 
@@ -176,7 +178,7 @@ describe('wiki routes slug normalization', () => {
     mockPrisma.wikiCategory.findMany.mockResolvedValue([])
   })
 
-  it('canonicalizes created wiki page slugs before writing', async () => {
+  it('uses the next numeric slug when creating wiki pages', async () => {
     const app = await createApp({ uid: 'user_1', role: 'user', displayName: 'Tester' })
 
     const response = await postJson(app, '/api/wiki', {
@@ -193,22 +195,22 @@ describe('wiki routes slug normalization', () => {
     expect(mockPrisma.wikiPage.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          slug: 'test-page-name',
+          slug: '1',
         }),
       })
     )
     expect(mockPrisma.wikiRevision.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          pageSlug: 'test-page-name',
-          slug: 'test-page-name',
+          pageSlug: '1',
+          slug: '1',
         }),
       })
     )
     expect(mockPrisma.wikiBranch.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          pageSlug: 'test-page-name',
+          pageSlug: '1',
         }),
       })
     )

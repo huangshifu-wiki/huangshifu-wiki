@@ -114,6 +114,7 @@ const GalleryDetail = () => {
   const commentFormRef = useRef<HTMLFormElement | null>(null)
   const commentInputRef = useRef<HTMLTextAreaElement | null>(null)
   const hasPendingThumbnails = shouldWaitForAnyGalleryThumbnail(gallery)
+  const galleryPublicId = gallery?.slug || galleryId
 
   const fetchGallery = async () => {
     if (!galleryId) return
@@ -134,7 +135,7 @@ const GalleryDetail = () => {
   }, [galleryId])
 
   useEffect(() => {
-    if (!galleryId || !hasPendingThumbnails) return
+    if (!galleryPublicId || !hasPendingThumbnails) return
 
     const abortController = new AbortController()
     let attempts = 0
@@ -145,7 +146,7 @@ const GalleryDetail = () => {
       attempts += 1
       try {
         const data = await apiGet<GalleryDetailResponse>(
-          `/api/galleries/${galleryId}`,
+          `/api/galleries/${galleryPublicId}`,
           undefined,
           THUMBNAIL_POLL_DEDUP_OPTIONS,
           abortController.signal
@@ -173,7 +174,7 @@ const GalleryDetail = () => {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [galleryId, hasPendingThumbnails])
+  }, [galleryPublicId, hasPendingThumbnails])
 
   useEffect(() => {
     const fetchGalleryAccess = async () => {
@@ -190,10 +191,10 @@ const GalleryDetail = () => {
   }, [])
 
   const fetchComments = async () => {
-    if (!galleryId) return
+    if (!gallery?.id) return
     try {
       const data = await apiGet<{ comments: CommentItem[] }>(
-        `/api/galleries/${galleryId}/comments`,
+        `/api/galleries/${gallery.id}/comments`,
         {
           includeDeleted: isAdmin && showDeletedComments,
         }
@@ -213,10 +214,10 @@ const GalleryDetail = () => {
   }, [isAdmin, location.hash, showDeletedComments])
 
   useEffect(() => {
-    if (isGalleryPublished && galleryId) {
+    if (isGalleryPublished && gallery?.id) {
       fetchComments()
     }
-  }, [isGalleryPublished, galleryId, isAdmin, showDeletedComments])
+  }, [isGalleryPublished, gallery?.id, isAdmin, showDeletedComments])
 
   useEffect(() => {
     if (!location.hash.startsWith('#comment-')) {
@@ -370,8 +371,8 @@ const GalleryDetail = () => {
   }
 
   const handleCopyLink = async () => {
-    if (!gallery?.id) return
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/gallery/${gallery.id}`))
+    if (!galleryPublicId) return
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/gallery/${galleryPublicId}`))
     if (copied) {
       show(t('gallery.linkCopied'))
       return
@@ -558,9 +559,9 @@ const GalleryDetail = () => {
   }
 
   const handleCopyCommentLink = async (comment: CommentItem) => {
-    if (!gallery?.id) return
+    if (!galleryPublicId) return
     const copied = await copyToClipboard(
-      toAbsoluteInternalUrl(`/gallery/${gallery.id}#comment-${comment.id}`)
+      toAbsoluteInternalUrl(`/gallery/${galleryPublicId}#comment-${comment.id}`)
     )
     if (copied) {
       show(t('gallery.commentLinkCopied'))
@@ -590,7 +591,7 @@ const GalleryDetail = () => {
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!galleryId || !user || !newComment.trim() || submittingComment) return
+    if (!gallery?.id || !user || !newComment.trim() || submittingComment) return
     if (isBanned) {
       show(t('gallery.bannedCannotComment'), { variant: 'error' })
       return
@@ -602,10 +603,13 @@ const GalleryDetail = () => {
 
     try {
       setSubmittingComment(true)
-      const data = await apiPost<{ comment: CommentItem }>(`/api/galleries/${galleryId}/comments`, {
-        content: newComment,
-        parentId: replyTo?.id || null,
-      })
+      const data = await apiPost<{ comment: CommentItem }>(
+        `/api/galleries/${gallery.id}/comments`,
+        {
+          content: newComment,
+          parentId: replyTo?.id || null,
+        }
+      )
 
       if (data.comment) {
         setComments((prev) => [...prev, data.comment])
@@ -802,7 +806,7 @@ const GalleryDetail = () => {
               </button>
               {canManage && (
                 <Link
-                  to={`/gallery/${gallery.id}/edit`}
+                  to={`/gallery/${galleryPublicId}/edit`}
                   className="px-4 py-2 text-[0.9375rem] rounded theme-button-primary transition-all flex items-center gap-2"
                 >
                   <Edit3 size={16} /> 编辑

@@ -255,10 +255,10 @@ const renderContentStatus = (status: unknown) =>
 
 const getItemHref = (type: ListType, item: AdminDataItem) => {
   if (type === 'wiki' && item.slug) return `/wiki/${item.slug}`
-  if (type === 'posts' && item.id) return `/forum/${item.id}`
-  if (type === 'galleries' && item.id) return `/gallery/${item.id}`
+  if (type === 'posts' && item.slug) return `/forum/${item.slug}`
+  if (type === 'galleries' && item.slug) return `/gallery/${item.slug}`
   if (type === 'events' && item.slug) return `/events/${item.slug}`
-  if (type === 'music' && item.docId) return `/music/${item.docId}`
+  if (type === 'music' && item.slug) return `/music/${item.slug}`
   return null
 }
 

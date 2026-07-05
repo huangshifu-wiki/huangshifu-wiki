@@ -36,6 +36,9 @@ import {
   ensureTextLimit,
   deletedAtFilter,
   softDeleteData,
+  allocateNumericSlug,
+  isNumericSlug,
+  withNumericSlugTransaction,
 } from '../utils'
 import { parseMusicUrl } from '../music/musicUrlParser'
 import {
@@ -390,37 +393,41 @@ router.post(
         }
       }
 
-      const song = await prisma.musicTrack.create({
-        data: {
-          title,
-          artists,
-          lyricists,
-          composers,
-          arrangers,
-          vocals,
-          album,
-          audioUrl,
-          lyric,
-          description: description ?? null,
-          releaseDate,
-          durationMs,
-          customPlatformLinks: customPlatformLinks.length
-            ? (customPlatformLinks as unknown as Prisma.InputJsonValue)
-            : undefined,
-          ...(sources.length
-            ? {
-                externalSources: {
-                  create: sources.map((source) => ({
-                    resourceType: 'song' as const,
-                    platform: source.platform,
-                    sourceId: source.sourceId,
-                    sourceUrl: source.sourceUrl,
-                    isPrimary: source.isPrimary,
-                  })),
-                },
-              }
-            : {}),
-        },
+      const song = await prisma.$transaction(async (tx) => {
+        const slug = await allocateNumericSlug(tx, 'MusicTrack')
+        return tx.musicTrack.create({
+          data: {
+            slug,
+            title,
+            artists,
+            lyricists,
+            composers,
+            arrangers,
+            vocals,
+            album,
+            audioUrl,
+            lyric,
+            description: description ?? null,
+            releaseDate,
+            durationMs,
+            customPlatformLinks: customPlatformLinks.length
+              ? (customPlatformLinks as unknown as Prisma.InputJsonValue)
+              : undefined,
+            ...(sources.length
+              ? {
+                  externalSources: {
+                    create: sources.map((source) => ({
+                      resourceType: 'song' as const,
+                      platform: source.platform,
+                      sourceId: source.sourceId,
+                      sourceUrl: source.sourceUrl,
+                      isPrimary: source.isPrimary,
+                    })),
+                  },
+                }
+              : {}),
+          },
+        })
       })
 
       const hydrated = await fetchSongWithRelationsByDocId(song.docId)
@@ -643,23 +650,30 @@ router.post(
             albumListChanged = albumListChanged || coverAdded
           }
         } else {
-          const createdAlbum = await prisma.album.create({
-            data: {
-              title: preview.title,
-              artist: preview.artist || 'Various Artists',
-              description: preview.description || null,
-              tracks: tracksPayload,
-              externalSources: {
-                create: {
-                  resourceType: 'album',
-                  platform: preview.platform,
-                  sourceId: preview.id,
-                  sourceUrl: preview.platformUrl || null,
-                  isPrimary: true,
+          const createdAlbum = await withNumericSlugTransaction(
+            prisma,
+            'Album',
+            async (tx, slug) => {
+              return tx.album.create({
+                data: {
+                  slug,
+                  title: preview.title,
+                  artist: preview.artist || 'Various Artists',
+                  description: preview.description || null,
+                  tracks: tracksPayload,
+                  externalSources: {
+                    create: {
+                      resourceType: 'album',
+                      platform: preview.platform,
+                      sourceId: preview.id,
+                      sourceUrl: preview.platformUrl || null,
+                      isPrimary: true,
+                    },
+                  },
                 },
-              },
-            },
-          })
+              })
+            }
+          )
           if (preview.cover) {
             await maybeAddImportedAlbumCover(createdAlbum.docId, preview.cover)
           }
@@ -912,13 +926,22 @@ router.get(
   })
 )
 
-// Get music by docId
+// Get music by public numeric slug
 router.get(
-  '/:docId',
+  '/:slug',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const identifier = req.params.docId
-      const song = await fetchSongWithRelationsByDocId(identifier)
+      if (!isNumericSlug(req.params.slug)) {
+        res.status(404).json({ error: '歌曲不存在' })
+        return
+      }
+
+      const bySlug = await prisma.musicTrack.findUnique({
+        where: { slug: req.params.slug },
+        select: { docId: true, deletedAt: true },
+      })
+      const song =
+        bySlug && !bySlug.deletedAt ? await fetchSongWithRelationsByDocId(bySlug.docId) : null
 
       if (!song) {
         res.status(404).json({ error: '歌曲不存在' })

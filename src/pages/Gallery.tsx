@@ -73,7 +73,7 @@ interface GalleryCardProps {
   viewMode: string
   canDelete: boolean
   deletingGalleryId: string | null
-  onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, galleryId: string) => void
+  onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, slug: string) => void
   onRequestDelete: (
     event: React.MouseEvent<HTMLButtonElement>,
     gallery: { id: string; title?: string | null }
@@ -91,7 +91,7 @@ const GalleryCard = React.memo(
   }: GalleryCardProps) => (
     <div className={clsx('relative group', viewMode === 'list' && 'flex')}>
       <Link
-        to={`/gallery/${gallery.id}`}
+        to={`/gallery/${gallery.slug || gallery.id}`}
         className={clsx(
           viewMode === 'list'
             ? 'flex gap-4 p-3 bg-surface border border-border rounded overflow-hidden hover:border-brand-gold transition-all w-full'
@@ -207,7 +207,7 @@ const GalleryCard = React.memo(
         </button>
       ) : null}
       <button
-        onClick={(event) => onCopyLink(event, gallery.id)}
+        onClick={(event) => onCopyLink(event, gallery.slug || gallery.id)}
         className={clsx(
           'p-2.5 rounded bg-surface/90 border border-border text-text-muted hover:text-brand-gold transition-all',
           viewMode === 'list'
@@ -378,11 +378,11 @@ const GalleryList = () => {
 
   const handleCopyGalleryLink = async (
     event: React.MouseEvent<HTMLButtonElement>,
-    galleryId: string
+    slug: string
   ) => {
     event.preventDefault()
     event.stopPropagation()
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/gallery/${galleryId}`))
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/gallery/${slug}`))
     if (copied) {
       show('图集内链已复制')
       return

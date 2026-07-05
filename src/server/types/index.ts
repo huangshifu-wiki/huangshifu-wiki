@@ -67,6 +67,7 @@ type WikiRelationGraphEdge = {
 
 type MusicTrackWithRelations = {
   docId: string
+  slug: string
   title: string
   artists: string[]
   lyricists: string[]
@@ -100,6 +101,7 @@ type MusicTrackWithRelations = {
     isDisplay: boolean
     album: {
       docId: string
+      slug: string
       title: string
       artist: string
       releaseDate: Date | null

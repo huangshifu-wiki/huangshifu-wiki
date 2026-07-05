@@ -1,7 +1,7 @@
 import { describe, beforeEach, afterEach, it, expect } from 'vitest'
 import request from 'supertest'
 import { app } from '../../server'
-import { prisma, createTestGallery, createTestUser } from './setup'
+import { prisma, createTestGallery, createTestUser, nextTestNumericSlug } from './setup'
 
 function findCookieValue(setCookieHeader: string | string[] | undefined, cookieName: string) {
   const cookies = Array.isArray(setCookieHeader)
@@ -169,6 +169,7 @@ describe('Admin batch operations API', () => {
     const [song, album] = await Promise.all([
       prisma.musicTrack.create({
         data: {
+          slug: nextTestNumericSlug(),
           title: 'Batch Cover Song',
           artists: ['Batch Artist'],
           album: 'Batch Album',
@@ -176,6 +177,7 @@ describe('Admin batch operations API', () => {
       }),
       prisma.album.create({
         data: {
+          slug: nextTestNumericSlug(),
           title: 'Batch Cover Album',
           artist: 'Batch Artist',
         },
@@ -298,6 +300,7 @@ describe('Admin batch operations API', () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const album = await prisma.album.create({
       data: {
+        slug: nextTestNumericSlug(),
         title: 'Batch Display Album',
         artist: 'Batch Artist',
       },
@@ -306,6 +309,7 @@ describe('Admin batch operations API', () => {
       [0, 1].map((index) =>
         prisma.musicTrack.create({
           data: {
+            slug: nextTestNumericSlug(),
             title: `Batch Display Song ${index}`,
             artists: ['Batch Artist'],
           },

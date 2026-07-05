@@ -20,6 +20,8 @@ import {
   enhancedCache,
   ensureTextLimit,
   softDeleteData,
+  allocateNumericSlug,
+  isNumericSlug,
 } from '../utils'
 import { cleanupUnusedMediaAssetById } from '../services/mediaAssetCleanupService'
 import { deleteMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
@@ -120,6 +122,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
         where,
         select: {
           docId: true,
+          slug: true,
           title: true,
           artist: true,
           description: true,
@@ -174,12 +177,16 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
   }
 })
 
-// Get album by ID
-router.get('/:id', async (req: AuthenticatedRequest, res) => {
+// Get album by public numeric slug
+router.get('/:slug', async (req: AuthenticatedRequest, res) => {
   try {
-    const identifier = req.params.id
+    if (!isNumericSlug(req.params.slug)) {
+      res.status(404).json({ error: '专辑不存在' })
+      return
+    }
+
     let album = await prisma.album.findUnique({
-      where: { docId: identifier },
+      where: { slug: req.params.slug },
       include: {
         covers: {
           orderBy: { sortOrder: 'asc' },
@@ -370,54 +377,59 @@ router.post('/', requireAdmin, async (req, res) => {
       }
     }
 
-    const created = await prisma.album.create({
-      data: {
-        title,
-        artist,
-        description,
-        releaseDate,
-        tracks,
-        ...(sources.length
-          ? {
-              externalSources: {
-                create: sources.map((source) => ({
-                  resourceType: 'album' as const,
-                  platform: source.platform,
-                  sourceId: source.sourceId,
-                  sourceUrl: source.sourceUrl,
-                  isPrimary: source.isPrimary,
-                })),
-              },
-            }
-          : {}),
-      },
-      include: {
-        covers: {
-          orderBy: { sortOrder: 'asc' },
+    const created = await prisma.$transaction(async (tx) => {
+      const slug = await allocateNumericSlug(tx, 'Album')
+      return tx.album.create({
+        data: {
+          slug,
+          title,
+          artist,
+          description,
+          releaseDate,
+          tracks,
+          ...(sources.length
+            ? {
+                externalSources: {
+                  create: sources.map((source) => ({
+                    resourceType: 'album' as const,
+                    platform: source.platform,
+                    sourceId: source.sourceId,
+                    sourceUrl: source.sourceUrl,
+                    isPrimary: source.isPrimary,
+                  })),
+                },
+              }
+            : {}),
         },
-        externalSources: {
-          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-        },
-        songRelations: {
-          include: {
-            song: {
-              select: {
-                docId: true,
-                title: true,
-                artists: true,
-                coverId: true,
-                coverAlbumDocId: true,
-                covers: { orderBy: { sortOrder: 'asc' } },
-                albumRelations: {
-                  include: {
-                    album: { include: { covers: { orderBy: { sortOrder: 'asc' } } } },
+        include: {
+          covers: {
+            orderBy: { sortOrder: 'asc' },
+          },
+          externalSources: {
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+          },
+          songRelations: {
+            include: {
+              song: {
+                select: {
+                  docId: true,
+                  slug: true,
+                  title: true,
+                  artists: true,
+                  coverId: true,
+                  coverAlbumDocId: true,
+                  covers: { orderBy: { sortOrder: 'asc' } },
+                  albumRelations: {
+                    include: {
+                      album: { include: { covers: { orderBy: { sortOrder: 'asc' } } } },
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
+      })
     })
 
     if (tracks.length) {
@@ -526,6 +538,7 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
             song: {
               select: {
                 docId: true,
+                slug: true,
                 title: true,
                 artists: true,
                 coverId: true,

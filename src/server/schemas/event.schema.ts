@@ -78,7 +78,6 @@ const imageInstructionSchema = z.union([
 
 export const eventWriteSchema = z.object({
   title: limitedString('活动标题', CONTENT_LIMITS.event.title).trim().min(1, '活动标题不能为空'),
-  slug: optionalLimitedString('活动路径', CONTENT_LIMITS.event.slug),
   location: limitedString('活动地点', CONTENT_LIMITS.event.location).trim().optional().default(''),
   content: limitedString('活动内容', CONTENT_LIMITS.event.content).optional().default(''),
   timeSlots: z.array(timeSlotSchema).max(CONTENT_LIMITS.event.timeSlots).optional().default([]),

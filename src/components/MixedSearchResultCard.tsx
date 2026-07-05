@@ -46,11 +46,11 @@ function getSourceTypeIcon(sourceType: ImageSourceType) {
 function getResultLink(result: MixedSearchResult): string {
   switch (result.sourceType) {
     case 'gallery':
-      return `/gallery/${result.sourceId}`
+      return `/gallery/${(result.data as GalleryItem | undefined)?.slug || result.sourceId}`
     case 'wiki':
       return `/wiki/${result.sourceId}`
     case 'post':
-      return `/forum/${result.sourceId}`
+      return `/forum/${(result.data as PostItem | undefined)?.slug || result.sourceId}`
     default:
       return '#'
   }

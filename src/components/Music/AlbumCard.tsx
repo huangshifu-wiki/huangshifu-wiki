@@ -9,7 +9,7 @@ import type { AlbumItem } from '../../types/entities'
 interface AlbumCardProps {
   album: AlbumItem
   viewMode?: 'grid' | 'list'
-  onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, albumId: string) => void
+  onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, slug: string) => void
 }
 
 const AlbumCard = React.memo(function AlbumCard({
@@ -18,7 +18,7 @@ const AlbumCard = React.memo(function AlbumCard({
   onCopyLink,
 }: AlbumCardProps) {
   const { t } = useI18n()
-  const albumId = album.docId || ''
+  const albumSlug = album.slug || album.docId || ''
   const trackCount = album.trackCount ?? album.tracks?.length ?? 0
   const coverSrc = album.coverThumbnail || album.cover
 
@@ -34,7 +34,7 @@ const AlbumCard = React.memo(function AlbumCard({
         </div>
         <div className="flex-1 min-w-0">
           <Link
-            to={`/album/${albumId}`}
+            to={`/album/${albumSlug}`}
             className="block text-[1.0625rem] font-semibold truncate text-text-primary group-hover:text-brand-gold transition-colors"
           >
             {album.title}
@@ -46,7 +46,7 @@ const AlbumCard = React.memo(function AlbumCard({
             {trackCount} {t('music.unit.song')}
           </span>
           <Link
-            to={`/album/${albumId}`}
+            to={`/album/${albumSlug}`}
             className="text-brand-gold hover:text-brand-gold/80 transition-colors"
           >
             <ChevronRight size={16} />
@@ -58,7 +58,7 @@ const AlbumCard = React.memo(function AlbumCard({
 
   return (
     <div className="group transition-all">
-      <Link to={`/album/${albumId}`} className="block">
+      <Link to={`/album/${albumSlug}`} className="block">
         <div className="relative aspect-square overflow-hidden bg-surface-alt rounded mb-2.5">
           <SmartImage
             src={coverSrc}
@@ -79,13 +79,13 @@ const AlbumCard = React.memo(function AlbumCard({
 
       <div className="mt-2 flex items-center justify-between">
         <Link
-          to={`/album/${albumId}`}
+          to={`/album/${albumSlug}`}
           className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-brand-gold transition-colors"
         >
           {t('music.viewAlbum')} <ChevronRight size={14} />
         </Link>
         <button
-          onClick={(event) => onCopyLink(event, albumId)}
+          onClick={(event) => onCopyLink(event, albumSlug)}
           className="p-1.5 text-text-muted hover:text-brand-gold transition-colors"
           title={t('music.copyAlbumLink')}
         >

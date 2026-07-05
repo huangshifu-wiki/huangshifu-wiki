@@ -40,7 +40,7 @@ const SongCard = React.memo(function SongCard({
   const coverSrc = song.coverThumbnail || song.cover
 
   const handleRowClick = () => {
-    navigate(`/music/${song.docId}`)
+    navigate(`/music/${song.slug || song.docId}`)
   }
 
   const renderFavoriteButton = (compact = false) => (

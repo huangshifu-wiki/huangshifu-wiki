@@ -33,6 +33,8 @@ import {
   ensureTextLimit,
   notifyMentionUsers,
   resolveMentionTargetsForText,
+  allocateNumericSlug,
+  isNumericSlug,
 } from '../utils'
 import type { AuthenticatedRequest, ContentStatus } from '../types'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -84,6 +86,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
         skip,
         select: {
           id: true,
+          slug: true,
           title: true,
           section: true,
           tags: true,
@@ -165,6 +168,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     const result = {
       posts: posts.map((post) => ({
         id: post.id,
+        slug: post.slug,
         title: post.title,
         section: post.section,
         authorUid: post.authorUid,
@@ -268,22 +272,26 @@ router.post(
 
       const nextStatus = normalizePostWriteStatus(status, req.authUser!)
 
-      const post = await prisma.post.create({
-        data: {
-          title,
-          section: finalSection,
-          content,
-          tags: tags || [],
-          status: nextStatus,
-          reviewNote: null,
-          reviewedBy: null,
-          reviewedAt: null,
-          authorUid: req.authUser!.uid,
-          musicDocId: normalizedMusicDocId,
-          albumDocId: normalizedAlbumDocId,
-          locationCode,
-          locationDetail: locationDetail || null,
-        },
+      const post = await prisma.$transaction(async (tx) => {
+        const slug = await allocateNumericSlug(tx, 'Post')
+        return tx.post.create({
+          data: {
+            slug,
+            title,
+            section: finalSection,
+            content,
+            tags: tags || [],
+            status: nextStatus,
+            reviewNote: null,
+            reviewedBy: null,
+            reviewedAt: null,
+            authorUid: req.authUser!.uid,
+            musicDocId: normalizedMusicDocId,
+            albumDocId: normalizedAlbumDocId,
+            locationCode,
+            locationDetail: locationDetail || null,
+          },
+        })
       })
 
       if (nextStatus === 'pending') {
@@ -325,10 +333,15 @@ router.post(
 )
 
 // Get post detail
-router.get('/:id', async (req: AuthenticatedRequest, res) => {
+router.get('/:slug', async (req: AuthenticatedRequest, res) => {
   try {
+    if (!isNumericSlug(req.params.slug)) {
+      res.status(404).json({ error: '帖子未找到' })
+      return
+    }
+
     const post = await prisma.post.findUnique({
-      where: { id: req.params.id },
+      where: { slug: req.params.slug },
       include: { author: { select: { displayName: true } } },
     })
 
@@ -345,7 +358,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
             where: {
               userUid: req.authUser!.uid,
               targetType: 'post',
-              targetId: req.params.id,
+              targetId: post.id,
             },
           })
           if (existing) {
@@ -358,7 +371,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
               data: {
                 userUid: req.authUser!.uid,
                 targetType: 'post',
-                targetId: req.params.id,
+                targetId: post.id,
               },
             })
           }
@@ -367,7 +380,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
 
     await Promise.all([
       prisma.post.update({
-        where: { id: req.params.id },
+        where: { id: post.id },
         data: { viewCount: { increment: 1 }, hotScore },
       }),
       browsingPromise,
@@ -377,7 +390,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
       isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true'
 
     const [comments, mentionTargets, likedByMe, favoritedByMe, dislikedByMe] = await Promise.all([
-      fetchPostCommentsForResponse(req.params.id, {
+      fetchPostCommentsForResponse(post.id, {
         authUserUid: req.authUser?.uid,
         includeDeleted: includeDeletedComments,
       }),
@@ -386,17 +399,17 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
         ? [
             prisma.postLike
               .count({
-                where: { postId: req.params.id, userUid: req.authUser.uid },
+                where: { postId: post.id, userUid: req.authUser.uid },
               })
               .then((c) => c > 0),
             prisma.favorite
               .count({
-                where: { targetType: 'post', targetId: req.params.id, userUid: req.authUser.uid },
+                where: { targetType: 'post', targetId: post.id, userUid: req.authUser.uid },
               })
               .then((c) => c > 0),
             prisma.postDislike
               .count({
-                where: { postId: req.params.id, userUid: req.authUser.uid },
+                where: { postId: post.id, userUid: req.authUser.uid },
               })
               .then((c) => c > 0),
           ]

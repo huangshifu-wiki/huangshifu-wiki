@@ -27,6 +27,7 @@ import type { MusicExternalSource } from '../types/entities'
 
 type SongItem = {
   docId: string
+  slug?: string
   title: string
   artists: string[]
   album: string
@@ -45,6 +46,7 @@ type SongItem = {
 type AlbumResponse = {
   album: {
     docId: string
+    slug?: string
     title: string
     artist: string
     cover: string
@@ -161,8 +163,9 @@ const AlbumDetail = () => {
   }
 
   const handleCopyAlbumLink = async () => {
-    if (!album?.docId) return
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/album/${album.docId}`))
+    const albumPublicId = album?.slug || album?.docId
+    if (!albumPublicId) return
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/album/${albumPublicId}`))
     if (copied) {
       show('专辑内链已复制')
       return
@@ -171,7 +174,7 @@ const AlbumDetail = () => {
   }
 
   const handleDeleteAlbum = async () => {
-    if (!albumId || !album || isDeleting) return
+    if (!album?.docId || isDeleting) return
     const confirmed = await dialog.confirm({
       title: '删除专辑',
       message: `确定要删除专辑《${album.title}》吗？删除后可在回收站恢复。`,
@@ -182,7 +185,7 @@ const AlbumDetail = () => {
 
     try {
       setIsDeleting(true)
-      await apiDelete(`/api/albums/${albumId}`)
+      await apiDelete(`/api/albums/${album.docId}`)
       show('专辑已删除')
       navigate('/music')
     } catch (error) {
@@ -319,7 +322,7 @@ const AlbumDetail = () => {
               return (
                 <div
                   key={track.docId}
-                  onClick={() => navigate(`/music/${track.docId}`)}
+                  onClick={() => navigate(`/music/${track.slug || track.docId}`)}
                   className={clsx(
                     'flex items-center gap-4 py-3 px-1 border-b border-border cursor-pointer transition-colors',
                     currentSong?.docId === track.docId && 'bg-brand-gold/10'
@@ -379,7 +382,7 @@ const AlbumDetail = () => {
         </div>
 
         {/* Admin */}
-        {isAdmin && albumId && (
+        {isAdmin && album.docId && (
           <div className="mb-10">
             <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 flex items-center gap-2">
               <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
@@ -388,7 +391,7 @@ const AlbumDetail = () => {
             <div className="flex flex-wrap gap-3">
               <CoverManager
                 resourceType="album"
-                resourceId={albumId}
+                resourceId={album.docId}
                 currentCover={album.cover}
                 onCoverUpdated={(cover) =>
                   setAlbum((prev) =>

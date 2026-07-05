@@ -42,6 +42,7 @@ type CustomPlatformLink = {
 
 type SongItem = {
   docId: string
+  slug?: string
   title: string
   artists: string[]
   lyricists?: string[]
@@ -68,6 +69,7 @@ type SongDetailResponse = {
 
 type PostItem = {
   id: string
+  slug?: string
   title: string
   likesCount: number
   commentsCount: number
@@ -156,8 +158,9 @@ const MusicDetail = () => {
   }
 
   const handleCopyLink = async () => {
-    if (!song?.docId) return
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/music/${song.docId}`))
+    const songPublicId = song?.slug || song?.docId
+    if (!songPublicId) return
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/music/${songPublicId}`))
     if (copied) {
       show('歌曲内链已复制')
       return
@@ -407,7 +410,7 @@ const MusicDetail = () => {
                   {posts.map((post) => (
                     <Link
                       key={post.id}
-                      to={`/forum/${post.id}`}
+                      to={`/forum/${post.slug || post.id}`}
                       className="py-3.5 border-b border-border transition-colors group"
                     >
                       <p className="text-[0.9375rem] text-text-primary mb-1 tracking-[0.04em] group-hover:text-brand-gold transition-colors">

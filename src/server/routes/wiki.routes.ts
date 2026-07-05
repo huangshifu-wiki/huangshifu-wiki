@@ -29,6 +29,8 @@ import {
   ensureTextLimit,
   createNotification,
   softDeleteData,
+  allocateNumericSlug,
+  isNumericSlug,
 } from '../utils'
 import { CONTENT_LIMITS, WIKI_MAX_CONTENT_SIZE } from '../../lib/contentLimits'
 import { enhancedCache, CACHE_KEYS } from '../utils/cache'
@@ -41,7 +43,6 @@ import type {
   WikiPullRequestWithRelations,
 } from '../types'
 import { buildWikiBacklinkSearchTerms } from '../../lib/wikiLinkParser'
-import { normalizeWikiPageSlug } from '../../lib/wikiSlug'
 import {
   buildLegacyDuplicateWikiTitleKey,
   getWikiUniqueConflictMessage,
@@ -617,6 +618,10 @@ router.get(
     res.setHeader('Expires', '0')
     try {
       const { slug } = req.params
+      if (!isNumericSlug(slug)) {
+        res.status(404).json({ error: '页面未找到' })
+        return
+      }
       const cacheKey = `${CACHE_KEYS.WIKI_PAGE}:${slug}`
 
       // 尝试读取缓存（仅对未登录用户启用缓存）
@@ -1218,7 +1223,6 @@ router.post(
       const hasRelationsInPayload = Object.prototype.hasOwnProperty.call(req.body, 'relations')
       const {
         title,
-        slug,
         category,
         content,
         tags,
@@ -1229,7 +1233,6 @@ router.post(
         locationDetail,
       } = req.body as {
         title?: string
-        slug?: string
         category?: string
         content?: string
         tags?: string[]
@@ -1240,10 +1243,9 @@ router.post(
         locationDetail?: string
       }
 
-      const pageSlug = normalizeWikiPageSlug(slug)
       const titleKey = typeof title === 'string' ? normalizeWikiTitleKey(title) : ''
 
-      if (!titleKey || !pageSlug || !category || !content) {
+      if (!titleKey || !category || !content) {
         res.status(400).json({ error: '缺少必要字段' })
         return
       }
@@ -1260,12 +1262,13 @@ router.post(
       }
 
       const nextStatus = normalizeWikiWriteStatus(status, req.authUser!)
-      const normalizedRelations = hasRelationsInPayload
-        ? await normalizeWikiRelationListForWrite(relations, pageSlug)
-        : []
       const normalizedTags = hasTagsInPayload ? (Array.isArray(tags) ? tags : []) : []
 
       const page = await prisma.$transaction(async (tx) => {
+        const pageSlug = await allocateNumericSlug(tx, 'WikiPage')
+        const normalizedRelations = hasRelationsInPayload
+          ? await normalizeWikiRelationListForWrite(relations, pageSlug)
+          : []
         const createdPage = await tx.wikiPage.create({
           include: wikiPageResponseInclude,
           data: {
@@ -1333,7 +1336,7 @@ router.post(
         return createdPage
       })
 
-      clearWikiPageCache(pageSlug)
+      clearWikiPageCache(page.slug)
       clearWikiListCaches()
       res.status(201).json({ page: toWikiResponse(page) })
     } catch (error) {
@@ -1832,17 +1835,15 @@ router.post(
       const hasTagsInPayload = Object.prototype.hasOwnProperty.call(req.body, 'tags')
       const hasRelationsInPayload = Object.prototype.hasOwnProperty.call(req.body, 'relations')
 
-      const { title, content, slug, category, tags, relations, eventDate, isAutoSave } =
-        req.body as {
-          title?: string
-          content?: string
-          slug?: string
-          category?: string
-          tags?: string[]
-          relations?: unknown
-          eventDate?: string | null
-          isAutoSave?: boolean
-        }
+      const { title, content, category, tags, relations, eventDate, isAutoSave } = req.body as {
+        title?: string
+        content?: string
+        category?: string
+        tags?: string[]
+        relations?: unknown
+        eventDate?: string | null
+        isAutoSave?: boolean
+      }
 
       if (!title || !content || !category) {
         res.status(400).json({ error: '缺少必要字段' })
@@ -1876,7 +1877,7 @@ router.post(
           branchId: branch.id,
           title,
           content,
-          slug: normalizeWikiPageSlug(slug || branch.pageSlug),
+          slug: branch.pageSlug,
           category,
           tags: normalizedTags,
           relations: normalizedRelations,
@@ -2431,7 +2432,7 @@ router.post(
   wikiWriteLimiter,
   requireAuth,
   requireActiveUser,
-  validateBody(wikiRevisionSchema.omit({ slug: true, isAutoSave: true })),
+  validateBody(wikiRevisionSchema.omit({ isAutoSave: true })),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
       const branch = await prisma.wikiBranch.findUnique({ where: { id: req.params.branchId } })

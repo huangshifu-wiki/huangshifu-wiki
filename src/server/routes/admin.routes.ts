@@ -2565,6 +2565,7 @@ router.get(
             where: activeWhere,
             select: {
               docId: true,
+              slug: true,
               title: true,
               artists: true,
               lyricists: true,

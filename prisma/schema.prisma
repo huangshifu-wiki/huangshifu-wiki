@@ -272,6 +272,7 @@ model WikiCategory {
 
 model Post {
   id            String        @id @default(cuid())
+  slug          String        @unique
   title         String
   section       String
   musicDocId    String?
@@ -636,6 +637,7 @@ model Announcement {
 
 model Gallery {
   id         String         @id @default(cuid())
+  slug       String         @unique
   title      String
   description String
   authorUid  String
@@ -844,6 +846,7 @@ model PostImageEmbedding {
 
 model Album {
   docId              String              @id @default(cuid())
+  slug               String              @unique
   title              String
   artist             String
   description        String?
@@ -870,6 +873,7 @@ model Album {
 
 model MusicTrack {
   docId     String   @id @default(cuid())
+  slug      String   @unique
   title     String
   artists   String[] @default([])
   lyricists String[] @default([])

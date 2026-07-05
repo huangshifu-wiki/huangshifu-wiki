@@ -23,6 +23,7 @@ import {
   createTestToken,
   createTestWikiPage,
   ensureTestWikiCategory,
+  nextTestNumericSlug,
 } from './setup'
 import type { CreateTestWikiPageInput } from './setup'
 
@@ -60,6 +61,15 @@ describe('Wiki API - 百科接口测试', () => {
     return createTestWikiPage({
       ...overrides,
       authorUid: testUser.user.uid,
+    })
+  }
+
+  async function createCurrentUserNumericWikiPage(
+    overrides: Omit<CreateTestWikiPageInput, 'authorUid' | 'slug'>
+  ) {
+    return createCurrentUserWikiPage({
+      ...overrides,
+      slug: nextTestNumericSlug(),
     })
   }
 
@@ -386,8 +396,7 @@ describe('Wiki API - 百科接口测试', () => {
      */
     it('应该返回存在的 Wiki 页面详情', async () => {
       // 创建测试页面
-      const wikiPage = await createCurrentUserWikiPage({
-        slug: 'test-detail-page',
+      const wikiPage = await createCurrentUserNumericWikiPage({
         title: 'Detail Test Page',
         content: '# Hello World\n\nThis is **detailed** content.',
         category: 'general',
@@ -430,8 +439,7 @@ describe('Wiki API - 百科接口测试', () => {
      */
     it('每次访问应该增加浏览次数', async () => {
       // 创建测试页面
-      const wikiPage = await createCurrentUserWikiPage({
-        slug: 'test-view-count',
+      const wikiPage = await createCurrentUserNumericWikiPage({
         title: 'View Count Test',
         status: 'published',
       })
@@ -455,7 +463,7 @@ describe('Wiki API - 百科接口测试', () => {
     it('已登录用户应该看到个性化交互状态', async () => {
       // 创建测试页面
       const wikiPage = await createTestWikiPage({
-        slug: 'test-auth-personalized',
+        slug: nextTestNumericSlug(),
         title: 'Auth Personalized Test',
         status: 'published',
         authorUid: testUser.user.uid,
@@ -485,8 +493,7 @@ describe('Wiki API - 百科接口测试', () => {
      */
     it('未认证用户不能查看草稿状态的页面', async () => {
       // 创建草稿页面
-      const draftPage = await createCurrentUserWikiPage({
-        slug: 'test-draft-page',
+      const draftPage = await createCurrentUserNumericWikiPage({
         title: 'Draft Page',
         status: 'draft',
       })
@@ -505,7 +512,7 @@ describe('Wiki API - 百科接口测试', () => {
     it('作者应该能够查看自己的草稿页面', async () => {
       // 创建属于当前用户的草稿页面
       const draftPage = await createTestWikiPage({
-        slug: 'test-my-draft',
+        slug: nextTestNumericSlug(),
         title: 'My Draft',
         status: 'draft',
         authorUid: testUser.user.uid,
@@ -525,20 +532,16 @@ describe('Wiki API - 百科接口测试', () => {
      * 测试目的：验证特殊字符的 slug 处理
      * 预期结果：系统应正确处理各种 slug 格式
      */
-    it('应该正确处理特殊格式的 slug', async () => {
-      // 测试包含连字符、数字等的 slug
-      const specialSlug = 'test-special-123-with-dashes'
-
-      await createCurrentUserWikiPage({
-        slug: specialSlug,
+    it('应该只允许通过数字 slug 获取详情', async () => {
+      const wikiPage = await createCurrentUserNumericWikiPage({
         title: 'Special Slug Test',
         status: 'published',
       })
 
-      const response = await request(app).get(`/api/wiki/${specialSlug}`)
+      const response = await request(app).get(`/api/wiki/${wikiPage.slug}`)
 
       expect(response.status).toBe(200)
-      expect(response.body.page.slug).toBe(specialSlug)
+      expect(response.body.page.slug).toBe(wikiPage.slug)
     })
   })
 
@@ -570,14 +573,14 @@ describe('Wiki API - 百科接口测试', () => {
 
       expect(response.status).toBe(201)
       expect(response.body).toHaveProperty('page')
-      expect(response.body.page.slug).toBe(newPageData.slug)
+      expect(response.body.page.slug).toMatch(/^[1-9]\d*$/)
       expect(response.body.page.title).toBe(newPageData.title)
       expect(response.body.page.category).toBe(newPageData.category)
       expect(response.body.page.content).toBe(newPageData.content)
 
       // 验证数据库中确实创建了该页面
       const dbPage = await prisma.wikiPage.findUnique({
-        where: { slug: newPageData.slug },
+        where: { slug: response.body.page.slug },
       })
       expect(dbPage).not.toBeNull()
     })
@@ -694,10 +697,10 @@ describe('Wiki API - 百科接口测试', () => {
     })
 
     /**
-     * 测试目的：验证重复 slug 的处理
-     * 预期结果：返回 409 冲突错误
+     * 测试目的：验证服务端创建时统一分配数字 slug
+     * 预期结果：忽略客户端传入的重复 slug 并创建成功
      */
-    it('使用重复的 slug 创建页面应该返回错误', async () => {
+    it('创建页面时忽略客户端传入的重复 slug', async () => {
       const { agent, xsrfToken } = await createAuthenticatedAgent(
         testUser.user.email,
         testUser.plainPassword
@@ -718,7 +721,9 @@ describe('Wiki API - 百科接口测试', () => {
         content: 'Duplicate content',
       })
 
-      expect([409, 500]).toContain(response.status)
+      expect(response.status).toBe(201)
+      expect(response.body.page.slug).toMatch(/^[1-9]\d*$/)
+      expect(response.body.page.slug).not.toBe('test-duplicate-slug')
     })
   })
 

@@ -279,6 +279,7 @@ async function resolveVisibleProfileContentKeys(
           where: { id: { in: postIds }, deletedAt: null },
           select: {
             id: true,
+            slug: true,
             status: true,
             authorUid: true,
             deletedAt: true,
@@ -1550,6 +1551,7 @@ router.get(
           skip,
           select: {
             id: true,
+            slug: true,
             title: true,
             section: true,
             content: true,
@@ -1881,10 +1883,13 @@ router.get(
         ...new Set(comments.map((c) => c.galleryId).filter((id): id is string => Boolean(id))),
       ]
       const commentIds = comments.map((comment) => comment.id)
-      const postsMap = new Map<string, { id: string; title: string; status: string }>()
+      const postsMap = new Map<
+        string,
+        { id: string; slug: string; title: string; status: string }
+      >()
       const galleriesMap = new Map<
         string,
-        { id: string; title: string; status: string; published: boolean }
+        { id: string; slug: string; title: string; status: string; published: boolean }
       >()
       const deletionReasonMap = new Map<string, string | null>()
 
@@ -1895,7 +1900,7 @@ router.get(
                 id: { in: postIds },
                 ...visibilityWhere,
               },
-              select: { id: true, title: true, status: true },
+              select: { id: true, slug: true, title: true, status: true },
             })
           : Promise.resolve([]),
         galleryIds.length
@@ -1904,7 +1909,7 @@ router.get(
                 id: { in: galleryIds },
                 ...galleryVisibilityWhere,
               },
-              select: { id: true, title: true, status: true, published: true },
+              select: { id: true, slug: true, title: true, status: true, published: true },
             })
           : Promise.resolve([]),
         canViewPrivateUserContent && commentIds.length
@@ -1941,6 +1946,7 @@ router.get(
             target: gallery
               ? {
                   id: gallery.id,
+                  slug: gallery.slug,
                   title: gallery.title,
                   status: gallery.status,
                   published: gallery.published,
@@ -2118,6 +2124,7 @@ router.get(
           post: {
             select: {
               id: true,
+              slug: true,
               title: true,
               section: true,
               status: true,

@@ -12,6 +12,7 @@ import {
   normalizeOptionalDurationMs,
   normalizeSongCustomPlatformLinks,
   prisma,
+  withNumericSlugTransaction,
 } from '../utils'
 import type { MusicPlatform, SongCustomPlatformLink } from '../types'
 
@@ -488,7 +489,7 @@ function buildCreateData(input: NormalizedSongJsonInput) {
           })),
         }
       : undefined,
-  } satisfies Prisma.MusicTrackCreateInput
+  }
 }
 
 async function appendMissingSources(
@@ -704,8 +705,13 @@ export async function executeSongJsonImport(
           continue
         }
 
-        const song = await prisma.musicTrack.create({
-          data: buildCreateData(item.input),
+        const song = await withNumericSlugTransaction(prisma, 'MusicTrack', async (tx, slug) => {
+          return tx.musicTrack.create({
+            data: {
+              slug,
+              ...buildCreateData(item.input),
+            },
+          })
         })
         const coverResult = await tryMaybeAddCover(item.input, song, summary, options)
         await autoLinkInstrumental(

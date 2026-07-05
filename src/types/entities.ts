@@ -27,6 +27,7 @@ export interface MusicExternalSource {
 
 export interface SongItem {
   docId: string
+  slug?: string
   title: string
   artists: string[]
   lyricists?: string[]
@@ -54,6 +55,7 @@ export interface SongItem {
 
 export interface AlbumItem {
   docId?: string
+  slug?: string
   title: string
   artist: string
   cover: string
@@ -66,6 +68,7 @@ export interface AlbumItem {
 
 export interface PostItem {
   id: string
+  slug?: string
   title: string
   section: string
   content: string
@@ -112,7 +115,7 @@ export interface CommentItem {
   likesCount?: number
   likedByMe?: boolean
   createdAt: string
-  post?: { id: string; title: string; status: string } | null
+  post?: { id: string; slug?: string; title: string; status: string } | null
 }
 
 export interface SectionItem {
@@ -132,7 +135,7 @@ export interface WikiCategoryItem {
 
 export interface WikiItem {
   id: string
-  slug: string
+  slug?: string
   title: string
   category: string
   content: string
@@ -160,6 +163,7 @@ export interface WikiItem {
 
 export interface GalleryItem {
   id: string
+  slug?: string
   title: string
   description: string
   authorUid: string
