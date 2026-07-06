@@ -79,7 +79,7 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
     <ToastContext.Provider value={value}>
       {children}
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] pointer-events-none px-4">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[1100] pointer-events-none px-4">
           <div
             className={[
               'min-w-[220px] max-w-[calc(100vw-2rem)] rounded border px-4 py-3 text-sm font-medium transition-all duration-200',
