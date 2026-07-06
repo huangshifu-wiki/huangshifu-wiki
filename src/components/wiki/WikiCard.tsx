@@ -22,23 +22,18 @@ const WikiCard = React.memo(({ page, viewMode, cardHeight, categoryLabel }: Wiki
 
   return (
     <div
-      className={clsx('relative group', isListMode && 'flex')}
+      className={clsx('relative min-w-0 max-w-full', isListMode && 'flex')}
       role="article"
       aria-label={`${page.title} - ${categoryLabel}`}
     >
       <Link
         to={`/wiki/${page.slug}`}
         className={clsx(
+          CARD.base,
+          'min-w-0 max-w-full',
           isListMode
-            ? clsx(
-                CARD.wikiListLayout,
-                'mobile-list-card border-y border-[var(--book-ink-line)] transition-all hover:border-[var(--book-ink-line)]'
-              )
-            : clsx(
-                CARD.gridLayout,
-                'min-h-full border-y border-[var(--book-ink-line)] bg-transparent p-5 transition-all hover:border-[var(--book-ink-line)]',
-                cardHeight
-              ),
+            ? clsx(CARD.wikiListLayout, 'mobile-list-card')
+            : clsx(CARD.gridLayout, 'min-h-full p-5', cardHeight),
           page.isPinned ? 'border-l-[3px] border-l-brand-gold' : ''
         )}
       >

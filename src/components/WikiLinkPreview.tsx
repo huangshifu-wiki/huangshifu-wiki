@@ -120,7 +120,9 @@ export default function WikiLinkPreview({ slug, children }: WikiLinkPreviewProps
           )}
           {!loading && preview && (
             <>
-              <h4 className="font-semibold text-text-primary mb-2 line-clamp-1">{preview.title}</h4>
+              <h4 className="text-wrap-anywhere font-semibold text-text-primary mb-2 line-clamp-2">
+                {preview.title}
+              </h4>
               <p className="text-text-secondary text-xs leading-relaxed line-clamp-3">
                 {getExcerpt(preview.content)}
               </p>

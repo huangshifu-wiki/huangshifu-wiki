@@ -67,11 +67,11 @@ export const CARD = {
 
   /** WikiCard 列表标题 */
   wikiTitleList:
-    'text-base font-bold text-text-primary mb-1 group-hover:text-brand-gold transition-colors truncate',
+    'min-w-0 max-w-full text-base font-bold text-text-primary mb-1 group-hover:text-brand-gold transition-colors truncate',
 
   /** WikiCard 网格标题 */
   wikiTitleGrid:
-    'text-lg font-bold text-text-primary mb-2 group-hover:text-brand-gold transition-colors',
+    'min-w-0 max-w-full text-lg font-bold text-text-primary mb-2 group-hover:text-brand-gold transition-colors text-wrap-anywhere line-clamp-2',
 
   /** WikiCard 描述 */
   wikiDesc: 'text-text-muted text-sm line-clamp-2',

@@ -1451,13 +1451,21 @@ html {
 }
 
 .mobile-page-title {
+  min-width: 0;
+  max-width: 100%;
   color: var(--color-text-primary);
   font-family: var(--book-title-font);
   font-size: clamp(2rem, 4vw, 3.1rem);
   font-weight: 400;
   line-height: 1.25;
   letter-spacing: 0.12em;
+  overflow-wrap: anywhere;
   text-shadow: 0 12px 34px rgba(138, 109, 47, 0.08);
+}
+
+.text-wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .mobile-action-row {
@@ -1731,7 +1739,6 @@ html {
   }
 
   .mobile-page-title {
-    overflow-wrap: anywhere;
     font-size: 2rem;
     letter-spacing: 0.08em;
   }

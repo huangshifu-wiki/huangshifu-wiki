@@ -324,12 +324,12 @@ const WikiPageView = () => {
                     <Link
                       key={`${relation.targetSlug}-${index}`}
                       to={`/wiki/${relation.targetSlug}`}
-                      className="p-3 bg-surface border border-border rounded hover:border-brand-gold transition-all group"
+                      className="min-w-0 p-3 bg-surface border border-border rounded hover:border-brand-gold transition-all group"
                     >
                       <p className="text-xs text-brand-gold font-medium uppercase tracking-wider mb-1">
                         {relation.typeLabel || RELATION_TYPE_LABELS[relation.type] || relation.type}
                       </p>
-                      <p className="font-medium text-text-primary group-hover:text-brand-gold group-hover:underline underline-offset-4 transition-colors">
+                      <p className="text-wrap-anywhere font-medium text-text-primary group-hover:text-brand-gold group-hover:underline underline-offset-4 transition-colors line-clamp-2">
                         {getWikiRelationDisplayTitle(relation)}
                       </p>
                       {relation.bidirectional && (
@@ -354,9 +354,9 @@ const WikiPageView = () => {
                     <Link
                       key={link.id}
                       to={`/wiki/${link.slug}`}
-                      className="p-3 bg-surface border border-border rounded hover:border-brand-gold transition-all group"
+                      className="min-w-0 p-3 bg-surface border border-border rounded hover:border-brand-gold transition-all group"
                     >
-                      <p className="font-medium text-text-primary group-hover:text-brand-gold group-hover:underline underline-offset-4 transition-colors">
+                      <p className="text-wrap-anywhere font-medium text-text-primary group-hover:text-brand-gold group-hover:underline underline-offset-4 transition-colors line-clamp-2">
                         {link.title}
                       </p>
                       <p className="text-xs text-text-muted mt-1 truncate">{link.slug}</p>

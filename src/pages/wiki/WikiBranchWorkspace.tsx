@@ -460,10 +460,10 @@ const WikiBranchWorkspace = () => {
                       className="p-4 rounded bg-surface-alt/40 border border-border"
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-bold text-text-primary line-clamp-1">
+                        <p className="min-w-0 text-sm font-bold text-text-primary line-clamp-1">
                           {revision.title}
                         </p>
-                        <span className="text-[11px] text-text-muted">
+                        <span className="flex-shrink-0 text-[11px] text-text-muted">
                           #{revisions.length - index}
                         </span>
                       </div>

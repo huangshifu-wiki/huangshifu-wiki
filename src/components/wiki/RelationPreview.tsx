@@ -48,16 +48,18 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
       className={`p-4 rounded border ${isNew || isEditing ? 'border-brand-gold/30 bg-brand-gold/5' : 'border-border bg-surface'} hover:border-brand-gold/40 transition-all`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h4 className="font-semibold text-text-primary text-base">{displayTitle}</h4>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 mb-1">
+            <h4 className="min-w-0 text-wrap-anywhere font-semibold text-text-primary text-base">
+              {displayTitle}
+            </h4>
             {isNew && (
-              <span className="px-2 py-0.5 bg-[var(--color-theme-accent)] text-white text-[10px] font-medium rounded">
+              <span className="flex-shrink-0 px-2 py-0.5 bg-[var(--color-theme-accent)] text-white text-[10px] font-medium rounded">
                 新建
               </span>
             )}
             {isEditing && (
-              <span className="px-2 py-0.5 theme-bg-info-soft theme-text-info text-[10px] font-medium rounded">
+              <span className="flex-shrink-0 px-2 py-0.5 theme-bg-info-soft theme-text-info text-[10px] font-medium rounded">
                 编辑中
               </span>
             )}
@@ -76,7 +78,7 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
             {hasCustomDisplayName && (
               <>
                 <span>/</span>
-                <span>目标：{targetDisplayTitle}</span>
+                <span className="min-w-0 text-wrap-anywhere">目标：{targetDisplayTitle}</span>
               </>
             )}
           </div>
