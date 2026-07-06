@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ZoomIn, ZoomOut, Maximize, ChevronLeft, ChevronRight, X } from '@/src/components/icons'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import { getFitScale as getFitScaleUtil, computeNextScale } from '../utils/lightbox'
@@ -36,6 +37,7 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const triggerElementRef = useRef<HTMLElement | null>(null)
   const lightboxStateKey = useRef<string | null>(null)
+  const previousBodyOverflowRef = useRef<string | null>(null)
 
   // Drag refs (avoid stale closures during high-frequency events)
   const dragStartX = useRef(0)
@@ -114,6 +116,7 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
     if (!open || !presence.mounted) return
     triggerElementRef.current = document.activeElement as HTMLElement
     closeButtonRef.current?.focus()
+    previousBodyOverflowRef.current = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
     const key = `lightbox-${Date.now()}`
@@ -168,7 +171,8 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
     return () => {
       window.removeEventListener('popstate', handlePopstate)
       document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
+      document.body.style.overflow = previousBodyOverflowRef.current ?? ''
+      previousBodyOverflowRef.current = null
       triggerElementRef.current?.focus()
     }
   }, [open, presence.mounted])
@@ -332,10 +336,10 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
     return null
   }
 
-  return (
+  const overlay = (
     <div
       ref={containerRef}
-      className="floating-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/95 select-none"
+      className="floating-overlay fixed inset-0 z-[10000] flex items-center justify-center bg-black/95 select-none"
       data-state={presence.state}
       onWheel={handleWheel}
       onMouseMove={handleMouseMove}
@@ -466,4 +470,6 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
       </div>
     </div>
   )
+
+  return createPortal(overlay, document.body)
 }
