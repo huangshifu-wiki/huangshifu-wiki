@@ -1,5 +1,5 @@
 import React from 'react'
-import { LayoutGrid, Grid3X3, Grid2x2, List } from '@/src/components/icons'
+import { Grid2x2, Grid3X3, Grid3x2, List } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { VIEW_MODE_LABELS } from '../lib/viewModes'
 import type { ViewMode } from '../types/userPreferences'
@@ -14,9 +14,9 @@ interface ViewModeSelectorProps {
 const DEFAULT_VIEW_MODE_OPTIONS: readonly ViewMode[] = ['large', 'medium', 'small', 'list']
 
 const VIEW_MODE_ICONS: Record<ViewMode, React.ReactNode> = {
-  large: <LayoutGrid size={20} />,
-  medium: <Grid3X3 size={17} />,
-  small: <Grid2x2 size={14} />,
+  large: <Grid2x2 size={16} />,
+  medium: <Grid3x2 size={16} />,
+  small: <Grid3X3 size={16} />,
   list: <List size={16} />,
 }
 
