@@ -39,7 +39,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
   onSearchKeyword,
 }) => {
   return (
-    <div className="theme-panel mb-6 rounded p-4 sm:p-6">
+    <div className="mb-6 border-b border-[var(--book-ink-line)] pb-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-xs text-text-muted">热门:</span>
@@ -47,7 +47,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
             <button
               key={tag}
               onClick={() => onSearchKeyword(tag)}
-              className="min-h-8 rounded bg-surface-alt px-3 py-1 text-xs text-text-secondary transition-all cursor-pointer hover:text-brand-gold"
+              className="min-h-8 rounded-sm border border-[var(--book-ink-line)] bg-transparent px-3 py-1 text-xs text-text-secondary transition-all cursor-pointer hover:border-brand-gold hover:text-brand-gold"
             >
               {tag}
             </button>
@@ -70,12 +70,12 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden mt-5 pt-5 border-t border-border"
+            className="overflow-hidden mt-5 pt-5 border-t border-[var(--book-ink-line)]"
           >
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4 lg:gap-6">
               {/* 标签筛选 */}
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
+                <h4 className="text-xs font-semibold text-text-secondary tracking-[0.12em] flex items-center gap-2">
                   <Tag size={12} /> 标签筛选
                 </h4>
                 <div className="flex flex-wrap gap-2">
@@ -84,7 +84,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                       key={tag}
                       onClick={() => onToggleTag(tag)}
                       className={clsx(
-                        'px-3 py-1 rounded text-xs transition-all',
+                        'px-3 py-1 rounded-sm text-xs transition-all',
                         filters.selectedTags.includes(tag)
                           ? 'theme-button-primary border border-transparent'
                           : 'theme-button-secondary'
@@ -98,7 +98,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
 
               {/* 时间范围 */}
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
+                <h4 className="text-xs font-semibold text-text-secondary tracking-[0.12em] flex items-center gap-2">
                   <Calendar size={12} /> 时间范围
                 </h4>
                 <div className="grid grid-cols-2 gap-2">
@@ -127,7 +127,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
 
               {/* 内容类型 */}
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
+                <h4 className="text-xs font-semibold text-text-secondary tracking-[0.12em] flex items-center gap-2">
                   <Book size={12} /> 内容类型
                 </h4>
                 <div className="flex flex-wrap gap-2">
@@ -138,7 +138,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                         onUpdateFilters({ contentType: type as SearchFiltersType['contentType'] })
                       }
                       className={clsx(
-                        'px-3 py-1 rounded text-xs transition-all capitalize',
+                        'px-3 py-1 rounded-sm text-xs transition-all capitalize',
                         filters.contentType === type
                           ? 'theme-button-primary border border-transparent'
                           : 'theme-button-secondary'
@@ -152,7 +152,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
 
               {semanticSearchEnabled && (
                 <div className="space-y-3">
-                  <h4 className="text-xs font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
+                  <h4 className="text-xs font-semibold text-text-secondary tracking-[0.12em] flex items-center gap-2">
                     <Sparkles size={12} /> AI 搜图
                   </h4>
                   <div className="flex flex-wrap gap-2">
@@ -161,7 +161,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                         onUpdateFilters({ semanticImageSearch: !filters.semanticImageSearch })
                       }
                       className={clsx(
-                        'px-3 py-1 rounded text-xs transition-all flex items-center gap-1.5',
+                        'px-3 py-1 rounded-sm text-xs transition-all flex items-center gap-1.5',
                         filters.semanticImageSearch
                           ? 'theme-button-primary border border-transparent'
                           : 'theme-button-secondary'
@@ -171,7 +171,6 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                       智能混合搜索
                     </button>
                   </div>
-                  <p className="text-[10px] text-text-muted">关键词+语义向量融合搜索</p>
                 </div>
               )}
             </div>

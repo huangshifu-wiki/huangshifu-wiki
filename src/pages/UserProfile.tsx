@@ -443,7 +443,7 @@ export default function UserProfile() {
 
   if (profileLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center bg-bg-primary">
+      <div className="mobile-page-shell flex min-h-[60vh] items-center justify-center">
         <Loader2 size={24} className="animate-spin text-brand-gold" />
       </div>
     )
@@ -451,8 +451,8 @@ export default function UserProfile() {
 
   if (!profile) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center bg-bg-primary px-6 text-center text-sm text-text-muted">
-        {error || '用户不存在或暂不可见'}
+      <div className="mobile-page-shell flex min-h-[60vh] items-center justify-center px-6 text-center text-sm text-text-muted">
+        <span className="relative z-10">{error || '用户不存在或暂不可见'}</span>
       </div>
     )
   }
@@ -476,7 +476,7 @@ export default function UserProfile() {
                 onError={handleAvatarError}
               />
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-semibold text-text-primary sm:text-3xl">
+                <h1 className="truncate font-[var(--book-title-font)] text-3xl font-normal tracking-[0.08em] text-text-primary sm:text-4xl">
                   {profile.displayName}
                 </h1>
                 {isSelf && signatureEditing ? (

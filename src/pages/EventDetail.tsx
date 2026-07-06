@@ -35,7 +35,7 @@ const EventLinkPanel = ({
   emptyText: string
   links: EventItem['externalLinks']
 }) => (
-  <div className="rounded border border-border bg-surface p-5">
+  <div className="border-y border-[var(--book-ink-line)] py-5">
     <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
       <ExternalLink size={16} className="text-brand-gold" />
       {title}
@@ -144,25 +144,25 @@ const EventDetail = () => {
         </Link>
 
         <article className="space-y-8">
-          <header className="grid gap-5 sm:gap-6 lg:grid-cols-[360px_1fr]">
-            <div className="aspect-[4/3] overflow-hidden rounded bg-surface-alt">
+          <header className="flex flex-col gap-6 border-b border-[var(--book-ink-line)] pb-6 sm:flex-row sm:items-start">
+            <div className="flex w-full shrink-0 items-start justify-center overflow-hidden sm:w-auto sm:justify-start">
               {coverSrc ? (
-                <SmartImage
+                <img
                   src={coverSrc}
                   alt={event.title}
-                  className="h-full w-full object-cover"
+                  className="block h-auto max-h-56 w-auto max-w-56 object-contain sm:max-h-72 sm:max-w-72"
                   loading="eager"
-                  fetchpriority="high"
+                  fetchPriority="high"
                 />
               ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text-muted">
+                <div className="flex h-56 w-56 flex-col items-center justify-center gap-2 bg-surface-alt text-text-muted sm:h-72 sm:w-72">
                   <Calendar size={32} className="text-brand-gold/60" />
                   <span className="text-sm">暂无封面</span>
                 </div>
               )}
             </div>
 
-            <div className="min-w-0 space-y-5">
+            <div className="min-w-0 flex-1 space-y-5">
               <h1 className="mobile-page-title">{event.title}</h1>
               <div className="space-y-3 text-sm text-text-secondary">
                 <div className="flex gap-2">
@@ -188,7 +188,7 @@ const EventDetail = () => {
                       <Link
                         key={tag}
                         to={`/events?tag=${encodeURIComponent(tag)}`}
-                        className="rounded px-2 py-0.5 text-xs theme-tag"
+                        className="rounded-sm px-2 py-0.5 text-xs theme-tag"
                       >
                         {tag}
                       </Link>
@@ -206,7 +206,7 @@ const EventDetail = () => {
           ) : null}
 
           <section className="grid gap-4 md:grid-cols-2">
-            <div className="rounded border border-border bg-surface p-5">
+            <div className="border-y border-[var(--book-ink-line)] py-5">
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <Ticket size={16} className="text-brand-gold" />
                 票价
@@ -218,7 +218,7 @@ const EventDetail = () => {
               )}
             </div>
 
-            <div className="rounded border border-border bg-surface p-5">
+            <div className="border-y border-[var(--book-ink-line)] py-5">
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <Calendar size={16} className="text-brand-gold" />
                 起售时间
@@ -237,7 +237,7 @@ const EventDetail = () => {
               )}
             </div>
 
-            <div className="rounded border border-border bg-surface p-5">
+            <div className="border-y border-[var(--book-ink-line)] py-5">
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <Users size={16} className="text-brand-gold" />
                 阵容
@@ -247,7 +247,7 @@ const EventDetail = () => {
                   {event.lineup.map((item, index) => (
                     <span
                       key={`${item}-${index}`}
-                      className="rounded bg-surface-alt px-2 py-1 text-xs text-brand-gold"
+                      className="rounded-sm bg-surface-alt px-2 py-1 text-xs text-brand-gold"
                     >
                       {item}
                     </span>
@@ -280,7 +280,7 @@ const EventDetail = () => {
                       setLightboxIndex(index)
                       setLightboxOpen(true)
                     }}
-                    className="aspect-[3/4] overflow-hidden rounded bg-surface-alt"
+                    className="aspect-[3/4] overflow-hidden bg-surface-alt"
                   >
                     <SmartImage
                       src={poster.url}

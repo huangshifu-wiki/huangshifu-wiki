@@ -260,7 +260,7 @@ const WikiPageView = () => {
         {/* Filter bar style info bar */}
         <div className="mobile-filterbar">
           <div className="mobile-filter-tabs items-center">
-            <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
+            <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold">
               {getCategoryLabel(page.category)}
             </span>
             {canSubmitReview && (

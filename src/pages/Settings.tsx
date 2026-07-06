@@ -1321,9 +1321,6 @@ const Settings = () => {
                 <div className="flex max-w-3xl items-center justify-between gap-4 border-t border-border pt-6">
                   <div>
                     <p className="text-sm font-medium text-text-primary">列表加载方式</p>
-                    <p className="mt-1 text-xs text-text-muted">
-                      分段加载会在滚动到底部时继续追加内容
-                    </p>
                   </div>
                   <div
                     className="inline-flex rounded border border-border bg-surface p-1"

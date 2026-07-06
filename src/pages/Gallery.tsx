@@ -1,14 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Image as ImageIcon, Plus, Clock, User as UserIcon, Link2 } from '@/src/components/icons'
+import { Image as ImageIcon, Plus, Clock, User as UserIcon } from '@/src/components/icons'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import { ViewModeSelector } from '../components/ViewModeSelector'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import { clsx } from 'clsx'
 import { SmartImage } from '../components/SmartImage'
-import { useToast } from '../components/Toast'
-import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { apiGet, invalidateApiCacheByPrefix } from '../lib/apiClient'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import { formatDate } from '../lib/dateUtils'
@@ -61,22 +59,21 @@ const GalleryCover = ({ gallery, className, imageClassName }: GalleryCoverProps)
 interface GalleryCardProps {
   gallery: GalleryItem
   viewMode: string
-  onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, slug: string) => void
 }
 
-const GalleryCard = React.memo(({ gallery, viewMode, onCopyLink }: GalleryCardProps) => (
+const GalleryCard = React.memo(({ gallery, viewMode }: GalleryCardProps) => (
   <div className={clsx('relative group', viewMode === 'list' && 'flex')}>
     <Link
       to={`/gallery/${gallery.slug || gallery.id}`}
       className={clsx(
         viewMode === 'list'
-          ? 'mobile-list-card flex gap-4 p-3 bg-surface border border-border rounded overflow-hidden hover:border-brand-gold transition-all w-full'
-          : 'block bg-surface border border-border rounded overflow-hidden hover:border-brand-gold transition-all'
+          ? 'mobile-list-card flex gap-4 border-y border-[var(--book-ink-line)] py-3 transition-all hover:border-[var(--book-ink-line)] w-full'
+          : 'block overflow-hidden border-y border-[var(--book-ink-line)] bg-transparent transition-all hover:border-[var(--book-ink-line)]'
       )}
     >
       {viewMode === 'list' ? (
         <>
-          <div className="mobile-list-thumb w-20 h-20 bg-surface-alt rounded overflow-hidden flex-shrink-0">
+          <div className="mobile-list-thumb w-20 h-20 bg-surface-alt overflow-hidden flex-shrink-0">
             <GalleryCover
               gallery={gallery}
               className="h-full w-full"
@@ -88,7 +85,7 @@ const GalleryCard = React.memo(({ gallery, viewMode, onCopyLink }: GalleryCardPr
               <h3 className="text-sm font-medium text-text-primary group-hover:text-brand-gold transition-colors truncate">
                 {gallery.title}
               </h3>
-              <span className="px-1.5 py-0.5 bg-surface-alt text-text-muted text-[10px] font-medium rounded flex-shrink-0">
+              <span className="px-1.5 py-0.5 bg-surface-alt text-text-muted text-[10px] font-medium rounded-sm flex-shrink-0">
                 {Array.isArray(gallery.images) ? gallery.images.length : 0} 张
               </span>
               {gallery.status && gallery.status !== 'published' ? (
@@ -125,9 +122,6 @@ const GalleryCard = React.memo(({ gallery, viewMode, onCopyLink }: GalleryCardPr
               className="h-full w-full"
               imageClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />
-            <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/40 text-white text-[10px] font-medium rounded">
-              {Array.isArray(gallery.images) ? gallery.images.length : 0} 张
-            </div>
             {gallery.status && gallery.status !== 'published' ? (
               <div
                 className={clsx(
@@ -139,7 +133,7 @@ const GalleryCard = React.memo(({ gallery, viewMode, onCopyLink }: GalleryCardPr
               </div>
             ) : null}
           </div>
-          <div className="p-3">
+          <div className="py-3">
             <h3 className="text-sm font-medium text-text-primary mb-1 group-hover:text-brand-gold transition-colors truncate">
               {gallery.title}
             </h3>
@@ -147,7 +141,7 @@ const GalleryCard = React.memo(({ gallery, viewMode, onCopyLink }: GalleryCardPr
               {gallery.tags?.slice(0, 3).map((tag: string) => (
                 <span
                   key={tag}
-                  className="text-[10px] text-brand-gold bg-surface-alt px-1.5 py-0.5 rounded"
+                  className="text-[10px] text-brand-gold bg-surface-alt px-1.5 py-0.5 rounded-sm"
                 >
                   {tag}
                 </span>
@@ -167,19 +161,6 @@ const GalleryCard = React.memo(({ gallery, viewMode, onCopyLink }: GalleryCardPr
         </>
       )}
     </Link>
-    <button
-      onClick={(event) => onCopyLink(event, gallery.slug || gallery.id)}
-      className={clsx(
-        'mobile-card-action rounded bg-surface/90 p-2.5 text-text-muted border border-border transition-all hover:text-brand-gold',
-        viewMode === 'list'
-          ? 'absolute top-2 right-2'
-          : 'absolute bottom-2 right-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-      )}
-      title="复制内链"
-      aria-label="复制图集内链"
-    >
-      <Link2 size={12} />
-    </button>
   </div>
 ))
 
@@ -190,7 +171,6 @@ const GalleryList = () => {
   const [isGalleryAdminOnly, setIsGalleryAdminOnly] = useState(false)
   const [galleryAccessLoaded, setGalleryAccessLoaded] = useState(false)
   const [totalGalleries, setTotalGalleries] = useState(0)
-  const { show } = useToast()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
   const navigate = useNavigate()
   const viewMode = getScopedViewMode('gallery')
@@ -325,20 +305,6 @@ const GalleryList = () => {
     fetchGalleryAccess()
   }, [])
 
-  const handleCopyGalleryLink = async (
-    event: React.MouseEvent<HTMLButtonElement>,
-    slug: string
-  ) => {
-    event.preventDefault()
-    event.stopPropagation()
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/gallery/${slug}`))
-    if (copied) {
-      show('图集内链已复制')
-      return
-    }
-    show('复制链接失败，请稍后重试', { variant: 'error' })
-  }
-
   return (
     <div className="mobile-page-shell">
       <div className="mobile-page-container gallery-page">
@@ -375,12 +341,7 @@ const GalleryList = () => {
               )}
             >
               {visibleGalleries.map((gallery) => (
-                <GalleryCard
-                  key={gallery.id}
-                  gallery={gallery}
-                  viewMode={viewMode}
-                  onCopyLink={handleCopyGalleryLink}
-                />
+                <GalleryCard key={gallery.id} gallery={gallery} viewMode={viewMode} />
               ))}
             </div>
             {isIncrementalMode ? (

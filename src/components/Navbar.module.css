@@ -81,6 +81,7 @@
   color: var(--home-text-2);
   font-family: var(--home-font-body);
   font-size: 0.88rem;
+  font-weight: 400;
   letter-spacing: 0.12em;
   text-decoration: none;
   transition: color 0.3s ease;
@@ -99,6 +100,19 @@
 
 .navLink:hover {
   color: var(--home-gold);
+}
+
+.navLink[aria-current='page'] {
+  color: var(--home-gold);
+  font-weight: 600;
+}
+
+.navLink[aria-current='page']::after {
+  width: 100%;
+}
+
+.siteNavLinks:hover .navLink[aria-current='page']:not(:hover)::after {
+  width: 0;
 }
 
 .navLink:hover::after {

@@ -131,9 +131,9 @@ const renderArticlePreview = (item: AdminReviewQueueMergedItem) => (
       </div>
     </header>
 
-    <div className="flex items-end justify-between border-b border-border mb-5">
+    <div className="flex items-end justify-between mb-5">
       <div className="flex gap-5 items-center">
-        <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
+        <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold">
           {getContentLabel(item)}
         </span>
       </div>
@@ -181,9 +181,9 @@ const renderGalleryPreview = (
         {item.copyright && <p className="text-xs text-text-muted mt-1">{item.copyright}</p>}
       </header>
 
-      <div className="flex items-end justify-between border-b border-border mb-6 pb-2">
+      <div className="flex items-end justify-between mb-6 pb-2">
         <div className="flex items-center gap-4 flex-wrap">
-          <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
+          <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold">
             图片（{images.length}）
           </span>
         </div>
@@ -256,7 +256,7 @@ const AdminReviewContentPreview = ({ item }: AdminReviewContentPreviewProps) => 
 
   return (
     <div
-      className="min-h-[calc(100vh-10rem)] bg-bg-primary rounded border border-border"
+      className="min-h-[calc(100vh-10rem)] bg-[var(--color-bg-antique)] rounded border border-border"
       style={{
         fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
         lineHeight: 1.8,

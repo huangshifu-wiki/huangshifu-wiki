@@ -79,18 +79,12 @@ const Setup = () => {
   }
 
   return (
-    <div
-      className="flex min-h-screen items-center justify-center bg-bg-primary px-6 py-12"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-      }}
-    >
-      <div className="w-full max-w-md">
+    <div className="mobile-page-shell flex min-h-screen items-center justify-center px-6 py-12">
+      <div className="theme-panel relative z-10 w-full max-w-md rounded-sm p-6 sm:p-8">
         <div className="mb-6">
-          <p className="mb-2 text-xs font-medium tracking-[0.14em] text-text-muted">
-            INITIAL SETUP
-          </p>
-          <h1 className="text-xl font-bold text-text-primary">初始化超级管理员</h1>
+          <h1 className="font-[var(--book-title-font)] text-3xl font-normal tracking-[0.1em] text-text-primary">
+            初始化超级管理员
+          </h1>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">

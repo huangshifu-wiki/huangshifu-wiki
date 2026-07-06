@@ -129,8 +129,8 @@ const SidebarNavLink = ({
         'flex items-center gap-3 rounded transition-all',
         paddingClassName,
         isActive
-          ? 'bg-surface-alt text-brand-gold font-medium'
-          : 'text-text-secondary hover:bg-surface-alt hover:text-brand-gold',
+          ? 'bg-[color-mix(in_srgb,var(--color-theme-accent)_12%,var(--color-surface))] text-brand-gold font-medium shadow-[inset_2px_0_0_var(--color-theme-accent)]'
+          : 'text-text-secondary hover:bg-[var(--book-panel-hover)] hover:text-brand-gold',
         className
       )}
       title={sidebarCollapsed && !mobileOpen ? item.label : undefined}
@@ -226,29 +226,29 @@ export const AdminLayout = () => {
 
   return (
     <div
-      className="h-screen flex flex-col overflow-hidden"
+      className="h-screen flex flex-col overflow-hidden bg-[var(--color-bg-antique)]"
       style={{
         fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
       }}
     >
       {/* Header */}
-      <header className="h-14 bg-surface border-b border-border flex items-center justify-between px-4 md:px-6 z-50 shrink-0">
+      <header className="h-14 border-b border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] backdrop-blur-[14px] flex items-center justify-between px-4 md:px-6 z-50 shrink-0 shadow-[0_1px_0_rgba(138,109,47,0.06)]">
         <div className="flex items-center gap-3">
           <button
-            className="md:hidden p-2 hover:bg-surface-alt rounded text-text-secondary"
+            className="md:hidden p-2 hover:bg-[var(--book-panel-hover)] rounded text-text-secondary"
             onClick={() => setMobileOpen((open) => !open)}
           >
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           <Link
             to="/admin"
-            className="text-lg font-bold text-text-primary hover:text-brand-gold transition-colors"
+            className="font-[var(--book-title-font)] text-2xl font-normal tracking-[0.1em] text-text-primary hover:text-brand-gold transition-colors"
           >
             管理后台
           </Link>
           <Link
             to="/"
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-muted hover:text-brand-gold hover:bg-surface-alt rounded transition-colors"
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-muted hover:text-brand-gold hover:bg-[var(--book-panel-hover)] rounded transition-colors"
           >
             <Home size={16} /> 返回主页
           </Link>
@@ -267,7 +267,7 @@ export const AdminLayout = () => {
         {/* Sidebar */}
         <aside
           className={clsx(
-            'bg-surface border-r border-border z-40 transition-all duration-300 shrink-0 flex flex-col',
+            'bg-[var(--book-panel-bg-strong)] border-r border-[var(--book-ink-line)] z-40 transition-all duration-300 shrink-0 flex flex-col shadow-[10px_0_28px_rgba(72,53,25,0.06)] backdrop-blur-[12px]',
             'fixed top-14 left-0 h-[calc(100vh-3.5rem)] md:static md:h-auto',
             mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
             sidebarCollapsed ? 'w-16' : 'w-56'
@@ -321,10 +321,10 @@ export const AdminLayout = () => {
             />
           </nav>
 
-          <div className="hidden md:block p-2 border-t border-border">
+          <div className="hidden md:block p-2 border-t border-[var(--book-ink-line)]">
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="w-full p-2 text-text-muted hover:text-brand-gold hover:bg-surface-alt rounded transition-colors flex items-center justify-center"
+              className="w-full p-2 text-text-muted hover:text-brand-gold hover:bg-[var(--book-panel-hover)] rounded transition-colors flex items-center justify-center"
             >
               {sidebarCollapsed ? (
                 <ChevronRight size={16} />
@@ -340,8 +340,10 @@ export const AdminLayout = () => {
           data-admin-scroll-container
           className="flex-1 overflow-y-auto bg-[var(--color-bg-antique)]"
         >
-          <div className="p-4 md:p-6 lg:p-8 min-h-full">
-            <Outlet />
+          <div className="relative min-h-full p-4 md:p-6 lg:p-8 before:pointer-events-none before:fixed before:inset-0 before:bg-[image:var(--book-paper-image)] before:bg-[length:var(--book-paper-size)] before:opacity-70 before:content-['']">
+            <div className="relative z-10">
+              <Outlet />
+            </div>
           </div>
         </main>
       </div>

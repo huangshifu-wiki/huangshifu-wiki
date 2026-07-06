@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { List, ChevronRight, Link2 } from '@/src/components/icons'
+import { List, ChevronRight } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useI18n } from '../../lib/i18n'
 import { SmartImage } from '../SmartImage'
@@ -9,14 +9,9 @@ import type { AlbumItem } from '../../types/entities'
 interface AlbumCardProps {
   album: AlbumItem
   viewMode?: 'grid' | 'list'
-  onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, slug: string) => void
 }
 
-const AlbumCard = React.memo(function AlbumCard({
-  album,
-  viewMode = 'grid',
-  onCopyLink,
-}: AlbumCardProps) {
+const AlbumCard = React.memo(function AlbumCard({ album, viewMode = 'grid' }: AlbumCardProps) {
   const { t } = useI18n()
   const albumSlug = album.slug || album.docId || ''
   const trackCount = album.trackCount ?? album.tracks?.length ?? 0
@@ -24,7 +19,7 @@ const AlbumCard = React.memo(function AlbumCard({
 
   if (viewMode === 'list') {
     return (
-      <div className="group flex items-center gap-3 border-b border-border px-1 py-3 transition-all hover:bg-surface-alt sm:gap-4 sm:py-4">
+      <div className="group flex items-center gap-3 border-y border-[var(--book-ink-line)] px-1 py-3 transition-all hover:bg-surface-alt sm:gap-4 sm:py-4">
         <div className="relative h-12 w-12 flex-shrink-0 sm:h-14 sm:w-14">
           <SmartImage
             src={coverSrc}
@@ -77,20 +72,13 @@ const AlbumCard = React.memo(function AlbumCard({
         <p className="text-xs text-text-muted truncate">{album.artist}</p>
       </Link>
 
-      <div className="mt-2 flex items-center justify-between">
+      <div className="mt-2 flex items-center">
         <Link
           to={`/album/${albumSlug}`}
           className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-brand-gold transition-colors"
         >
           {t('music.viewAlbum')} <ChevronRight size={14} />
         </Link>
-        <button
-          onClick={(event) => onCopyLink(event, albumSlug)}
-          className="mobile-card-action p-1.5 text-text-muted transition-colors hover:text-brand-gold"
-          title={t('music.copyAlbumLink')}
-        >
-          <Link2 size={14} />
-        </button>
       </div>
     </div>
   )

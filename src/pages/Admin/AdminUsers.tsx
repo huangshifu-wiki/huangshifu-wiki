@@ -637,7 +637,7 @@ export const AdminUsers = () => {
               value={editForm.displayName}
               onChange={(e) => updateEditForm('displayName', e.target.value)}
               maxLength={PROFILE_DISPLAY_NAME_MAX_LENGTH}
-              className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
 
@@ -647,7 +647,7 @@ export const AdminUsers = () => {
               type="email"
               value={editForm.email}
               onChange={(e) => updateEditForm('email', e.target.value)}
-              className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
 
@@ -689,7 +689,7 @@ export const AdminUsers = () => {
               value={editForm.signature}
               onChange={(e) => updateEditForm('signature', e.target.value)}
               maxLength={PROFILE_SIGNATURE_MAX_LENGTH}
-              className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
 
@@ -703,7 +703,7 @@ export const AdminUsers = () => {
               onChange={(e) => updateEditForm('bio', e.target.value)}
               maxLength={WIKI_MAX_CONTENT_SIZE}
               rows={6}
-              className="w-full resize-y rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full resize-y rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
 
@@ -719,7 +719,7 @@ export const AdminUsers = () => {
               autoComplete="new-password"
               minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
-              className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
 
@@ -732,7 +732,7 @@ export const AdminUsers = () => {
               autoComplete="new-password"
               minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
-              className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
         </div>

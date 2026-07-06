@@ -184,7 +184,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     return (
       <div className="space-y-3 animate-pulse">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-24 theme-panel rounded" />
+          <div key={i} className="h-24 book-skeleton border-y border-[var(--book-ink-line)]" />
         ))}
       </div>
     )
@@ -192,7 +192,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   if (!hasSearched && !hasFilters) {
     return (
-      <div className="theme-panel rounded p-10 text-center sm:p-20">
+      <div className="border-y border-[var(--book-ink-line)] p-10 text-center sm:p-20">
         <Tag size={48} className="mx-auto text-border mb-6" />
         <p className="text-text-muted italic">输入关键词、上传图片或使用高级筛选开始探索</p>
       </div>
@@ -209,7 +209,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   if (!isMixedSearch && totalResults === 0 && (textSemanticResults?.length ?? 0) === 0) {
     return (
-      <div className="theme-panel rounded p-10 text-center sm:p-20">
+      <div className="border-y border-[var(--book-ink-line)] p-10 text-center sm:p-20">
         <SearchIcon size={48} className="mx-auto text-border mb-6" />
         <p className="text-text-muted italic">未找到符合筛选条件的结果</p>
       </div>
@@ -218,10 +218,9 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   if (isMixedSearch && mixedResults.length === 0) {
     return (
-      <div className="theme-panel rounded p-10 text-center sm:p-20">
+      <div className="border-y border-[var(--book-ink-line)] p-10 text-center sm:p-20">
         <Sparkles size={48} className="mx-auto text-border mb-6" />
         <p className="text-text-muted italic">未找到语义匹配的结果</p>
-        <p className="text-text-muted/70 text-sm mt-2">尝试使用其他关键词或上传图片搜索</p>
       </div>
     )
   }
@@ -238,7 +237,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               className={clsx(
                 'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
                 activeTab === tab.id
-                  ? "text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]"
+                  ? 'text-brand-gold font-semibold'
                   : 'text-text-muted hover:text-brand-gold'
               )}
             >

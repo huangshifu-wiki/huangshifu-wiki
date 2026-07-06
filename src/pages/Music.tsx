@@ -6,7 +6,6 @@ import { useMusic } from '../context/MusicContext'
 import { clsx } from 'clsx'
 import { useToast } from '../components/Toast'
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
-import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import Pagination from '../components/Pagination'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
@@ -226,16 +225,6 @@ const Music = () => {
     setIsPlaying(true)
   }
 
-  const handleCopyAlbumLink = async (event: React.MouseEvent<HTMLButtonElement>, slug: string) => {
-    event.stopPropagation()
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/album/${slug}`))
-    if (copied) {
-      show('专辑内链已复制')
-      return
-    }
-    show('复制链接失败，请稍后重试', { variant: 'error' })
-  }
-
   const handleToggleFavorite = async (song: SongItem) => {
     if (!user || !song.docId) {
       show('请先登录后收藏', { variant: 'error' })
@@ -325,7 +314,7 @@ const Music = () => {
                       className={clsx(
                         'mobile-grid',
                         viewMode === 'list'
-                          ? 'divide-y divide-border'
+                          ? 'shared-ink-list'
                           : clsx(
                               'grid',
                               VIEW_MODE_CONFIG[viewMode].gridCols,
@@ -412,7 +401,6 @@ const Music = () => {
                           key={album.docId}
                           album={album}
                           viewMode={viewMode === 'list' ? 'list' : 'grid'}
-                          onCopyLink={handleCopyAlbumLink}
                         />
                       ))}
                     </div>

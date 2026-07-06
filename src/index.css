@@ -37,11 +37,13 @@
   --color-theme-button-contrast: #fff;
   --color-theme-text-inverse: #fff;
   --color-theme-selection-text: #2c2c2c;
-  --font-theme-main: var(--font-sans);
+  --font-theme-main: var(--home-font-body);
   --font-theme-serif: var(--font-serif);
-  --radius-theme-card: 1.5rem;
-  --shadow-theme-card: 0 10px 30px rgba(0, 0, 0, 0.06);
-  --theme-header-image: linear-gradient(135deg, rgba(176, 123, 23, 0.12), rgba(240, 236, 227, 0.7));
+  --radius-theme-card: 0.5rem;
+  --shadow-theme-card: 0 14px 34px rgba(72, 53, 25, 0.08);
+  --theme-header-image:
+    radial-gradient(ellipse at 15% 0%, rgba(158, 49, 38, 0.06), transparent 42%),
+    linear-gradient(135deg, rgba(176, 123, 23, 0.12), rgba(240, 236, 227, 0.72));
 
   --home-bg-deep: #f4efe4;
   --home-bg-surface: #eee9de;
@@ -76,19 +78,37 @@
   --home-shadow-lg: 0 12px 48px rgba(42, 37, 32, 0.08);
   --home-font-display: 'Ma Shan Zheng HSF', 'STKaiti', 'KaiTi', cursive;
   --home-font-body: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+  --book-bg-image:
+    radial-gradient(ellipse at 12% 4%, rgba(148, 48, 42, 0.055), transparent 34%),
+    radial-gradient(ellipse at 88% 10%, rgba(138, 109, 47, 0.08), transparent 38%),
+    radial-gradient(ellipse at 48% 100%, rgba(138, 109, 47, 0.06), transparent 42%),
+    linear-gradient(180deg, #f7f2e7 0%, #f3ecde 48%, #f7f2e7 100%);
+  --book-paper-image:
+    linear-gradient(rgba(138, 109, 47, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(138, 109, 47, 0.026) 1px, transparent 1px);
+  --book-paper-size: 42px 42px;
+  --book-ink-line: rgba(119, 88, 37, 0.18);
+  --book-panel-bg: rgba(255, 252, 245, 0.78);
+  --book-panel-bg-strong: rgba(255, 252, 245, 0.92);
+  --book-panel-hover: rgba(255, 249, 236, 0.98);
+  --book-panel-shadow: 0 14px 36px rgba(72, 53, 25, 0.08);
+  --book-panel-shadow-hover: 0 22px 48px rgba(72, 53, 25, 0.13);
+  --book-focus-ring: 0 0 0 3px rgba(176, 123, 23, 0.18);
+  --book-title-font: 'Ma Shan Zheng HSF', 'STKaiti', 'KaiTi', var(--home-font-body);
 
-  /* 高亮文字色 - 苹果标志性渐变色彩 */
-  --color-highlight-1: rgba(255, 149, 0, 0.8);
-  --color-highlight-2: rgba(255, 99, 132, 0.8);
-  --color-highlight-3: rgba(153, 102, 255, 0.8);
-  --color-highlight-4: rgba(54, 162, 235, 0.8);
+  /* 高亮文字色 - 书卷金、朱砂、黛青、松绿 */
+  --color-highlight-1: rgba(176, 123, 23, 0.82);
+  --color-highlight-2: rgba(158, 49, 38, 0.78);
+  --color-highlight-3: rgba(54, 85, 91, 0.78);
+  --color-highlight-4: rgba(76, 112, 83, 0.78);
 
-  /* 苹果标志性渐变 - 蓝紫渐变 */
-  --gradient-highlight: linear-gradient(135deg, #007aff 0%, #5856d6 100%);
+  /* 古风高亮渐变 */
+  --gradient-highlight: linear-gradient(135deg, #8a6313 0%, #9e3126 52%, #36555b 100%);
   --gradient-highlight-subtle: linear-gradient(
     135deg,
-    rgba(0, 122, 255, 0.8) 0%,
-    rgba(88, 86, 214, 0.8) 100%
+    rgba(138, 99, 19, 0.78) 0%,
+    rgba(158, 49, 38, 0.72) 55%,
+    rgba(54, 85, 91, 0.74) 100%
   );
 
   /* CTA 行动号召色 */
@@ -132,8 +152,6 @@
   /* 占位/错误状态色 (Placeholder & Error State) */
   --color-surface-error: #f5f2eb;
   --color-surface-form: #faf7f2;
-  --color-action-blue: #1890ff;
-
   /* 功能色 (Functional) */
   --color-success: #22c55e;
   --color-success-rgb: 34, 197, 94;
@@ -148,7 +166,7 @@
   --color-info-rgb: 59, 130, 246;
   --color-info-hover: #2563eb;
 
-  /* Liquid Glass 玻璃质感核心变量 */
+  /* 纸面浮层核心变量 */
   --glass-bg: rgba(255, 255, 255, 0.2);
   --glass-bg-strong: rgba(255, 255, 255, 0.8);
   --glass-blur: 15px;
@@ -180,7 +198,7 @@
   --color-menu-hover-light: rgba(255, 255, 255, 0.5);
   --shadow-menu-hover-light: inset -2px -2px 2px rgba(0, 0, 0, 0.1);
 
-  /* Liquid Glass 流动效果变量 */
+  /* 纸面浮层动效变量 */
   --morph-duration: 400ms;
   --morph-easing: cubic-bezier(0.175, 0.885, 0.32, 2.2);
   --focus-scale: 1.02;
@@ -317,6 +335,21 @@ a.mention-highlight:hover {
   --home-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
   --home-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.24);
   --home-shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.34);
+  --book-bg-image:
+    radial-gradient(ellipse at 12% 4%, rgba(120, 36, 42, 0.18), transparent 34%),
+    radial-gradient(ellipse at 88% 10%, rgba(201, 169, 110, 0.11), transparent 38%),
+    radial-gradient(ellipse at 48% 100%, rgba(201, 169, 110, 0.08), transparent 42%),
+    linear-gradient(180deg, #1f1a16 0%, #191511 48%, #1f1a16 100%);
+  --book-paper-image:
+    linear-gradient(rgba(201, 169, 110, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201, 169, 110, 0.025) 1px, transparent 1px);
+  --book-ink-line: rgba(201, 169, 110, 0.18);
+  --book-panel-bg: rgba(42, 35, 30, 0.78);
+  --book-panel-bg-strong: rgba(42, 35, 30, 0.92);
+  --book-panel-hover: rgba(52, 44, 37, 0.98);
+  --book-panel-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+  --book-panel-shadow-hover: 0 24px 52px rgba(0, 0, 0, 0.38);
+  --book-focus-ring: 0 0 0 3px rgba(212, 168, 67, 0.2);
 }
 
 @layer base {
@@ -341,7 +374,8 @@ a.mention-highlight:hover {
   }
 
   body {
-    background: var(--color-theme-bg);
+    background: var(--book-bg-image);
+    background-attachment: fixed;
     color: var(--color-theme-text);
     font-family: var(--font-theme-main);
     margin: 0;
@@ -355,6 +389,20 @@ a.mention-highlight:hover {
   h5,
   h6 {
     font-family: var(--font-theme-serif);
+  }
+
+  a,
+  button,
+  input,
+  textarea,
+  select {
+    letter-spacing: 0;
+  }
+
+  :focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--color-theme-accent) 70%, transparent);
+    outline-offset: 3px;
+    box-shadow: var(--book-focus-ring);
   }
 
   /* 全局 ::selection 样式 - 古风黄色调 */
@@ -402,14 +450,17 @@ a.mention-highlight:hover {
 }
 
 .theme-panel {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-theme-card);
+  position: relative;
+  background: var(--book-panel-bg);
+  border: 1px solid var(--book-ink-line);
+  box-shadow: var(--book-panel-shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .theme-panel-soft {
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
+  border: 1px solid var(--book-ink-line);
 }
 
 .theme-divider {
@@ -417,9 +468,13 @@ a.mention-highlight:hover {
 }
 
 .theme-input {
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface-alt) 88%, transparent);
+  border: 1px solid var(--book-ink-line);
   color: var(--color-text-primary);
+  transition:
+    border-color 0.22s ease,
+    background 0.22s ease,
+    box-shadow 0.22s ease;
 }
 
 .theme-input::placeholder {
@@ -429,29 +484,45 @@ a.mention-highlight:hover {
 .theme-input:focus {
   outline: none;
   border-color: var(--color-theme-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-theme-accent) 16%, transparent);
+  background: var(--book-panel-bg-strong);
+  box-shadow: var(--book-focus-ring);
 }
 
 .theme-button-primary {
-  background: var(--color-theme-accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent), var(--color-theme-accent);
+  border: 1px solid color-mix(in srgb, var(--color-theme-accent) 84%, #2a2520);
   color: var(--color-theme-accent-contrast);
   box-shadow: var(--shadow-brand-soft);
+  transition:
+    background 0.24s ease,
+    border-color 0.24s ease,
+    box-shadow 0.24s ease,
+    transform 0.24s ease;
 }
 
 .theme-button-primary:hover {
   background: var(--color-theme-accent-hover);
   box-shadow: var(--shadow-brand-hover);
+  transform: translateY(-1px);
 }
 
 .theme-button-secondary {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--book-panel-bg);
+  border: 1px solid var(--book-ink-line);
   color: var(--color-text-secondary);
+  transition:
+    background 0.24s ease,
+    border-color 0.24s ease,
+    color 0.24s ease,
+    transform 0.24s ease;
 }
 
 .theme-button-secondary:hover {
   border-color: var(--color-theme-accent);
   color: var(--color-theme-accent);
+  background: var(--book-panel-hover);
+  transform: translateY(-1px);
 }
 
 .theme-button-danger-outline {
@@ -495,7 +566,7 @@ a.mention-highlight:hover {
 }
 
 .theme-tag {
-  background: var(--color-theme-accent-soft);
+  background: color-mix(in srgb, var(--color-theme-accent-soft) 82%, transparent);
   color: var(--color-theme-accent);
   border: 1px solid color-mix(in srgb, var(--color-theme-accent) 28%, transparent);
 }
@@ -808,36 +879,32 @@ img {
   transform: scale(0.98);
 }
 
-/* 玻璃质感卡片样式 - 增强版 Liquid Glass */
+/* 纸面浮层样式：保留历史类名供旧组件复用 */
 .liquidGlass-wrapper {
   position: relative;
   display: flex;
   overflow: hidden;
   padding: 0.6rem;
-  border-radius: 2rem;
+  border-radius: 0.5rem;
   cursor: pointer;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
+  background: var(--book-panel-bg);
+  border: 1px solid var(--book-ink-line);
+  box-shadow: var(--book-panel-shadow);
   transition: all var(--morph-duration) var(--morph-easing);
 }
 
 /* Light mode 增强可见性 */
 @media (prefers-color-scheme: light) {
   .liquidGlass-wrapper {
-    background: var(--glass-bg-strong);
-    border-color: var(--color-liquid-border-strong);
+    background: var(--book-panel-bg-strong);
+    border-color: var(--book-ink-line);
   }
 }
 
-/* Hover效果 - Morphing 动画 */
+/* Hover效果 */
 .liquidGlass-wrapper:hover {
-  padding: 0.8rem;
-  border-radius: 2.5rem;
-  transform: scale(var(--focus-scale));
-  box-shadow: var(--shadow-liquid-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--book-panel-shadow-hover);
 }
 
 /* 扭曲层 */
@@ -845,9 +912,9 @@ img {
   position: absolute;
   z-index: 0;
   inset: 0;
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  filter: url(#glass-distortion);
+  background-image: var(--book-paper-image);
+  background-size: var(--book-paper-size);
+  opacity: 0.45;
 }
 
 /* 色调层 */
@@ -855,7 +922,7 @@ img {
   position: absolute;
   z-index: 1;
   inset: 0;
-  background: var(--color-liquid-tint);
+  background: color-mix(in srgb, var(--color-theme-accent-soft) 34%, transparent);
 }
 
 /* 光泽层 */
@@ -863,7 +930,7 @@ img {
   position: absolute;
   z-index: 2;
   inset: 0;
-  box-shadow: var(--shadow-liquid-shine);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 /* 内容层 */
@@ -1336,23 +1403,42 @@ html {
 
 .mobile-page-shell {
   min-height: calc(100vh - 60px);
-  background: var(--color-bg-primary);
+  position: relative;
+  overflow-x: clip;
+  background: var(--book-bg-image);
   line-height: 1.8;
+}
+
+.mobile-page-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    var(--book-paper-image),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-size:
+    var(--book-paper-size),
+    256px 256px;
 }
 
 .mobile-page-shell.antique-page,
 .mobile-page-shell.antique-detail {
-  background: var(--color-bg-antique);
+  background: var(--book-bg-image);
 }
 
 .mobile-page-container {
+  position: relative;
+  z-index: 1;
   width: min(1100px, 100%);
   margin-inline: auto;
-  padding: 2rem 1.5rem calc(env(safe-area-inset-bottom) + 8rem);
+  padding: 2.5rem 1.5rem calc(env(safe-area-inset-bottom) + 8rem);
+  animation: book-page-enter 0.48s ease both;
 }
 
 .mobile-page-header {
-  margin-bottom: 1.75rem;
+  margin-bottom: 2rem;
 }
 
 .mobile-page-titlebar {
@@ -1360,15 +1446,18 @@ html {
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 1rem;
+  padding-bottom: 0;
 }
 
 .mobile-page-title {
   color: var(--color-text-primary);
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-family: var(--book-title-font);
+  font-size: clamp(2rem, 4vw, 3.1rem);
+  font-weight: 400;
   line-height: 1.25;
   letter-spacing: 0.12em;
+  text-shadow: 0 12px 34px rgba(138, 109, 47, 0.08);
 }
 
 .mobile-action-row {
@@ -1380,19 +1469,48 @@ html {
   min-width: 0;
 }
 
+.bottom-nav-label {
+  position: relative;
+  font-weight: 400;
+}
+
+.bottom-nav-label::after {
+  content: '';
+  position: absolute;
+  bottom: -0.125rem;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: currentColor;
+  transition: width 0.3s ease;
+}
+
+.bottom-nav-link[aria-current='page'] .bottom-nav-label {
+  font-weight: 600;
+}
+
+.bottom-nav-link[aria-current='page'] .bottom-nav-label::after,
+.bottom-nav-link:hover .bottom-nav-label::after {
+  width: 100%;
+}
+
+.bottom-nav:hover .bottom-nav-link[aria-current='page']:not(:hover) .bottom-nav-label::after {
+  width: 0;
+}
+
 .mobile-filterbar {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.25rem;
-  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--book-ink-line);
 }
 
 .mobile-filter-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.25rem;
+  gap: 1.3rem;
   min-width: 0;
 }
 
@@ -1407,6 +1525,15 @@ html {
   font-size: 0.8125rem;
 }
 
+.mobile-grid.grid-cols-1 {
+  row-gap: 0 !important;
+}
+
+.mobile-grid.grid-cols-1 > * + *,
+.shared-ink-list > * + * {
+  margin-top: -1px;
+}
+
 .mobile-detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
@@ -1417,10 +1544,163 @@ html {
 .mobile-detail-aside {
   position: sticky;
   top: 5rem;
+  border-left: 1px solid var(--book-ink-line);
+  padding-left: 1.5rem;
 }
 
 .mobile-grid {
   min-width: 0;
+}
+
+.mobile-grid .group,
+.mobile-grid [role='button'],
+.mobile-grid a,
+.space-y-3 > div,
+.space-y-4 > div {
+  transition:
+    background 0.26s ease,
+    border-color 0.26s ease,
+    box-shadow 0.26s ease,
+    color 0.26s ease,
+    transform 0.26s ease;
+}
+
+.mobile-grid .group:hover,
+.mobile-grid [role='button']:hover,
+.mobile-grid a:hover,
+.space-y-3 > div:hover,
+.space-y-4 > div:hover {
+  transform: translateY(-1px);
+}
+
+.mobile-page-shell .bg-surface,
+[data-admin-scroll-container] .bg-surface {
+  background-color: var(--book-panel-bg);
+}
+
+.mobile-page-shell .bg-surface\/90,
+.mobile-page-shell .bg-surface\/96,
+[data-admin-scroll-container] .bg-surface\/90,
+[data-admin-scroll-container] .bg-surface\/96 {
+  background-color: var(--book-panel-bg-strong);
+}
+
+.mobile-page-shell .bg-surface-alt,
+[data-admin-scroll-container] .bg-surface-alt {
+  background-color: color-mix(in srgb, var(--color-surface-alt) 86%, transparent);
+}
+
+.mobile-page-shell .border-border,
+[data-admin-scroll-container] .border-border {
+  border-color: var(--book-ink-line);
+}
+
+.mobile-page-shell .shadow,
+.mobile-page-shell .shadow-sm,
+.mobile-page-shell .shadow-md,
+[data-admin-scroll-container] .shadow,
+[data-admin-scroll-container] .shadow-sm,
+[data-admin-scroll-container] .shadow-md {
+  box-shadow: var(--book-panel-shadow);
+}
+
+.mobile-page-shell table,
+[data-admin-scroll-container] table {
+  background: var(--book-panel-bg);
+}
+
+.mobile-page-shell th,
+[data-admin-scroll-container] th {
+  background: color-mix(in srgb, var(--color-surface-alt) 84%, transparent);
+  color: var(--color-text-secondary);
+}
+
+.mobile-page-shell input:not([type='range']),
+.mobile-page-shell textarea,
+.mobile-page-shell select,
+[data-admin-scroll-container] input:not([type='range']),
+[data-admin-scroll-container] textarea,
+[data-admin-scroll-container] select {
+  border-color: var(--book-ink-line);
+}
+
+.mobile-page-shell .rounded-xl,
+[data-admin-scroll-container] .rounded-xl {
+  border-radius: 0.375rem;
+}
+
+.mobile-page-shell .rounded-2xl,
+[data-admin-scroll-container] .rounded-2xl {
+  border-radius: 0.5rem;
+}
+
+[data-admin-scroll-container] .bg-surface.border.border-border.rounded,
+[data-admin-scroll-container] .bg-surface.border.border-border.rounded-sm,
+[data-admin-scroll-container] .bg-surface.border.border-border.rounded-md,
+.mobile-page-shell .bg-surface.border.border-border.rounded,
+.mobile-page-shell .bg-surface.border.border-border.rounded-sm,
+.mobile-page-shell .bg-surface.border.border-border.rounded-md {
+  background: var(--book-panel-bg);
+  border-color: var(--book-ink-line);
+  box-shadow: none;
+}
+
+[data-admin-scroll-container] .animate-pulse.bg-bg-tertiary,
+.mobile-page-shell .animate-pulse.bg-bg-tertiary {
+  background: color-mix(in srgb, var(--color-theme-accent-soft) 68%, transparent);
+}
+
+[data-admin-scroll-container] h1,
+[data-admin-scroll-container] h2,
+.mobile-page-shell h1,
+.mobile-page-shell h2 {
+  letter-spacing: 0.08em;
+}
+
+.mobile-grid > *,
+.space-y-3 > *,
+.space-y-4 > * {
+  animation: book-item-enter 0.42s ease both;
+}
+
+.mobile-grid > *:nth-child(2),
+.space-y-3 > *:nth-child(2),
+.space-y-4 > *:nth-child(2) {
+  animation-delay: 0.03s;
+}
+
+.mobile-grid > *:nth-child(3),
+.space-y-3 > *:nth-child(3),
+.space-y-4 > *:nth-child(3) {
+  animation-delay: 0.06s;
+}
+
+.mobile-grid > *:nth-child(4),
+.space-y-3 > *:nth-child(4),
+.space-y-4 > *:nth-child(4) {
+  animation-delay: 0.09s;
+}
+
+@keyframes book-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes book-item-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .mobile-card-action {
@@ -1447,11 +1727,12 @@ html {
 
   .mobile-page-titlebar {
     align-items: flex-start;
+    padding-bottom: 0.85rem;
   }
 
   .mobile-page-title {
     overflow-wrap: anywhere;
-    font-size: 1.5rem;
+    font-size: 2rem;
     letter-spacing: 0.08em;
   }
 
@@ -1503,6 +1784,10 @@ html {
   .mobile-detail-aside {
     position: static;
     margin-top: 2rem;
+    border-left: 0;
+    border-top: 1px solid var(--book-ink-line);
+    padding-top: 1.25rem;
+    padding-left: 0;
   }
 
   .mobile-grid {
@@ -1526,7 +1811,7 @@ html {
   }
 
   .mobile-page-title {
-    font-size: 1.375rem;
+    font-size: 1.75rem;
   }
 }
 
@@ -1534,7 +1819,7 @@ html {
   position: relative;
   min-height: 100vh;
   overflow-x: hidden;
-  background: var(--home-bg-deep);
+  background: var(--home-hero-bg-image);
   color: var(--home-text-1);
   font-family: var(--home-font-body);
   line-height: 1.7;
@@ -1655,8 +1940,7 @@ html {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.8rem;
-  padding-bottom: 0.8rem;
-  border-bottom: 1px solid var(--home-border);
+  padding-bottom: 0;
 }
 
 .home-section-hd h2 {
@@ -1983,6 +2267,17 @@ html {
   width: 38%;
   height: 0.7rem;
   margin-top: 0.45rem;
+}
+
+.book-skeleton {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-border) 64%, transparent),
+    color-mix(in srgb, var(--color-theme-accent-soft) 72%, transparent),
+    color-mix(in srgb, var(--color-border) 64%, transparent)
+  );
+  background-size: 220% 100%;
+  animation: home-skeleton 1.6s ease-in-out infinite;
 }
 
 .home-reveal {

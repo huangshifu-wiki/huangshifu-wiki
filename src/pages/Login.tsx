@@ -28,13 +28,8 @@ const Login = () => {
   }
 
   return (
-    <div
-      className="flex min-h-[calc(100vh-60px)] items-center justify-center bg-bg-primary px-6 py-12"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-      }}
-    >
-      <div className="w-full max-w-md">
+    <div className="mobile-page-shell flex min-h-[calc(100vh-60px)] items-center justify-center px-6 py-12">
+      <div className="theme-panel relative z-10 w-full max-w-md rounded p-6 sm:p-8">
         <AuthForm
           initialMode="login"
           autoFocus

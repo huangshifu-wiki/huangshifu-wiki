@@ -150,7 +150,7 @@ export const ConfirmModal = ({
       <div
         className={clsx(
           'floating-panel',
-          'relative w-full max-w-md overflow-hidden rounded-xl border bg-surface',
+          'relative w-full max-w-md overflow-hidden rounded-sm border bg-[var(--book-panel-bg-strong)]',
           variantStyle.border,
           variantStyle.glow
         )}
@@ -170,7 +170,10 @@ export const ConfirmModal = ({
               <AlertTriangle className={clsx('w-8 h-8', variantStyle.iconText)} />
             </div>
             <div className="min-w-0 pt-1">
-              <h3 id={titleId} className="text-xl font-bold text-text-primary tracking-wide">
+              <h3
+                id={titleId}
+                className="font-[var(--book-title-font)] text-2xl font-normal tracking-[0.1em] text-text-primary"
+              >
                 {title}
               </h3>
               <p id={messageId} className="mt-2 text-sm text-text-secondary leading-relaxed">
@@ -188,7 +191,7 @@ export const ConfirmModal = ({
               type="button"
               onClick={handleClose}
               disabled={loading}
-              className="px-5 py-2.5 rounded-lg theme-button-secondary transition-all disabled:opacity-50 text-sm font-medium"
+              className="px-5 py-2.5 rounded-sm theme-button-secondary transition-all disabled:opacity-50 text-sm font-medium"
               aria-label="取消"
             >
               {cancelText}
@@ -198,7 +201,7 @@ export const ConfirmModal = ({
               onClick={onConfirm}
               disabled={loading}
               className={clsx(
-                'px-6 py-2.5 rounded-lg font-bold transition-all disabled:opacity-50 inline-flex items-center gap-2 text-sm shadow-lg',
+                'px-6 py-2.5 rounded-sm font-bold transition-all disabled:opacity-50 inline-flex items-center gap-2 text-sm shadow-lg',
                 variantStyle.buttonBg
               )}
             >

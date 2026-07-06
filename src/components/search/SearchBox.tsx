@@ -124,7 +124,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
       case 'music':
         return 'theme-status-error'
       case 'album':
-        return 'bg-purple-50 text-purple-600'
+        return 'theme-status-warning'
       default:
         return 'bg-surface-alt text-text-secondary'
     }
@@ -207,7 +207,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   }
 
   return (
-    <div ref={wrapperRef} className="theme-panel mb-6 rounded p-4 sm:p-6">
+    <div ref={wrapperRef} className="mb-6 border-y border-[var(--book-ink-line)] py-4 sm:py-6">
       <form
         onSubmit={handleSubmit}
         className="relative group mb-5"
@@ -236,7 +236,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           autoComplete="off"
           aria-owns="search-suggestions"
           aria-expanded={dropdownOpen}
-          className="theme-input w-full rounded py-4 pl-12 pr-12 text-base transition-all sm:pr-40"
+          className="theme-input w-full rounded py-4 pl-12 pr-12 text-base shadow-inner transition-all sm:pr-40"
         />
         <SearchIcon
           className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-gold transition-colors"
@@ -245,7 +245,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
         {dropdownPresence.mounted && visibleDropdown && visibleDropdown.items.length > 0 && (
           <div
-            className="floating-dropdown absolute left-0 right-0 top-full mt-2 bg-surface border border-border rounded z-50 overflow-hidden"
+            className="floating-dropdown absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[var(--book-panel-shadow)]"
             data-state={dropdownPresence.state}
             role="listbox"
             id="search-suggestions"
@@ -354,7 +354,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                       className={clsx(
                         'mr-2 p-1.5 rounded transition-colors',
                         i === highlightedIndex
-                          ? 'text-white/80 hover:text-white hover:bg-white/10'
+                          ? 'text-white/80 hover:text-white hover:bg-[color-mix(in_srgb,var(--color-theme-accent)_24%,transparent)]'
                           : 'text-text-muted hover:text-brand-gold hover:bg-surface'
                       )}
                       title={`删除搜索历史：${item.query}`}
@@ -427,9 +427,6 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
               className="text-sm text-text-secondary cursor-pointer select-none"
             >
               <span className="font-medium">智能混合搜索</span>
-              <span className="ml-1.5 hidden text-xs text-text-muted sm:inline">
-                (关键词+语义向量融合搜索)
-              </span>
             </label>
           </div>
           <div className="text-xs text-text-muted">

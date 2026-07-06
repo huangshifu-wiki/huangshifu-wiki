@@ -175,7 +175,7 @@ const SongCard = React.memo(function SongCard({
         }
       }}
       className={clsx(
-        'gufeng-song-item group flex items-center gap-3 py-3 px-1 border-b border-border transition-all cursor-pointer sm:gap-4 sm:py-4',
+        'gufeng-song-item group flex items-center gap-3 border-y border-[var(--book-ink-line)] px-1 py-3 transition-all cursor-pointer sm:gap-4 sm:py-4',
         isCurrentSong && 'bg-brand-gold/10'
       )}
       role="button"

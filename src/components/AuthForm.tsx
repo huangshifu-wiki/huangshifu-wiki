@@ -89,7 +89,7 @@ export const AuthForm = ({
   return (
     <>
       <div className="mb-5">
-        <h1 className="text-lg font-bold text-text-primary">
+        <h1 className="font-[var(--book-title-font)] text-3xl font-normal tracking-[0.1em] text-text-primary">
           {authMode === 'wechat'
             ? t('auth.wechatLogin')
             : authMode === 'forgot-password'
@@ -100,7 +100,7 @@ export const AuthForm = ({
         </h1>
       </div>
 
-      <form onSubmit={handleAuthSubmit} className="space-y-3">
+      <form onSubmit={handleAuthSubmit} className="space-y-3.5">
         {(isRegisterMode || authMode === 'wechat') && (
           <div>
             <label htmlFor="auth-display-name" className="sr-only">

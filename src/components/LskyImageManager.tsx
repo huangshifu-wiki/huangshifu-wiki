@@ -33,8 +33,8 @@ export function LskyImageManager() {
           margin-bottom: -2px;
         }
         .lsky-tab.active {
-          color: var(--color-action-blue);
-          border-bottom-color: var(--color-action-blue);
+          color: var(--color-theme-accent);
+          border-bottom-color: var(--color-theme-accent);
         }
         .lsky-upload-area {
           border: 2px dashed var(--color-border);
@@ -46,8 +46,8 @@ export function LskyImageManager() {
           transition: all 0.3s;
         }
         .lsky-upload-area:hover {
-          border-color: var(--color-action-blue);
-          background: color-mix(in srgb, var(--color-action-blue) 10%, var(--color-surface-form));
+          border-color: var(--color-theme-accent);
+          background: color-mix(in srgb, var(--color-theme-accent) 10%, var(--color-surface-form));
         }
         .lsky-upload-area.uploading {
           pointer-events: none;
@@ -63,7 +63,7 @@ export function LskyImageManager() {
         }
         .lsky-progress-bar {
           height: 100%;
-          background: var(--color-action-blue);
+          background: var(--color-theme-accent);
           transition: width 0.3s;
         }
         .lsky-error {
@@ -118,8 +118,8 @@ export function LskyImageManager() {
           color: var(--color-text-secondary);
         }
         .lsky-btn:hover {
-          color: var(--color-action-blue);
-          border-color: var(--color-action-blue);
+          color: var(--color-theme-accent);
+          border-color: var(--color-theme-accent);
         }
         .lsky-btn.danger:hover {
           color: var(--color-error);
@@ -474,7 +474,7 @@ function AlbumsPanel() {
             />
           </div>
           <button
-            className="lsky-btn bg-[var(--color-action-blue)] text-white border-none"
+            className="lsky-btn bg-[var(--color-theme-accent)] text-white border-none"
             onClick={handleCreate}
           >
             创建相册

@@ -304,10 +304,10 @@ export const GlobalMusicPlayer = () => {
   if (!currentSong) return null
 
   return (
-    <div className="global-music-player fixed left-0 right-0 z-[200] border-t border-border bg-surface/96 backdrop-blur-[16px]">
+    <div className="global-music-player fixed left-0 right-0 z-[200] border-t border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[0_-14px_36px_rgba(72,53,25,0.08)] backdrop-blur-[16px]">
       {/* Progress bar */}
       <div
-        className="absolute top-[-1px] left-0 right-0 h-[2px] bg-border cursor-pointer"
+        className="absolute top-[-1px] left-0 right-0 h-[2px] bg-[var(--book-ink-line)] cursor-pointer"
         aria-label="播放进度"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -338,7 +338,7 @@ export const GlobalMusicPlayer = () => {
         <img
           src={currentSong.coverThumbnail || currentSong.cover}
           alt={currentSong?.title + ' 封面' || ''}
-          className="h-10 w-10 flex-shrink-0 rounded object-cover bg-surface-alt sm:h-11 sm:w-11"
+          className="h-10 w-10 flex-shrink-0 rounded object-cover bg-surface-alt shadow-[0_6px_18px_rgba(72,53,25,0.12)] sm:h-11 sm:w-11"
           referrerPolicy="no-referrer"
         />
 
@@ -360,7 +360,7 @@ export const GlobalMusicPlayer = () => {
         <div className="flex flex-shrink-0 items-center gap-1 sm:gap-3">
           <button
             onClick={handlePlayPrevious}
-            className="hidden rounded-full p-1.5 text-text-secondary transition-all hover:bg-surface-alt hover:text-brand-gold sm:inline-flex"
+            className="hidden rounded-full p-1.5 text-text-secondary transition-all hover:bg-[var(--book-panel-hover)] hover:text-brand-gold sm:inline-flex"
           >
             <SkipBack size={18} />
           </button>
@@ -373,7 +373,7 @@ export const GlobalMusicPlayer = () => {
           </button>
           <button
             onClick={handlePlayNext}
-            className="hidden rounded-full p-1.5 text-text-secondary transition-all hover:bg-surface-alt hover:text-brand-gold sm:inline-flex"
+            className="hidden rounded-full p-1.5 text-text-secondary transition-all hover:bg-[var(--book-panel-hover)] hover:text-brand-gold sm:inline-flex"
           >
             <SkipForward size={18} />
           </button>
@@ -395,14 +395,14 @@ export const GlobalMusicPlayer = () => {
           <button
             onClick={contextToggleMute}
             aria-label={contextIsMuted ? '静音' : '音量'}
-            className="p-1.5 text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded-full transition-all"
+            className="p-1.5 text-text-secondary hover:text-brand-gold hover:bg-[var(--book-panel-hover)] rounded-full transition-all"
           >
             <Volume2 size={18} />
           </button>
           {volumePresence.mounted && (
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2">
               <div
-                className="floating-popover-up px-3 py-2 bg-surface rounded border border-border flex items-center gap-2"
+                className="floating-popover-up px-3 py-2 bg-[var(--book-panel-bg-strong)] rounded border border-[var(--book-ink-line)] flex items-center gap-2 shadow-[var(--book-panel-shadow)]"
                 data-state={volumePresence.state}
                 aria-hidden={!volumeSliderExpanded}
               >
@@ -425,7 +425,7 @@ export const GlobalMusicPlayer = () => {
 
         <button
           onClick={() => setCurrentSong(null)}
-          className="p-1.5 text-text-muted theme-icon-button-danger hover:bg-surface-alt rounded-full transition-all flex-shrink-0"
+          className="p-1.5 text-text-muted theme-icon-button-danger hover:bg-[var(--book-panel-hover)] rounded-full transition-all flex-shrink-0"
         >
           <X size={18} />
         </button>

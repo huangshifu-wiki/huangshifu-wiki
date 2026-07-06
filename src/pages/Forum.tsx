@@ -129,26 +129,25 @@ const HIGHLIGHTED_COMMENT_CLASS =
 interface PostCardProps {
   post: PostItem
   sectionName: string
-  onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, slug: string) => void
 }
 
-const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) => {
+const PostCard = React.memo(({ post, sectionName }: PostCardProps) => {
   const { t } = useI18n()
   return (
     <div
       className={clsx(
-        'relative rounded border border-border bg-surface p-3 transition-all group hover:border-brand-gold sm:p-4',
+        'relative border-y border-[var(--book-ink-line)] py-4 transition-all group hover:border-[var(--book-ink-line)]',
         post.isPinned && 'border-l-[3px] border-l-[var(--color-theme-accent)]'
       )}
     >
       <Link to={`/forum/${post.slug || post.id}`} className="block">
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           {post.isPinned && (
-            <span className="flex items-center gap-1 px-2 py-0.5 theme-tag text-[10px] font-bold uppercase tracking-wider rounded">
+            <span className="flex items-center gap-1 px-2 py-0.5 theme-tag text-[10px] font-bold uppercase tracking-wider rounded-sm">
               <Pin size={10} /> {t('forum.pinned')}
             </span>
           )}
-          <span className="px-2 py-0.5 theme-tag text-[10px] font-bold uppercase tracking-wider rounded">
+          <span className="px-2 py-0.5 theme-tag text-[10px] font-bold uppercase tracking-wider rounded-sm">
             {sectionName}
           </span>
           <span className="text-border">|</span>
@@ -182,7 +181,7 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
             </span>
           </div>
           <div className="flex min-w-0 items-center gap-2">
-            <div className="w-5 h-5 rounded bg-surface-alt overflow-hidden flex items-center justify-center">
+            <div className="w-5 h-5 bg-surface-alt overflow-hidden flex items-center justify-center">
               <UserIcon size={10} className="text-text-muted" />
             </div>
             <span className="truncate text-xs text-text-muted">
@@ -192,14 +191,6 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
           </div>
         </div>
       </Link>
-      <button
-        onClick={(event) => onCopyLink(event, post.slug || post.id)}
-        className="mobile-card-action absolute top-3 right-3 rounded border border-border bg-surface/90 p-2 text-text-muted transition-all hover:border-brand-gold hover:text-brand-gold sm:top-4 sm:right-4"
-        title={t('forum.copyInternalLink')}
-        aria-label={t('forum.copyPostInternalLink')}
-      >
-        <Link2 size={14} />
-      </button>
     </div>
   )
 })
@@ -213,10 +204,9 @@ const PostList = () => {
   const [sections, setSections] = useState<SectionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [totalPages, setTotalPages] = useState<number>()
-  const { user, profile, isBanned } = useAuth()
+  const { user, isBanned } = useAuth()
   const { preferences } = useUserPreferences()
   const isIncrementalMode = preferences.listLoadMode === 'incremental'
-  const { show } = useToast()
   const pagination = useRoutedPagination({
     serverTotalPages: totalPages,
     defaultPageSize: 20,
@@ -316,17 +306,6 @@ const PostList = () => {
     return query ? `/forum?${query}` : '/forum'
   }
 
-  const handleCopyPostLink = async (event: React.MouseEvent<HTMLButtonElement>, slug: string) => {
-    event.preventDefault()
-    event.stopPropagation()
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/forum/${slug}`))
-    if (copied) {
-      show(t('forum.postLinkCopied'))
-      return
-    }
-    show(t('forum.copyLinkFailed'), { variant: 'error' })
-  }
-
   return (
     <div className="mobile-page-shell">
       <div className="mobile-page-container">
@@ -351,7 +330,7 @@ const PostList = () => {
               className={clsx(
                 'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
                 section === 'all'
-                  ? "text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]"
+                  ? 'text-brand-gold font-semibold'
                   : 'text-text-muted hover:text-brand-gold'
               )}
             >
@@ -364,7 +343,7 @@ const PostList = () => {
                 className={clsx(
                   'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
                   section === sec.id
-                    ? "text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]"
+                    ? 'text-brand-gold font-semibold'
                     : 'text-text-muted hover:text-brand-gold'
                 )}
               >
@@ -397,13 +376,12 @@ const PostList = () => {
           <PageSkeleton variant="forum" />
         ) : visiblePosts.length > 0 ? (
           <>
-            <div className="space-y-3">
+            <div className="shared-ink-list">
               {visiblePosts.map((post) => (
                 <PostCard
                   key={post.id}
                   post={post}
                   sectionName={sections.find((s) => s.id === post.section)?.name || post.section}
-                  onCopyLink={handleCopyPostLink}
                 />
               ))}
             </div>
@@ -425,7 +403,7 @@ const PostList = () => {
             ) : null}
           </>
         ) : (
-          <div className="bg-surface p-20 rounded border border-border text-center">
+          <div className="border-y border-[var(--book-ink-line)] p-20 text-center">
             <MessageSquare size={48} className="mx-auto text-border mb-6" />
             <p className="text-text-muted italic">{t('forum.emptyPosts')}</p>
           </div>
@@ -867,7 +845,7 @@ const PostDetail = () => {
         {/* Info bar */}
         <div className="mobile-filterbar">
           <div className="mobile-filter-tabs items-center">
-            <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
+            <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold">
               {sections.find((s) => s.id === post.section)?.name || post.section}
             </span>
             {canSubmitReview && (

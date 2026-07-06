@@ -85,13 +85,15 @@ export const AdminDashboard = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">仪表盘</h1>
+          <h1 className="font-[var(--book-title-font)] text-3xl font-normal text-text-primary tracking-[0.12em]">
+            仪表盘
+          </h1>
           <p className="text-sm text-text-muted mt-1">总内容量：{total}</p>
         </div>
         <button
           onClick={() => fetchStats(true)}
           disabled={refreshing}
-          className="inline-flex items-center gap-2 px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all disabled:opacity-50"
+          className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm disabled:opacity-50"
         >
           <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> 刷新
         </button>
@@ -100,9 +102,9 @@ export const AdminDashboard = () => {
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {cards.map((c) => (
-            <div key={c.key} className="bg-surface border border-border rounded p-5 animate-pulse">
-              <div className="h-4 bg-bg-tertiary rounded w-16 mb-3" />
-              <div className="h-8 bg-bg-tertiary rounded w-20" />
+            <div key={c.key} className="theme-panel rounded p-5">
+              <div className="book-skeleton h-4 rounded w-16 mb-3" />
+              <div className="book-skeleton h-8 rounded w-20" />
             </div>
           ))}
         </div>
@@ -114,7 +116,7 @@ export const AdminDashboard = () => {
               <Link
                 key={c.key}
                 to={c.path}
-                className="bg-surface border border-border rounded p-5 hover:border-brand-gold transition-all group"
+                className="theme-panel group rounded p-5 transition-all hover:border-brand-gold hover:shadow-[var(--book-panel-shadow-hover)]"
               >
                 <div className="flex items-center gap-2 mb-3">
                   <Icon
@@ -133,7 +135,7 @@ export const AdminDashboard = () => {
       )}
 
       {isRegularAdmin && (
-        <div className="flex items-start gap-3 rounded border border-border bg-surface p-4 text-sm text-text-secondary">
+        <div className="theme-panel flex items-start gap-3 rounded p-4 text-sm text-text-secondary">
           <AlertTriangle size={18} className="theme-text-warning mt-0.5 shrink-0" />
           <p>数据库备份功能仅限超级管理员使用。普通管理员无法查看、创建、下载、恢复或删除备份。</p>
         </div>

@@ -354,7 +354,7 @@ const MusicDetail = () => {
             {/* Description */}
             {song?.description && (
               <div className="mb-10">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 pb-2.5 border-b border-border flex items-center gap-2">
+                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 flex items-center gap-2">
                   <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
                   歌曲描述
                 </h2>
@@ -385,7 +385,7 @@ const MusicDetail = () => {
 
             {/* Related Posts */}
             <div className="mb-10">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2.5">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] flex items-center gap-2">
                   <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
                   关联乐评
@@ -433,7 +433,7 @@ const MusicDetail = () => {
             {/* Custom Platform Links */}
             {customPlatformLinks.length > 0 && (
               <div className="mb-10">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 pb-2.5 border-b border-border flex items-center gap-2">
+                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 flex items-center gap-2">
                   <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
                   更多平台
                 </h2>
@@ -457,7 +457,7 @@ const MusicDetail = () => {
             {/* Admin */}
             {isAdmin && song?.docId && (
               <div className="mb-10">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 pb-2.5 border-b border-border flex items-center gap-2">
+                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 flex items-center gap-2">
                   <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
                   管理功能
                 </h2>

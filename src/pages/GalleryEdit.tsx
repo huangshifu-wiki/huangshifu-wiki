@@ -686,7 +686,7 @@ const GalleryEdit = () => {
       onDrop={handlePageDrop}
     >
       {pageDragDepth > 0 ? (
-        <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center bg-bg-primary/80 px-4">
+        <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-bg-antique)_82%,transparent)] px-4">
           <div className="w-full max-w-3xl rounded border-2 border-dashed border-brand-gold bg-surface/95 px-8 py-12 text-center">
             <p className="text-lg font-bold text-text-primary">{t('gallery.dropToUpload')}</p>
             <p className="mt-2 text-sm text-text-muted">{t('gallery.dropHint')}</p>
@@ -865,7 +865,7 @@ const GalleryEdit = () => {
           <section className="border-t border-border pt-7">
             <div className="mb-4">
               <div>
-                <h2 className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-full after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
+                <h2 className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold">
                   {t('gallery.imageCount', { count: draft.images.length })}
                 </h2>
               </div>

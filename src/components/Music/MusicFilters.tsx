@@ -54,7 +54,7 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
           className={clsx(
             'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
             activeTab === 'music'
-              ? "text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]"
+              ? 'text-brand-gold font-semibold'
               : 'text-text-muted hover:text-brand-gold'
           )}
         >
@@ -65,7 +65,7 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
           className={clsx(
             'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
             activeTab === 'albums'
-              ? "text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]"
+              ? 'text-brand-gold font-semibold'
               : 'text-text-muted hover:text-brand-gold'
           )}
         >

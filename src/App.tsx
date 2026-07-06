@@ -191,7 +191,7 @@ const MainLayout = () => {
       <BottomNav />
       {path === '/' ? null : (
         <footer
-          className="hidden md:block text-center border-t border-border bg-surface-alt py-10 px-6 text-text-muted text-[0.8125rem] tracking-[0.08em]"
+          className="hidden border-t border-[var(--book-ink-line)] bg-transparent px-6 py-10 text-center text-[0.8125rem] tracking-[0.08em] text-text-muted md:block"
           role="contentinfo"
           aria-label="页面底部"
           style={{ marginBottom: currentSong ? '80px' : '0' }}

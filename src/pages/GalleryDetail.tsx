@@ -750,7 +750,7 @@ const GalleryDetail = () => {
   }
 
   return (
-    <div className="mobile-page-shell">
+    <div className="mobile-page-shell antique-detail">
       <div className="mobile-page-container gallery-detail-page">
         <div className="mb-6 mobile-detail-grid">
           <div className="min-w-0">
@@ -862,7 +862,7 @@ const GalleryDetail = () => {
         {/* Info bar */}
         <div className="mobile-filterbar mb-6">
           <div className="mobile-filter-tabs">
-            <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
+            <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold">
               {t('gallery.imageCount', { count: images.length })}
             </span>
             {canSubmitReview && (
@@ -898,7 +898,7 @@ const GalleryDetail = () => {
             {images.map((image, index) => (
               <div
                 key={image.clientId || image.id}
-                className="relative aspect-[3/4] cursor-zoom-in overflow-hidden rounded group"
+                className="relative aspect-[3/4] cursor-zoom-in overflow-hidden group"
               >
                 <button
                   onClick={() => handleOpenLightbox(index)}
@@ -918,8 +918,8 @@ const GalleryDetail = () => {
                   )}
                 </button>
 
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300 pointer-events-none">
-                  <div className="absolute bottom-3 right-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 bg-black/40 text-white text-xs px-2 py-1 rounded">
+                <div className="absolute inset-0 bg-transparent group-hover:bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] transition-colors duration-300 pointer-events-none">
+                  <div className="absolute bottom-3 right-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 bg-[var(--book-panel-bg-strong)] text-brand-gold text-xs px-2 py-1 rounded-sm">
                     {t('gallery.viewFullSize')}
                   </div>
                 </div>
@@ -931,7 +931,7 @@ const GalleryDetail = () => {
         {/* Comments */}
         {isGalleryPublished && (
           <section className="border-t border-border pt-8">
-            <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-6 pb-2.5 border-b border-border flex items-center gap-2">
+            <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-6 flex items-center gap-2">
               <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
               {t('gallery.comments')}
             </h2>

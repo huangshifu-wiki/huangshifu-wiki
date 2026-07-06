@@ -216,7 +216,7 @@ const RelationGraph = ({ graph, currentSlug, onNodeClick }: RelationGraphProps) 
   }
 
   return (
-    <div className="rounded border border-brand-gold/20 bg-gradient-to-br from-surface-alt to-surface p-6 sm:p-8">
+    <div className="border-y border-[var(--book-ink-line)] bg-transparent py-6 sm:py-8">
       <div
         ref={containerRef}
         className={`w-full h-[400px] sm:h-[500px] cursor-${cursor}`}
@@ -229,7 +229,7 @@ const RelationGraph = ({ graph, currentSlug, onNodeClick }: RelationGraphProps) 
           ([type, label]) => (
             <div
               key={type}
-              className="inline-flex items-center gap-2 px-3 py-1.5 bg-surface-alt rounded"
+              className="inline-flex items-center gap-2 rounded-sm bg-surface-alt px-3 py-1.5"
             >
               <span
                 className={`inline-block h-3 w-3 rounded`}
@@ -239,7 +239,7 @@ const RelationGraph = ({ graph, currentSlug, onNodeClick }: RelationGraphProps) 
             </div>
           )
         )}
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-surface-alt/50 rounded">
+        <div className="inline-flex items-center gap-2 rounded-sm bg-surface-alt/50 px-3 py-1.5">
           <span className="text-text-muted font-medium">虚线表示反向推断关系</span>
         </div>
       </div>

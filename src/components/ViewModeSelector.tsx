@@ -31,7 +31,7 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({
   return (
     <div
       className={clsx(
-        'inline-flex shrink-0 border border-border bg-surface rounded p-0.5',
+        'inline-flex shrink-0 border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] rounded p-0.5 shadow-[0_8px_22px_rgba(72,53,25,0.06)]',
         size === 'sm' ? 'gap-0.5' : 'gap-1'
       )}
     >
@@ -47,7 +47,7 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({
               size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-1.5 text-sm',
               value === mode
                 ? 'bg-[var(--color-theme-accent)] text-white'
-                : 'text-text-muted hover:text-text-secondary'
+                : 'text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-text-secondary'
             )}
             title={label}
           >

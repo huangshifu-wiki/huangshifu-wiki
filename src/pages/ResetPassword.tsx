@@ -45,12 +45,14 @@ const ResetPassword = () => {
 
   if (!token) {
     return (
-      <div className="flex min-h-[calc(100vh-60px)] items-center justify-center bg-bg-primary px-6 py-12">
-        <section className="w-full max-w-md rounded border border-border bg-surface p-6 text-center shadow-sm">
+      <div className="mobile-page-shell flex min-h-[calc(100vh-60px)] items-center justify-center px-6 py-12">
+        <section className="theme-panel relative z-10 w-full max-w-md rounded-sm p-6 text-center">
           <div className="mb-4 flex justify-center">
             <AlertCircle size={32} className="text-[var(--color-error)]" />
           </div>
-          <h1 className="text-lg font-semibold text-text-primary">重置密码</h1>
+          <h1 className="font-[var(--book-title-font)] text-3xl font-normal tracking-[0.1em] text-text-primary">
+            重置密码
+          </h1>
           <p className="mt-3 text-sm leading-6 text-text-secondary">重置链接无效</p>
           <div className="mt-6 flex justify-center">
             <Link
@@ -66,11 +68,13 @@ const ResetPassword = () => {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-60px)] items-center justify-center bg-bg-primary px-6 py-12">
-      <section className="w-full max-w-md rounded border border-border bg-surface p-6 shadow-sm">
+    <div className="mobile-page-shell flex min-h-[calc(100vh-60px)] items-center justify-center px-6 py-12">
+      <section className="theme-panel relative z-10 w-full max-w-md rounded-sm p-6">
         <div className="mb-5 flex items-center gap-2">
           <KeyRound size={20} className="text-brand-gold" />
-          <h1 className="text-lg font-semibold text-text-primary">重置密码</h1>
+          <h1 className="font-[var(--book-title-font)] text-3xl font-normal tracking-[0.1em] text-text-primary">
+            重置密码
+          </h1>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">

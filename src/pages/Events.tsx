@@ -64,14 +64,14 @@ const EventCard = ({ event, viewMode }: { event: EventItem; viewMode: ViewMode }
     <Link
       to={`/events/${event.slug}`}
       className={clsx(
-        'group overflow-hidden rounded border border-border bg-surface transition-all hover:border-brand-gold',
-        isListMode ? 'flex gap-4 p-3' : 'block'
+        'group overflow-hidden border-y border-[var(--book-ink-line)] bg-transparent transition-all hover:border-brand-gold',
+        isListMode ? 'flex gap-4 py-3' : 'block'
       )}
     >
       <div
         className={clsx(
           'overflow-hidden bg-surface-alt',
-          isListMode ? 'h-24 w-24 flex-shrink-0 rounded' : 'aspect-[16/10]'
+          isListMode ? 'h-24 w-24 flex-shrink-0' : 'aspect-[16/10]'
         )}
       >
         <EventCover
@@ -79,7 +79,7 @@ const EventCard = ({ event, viewMode }: { event: EventItem; viewMode: ViewMode }
           className="h-full w-full transition-transform duration-500 group-hover:scale-[1.04]"
         />
       </div>
-      <div className={clsx('min-w-0', isListMode ? 'flex-1 space-y-2 py-0.5' : 'space-y-3 p-4')}>
+      <div className={clsx('min-w-0', isListMode ? 'flex-1 space-y-2 py-0.5' : 'space-y-3 py-4')}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {dayOffset !== null && (
@@ -109,7 +109,7 @@ const EventCard = ({ event, viewMode }: { event: EventItem; viewMode: ViewMode }
           {event.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {event.tags.slice(0, 3).map((tag) => (
-                <span key={tag} className="rounded px-2 py-0.5 text-[10px] theme-tag">
+                <span key={tag} className="rounded-sm px-2 py-0.5 text-[10px] theme-tag">
                   {tag}
                 </span>
               ))}

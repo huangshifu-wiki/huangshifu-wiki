@@ -20,7 +20,7 @@ const NAV_BUTTON_CLASS = clsx(
 )
 const INACTIVE_NAV_BUTTON_CLASS = clsx(
   NAV_BUTTON_CLASS,
-  'border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
+  'border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-secondary hover:border-brand-gold hover:bg-[var(--book-panel-hover)] hover:text-brand-gold'
 )
 const INACTIVE_NAV_BUTTON_WITH_GAP_CLASS = clsx(INACTIVE_NAV_BUTTON_CLASS, 'gap-1')
 
@@ -80,7 +80,7 @@ export const Pagination: React.FC<PaginationProps> = ({
 
   return (
     <footer
-      className="mt-6 flex flex-col gap-3 border-t border-border px-0 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4 md:px-6"
+      className="mt-6 flex flex-col gap-3 border-t border-[var(--book-ink-line)] px-0 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4 md:px-6"
       role="navigation"
       aria-label="分页导航"
     >
@@ -145,7 +145,7 @@ export const Pagination: React.FC<PaginationProps> = ({
                 NAV_BUTTON_CLASS,
                 item === page
                   ? 'bg-[var(--color-theme-accent)] text-white border-[var(--color-theme-accent)]'
-                  : 'border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
+                  : 'border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-secondary hover:border-brand-gold hover:bg-[var(--book-panel-hover)] hover:text-brand-gold'
               )}
             >
               {item}

@@ -6,8 +6,6 @@ import { useUserPreferences } from '../../context/UserPreferencesContext'
 import { ViewModeSelector } from '../../components/ViewModeSelector'
 import { VIEW_MODE_CONFIG } from '../../lib/viewModes'
 import { clsx } from 'clsx'
-import { useToast } from '../../components/Toast'
-import { copyToClipboard, toAbsoluteInternalUrl } from '../../lib/copyLink'
 import { apiGet } from '../../lib/apiClient'
 import WikiCard from '../../components/wiki/WikiCard'
 import Pagination from '../../components/Pagination'
@@ -28,7 +26,6 @@ const WikiList = () => {
   const [total, setTotal] = useState<number>()
   const [loading, setLoading] = useState(true)
   const { user, isBanned } = useAuth()
-  const { show } = useToast()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
   const viewMode = getScopedViewMode('wiki')
   const isIncrementalMode = preferences.listLoadMode === 'incremental'
@@ -121,17 +118,6 @@ const WikiList = () => {
     return query ? `/wiki?${query}` : '/wiki'
   }
 
-  const handleCopyWikiLink = async (event: React.MouseEvent<HTMLButtonElement>, slug: string) => {
-    event.preventDefault()
-    event.stopPropagation()
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/wiki/${slug}`))
-    if (copied) {
-      show('百科内链已复制')
-      return
-    }
-    show('复制链接失败，请稍后重试', { variant: 'error' })
-  }
-
   return (
     <div className="mobile-page-shell antique-page">
       <div className="mobile-page-container">
@@ -158,7 +144,7 @@ const WikiList = () => {
                 className={clsx(
                   'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
                   category === cat
-                    ? "text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]"
+                    ? 'text-brand-gold font-semibold'
                     : 'text-text-muted hover:text-brand-gold'
                 )}
               >
@@ -190,7 +176,7 @@ const WikiList = () => {
                 key={i}
                 className={clsx(
                   viewMode === 'list' ? 'h-24' : VIEW_MODE_CONFIG[viewMode].cardHeight,
-                  'bg-surface rounded animate-pulse border border-border'
+                  'book-skeleton border-y border-[var(--book-ink-line)]'
                 )}
               ></div>
             ))}
@@ -211,7 +197,6 @@ const WikiList = () => {
                   viewMode={viewMode}
                   cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                   categoryLabel={getCategoryLabel(page.category)}
-                  onCopyLink={handleCopyWikiLink}
                 />
               ))}
             </div>
@@ -237,7 +222,7 @@ const WikiList = () => {
             ) : null}
           </>
         ) : (
-          <div className="bg-surface p-20 rounded border border-border text-center">
+          <div className="border-y border-[var(--book-ink-line)] p-20 text-center">
             <Book size={48} className="mx-auto text-border-light mb-6" />
             <p className="text-text-muted italic">暂无相关百科页面</p>
           </div>

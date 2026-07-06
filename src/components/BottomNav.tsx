@@ -23,7 +23,7 @@ export const BottomNav = () => {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-[150] bg-[var(--home-nav-bg)] shadow-[0_-1px_0_var(--home-border)] backdrop-blur-[16px] pb-safe"
+      className="bottom-nav md:hidden fixed bottom-0 left-0 right-0 z-[150] border-t border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[0_-12px_30px_rgba(72,53,25,0.08)] backdrop-blur-[16px] pb-safe"
       role="navigation"
       aria-label="底部导航"
     >
@@ -34,14 +34,17 @@ export const BottomNav = () => {
             to={to}
             className={({ isActive }) =>
               clsx(
-                'flex min-w-[52px] flex-1 flex-col items-center gap-0.5 rounded px-1.5 py-1 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2',
-                isActive ? 'text-brand-gold' : 'text-text-muted'
+                'group flex min-w-[52px] flex-1 flex-col items-center gap-0.5 rounded px-1.5 py-1 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2',
+                'bottom-nav-link',
+                isActive
+                  ? 'bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
+                  : 'text-text-muted hover:text-text-secondary'
               )
             }
             aria-label={label}
           >
             <Icon size={22} />
-            <span className="text-[0.625rem]">{label}</span>
+            <span className="bottom-nav-label text-[0.625rem]">{label}</span>
           </NavLink>
         ))}
       </div>
