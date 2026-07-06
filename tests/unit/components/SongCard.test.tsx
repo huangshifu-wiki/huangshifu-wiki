@@ -135,7 +135,8 @@ describe('SongCard', () => {
     )
 
     expect(screen.getByText('测试歌手')).toBeInTheDocument()
-    expect(screen.getByText('发行日期：2024-01-02')).toBeInTheDocument()
+    expect(screen.getByText('2024-01-02')).toBeInTheDocument()
+    expect(screen.queryByText('发行日期：2024-01-02')).not.toBeInTheDocument()
     expect(screen.queryByText('测试专辑')).not.toBeInTheDocument()
     expect(container.querySelectorAll('.bg-border.rounded-full')).toHaveLength(1)
   })

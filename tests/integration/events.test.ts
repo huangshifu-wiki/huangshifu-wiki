@@ -37,7 +37,12 @@ describe('Events API - 活动标签筛选', () => {
     await cleanupEventTestData()
   })
 
-  async function createEvent(title: string, tags: string[], deletedAt: Date | null = null) {
+  async function createEvent(
+    title: string,
+    tags: string[],
+    deletedAt: Date | null = null,
+    sortStart: string | null = null
+  ) {
     return prisma.event.create({
       data: {
         slug: nextTestNumericSlug(),
@@ -45,6 +50,7 @@ describe('Events API - 活动标签筛选', () => {
         location: '',
         content: '',
         tags,
+        sortStart,
         createdByUid: adminUser.user.uid,
         updatedByUid: adminUser.user.uid,
         deletedAt,
@@ -63,6 +69,30 @@ describe('Events API - 活动标签筛选', () => {
     expect(response.body.events[0].title).toBe('Event Tags Test Live')
     expect(response.body.events[0].tags).toEqual(['现场', '巡演'])
     expect(response.body.total).toBe(1)
+  })
+
+  it('默认按活动时间倒序排列，也支持显式正序', async () => {
+    await createEvent('Event Tags Test Old', ['排序'], null, '2024-01-01')
+    await createEvent('Event Tags Test New', ['排序'], null, '2024-02-01')
+    await createEvent('Event Tags Test Unknown Time', ['排序'])
+
+    const descResponse = await request(app).get('/api/events').query({ tag: '排序' })
+    const ascResponse = await request(app)
+      .get('/api/events')
+      .query({ tag: '排序', sortOrder: 'asc' })
+
+    expect(descResponse.status).toBe(200)
+    expect(descResponse.body.events.map((event: { title: string }) => event.title)).toEqual([
+      'Event Tags Test New',
+      'Event Tags Test Old',
+      'Event Tags Test Unknown Time',
+    ])
+    expect(ascResponse.status).toBe(200)
+    expect(ascResponse.body.events.map((event: { title: string }) => event.title)).toEqual([
+      'Event Tags Test Old',
+      'Event Tags Test New',
+      'Event Tags Test Unknown Time',
+    ])
   })
 
   it('从未删除活动聚合可筛选标签', async () => {

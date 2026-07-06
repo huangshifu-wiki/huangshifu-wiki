@@ -1,12 +1,15 @@
 import {
   DEFAULT_PREFERENCES,
+  DEFAULT_VIEW_MODES,
   LIST_LOAD_MODES,
   THEME_MODES,
+  VIEW_MODE_SCOPES,
   VIEW_MODES,
   type ListLoadMode,
   type ThemeMode,
   type UserPreferences,
   type ViewMode,
+  type ViewModePreferences,
 } from '../types/userPreferences'
 import { readBootstrapAuthUid } from './auth'
 import { THEME_META_COLOR } from './colorTokens'
@@ -49,6 +52,25 @@ export function normalizeViewMode(value: unknown): ViewMode {
   return DEFAULT_PREFERENCES.viewMode
 }
 
+export function normalizeScopedViewModes(
+  value?: unknown,
+  fallbackViewMode?: unknown
+): ViewModePreferences {
+  const legacyViewMode = isViewMode(fallbackViewMode) ? fallbackViewMode : undefined
+  const source = isRecord(value) ? value : {}
+
+  return Object.fromEntries(
+    VIEW_MODE_SCOPES.map((scope) => [
+      scope,
+      isViewMode(source[scope])
+        ? source[scope]
+        : scope === 'gallery' && legacyViewMode
+          ? legacyViewMode
+          : DEFAULT_VIEW_MODES[scope],
+    ])
+  ) as ViewModePreferences
+}
+
 export function isListLoadMode(value: unknown): value is ListLoadMode {
   return isOneOf(LIST_LOAD_MODES, value)
 }
@@ -71,6 +93,7 @@ export function normalizeStoredPreferences(
   return {
     ...DEFAULT_PREFERENCES,
     viewMode: normalizeViewMode(value?.viewMode),
+    viewModes: normalizeScopedViewModes(value?.viewModes, value?.viewMode),
     theme: normalizeThemeMode(value?.theme),
     listLoadMode: normalizeListLoadMode(value?.listLoadMode),
     showCharacterCount: isBooleanPreference(value?.showCharacterCount)
@@ -94,6 +117,8 @@ export function hasStoredPreferenceValues(
 
   return (
     isViewMode(value.viewMode) ||
+    (isRecord(value.viewModes) &&
+      VIEW_MODE_SCOPES.some((scope) => isViewMode(value.viewModes?.[scope]))) ||
     isThemeMode(value.theme) ||
     isListLoadMode(value.listLoadMode) ||
     isBooleanPreference(value.showCharacterCount) ||
@@ -111,8 +136,23 @@ export function mergeStoredPreferences(
     return normalizedBase
   }
 
+  const nextViewMode = isViewMode(value.viewMode) ? value.viewMode : normalizedBase.viewMode
+  const validScopedViewModes = isRecord(value.viewModes)
+    ? Object.fromEntries(
+        Object.entries(value.viewModes).filter(([, scopedViewMode]) => isViewMode(scopedViewMode))
+      )
+    : null
+
   return {
-    viewMode: isViewMode(value.viewMode) ? value.viewMode : normalizedBase.viewMode,
+    viewMode: nextViewMode,
+    viewModes: validScopedViewModes
+      ? normalizeScopedViewModes(
+          { ...normalizedBase.viewModes, ...validScopedViewModes },
+          nextViewMode
+        )
+      : isViewMode(value.viewMode)
+        ? normalizeScopedViewModes(undefined, value.viewMode)
+        : normalizedBase.viewModes,
     theme: isThemeMode(value.theme) ? value.theme : normalizedBase.theme,
     listLoadMode: isListLoadMode(value.listLoadMode)
       ? value.listLoadMode

@@ -246,9 +246,9 @@ const GalleryList = () => {
   }
 
   const deleteTarget = galleryToDelete ?? lastGalleryToDeleteRef.current
-  const { preferences, setViewMode } = useUserPreferences()
+  const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
   const navigate = useNavigate()
-  const viewMode = preferences.viewMode
+  const viewMode = getScopedViewMode('gallery')
   const isIncrementalMode = preferences.listLoadMode === 'incremental'
 
   const galleryPagination = useRoutedPagination({
@@ -459,7 +459,11 @@ const GalleryList = () => {
           <div className="flex items-end justify-between flex-wrap gap-3">
             <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">画廊</h1>
             <div className="flex items-center gap-3">
-              <ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
+              <ViewModeSelector
+                value={viewMode}
+                onChange={(mode) => void setScopedViewMode('gallery', mode)}
+                size="sm"
+              />
               {user && !isBanned && galleryAccessLoaded && (!isGalleryAdminOnly || isAdmin) && (
                 <button
                   onClick={() => navigate('/gallery/new')}

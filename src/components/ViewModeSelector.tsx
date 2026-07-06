@@ -1,13 +1,16 @@
 import React from 'react'
 import { LayoutGrid, Grid3X3, Grid2x2, List } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { ViewMode } from '../types/userPreferences'
+import type { ViewMode } from '../types/userPreferences'
 
 interface ViewModeSelectorProps {
   value: ViewMode
   onChange: (mode: ViewMode) => void
   size?: 'sm' | 'md'
+  modes?: readonly ViewMode[]
 }
+
+const DEFAULT_VIEW_MODE_OPTIONS: readonly ViewMode[] = ['large', 'medium', 'small', 'list']
 
 const VIEW_MODE_CONFIG_UI: Record<
   ViewMode,
@@ -23,8 +26,8 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({
   value,
   onChange,
   size = 'md',
+  modes = DEFAULT_VIEW_MODE_OPTIONS,
 }) => {
-  const modes: ViewMode[] = ['large', 'medium', 'small', 'list']
   const showLabels = size === 'md'
 
   return (

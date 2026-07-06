@@ -35,7 +35,7 @@ const SongCard = React.memo(function SongCard({
   const artistsText = formatMusicCredits(song.artists, '未知歌手')
   const canPlay = isPlayableSong(song)
   const albumText = (song.displayAlbum ? song.displayAlbum.title : song.album).trim()
-  const releaseDateText = song.releaseDate ? `发行日期：${song.releaseDate}` : null
+  const releaseDateText = song.releaseDate || null
   const listMetaItems = [artistsText, albumText, releaseDateText].filter(Boolean)
   const coverSrc = song.coverThumbnail || song.cover
 
@@ -153,7 +153,7 @@ const SongCard = React.memo(function SongCard({
                 isSmallGrid ? 'text-[0.6875rem]' : 'text-xs'
               )}
             >
-              {isSmallGrid ? `发行：${song.releaseDate}` : releaseDateText}
+              {releaseDateText}
             </p>
           )}
         </div>

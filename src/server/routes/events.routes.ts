@@ -94,6 +94,10 @@ function parseEventTagQuery(value: unknown) {
   return tag.length > CONTENT_LIMITS.event.tag ? null : tag
 }
 
+function parseEventSortOrder(value: unknown): Prisma.SortOrder {
+  return value === 'asc' ? 'asc' : 'desc'
+}
+
 async function syncAssetsToImageMap(assetIds: string[]) {
   const uniqueIds = [...new Set(assetIds.filter(Boolean))]
   if (uniqueIds.length === 0) return
@@ -187,6 +191,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const { limit, page, offset: skip } = parsePagination(req.query)
     const tag = parseEventTagQuery(req.query.tag)
+    const sortOrder = parseEventSortOrder(req.query.sortOrder)
     if (tag === null) {
       res.status(400).json({ error: `标签不能超过${CONTENT_LIMITS.event.tag}个字符` })
       return
@@ -200,7 +205,7 @@ router.get(
       prisma.event.findMany({
         where,
         include: eventInclude,
-        orderBy: [{ sortStart: 'asc' }, { createdAt: 'desc' }],
+        orderBy: [{ sortStart: { sort: sortOrder, nulls: 'last' } }, { createdAt: 'desc' }],
         skip,
         take: limit,
       }),

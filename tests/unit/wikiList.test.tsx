@@ -8,7 +8,6 @@ import WikiList from '../../src/pages/wiki/WikiList'
 import { DEFAULT_PAGE_SIZE, type WikiItem } from '../../src/pages/wiki/types'
 
 const mockApiGet = vi.hoisted(() => vi.fn())
-const mockSetViewMode = vi.hoisted(() => vi.fn())
 const mockShowToast = vi.hoisted(() => vi.fn())
 const mockListLoadMode = vi.hoisted(() => vi.fn(() => 'pagination'))
 
@@ -43,10 +42,10 @@ vi.mock('../../src/context/AuthContext', () => ({
 vi.mock('../../src/context/UserPreferencesContext', () => ({
   useUserPreferences: () => ({
     preferences: {
-      viewMode: 'medium',
       listLoadMode: mockListLoadMode(),
     },
-    setViewMode: mockSetViewMode,
+    getScopedViewMode: (scope: string) => (scope === 'wiki' ? 'medium' : 'list'),
+    setScopedViewMode: vi.fn(),
   }),
 }))
 

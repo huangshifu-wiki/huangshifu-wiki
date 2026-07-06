@@ -36,8 +36,8 @@ const Music = () => {
   const activeTab: 'music' | 'albums' = tabParam === 'albums' ? 'albums' : 'music'
   const { user } = useAuth()
   const { currentSong, setCurrentSong, setIsPlaying, setPlaylist, playSongAtIndex } = useMusic()
-  const { preferences, setViewMode } = useUserPreferences()
-  const viewMode = preferences.viewMode
+  const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
+  const viewMode = getScopedViewMode('music')
   const isIncrementalMode = preferences.listLoadMode === 'incremental'
   const { show } = useToast()
   const { t } = useI18n()
@@ -321,7 +321,7 @@ const Music = () => {
               musicCount={visibleSongTotal}
               albumCount={visibleAlbumTotal}
               viewMode={viewMode}
-              onViewModeChange={setViewMode}
+              onViewModeChange={(mode) => void setScopedViewMode('music', mode)}
             />
 
             {/* Content */}

@@ -329,7 +329,7 @@ export const DefaultHome = () => {
       setLoadState(initialLoadState)
 
       const [eventResult, galleryResult, songResult, albumResult] = await Promise.allSettled([
-        apiGet<EventListResponse>('/api/events', { page: 1, limit: 4 }),
+        apiGet<EventListResponse>('/api/events', { page: 1, limit: 4, sortOrder: 'desc' }),
         apiGet<GalleryListResponse>('/api/galleries', { page: 1, limit: 5 }),
         apiGet<SongsResponse>('/api/music', {
           page: 1,

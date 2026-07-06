@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Calendar, MapPin } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { SmartImage } from '../components/SmartImage'
+import { ViewModeSelector } from '../components/ViewModeSelector'
+import { useUserPreferences } from '../context/UserPreferencesContext'
 import Pagination from '../components/Pagination'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
@@ -13,10 +15,14 @@ import {
   getEventCoverSrc,
   getEventListDayOffset,
 } from '../lib/eventFormat'
+import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import type { EventListResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
+import type { ViewMode } from '../types/userPreferences'
 
 const DEFAULT_PAGE_SIZE = 12
+type EventSortOrder = 'asc' | 'desc'
+const EVENT_VIEW_MODES = ['large', 'list'] as const
 const TAG_FILTER_BASE_CLASS =
   'relative pb-2 text-[1.125rem] tracking-[0.05em] transition-all cursor-pointer'
 
@@ -47,24 +53,33 @@ const EventCover = ({ event, className }: { event: EventItem; className?: string
   )
 }
 
-const EventCard = ({ event }: { event: EventItem }) => {
+const EventCard = ({ event, viewMode }: { event: EventItem; viewMode: ViewMode }) => {
   const eventDate = formatEventListDate(event.timeSlots)
   const dayOffset = getEventListDayOffset(event.timeSlots)
   const isFutureOrToday = dayOffset !== null && dayOffset >= 0
   const ticketPriceRange = formatEventTicketPriceRange(event.ticketPrices)
+  const isListMode = viewMode === 'list'
 
   return (
     <Link
       to={`/events/${event.slug}`}
-      className="group block overflow-hidden rounded border border-border bg-surface transition-all hover:border-brand-gold"
+      className={clsx(
+        'group overflow-hidden rounded border border-border bg-surface transition-all hover:border-brand-gold',
+        isListMode ? 'flex gap-4 p-3' : 'block'
+      )}
     >
-      <div className="aspect-[16/10] overflow-hidden bg-surface-alt">
+      <div
+        className={clsx(
+          'overflow-hidden bg-surface-alt',
+          isListMode ? 'h-24 w-24 flex-shrink-0 rounded' : 'aspect-[16/10]'
+        )}
+      >
         <EventCover
           event={event}
           className="h-full w-full transition-transform duration-500 group-hover:scale-[1.04]"
         />
       </div>
-      <div className="space-y-3 p-4">
+      <div className={clsx('min-w-0', isListMode ? 'flex-1 space-y-2 py-0.5' : 'space-y-3 p-4')}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {dayOffset !== null && (
@@ -81,7 +96,12 @@ const EventCard = ({ event }: { event: EventItem }) => {
               {event.title}
             </h2>
           </div>
-          <span className="shrink-0 text-right text-sm font-medium text-text-secondary tabular-nums">
+          <span
+            className={clsx(
+              'shrink-0 text-right font-medium text-text-secondary tabular-nums',
+              isListMode ? 'text-xs' : 'text-sm'
+            )}
+          >
             {ticketPriceRange || '票价待定'}
           </span>
         </div>
@@ -110,12 +130,16 @@ const EventCard = ({ event }: { event: EventItem }) => {
 }
 
 const Events = () => {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const selectedTag = searchParams.get('tag') || ''
+  const [sortOrder, setSortOrder] = useState<EventSortOrder>('desc')
   const [events, setEvents] = useState<EventItem[]>([])
   const [tags, setTags] = useState<string[]>([])
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
+  const { getScopedViewMode, setScopedViewMode } = useUserPreferences()
+  const storedViewMode = getScopedViewMode('events')
+  const viewMode: ViewMode = storedViewMode === 'large' ? 'large' : 'list'
   const { page, handlePageChange } = useRoutedPagination({
     serverTotalPages: totalPages,
     defaultPageSize: DEFAULT_PAGE_SIZE,
@@ -145,6 +169,7 @@ const Events = () => {
     apiGet<EventListResponse>('/api/events', {
       page,
       limit: DEFAULT_PAGE_SIZE,
+      sortOrder,
       ...(selectedTag ? { tag: selectedTag } : {}),
     })
       .then((data) => {
@@ -166,7 +191,20 @@ const Events = () => {
     return () => {
       cancelled = true
     }
-  }, [page, selectedTag])
+  }, [page, selectedTag, sortOrder])
+
+  const handleSortOrderChange = (value: EventSortOrder) => {
+    if (value === sortOrder) return
+    setSortOrder(value)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('page')
+        return next
+      },
+      { replace: true }
+    )
+  }
 
   const getTagUrl = (tag: string) => {
     const next = new URLSearchParams(searchParams)
@@ -197,8 +235,8 @@ const Events = () => {
           </div>
         </div>
 
-        {tags.length > 0 && (
-          <div className="mb-5 flex items-end justify-between border-b border-border">
+        <div className="mb-5 flex items-end justify-between gap-4 border-b border-border">
+          {tags.length > 0 ? (
             <div className="flex flex-wrap gap-5">
               <Link to={getTagUrl('')} className={getTagFilterClassName(!selectedTag)}>
                 全部标签
@@ -213,14 +251,48 @@ const Events = () => {
                 </Link>
               ))}
             </div>
+          ) : (
+            <div />
+          )}
+
+          <div className="flex flex-wrap items-center justify-end gap-3 pb-2 text-[0.8125rem] text-text-muted">
+            <ViewModeSelector
+              value={viewMode}
+              modes={EVENT_VIEW_MODES}
+              onChange={(mode) => void setScopedViewMode('events', mode)}
+              size="sm"
+            />
+            <div className="inline-flex rounded border border-border bg-surface p-0.5">
+              {(['desc', 'asc'] as const).map((order) => (
+                <button
+                  key={order}
+                  type="button"
+                  onClick={() => handleSortOrderChange(order)}
+                  className={clsx(
+                    'rounded px-2.5 py-1.5 text-xs font-medium transition-all',
+                    sortOrder === order
+                      ? 'bg-[var(--color-theme-accent)] text-white'
+                      : 'text-text-muted hover:text-text-secondary'
+                  )}
+                >
+                  {order === 'desc' ? '时间倒序' : '时间正序'}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+        </div>
 
         {events.length > 0 ? (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div
+              className={clsx(
+                'grid',
+                VIEW_MODE_CONFIG[viewMode].gridCols,
+                VIEW_MODE_CONFIG[viewMode].gap
+              )}
+            >
               {events.map((event) => (
-                <EventCard key={event.id} event={event} />
+                <EventCard key={event.id} event={event} viewMode={viewMode} />
               ))}
             </div>
             {totalPages > 1 && (

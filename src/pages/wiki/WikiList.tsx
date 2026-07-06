@@ -29,8 +29,8 @@ const WikiList = () => {
   const [loading, setLoading] = useState(true)
   const { user, isBanned } = useAuth()
   const { show } = useToast()
-  const { preferences, setViewMode } = useUserPreferences()
-  const viewMode = preferences.viewMode
+  const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
+  const viewMode = getScopedViewMode('wiki')
   const isIncrementalMode = preferences.listLoadMode === 'incremental'
   const { categories, getCategoryLabel } = useWikiCategories()
 
@@ -170,7 +170,11 @@ const WikiList = () => {
           </div>
 
           <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
-            <ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
+            <ViewModeSelector
+              value={viewMode}
+              onChange={(mode) => void setScopedViewMode('wiki', mode)}
+              size="sm"
+            />
             <span className="text-text-muted">{visibleTotal} 个页面</span>
           </div>
         </div>

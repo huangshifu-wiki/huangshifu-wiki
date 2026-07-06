@@ -226,7 +226,11 @@ describe('DefaultHome', () => {
       expect(mockApiGet).toHaveBeenCalledTimes(4)
     })
 
-    expect(mockApiGet).toHaveBeenCalledWith('/api/events', { page: 1, limit: 4 })
+    expect(mockApiGet).toHaveBeenCalledWith('/api/events', {
+      page: 1,
+      limit: 4,
+      sortOrder: 'desc',
+    })
     expect(mockApiGet).toHaveBeenCalledWith('/api/galleries', { page: 1, limit: 5 })
     expect(mockApiGet).toHaveBeenCalledWith('/api/music', {
       page: 1,

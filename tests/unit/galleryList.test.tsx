@@ -14,7 +14,6 @@ class MockIntersectionObserver {
 
 const mockApiGet = vi.hoisted(() => vi.fn())
 const mockInvalidateApiCacheByPrefix = vi.hoisted(() => vi.fn())
-const mockSetViewMode = vi.hoisted(() => vi.fn())
 const mockShowToast = vi.hoisted(() => vi.fn())
 const mockSmartImage = vi.hoisted(() => vi.fn())
 
@@ -37,10 +36,10 @@ vi.mock('../../src/context/AuthContext', () => ({
 vi.mock('../../src/context/UserPreferencesContext', () => ({
   useUserPreferences: () => ({
     preferences: {
-      viewMode: 'medium',
       listLoadMode: 'pagination',
     },
-    setViewMode: mockSetViewMode,
+    getScopedViewMode: (scope: string) => (scope === 'gallery' ? 'medium' : 'list'),
+    setScopedViewMode: vi.fn(),
   }),
 }))
 

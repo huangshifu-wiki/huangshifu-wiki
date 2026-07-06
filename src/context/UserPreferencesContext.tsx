@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { UserPreferences, ViewMode, ThemeMode, DEFAULT_PREFERENCES } from '../types/userPreferences'
+import {
+  UserPreferences,
+  ViewMode,
+  ThemeMode,
+  DEFAULT_PREFERENCES,
+  type ViewModeScope,
+} from '../types/userPreferences'
 import { apiGet, apiPatch } from '../lib/apiClient'
 import { useAuth } from './AuthContext'
 import type { AuthMeResponse } from '../types/api'
@@ -18,6 +24,8 @@ interface UserPreferencesContextType {
   preferences: UserPreferences
   updatePreferences: (updates: Partial<UserPreferences>) => Promise<void>
   setViewMode: (mode: ViewMode) => Promise<void>
+  getScopedViewMode: (scope: ViewModeScope) => ViewMode
+  setScopedViewMode: (scope: ViewModeScope, mode: ViewMode) => Promise<void>
   setTheme: (mode: ThemeMode) => Promise<void>
   resolvedTheme: ResolvedTheme
   loading: boolean
@@ -27,6 +35,8 @@ const UserPreferencesContext = createContext<UserPreferencesContextType>({
   preferences: DEFAULT_PREFERENCES,
   updatePreferences: async () => {},
   setViewMode: async () => {},
+  getScopedViewMode: (scope) => DEFAULT_PREFERENCES.viewModes[scope],
+  setScopedViewMode: async () => {},
   setTheme: async () => {},
   resolvedTheme: 'default',
   loading: true,
@@ -137,6 +147,25 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
     [updatePreferences]
   )
 
+  const getScopedViewMode = useCallback(
+    (scope: ViewModeScope) => {
+      return preferences.viewModes[scope]
+    },
+    [preferences.viewModes]
+  )
+
+  const setScopedViewMode = useCallback(
+    (scope: ViewModeScope, mode: ViewMode) => {
+      return updatePreferences({
+        viewModes: {
+          ...preferences.viewModes,
+          [scope]: mode,
+        },
+      })
+    },
+    [preferences.viewModes, updatePreferences]
+  )
+
   const setTheme = useCallback(
     (mode: ThemeMode) => {
       return updatePreferences({ theme: mode })
@@ -150,6 +179,8 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
         preferences,
         updatePreferences,
         setViewMode,
+        getScopedViewMode,
+        setScopedViewMode,
         setTheme,
         resolvedTheme,
         loading,
