@@ -1,4 +1,3 @@
-import React from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Music,
@@ -24,7 +23,7 @@ export const BottomNav = () => {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-[150] border-t border-border bg-surface/98 backdrop-blur-xl"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-[150] bg-[rgba(244,239,228,0.88)] shadow-[0_-1px_0_var(--home-border)] backdrop-blur-[16px]"
       role="navigation"
       aria-label="底部导航"
     >
