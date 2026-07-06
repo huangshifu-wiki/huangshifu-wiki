@@ -275,6 +275,9 @@ const Music = () => {
           <div className="mobile-page-titlebar">
             <h1 className="mobile-page-title">{t('music.title')}</h1>
           </div>
+          <div className="mt-3 flex">
+            <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+          </div>
         </header>
 
         {/* Two Column Layout */}
@@ -307,16 +310,16 @@ const Music = () => {
 
             {/* Content */}
             {activeTab === 'music' ? (
-              <div className="flex flex-col mt-6">
+              <div className="mt-5 flex flex-col">
                 {visibleSongs.length > 0 ? (
                   <>
                     <div
                       className={clsx(
-                        'mobile-grid',
                         viewMode === 'list'
-                          ? 'shared-ink-list'
+                          ? 'flex flex-col gap-0.5'
                           : clsx(
-                              'grid',
+                              'mobile-grid grid',
+                              viewMode === 'large' && 'music-large-grid',
                               VIEW_MODE_CONFIG[viewMode].gridCols,
                               VIEW_MODE_CONFIG[viewMode].gap
                             )
@@ -364,26 +367,28 @@ const Music = () => {
                     ) : null}
                   </>
                 ) : (
-                  <div className="py-20 text-center text-text-muted italic tracking-[0.1em]">
-                    {t('music.noMusic')}
+                  <div className="py-20 text-center">
+                    <p className="text-[0.9rem] tracking-[0.08em] text-text-muted">
+                      {t('music.noMusic')}
+                    </p>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="mt-6">
+              <div className="mt-5">
                 {!isIncrementalMode && loadingAlbums ? (
                   <div
                     className={clsx(
-                      'mobile-grid grid',
+                      'grid',
                       VIEW_MODE_CONFIG[viewMode].gridCols,
                       VIEW_MODE_CONFIG[viewMode].gap
                     )}
                   >
                     {[1, 2, 3, 4, 5, 6].map((i) => (
                       <div key={i} className="animate-pulse">
-                        <div className="aspect-square rounded bg-surface-alt mb-2.5" />
-                        <div className="h-4 bg-surface-alt rounded w-2/3 mb-1.5" />
-                        <div className="h-3 bg-surface-alt rounded w-1/2" />
+                        <div className="mb-2.5 aspect-square rounded-lg bg-surface-alt" />
+                        <div className="mb-1.5 h-4 w-2/3 rounded bg-surface-alt" />
+                        <div className="h-3 w-1/2 rounded bg-surface-alt" />
                       </div>
                     ))}
                   </div>
@@ -391,9 +396,14 @@ const Music = () => {
                   <>
                     <div
                       className={clsx(
-                        'mobile-grid grid',
-                        VIEW_MODE_CONFIG[viewMode].gridCols,
-                        VIEW_MODE_CONFIG[viewMode].gap
+                        viewMode === 'list'
+                          ? 'flex flex-col gap-0.5'
+                          : clsx(
+                              'mobile-grid grid',
+                              viewMode === 'large' && 'music-large-grid',
+                              VIEW_MODE_CONFIG[viewMode].gridCols,
+                              VIEW_MODE_CONFIG[viewMode].gap
+                            )
                       )}
                     >
                       {visibleAlbums.map((album) => (
@@ -426,8 +436,10 @@ const Music = () => {
                     ) : null}
                   </>
                 ) : (
-                  <div className="py-20 text-center text-text-muted italic tracking-[0.1em]">
-                    {t('music.noAlbums')}
+                  <div className="py-20 text-center">
+                    <p className="text-[0.9rem] tracking-[0.08em] text-text-muted">
+                      {t('music.noAlbums')}
+                    </p>
                   </div>
                 )}
               </div>
@@ -436,19 +448,25 @@ const Music = () => {
 
           {/* Sidebar */}
           <aside className="mobile-detail-aside">
-            {/* Stats */}
             <div className="py-5">
-              <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">
+              <div className="mb-4 flex justify-center">
+                <div className="h-px w-8 bg-gradient-to-r from-transparent via-brand-gold/30 to-transparent" />
+              </div>
+              <h3 className="mb-4 text-center text-[0.8125rem] uppercase tracking-[0.14em] text-text-muted">
                 统计
               </h3>
-              <div className="flex flex-col gap-2.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-muted">单曲</span>
-                  <span className="text-text-primary font-medium">{visibleSongTotal}</span>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[0.875rem] text-text-muted">单曲</span>
+                  <span className="text-[0.875rem] font-medium tabular-nums text-text-primary">
+                    {visibleSongTotal}
+                  </span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-muted">专辑</span>
-                  <span className="text-text-primary font-medium">{visibleAlbumTotal}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[0.875rem] text-text-muted">专辑</span>
+                  <span className="text-[0.875rem] font-medium tabular-nums text-text-primary">
+                    {visibleAlbumTotal}
+                  </span>
                 </div>
               </div>
             </div>

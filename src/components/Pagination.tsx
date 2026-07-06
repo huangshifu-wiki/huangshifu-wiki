@@ -13,16 +13,12 @@ interface PaginationProps {
 }
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
-const NAV_BUTTON_CLASS = clsx(
-  'inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded px-2.5 py-1 text-xs',
-  'border transition-all',
-  'disabled:cursor-not-allowed disabled:opacity-50'
+const NAV_BTN = clsx(
+  'inline-flex h-9 min-w-[36px] shrink-0 items-center justify-center rounded border',
+  'border-[var(--book-ink-line)] text-text-muted transition-colors',
+  'hover:border-brand-gold/50 hover:text-brand-gold',
+  'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[var(--book-ink-line)] disabled:hover:text-text-muted'
 )
-const INACTIVE_NAV_BUTTON_CLASS = clsx(
-  NAV_BUTTON_CLASS,
-  'border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-secondary hover:border-brand-gold hover:bg-[var(--book-panel-hover)] hover:text-brand-gold'
-)
-const INACTIVE_NAV_BUTTON_WITH_GAP_CLASS = clsx(INACTIVE_NAV_BUTTON_CLASS, 'gap-1')
 
 function generatePageNumbers(current: number, total: number): (number | 'ellipsis')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
@@ -53,49 +49,41 @@ export const Pagination: React.FC<PaginationProps> = ({
   if (totalPages <= 0) return null
 
   const handlePrev = () => {
-    if (page > 1) {
-      onPageChange(page - 1)
-    }
+    if (page > 1) onPageChange(page - 1)
   }
 
   const handleNext = () => {
-    if (page < totalPages) {
-      onPageChange(page + 1)
-    }
+    if (page < totalPages) onPageChange(page + 1)
   }
 
   const handleFirst = () => {
-    if (page > 1) {
-      onPageChange(1)
-    }
+    if (page > 1) onPageChange(1)
   }
 
   const handleLast = () => {
-    if (page < totalPages) {
-      onPageChange(totalPages)
-    }
+    if (page < totalPages) onPageChange(totalPages)
   }
 
   const pageNumbers = generatePageNumbers(page, totalPages)
 
   return (
     <footer
-      className="mt-6 flex flex-col gap-3 border-t border-[var(--book-ink-line)] px-0 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4 md:px-6"
+      className="mt-6 flex flex-col gap-3 border-t border-[var(--book-ink-line)] pt-4 sm:flex-row sm:items-center sm:justify-between"
       role="navigation"
       aria-label="分页导航"
     >
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center gap-3">
         <p className="text-xs text-text-muted" aria-live="polite" aria-atomic="true">
           第 {Math.min(page, totalPages)} / {totalPages} 页
         </p>
         {showPageSizeSelector && pageSize && onPageSizeChange && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span className="text-xs text-text-muted">每页</span>
             <select
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
               aria-label="每页显示条数"
-              className="theme-input text-xs rounded px-2 py-1 cursor-pointer"
+              className="cursor-pointer rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-1.5 py-0.5 text-xs text-text-primary"
             >
               {pageSizeOptions.map((size) => (
                 <option key={size} value={size}>
@@ -106,13 +94,13 @@ export const Pagination: React.FC<PaginationProps> = ({
           </div>
         )}
       </div>
-      <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1">
+      <div className="-mx-0.5 flex items-center gap-1 overflow-x-auto px-0.5">
         <button
           onClick={handleFirst}
           disabled={page <= 1}
           aria-label="首页"
           aria-disabled={page <= 1}
-          className={INACTIVE_NAV_BUTTON_CLASS}
+          className={NAV_BTN}
         >
           <ChevronsLeft size={14} />
         </button>
@@ -121,7 +109,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           disabled={page <= 1}
           aria-label="上一页"
           aria-disabled={page <= 1}
-          className={INACTIVE_NAV_BUTTON_WITH_GAP_CLASS}
+          className={NAV_BTN}
         >
           <ChevronLeft size={14} />
         </button>
@@ -130,7 +118,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           item === 'ellipsis' ? (
             <span
               key={`ellipsis-${index}`}
-              className="shrink-0 cursor-default px-1 text-xs text-text-muted"
+              className="shrink-0 px-1 text-xs text-text-muted/60"
               aria-hidden="true"
             >
               ...
@@ -142,10 +130,10 @@ export const Pagination: React.FC<PaginationProps> = ({
               aria-label={`第 ${item} 页`}
               aria-current={item === page ? 'page' : undefined}
               className={clsx(
-                NAV_BUTTON_CLASS,
+                'inline-flex h-9 min-w-[36px] shrink-0 items-center justify-center rounded px-2 text-xs transition-all',
                 item === page
-                  ? 'bg-[var(--color-theme-accent)] text-white border-[var(--color-theme-accent)]'
-                  : 'border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-secondary hover:border-brand-gold hover:bg-[var(--book-panel-hover)] hover:text-brand-gold'
+                  ? 'bg-brand-gold font-medium text-white'
+                  : 'border border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
               )}
             >
               {item}
@@ -158,7 +146,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           disabled={page >= totalPages}
           aria-label="下一页"
           aria-disabled={page >= totalPages}
-          className={INACTIVE_NAV_BUTTON_WITH_GAP_CLASS}
+          className={NAV_BTN}
         >
           <ChevronRight size={14} />
         </button>
@@ -167,7 +155,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           disabled={page >= totalPages}
           aria-label="末页"
           aria-disabled={page >= totalPages}
-          className={INACTIVE_NAV_BUTTON_CLASS}
+          className={NAV_BTN}
         >
           <ChevronsRight size={14} />
         </button>

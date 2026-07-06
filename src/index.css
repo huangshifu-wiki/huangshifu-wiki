@@ -1537,6 +1537,10 @@ html {
   row-gap: 0 !important;
 }
 
+.mobile-grid.music-large-grid {
+  row-gap: 1.5rem !important;
+}
+
 .mobile-grid.grid-cols-1 > * + *,
 .shared-ink-list > * + * {
   margin-top: -1px;

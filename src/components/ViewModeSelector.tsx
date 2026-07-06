@@ -31,8 +31,8 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({
   return (
     <div
       className={clsx(
-        'inline-flex shrink-0 border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] rounded p-0.5 shadow-[0_8px_22px_rgba(72,53,25,0.06)]',
-        size === 'sm' ? 'gap-0.5' : 'gap-1'
+        'inline-flex shrink-0 overflow-hidden rounded border border-[var(--book-ink-line)]',
+        size === 'sm' ? '' : ''
       )}
     >
       {modes.map((mode) => {
@@ -43,16 +43,16 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({
             onClick={() => onChange(mode)}
             aria-label={label}
             className={clsx(
-              'min-h-9 min-w-9 rounded transition-all inline-flex items-center justify-center gap-1.5 font-medium',
-              size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-1.5 text-sm',
+              'inline-flex items-center justify-center gap-1 transition-all',
+              size === 'sm' ? 'p-1.5' : 'px-3 py-1.5',
               value === mode
-                ? 'bg-[var(--color-theme-accent)] text-white'
-                : 'text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-text-secondary'
+                ? 'bg-brand-gold text-white'
+                : 'bg-[var(--book-panel-bg)] text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-text-secondary'
             )}
             title={label}
           >
             {VIEW_MODE_ICONS[mode]}
-            {showLabels && <span className="hidden sm:inline">{label}</span>}
+            {showLabels && <span className="ml-1.5 hidden sm:inline">{label}</span>}
           </button>
         )
       })}

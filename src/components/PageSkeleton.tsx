@@ -58,19 +58,26 @@ export const PageSkeleton: React.FC<PageSkeletonProps> = ({ variant = 'default' 
 
   if (variant === 'music') {
     return (
-      <div className="max-w-[1100px] mx-auto px-6 py-8" aria-label="加载中" role="status">
-        <SkeletonLine className="h-10 w-48 mb-6" />
-        <div className="space-y-1">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="flex items-center gap-4 py-4 px-1 border-b border-border">
-              <SkeletonCircle size="w-14 h-14" />
-              <div className="flex-1 space-y-2">
-                <SkeletonLine className="h-5 w-1/3" />
-                <SkeletonLine className="h-4 w-1/4" />
+      <div className="gufeng-music-page mobile-page-shell" aria-label="加载中" role="status">
+        <div className="mobile-page-container">
+          <SkeletonLine className="mb-3 h-10 w-48" />
+          <div className="mb-6 h-px w-16 bg-surface-alt" />
+          <div className="mb-5 flex gap-4 border-b border-border pb-3">
+            <SkeletonLine className="h-6 w-12" />
+            <SkeletonLine className="h-6 w-12" />
+          </div>
+          <div className="flex flex-col gap-1">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center gap-3.5 rounded px-3 py-2.5">
+                <SkeletonLine className="h-[52px] w-[52px] shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <SkeletonLine className="h-4 w-2/5" />
+                  <SkeletonLine className="h-3 w-1/3" />
+                </div>
+                <SkeletonLine className="h-[34px] w-[34px] shrink-0 !rounded-full" />
               </div>
-              <SkeletonLine className="h-8 w-20" />
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     )

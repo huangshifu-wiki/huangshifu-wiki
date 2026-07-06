@@ -52,24 +52,30 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
         <button
           onClick={() => onTabChange('music')}
           className={clsx(
-            'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
+            'relative cursor-pointer pb-2 text-[1.0625rem] tracking-[0.06em] transition-all',
             activeTab === 'music'
-              ? 'text-brand-gold font-semibold'
-              : 'text-text-muted hover:text-brand-gold'
+              ? 'font-semibold text-text-primary'
+              : 'text-text-muted hover:text-text-secondary'
           )}
         >
           {t('music.tabMusic')}
+          {activeTab === 'music' && (
+            <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand-gold" />
+          )}
         </button>
         <button
           onClick={() => onTabChange('albums')}
           className={clsx(
-            'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
+            'relative cursor-pointer pb-2 text-[1.0625rem] tracking-[0.06em] transition-all',
             activeTab === 'albums'
-              ? 'text-brand-gold font-semibold'
-              : 'text-text-muted hover:text-brand-gold'
+              ? 'font-semibold text-text-primary'
+              : 'text-text-muted hover:text-text-secondary'
           )}
         >
           {t('music.tabAlbums')}
+          {activeTab === 'albums' && (
+            <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand-gold" />
+          )}
         </button>
       </div>
 
@@ -79,14 +85,15 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
         )}
         {activeTab === 'music' && (
           <>
-            <div className="flex shrink-0 items-center">
+            <span className="text-border/50">|</span>
+            <div className="flex items-center gap-0.5">
               {(['releaseDate', 'title', 'artist'] as SortBy[]).map((key) => (
                 <button
                   key={key}
                   onClick={() => onSortByChange(key)}
                   className={clsx(
-                    'px-2 py-1 transition-colors cursor-pointer',
-                    sortBy === key ? 'text-text-primary font-medium' : 'hover:text-text-secondary'
+                    'cursor-pointer rounded px-1.5 py-0.5 transition-colors',
+                    sortBy === key ? 'font-medium text-text-primary' : 'hover:text-text-secondary'
                   )}
                 >
                   {sortLabel[key]}
@@ -94,29 +101,27 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
               ))}
               <button
                 onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="p-1 hover:text-brand-gold transition-colors cursor-pointer"
+                className="cursor-pointer p-0.5 transition-colors hover:text-brand-gold"
                 title={sortOrder === 'asc' ? t('music.sortOrder.asc') : t('music.sortOrder.desc')}
               >
-                <ArrowUpDown size={13} />
+                <ArrowUpDown size={12} />
               </button>
             </div>
-            <span className="mx-1 text-border">|</span>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none hover:text-text-secondary transition-colors">
+            <span className="text-border/50">|</span>
+            <label className="flex cursor-pointer select-none items-center gap-1.5 transition-colors hover:text-text-secondary">
               <input
                 type="checkbox"
                 checked={showAccompaniments}
                 onChange={(e) => onShowAccompanimentsChange(e.target.checked)}
-                className="w-3 h-3 rounded-sm border-border text-brand-gold focus:ring-0 focus:ring-offset-0 accent-[var(--color-theme-accent)]"
+                className="h-3 w-3 rounded-sm accent-[var(--color-theme-accent)]"
               />
               <span className="hidden sm:inline">{t('music.showAccompaniments')}</span>
-              <span className="sm:hidden" title={t('music.showAccompaniments')}>
-                伴奏
-              </span>
+              <span className="sm:hidden">伴奏</span>
             </label>
-            <span className="mx-1 text-border">|</span>
           </>
         )}
-        <span className="text-text-muted">
+        <span className="text-border/50">|</span>
+        <span className="text-text-muted/70">
           {activeTab === 'music'
             ? `${musicCount} ${t('music.unit.song')}`
             : `${albumCount} ${t('music.unit.album')}`}
