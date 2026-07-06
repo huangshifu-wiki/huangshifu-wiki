@@ -1,3254 +1,423 @@
-/**
- * Posts API 集成测试
- *
- * 测试范围：
- * 1. GET /api/posts - 获取文章列表
- * 2. GET /api/posts/:id - 获取单个文章详情（包含评论）
- * 3. POST /api/posts - 创建新文章（需要认证）
- * 4. PUT /api/posts/:id - 更新文章（需要认证）
- * 5. DELETE /api/posts/:id - 删除文章（需要认证）
- *
- * 测试策略：
- * - 使用 supertest 进行 HTTP 请求测试
- * - 测试未认证和已认证两种状态下的访问权限
- * - 验证分页、排序、筛选等查询参数
- * - 测试权限控制（作者、管理员、普通用户）
- * - 包含正常情况和错误情况的完整测试覆盖
- */
-
-import { describe, beforeEach, afterEach, it, expect } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import request from 'supertest'
 import { app } from '../../server'
-import { enhancedCache } from '../../src/server/utils'
-import { prisma, createTestUser, createTestToken, createTestPost, createTestGallery } from './setup'
-import type { CreateTestPostInput } from './setup'
+import { prisma, createTestGallery, createTestPost, createTestUser } from './setup'
+
+const POST_TITLE_PREFIX = 'ROI Post'
+const GALLERY_TITLE_PREFIX = 'ROI Gallery'
 
 async function cleanupPostTestData() {
-  enhancedCache.invalidateByPrefix('gallery_list_public:')
+  const [postIds, galleryIds] = await Promise.all([
+    prisma.post.findMany({
+      where: { title: { startsWith: POST_TITLE_PREFIX } },
+      select: { id: true },
+    }),
+    prisma.gallery.findMany({
+      where: { title: { startsWith: GALLERY_TITLE_PREFIX } },
+      select: { id: true },
+    }),
+  ])
+  const targetIds = [...postIds.map((post) => post.id), ...galleryIds.map((gallery) => gallery.id)]
 
-  // Defensive cleanup for legacy dirty test DBs that still contain orphaned rows
-  // from older versions of this suite.
+  await prisma.notification.deleteMany({
+    where: {
+      OR: [
+        { payload: { path: ['title'], string_starts_with: POST_TITLE_PREFIX } },
+        { payload: { path: ['title'], string_starts_with: GALLERY_TITLE_PREFIX } },
+        ...targetIds.map((targetId) => ({ payload: { path: ['targetId'], equals: targetId } })),
+      ],
+    },
+  })
+  await prisma.moderationLog.deleteMany({
+    where: {
+      OR: [
+        { targetType: { in: ['post', 'comment', 'gallery'] }, note: { contains: 'ROI' } },
+        ...(targetIds.length > 0 ? [{ targetId: { in: targetIds } }] : []),
+      ],
+    },
+  })
   await prisma.post.deleteMany({
-    where: {
-      OR: [
-        { title: { startsWith: 'Test' } },
-        { title: { startsWith: 'Pagination Test' } },
-        { title: { startsWith: 'Sort Test' } },
-        { title: { startsWith: 'General Section Post' } },
-        { title: { startsWith: 'Discussion Section Post' } },
-        { title: { startsWith: 'Personalized Post' } },
-        { title: { startsWith: 'Draft Post Should Not Appear' } },
-        { title: { startsWith: 'Detail Test Post' } },
-        { title: { startsWith: 'View Count Test Post' } },
-        { title: { startsWith: 'Auth Personalized Post' } },
-        { title: { startsWith: 'Draft Post For Auth Test' } },
-        { title: { startsWith: 'My Draft Post' } },
-        { title: { startsWith: 'Comment Order Test' } },
-        { title: { startsWith: 'Top Level Comment Test' } },
-        { title: { startsWith: 'Reply Comment Test' } },
-        { title: { startsWith: 'Reply Nested Comment Test' } },
-        { title: { startsWith: 'Comment Pagination Visibility Test' } },
-        { title: { startsWith: 'Soft Delete Parent Comment Test' } },
-        { title: { startsWith: 'Soft Delete Child Comment Test' } },
-        { title: { startsWith: 'Comment Delete Reason Test' } },
-        { title: { startsWith: 'Restore Deleted Comment Test' } },
-        { title: { startsWith: 'Comment Like Test' } },
-        { title: { startsWith: 'Hidden Comment Like Post Test' } },
-        { title: { startsWith: 'Tags Test Post' } },
-        { title: { startsWith: 'No Tags Post' } },
-        { title: { startsWith: 'Original Title' } },
-        { title: { startsWith: "Other User's Post" } },
-        { title: { startsWith: "User's Post" } },
-        { title: { startsWith: 'To Be Deleted By Author' } },
-        { title: { startsWith: 'To Be Deleted By Admin' } },
-        { title: { startsWith: 'To Be Deleted By Admin Missing Reason' } },
-        { title: { startsWith: 'Unauth Delete Test' } },
-        { title: { startsWith: 'New Test Post ' } },
-        { title: { startsWith: 'Admin Direct Publish Test ' } },
-        { title: { startsWith: 'Admin Preserve Pending Test ' } },
-        { title: { startsWith: 'Admin Restore Post Test' } },
-        { title: { startsWith: 'Admin List Delete Post Test' } },
-        { title: { startsWith: 'Long Content Test ' } },
-        { title: { startsWith: 'Test Mention ' } },
-      ],
-    },
+    where: { title: { startsWith: POST_TITLE_PREFIX } },
   })
-
-  await prisma.postComment.deleteMany({
-    where: {
-      OR: [
-        { content: { startsWith: 'Top level comment' } },
-        { content: { startsWith: 'Reply comment' } },
-        { content: { startsWith: 'Reply child comment' } },
-        { content: { startsWith: 'Root comment' } },
-        { content: { startsWith: 'Deleted child comment' } },
-        { content: { startsWith: 'Visible child comment' } },
-        { content: { startsWith: 'Parent comment content' } },
-        { content: { startsWith: 'Child comment content' } },
-        { content: { startsWith: 'Reply to deleted parent' } },
-        { content: { startsWith: 'Gallery comment content' } },
-        { content: { startsWith: 'Comment delete reason content' } },
-        { content: { startsWith: 'Reply to deleted child' } },
-        { content: { startsWith: 'Restorable comment' } },
-        { content: { startsWith: 'Comment to like' } },
-        { content: { startsWith: 'Draft post comment' } },
-        { content: { startsWith: 'Mention comment' } },
-      ],
-    },
-  })
-
   await prisma.gallery.deleteMany({
-    where: {
-      OR: [
-        { title: { startsWith: 'Test Gallery ' } },
-        { title: { startsWith: 'Gallery Delete Reason Test' } },
-        { title: { startsWith: 'Gallery Publish Review Test' } },
-        { title: { startsWith: 'Gallery Submit Endpoint Review Test' } },
-        { title: { startsWith: 'Gallery Submit Endpoint Admin Publish Test' } },
-        { title: { startsWith: 'Gallery Submit Review Create Test' } },
-        { title: { startsWith: 'Gallery Published Edit Review Test' } },
-        { title: { startsWith: 'Gallery Pending Preserve Test' } },
-        { title: { startsWith: 'Gallery Publish False Review Test' } },
-        { title: { startsWith: 'Gallery Legacy Published Flag Test' } },
-        { title: { startsWith: 'Gallery Comment Notification Test' } },
-        { title: { startsWith: 'Gallery Refresh Thumbnails Cache Test' } },
-        { title: { startsWith: 'Gallery List Visibility Test' } },
-      ],
-    },
+    where: { title: { startsWith: GALLERY_TITLE_PREFIX } },
   })
-
+  await prisma.section.deleteMany({
+    where: { id: { startsWith: 'roi-section-' } },
+  })
   await prisma.user.deleteMany({
-    where: {
-      email: {
-        startsWith: 'test_',
-      },
-    },
+    where: { email: { startsWith: 'roi_posts_' } },
   })
 }
 
-describe('Posts API - 文章接口测试', () => {
-  let testUser: Awaited<ReturnType<typeof createTestUser>>
+function pickCookie(setCookieHeader: string | string[] | undefined, cookieName: string) {
+  const cookies = Array.isArray(setCookieHeader)
+    ? setCookieHeader
+    : setCookieHeader
+      ? [setCookieHeader]
+      : []
+  const targetCookie = cookies.find((cookie) => cookie?.startsWith(`${cookieName}=`))
+  return targetCookie?.split(';')[0].split('=')[1]
+}
+
+async function createAuthenticatedAgent(email: string, password: string) {
+  const agent = request.agent(app)
+  const loginResponse = await agent.post('/api/auth/login').send({ email, password })
+  expect(loginResponse.status).toBe(200)
+  const xsrfToken = pickCookie(loginResponse.headers['set-cookie'], 'XSRF-TOKEN')
+  expect(xsrfToken).toBeTruthy()
+  return { agent, xsrfToken: xsrfToken! }
+}
+
+describe('Posts API', () => {
+  let normalUser: Awaited<ReturnType<typeof createTestUser>>
   let adminUser: Awaited<ReturnType<typeof createTestUser>>
-  let userToken: string
-  let adminToken: string
 
-  function findCookieValue(setCookieHeader: string | string[] | undefined, cookieName: string) {
-    const cookies = Array.isArray(setCookieHeader)
-      ? setCookieHeader
-      : setCookieHeader
-        ? [setCookieHeader]
-        : []
-    const targetCookie = cookies.find((cookie) => cookie?.startsWith(`${cookieName}=`))
-    return targetCookie?.split(';')[0].split('=')[1]
-  }
-
-  async function createAuthenticatedAgent(email: string, password: string) {
-    const agent = request.agent(app)
-    const loginResponse = await agent.post('/api/auth/login').send({ email, password })
-
-    expect(loginResponse.status).toBe(200)
-    const xsrfToken = findCookieValue(loginResponse.headers['set-cookie'], 'XSRF-TOKEN')
-    expect(xsrfToken).toBeTruthy()
-
-    return {
-      agent,
-      xsrfToken: xsrfToken!,
-    }
-  }
-
-  async function createCurrentUserPost(overrides: Omit<CreateTestPostInput, 'authorUid'>) {
-    return createTestPost({
-      ...overrides,
-      authorUid: testUser.user.uid,
-    })
-  }
-
-  /**
-   * 每个测试套件前准备测试数据
-   */
   beforeEach(async () => {
     await cleanupPostTestData()
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-
-    // 创建测试用户
-    testUser = await createTestUser({
+    normalUser = await createTestUser({
       role: 'user',
-      email: `test_posts_user_${suffix}@example.com`,
-      displayName: `TestPostsUser_${suffix}`,
+      email: `roi_posts_user_${suffix}@example.com`,
+      displayName: `RoiPostsUser_${suffix}`,
     })
     adminUser = await createTestUser({
       role: 'admin',
-      email: `test_posts_admin_${suffix}@example.com`,
-      displayName: `TestPostsAdmin_${suffix}`,
+      email: `roi_posts_admin_${suffix}@example.com`,
+      displayName: `RoiPostsAdmin_${suffix}`,
     })
-
-    // 创建认证 token
-    userToken = await createTestToken(testUser.user.uid, testUser.user.role)
-    adminToken = await createTestToken(adminUser.user.uid, adminUser.user.role)
   })
 
-  /**
-   * 清理测试数据
-   */
   afterEach(async () => {
     await cleanupPostTestData()
   })
 
-  // ============================================================================
-  // 获取文章列表接口测试
-  // ============================================================================
-  describe('GET /api/posts - 获取文章列表', () => {
-    /**
-     * 测试目的：验证获取空列表时的响应格式
-     * 预期结果：返回空数组和正确的元数据
-     */
-    it('应该返回空的文章列表（当没有数据时）', async () => {
-      const emptySection = `empty-section-${Date.now()}`
-      const response = await request(app).get('/api/posts').query({ section: emptySection })
-
-      expect(response.status).toBe(200)
-      expect(response.body).toHaveProperty('posts')
-      expect(Array.isArray(response.body.posts)).toBe(true)
-      expect(response.body.posts.length).toBe(0)
-
-      // 验证分页元数据
-      expect(response.body).toHaveProperty('total', 0)
-      expect(response.body).toHaveProperty('page', 1)
-      expect(response.body).toHaveProperty('limit', 20)
-      expect(response.body).toHaveProperty('totalPages', 1)
-      expect(response.body).toHaveProperty('hasMore', false)
+  it('lists public posts without exposing drafts and lets authors view their own drafts', async () => {
+    const publishedPost = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Published`,
+      section: 'general',
+      status: 'published',
+      authorUid: normalUser.user.uid,
     })
+    const draftPost = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Draft`,
+      section: 'general',
+      status: 'draft',
+      authorUid: normalUser.user.uid,
+    })
+    const { agent } = await createAuthenticatedAgent(
+      normalUser.user.email,
+      normalUser.plainPassword
+    )
 
-    /**
-     * 测试目的：验证返回包含数据的文章列表
-     * 预期结果：返回正确数量的文章和完整的文章信息
-     */
-    it('应该返回包含数据的文章列表', async () => {
-      // 创建多个测试文章
-      const post1 = await createTestPost({
-        title: 'Test Post 1',
+    const listResponse = await request(app)
+      .get('/api/posts')
+      .query({ section: 'general', limit: 50 })
+    expect(listResponse.status).toBe(200)
+    const listedIds = listResponse.body.posts.map((post: { id: string }) => post.id)
+    expect(listedIds).toContain(publishedPost.id)
+    expect(listedIds).not.toContain(draftPost.id)
+
+    const authorDetailResponse = await agent.get(`/api/posts/${draftPost.slug}`)
+    const visitorDetailResponse = await request(app).get(`/api/posts/${draftPost.slug}`)
+    expect(authorDetailResponse.status).toBe(200)
+    expect(authorDetailResponse.body.post.id).toBe(draftPost.id)
+    expect(visitorDetailResponse.status).toBe(404)
+  })
+
+  it('creates posts with review-aware defaults and rejects anonymous or invalid writes', async () => {
+    const { agent: userAgent, xsrfToken: userXsrfToken } = await createAuthenticatedAgent(
+      normalUser.user.email,
+      normalUser.plainPassword
+    )
+    const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const userResponse = await userAgent
+      .post('/api/posts')
+      .set('X-XSRF-TOKEN', userXsrfToken)
+      .send({
+        title: `${POST_TITLE_PREFIX} Created By User`,
         section: 'general',
-        content: 'Content of post 1',
-        status: 'published',
-        authorUid: testUser.user.uid,
-      })
-
-      const post2 = await createTestPost({
-        title: 'Test Post 2',
-        section: 'discussion',
-        content: 'Content of post 2',
-        status: 'published',
-        authorUid: testUser.user.uid,
-      })
-
-      const response = await request(app).get('/api/posts')
-
-      expect(response.status).toBe(200)
-      expect(response.body.posts.length).toBeGreaterThanOrEqual(2)
-
-      // 验证文章结构包含必要字段
-      const post = response.body.posts.find((p: { id: string }) => p.id === post1.id)
-      expect(post).toBeDefined()
-      expect(post).toHaveProperty('id', post1.id)
-      expect(post).toHaveProperty('title', post1.title)
-      expect(post).toHaveProperty('section', post1.section)
-      expect(post).toHaveProperty('status')
-      expect(post).toHaveProperty('authorName', testUser.user.displayName)
-      expect(post).toHaveProperty('createdAt')
-      expect(post).toHaveProperty('updatedAt')
-      expect(post).toHaveProperty('viewCount')
-      expect(post).toHaveProperty('likesCount')
-      expect(post).toHaveProperty('commentsCount')
-      expect(post).toHaveProperty('excerpt', 'Content of post 1')
-
-      // 验证总数
-      expect(response.body.total).toBeGreaterThanOrEqual(2)
-    })
-
-    /**
-     * 测试目的：验证分页功能是否正常工作
-     * 预期结果：返回指定页码的数据和正确的分页信息
-     */
-    it('应该支持分页参数', async () => {
-      // 创建多个测试文章
-      for (let i = 0; i < 25; i++) {
-        await createTestPost({
-          title: `Pagination Test ${i}`,
-          status: 'published',
-          authorUid: testUser.user.uid,
-        })
-      }
-
-      // 请求第一页，每页 10 条
-      const response1 = await request(app).get('/api/posts').query({ page: 1, limit: 10 })
-
-      expect(response1.status).toBe(200)
-      expect(response1.body.posts.length).toBe(10)
-      expect(response1.body.page).toBe(1)
-      expect(response1.body.limit).toBe(10)
-      expect(response1.body.totalPages).toBe(
-        Math.max(1, Math.ceil(response1.body.total / response1.body.limit))
-      )
-      expect(response1.body.hasMore).toBe(true)
-
-      // 请求第二页
-      const response2 = await request(app).get('/api/posts').query({ page: 2, limit: 10 })
-
-      expect(response2.status).toBe(200)
-      expect(response2.body.posts.length).toBe(10)
-      expect(response2.body.page).toBe(2)
-      expect(response2.body.totalPages).toBe(response1.body.totalPages)
-
-      // 请求第三页（剩余 5 条）
-      const response3 = await request(app).get('/api/posts').query({ page: 3, limit: 10 })
-
-      expect(response3.status).toBe(200)
-      expect(response3.body.totalPages).toBe(response1.body.totalPages)
-      expect(response3.body.hasMore).toBe(false)
-    })
-
-    /**
-     * 测试目的：验证按版块筛选功能
-     * 预期结果：只返回指定版块的文章
-     */
-    it('应该支持按版块筛选', async () => {
-      // 创建不同版块的文章
-      await createCurrentUserPost({
-        title: 'General Section Post',
-        section: 'general',
-        status: 'published',
-      })
-
-      await createCurrentUserPost({
-        title: 'Discussion Section Post',
-        section: 'discussion',
-        status: 'published',
-      })
-
-      // 筛选 general 版块
-      const response = await request(app).get('/api/posts').query({ section: 'general' })
-
-      expect(response.status).toBe(200)
-
-      // 验证所有返回的文章都属于 general 版块
-      if (response.body.posts.length > 0) {
-        response.body.posts.forEach((post: { section: string }) => {
-          expect(post.section).toBe('general')
-        })
-      }
-    })
-
-    /**
-     * 测试目的：验证排序参数功能
-     * 预期结果：根据不同的排序方式返回正确排序的结果
-     */
-    it('应该支持不同的排序方式', async () => {
-      // 创建一些测试文章
-      for (let i = 0; i < 5; i++) {
-        await createTestPost({
-          title: `Sort Test ${i}`,
-          status: 'published',
-          authorUid: testUser.user.uid,
-        })
-      }
-
-      // 默认排序（最新优先）
-      const responseLatest = await request(app).get('/api/posts').query({ sort: 'latest' })
-
-      expect(responseLatest.status).toBe(200)
-      if (responseLatest.body.posts.length >= 2) {
-        const date1 = new Date(responseLatest.body.posts[0].updatedAt).getTime()
-        const date2 = new Date(responseLatest.body.posts[1].updatedAt).getTime()
-        expect(date1).toBeGreaterThanOrEqual(date2)
-      }
-
-      // 热门排序
-      const responseHot = await request(app).get('/api/posts').query({ sort: 'hot' })
-
-      expect(responseHot.status).toBe(200)
-      expect(responseHot.body).toHaveProperty('posts')
-    })
-
-    /**
-     * 测试目的：验证已登录用户的个性化数据
-     * 预期结果：登录用户应看到 likedByMe、favoritedByMe 等字段
-     */
-    it('已登录用户应该看到个性化交互状态', async () => {
-      // 创建测试文章
-      const post = await createTestPost({
-        title: 'Personalized Post',
-        status: 'published',
-        authorUid: testUser.user.uid,
-      })
-
-      // 用户点赞该文章
-      await prisma.postLike.create({
-        data: {
-          postId: post.id,
-          userUid: testUser.user.uid,
-        },
-      })
-
-      // 已认证用户访问
-      const response = await request(app)
-        .get('/api/posts')
-        .set('Authorization', `Bearer ${userToken}`)
-
-      expect(response.status).toBe(200)
-
-      // 查找我们创建的文章
-      const userPost = response.body.posts.find((p: { id: string }) => p.id === post.id)
-      if (userPost) {
-        expect(userPost).toHaveProperty('likedByMe', true)
-      }
-    })
-
-    /**
-     * 测试目的：验证草稿状态的文章对非作者不可见
-     * 预期结果：未登录/非作者不应看到草稿文章
-     */
-    it('未登录用户不应该看到草稿状态的文章', async () => {
-      // 创建草稿文章
-      await createTestPost({
-        title: 'Draft Post Should Not Appear',
-        status: 'draft',
-        authorUid: testUser.user.uid,
-      })
-
-      // 未登录用户获取列表
-      const response = await request(app).get('/api/posts')
-
-      expect(response.status).toBe(200)
-
-      // 草稿文章不应出现在列表中
-      const draftPost = response.body.posts.find(
-        (post: { title: string }) => post.title === 'Draft Post Should Not Appear'
-      )
-      expect(draftPost).toBeUndefined()
-    })
-
-    /**
-     * 测试目的：验证非已发布状态的文章不应出现在论坛列表中
-     * 预期结果：列表只显示已通过审核的文章
-     */
-    it('已登录作者不应该在列表中看到待审核或被驳回的文章', async () => {
-      await createCurrentUserPost({
-        title: 'Pending Post Should Not Appear',
+        content: 'User post content',
+        tags: ['roi'],
         status: 'pending',
       })
-      await createCurrentUserPost({
-        title: 'Rejected Post Should Not Appear',
-        status: 'rejected',
-      })
-
-      const response = await request(app)
-        .get('/api/posts')
-        .set('Authorization', `Bearer ${userToken}`)
-
-      expect(response.status).toBe(200)
-
-      const pendingPost = response.body.posts.find(
-        (post: { title: string }) => post.title === 'Pending Post Should Not Appear'
-      )
-      const rejectedPost = response.body.posts.find(
-        (post: { title: string }) => post.title === 'Rejected Post Should Not Appear'
-      )
-      expect(pendingPost).toBeUndefined()
-      expect(rejectedPost).toBeUndefined()
-    })
-  })
-
-  // ============================================================================
-  // 获取单个文章详情接口测试
-  // ============================================================================
-  describe('GET /api/posts/:id - 获取文章详情', () => {
-    /**
-     * 测试目的：验证获取存在的文章详情
-     * 预期结果：返回完整的文章信息和评论列表
-     */
-    it('应该返回存在的文章详情', async () => {
-      // 创建测试文章
-      const post = await createTestPost({
-        title: 'Detail Test Post',
-        content: '# Hello\n\nThis is detailed **content**.',
+    const adminResponse = await adminAgent
+      .post('/api/posts')
+      .set('X-XSRF-TOKEN', adminXsrfToken)
+      .send({
+        title: `${POST_TITLE_PREFIX} Created By Admin`,
         section: 'general',
-        status: 'published',
-        authorUid: testUser.user.uid,
-      })
-
-      // 添加一些评论
-      await prisma.postComment.createMany({
-        data: [
-          {
-            postId: post.id,
-            authorUid: testUser.user.uid,
-            content: 'First comment',
-          },
-          {
-            postId: post.id,
-            authorUid: testUser.user.uid,
-            content: 'Second comment',
-          },
-        ],
-      })
-
-      const response = await request(app).get(`/api/posts/${post.slug}`)
-
-      expect(response.status).toBe(200)
-
-      // 验证主要字段
-      expect(response.body).toHaveProperty('post')
-      expect(response.body.post.id).toBe(post.id)
-      expect(response.body.post.title).toBe(post.title)
-      expect(response.body.post.content).toBe(post.content)
-      expect(response.body.post.section).toBe(post.section)
-      expect(response.body.post.author).toMatchObject({
-        displayName: testUser.user.displayName,
-      })
-
-      // 验证评论列表
-      expect(response.body).toHaveProperty('comments')
-      expect(Array.isArray(response.body.comments)).toBe(true)
-      expect(response.body.comments.length).toBe(2)
-    })
-
-    /**
-     * 测试目的：验证访问不存在的文章
-     * 预期结果：返回 404 错误
-     */
-    it('访问不存在的文章应该返回 404 错误', async () => {
-      const nonExistentId = 'non_existent_post_id_12345'
-
-      const response = await request(app).get(`/api/posts/${nonExistentId}`)
-
-      expect(response.status).toBe(404)
-      expect(response.body).toHaveProperty('error')
-      expect(response.body.error).toContain('未找到')
-    })
-
-    /**
-     * 测试目的：验证访问文章时浏览次数是否增加
-     * 预期结果：每次访问后 viewCount 应该增加
-     */
-    it('每次访问应该增加浏览次数', async () => {
-      // 创建测试文章
-      const post = await createCurrentUserPost({
-        title: 'View Count Test Post',
-        status: 'published',
-      })
-
-      // 第一次访问
-      const response1 = await request(app).get(`/api/posts/${post.slug}`)
-      expect(response1.status).toBe(200)
-
-      // 从数据库获取更新后的浏览次数
-      const updatedPost = await prisma.post.findUnique({
-        where: { id: post.id },
-      })
-
-      expect(updatedPost?.viewCount).toBeGreaterThanOrEqual(1)
-    })
-
-    /**
-     * 测试目的：验证已认证用户的个性化数据
-     * 预期结果：登录用户应看到 favoritedByMe、likedByMe、dislikedByMe 字段
-     */
-    it('已登录用户应该看到个性化交互状态', async () => {
-      // 创建测试文章
-      const post = await createTestPost({
-        title: 'Auth Personalized Post',
-        status: 'published',
-        authorUid: testUser.user.uid,
-      })
-
-      // 用户点赞并收藏该文章
-      await Promise.all([
-        prisma.postLike.create({
-          data: { postId: post.id, userUid: testUser.user.uid },
-        }),
-        prisma.favorite.create({
-          data: {
-            userUid: testUser.user.uid,
-            targetType: 'post',
-            targetId: post.id,
-          },
-        }),
-      ])
-
-      // 已认证用户访问
-      const response = await request(app)
-        .get(`/api/posts/${post.slug}`)
-        .set('Authorization', `Bearer ${userToken}`)
-
-      expect(response.status).toBe(200)
-      expect(response.body.post).toHaveProperty('likedByMe', true)
-      expect(response.body.post).toHaveProperty('favoritedByMe', true)
-      expect(response.body.post).toHaveProperty('dislikedByMe', false)
-    })
-
-    /**
-     * 测试目的：验证草稿文章的访问权限
-     * 预期结果：非作者/管理员不能查看草稿
-     */
-    it('未认证用户不能查看草稿状态的文章', async () => {
-      // 创建草稿文章
-      const draftPost = await createCurrentUserPost({
-        title: 'Draft Post For Auth Test',
-        status: 'draft',
-      })
-
-      // 未认证用户尝试访问草稿
-      const response = await request(app).get(`/api/posts/${draftPost.slug}`)
-
-      expect(response.status).toBe(404)
-      expect(response.body).toHaveProperty('error')
-    })
-
-    /**
-     * 测试目的：验证作者可以查看自己的草稿
-     * 预期结果：作者应能看到自己的草稿文章
-     */
-    it('作者应该能够查看自己的草稿文章', async () => {
-      // 创建属于当前用户的草稿文章
-      const draftPost = await createTestPost({
-        title: 'My Draft Post',
-        status: 'draft',
-        authorUid: testUser.user.uid,
-      })
-
-      // 作者访问自己的草稿
-      const response = await request(app)
-        .get(`/api/posts/${draftPost.slug}`)
-        .set('Authorization', `Bearer ${userToken}`)
-
-      expect(response.status).toBe(200)
-      expect(response.body.post.id).toBe(draftPost.id)
-      expect(response.body.post.status).toBe('draft')
-    })
-
-    /**
-     * 测试目的：验证评论的正确排序
-     * 预期结果：评论应按时间升序排列（最早的在前）
-     */
-    it('评论应该按时间升序排列', async () => {
-      // 创建测试文章
-      const post = await createCurrentUserPost({
-        title: 'Comment Order Test',
-        status: 'published',
-      })
-
-      // 添加评论（注意顺序）
-      const comment1 = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'First comment',
-        },
-      })
-
-      const comment2 = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Second comment',
-        },
-      })
-
-      const response = await request(app).get(`/api/posts/${post.slug}`)
-
-      expect(response.status).toBe(200)
-      expect(response.body.comments.length).toBe(2)
-
-      // 验证顺序：第一个评论应该在前面
-      expect(response.body.comments[0].id).toBe(comment1.id)
-      expect(response.body.comments[1].id).toBe(comment2.id)
-    })
-  })
-
-  // ============================================================================
-  // 发表评论接口测试（需要认证）
-  // ============================================================================
-  describe('POST /api/posts/:postId/comments - 发表评论', () => {
-    it('应该允许顶级评论显式传入 null parentId', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Top Level Comment Test',
-        status: 'published',
-      })
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-
-      const response = await agent
-        .post(`/api/posts/${post.id}/comments`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          content: 'Top level comment',
-          parentId: null,
-        })
-
-      expect(response.status).toBe(201)
-      expect(response.body).toHaveProperty('comment')
-      expect(response.body.comment.content).toBe('Top level comment')
-      expect(response.body.comment.parentId).toBeNull()
-
-      const dbComment = await prisma.postComment.findUnique({
-        where: { id: response.body.comment.id },
-      })
-      expect(dbComment?.parentId).toBeNull()
-
-      const dbPost = await prisma.post.findUnique({
-        where: { id: post.id },
-      })
-      expect(dbPost?.commentsCount).toBe(1)
-    })
-
-    it('应该允许回复已有评论', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Reply Comment Test',
-        status: 'published',
-      })
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-
-      const parent = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Parent comment',
-        },
-      })
-
-      const response = await agent
-        .post(`/api/posts/${post.id}/comments`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          content: 'Reply comment',
-          parentId: parent.id,
-        })
-
-      expect(response.status).toBe(201)
-      expect(response.body.comment.parentId).toBe(parent.id)
-
-      const dbComment = await prisma.postComment.findUnique({
-        where: { id: response.body.comment.id },
-      })
-      expect(dbComment?.parentId).toBe(parent.id)
-    })
-
-    it('回复子评论时应归入根评论并记录实际回复目标', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Reply Nested Comment Test',
-        status: 'published',
-      })
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-
-      const parent = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Root comment',
-        },
-      })
-      const child = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Child comment',
-          parentId: parent.id,
-          replyToId: parent.id,
-        },
-      })
-
-      const response = await agent
-        .post(`/api/posts/${post.id}/comments`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          content: 'Reply child comment',
-          parentId: child.id,
-        })
-
-      expect(response.status).toBe(201)
-      expect(response.body.comment.parentId).toBe(parent.id)
-      expect(response.body.comment.replyToId).toBe(child.id)
-      expect(response.body.comment.replyToAuthorUid).toBe(testUser.user.uid)
-
-      const dbComment = await prisma.postComment.findUnique({
-        where: { id: response.body.comment.id },
-      })
-      expect(dbComment?.parentId).toBe(parent.id)
-      expect(dbComment?.replyToId).toBe(child.id)
-    })
-  })
-
-  describe('GET /api/posts/:postId/comments - 获取评论列表', () => {
-    it('分页应在过滤不可见删除评论之后执行', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Comment Pagination Visibility Test',
-        status: 'published',
-      })
-      const root = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Root comment',
-          createdAt: new Date('2026-01-01T00:00:00.000Z'),
-        },
-      })
-      const hiddenChild = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Deleted child comment',
-          parentId: root.id,
-          replyToId: root.id,
-          deletedAt: new Date('2026-01-01T00:00:01.000Z'),
-          deletedBy: testUser.user.uid,
-          createdAt: new Date('2026-01-01T00:00:01.000Z'),
-        },
-      })
-      const visibleChild = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Visible child comment',
-          parentId: root.id,
-          replyToId: root.id,
-          createdAt: new Date('2026-01-01T00:00:02.000Z'),
-        },
-      })
-
-      const publicResponse = await request(app)
-        .get(`/api/posts/${post.id}/comments`)
-        .query({ page: 1, limit: 2 })
-      expect(publicResponse.status).toBe(200)
-      expect(publicResponse.body.total).toBe(2)
-      expect(publicResponse.body.comments.map((comment: { id: string }) => comment.id)).toEqual([
-        root.id,
-        visibleChild.id,
-      ])
-
-      const adminResponse = await request(app)
-        .get(`/api/posts/${post.id}/comments`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .query({ page: 1, limit: 3, includeDeleted: true })
-      expect(adminResponse.status).toBe(200)
-      expect(adminResponse.body.total).toBe(3)
-      expect(adminResponse.body.comments.map((comment: { id: string }) => comment.id)).toEqual([
-        root.id,
-        hiddenChild.id,
-        visibleChild.id,
-      ])
-    })
-  })
-
-  // ============================================================================
-  // 删除评论接口测试（需要认证）
-  // ============================================================================
-  describe('DELETE /api/posts/comments/:id - 删除评论', () => {
-    it('删除父评论时应软删除并保留子评论可见', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Soft Delete Parent Comment Test',
-        status: 'published',
-      })
-
-      const parent = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Parent comment content',
-        },
-      })
-
-      const child = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Child comment content',
-          parentId: parent.id,
-        },
-      })
-
-      await prisma.post.update({
-        where: { id: post.id },
-        data: { commentsCount: 2 },
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const deleteResponse = await agent
-        .delete(`/api/posts/comments/${parent.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-
-      expect(deleteResponse.status).toBe(200)
-      expect(deleteResponse.body).toEqual({ success: true })
-
-      const dbParent = await prisma.postComment.findUnique({
-        where: { id: parent.id },
-      })
-      expect(dbParent).not.toBeNull()
-      expect(dbParent?.deletedAt).not.toBeNull()
-      expect(dbParent?.deletedBy).toBe(testUser.user.uid)
-
-      const dbChild = await prisma.postComment.findUnique({
-        where: { id: child.id },
-      })
-      expect(dbChild?.deletedAt).toBeNull()
-      expect(dbChild?.parentId).toBe(parent.id)
-
-      const publicResponse = await request(app).get(`/api/posts/${post.slug}`)
-      expect(publicResponse.status).toBe(200)
-      expect(publicResponse.body.comments).toHaveLength(2)
-      const publicParent = publicResponse.body.comments.find(
-        (comment: { id: string }) => comment.id === parent.id
-      )
-      const publicChild = publicResponse.body.comments.find(
-        (comment: { id: string }) => comment.id === child.id
-      )
-      expect(publicParent).toMatchObject({
-        id: parent.id,
-        content: '评论已删除',
-        isDeleted: true,
-        deletedByName: null,
-      })
-      expect(publicChild).toMatchObject({
-        id: child.id,
-        content: 'Child comment content',
-      })
-
-      const adminResponse = await request(app)
-        .get(`/api/posts/${post.slug}`)
-        .set('Authorization', `Bearer ${adminToken}`)
-      expect(adminResponse.status).toBe(200)
-      expect(adminResponse.body.comments[0].content).toBe('评论已删除')
-      expect(adminResponse.body.comments[0].isDeleted).toBe(true)
-      expect(adminResponse.body.comments[0].deletedByName).toBeNull()
-
-      const adminWithDeletedResponse = await request(app)
-        .get(`/api/posts/${post.slug}?includeDeleted=true`)
-        .set('Authorization', `Bearer ${adminToken}`)
-      expect(adminWithDeletedResponse.status).toBe(200)
-      expect(adminWithDeletedResponse.body.comments[0].content).toBe('Parent comment content')
-      expect(adminWithDeletedResponse.body.comments[0].deletedBy).toBe(testUser.user.uid)
-      expect(adminWithDeletedResponse.body.comments[0].deletedByName).toBe(
-        testUser.user.displayName
-      )
-
-      const replyDeletedParentResponse = await agent
-        .post(`/api/posts/${post.id}/comments`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          content: 'Reply to deleted parent',
-          parentId: parent.id,
-        })
-      expect(replyDeletedParentResponse.status).toBe(201)
-      expect(replyDeletedParentResponse.body.comment.parentId).toBe(parent.id)
-      expect(replyDeletedParentResponse.body.comment.replyToId).toBe(parent.id)
-
-      const dbPost = await prisma.post.findUnique({
-        where: { id: post.id },
-      })
-      expect(dbPost?.commentsCount).toBe(2)
-    })
-
-    it('应该允许通过通用评论接口删除图集评论', async () => {
-      const gallery = await createTestGallery({
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-      })
-
-      const galleryComment = await prisma.postComment.create({
-        data: {
-          galleryId: gallery.id,
-          authorUid: testUser.user.uid,
-          content: 'Gallery comment content',
-        },
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const responseWithCsrf = await agent
-        .delete(`/api/posts/comments/${galleryComment.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-
-      expect(responseWithCsrf.status).toBe(200)
-      expect(responseWithCsrf.body).toEqual({ success: true })
-
-      const dbComment = await prisma.postComment.findUnique({
-        where: { id: galleryComment.id },
-      })
-      expect(dbComment?.deletedAt).not.toBeNull()
-      expect(dbComment?.deletedBy).toBe(testUser.user.uid)
-
-      const moderationLog = await prisma.moderationLog.findFirst({
-        where: {
-          targetType: 'comment',
-          targetId: galleryComment.id,
-          action: 'delete',
-        },
-      })
-      expect(moderationLog?.note).toBe('自行删除')
-    })
-
-    it('管理员删除他人评论时必须提供删除理由并记录日志', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Comment Delete Reason Test',
-        status: 'published',
-      })
-      const comment = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Comment delete reason content',
-        },
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const missingReasonResponse = await agent
-        .delete(`/api/posts/comments/${comment.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-      expect(missingReasonResponse.status).toBe(400)
-
-      const response = await agent
-        .delete(`/api/posts/comments/${comment.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ reason: '管理员删除违规评论' })
-      expect(response.status).toBe(200)
-
-      const moderationLog = await prisma.moderationLog.findFirst({
-        where: {
-          targetType: 'comment',
-          targetId: comment.id,
-          action: 'delete',
-          operatorUid: adminUser.user.uid,
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(moderationLog?.note).toBe('管理员删除违规评论')
-    })
-
-    it('删除子评论后普通用户不可见且不能继续回复', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Soft Delete Child Comment Test',
-        status: 'published',
-      })
-      const parent = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Root comment content',
-        },
-      })
-      const child = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Child comment content',
-          parentId: parent.id,
-          replyToId: parent.id,
-        },
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const deleteResponse = await agent
-        .delete(`/api/posts/comments/${child.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-      expect(deleteResponse.status).toBe(200)
-
-      const publicResponse = await request(app).get(`/api/posts/${post.slug}`)
-      expect(publicResponse.status).toBe(200)
-      expect(publicResponse.body.comments.map((comment: { id: string }) => comment.id)).toEqual([
-        parent.id,
-      ])
-
-      const adminWithDeletedResponse = await request(app)
-        .get(`/api/posts/${post.slug}?includeDeleted=true`)
-        .set('Authorization', `Bearer ${adminToken}`)
-      expect(adminWithDeletedResponse.status).toBe(200)
-      expect(
-        adminWithDeletedResponse.body.comments.map((comment: { id: string }) => comment.id)
-      ).toEqual([parent.id, child.id])
-
-      const replyDeletedChildResponse = await agent
-        .post(`/api/posts/${post.id}/comments`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          content: 'Reply to deleted child',
-          parentId: child.id,
-        })
-      expect(replyDeletedChildResponse.status).toBe(400)
-      expect(replyDeletedChildResponse.body.error).toBe('回复目标不存在')
-    })
-
-    it('管理员应该可以恢复已删除评论', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Restore Deleted Comment Test',
-        status: 'published',
-      })
-      const comment = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Restorable comment',
-          deletedAt: new Date(),
-          deletedBy: testUser.user.uid,
-        },
-      })
-
-      const { agent: userAgent, xsrfToken: userXsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const forbiddenResponse = await userAgent
-        .post(`/api/posts/comments/${comment.id}/restore`)
-        .set('X-XSRF-TOKEN', userXsrfToken)
-      expect(forbiddenResponse.status).toBe(403)
-
-      const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await adminAgent
-        .post(`/api/posts/comments/${comment.id}/restore`)
-        .set('X-XSRF-TOKEN', adminXsrfToken)
-      expect(response.status).toBe(200)
-      expect(response.body).toEqual({ success: true })
-
-      const dbComment = await prisma.postComment.findUnique({
-        where: { id: comment.id },
-      })
-      expect(dbComment?.deletedAt).toBeNull()
-      expect(dbComment?.deletedBy).toBeNull()
-    })
-  })
-
-  describe('POST/DELETE /api/posts/comments/:id/like - 评论点赞', () => {
-    it('应该持久化评论点赞并防重复', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Comment Like Test',
-        status: 'published',
-      })
-      const comment = await prisma.postComment.create({
-        data: {
-          postId: post.id,
-          authorUid: testUser.user.uid,
-          content: 'Comment to like',
-        },
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const likeResponse = await agent
-        .post(`/api/posts/comments/${comment.id}/like`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-      expect(likeResponse.status).toBe(200)
-      expect(likeResponse.body).toMatchObject({ likedByMe: true, likesCount: 1 })
-
-      const duplicateLikeResponse = await agent
-        .post(`/api/posts/comments/${comment.id}/like`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-      expect(duplicateLikeResponse.status).toBe(200)
-      expect(duplicateLikeResponse.body).toMatchObject({ likedByMe: true, likesCount: 1 })
-
-      const detailResponse = await agent.get(`/api/posts/${post.slug}`)
-
-      expect(detailResponse.status).toBe(200)
-      expect(detailResponse.body.comments[0]).toMatchObject({
-        id: comment.id,
-        likedByMe: true,
-        likesCount: 1,
-      })
-
-      const unlikeResponse = await agent
-        .delete(`/api/posts/comments/${comment.id}/like`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-      expect(unlikeResponse.status).toBe(200)
-      expect(unlikeResponse.body).toMatchObject({ likedByMe: false, likesCount: 0 })
-    })
-
-    it('不能点赞或取消点赞当前用户不可见内容下的评论', async () => {
-      const otherUser = await createTestUser({
-        email: `test_other_${Date.now()}@example.com`,
-        role: 'user',
-      })
-      const otherToken = await createTestToken(otherUser.user.uid, otherUser.user.role)
-      const { agent: ownerAgent, xsrfToken: ownerXsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const { agent: otherAgent, xsrfToken: otherXsrfToken } = await createAuthenticatedAgent(
-        otherUser.user.email,
-        otherUser.plainPassword
-      )
-      const draftPost = await createCurrentUserPost({
-        title: 'Hidden Comment Like Post Test',
-        status: 'draft',
-      })
-      const postComment = await prisma.postComment.create({
-        data: {
-          postId: draftPost.id,
-          authorUid: testUser.user.uid,
-          content: 'Draft post comment',
-        },
-      })
-      const hiddenGallery = await createTestGallery({
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        published: false,
-      })
-      const galleryComment = await prisma.postComment.create({
-        data: {
-          galleryId: hiddenGallery.id,
-          authorUid: testUser.user.uid,
-          content: 'Hidden gallery comment',
-        },
-      })
-
-      const postLikeResponse = await otherAgent
-        .post(`/api/posts/comments/${postComment.id}/like`)
-        .set('X-XSRF-TOKEN', otherXsrfToken)
-      expect(postLikeResponse.status).toBe(404)
-
-      const postUnlikeResponse = await otherAgent
-        .delete(`/api/posts/comments/${postComment.id}/like`)
-        .set('X-XSRF-TOKEN', otherXsrfToken)
-      expect(postUnlikeResponse.status).toBe(404)
-
-      const galleryLikeResponse = await otherAgent
-        .post(`/api/posts/comments/${galleryComment.id}/like`)
-        .set('X-XSRF-TOKEN', otherXsrfToken)
-      expect(galleryLikeResponse.status).toBe(404)
-
-      const ownerLikeResponse = await ownerAgent
-        .post(`/api/posts/comments/${postComment.id}/like`)
-        .set('X-XSRF-TOKEN', ownerXsrfToken)
-      expect(ownerLikeResponse.status).toBe(200)
-      expect(ownerLikeResponse.body).toMatchObject({ likedByMe: true, likesCount: 1 })
-    })
-  })
-
-  // ============================================================================
-  // 创建文章接口测试（需要认证）
-  // ============================================================================
-  describe('POST /api/posts - 创建文章', () => {
-    /**
-     * 测试目的：验证已认证用户能否成功创建文章
-     * 预期结果：返回 201 状态码和新创建的文章信息
-     */
-    it('已认证用户应该能够创建新文章', async () => {
-      const newPostData = {
-        title: `New Test Post ${Date.now()}`,
-        section: 'general',
-        content: 'This is a new post content with **markdown** support.',
-        tags: ['test', 'new'],
-      }
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send(newPostData)
-
-      expect(response.status).toBe(201)
-      expect(response.body).toHaveProperty('post')
-      expect(response.body.post.title).toBe(newPostData.title)
-      expect(response.body.post.section).toBe(newPostData.section)
-      expect(response.body.post.content).toBe(newPostData.content)
-      expect(response.body.post.authorUid).toBe(testUser.user.uid)
-
-      // 验证数据库中确实创建了该文章
-      const dbPost = await prisma.post.findUnique({
-        where: { id: response.body.post.id },
-      })
-      expect(dbPost).not.toBeNull()
-      expect(dbPost?.title).toBe(newPostData.title)
-    })
-
-    it('应该允许提交待审核状态并接受空位置信息', async () => {
-      const newPostData = {
-        title: `New Test Post Pending ${Date.now()}`,
-        section: 'discussion',
-        content: 'Pending review content.',
+        content: 'Admin post content',
         tags: [],
         status: 'pending',
-        locationCode: null,
-        locationDetail: null,
-      }
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send(newPostData)
-
-      expect(response.status).toBe(201)
-      expect(response.body.post.status).toBe('pending')
-      expect(response.body.post.locationCode).toBeNull()
-      expect(response.body.post.locationDetail).toBeNull()
-
-      const dbPost = await prisma.post.findUnique({
-        where: { id: response.body.post.id },
       })
-      expect(dbPost?.status).toBe('pending')
-      expect(dbPost?.locationCode ?? null).toBeNull()
-      expect(dbPost?.locationDetail ?? null).toBeNull()
-    })
-
-    it('管理员提交待审核状态时应该直接发布', async () => {
-      const newPostData = {
-        title: `Admin Direct Publish Test ${Date.now()}`,
-        section: 'discussion',
-        content: 'Admin post should skip review.',
-        tags: [],
-        status: 'pending',
-      }
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send(newPostData)
-
-      expect(response.status).toBe(201)
-      expect(response.body.post.status).toBe('published')
-
-      const dbPost = await prisma.post.findUnique({
-        where: { id: response.body.post.id },
-      })
-      expect(dbPost?.status).toBe('published')
-    })
-
-    /**
-     * 测试目的：验证未认证用户无法创建文章
-     * 预期结果：返回 401 认证错误
-     */
-    it('未认证用户尝试创建文章应该返回 401 错误', async () => {
-      const response = await request(app).post('/api/posts').send({
-        title: 'Unauthorized Create',
+    const anonymousResponse = await request(app)
+      .post('/api/posts')
+      .send({
+        title: `${POST_TITLE_PREFIX} Anonymous`,
         section: 'general',
-        content: 'Should not be created',
+        content: 'Anonymous content',
       })
-
-      expect(response.status).toBe(401)
-      expect(response.body).toHaveProperty('error')
-    })
-
-    /**
-     * 测试目的：验证缺少必填字段的创建请求
-     * 预期结果：返回 400 错误并提示缺少必要字段
-     */
-    it('缺少必填字段时应该返回 400 错误', async () => {
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      // 缺少标题
-      const response1 = await agent.post('/api/posts').set('X-XSRF-TOKEN', xsrfToken).send({
-        section: 'general',
-        content: 'No title provided',
-      })
-
-      expect(response1.status).toBe(400)
-      expect(response1.body.error).toBe('Validation failed')
-      expect(response1.body.fields).toHaveProperty('title')
-
-      // 缺少内容
-      const response2 = await agent.post('/api/posts').set('X-XSRF-TOKEN', xsrfToken).send({
-        title: 'No Content',
+    const invalidResponse = await userAgent
+      .post('/api/posts')
+      .set('X-XSRF-TOKEN', userXsrfToken)
+      .send({
+        title: `${POST_TITLE_PREFIX} Invalid`,
         section: 'general',
       })
 
-      expect(response2.status).toBe(400)
-      expect(response2.body.error).toBe('Validation failed')
-      expect(response2.body.fields).toHaveProperty('content')
+    expect(userResponse.status).toBe(201)
+    expect(userResponse.body.post.status).toBe('pending')
+    expect(adminResponse.status).toBe(201)
+    expect(adminResponse.body.post.status).toBe('published')
+    expect(anonymousResponse.status).toBe(401)
+    expect(invalidResponse.status).toBe(400)
+  })
 
-      // 缺少版块
-      const response3 = await agent.post('/api/posts').set('X-XSRF-TOKEN', xsrfToken).send({
-        title: 'No Section',
-        content: 'Content without section',
-      })
-
-      expect(response3.status).toBe(400)
-      expect(response3.body.error).toBe('Validation failed')
-      expect(response3.body.fields).toHaveProperty('section')
+  it('enforces update ownership while allowing admins to edit any post', async () => {
+    const otherUser = await createTestUser({
+      email: `roi_posts_other_${Date.now()}@example.com`,
+      displayName: `RoiPostsOther_${Date.now()}`,
     })
-
-    /**
-     * 测试目的：验证标签的处理
-     * 预期结果：标签应被正确存储为数组格式
-     */
-    it('应该正确处理文章标签', async () => {
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: 'Tags Test Post',
-          section: 'general',
-          content: 'Testing tags functionality',
-          tags: ['javascript', 'typescript', 'testing'],
-        })
-
-      expect(response.status).toBe(201)
-
-      // 从数据库验证标签
-      const dbPost = await prisma.post.findUnique({
-        where: { id: response.body.post.id },
-      })
-      expect(dbPost?.tags).toEqual(['javascript', 'typescript', 'testing'])
+    const post = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Update Owned`,
+      section: 'general',
+      status: 'published',
+      authorUid: otherUser.user.uid,
     })
+    const { agent: userAgent, xsrfToken: userXsrfToken } = await createAuthenticatedAgent(
+      normalUser.user.email,
+      normalUser.plainPassword
+    )
+    const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
 
-    /**
-     * 测试目的：验证空标签数组或无标签的处理
-     * 预期结果：应能正常处理没有标签的情况
-     */
-    it('应该能处理没有标签的文章', async () => {
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent.post('/api/posts').set('X-XSRF-TOKEN', xsrfToken).send({
-        title: 'No Tags Post',
+    const forbiddenResponse = await userAgent
+      .put(`/api/posts/${post.id}`)
+      .set('X-XSRF-TOKEN', userXsrfToken)
+      .send({
+        title: `${POST_TITLE_PREFIX} Hijacked`,
         section: 'general',
-        content: 'Post without any tags',
+        content: 'Nope',
       })
+    expect(forbiddenResponse.status).toBe(403)
 
-      expect(response.status).toBe(201)
-      expect(response.body.post.tags).toEqual([])
+    const adminResponse = await adminAgent
+      .put(`/api/posts/${post.id}`)
+      .set('X-XSRF-TOKEN', adminXsrfToken)
+      .send({
+        title: `${POST_TITLE_PREFIX} Admin Updated`,
+        section: 'general',
+        content: 'Admin updated content',
+      })
+    expect(adminResponse.status).toBe(200)
+    expect(adminResponse.body.post.title).toBe(`${POST_TITLE_PREFIX} Admin Updated`)
+  })
+
+  it('soft deletes posts with correct permission and reason semantics', async () => {
+    const post = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Delete`,
+      section: 'general',
+      status: 'published',
+      authorUid: normalUser.user.uid,
+    })
+    const { agent: userAgent, xsrfToken: userXsrfToken } = await createAuthenticatedAgent(
+      normalUser.user.email,
+      normalUser.plainPassword
+    )
+    const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const selfDeleteResponse = await userAgent
+      .delete(`/api/posts/${post.id}`)
+      .set('X-XSRF-TOKEN', userXsrfToken)
+      .send({ reason: 'ROI self delete' })
+    expect(selfDeleteResponse.status).toBe(200)
+    const selfDeletedPost = await prisma.post.findUnique({ where: { id: post.id } })
+    expect(selfDeletedPost?.deletedBy).toBe(normalUser.user.uid)
+
+    const adminPost = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Admin Delete`,
+      section: 'general',
+      status: 'published',
+      authorUid: normalUser.user.uid,
+    })
+    const missingReasonResponse = await adminAgent
+      .delete(`/api/posts/${adminPost.id}`)
+      .set('X-XSRF-TOKEN', adminXsrfToken)
+    expect(missingReasonResponse.status).toBe(400)
+
+    const adminDeleteResponse = await adminAgent
+      .delete(`/api/posts/${adminPost.id}`)
+      .set('X-XSRF-TOKEN', adminXsrfToken)
+      .send({ reason: 'ROI policy violation' })
+    expect(adminDeleteResponse.status).toBe(200)
+    const adminDeletedPost = await prisma.post.findUnique({ where: { id: adminPost.id } })
+    expect(adminDeletedPost?.deletedAt).toBeInstanceOf(Date)
+    expect(adminDeletedPost?.deletedBy).toBe(adminUser.user.uid)
+
+    const notification = await prisma.notification.findFirst({
+      where: { userUid: normalUser.user.uid, type: 'review_result' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(notification?.payload).toMatchObject({
+      action: 'deleted',
+      targetType: 'post',
+      targetId: adminPost.id,
+      note: 'ROI policy violation',
     })
   })
 
-  // ============================================================================
-  // 更新文章接口测试（需要认证）
-  // ============================================================================
-  describe('PUT /api/posts/:id - 更新文章', () => {
-    /**
-     * 测试目的：验证作者能否成功更新自己创建的文章
-     * 预期结果：返回更新后的文章信息
-     */
-    it('作者应该能够成功更新自己的文章', async () => {
-      // 创建属于当前用户的文章
-      const post = await createTestPost({
-        title: 'Original Title',
-        content: 'Original content',
-        authorUid: testUser.user.uid,
-        status: 'published',
-      })
+  it('preserves comment thread behavior for replies, soft deletion, and likes', async () => {
+    const post = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Comments`,
+      section: 'general',
+      status: 'published',
+      authorUid: normalUser.user.uid,
+    })
+    const commenter = await createTestUser({
+      email: `roi_posts_commenter_${Date.now()}@example.com`,
+      displayName: `RoiPostsCommenter_${Date.now()}`,
+    })
+    const { agent: commenterAgent, xsrfToken: commenterXsrfToken } = await createAuthenticatedAgent(
+      commenter.user.email,
+      commenter.plainPassword
+    )
+    const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
 
-      const updateData = {
-        title: 'Updated Title',
+    const rootResponse = await commenterAgent
+      .post(`/api/posts/${post.id}/comments`)
+      .set('X-XSRF-TOKEN', commenterXsrfToken)
+      .send({ content: 'ROI root comment', parentId: null })
+    expect(rootResponse.status).toBe(201)
+
+    const replyResponse = await commenterAgent
+      .post(`/api/posts/${post.id}/comments`)
+      .set('X-XSRF-TOKEN', commenterXsrfToken)
+      .send({ content: 'ROI reply comment', parentId: rootResponse.body.comment.id })
+    expect(replyResponse.status).toBe(201)
+    expect(replyResponse.body.comment.parentId).toBe(rootResponse.body.comment.id)
+
+    const likeResponse = await commenterAgent
+      .post(`/api/posts/comments/${rootResponse.body.comment.id}/like`)
+      .set('X-XSRF-TOKEN', commenterXsrfToken)
+    expect(likeResponse.status).toBe(200)
+
+    const deleteResponse = await adminAgent
+      .delete(`/api/posts/comments/${rootResponse.body.comment.id}`)
+      .set('X-XSRF-TOKEN', adminXsrfToken)
+      .send({ reason: 'ROI moderation' })
+    expect(deleteResponse.status).toBe(200)
+
+    const commentsResponse = await request(app).get(`/api/posts/${post.id}/comments`)
+    expect(commentsResponse.status).toBe(200)
+    const comments = commentsResponse.body.comments as Array<{
+      id: string
+      deletedAt?: string | null
+      replies?: Array<{ id: string; content: string }>
+    }>
+    const root = comments.find((comment) => comment.id === rootResponse.body.comment.id)
+    expect(root?.deletedAt).toBeTruthy()
+    expect(comments.map((comment) => comment.id)).toContain(replyResponse.body.comment.id)
+    const reply = comments.find((comment) => comment.id === replyResponse.body.comment.id)
+    expect(reply).toMatchObject({
+      parentId: rootResponse.body.comment.id,
+      content: 'ROI reply comment',
+    })
+  })
+
+  it('keeps gallery review and deletion rules aligned with posts', async () => {
+    const gallery = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Delete`,
+      authorUid: normalUser.user.uid,
+      authorName: normalUser.user.displayName,
+      published: true,
+    })
+    const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const missingReasonResponse = await adminAgent
+      .delete(`/api/galleries/${gallery.id}`)
+      .set('X-XSRF-TOKEN', adminXsrfToken)
+    expect(missingReasonResponse.status).toBe(400)
+
+    const deleteResponse = await adminAgent
+      .delete(`/api/galleries/${gallery.id}`)
+      .set('X-XSRF-TOKEN', adminXsrfToken)
+      .send({ reason: 'ROI gallery moderation' })
+    expect(deleteResponse.status).toBe(200)
+
+    const deletedGallery = await prisma.gallery.findUnique({ where: { id: gallery.id } })
+    expect(deletedGallery?.deletedAt).toBeInstanceOf(Date)
+    expect(deletedGallery?.deletedBy).toBe(adminUser.user.uid)
+  })
+
+  it('sends mention notifications for published content but not drafts', async () => {
+    const mentioned = await createTestUser({
+      email: `roi_posts_mentioned_${Date.now()}@example.com`,
+      displayName: `RoiMentioned_${Date.now()}`,
+    })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      normalUser.user.email,
+      normalUser.plainPassword
+    )
+
+    const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const publishedResponse = await adminAgent
+      .post('/api/posts')
+      .set('X-XSRF-TOKEN', adminXsrfToken)
+      .send({
+        title: `${POST_TITLE_PREFIX} Mention Published`,
         section: 'general',
-        content: 'Updated content with new information',
-        tags: ['updated'],
-      }
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .put(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send(updateData)
-
-      expect(response.status).toBe(200)
-      expect(response.body.post.title).toBe(updateData.title)
-      expect(response.body.post.content).toBe(updateData.content)
-
-      // 验证数据库中的更新
-      const dbPost = await prisma.post.findUnique({
-        where: { id: post.id },
-      })
-      expect(dbPost?.title).toBe(updateData.title)
-    })
-
-    /**
-     * 测试目的：验证非作者无法更新他人的文章
-     * 预期结果：返回 403 权限错误
-     */
-    it('非作者尝试更新他人文章应该返回 403 错误', async () => {
-      // 创建属于其他用户的文章
-      const otherUser = await createTestUser()
-      const post = await createTestPost({
-        title: "Other User's Post",
-        authorUid: otherUser.user.uid,
+        content: `Hello @${mentioned.user.displayName}`,
         status: 'published',
       })
+    expect(publishedResponse.status).toBe(201)
 
-      // 当前用户尝试更新
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .put(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: 'Hacked Title',
-          content: 'Hacked content',
-          section: 'general',
-        })
-
-      expect(response.status).toBe(403)
-      expect(response.body).toHaveProperty('error')
-      expect(response.body.error).toContain('无权')
+    const publishedNotification = await prisma.notification.findFirst({
+      where: {
+        userUid: mentioned.user.uid,
+        type: 'mention',
+        payload: { path: ['postId'], equals: publishedResponse.body.post.id },
+      },
     })
+    expect(publishedNotification).not.toBeNull()
 
-    /**
-     * 测试目的：验证管理员可以更新任何文章
-     * 预期结果：管理员应能成功更新其他人的文章
-     */
-    it('管理员应该能够更新任意文章', async () => {
-      // 创建普通用户的文章
-      const post = await createTestPost({
-        title: "User's Post",
-        authorUid: testUser.user.uid,
-        status: 'published',
-      })
-
-      // 管理员更新
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await agent
-        .put(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: 'Admin Updated Title',
-          content: 'Admin updated this content',
-          section: 'general',
-        })
-
-      expect(response.status).toBe(200)
-      expect(response.body.post.title).toBe('Admin Updated Title')
-    })
-
-    it('管理员更新待审核文章但未传状态时应该保留原状态', async () => {
-      const post = await createTestPost({
-        title: `Admin Preserve Pending Test ${Date.now()}`,
-        authorUid: testUser.user.uid,
-        status: 'pending',
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await agent
-        .put(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: 'Admin Preserve Pending Test Updated',
-          content: 'Admin updated content without reviewing.',
-          section: 'general',
-        })
-
-      expect(response.status).toBe(200)
-      expect(response.body.post.status).toBe('pending')
-
-      const dbPost = await prisma.post.findUnique({
-        where: { id: post.id },
-      })
-      expect(dbPost?.status).toBe('pending')
-    })
-
-    /**
-     * 测试目的：验证更新不存在的文章
-     * 预期结果：返回 404 错误
-     */
-    it('更新不存在的文章应该返回 404 错误', async () => {
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .put('/api/posts/nonexistent_id_for_update')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: 'Update Nonexistent',
-          content: 'Content',
-          section: 'general',
-        })
-
-      expect(response.status).toBe(404)
-      expect(response.body).toHaveProperty('error')
-    })
-
-    /**
-     * 测试目的：验证未认证用户无法更新文章
-     * 预期结果：返回 401 认证错误
-     */
-    it('未认证用户尝试更新应该返回 401 错误', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Unauth Update Test',
-        status: 'published',
-      })
-
-      const response = await request(app).put(`/api/posts/${post.id}`).send({
-        title: 'Unauthorized Update',
-        content: 'Hacked',
+    const draftResponse = await agent
+      .post('/api/posts')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: `${POST_TITLE_PREFIX} Mention Draft`,
         section: 'general',
-      })
-
-      expect(response.status).toBe(401)
-    })
-  })
-
-  // ============================================================================
-  // 删除文章接口测试（需要认证）
-  // ============================================================================
-  describe('DELETE /api/posts/:id - 删除文章', () => {
-    /**
-     * 测试目的：验证作者能否成功删除自己创建的文章
-     * 预期结果：返回成功响应且数据库中的记录被删除
-     */
-    it('作者应该能够成功删除自己的文章', async () => {
-      // 创建属于当前用户的文章
-      const post = await createTestPost({
-        title: 'To Be Deleted By Author',
-        authorUid: testUser.user.uid,
-        status: 'published',
-      })
-
-      // 验证文章存在
-      let dbPost = await prisma.post.findUnique({ where: { id: post.id } })
-      expect(dbPost).not.toBeNull()
-
-      // 执行删除
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .delete(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ reason: '作者自行删除' })
-
-      expect(response.status).toBe(200)
-      expect(response.body).toHaveProperty('success', true)
-
-      // 验证文章已被软删除
-      dbPost = await prisma.post.findUnique({ where: { id: post.id } })
-      expect(dbPost?.deletedAt).not.toBeNull()
-      expect(dbPost?.deletedBy).toBe(testUser.user.uid)
-
-      const moderationLog = await prisma.moderationLog.findFirst({
-        where: {
-          targetType: 'post',
-          targetId: post.id,
-          action: 'delete',
-        },
-      })
-      expect(moderationLog).not.toBeNull()
-      expect(moderationLog?.operatorUid).toBe(testUser.user.uid)
-      expect(moderationLog?.note).toBe('自行删除')
-    })
-
-    /**
-     * 测试目的：验证非作者无法删除他人的文章
-     * 预期结果：返回 403 权限错误
-     */
-    it('非作者尝试删除他人文章应该返回 403 错误', async () => {
-      // 创建属于其他用户的文章
-      const otherUser = await createTestUser()
-      const post = await createTestPost({
-        title: "Other User's Post",
-        authorUid: otherUser.user.uid,
-        status: 'published',
-      })
-
-      // 当前用户尝试删除
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent.delete(`/api/posts/${post.id}`).set('X-XSRF-TOKEN', xsrfToken)
-
-      expect(response.status).toBe(403)
-      expect(response.body).toHaveProperty('error')
-    })
-
-    /**
-     * 测试目的：验证管理员可以删除任何文章
-     * 预期结果：管理员应能成功删除其他人的文章
-     */
-    it('管理员应该能够删除任意文章', async () => {
-      // 创建普通用户的文章
-      const post = await createTestPost({
-        title: 'To Be Deleted By Admin',
-        authorUid: testUser.user.uid,
-        status: 'published',
-      })
-
-      // 管理员删除
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await agent
-        .delete(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ reason: '管理员删除违规内容' })
-
-      expect(response.status).toBe(200)
-      expect(response.body).toHaveProperty('success', true)
-
-      // 验证文章已被软删除
-      const dbPost = await prisma.post.findUnique({ where: { id: post.id } })
-      expect(dbPost?.deletedAt).not.toBeNull()
-      expect(dbPost?.deletedBy).toBe(adminUser.user.uid)
-
-      const notification = await prisma.notification.findFirst({
-        where: {
-          userUid: testUser.user.uid,
-          type: 'review_result',
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(notification).not.toBeNull()
-      const payload = notification!.payload as Record<string, unknown>
-      expect(payload.action).toBe('deleted')
-      expect(payload.approved).toBe(false)
-      expect(payload.targetType).toBe('post')
-      expect(payload.targetId).toBe(post.id)
-      expect(payload.title).toBe(post.title)
-      expect(payload.note).toBe('管理员删除违规内容')
-      expect(payload.operatorUid).toBe(adminUser.user.uid)
-    })
-
-    it('管理员删除他人文章时必须提供删除理由', async () => {
-      const post = await createTestPost({
-        title: 'To Be Deleted By Admin Missing Reason',
-        authorUid: testUser.user.uid,
-        status: 'published',
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await agent.delete(`/api/posts/${post.id}`).set('X-XSRF-TOKEN', xsrfToken)
-
-      expect(response.status).toBe(400)
-      expect(response.body.error).toContain('删除理由不能为空')
-    })
-
-    /**
-     * 测试目的：验证删除不存在的文章
-     * 预期结果：返回 404 错误
-     */
-    it('删除不存在的文章应该返回 404 错误', async () => {
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .delete('/api/posts/nonexistent_id_for_delete')
-        .set('X-XSRF-TOKEN', xsrfToken)
-
-      expect(response.status).toBe(404)
-      expect(response.body).toHaveProperty('error')
-    })
-
-    /**
-     * 测试目的：验证未认证用户无法删除文章
-     * 预期结果：返回 401 认证错误
-     */
-    it('未认证用户尝试删除应该返回 401 错误', async () => {
-      const post = await createCurrentUserPost({
-        title: 'Unauth Delete Test',
-        status: 'published',
-      })
-
-      const response = await request(app).delete(`/api/posts/${post.id}`)
-
-      expect(response.status).toBe(401)
-    })
-  })
-
-  describe('DELETE /api/galleries/:id - 删除图集', () => {
-    it('作者删除自己的图集时固定记录自行删除', async () => {
-      const gallery = await createTestGallery({
-        title: 'Gallery Delete Reason Test Self',
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .delete(`/api/galleries/${gallery.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-
-      expect(response.status).toBe(200)
-      const dbGallery = await prisma.gallery.findUnique({ where: { id: gallery.id } })
-      expect(dbGallery?.deletedAt).not.toBeNull()
-      expect(dbGallery?.deletedBy).toBe(testUser.user.uid)
-
-      const moderationLog = await prisma.moderationLog.findFirst({
-        where: {
-          targetType: 'gallery',
-          targetId: gallery.id,
-          action: 'delete',
-        },
-      })
-      expect(moderationLog?.note).toBe('自行删除')
-    })
-
-    it('管理员删除他人图集时必须提供删除理由并在后台列表返回', async () => {
-      const gallery = await createTestGallery({
-        title: 'Gallery Delete Reason Test Admin',
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const missingReasonResponse = await agent
-        .delete(`/api/galleries/${gallery.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-      expect(missingReasonResponse.status).toBe(400)
-
-      const response = await agent
-        .delete(`/api/galleries/${gallery.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ reason: '管理员删除违规图集' })
-      expect(response.status).toBe(200)
-
-      const moderationLog = await prisma.moderationLog.findFirst({
-        where: {
-          targetType: 'gallery',
-          targetId: gallery.id,
-          action: 'delete',
-          operatorUid: adminUser.user.uid,
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(moderationLog?.note).toBe('管理员删除违规图集')
-
-      const listResponse = await agent
-        .get('/api/admin/galleries')
-        .query({ includeDeleted: 'true' })
-        .set('X-XSRF-TOKEN', xsrfToken)
-      expect(listResponse.status).toBe(200)
-      const deletedItem = listResponse.body.data.find(
-        (item: { id: string }) => item.id === gallery.id
-      )
-      expect(deletedItem).toBeDefined()
-      expect(deletedItem.deletionReason).toBe('管理员删除违规图集')
-    })
-  })
-
-  describe('GET /api/galleries - 公共列表缓存', () => {
-    it('登录作者访问公共图集列表时也只返回已发布图集', async () => {
-      const publishedGallery = await createTestGallery({
-        title: `Gallery List Visibility Test Published ${Date.now()}`,
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'published',
-      })
-      const draftGallery = await createTestGallery({
-        title: `Gallery List Visibility Test Draft ${Date.now()}`,
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
+        content: `Draft hello @${mentioned.user.displayName}`,
         status: 'draft',
       })
-      const pendingGallery = await createTestGallery({
-        title: `Gallery List Visibility Test Pending ${Date.now()}`,
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'pending',
-      })
-      const rejectedGallery = await createTestGallery({
-        title: `Gallery List Visibility Test Rejected ${Date.now()}`,
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'rejected',
-      })
+    expect(draftResponse.status).toBe(201)
 
-      const response = await request(app)
-        .get('/api/galleries')
-        .query({ page: 1, limit: 50 })
-        .set('Authorization', `Bearer ${userToken}`)
-
-      expect(response.status).toBe(200)
-      const galleryIds = response.body.galleries.map((gallery: { id: string }) => gallery.id)
-      expect(galleryIds).toContain(publishedGallery.id)
-      expect(galleryIds).not.toContain(draftGallery.id)
-      expect(galleryIds).not.toContain(pendingGallery.id)
-      expect(galleryIds).not.toContain(rejectedGallery.id)
-      expect(
-        response.body.galleries.every(
-          (gallery: { status: string }) => gallery.status === 'published'
-        )
-      ).toBe(true)
+    const draftNotification = await prisma.notification.findFirst({
+      where: {
+        userUid: mentioned.user.uid,
+        type: 'mention',
+        payload: { path: ['postId'], equals: draftResponse.body.post.id },
+      },
     })
-
-    it('管理员访问公共图集列表时也不返回非发布图集', async () => {
-      const publishedGallery = await createTestGallery({
-        title: `Gallery List Visibility Test Admin Published ${Date.now()}`,
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'published',
-      })
-      const pendingGallery = await createTestGallery({
-        title: `Gallery List Visibility Test Admin Pending ${Date.now()}`,
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'pending',
-      })
-
-      const response = await request(app)
-        .get('/api/galleries')
-        .query({ page: 1, limit: 50 })
-        .set('Authorization', `Bearer ${adminToken}`)
-
-      expect(response.status).toBe(200)
-      const galleryIds = response.body.galleries.map((gallery: { id: string }) => gallery.id)
-      expect(galleryIds).toContain(publishedGallery.id)
-      expect(galleryIds).not.toContain(pendingGallery.id)
-      expect(
-        response.body.galleries.every(
-          (gallery: { status: string }) => gallery.status === 'published'
-        )
-      ).toBe(true)
-    })
-
-    it('refreshThumbnails=true 应绕过匿名公共列表缓存', async () => {
-      const firstResponse = await request(app).get('/api/galleries').query({ page: 1, limit: 1 })
-
-      expect(firstResponse.status).toBe(200)
-      const cachedTotal = firstResponse.body.total
-
-      const gallery = await createTestGallery({
-        title: `Gallery Refresh Thumbnails Cache Test ${Date.now()}`,
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'published',
-      })
-
-      const cachedResponse = await request(app).get('/api/galleries').query({ page: 1, limit: 1 })
-      expect(cachedResponse.status).toBe(200)
-      expect(cachedResponse.body.total).toBe(cachedTotal)
-
-      const refreshResponse = await request(app)
-        .get('/api/galleries')
-        .query({ page: 1, limit: 1, refreshThumbnails: 'true' })
-
-      expect(refreshResponse.status).toBe(200)
-      expect(refreshResponse.body.total).toBe(cachedTotal + 1)
-      expect(
-        refreshResponse.body.galleries.some((item: { id: string }) => item.id === gallery.id)
-      ).toBe(true)
-
-      const updatedCachedResponse = await request(app)
-        .get('/api/galleries')
-        .query({ page: 1, limit: 1 })
-      expect(updatedCachedResponse.status).toBe(200)
-      expect(updatedCachedResponse.body.total).toBe(cachedTotal + 1)
-      expect(
-        updatedCachedResponse.body.galleries.some((item: { id: string }) => item.id === gallery.id)
-      ).toBe(true)
-    })
-  })
-
-  describe('POST/PATCH /api/galleries - 图集描述', () => {
-    it('创建图集时未填写描述应保留为空串并保存版权信息', async () => {
-      const asset = await prisma.mediaAsset.create({
-        data: {
-          ownerUid: testUser.user.uid,
-          storageKey: `galleries/test-empty-description-${Date.now()}.jpg`,
-          publicUrl: `/uploads/galleries/test-empty-description-${Date.now()}.jpg`,
-          fileName: 'test-empty-description.jpg',
-          mimeType: 'image/jpeg',
-          sizeBytes: 1024,
-          status: 'ready',
-        },
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .post('/api/galleries')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: `Test Gallery Empty Description ${Date.now()}`,
-          description: '',
-          copyright: '摄影：测试用户',
-          assetIds: [asset.id],
-        })
-
-      expect(response.status).toBe(201)
-      expect(response.body.gallery.description).toBe('')
-      expect(response.body.gallery.copyright).toBe('摄影：测试用户')
-
-      const createdGallery = await prisma.gallery.findUnique({
-        where: { id: response.body.gallery.id },
-        select: { description: true, copyright: true },
-      })
-      expect(createdGallery?.description).toBe('')
-      expect(createdGallery?.copyright).toBe('摄影：测试用户')
-    })
-
-    it('创建图集时应允许复用没有当前用户 MediaAsset 归属的去重本地图片 URL', async () => {
-      const sharedUrl = `/uploads/galleries/shared-dedup-${Date.now()}.jpg`
-      const otherUser = await createTestUser({
-        email: `gallery-shared-owner-${Date.now()}@example.com`,
-        displayName: `SharedGalleryOwner${Date.now()}`,
-      })
-      const sharedAsset = await prisma.mediaAsset.create({
-        data: {
-          ownerUid: otherUser.user.uid,
-          storageKey: sharedUrl.slice('/uploads/'.length),
-          publicUrl: sharedUrl,
-          fileName: 'shared-dedup.jpg',
-          mimeType: 'image/jpeg',
-          sizeBytes: 1024,
-          status: 'ready',
-        },
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .post('/api/galleries')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: `Gallery Reuse Shared Upload ${Date.now()}`,
-          images: [{ url: sharedUrl, name: 'shared-dedup.jpg' }],
-        })
-
-      expect(response.status).toBe(201)
-      const createdImage = await prisma.galleryImage.findFirst({
-        where: { galleryId: response.body.gallery.id },
-        select: { assetId: true, url: true, name: true },
-      })
-      expect(createdImage?.url).toBe(sharedUrl)
-      expect(createdImage?.name).toBe('shared-dedup.jpg')
-      expect(createdImage?.assetId).toBe(sharedAsset.id)
-    })
-
-    it('更新图集时清空描述应保留为空串', async () => {
-      const gallery = await createTestGallery({
-        title: 'Gallery Clear Description Test',
-        description: '原始描述',
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .patch(`/api/galleries/${gallery.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          description: '',
-        })
-
-      expect(response.status).toBe(200)
-      expect(response.body.gallery.description).toBe('')
-
-      const updatedGallery = await prisma.gallery.findUnique({
-        where: { id: gallery.id },
-        select: { description: true },
-      })
-      expect(updatedGallery?.description).toBe('')
-    })
-
-    it('普通用户发布未发布图集时应提交审核而不是回到草稿', async () => {
-      const gallery = await createTestGallery({
-        title: 'Gallery Publish Review Test',
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        published: false,
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .patch(`/api/galleries/${gallery.id}/publish`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({})
-
-      expect(response.status).toBe(200)
-      expect(response.body.gallery.status).toBe('pending')
-      expect(response.body.gallery.published).toBe(false)
-
-      const updatedGallery = await prisma.gallery.findUnique({
-        where: { id: gallery.id },
-        select: { status: true, published: true, publishedAt: true },
-      })
-      expect(updatedGallery?.status).toBe('pending')
-      expect(updatedGallery?.published).toBe(false)
-      expect(updatedGallery?.publishedAt).toBeNull()
-    })
-
-    it('普通用户通过提交审核端点应进入待审核并记录日志', async () => {
-      const gallery = await createTestGallery({
-        title: 'Gallery Submit Endpoint Review Test',
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'draft',
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .post(`/api/galleries/${gallery.id}/submit`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-
-      expect(response.status).toBe(200)
-      expect(response.body.gallery.status).toBe('pending')
-      expect(response.body.gallery.published).toBe(false)
-
-      const updatedGallery = await prisma.gallery.findUnique({
-        where: { id: gallery.id },
-        select: { status: true, published: true, publishedAt: true },
-      })
-      expect(updatedGallery?.status).toBe('pending')
-      expect(updatedGallery?.published).toBe(false)
-      expect(updatedGallery?.publishedAt).toBeNull()
-
-      const moderationLog = await prisma.moderationLog.findFirst({
-        where: {
-          targetType: 'gallery',
-          targetId: gallery.id,
-          action: 'submit',
-          operatorUid: testUser.user.uid,
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(moderationLog).not.toBeNull()
-      expect(moderationLog?.note).toBeNull()
-    })
-
-    it('管理员通过提交审核端点应按论坛写入规则直接发布', async () => {
-      const gallery = await createTestGallery({
-        title: 'Gallery Submit Endpoint Admin Publish Test',
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'draft',
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await agent
-        .post(`/api/galleries/${gallery.id}/submit`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-
-      expect(response.status).toBe(200)
-      expect(response.body.gallery.status).toBe('published')
-      expect(response.body.gallery.published).toBe(true)
-
-      const updatedGallery = await prisma.gallery.findUnique({
-        where: { id: gallery.id },
-        select: { status: true, published: true, publishedAt: true },
-      })
-      expect(updatedGallery?.status).toBe('published')
-      expect(updatedGallery?.published).toBe(true)
-      expect(updatedGallery?.publishedAt).not.toBeNull()
-    })
-
-    it('普通用户创建图集传 pending 时应进入待审核并记录提交日志', async () => {
-      const asset = await prisma.mediaAsset.create({
-        data: {
-          ownerUid: testUser.user.uid,
-          storageKey: `galleries/test-submit-review-create-${Date.now()}.jpg`,
-          publicUrl: `/uploads/galleries/test-submit-review-create-${Date.now()}.jpg`,
-          fileName: 'test-submit-review-create.jpg',
-          mimeType: 'image/jpeg',
-          sizeBytes: 1024,
-          status: 'ready',
-        },
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .post('/api/galleries')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: `Gallery Submit Review Create Test ${Date.now()}`,
-          assetIds: [asset.id],
-          status: 'pending',
-        })
-
-      expect(response.status).toBe(201)
-      expect(response.body.gallery.status).toBe('pending')
-      expect(response.body.gallery.published).toBe(false)
-
-      const moderationLog = await prisma.moderationLog.findFirst({
-        where: {
-          targetType: 'gallery',
-          targetId: response.body.gallery.id,
-          action: 'submit',
-          operatorUid: testUser.user.uid,
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(moderationLog).not.toBeNull()
-      expect(moderationLog?.note).toBeNull()
-    })
-
-    it('上传会话达到最大文件数时应返回 400 而不是 500', async () => {
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const pngBuffer = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4xQAAAAASUVORK5CYII=',
-        'base64'
-      )
-
-      const sessionResponse = await agent
-        .post('/api/uploads/sessions')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ maxFiles: 1 })
-
-      expect(sessionResponse.status).toBe(201)
-      const sessionId = sessionResponse.body.session.id as string
-
-      const firstUpload = await agent
-        .post(`/api/uploads/sessions/${sessionId}/files`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .attach('file', pngBuffer, 'first.png')
-
-      expect(firstUpload.status).toBe(201)
-
-      const secondUpload = await agent
-        .post(`/api/uploads/sessions/${sessionId}/files`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .attach('file', pngBuffer, 'second.png')
-
-      expect(secondUpload.status).toBe(400)
-      expect(secondUpload.body.error).toBe('已达到最大上传数量限制')
-    })
-
-    it('上传会话并发命中 maxFiles 时只应接受一个文件', async () => {
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const pngBuffer = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4xQAAAAASUVORK5CYII=',
-        'base64'
-      )
-
-      const sessionResponse = await agent
-        .post('/api/uploads/sessions')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ maxFiles: 1 })
-
-      expect(sessionResponse.status).toBe(201)
-      const sessionId = sessionResponse.body.session.id as string
-
-      const [firstUpload, secondUpload] = await Promise.all([
-        agent
-          .post(`/api/uploads/sessions/${sessionId}/files`)
-          .set('X-XSRF-TOKEN', xsrfToken)
-          .attach('file', pngBuffer, 'first-concurrent.png'),
-        agent
-          .post(`/api/uploads/sessions/${sessionId}/files`)
-          .set('X-XSRF-TOKEN', xsrfToken)
-          .attach('file', pngBuffer, 'second-concurrent.png'),
-      ])
-
-      const statuses = [firstUpload.status, secondUpload.status].sort((a, b) => a - b)
-      expect(statuses).toEqual([201, 400])
-
-      const failedUpload = [firstUpload, secondUpload].find((response) => response.status === 400)
-      expect(failedUpload?.body.error).toBe('已达到最大上传数量限制')
-
-      const [session, assetCount] = await Promise.all([
-        prisma.uploadSession.findUnique({
-          where: { id: sessionId },
-          select: { uploadedFiles: true },
-        }),
-        prisma.mediaAsset.count({
-          where: { sessionId },
-        }),
-      ])
-      expect(session?.uploadedFiles).toBe(1)
-      expect(assetCount).toBe(1)
-    })
-
-    it('普通用户编辑已发布图集时应像论坛一样强制回待审核', async () => {
-      const gallery = await createTestGallery({
-        title: 'Gallery Published Edit Review Test',
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'published',
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .patch(`/api/galleries/${gallery.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          description: '普通用户编辑已发布图集',
-          status: 'draft',
-        })
-
-      expect(response.status).toBe(200)
-      expect(response.body.gallery.status).toBe('pending')
-      expect(response.body.gallery.published).toBe(false)
-
-      const updatedGallery = await prisma.gallery.findUnique({
-        where: { id: gallery.id },
-        select: { status: true, published: true, publishedAt: true },
-      })
-      expect(updatedGallery?.status).toBe('pending')
-      expect(updatedGallery?.published).toBe(false)
-      expect(updatedGallery?.publishedAt).toBeNull()
-
-      const moderationLog = await prisma.moderationLog.findFirst({
-        where: {
-          targetType: 'gallery',
-          targetId: gallery.id,
-          action: 'submit',
-          operatorUid: testUser.user.uid,
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(moderationLog).not.toBeNull()
-      expect(moderationLog?.note).toBe('编辑后重新提交审核')
-    })
-
-    it('普通用户保存待审核图集时不应被草稿状态降级', async () => {
-      const gallery = await createTestGallery({
-        title: 'Gallery Pending Preserve Test',
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'pending',
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .patch(`/api/galleries/${gallery.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          description: '保存待审核图集',
-          status: 'draft',
-        })
-
-      expect(response.status).toBe(200)
-      expect(response.body.gallery.status).toBe('pending')
-      expect(response.body.gallery.published).toBe(false)
-
-      const updatedGallery = await prisma.gallery.findUnique({
-        where: { id: gallery.id },
-        select: { status: true, published: true },
-      })
-      expect(updatedGallery?.status).toBe('pending')
-      expect(updatedGallery?.published).toBe(false)
-    })
-
-    it('普通用户通过旧 published 字段提交图集时也应进入待审核', async () => {
-      const gallery = await createTestGallery({
-        title: 'Gallery Legacy Published Flag Test',
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'draft',
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .patch(`/api/galleries/${gallery.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          published: true,
-        })
-
-      expect(response.status).toBe(200)
-      expect(response.body.gallery.status).toBe('pending')
-      expect(response.body.gallery.published).toBe(false)
-
-      const updatedGallery = await prisma.gallery.findUnique({
-        where: { id: gallery.id },
-        select: { status: true, published: true },
-      })
-      expect(updatedGallery?.status).toBe('pending')
-      expect(updatedGallery?.published).toBe(false)
-    })
-
-    it('普通用户不能通过发布端点把已发布图集降回草稿', async () => {
-      const gallery = await createTestGallery({
-        title: 'Gallery Publish False Review Test',
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-        status: 'published',
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .patch(`/api/galleries/${gallery.id}/publish`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ published: false })
-
-      expect(response.status).toBe(200)
-      expect(response.body.gallery.status).toBe('pending')
-      expect(response.body.gallery.published).toBe(false)
-
-      const updatedGallery = await prisma.gallery.findUnique({
-        where: { id: gallery.id },
-        select: { status: true, published: true, publishedAt: true },
-      })
-      expect(updatedGallery?.status).toBe('pending')
-      expect(updatedGallery?.published).toBe(false)
-      expect(updatedGallery?.publishedAt).toBeNull()
-    })
-  })
-
-  describe('DELETE /api/admin/posts/:id - 后台删除文章', () => {
-    it('管理员后台删除文章时记录删除理由并在管理列表返回', async () => {
-      const post = await createTestPost({
-        title: 'Admin List Delete Post Test',
-        authorUid: testUser.user.uid,
-        status: 'published',
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await agent
-        .delete(`/api/admin/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ reason: '后台管理删除违规帖子' })
-
-      expect(response.status).toBe(200)
-      expect(response.body).toEqual({ success: true })
-
-      const moderationLog = await prisma.moderationLog.findFirst({
-        where: {
-          targetType: 'post',
-          targetId: post.id,
-          action: 'delete',
-          operatorUid: adminUser.user.uid,
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(moderationLog).not.toBeNull()
-      expect(moderationLog?.note).toBe('后台管理删除违规帖子')
-
-      const listResponse = await agent
-        .get('/api/admin/posts')
-        .query({ includeDeleted: 'true' })
-        .set('X-XSRF-TOKEN', xsrfToken)
-
-      expect(listResponse.status).toBe(200)
-      const deletedItem = listResponse.body.data.find((item: { id: string }) => item.id === post.id)
-      expect(deletedItem).toBeDefined()
-      expect(deletedItem.deletionReason).toBe('后台管理删除违规帖子')
-    })
-  })
-
-  describe('POST /api/admin/posts/:id/restore - 恢复文章', () => {
-    it('管理员恢复他人的文章后通知作者', async () => {
-      const post = await createTestPost({
-        title: 'Admin Restore Post Test',
-        authorUid: testUser.user.uid,
-        status: 'published',
-      })
-      await prisma.post.update({
-        where: { id: post.id },
-        data: { deletedAt: new Date(), deletedBy: adminUser.user.uid },
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await agent
-        .post(`/api/admin/posts/${post.id}/restore`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-
-      expect(response.status).toBe(200)
-      expect(response.body).toEqual({ success: true })
-      const restoredPost = await prisma.post.findUnique({ where: { id: post.id } })
-      expect(restoredPost?.deletedAt).toBeNull()
-      expect(restoredPost?.deletedBy).toBeNull()
-
-      const notification = await prisma.notification.findFirst({
-        where: {
-          userUid: testUser.user.uid,
-          type: 'review_result',
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(notification).not.toBeNull()
-      const payload = notification!.payload as Record<string, unknown>
-      expect(payload.action).toBe('restored')
-      expect(payload.approved).toBe(true)
-      expect(payload.targetType).toBe('post')
-      expect(payload.targetId).toBe(post.id)
-      expect(payload.title).toBe(post.title)
-      expect(payload.status).toBe('published')
-      expect(payload.linkable).toBe(true)
-      expect(payload.operatorUid).toBe(adminUser.user.uid)
-    })
-  })
-
-  // ============================================================================
-  // 边界情况和安全性测试
-  // ============================================================================
-  describe('边界情况和安全性', () => {
-    /**
-     * 测试目的：验证超长内容的处理
-     * 预期结果：系统应优雅地处理超长输入
-     */
-    it('应该优雅地处理超长内容', async () => {
-      const longContent = 'x'.repeat(100000) // 100KB 内容
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: `Long Content Test ${Date.now()}`,
-          section: 'general',
-          content: longContent,
-        })
-
-      // 不应该崩溃，可能成功或返回错误
-      expect([201, 400, 413]).toContain(response.status)
-      expect(response.status).not.toBe(500)
-    })
-
-    /**
-     * 测试目的：验证 HTML/脚本注入防护
-     * 预期结果：恶意脚本应被安全存储或清理
-     */
-    it('应该正确处理包含 HTML/脚本的内容', async () => {
-      const maliciousContent = '<script>alert("xss")</script><img src=x onerror="alert(1)">'
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent.post('/api/posts').set('X-XSRF-TOKEN', xsrfToken).send({
-        title: '<script>alert("xss")</script>',
-        section: 'general',
-        content: maliciousContent,
-      })
-
-      // 不应该导致服务器错误
-      if (response.status === 201) {
-        expect(response.body.post).toBeDefined()
-      }
-      expect(response.status).not.toBe(500)
-    })
-
-    /**
-     * 测试目的：验证并发请求的处理
-     * 预期结果：系统应能正确处理并发请求
-     */
-    it('应该能够处理并发请求', async () => {
-      // 发送多个并发请求
-      const requests = Array.from({ length: 5 }, (_, i) =>
-        request(app).get('/api/posts').query({ limit: 10 })
-      )
-
-      const responses = await Promise.all(requests)
-
-      // 所有请求都应该成功
-      responses.forEach((response) => {
-        expect(response.status).toBe(200)
-        expect(response.body).toHaveProperty('posts')
-      })
-    })
-
-    /**
-     * 测试目的：验证特殊字符 ID 的处理
-     * 预期结果：特殊字符 ID 应被安全处理
-     */
-    it('应该安全地处理特殊字符的 ID', async () => {
-      const specialIds = [
-        '../etc/passwd',
-        "'; DROP TABLE posts; --",
-        '<script>alert(1)</script>',
-        '1 OR 1=1',
-      ]
-
-      for (const specialId of specialIds) {
-        const response = await request(app).get(`/api/posts/${encodeURIComponent(specialId)}`)
-
-        // 不应该导致服务器错误
-        expect([200, 400, 404]).toContain(response.status)
-        expect(response.status).not.toBe(500)
-      }
-    })
-
-    /**
-     * 测试目的：验证空请求体的处理
-     * 预期结果：返回适当的错误响应
-     */
-    it('发送空请求体时应该返回 400 错误', async () => {
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .set('Content-Type', 'application/json')
-        .send('')
-
-      expect(response.status).toBe(400)
-    })
-  })
-
-  describe('@mention 通知', () => {
-    it('已发布帖子正文应通知被提及用户并返回可链接目标', async () => {
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: `Test Mention Published Post ${Date.now()}`,
-          section: 'general',
-          content: `正文提及 @${testUser.user.displayName}`,
-          status: 'published',
-        })
-
-      expect(response.status).toBe(201)
-      expect(response.body.post.mentionTargets).toEqual([
-        expect.objectContaining({
-          uid: testUser.user.uid,
-          displayName: testUser.user.displayName,
-        }),
-      ])
-
-      const notification = await prisma.notification.findFirst({
-        where: { userUid: testUser.user.uid, type: 'mention' },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(notification).not.toBeNull()
-      const payload = notification!.payload as Record<string, unknown>
-      expect(payload.targetType).toBe('post')
-      expect(payload.postId).toBe(response.body.post.id)
-      expect(payload.commentId).toBeNull()
-      expect(payload.actorUid).toBe(adminUser.user.uid)
-    })
-
-    it('已发布帖子正文应解析带点显示名并发送 mention 通知', async () => {
-      const mentionedUser = await createTestUser({
-        displayName: `Mention.Target_${Date.now()}`,
-      })
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: `Test Mention Dotted Post ${Date.now()}`,
-          section: 'general',
-          content: `正文提及 @${mentionedUser.user.displayName}`,
-          status: 'published',
-        })
-
-      expect(response.status).toBe(201)
-      expect(response.body.post.mentionTargets).toEqual([
-        expect.objectContaining({
-          uid: mentionedUser.user.uid,
-          displayName: mentionedUser.user.displayName,
-        }),
-      ])
-
-      const notification = await prisma.notification.findFirst({
-        where: { userUid: mentionedUser.user.uid, type: 'mention' },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(notification).not.toBeNull()
-      expect((notification!.payload as Record<string, unknown>).postId).toBe(response.body.post.id)
-    })
-
-    it('已发布帖子正文应剥离尾部标点解析 mention', async () => {
-      const displayName = `MentionPlain_${Date.now()}`
-      const mentionedUser = await createTestUser({ displayName })
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: `Test Mention Trailing Punctuation Post ${Date.now()}`,
-          section: 'general',
-          content: `正文提及 @${displayName}!`,
-          status: 'published',
-        })
-
-      expect(response.status).toBe(201)
-      expect(response.body.post.mentionTargets).toEqual([
-        expect.objectContaining({
-          uid: mentionedUser.user.uid,
-          displayName,
-        }),
-      ])
-
-      const notification = await prisma.notification.findFirst({
-        where: { userUid: mentionedUser.user.uid, type: 'mention' },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(notification).not.toBeNull()
-      expect((notification!.payload as Record<string, unknown>).postId).toBe(response.body.post.id)
-    })
-
-    it('已发布帖子正文应解析无空格标点分隔的连续 mention 并发送通知', async () => {
-      const timestamp = Date.now()
-      const firstUser = await createTestUser({ displayName: `MentionCommaFirst_${timestamp}` })
-      const secondUser = await createTestUser({ displayName: `MentionCommaSecond_${timestamp}` })
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: `Test Mention Consecutive Punctuation Post ${timestamp}`,
-          section: 'general',
-          content: `正文提及 @${firstUser.user.displayName}，@${secondUser.user.displayName}`,
-          status: 'published',
-        })
-
-      expect(response.status).toBe(201)
-      expect(response.body.post.mentionTargets).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            uid: firstUser.user.uid,
-            displayName: firstUser.user.displayName,
-          }),
-          expect.objectContaining({
-            uid: secondUser.user.uid,
-            displayName: secondUser.user.displayName,
-          }),
-        ])
-      )
-      expect(response.body.post.mentionTargets).toHaveLength(2)
-
-      const [firstNotificationCount, secondNotificationCount] = await Promise.all([
-        prisma.notification.count({ where: { userUid: firstUser.user.uid, type: 'mention' } }),
-        prisma.notification.count({ where: { userUid: secondUser.user.uid, type: 'mention' } }),
-      ])
-      expect(firstNotificationCount).toBe(1)
-      expect(secondNotificationCount).toBe(1)
-    })
-
-    it('已发布帖子正文不应通知 Markdown 链接和 URL 内的 mention', async () => {
-      const mentionedUser = await createTestUser({
-        displayName: `MentionLink_${Date.now()}`,
-      })
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: `Test Mention Link Ignored Post ${Date.now()}`,
-          section: 'general',
-          content: [
-            `[see @${mentionedUser.user.displayName}](/users/@${mentionedUser.user.displayName})`,
-            `https://example.com/@${mentionedUser.user.displayName}`,
-          ].join('\n'),
-          status: 'published',
-        })
-
-      expect(response.status).toBe(201)
-      expect(response.body.post.mentionTargets).toEqual([])
-
-      const notification = await prisma.notification.findFirst({
-        where: { userUid: mentionedUser.user.uid, type: 'mention' },
-      })
-      expect(notification).toBeNull()
-    })
-
-    it('草稿帖子正文不应发送 mention 通知', async () => {
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-
-      const response = await agent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({
-          title: `Test Mention Draft Post ${Date.now()}`,
-          section: 'general',
-          content: `草稿提及 @${adminUser.user.displayName}`,
-          status: 'draft',
-        })
-
-      expect(response.status).toBe(201)
-      const notifications = await prisma.notification.findMany({
-        where: { userUid: adminUser.user.uid, type: 'mention' },
-      })
-      expect(notifications).toHaveLength(0)
-    })
-
-    it('管理员审核通过待发布帖子时 mention 通知应归属帖子作者', async () => {
-      const mentionedUser = await createTestUser({
-        displayName: `MentionReviewTarget_${Date.now()}`,
-      })
-      const { agent: authorAgent, xsrfToken: authorXsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const createResponse = await authorAgent
-        .post('/api/posts')
-        .set('X-XSRF-TOKEN', authorXsrfToken)
-        .send({
-          title: `Test Mention Review Post ${Date.now()}`,
-          section: 'general',
-          content: `审核提及 @${mentionedUser.user.displayName} @${testUser.user.displayName}`,
-          status: 'pending',
-        })
-
-      expect(createResponse.status).toBe(201)
-      expect(createResponse.body.post.status).toBe('pending')
-
-      const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const approveResponse = await adminAgent
-        .put(`/api/admin/review-queue/${createResponse.body.post.id}/approve`)
-        .set('X-XSRF-TOKEN', adminXsrfToken)
-        .send({ type: 'post' })
-
-      expect(approveResponse.status).toBe(200)
-
-      const notification = await prisma.notification.findFirst({
-        where: { userUid: mentionedUser.user.uid, type: 'mention' },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(notification).not.toBeNull()
-      const payload = notification!.payload as Record<string, unknown>
-      expect(payload.actorUid).toBe(testUser.user.uid)
-      expect(payload.actorName).toBe(testUser.user.displayName)
-      expect(payload.postId).toBe(createResponse.body.post.id)
-
-      const authorMentionCount = await prisma.notification.count({
-        where: { userUid: testUser.user.uid, type: 'mention' },
-      })
-      expect(authorMentionCount).toBe(0)
-    })
-
-    it('管理员审核队列统计会按单值方式解析重复 query 参数', async () => {
-      await createCurrentUserPost({
-        title: `Pending Review Queue Post ${Date.now()}`,
-        content: 'pending post',
-        status: 'pending',
-      })
-      await createCurrentUserPost({
-        title: `Published Review Queue Post ${Date.now()}`,
-        content: 'published post',
-        status: 'published',
-      })
-
-      const { agent: adminAgent } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await adminAgent
-        .get('/api/admin/review-queue/count')
-        .query({ type: ['posts', 'wiki'], status: ['pending', 'published'] })
-
-      expect(response.status).toBe(200)
-      expect(response.body.status).toBe('pending')
-      expect(response.body.total).toBe(1)
-      expect(response.body.counts).toEqual({
-        wiki: 0,
-        posts: 1,
-        galleries: 0,
-      })
-    })
-
-    it('已发布帖子编辑后重新审核时只通知新增 mention', async () => {
-      const oldMentionedUser = await createTestUser({
-        displayName: `MentionReviewOld_${Date.now()}`,
-      })
-      const newMentionedUser = await createTestUser({
-        displayName: `MentionReviewNew_${Date.now()}`,
-      })
-      const post = await createCurrentUserPost({
-        title: `Test Mention Republish Review Post ${Date.now()}`,
-        content: `原文提及 @${oldMentionedUser.user.displayName}`,
-        status: 'published',
-      })
-
-      const { agent: authorAgent, xsrfToken: authorXsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const editResponse = await authorAgent
-        .put(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', authorXsrfToken)
-        .send({
-          title: post.title,
-          section: post.section,
-          content: `编辑后提及 @${oldMentionedUser.user.displayName} @${newMentionedUser.user.displayName}`,
-          status: 'published',
-        })
-
-      expect(editResponse.status).toBe(200)
-      expect(editResponse.body.post.status).toBe('pending')
-
-      const pendingPost = await prisma.post.findUnique({ where: { id: post.id } })
-      expect(pendingPost?.pendingReviewBaseContent).toBe(post.content)
-
-      const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const approveResponse = await adminAgent
-        .put(`/api/admin/review-queue/${post.id}/approve`)
-        .set('X-XSRF-TOKEN', adminXsrfToken)
-        .send({ type: 'post' })
-
-      expect(approveResponse.status).toBe(200)
-
-      const [oldMentionCount, newMentionCount] = await Promise.all([
-        prisma.notification.count({
-          where: { userUid: oldMentionedUser.user.uid, type: 'mention' },
-        }),
-        prisma.notification.count({
-          where: { userUid: newMentionedUser.user.uid, type: 'mention' },
-        }),
-      ])
-      expect(oldMentionCount).toBe(0)
-      expect(newMentionCount).toBe(1)
-
-      const approvedPost = await prisma.post.findUnique({ where: { id: post.id } })
-      expect(approvedPost?.pendingReviewBaseContent).toBeNull()
-    })
-
-    it('无快照的旧复审帖子审核通过时应保守抑制 mention 重复通知', async () => {
-      const mentionedUser = await createTestUser({
-        displayName: `MentionLegacyReview_${Date.now()}`,
-      })
-      const post = await createCurrentUserPost({
-        title: `Test Mention Legacy Republish Review Post ${Date.now()}`,
-        content: `旧待审正文 @${mentionedUser.user.displayName}`,
-        status: 'pending',
-      })
-      await prisma.moderationLog.create({
-        data: {
-          targetType: 'post',
-          targetId: post.id,
-          action: 'submit',
-          operatorUid: testUser.user.uid,
-          note: '编辑后重新提交审核',
-        },
-      })
-
-      const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const approveResponse = await adminAgent
-        .put(`/api/admin/review-queue/${post.id}/approve`)
-        .set('X-XSRF-TOKEN', adminXsrfToken)
-        .send({ type: 'post' })
-
-      expect(approveResponse.status).toBe(200)
-
-      const mentionCount = await prisma.notification.count({
-        where: { userUid: mentionedUser.user.uid, type: 'mention' },
-      })
-      expect(mentionCount).toBe(0)
-    })
-
-    it('管理员直接发布待审编辑时应使用快照去重 mention 并清空快照', async () => {
-      const oldMentionedUser = await createTestUser({
-        displayName: `MentionAdminPublishOld_${Date.now()}`,
-      })
-      const newMentionedUser = await createTestUser({
-        displayName: `MentionAdminPublishNew_${Date.now()}`,
-      })
-      const post = await createCurrentUserPost({
-        title: `Test Mention Admin Direct Publish Post ${Date.now()}`,
-        content: `原文提及 @${oldMentionedUser.user.displayName}`,
-        status: 'published',
-      })
-
-      const { agent: authorAgent, xsrfToken: authorXsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const editResponse = await authorAgent
-        .put(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', authorXsrfToken)
-        .send({
-          title: post.title,
-          section: post.section,
-          content: `管理员发布前提及 @${oldMentionedUser.user.displayName} @${newMentionedUser.user.displayName}`,
-          status: 'published',
-        })
-      expect(editResponse.status).toBe(200)
-
-      const { agent: adminAgent, xsrfToken: adminXsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const publishResponse = await adminAgent
-        .put(`/api/posts/${post.id}`)
-        .set('X-XSRF-TOKEN', adminXsrfToken)
-        .send({
-          title: post.title,
-          section: post.section,
-          content: `管理员发布前提及 @${oldMentionedUser.user.displayName} @${newMentionedUser.user.displayName}`,
-          status: 'published',
-        })
-
-      expect(publishResponse.status).toBe(200)
-      expect(publishResponse.body.post.status).toBe('published')
-
-      const [oldMentionCount, newMentionCount, publishedPost] = await Promise.all([
-        prisma.notification.count({
-          where: { userUid: oldMentionedUser.user.uid, type: 'mention' },
-        }),
-        prisma.notification.count({
-          where: { userUid: newMentionedUser.user.uid, type: 'mention' },
-        }),
-        prisma.post.findUnique({ where: { id: post.id } }),
-      ])
-      expect(oldMentionCount).toBe(0)
-      expect(newMentionCount).toBe(1)
-      expect(publishedPost?.pendingReviewBaseContent).toBeNull()
-    })
-
-    it('评论 mention 应通知被提及用户并链接评论锚点', async () => {
-      const mentionedUser = await createTestUser({
-        displayName: `MentionTarget_${Date.now()}`,
-      })
-      const post = await createCurrentUserPost({
-        title: `Test Mention Comment Post ${Date.now()}`,
-        status: 'published',
-      })
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-
-      const response = await agent
-        .post(`/api/posts/${post.id}/comments`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ content: `Mention comment @${mentionedUser.user.displayName}` })
-
-      expect(response.status).toBe(201)
-      expect(response.body.comment.mentionTargets).toEqual([
-        expect.objectContaining({ uid: mentionedUser.user.uid }),
-      ])
-
-      const notification = await prisma.notification.findFirst({
-        where: { userUid: mentionedUser.user.uid, type: 'mention' },
-        orderBy: { createdAt: 'desc' },
-      })
-      expect(notification).not.toBeNull()
-      const payload = notification!.payload as Record<string, unknown>
-      expect(payload.targetType).toBe('post')
-      expect(payload.postId).toBe(post.id)
-      expect(payload.commentId).toBe(response.body.comment.id)
-    })
-
-    it('评论 mention 不应重复通知已经收到回复通知的用户', async () => {
-      const post = await createCurrentUserPost({
-        title: `Test Mention Reply Dedupe Post ${Date.now()}`,
-        status: 'published',
-      })
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-
-      const response = await agent
-        .post(`/api/posts/${post.id}/comments`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ content: `Mention comment @${testUser.user.displayName}` })
-
-      expect(response.status).toBe(201)
-
-      const [replyCount, mentionCount] = await Promise.all([
-        prisma.notification.count({ where: { userUid: testUser.user.uid, type: 'reply' } }),
-        prisma.notification.count({ where: { userUid: testUser.user.uid, type: 'mention' } }),
-      ])
-      expect(replyCount).toBe(1)
-      expect(mentionCount).toBe(0)
-    })
-  })
-
-  describe('POST /api/galleries/:id/comments - 图集评论通知', () => {
-    it('顶层评论应通知图集作者，且通知 payload 带 galleryId 而非 postId', async () => {
-      const gallery = await createTestGallery({
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const response = await agent
-        .post(`/api/galleries/${gallery.id}/comments`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ content: 'Gallery comment content for notification' })
-
-      expect(response.status).toBe(201)
-
-      const notifications = await prisma.notification.findMany({
-        where: { userUid: testUser.user.uid, type: 'reply' },
-      })
-      expect(notifications).toHaveLength(1)
-
-      const payload = notifications[0].payload as Record<string, unknown>
-      expect(payload.targetType).toBe('gallery')
-      expect(payload.galleryId).toBe(gallery.id)
-      expect(payload.postId).toBeUndefined()
-      expect(payload.parentId).toBeNull()
-      expect(payload.actorUid).toBe(adminUser.user.uid)
-      expect(payload.commentId).toBe(response.body.comment.id)
-    })
-
-    it('回复评论应通知被回复者', async () => {
-      const gallery = await createTestGallery({
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-      })
-
-      const adminSession = await createAuthenticatedAgent(
-        adminUser.user.email,
-        adminUser.plainPassword
-      )
-      const rootResponse = await adminSession.agent
-        .post(`/api/galleries/${gallery.id}/comments`)
-        .set('X-XSRF-TOKEN', adminSession.xsrfToken)
-        .send({ content: 'Gallery comment content root' })
-      expect(rootResponse.status).toBe(201)
-
-      const ownerSession = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const replyResponse = await ownerSession.agent
-        .post(`/api/galleries/${gallery.id}/comments`)
-        .set('X-XSRF-TOKEN', ownerSession.xsrfToken)
-        .send({
-          content: 'Gallery comment content reply',
-          parentId: rootResponse.body.comment.id,
-        })
-      expect(replyResponse.status).toBe(201)
-
-      const adminNotifications = await prisma.notification.findMany({
-        where: { userUid: adminUser.user.uid, type: 'reply' },
-      })
-      expect(adminNotifications).toHaveLength(1)
-
-      const payload = adminNotifications[0].payload as Record<string, unknown>
-      expect(payload.targetType).toBe('gallery')
-      expect(payload.galleryId).toBe(gallery.id)
-      expect(payload.parentId).toBe(rootResponse.body.comment.id)
-      expect(payload.actorUid).toBe(testUser.user.uid)
-    })
-
-    it('对自己的图集评论不应给自己发通知', async () => {
-      const gallery = await createTestGallery({
-        authorUid: testUser.user.uid,
-        authorName: testUser.user.displayName,
-      })
-
-      const { agent, xsrfToken } = await createAuthenticatedAgent(
-        testUser.user.email,
-        testUser.plainPassword
-      )
-      const response = await agent
-        .post(`/api/galleries/${gallery.id}/comments`)
-        .set('X-XSRF-TOKEN', xsrfToken)
-        .send({ content: 'Gallery comment content self' })
-
-      expect(response.status).toBe(201)
-
-      const notifications = await prisma.notification.findMany({
-        where: { userUid: testUser.user.uid },
-      })
-      expect(notifications).toHaveLength(0)
-    })
+    expect(draftNotification).toBeNull()
   })
 })
