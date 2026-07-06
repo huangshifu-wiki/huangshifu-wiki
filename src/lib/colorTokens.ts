@@ -1,6 +1,6 @@
 export const THEME_META_COLOR = {
   default: '#b07b17',
-  dark: '#1f1a16',
+  dark: '#0c0c12',
 } as const
 
 export const CHART_COLOR_TOKENS = {

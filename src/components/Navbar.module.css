@@ -11,7 +11,7 @@
 }
 
 .siteNav[data-scrolled='true'] {
-  background: rgba(244, 239, 228, 0.88);
+  background: var(--home-nav-bg);
   box-shadow: 0 1px 0 var(--home-border);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -137,7 +137,7 @@
   top: 64px;
   left: 0;
   right: 0;
-  background: rgba(244, 239, 228, 0.95);
+  background: var(--home-mobile-menu-bg);
   border-bottom: 1px solid var(--home-border);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
