@@ -723,8 +723,8 @@ const GalleryDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-60px)] antique-page bg-bg-primary">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container">
           <div className="h-48 bg-surface-alt rounded animate-pulse" />
         </div>
       </div>
@@ -733,8 +733,8 @@ const GalleryDetail = () => {
 
   if (!gallery) {
     return (
-      <div className="min-h-[calc(100vh-60px)] antique-page bg-bg-primary">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container">
           <Link
             to="/gallery"
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
@@ -750,15 +750,9 @@ const GalleryDetail = () => {
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 gallery-detail-page">
-        <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px] lg:items-start">
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container gallery-detail-page">
+        <div className="mb-6 mobile-detail-grid">
           <div className="min-w-0">
             <Link
               to="/gallery"
@@ -769,9 +763,7 @@ const GalleryDetail = () => {
 
             <header>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[1.75rem] font-semibold tracking-[0.12em] text-text-primary">
-                  {gallery.title}
-                </h1>
+                <h1 className="mobile-page-title">{gallery.title}</h1>
                 {gallery.status && gallery.status !== 'published' ? (
                   <span
                     className={clsx(
@@ -796,7 +788,7 @@ const GalleryDetail = () => {
           </div>
 
           <div className="lg:pt-0">
-            <div className="flex flex-wrap gap-2 lg:justify-end">
+            <div className="mobile-action-row">
               <button
                 onClick={handleCopyLink}
                 className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
@@ -814,7 +806,7 @@ const GalleryDetail = () => {
               )}
             </div>
 
-            <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">
               <button
                 onClick={toggleGalleryLike}
                 disabled={likingGallery}
@@ -868,8 +860,8 @@ const GalleryDetail = () => {
         </div>
 
         {/* Info bar */}
-        <div className="flex items-end justify-between border-b border-border mb-6 pb-2">
-          <div className="flex items-center gap-4 flex-wrap">
+        <div className="mobile-filterbar mb-6">
+          <div className="mobile-filter-tabs">
             <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
               {t('gallery.imageCount', { count: images.length })}
             </span>
@@ -883,7 +875,7 @@ const GalleryDetail = () => {
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
+          <div className="mobile-filter-actions">
             <span className="flex items-center gap-1">
               <Clock size={14} /> {formatDateTime(gallery.createdAt)}
             </span>
@@ -902,7 +894,7 @@ const GalleryDetail = () => {
 
         {/* Images Grid */}
         <section className="mb-10">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
             {images.map((image, index) => (
               <div
                 key={image.clientId || image.id}
@@ -970,7 +962,7 @@ const GalleryDetail = () => {
                   </div>
                 )}
                 <div className="flex gap-3">
-                  <div className="w-10 h-10 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
+                  <div className="hidden w-10 h-10 rounded bg-surface-alt flex-shrink-0 overflow-hidden sm:block">
                     <img
                       src={user.photoURL || DEFAULT_AVATAR}
                       alt=""
@@ -979,7 +971,7 @@ const GalleryDetail = () => {
                       onError={handleAvatarError}
                     />
                   </div>
-                  <div className="relative flex-grow">
+                  <div className="relative min-w-0 flex-grow">
                     <MentionTextarea
                       textareaRef={commentInputRef}
                       value={newComment}
@@ -999,7 +991,7 @@ const GalleryDetail = () => {
                       <button
                         type="submit"
                         disabled={!newComment.trim() || submittingComment}
-                        className="px-5 py-2 theme-button-primary text-sm rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="min-h-10 px-5 py-2 theme-button-primary text-sm rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {submittingComment ? t('gallery.sending') : t('gallery.send')}
                       </button>
@@ -1046,7 +1038,7 @@ const GalleryDetail = () => {
                           />
                         )}
                       </div>
-                      <div className="flex-grow">
+                      <div className="min-w-0 flex-grow">
                         {comment.isDeleted && !showDeletedComments ? null : (
                           <div className="mb-1 text-sm font-semibold text-text-primary">
                             {getCommentAuthorName(comment)}
@@ -1067,7 +1059,7 @@ const GalleryDetail = () => {
                     </div>
 
                     {getReplies(comment.id).length > 0 && (
-                      <div className="ml-14 space-y-4 border-l-2 border-border pl-6">
+                      <div className="ml-4 space-y-4 border-l-2 border-border pl-4 sm:ml-14 sm:pl-6">
                         {getReplies(comment.id).map((reply) => (
                           <div
                             id={`comment-${reply.id}`}
@@ -1091,7 +1083,7 @@ const GalleryDetail = () => {
                                 onError={handleAvatarError}
                               />
                             </div>
-                            <div className="flex-grow">
+                            <div className="min-w-0 flex-grow">
                               <p className="text-text-secondary text-xs leading-relaxed">
                                 <span className="font-semibold text-text-primary">
                                   {getCommentAuthorName(reply)}

@@ -5,8 +5,7 @@ import { Image as ImageIcon, Book, MessageSquare, Sparkles, Clock } from '@/src/
 import { SmartImage } from './SmartImage'
 import type { MixedSearchResult, ImageSourceType } from '../hooks/useSearch'
 import type { GalleryItem, WikiItem, PostItem } from '../types/entities'
-import { format } from 'date-fns'
-import { toDateValue } from '../lib/dateUtils'
+import { formatDate } from '../lib/dateUtils'
 import { CARD } from '../styles/cardStyles'
 import { getFirstGalleryImage, shouldWaitForGalleryThumbnail } from '../lib/galleryThumbnails'
 
@@ -84,8 +83,8 @@ export const MixedSearchResultCard = React.memo(
 
     if (viewMode === 'list') {
       return (
-        <Link to={link} className={clsx(CARD.base, CARD.listLayout)}>
-          <div className={CARD.imageWrapperList}>{imageContent}</div>
+        <Link to={link} className={clsx(CARD.base, CARD.listLayout, 'mobile-list-card')}>
+          <div className={clsx(CARD.imageWrapperList, 'mobile-list-thumb')}>{imageContent}</div>
           <div className="flex-1 min-w-0 flex flex-col justify-center">
             <div className="flex items-center gap-2 mb-1">
               <span className={CARD.tag}>
@@ -102,12 +101,7 @@ export const MixedSearchResultCard = React.memo(
             </p>
             <p className="text-[10px] text-text-muted mt-1 flex items-center gap-1">
               <Clock size={10} />
-              {toDateValue((data as GalleryItem | WikiItem | PostItem).updatedAt)
-                ? format(
-                    toDateValue((data as GalleryItem | WikiItem | PostItem).updatedAt)!,
-                    'yyyy-MM-dd'
-                  )
-                : '刚刚'}
+              {formatDate((data as GalleryItem | WikiItem | PostItem).updatedAt, 'yyyy-MM-dd')}
             </p>
           </div>
         </Link>
@@ -181,12 +175,7 @@ export const MixedSearchResultCard = React.memo(
           </p>
           <div className="flex items-center mt-auto pt-2 text-[10px] text-text-muted">
             <Clock size={10} className="mr-1" />
-            {toDateValue((data as GalleryItem | WikiItem | PostItem).updatedAt)
-              ? format(
-                  toDateValue((data as GalleryItem | WikiItem | PostItem).updatedAt)!,
-                  'yyyy-MM-dd'
-                )
-              : '刚刚'}
+            {formatDate((data as GalleryItem | WikiItem | PostItem).updatedAt, 'yyyy-MM-dd')}
           </div>
         </div>
       </Link>

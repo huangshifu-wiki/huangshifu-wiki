@@ -636,8 +636,8 @@ const GalleryEdit = () => {
 
   if (!draft || (!isCreating && !gallery)) {
     return (
-      <div className="min-h-[calc(100vh-60px)] bg-bg-primary">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+      <div className="mobile-page-shell">
+        <div className="mobile-page-container">
           <button
             type="button"
             onClick={() => navigate('/gallery')}
@@ -655,8 +655,8 @@ const GalleryEdit = () => {
 
   if (!canManage) {
     return (
-      <div className="min-h-[calc(100vh-60px)] bg-bg-primary">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+      <div className="mobile-page-shell">
+        <div className="mobile-page-container">
           <button
             type="button"
             onClick={handleCancel}
@@ -679,11 +679,7 @@ const GalleryEdit = () => {
 
   return (
     <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
+      className="mobile-page-shell"
       onDragEnter={handlePageDragEnter}
       onDragOver={handlePageDragOver}
       onDragLeave={handlePageDragLeave}
@@ -698,8 +694,8 @@ const GalleryEdit = () => {
         </div>
       ) : null}
 
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-        <div className="mb-8 flex items-start justify-between gap-4">
+      <div className="mobile-page-container">
+        <div className="mobile-page-titlebar mb-8">
           <div>
             <button
               type="button"
@@ -708,9 +704,7 @@ const GalleryEdit = () => {
             >
               <ArrowLeft size={16} /> 返回图集
             </button>
-            <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">
-              {isCreating ? '上传新图集' : '编辑图集'}
-            </h1>
+            <h1 className="mobile-page-title">{isCreating ? '上传新图集' : '编辑图集'}</h1>
             <p className="mt-2 text-sm text-text-muted">
               {isCreating
                 ? '填写图集信息并加入图片，保存后进入图集详情。'
@@ -720,7 +714,7 @@ const GalleryEdit = () => {
           <button
             type="button"
             onClick={handleCancel}
-            className="p-2 text-text-muted theme-icon-button-danger transition-colors"
+            className="mobile-card-action p-2 text-text-muted theme-icon-button-danger transition-colors"
             aria-label={t('gallery.cancelEdit')}
           >
             <X size={24} />
@@ -896,7 +890,7 @@ const GalleryEdit = () => {
               onChange={handleAddImages}
             />
 
-            <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
               {draft.images.map((image, index) => (
                 <div
                   key={image.clientId || image.id}
@@ -929,7 +923,7 @@ const GalleryEdit = () => {
                   <button
                     type="button"
                     onClick={() => handleDeleteImage(index)}
-                    className="absolute top-1.5 left-1.5 z-10 p-1 rounded bg-black/50 text-white hover:bg-[var(--color-error)]/80 transition-colors"
+                    className="mobile-card-action absolute top-1.5 left-1.5 z-10 rounded bg-black/50 p-1 text-white transition-colors hover:bg-[var(--color-error)]/80"
                     title={t('gallery.deleteImage')}
                   >
                     <Trash2 size={12} />
@@ -963,7 +957,7 @@ const GalleryEdit = () => {
             </div>
           </section>
 
-          <div className="pt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-end">
             {!isCreating && gallery && (
               <button
                 type="button"

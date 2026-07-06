@@ -37,19 +37,13 @@ const Search: React.FC = () => {
   }, [semanticSearchEnabled, state.filters.semanticImageSearch, updateFilters])
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 search-page">
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container search-page">
         {/* Header */}
-        <header className="mb-7">
-          <div className="flex items-end justify-between flex-wrap gap-3">
-            <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">搜索</h1>
-            <div className="flex items-center gap-3">
+        <header className="mobile-page-header">
+          <div className="mobile-page-titlebar">
+            <h1 className="mobile-page-title">搜索</h1>
+            <div className="mobile-action-row">
               <ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
             </div>
           </div>

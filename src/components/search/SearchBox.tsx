@@ -64,8 +64,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
       : inputFocused && matchingHistory.length > 0
         ? { type: 'history', items: matchingHistory }
         : null
+  const dropdownOpen = Boolean(currentDropdown)
 
-  const dropdownPresence = useFloatingPresence(Boolean(currentDropdown))
+  const dropdownPresence = useFloatingPresence(dropdownOpen)
   const lastDropdownRef = useRef<SearchDropdown | null>(null)
 
   if (currentDropdown) {
@@ -75,7 +76,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   const visibleDropdown = currentDropdown || lastDropdownRef.current
 
   useEffect(() => {
-    if (!currentDropdown) return
+    if (!dropdownOpen) return
     const handleClickOutside = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setInputFocused(false)
@@ -84,7 +85,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [currentDropdown, onDismissSuggestions])
+  }, [dropdownOpen, onDismissSuggestions])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -206,7 +207,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   }
 
   return (
-    <div ref={wrapperRef} className="theme-panel rounded p-6 mb-6">
+    <div ref={wrapperRef} className="theme-panel mb-6 rounded p-4 sm:p-6">
       <form
         onSubmit={handleSubmit}
         className="relative group mb-5"
@@ -234,8 +235,8 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           aria-label="搜索百科、帖子、图集、音乐或专辑"
           autoComplete="off"
           aria-owns="search-suggestions"
-          aria-expanded={Boolean(currentDropdown)}
-          className="theme-input w-full px-12 py-4 rounded transition-all text-base"
+          aria-expanded={dropdownOpen}
+          className="theme-input w-full rounded py-4 pl-12 pr-12 text-base transition-all sm:pr-40"
         />
         <SearchIcon
           className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-gold transition-colors"
@@ -366,13 +367,13 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           </div>
         )}
 
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+        <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2">
           {semanticSearchEnabled && (
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={aiSearching}
-              className="p-2.5 bg-surface-alt text-text-muted rounded hover:text-brand-gold transition-all"
+              className="rounded bg-surface-alt p-2.5 text-text-muted transition-all hover:text-brand-gold"
               title="AI 图片搜索"
               aria-label="AI 图片搜索"
             >
@@ -381,7 +382,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           )}
           <button
             type="submit"
-            className="theme-button-primary px-6 py-2.5 rounded font-medium transition-all"
+            className="hidden rounded px-6 py-2.5 font-medium theme-button-primary transition-all sm:inline-flex"
             aria-label="提交搜索"
           >
             搜索
@@ -400,8 +401,8 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
       {/* 混合搜索模式切换 */}
       {semanticSearchEnabled && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-          <div className="flex items-center gap-3">
+        <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={onToggleSemanticSearch}
@@ -426,7 +427,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
               className="text-sm text-text-secondary cursor-pointer select-none"
             >
               <span className="font-medium">智能混合搜索</span>
-              <span className="ml-1.5 text-xs text-text-muted">(关键词+语义向量融合搜索)</span>
+              <span className="ml-1.5 hidden text-xs text-text-muted sm:inline">
+                (关键词+语义向量融合搜索)
+              </span>
             </label>
           </div>
           <div className="text-xs text-text-muted">

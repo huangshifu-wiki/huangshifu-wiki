@@ -146,8 +146,8 @@ describe('Music page pagination', () => {
 
     await screen.findByText('第一页歌曲')
 
-    const layout = screen.getByText('统计').closest('.grid')
-    expect(layout).toHaveClass('lg:grid-cols-[minmax(0,1fr)_280px]')
+    const layout = screen.getByText('统计').closest('.mobile-detail-grid')
+    expect(layout).toHaveClass('mobile-detail-grid')
     expect(layout?.firstElementChild).toHaveClass('min-w-0')
   })
 

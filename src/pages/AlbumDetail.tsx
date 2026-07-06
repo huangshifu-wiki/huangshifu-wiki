@@ -198,8 +198,8 @@ const AlbumDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen antique-page bg-bg-primary">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container">
           <div className="h-40 bg-surface-alt rounded animate-pulse" />
         </div>
       </div>
@@ -208,8 +208,8 @@ const AlbumDetail = () => {
 
   if (!album) {
     return (
-      <div className="min-h-screen antique-page bg-bg-primary">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container">
           <Link
             to="/music"
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
@@ -227,8 +227,8 @@ const AlbumDetail = () => {
   const coverPreviewSrc = album.coverThumbnail || album.cover
 
   return (
-    <div className="min-h-screen antique-detail text-[var(--color-text-antique)] bg-bg-primary">
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+    <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
+      <div className="mobile-page-container">
         <Link
           to="/music"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
@@ -237,11 +237,11 @@ const AlbumDetail = () => {
         </Link>
 
         {/* Detail Header */}
-        <div className="flex flex-col md:flex-row gap-5 mb-6 pb-6 border-b border-border">
+        <div className="mb-6 flex flex-col gap-5 border-b border-border pb-6 sm:flex-row">
           <button
             type="button"
             onClick={() => setCoverLightboxOpen(true)}
-            className="w-40 h-40 md:w-44 md:h-44 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+            className="h-40 w-40 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:h-44 sm:w-44"
             aria-label={`查看 ${album.title} 封面原图`}
           >
             <SmartImage
@@ -251,13 +251,11 @@ const AlbumDetail = () => {
             />
           </button>
           <div className="flex-1 flex flex-col justify-center min-w-0">
-            <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em] mb-1.5">
-              {album.title}
-            </h1>
+            <h1 className="mobile-page-title mb-1.5">{album.title}</h1>
             <p className="text-base text-text-secondary tracking-[0.08em] mb-4">
               {album.artist} · {album.tracks.length} 首歌曲
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="mobile-action-row justify-start">
               <button
                 onClick={() => handlePlay(0)}
                 disabled={playableTracks.length === 0}
@@ -324,11 +322,11 @@ const AlbumDetail = () => {
                   key={track.docId}
                   onClick={() => navigate(`/music/${track.slug || track.docId}`)}
                   className={clsx(
-                    'flex items-center gap-4 py-3 px-1 border-b border-border cursor-pointer transition-colors',
+                    'flex items-center gap-3 py-3 px-1 border-b border-border cursor-pointer transition-colors sm:gap-4',
                     currentSong?.docId === track.docId && 'bg-brand-gold/10'
                   )}
                 >
-                  <span className="text-sm text-text-muted w-7 text-right flex-shrink-0">
+                  <span className="hidden w-7 flex-shrink-0 text-right text-sm text-text-muted sm:inline-block">
                     {(track.trackOrder ?? index) + 1}
                   </span>
                   <button

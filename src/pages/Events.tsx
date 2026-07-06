@@ -221,23 +221,15 @@ const Events = () => {
   if (loading) return <PageSkeleton />
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="mx-auto max-w-[1100px] px-6 py-8 pb-32">
-        <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-          <div>
-            <h1 className="text-[1.75rem] font-bold tracking-[0.12em] text-text-primary">游记</h1>
-          </div>
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container">
+        <div className="mobile-page-titlebar mb-6">
+          <h1 className="mobile-page-title">游记</h1>
         </div>
 
-        <div className="mb-5 flex items-end justify-between gap-4 border-b border-border">
+        <div className="mobile-filterbar">
           {tags.length > 0 ? (
-            <div className="flex flex-wrap gap-5">
+            <div className="mobile-filter-tabs">
               <Link to={getTagUrl('')} className={getTagFilterClassName(!selectedTag)}>
                 全部标签
               </Link>
@@ -255,7 +247,7 @@ const Events = () => {
             <div />
           )}
 
-          <div className="flex flex-wrap items-center justify-end gap-3 pb-2 text-[0.8125rem] text-text-muted">
+          <div className="mobile-filter-actions">
             <ViewModeSelector
               value={viewMode}
               modes={EVENT_VIEW_MODES}
@@ -286,7 +278,7 @@ const Events = () => {
           <>
             <div
               className={clsx(
-                'grid',
+                'mobile-grid grid',
                 VIEW_MODE_CONFIG[viewMode].gridCols,
                 VIEW_MODE_CONFIG[viewMode].gap
               )}

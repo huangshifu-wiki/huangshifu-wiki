@@ -39,15 +39,15 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
   onSearchKeyword,
 }) => {
   return (
-    <div className="theme-panel rounded p-6 mb-6">
+    <div className="theme-panel mb-6 rounded p-4 sm:p-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-xs text-text-muted">热门:</span>
           {hotKeywords.slice(0, 6).map((tag) => (
             <button
               key={tag}
               onClick={() => onSearchKeyword(tag)}
-              className="px-3 py-1 bg-surface-alt text-text-secondary text-xs rounded hover:text-brand-gold transition-all cursor-pointer"
+              className="min-h-8 rounded bg-surface-alt px-3 py-1 text-xs text-text-secondary transition-all cursor-pointer hover:text-brand-gold"
             >
               {tag}
             </button>
@@ -72,7 +72,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden mt-5 pt-5 border-t border-border"
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4 lg:gap-6">
               {/* 标签筛选 */}
               <div className="space-y-3">
                 <h4 className="text-xs font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
@@ -176,7 +176,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
               )}
             </div>
 
-            <div className="mt-5 flex justify-end gap-3">
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
               <button
                 onClick={onResetFilters}
                 className="text-xs text-text-muted theme-icon-button-danger transition-colors"

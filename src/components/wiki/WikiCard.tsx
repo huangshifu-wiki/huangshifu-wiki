@@ -34,7 +34,7 @@ const WikiCard = React.memo(
             isListMode
               ? clsx(
                   CARD.wikiListLayout,
-                  'bg-surface rounded border border-border hover:border-brand-gold transition-all'
+                  'mobile-list-card bg-surface rounded border border-border hover:border-brand-gold transition-all'
                 )
               : clsx(
                   CARD.gridLayout,
@@ -46,7 +46,7 @@ const WikiCard = React.memo(
         >
           {isListMode ? (
             <>
-              <div className="w-16 h-16 bg-surface-alt rounded flex items-center justify-center flex-shrink-0">
+              <div className="mobile-list-thumb flex h-16 w-16 flex-shrink-0 items-center justify-center rounded bg-surface-alt">
                 <Book size={24} className="text-brand-gold/60" />
               </div>
               <div className="flex-1 min-w-0">
@@ -95,16 +95,16 @@ const WikiCard = React.memo(
         <button
           onClick={(event) => onCopyLink(event, page.slug)}
           className={clsx(
-            'inline-flex items-center gap-1.5 rounded border bg-surface/90 px-3 py-2 text-xs font-medium text-text-muted hover:border-brand-gold hover:text-brand-gold transition-all',
+            'mobile-card-action inline-flex items-center justify-center gap-1.5 rounded border bg-surface/90 px-3 py-2 text-xs font-medium text-text-muted hover:border-brand-gold hover:text-brand-gold transition-all',
             isListMode
-              ? 'absolute top-4 right-4'
-              : 'absolute bottom-4 right-4 opacity-0 group-hover:opacity-100'
+              ? 'absolute top-3 right-3 sm:top-4 sm:right-4'
+              : 'absolute bottom-3 right-3 opacity-100 sm:bottom-4 sm:right-4 sm:opacity-0 sm:group-hover:opacity-100'
           )}
           title="复制链接"
           aria-label="复制链接"
         >
           <Link2 size={14} />
-          <span>复制链接</span>
+          <span className="hidden sm:inline">复制链接</span>
         </button>
       </div>
     )

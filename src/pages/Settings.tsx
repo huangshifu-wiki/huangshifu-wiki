@@ -803,16 +803,10 @@ const Settings = () => {
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="mx-auto max-w-[1180px] px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container max-w-[1180px]">
         <div className="mb-8 border-b border-border pb-4">
-          <h1 className="text-2xl font-bold text-text-primary">设置</h1>
+          <h1 className="mobile-page-title">设置</h1>
         </div>
 
         <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">

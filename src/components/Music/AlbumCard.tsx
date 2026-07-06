@@ -24,8 +24,8 @@ const AlbumCard = React.memo(function AlbumCard({
 
   if (viewMode === 'list') {
     return (
-      <div className="flex gap-4 py-4 px-1 border-b border-border items-center group transition-all hover:bg-surface-alt">
-        <div className="relative w-14 h-14 flex-shrink-0">
+      <div className="group flex items-center gap-3 border-b border-border px-1 py-3 transition-all hover:bg-surface-alt sm:gap-4 sm:py-4">
+        <div className="relative h-12 w-12 flex-shrink-0 sm:h-14 sm:w-14">
           <SmartImage
             src={coverSrc}
             alt={album.title}
@@ -41,8 +41,8 @@ const AlbumCard = React.memo(function AlbumCard({
           </Link>
           <p className="text-[0.8125rem] text-text-muted truncate mt-0.5">{album.artist}</p>
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <span className="text-xs text-text-muted">
+        <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+          <span className="hidden text-xs text-text-muted sm:inline">
             {trackCount} {t('music.unit.song')}
           </span>
           <Link
@@ -86,7 +86,7 @@ const AlbumCard = React.memo(function AlbumCard({
         </Link>
         <button
           onClick={(event) => onCopyLink(event, albumSlug)}
-          className="p-1.5 text-text-muted hover:text-brand-gold transition-colors"
+          className="mobile-card-action p-1.5 text-text-muted transition-colors hover:text-brand-gold"
           title={t('music.copyAlbumLink')}
         >
           <Link2 size={14} />

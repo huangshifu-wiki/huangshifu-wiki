@@ -13,6 +13,16 @@ interface PaginationProps {
 }
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
+const NAV_BUTTON_CLASS = clsx(
+  'inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded px-2.5 py-1 text-xs',
+  'border transition-all',
+  'disabled:cursor-not-allowed disabled:opacity-50'
+)
+const INACTIVE_NAV_BUTTON_CLASS = clsx(
+  NAV_BUTTON_CLASS,
+  'border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
+)
+const INACTIVE_NAV_BUTTON_WITH_GAP_CLASS = clsx(INACTIVE_NAV_BUTTON_CLASS, 'gap-1')
 
 function generatePageNumbers(current: number, total: number): (number | 'ellipsis')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
@@ -70,11 +80,11 @@ export const Pagination: React.FC<PaginationProps> = ({
 
   return (
     <footer
-      className="px-4 md:px-6 py-3 border-t border-border flex items-center justify-between flex-wrap gap-3"
+      className="mt-6 flex flex-col gap-3 border-t border-border px-0 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4 md:px-6"
       role="navigation"
       aria-label="分页导航"
     >
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <p className="text-xs text-text-muted" aria-live="polite" aria-atomic="true">
           第 {Math.min(page, totalPages)} / {totalPages} 页
         </p>
@@ -96,17 +106,13 @@ export const Pagination: React.FC<PaginationProps> = ({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1">
         <button
           onClick={handleFirst}
           disabled={page <= 1}
           aria-label="首页"
           aria-disabled={page <= 1}
-          className={clsx(
-            'inline-flex items-center justify-center px-2.5 py-1 text-xs rounded min-h-[44px] min-w-[44px]',
-            'border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold',
-            'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
-          )}
+          className={INACTIVE_NAV_BUTTON_CLASS}
         >
           <ChevronsLeft size={14} />
         </button>
@@ -115,11 +121,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           disabled={page <= 1}
           aria-label="上一页"
           aria-disabled={page <= 1}
-          className={clsx(
-            'inline-flex items-center justify-center gap-1 px-2.5 py-1 text-xs rounded min-h-[44px] min-w-[44px]',
-            'border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold',
-            'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
-          )}
+          className={INACTIVE_NAV_BUTTON_WITH_GAP_CLASS}
         >
           <ChevronLeft size={14} />
         </button>
@@ -128,7 +130,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           item === 'ellipsis' ? (
             <span
               key={`ellipsis-${index}`}
-              className="text-text-muted px-1 cursor-default text-xs"
+              className="shrink-0 cursor-default px-1 text-xs text-text-muted"
               aria-hidden="true"
             >
               ...
@@ -140,7 +142,7 @@ export const Pagination: React.FC<PaginationProps> = ({
               aria-label={`第 ${item} 页`}
               aria-current={item === page ? 'page' : undefined}
               className={clsx(
-                'inline-flex items-center justify-center px-2.5 py-1 text-xs rounded border transition-all min-h-[44px] min-w-[44px]',
+                NAV_BUTTON_CLASS,
                 item === page
                   ? 'bg-[var(--color-theme-accent)] text-white border-[var(--color-theme-accent)]'
                   : 'border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
@@ -156,11 +158,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           disabled={page >= totalPages}
           aria-label="下一页"
           aria-disabled={page >= totalPages}
-          className={clsx(
-            'inline-flex items-center justify-center gap-1 px-2.5 py-1 text-xs rounded min-h-[44px] min-w-[44px]',
-            'border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold',
-            'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
-          )}
+          className={INACTIVE_NAV_BUTTON_WITH_GAP_CLASS}
         >
           <ChevronRight size={14} />
         </button>
@@ -169,11 +167,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           disabled={page >= totalPages}
           aria-label="末页"
           aria-disabled={page >= totalPages}
-          className={clsx(
-            'inline-flex items-center justify-center px-2.5 py-1 text-xs rounded min-h-[44px] min-w-[44px]',
-            'border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold',
-            'disabled:opacity-50 disabled:cursor-not-allowed transition-all'
-          )}
+          className={INACTIVE_NAV_BUTTON_CLASS}
         >
           <ChevronsRight size={14} />
         </button>

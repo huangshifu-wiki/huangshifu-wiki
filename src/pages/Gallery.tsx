@@ -13,13 +13,12 @@ import { useUserPreferences } from '../context/UserPreferencesContext'
 import { ViewModeSelector } from '../components/ViewModeSelector'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import { clsx } from 'clsx'
-import { format } from 'date-fns'
 import { SmartImage } from '../components/SmartImage'
 import { useToast } from '../components/Toast'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { apiDelete, apiGet, invalidateApiCacheByPrefix } from '../lib/apiClient'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
-import { toDateValue } from '../lib/dateUtils'
+import { formatDate } from '../lib/dateUtils'
 import {
   getFirstGalleryImage,
   getGalleryThumbnailPlaceholderLabel,
@@ -94,13 +93,13 @@ const GalleryCard = React.memo(
         to={`/gallery/${gallery.slug || gallery.id}`}
         className={clsx(
           viewMode === 'list'
-            ? 'flex gap-4 p-3 bg-surface border border-border rounded overflow-hidden hover:border-brand-gold transition-all w-full'
+            ? 'mobile-list-card flex gap-4 p-3 bg-surface border border-border rounded overflow-hidden hover:border-brand-gold transition-all w-full'
             : 'block bg-surface border border-border rounded overflow-hidden hover:border-brand-gold transition-all'
         )}
       >
         {viewMode === 'list' ? (
           <>
-            <div className="w-20 h-20 bg-surface-alt rounded overflow-hidden flex-shrink-0">
+            <div className="mobile-list-thumb w-20 h-20 bg-surface-alt rounded overflow-hidden flex-shrink-0">
               <GalleryCover
                 gallery={gallery}
                 className="h-full w-full"
@@ -131,10 +130,7 @@ const GalleryCard = React.memo(
               </p>
               <div className="flex items-center gap-3 text-text-muted text-[11px] mt-1">
                 <span className="flex items-center gap-1">
-                  <Clock size={10} />{' '}
-                  {toDateValue(gallery.createdAt)
-                    ? format(toDateValue(gallery.createdAt)!, 'yyyy-MM-dd')
-                    : '刚刚'}
+                  <Clock size={10} /> {formatDate(gallery.createdAt, 'yyyy-MM-dd')}
                 </span>
                 <span className="flex items-center gap-1">
                   <UserIcon size={10} />{' '}
@@ -184,10 +180,7 @@ const GalleryCard = React.memo(
               </div>
               <div className="flex items-center justify-between text-text-muted text-[11px]">
                 <span className="flex items-center gap-1">
-                  <Clock size={10} />{' '}
-                  {toDateValue(gallery.createdAt)
-                    ? format(toDateValue(gallery.createdAt)!, 'yyyy-MM-dd')
-                    : '刚刚'}
+                  <Clock size={10} /> {formatDate(gallery.createdAt, 'yyyy-MM-dd')}
                 </span>
                 <span className="flex items-center gap-1">
                   <UserIcon size={10} />{' '}
@@ -203,7 +196,7 @@ const GalleryCard = React.memo(
         <button
           onClick={(event) => onRequestDelete(event, gallery)}
           disabled={deletingGalleryId === gallery.id}
-          className="absolute top-2 left-2 p-2.5 rounded bg-surface/90 border border-border text-text-muted theme-icon-button-danger transition-all disabled:cursor-not-allowed disabled:opacity-60"
+          className="mobile-card-action absolute top-2 left-2 rounded bg-surface/90 p-2.5 text-text-muted theme-icon-button-danger border border-border transition-all disabled:cursor-not-allowed disabled:opacity-60"
           title="删除图集"
           aria-label="删除图集"
         >
@@ -213,7 +206,7 @@ const GalleryCard = React.memo(
       <button
         onClick={(event) => onCopyLink(event, gallery.slug || gallery.id)}
         className={clsx(
-          'p-2.5 rounded bg-surface/90 border border-border text-text-muted hover:text-brand-gold transition-all',
+          'mobile-card-action rounded bg-surface/90 p-2.5 text-text-muted border border-border transition-all hover:text-brand-gold',
           viewMode === 'list'
             ? 'absolute top-2 right-2'
             : 'absolute bottom-2 right-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
@@ -446,19 +439,13 @@ const GalleryList = () => {
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 gallery-page">
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container gallery-page">
         {/* Header */}
-        <header className="mb-7">
-          <div className="flex items-end justify-between flex-wrap gap-3">
-            <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">画廊</h1>
-            <div className="flex items-center gap-3">
+        <header className="mobile-page-header">
+          <div className="mobile-page-titlebar">
+            <h1 className="mobile-page-title">画廊</h1>
+            <div className="mobile-action-row">
               <ViewModeSelector
                 value={viewMode}
                 onChange={(mode) => void setScopedViewMode('gallery', mode)}
@@ -481,7 +468,7 @@ const GalleryList = () => {
           <>
             <div
               className={clsx(
-                'grid',
+                'mobile-grid grid',
                 VIEW_MODE_CONFIG[viewMode].gridCols,
                 VIEW_MODE_CONFIG[viewMode].gap
               )}

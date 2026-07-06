@@ -38,81 +38,85 @@ const WikiPullRequestList = () => {
 
   if (!user) {
     return (
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center text-[var(--color-text-antique-muted)] italic antique-page">
-        请先登录查看 PR 列表。
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container text-center text-[var(--color-text-antique-muted)] italic">
+          请先登录查看 PR 列表。
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link
-          to={slug ? `/wiki/${slug}/branches` : '/wiki'}
-          className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-        >
-          <ArrowLeft size={18} /> 返回
-        </Link>
-        <div className="flex gap-2">
-          {(['open', 'merged', 'rejected'] as const).map((item) => (
-            <button
-              key={item}
-              onClick={() => setStatus(item)}
-              className={clsx(
-                'px-4 py-2 rounded text-xs font-bold',
-                status === item
-                  ? 'bg-[var(--color-theme-accent)] text-white'
-                  : 'bg-surface-alt text-text-muted hover:bg-bg-tertiary'
-              )}
-            >
-              {getPrStatusText(item)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-surface rounded border border-border p-6 sm:p-8">
-        <h1 className="text-[1.5rem] font-bold text-text-primary tracking-[0.12em] mb-4">
-          PR 列表 {isAdmin ? '(管理员视角)' : '(我的 PR)'}
-        </h1>
-        {loading ? (
-          <p className="text-text-muted italic">加载中...</p>
-        ) : items.length ? (
-          <div className="space-y-3">
-            {items.map((item) => (
-              <Link
-                key={item.id}
-                to={`/wiki/${item.pageSlug}/prs/${item.id}`}
-                className="block p-4 rounded border border-border hover:border-brand-gold hover:bg-surface-alt/20 transition-all"
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link
+            to={slug ? `/wiki/${slug}/branches` : '/wiki'}
+            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+          >
+            <ArrowLeft size={18} /> 返回
+          </Link>
+          <div className="flex gap-2">
+            {(['open', 'merged', 'rejected'] as const).map((item) => (
+              <button
+                key={item}
+                onClick={() => setStatus(item)}
+                className={clsx(
+                  'px-4 py-2 rounded text-xs font-bold',
+                  status === item
+                    ? 'bg-[var(--color-theme-accent)] text-white'
+                    : 'bg-surface-alt text-text-muted hover:bg-bg-tertiary'
+                )}
               >
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
-                  <p className="font-bold text-text-primary">{item.title}</p>
-                  <span
-                    className={clsx(
-                      'px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider',
-                      item.status === 'open'
-                        ? 'theme-status-warning'
-                        : item.status === 'merged'
-                          ? 'theme-status-success'
-                          : 'theme-status-error'
-                    )}
-                  >
-                    {getPrStatusText(item.status)}
-                  </span>
-                </div>
-                <p className="text-xs text-text-muted">
-                  页面：{item.page?.title || item.pageSlug} · 发起人：
-                  {item.createdByName}
-                </p>
-                <p className="text-xs text-text-muted mt-1">
-                  {formatDate(item.createdAt, 'yyyy-MM-dd HH:mm:ss')}
-                </p>
-              </Link>
+                {getPrStatusText(item)}
+              </button>
             ))}
           </div>
-        ) : (
-          <p className="text-text-muted italic">当前筛选下暂无 PR</p>
-        )}
+        </div>
+
+        <div className="bg-surface rounded border border-border p-6 sm:p-8">
+          <h1 className="text-[1.5rem] font-bold text-text-primary tracking-[0.12em] mb-4">
+            PR 列表 {isAdmin ? '(管理员视角)' : '(我的 PR)'}
+          </h1>
+          {loading ? (
+            <p className="text-text-muted italic">加载中...</p>
+          ) : items.length ? (
+            <div className="space-y-3">
+              {items.map((item) => (
+                <Link
+                  key={item.id}
+                  to={`/wiki/${item.pageSlug}/prs/${item.id}`}
+                  className="block p-4 rounded border border-border hover:border-brand-gold hover:bg-surface-alt/20 transition-all"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+                    <p className="font-bold text-text-primary">{item.title}</p>
+                    <span
+                      className={clsx(
+                        'px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider',
+                        item.status === 'open'
+                          ? 'theme-status-warning'
+                          : item.status === 'merged'
+                            ? 'theme-status-success'
+                            : 'theme-status-error'
+                      )}
+                    >
+                      {getPrStatusText(item.status)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-muted">
+                    页面：{item.page?.title || item.pageSlug} · 发起人：
+                    {item.createdByName}
+                  </p>
+                  <p className="text-xs text-text-muted mt-1">
+                    {formatDate(item.createdAt, 'yyyy-MM-dd HH:mm:ss')}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-text-muted italic">当前筛选下暂无 PR</p>
+          )}
+        </div>
       </div>
     </div>
   )

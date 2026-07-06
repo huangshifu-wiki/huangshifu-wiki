@@ -220,18 +220,10 @@ const WikiEditor = () => {
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">
-            {isNew ? t('wiki.createWiki') : t('wiki.editWiki')}
-          </h1>
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container">
+        <div className="mobile-page-titlebar mb-8">
+          <h1 className="mobile-page-title">{isNew ? t('wiki.createWiki') : t('wiki.editWiki')}</h1>
           <button
             type="button"
             onClick={() => navigate(-1)}

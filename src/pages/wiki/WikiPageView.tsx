@@ -138,14 +138,18 @@ const WikiPageView = () => {
 
   if (loading)
     return (
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center italic text-[var(--color-text-antique-muted)] antique-page">
-        {t('wiki.loading')}
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container text-center italic text-[var(--color-text-antique-muted)]">
+          {t('wiki.loading')}
+        </div>
       </div>
     )
   if (!page)
     return (
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 text-center italic text-[var(--color-text-antique-muted)] antique-page">
-        {t('wiki.notFound')}
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container text-center italic text-[var(--color-text-antique-muted)]">
+          {t('wiki.notFound')}
+        </div>
       </div>
     )
 
@@ -203,8 +207,8 @@ const WikiPageView = () => {
   }
 
   return (
-    <div className="min-h-[calc(100vh-60px)] antique-detail">
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 wiki-detail-page">
+    <div className="mobile-page-shell antique-detail">
+      <div className="mobile-page-container wiki-detail-page">
         {/* Breadcrumb */}
         <Link
           to={'/wiki'}
@@ -215,11 +219,9 @@ const WikiPageView = () => {
 
         {/* Header */}
         <header className="mb-7">
-          <div className="flex items-end justify-between flex-wrap gap-3">
-            <h1 className="text-[1.75rem] font-semibold tracking-[0.12em] text-text-primary">
-              {page.title}
-            </h1>
-            <div className="flex flex-wrap gap-2">
+          <div className="mobile-page-titlebar">
+            <h1 className="mobile-page-title">{page.title}</h1>
+            <div className="mobile-action-row">
               {canEditPage && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/edit`}
@@ -256,8 +258,8 @@ const WikiPageView = () => {
         </header>
 
         {/* Filter bar style info bar */}
-        <div className="flex items-end justify-between border-b border-border mb-5">
-          <div className="flex gap-5 items-center">
+        <div className="mobile-filterbar">
+          <div className="mobile-filter-tabs items-center">
             <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
               {getCategoryLabel(page.category)}
             </span>
@@ -277,7 +279,7 @@ const WikiPageView = () => {
               </span>
             ) : null}
           </div>
-          <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
+          <div className="mobile-filter-actions">
             <span className="flex items-center gap-1">
               <Clock size={14} />
               {formatDate(page.updatedAt, 'yyyy-MM-dd HH:mm')}
@@ -286,7 +288,7 @@ const WikiPageView = () => {
         </div>
 
         {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
+        <div className="mobile-detail-grid">
           {/* Main Content */}
           <div>
             {/* Markdown Content */}
@@ -297,7 +299,7 @@ const WikiPageView = () => {
             {/* Relation Graph */}
             {showGraph && canShowRelationGraph && expandableRelationGraph && (
               <div className="mt-12 pt-8 border-t border-border">
-                <div className="flex items-center justify-between mb-5">
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                   <h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
                     <Network size={14} className="text-brand-gold" /> {t('wiki.relationGraph')}
                   </h4>
@@ -366,7 +368,7 @@ const WikiPageView = () => {
           </div>
 
           {/* Sidebar */}
-          <aside className="lg:sticky lg:top-20">
+          <aside className="mobile-detail-aside">
             {/* Actions */}
             <div className="py-5 border-b border-border">
               <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">

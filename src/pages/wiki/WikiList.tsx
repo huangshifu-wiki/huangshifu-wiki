@@ -133,13 +133,11 @@ const WikiList = () => {
   }
 
   return (
-    <div className="min-h-[calc(100vh-60px)] antique-page">
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-          <div>
-            <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">百科</h1>
-          </div>
-          <div className="flex items-center gap-3">
+    <div className="mobile-page-shell antique-page">
+      <div className="mobile-page-container">
+        <div className="mobile-page-titlebar mb-6">
+          <h1 className="mobile-page-title">百科</h1>
+          <div className="mobile-action-row">
             {user && !isBanned && (
               <Link
                 to={'/wiki/new'}
@@ -151,8 +149,8 @@ const WikiList = () => {
           </div>
         </div>
 
-        <div className="flex items-end justify-between border-b border-border mb-5">
-          <div className="flex gap-5">
+        <div className="mobile-filterbar">
+          <div className="mobile-filter-tabs">
             {['all', ...categories.map((item) => item.id)].map((cat) => (
               <Link
                 key={cat}
@@ -169,7 +167,7 @@ const WikiList = () => {
             ))}
           </div>
 
-          <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
+          <div className="mobile-filter-actions">
             <ViewModeSelector
               value={viewMode}
               onChange={(mode) => void setScopedViewMode('wiki', mode)}
@@ -182,7 +180,7 @@ const WikiList = () => {
         {isInitialLoading ? (
           <div
             className={clsx(
-              'grid',
+              'mobile-grid grid',
               VIEW_MODE_CONFIG[viewMode].gridCols,
               VIEW_MODE_CONFIG[viewMode].gap
             )}
@@ -201,7 +199,7 @@ const WikiList = () => {
           <>
             <div
               className={clsx(
-                'grid',
+                'mobile-grid grid',
                 VIEW_MODE_CONFIG[viewMode].gridCols,
                 VIEW_MODE_CONFIG[viewMode].gap
               )}

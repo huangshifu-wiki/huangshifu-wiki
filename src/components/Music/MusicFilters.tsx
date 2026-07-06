@@ -47,8 +47,8 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
   } as const
 
   return (
-    <div className="flex items-end justify-between border-b border-border mb-5">
-      <div className="flex gap-5">
+    <div className="mobile-filterbar">
+      <div className="mobile-filter-tabs">
         <button
           onClick={() => onTabChange('music')}
           className={clsx(
@@ -73,13 +73,13 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
         </button>
       </div>
 
-      <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
+      <div className="mobile-filter-actions">
         {viewMode && onViewModeChange && (
           <ViewModeSelector value={viewMode} onChange={onViewModeChange} size="sm" />
         )}
         {activeTab === 'music' && (
           <>
-            <div className="flex items-center">
+            <div className="flex shrink-0 items-center">
               {(['releaseDate', 'title', 'artist'] as SortBy[]).map((key) => (
                 <button
                   key={key}

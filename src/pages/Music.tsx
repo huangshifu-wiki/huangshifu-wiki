@@ -279,25 +279,17 @@ const Music = () => {
   }
 
   return (
-    <div
-      className="gufeng-music-page min-h-screen bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 md:pb-32">
+    <div className="gufeng-music-page mobile-page-shell">
+      <div className="mobile-page-container">
         {/* Header */}
-        <header className="mb-7">
-          <div className="flex items-end justify-between flex-wrap gap-3">
-            <h1 className="text-[1.75rem] font-semibold tracking-[0.12em] text-text-primary">
-              {t('music.title')}
-            </h1>
+        <header className="mobile-page-header">
+          <div className="mobile-page-titlebar">
+            <h1 className="mobile-page-title">{t('music.title')}</h1>
           </div>
         </header>
 
         {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-8 items-start">
+        <div className="mobile-detail-grid">
           {/* Main Content */}
           <div className="min-w-0">
             <MusicFilters
@@ -331,6 +323,7 @@ const Music = () => {
                   <>
                     <div
                       className={clsx(
+                        'mobile-grid',
                         viewMode === 'list'
                           ? 'divide-y divide-border'
                           : clsx(
@@ -392,7 +385,7 @@ const Music = () => {
                 {!isIncrementalMode && loadingAlbums ? (
                   <div
                     className={clsx(
-                      'grid',
+                      'mobile-grid grid',
                       VIEW_MODE_CONFIG[viewMode].gridCols,
                       VIEW_MODE_CONFIG[viewMode].gap
                     )}
@@ -409,7 +402,7 @@ const Music = () => {
                   <>
                     <div
                       className={clsx(
-                        'grid',
+                        'mobile-grid grid',
                         VIEW_MODE_CONFIG[viewMode].gridCols,
                         VIEW_MODE_CONFIG[viewMode].gap
                       )}
@@ -454,7 +447,7 @@ const Music = () => {
           </div>
 
           {/* Sidebar */}
-          <aside className="lg:sticky lg:top-20">
+          <aside className="mobile-detail-aside">
             {/* Stats */}
             <div className="py-5">
               <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">

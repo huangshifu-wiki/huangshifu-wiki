@@ -58,17 +58,24 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(
         to={config.link}
         className={clsx(
           CARD.base,
-          isList ? CARD.listLayout : clsx(CARD.gridLayout, 'block', cardHeight)
+          isList
+            ? clsx(CARD.listLayout, 'mobile-list-card')
+            : clsx(CARD.gridLayout, 'block', cardHeight)
         )}
       >
         {isList ? (
           <>
             {config.image ? (
-              <div className={CARD.imageWrapperList}>
+              <div className={clsx(CARD.imageWrapperList, 'mobile-list-thumb')}>
                 <SmartImage src={config.image} alt="" className={CARD.imageFill} />
               </div>
             ) : (
-              <div className={clsx(CARD.imageWrapperList, 'flex items-center justify-center')}>
+              <div
+                className={clsx(
+                  CARD.imageWrapperList,
+                  'mobile-list-thumb flex items-center justify-center'
+                )}
+              >
                 {fallbackContent}
               </div>
             )}

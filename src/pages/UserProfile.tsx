@@ -463,14 +463,8 @@ export default function UserProfile() {
   const displaySignature = profile.signature?.trim()
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="mx-auto max-w-[900px] px-5 py-7 sm:px-6 sm:py-9">
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container max-w-[900px]">
         <section className="pb-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 flex-1 items-start gap-4">
@@ -482,7 +476,7 @@ export default function UserProfile() {
                 onError={handleAvatarError}
               />
               <div className="min-w-0">
-                <h1 className="truncate text-3xl font-semibold text-text-primary">
+                <h1 className="truncate text-2xl font-semibold text-text-primary sm:text-3xl">
                   {profile.displayName}
                 </h1>
                 {isSelf && signatureEditing ? (

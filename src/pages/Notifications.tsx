@@ -276,14 +276,8 @@ const Notifications = () => {
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[900px] mx-auto px-6 py-12">
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container max-w-[900px]">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-6"
@@ -293,9 +287,9 @@ const Notifications = () => {
         </Link>
 
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="mobile-page-titlebar mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2 tracking-[0.05em]">
+            <h1 className="mobile-page-title flex items-center gap-2">
               <Bell size={22} className="text-brand-gold" />
               通知中心
             </h1>
@@ -315,7 +309,7 @@ const Notifications = () => {
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex items-center gap-1 border-b border-border mb-6 overflow-x-auto">
+        <div className="mb-6 flex items-center gap-1 overflow-x-auto border-b border-border">
           {FILTER_OPTIONS.map((option) => (
             <button
               key={option.id}
@@ -354,7 +348,7 @@ const Notifications = () => {
                   <li
                     key={notif.id}
                     className={clsx(
-                      'px-6 py-4 border-b border-border last:border-b-0 transition-colors',
+                      'border-b border-border px-4 py-4 transition-colors last:border-b-0 sm:px-6',
                       !notif.isRead && 'bg-brand-gold/10'
                     )}
                   >

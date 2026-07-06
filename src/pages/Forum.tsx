@@ -137,7 +137,7 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
   return (
     <div
       className={clsx(
-        'p-4 bg-surface border border-border rounded hover:border-brand-gold transition-all group relative',
+        'relative rounded border border-border bg-surface p-3 transition-all group hover:border-brand-gold sm:p-4',
         post.isPinned && 'border-l-[3px] border-l-[var(--color-theme-accent)]'
       )}
     >
@@ -166,11 +166,11 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
             </span>
           )}
         </div>
-        <h3 className="text-base font-bold text-text-primary group-hover:text-brand-gold transition-colors mb-2">
+        <h3 className="mb-2 pr-10 text-base font-bold text-text-primary transition-colors group-hover:text-brand-gold sm:pr-0">
           {post.title}
         </h3>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 text-text-muted text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-4 text-xs text-text-muted">
             <span className="flex items-center gap-1">
               <Heart size={10} /> {post.likesCount || 0}
             </span>
@@ -181,11 +181,11 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
               <MessageSquare size={10} /> {post.commentsCount || 0}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <div className="w-5 h-5 rounded bg-surface-alt overflow-hidden flex items-center justify-center">
               <UserIcon size={10} className="text-text-muted" />
             </div>
-            <span className="text-xs text-text-muted">
+            <span className="truncate text-xs text-text-muted">
               {post.authorName ||
                 (post.authorPublicId ? `#${post.authorPublicId}` : t('forum.anonymous'))}
             </span>
@@ -194,7 +194,7 @@ const PostCard = React.memo(({ post, sectionName, onCopyLink }: PostCardProps) =
       </Link>
       <button
         onClick={(event) => onCopyLink(event, post.slug || post.id)}
-        className="absolute top-4 right-4 p-2 rounded border border-border bg-surface/90 text-text-muted hover:text-brand-gold hover:border-brand-gold transition-all"
+        className="mobile-card-action absolute top-3 right-3 rounded border border-border bg-surface/90 p-2 text-text-muted transition-all hover:border-brand-gold hover:text-brand-gold sm:top-4 sm:right-4"
         title={t('forum.copyInternalLink')}
         aria-label={t('forum.copyPostInternalLink')}
       >
@@ -328,21 +328,11 @@ const PostList = () => {
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-          <div>
-            <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">
-              {t('forum.title')}
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container">
+        <div className="mobile-page-titlebar mb-6">
+          <h1 className="mobile-page-title">{t('forum.title')}</h1>
+          <div className="mobile-action-row">
             {user && !isBanned && (
               <Link
                 to="/forum/new"
@@ -354,8 +344,8 @@ const PostList = () => {
           </div>
         </div>
 
-        <div className="flex items-end justify-between border-b border-border mb-5">
-          <div className="flex gap-5 flex-wrap">
+        <div className="mobile-filterbar">
+          <div className="mobile-filter-tabs">
             <Link
               to={getListUrl({ section: 'all' })}
               className={clsx(
@@ -383,7 +373,7 @@ const PostList = () => {
             ))}
           </div>
 
-          <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
+          <div className="mobile-filter-actions">
             {(['latest', 'hot', 'recommended'] as const).map((s) => (
               <Link
                 key={s}
@@ -689,15 +679,10 @@ const PostDetail = () => {
   if (loading) return <PageSkeleton variant="forum" />
   if (!post)
     return (
-      <div
-        className="min-h-[calc(100vh-60px)] flex items-center justify-center text-text-muted italic bg-bg-primary"
-        style={{
-          fontFamily:
-            "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-          lineHeight: 1.8,
-        }}
-      >
-        {t('forum.postNotFound')}
+      <div className="mobile-page-shell">
+        <div className="mobile-page-container text-center text-text-muted italic">
+          {t('forum.postNotFound')}
+        </div>
       </div>
     )
 
@@ -847,14 +832,8 @@ const PostDetail = () => {
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 wiki-detail-page">
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container wiki-detail-page">
         <Link
           to="/forum"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
@@ -864,11 +843,9 @@ const PostDetail = () => {
 
         {/* Header */}
         <header className="mb-7">
-          <div className="flex items-end justify-between flex-wrap gap-3">
-            <h1 className="text-[1.75rem] font-semibold tracking-[0.12em] text-text-primary">
-              {post.title}
-            </h1>
-            <div className="flex flex-wrap gap-2">
+          <div className="mobile-page-titlebar">
+            <h1 className="mobile-page-title">{post.title}</h1>
+            <div className="mobile-action-row">
               <button
                 onClick={handleShare}
                 className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
@@ -888,8 +865,8 @@ const PostDetail = () => {
         </header>
 
         {/* Info bar */}
-        <div className="flex items-end justify-between border-b border-border mb-5">
-          <div className="flex gap-5 items-center">
+        <div className="mobile-filterbar">
+          <div className="mobile-filter-tabs items-center">
             <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
               {sections.find((s) => s.id === post.section)?.name || post.section}
             </span>
@@ -909,7 +886,7 @@ const PostDetail = () => {
               </span>
             ) : null}
           </div>
-          <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
+          <div className="mobile-filter-actions">
             <span className="flex items-center gap-1">
               <Clock size={14} />
               {formatDate(post.updatedAt, 'yyyy-MM-dd HH:mm')}
@@ -918,7 +895,7 @@ const PostDetail = () => {
         </div>
 
         {/* Two column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
+        <div className="mobile-detail-grid">
           <div>
             <div className="prose prose-lg max-w-none font-body leading-relaxed text-text-primary">
               <MarkdownRenderer
@@ -1039,7 +1016,7 @@ const PostDetail = () => {
                       </div>
 
                       {getReplies(comment.id).length > 0 && (
-                        <div className="ml-12 mt-3 space-y-3 border-l-2 border-border pl-4">
+                        <div className="ml-4 mt-3 space-y-3 border-l-2 border-border pl-4 sm:ml-12">
                           {getReplies(comment.id).map((reply) => (
                             <div
                               id={`comment-${reply.id}`}
@@ -1103,7 +1080,7 @@ const PostDetail = () => {
             </section>
           </div>
 
-          <aside className="lg:sticky lg:top-20">
+          <aside className="mobile-detail-aside">
             {/* Interactions */}
             <div className="py-5 border-b border-border">
               <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">
@@ -1488,21 +1465,15 @@ const PostEditor = () => {
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container">
+        <div className="mobile-page-titlebar mb-8">
+          <h1 className="mobile-page-title">
             {isEditing ? t('forum.editPost') : t('forum.createPost')}
           </h1>
           <button
             onClick={() => navigate(-1)}
-            className="p-2 text-text-muted theme-icon-button-danger transition-colors"
+            className="mobile-card-action p-2 text-text-muted theme-icon-button-danger transition-colors"
           >
             <X size={24} />
           </button>

@@ -175,7 +175,7 @@ const SongCard = React.memo(function SongCard({
         }
       }}
       className={clsx(
-        'gufeng-song-item group flex items-center gap-4 py-4 px-1 border-b border-border transition-all cursor-pointer',
+        'gufeng-song-item group flex items-center gap-3 py-3 px-1 border-b border-border transition-all cursor-pointer sm:gap-4 sm:py-4',
         isCurrentSong && 'bg-brand-gold/10'
       )}
       role="button"
@@ -184,7 +184,7 @@ const SongCard = React.memo(function SongCard({
     >
       {sequenceNumber !== undefined ? (
         <span
-          className="w-9 flex-shrink-0 text-right text-sm tabular-nums text-text-muted"
+          className="hidden w-9 flex-shrink-0 text-right text-sm tabular-nums text-text-muted sm:inline-block"
           aria-hidden="true"
         >
           {sequenceNumber}
@@ -192,7 +192,7 @@ const SongCard = React.memo(function SongCard({
       ) : null}
 
       {/* Cover */}
-      <div className="relative w-14 h-14 flex-shrink-0 overflow-hidden rounded">
+      <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded sm:h-14 sm:w-14">
         <SmartImage
           src={coverSrc}
           alt={song.title + ' 封面'}
@@ -206,7 +206,7 @@ const SongCard = React.memo(function SongCard({
       <div className="flex-1 min-w-0 pointer-events-none">
         <p
           className={clsx(
-            'block text-[1.0625rem] font-semibold truncate tracking-[0.03em] transition-colors',
+            'block truncate text-[0.98rem] font-semibold tracking-[0.03em] transition-colors sm:text-[1.0625rem]',
             isCurrentSong ? 'text-brand-gold' : 'text-text-primary group-hover:text-brand-gold'
           )}
         >
@@ -225,10 +225,7 @@ const SongCard = React.memo(function SongCard({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <div className="hidden md:flex items-center gap-0.5">{renderFavoriteButton()}</div>
-        <div className="flex md:hidden items-center gap-0.5">{renderFavoriteButton()}</div>
-      </div>
+      <div className="flex items-center gap-1 flex-shrink-0">{renderFavoriteButton()}</div>
     </div>
   )
 })

@@ -1232,196 +1232,26 @@ html {
   color: var(--color-brand-gold);
 }
 
-/* ========================================
-   Task 8: 375px Responsive Styles
-   Small screen optimizations for
-   devices with 375px viewport width
-   (iPhone SE 2nd/3rd gen, standard phones).
-   ======================================== */
 @media (max-width: 375px) {
-  /* 防止小屏幕溢出 */
   body {
     overflow-x: hidden;
   }
 
-  /* 字体微调 */
-  h1 {
-    font-size: 1.625rem !important;
-  }
-
-  h2 {
-    font-size: 1.375rem !important;
-  }
-
-  /* 表格横向滚动 */
   table {
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-
-  /* 容器内边距调整 */
-  .container,
-  [class*='max-w'] {
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
-  }
 }
 
-/* ========================================
-   Task 9: 320px Responsive Styles
-   Ultra-small screen optimizations for
-   devices with 320px viewport width
-   (iPhone SE 1st gen, small Android).
-   ======================================== */
 @media (max-width: 320px) {
-  /* Typography scaling for 320px screens */
-  h1 {
-    font-size: 1.5rem !important;
-    line-height: 1.25;
-  }
-
-  h2 {
-    font-size: 1.25rem !important;
-    line-height: 1.3;
-  }
-
-  h3 {
-    font-size: 1.125rem !important;
-    line-height: 1.35;
-  }
-
-  h4,
-  h5,
-  h6 {
-    font-size: 1rem !important;
-    line-height: 1.4;
-  }
-
-  p,
-  span,
-  div,
-  li,
-  td,
-  th {
-    font-size: 0.875rem !important;
-  }
-
-  /* Reduce padding on common containers */
-  .container,
-  [class*='px-'],
-  [class*='p-'] {
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
-  }
-
-  [class*='py-'] {
-    padding-top: 0.5rem !important;
-    padding-bottom: 0.5rem !important;
-  }
-
-  /* Stack flex layouts vertically */
-  .flex-row-320,
-  [class*='flex-row'] {
-    flex-direction: column !important;
-  }
-
-  /* Ensure images don't overflow */
-  img,
-  video,
-  canvas,
-  svg {
-    max-width: 100% !important;
-    height: auto !important;
-  }
-
-  /* Reduce grid gaps */
-  [class*='gap-'] {
-    gap: 0.5rem !important;
-  }
-
-  /* Make cards full width */
-  [class*='card'],
-  .theme-surface,
-  .theme-surface-soft,
-  .liquidGlass-wrapper {
-    border-radius: 0.75rem !important;
-  }
-
-  /* Adjust bento grid for 320px */
-  .bento-grid {
-    grid-template-columns: 1fr !important;
-    gap: 0.75rem !important;
-  }
-
-  .bento-item-large,
-  .bento-item-tall {
-    grid-column: span 1 !important;
-    grid-row: span 1 !important;
-  }
-
-  /* Reduce display text sizes */
-  .text-display {
-    font-size: 2rem !important;
-  }
-
-  .text-hero {
-    font-size: 1.5rem !important;
-  }
-
-  .text-section {
-    font-size: 1.25rem !important;
-  }
-
-  /* Navigation adjustments */
-  nav,
-  header,
-  .nav-bar,
-  [class*='navbar'] {
-    padding-left: 0.5rem !important;
-    padding-right: 0.5rem !important;
-  }
-
-  /* Buttons full width on 320px */
-  button,
-  .btn-cta,
-  [role='button'] {
-    width: 100% !important;
-    text-align: center;
-  }
-
-  /* Table adjustments */
   table {
-    font-size: 0.75rem !important;
+    font-size: 0.75rem;
   }
 
   th,
   td {
-    padding: 0.375rem 0.5rem !important;
-  }
-
-  /* Form inputs */
-  input,
-  textarea,
-  select {
-    font-size: 16px !important;
-    padding: 0.5rem !important;
-  }
-
-  /* Modal/dialog adjustments */
-  [role='dialog'],
-  .modal,
-  [class*='modal'] {
-    width: 100% !important;
-    margin: 0.5rem !important;
-    max-width: calc(100vw - 1rem) !important;
-  }
-
-  /* Safe area padding */
-  .pb-safe,
-  .pb-safe-inset,
-  .mobile-safe-bottom {
-    padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem) !important;
+    padding: 0.375rem 0.5rem;
   }
 }
 
@@ -1430,14 +1260,18 @@ html {
    Replaces inline style={{ backgroundColor,
    fontFamily }} with CSS classes.
    ======================================== */
-.antique-page {
-  background-color: var(--color-bg-antique);
+.antique-page,
+.antique-detail,
+.mobile-page-shell {
   font-family: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif;
 }
 
+.antique-page,
 .antique-detail {
   background-color: var(--color-bg-antique);
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif;
+}
+
+.antique-detail {
   line-height: 1.8;
 }
 
@@ -1451,6 +1285,202 @@ html {
 
 .site-main-offset {
   padding-top: 64px;
+}
+
+.mobile-page-shell {
+  min-height: calc(100vh - 60px);
+  background: var(--color-bg-primary);
+  line-height: 1.8;
+}
+
+.mobile-page-shell.antique-page,
+.mobile-page-shell.antique-detail {
+  background: var(--color-bg-antique);
+}
+
+.mobile-page-container {
+  width: min(1100px, 100%);
+  margin-inline: auto;
+  padding: 2rem 1.5rem calc(env(safe-area-inset-bottom) + 8rem);
+}
+
+.mobile-page-header {
+  margin-bottom: 1.75rem;
+}
+
+.mobile-page-titlebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mobile-page-title {
+  color: var(--color-text-primary);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.12em;
+}
+
+.mobile-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.mobile-filterbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mobile-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.mobile-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-bottom: 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.mobile-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 2rem;
+  align-items: start;
+}
+
+.mobile-detail-aside {
+  position: sticky;
+  top: 5rem;
+}
+
+.mobile-grid {
+  min-width: 0;
+}
+
+.mobile-card-action {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.global-music-player {
+  bottom: 0;
+}
+
+@media (max-width: 767px) {
+  .global-music-player {
+    bottom: calc(env(safe-area-inset-bottom) + 56px);
+  }
+
+  .mobile-page-container {
+    padding: 1.25rem 1rem calc(env(safe-area-inset-bottom) + 6.75rem);
+  }
+
+  .mobile-page-header {
+    margin-bottom: 1.25rem;
+  }
+
+  .mobile-page-titlebar {
+    align-items: flex-start;
+  }
+
+  .mobile-page-title {
+    overflow-wrap: anywhere;
+    font-size: 1.5rem;
+    letter-spacing: 0.08em;
+  }
+
+  .mobile-action-row {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .mobile-filterbar {
+    display: block;
+    margin-inline: -1rem;
+    padding-inline: 1rem;
+    overflow: hidden;
+  }
+
+  .mobile-filter-tabs,
+  .mobile-filter-actions {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-filter-tabs::-webkit-scrollbar,
+  .mobile-filter-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-filter-tabs {
+    gap: 1rem;
+  }
+
+  .mobile-filter-tabs > *,
+  .mobile-filter-actions > * {
+    flex: 0 0 auto;
+  }
+
+  .mobile-filter-actions {
+    gap: 0.5rem;
+    padding-top: 0.65rem;
+  }
+
+  .mobile-detail-grid {
+    display: block;
+  }
+
+  .mobile-detail-aside {
+    position: static;
+    margin-top: 2rem;
+  }
+
+  .mobile-grid {
+    gap: 0.875rem;
+  }
+
+  .mobile-list-card {
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .mobile-list-thumb {
+    width: 4.25rem;
+    height: 4.25rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .mobile-page-container {
+    padding-inline: 0.875rem;
+  }
+
+  .mobile-page-title {
+    font-size: 1.375rem;
+  }
 }
 
 .home-shell {

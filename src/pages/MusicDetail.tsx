@@ -204,8 +204,8 @@ const MusicDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen antique-page bg-bg-primary">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container">
           <div className="h-48 bg-surface-alt rounded animate-pulse" />
         </div>
       </div>
@@ -214,8 +214,8 @@ const MusicDetail = () => {
 
   if (!song) {
     return (
-      <div className="min-h-screen antique-page bg-bg-primary">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container">
           <Link
             to="/music"
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
@@ -242,8 +242,8 @@ const MusicDetail = () => {
   ].filter((item) => item.value)
 
   return (
-    <div className="min-h-screen antique-detail text-[var(--color-text-antique)] bg-bg-primary">
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+    <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
+      <div className="mobile-page-container">
         <Link
           to="/music"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
@@ -251,15 +251,15 @@ const MusicDetail = () => {
           <ArrowLeft size={16} /> 返回音乐馆
         </Link>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
+        <div className="mobile-detail-grid">
           {/* Main Content */}
           <div>
             {/* Detail Header */}
-            <div className="flex flex-col md:flex-row gap-5 mb-6 pb-6 border-b border-border">
+            <div className="mb-6 flex flex-col gap-5 border-b border-border pb-6 sm:flex-row">
               <button
                 type="button"
                 onClick={() => setCoverLightboxOpen(true)}
-                className="w-40 h-40 md:w-44 md:h-44 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                className="h-40 w-40 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:h-44 sm:w-44"
                 aria-label={`查看 ${song.title} 封面原图`}
               >
                 <SmartImage
@@ -269,16 +269,14 @@ const MusicDetail = () => {
                 />
               </button>
               <div className="flex-1 flex flex-col justify-center min-w-0">
-                <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em] mb-1.5">
-                  {song.title}
-                </h1>
+                <h1 className="mobile-page-title mb-1.5">{song.title}</h1>
                 <p className="text-base text-text-secondary tracking-[0.08em] mb-3">
                   {artistsText}
                 </p>
                 <div className="flex flex-wrap gap-x-5 gap-y-2 mb-4 text-sm text-text-muted">
                   <span>专辑：{song.album}</span>
                 </div>
-                <div className="flex flex-wrap gap-3">
+                <div className="mobile-action-row justify-start">
                   <button
                     onClick={handlePlay}
                     disabled={!canPlay}
@@ -321,7 +319,7 @@ const MusicDetail = () => {
 
             {/* Lyrics */}
             <div className="mb-10">
-              <div className="flex items-center gap-3 mb-4">
+              <div className="mb-4 flex flex-wrap items-center gap-3">
                 <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] flex items-center gap-2">
                   <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
                   歌词
@@ -387,7 +385,7 @@ const MusicDetail = () => {
 
             {/* Related Posts */}
             <div className="mb-10">
-              <div className="flex items-center justify-between mb-4 pb-2.5 border-b border-border">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2.5">
                 <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] flex items-center gap-2">
                   <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
                   关联乐评
@@ -499,7 +497,7 @@ const MusicDetail = () => {
           </div>
 
           {/* Sidebar */}
-          <aside className="lg:sticky lg:top-20">
+          <aside className="mobile-detail-aside">
             <div className="py-5 border-b border-border">
               <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">
                 歌曲信息

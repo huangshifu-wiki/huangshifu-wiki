@@ -14,8 +14,7 @@ import {
 import { VIEW_MODE_CONFIG } from '../../lib/viewModes'
 import { formatMusicCredits } from '../../lib/musicCredits'
 import type { ViewMode } from '../../types/userPreferences'
-import { toDateValue } from '../../lib/dateUtils'
-import { format } from 'date-fns'
+import { formatDate } from '../../lib/dateUtils'
 import type { SearchState } from '../../hooks/useSearchPage'
 import type { WikiItem, PostItem, GalleryItem, SongItem, AlbumItem } from '../../types/entities'
 import type { TextSearchResult } from '../../types/api'
@@ -37,7 +36,7 @@ function wikiToConfig(page: WikiItem): import('./SearchResultCard').SearchResult
     description: (page.content || '').replace(/[#*`]/g, '').substring(0, 80),
     link: `/wiki/${page.slug}`,
     tags: [page.category],
-    meta: toDateValue(page.updatedAt) ? format(toDateValue(page.updatedAt)!, 'yyyy-MM-dd') : '刚刚',
+    meta: formatDate(page.updatedAt, 'yyyy-MM-dd'),
     type: 'wiki',
   }
 }
@@ -89,7 +88,7 @@ function postToConfig(post: PostItem): import('./SearchResultCard').SearchResult
     description: (post.content || '').replace(/[#*`]/g, '').substring(0, 80),
     link: `/forum/${post.slug || post.id}`,
     tags: [post.section],
-    meta: toDateValue(post.updatedAt) ? format(toDateValue(post.updatedAt)!, 'yyyy-MM-dd') : '刚刚',
+    meta: formatDate(post.updatedAt, 'yyyy-MM-dd'),
     type: 'post',
   }
 }
@@ -176,7 +175,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     ? mixedResults.filter((result) => activeTab === 'semantic' || result.sourceType === activeTab)
     : []
   const resultGridClassName = clsx(
-    'grid',
+    'mobile-grid grid',
     VIEW_MODE_CONFIG[viewMode].gridCols,
     VIEW_MODE_CONFIG[viewMode].gap
   )
@@ -193,7 +192,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   if (!hasSearched && !hasFilters) {
     return (
-      <div className="theme-panel rounded p-20 text-center">
+      <div className="theme-panel rounded p-10 text-center sm:p-20">
         <Tag size={48} className="mx-auto text-border mb-6" />
         <p className="text-text-muted italic">输入关键词、上传图片或使用高级筛选开始探索</p>
       </div>
@@ -210,7 +209,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   if (!isMixedSearch && totalResults === 0 && (textSemanticResults?.length ?? 0) === 0) {
     return (
-      <div className="theme-panel rounded p-20 text-center">
+      <div className="theme-panel rounded p-10 text-center sm:p-20">
         <SearchIcon size={48} className="mx-auto text-border mb-6" />
         <p className="text-text-muted italic">未找到符合筛选条件的结果</p>
       </div>
@@ -219,7 +218,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   if (isMixedSearch && mixedResults.length === 0) {
     return (
-      <div className="theme-panel rounded p-20 text-center">
+      <div className="theme-panel rounded p-10 text-center sm:p-20">
         <Sparkles size={48} className="mx-auto text-border mb-6" />
         <p className="text-text-muted italic">未找到语义匹配的结果</p>
         <p className="text-text-muted/70 text-sm mt-2">尝试使用其他关键词或上传图片搜索</p>
@@ -230,8 +229,8 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   return (
     <div className="space-y-8">
       {/* Tab bar */}
-      <div className="flex items-end justify-between border-b border-border mb-5">
-        <div className="flex gap-5">
+      <div className="mobile-filterbar">
+        <div className="mobile-filter-tabs">
           {tabItems.map((tab) => (
             <button
               key={tab.id}
@@ -248,7 +247,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
             </button>
           ))}
         </div>
-        <div className="pb-2 text-[0.8125rem] text-text-muted">
+        <div className="mobile-filter-actions">
           {isMixedSearch ? `${mixedResults.length} 个结果` : `${totalResults} 个结果`}
         </div>
       </div>

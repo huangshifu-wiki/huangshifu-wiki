@@ -304,10 +304,7 @@ export const GlobalMusicPlayer = () => {
   if (!currentSong) return null
 
   return (
-    <div
-      className="fixed left-0 right-0 z-[200] border-t border-border bg-surface/96"
-      style={{ bottom: 0, backdropFilter: 'blur(16px)' }}
-    >
+    <div className="global-music-player fixed left-0 right-0 z-[200] border-t border-border bg-surface/96 backdrop-blur-[16px]">
       {/* Progress bar */}
       <div
         className="absolute top-[-1px] left-0 right-0 h-[2px] bg-border cursor-pointer"
@@ -336,12 +333,12 @@ export const GlobalMusicPlayer = () => {
         />
       </div>
 
-      <div className="max-w-[1100px] mx-auto px-6 flex items-center gap-4 py-[10px] px-[24px]">
+      <div className="mx-auto flex max-w-[1100px] items-center gap-2 px-3 py-[8px] sm:gap-4 sm:px-6 sm:py-[10px] md:px-[24px]">
         {/* Cover */}
         <img
           src={currentSong.coverThumbnail || currentSong.cover}
           alt={currentSong?.title + ' 封面' || ''}
-          className="w-11 h-11 rounded object-cover flex-shrink-0 bg-surface-alt"
+          className="h-10 w-10 flex-shrink-0 rounded object-cover bg-surface-alt sm:h-11 sm:w-11"
           referrerPolicy="no-referrer"
         />
 
@@ -360,23 +357,23 @@ export const GlobalMusicPlayer = () => {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-1 sm:gap-3">
           <button
             onClick={handlePlayPrevious}
-            className="p-1.5 text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded-full transition-all"
+            className="hidden rounded-full p-1.5 text-text-secondary transition-all hover:bg-surface-alt hover:text-brand-gold sm:inline-flex"
           >
             <SkipBack size={18} />
           </button>
           <button
             onClick={togglePlay}
             aria-label={isPlaying ? '暂停' : '播放'}
-            className="w-9 h-9 theme-button-primary rounded-full flex items-center justify-center transition-all"
+            className="flex h-9 w-9 items-center justify-center rounded-full theme-button-primary transition-all"
           >
             {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
           </button>
           <button
             onClick={handlePlayNext}
-            className="p-1.5 text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded-full transition-all"
+            className="hidden rounded-full p-1.5 text-text-secondary transition-all hover:bg-surface-alt hover:text-brand-gold sm:inline-flex"
           >
             <SkipForward size={18} />
           </button>

@@ -1,6 +1,7 @@
 import React from 'react'
 import { LayoutGrid, Grid3X3, Grid2x2, List } from '@/src/components/icons'
 import { clsx } from 'clsx'
+import { VIEW_MODE_LABELS } from '../lib/viewModes'
 import type { ViewMode } from '../types/userPreferences'
 
 interface ViewModeSelectorProps {
@@ -12,14 +13,11 @@ interface ViewModeSelectorProps {
 
 const DEFAULT_VIEW_MODE_OPTIONS: readonly ViewMode[] = ['large', 'medium', 'small', 'list']
 
-const VIEW_MODE_CONFIG_UI: Record<
-  ViewMode,
-  { label: string; icon: React.ReactNode; iconSize: number }
-> = {
-  large: { label: '舒适', icon: <LayoutGrid size={20} />, iconSize: 20 },
-  medium: { label: '标准', icon: <Grid3X3 size={17} />, iconSize: 17 },
-  small: { label: '紧凑', icon: <Grid2x2 size={14} />, iconSize: 14 },
-  list: { label: '列表', icon: <List size={16} />, iconSize: 16 },
+const VIEW_MODE_ICONS: Record<ViewMode, React.ReactNode> = {
+  large: <LayoutGrid size={20} />,
+  medium: <Grid3X3 size={17} />,
+  small: <Grid2x2 size={14} />,
+  list: <List size={16} />,
 }
 
 export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({
@@ -33,28 +31,28 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({
   return (
     <div
       className={clsx(
-        'inline-flex border border-border bg-surface rounded p-0.5',
+        'inline-flex shrink-0 border border-border bg-surface rounded p-0.5',
         size === 'sm' ? 'gap-0.5' : 'gap-1'
       )}
     >
       {modes.map((mode) => {
-        const config = VIEW_MODE_CONFIG_UI[mode]
+        const label = VIEW_MODE_LABELS[mode]
         return (
           <button
             key={mode}
             onClick={() => onChange(mode)}
-            aria-label={config.label}
+            aria-label={label}
             className={clsx(
-              'rounded transition-all inline-flex items-center gap-1.5 font-medium',
+              'min-h-9 min-w-9 rounded transition-all inline-flex items-center justify-center gap-1.5 font-medium',
               size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-1.5 text-sm',
               value === mode
                 ? 'bg-[var(--color-theme-accent)] text-white'
                 : 'text-text-muted hover:text-text-secondary'
             )}
-            title={config.label}
+            title={label}
           >
-            {config.icon}
-            {showLabels && <span className="hidden sm:inline">{config.label}</span>}
+            {VIEW_MODE_ICONS[mode]}
+            {showLabels && <span className="hidden sm:inline">{label}</span>}
           </button>
         )
       })}
