@@ -1,168 +1,28 @@
-import React, { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { Image as ImageIcon, Plus, Clock, User as UserIcon } from '@/src/components/icons'
-import { useUserPreferences } from '../context/UserPreferencesContext'
-import { ViewModeSelector } from '../components/ViewModeSelector'
-import { VIEW_MODE_CONFIG } from '../lib/viewModes'
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Image as ImageIcon, Plus } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { SmartImage } from '../components/SmartImage'
+import { GalleryCard } from '../components/Gallery/GalleryCard'
+import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
+import Pagination from '../components/Pagination'
+import { ViewModeSelector } from '../components/ViewModeSelector'
+import { useAuth } from '../context/AuthContext'
+import { useUserPreferences } from '../context/UserPreferencesContext'
+import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
+import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { apiGet, invalidateApiCacheByPrefix } from '../lib/apiClient'
-import { getStatusClassName, getStatusText } from '../lib/contentUtils'
-import { formatDate } from '../lib/dateUtils'
 import {
-  getFirstGalleryImage,
-  getGalleryThumbnailPlaceholderLabel,
   shouldWaitForGalleryThumbnail,
   THUMBNAIL_POLL_DEDUP_OPTIONS,
   THUMBNAIL_POLL_INTERVAL_MS,
   THUMBNAIL_POLL_MAX_ATTEMPTS,
 } from '../lib/galleryThumbnails'
-import Pagination from '../components/Pagination'
-import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
-import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
-import { useRoutedPagination } from '../hooks/useRoutedPagination'
-import type { GalleryItem } from '../types/entities'
+import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import type { GalleryListResponse } from '../types/api'
+import type { GalleryItem } from '../types/entities'
 
 const DEFAULT_PAGE_SIZE = 24
 const PAGE_SIZE_OPTIONS = [12, 24, 48, 96]
-
-interface GalleryCoverProps {
-  gallery: GalleryItem
-  className: string
-  imageClassName: string
-}
-
-const GalleryCover = ({ gallery, className, imageClassName }: GalleryCoverProps) => {
-  const image = getFirstGalleryImage(gallery)
-
-  if (image?.thumbnailUrl) {
-    return <SmartImage src={image.thumbnailUrl} alt={gallery.title} className={imageClassName} />
-  }
-
-  return (
-    <div
-      className={clsx(
-        'flex flex-col items-center justify-center gap-1 bg-surface-alt text-text-muted',
-        className
-      )}
-    >
-      <ImageIcon size={20} className="text-brand-gold/50" aria-hidden="true" />
-      <span className="px-1 text-center text-[10px] leading-tight">
-        {getGalleryThumbnailPlaceholderLabel(image)}
-      </span>
-    </div>
-  )
-}
-
-interface GalleryCardProps {
-  gallery: GalleryItem
-  viewMode: string
-}
-
-const GalleryCard = React.memo(({ gallery, viewMode }: GalleryCardProps) => (
-  <div className={clsx('relative group', viewMode === 'list' && 'flex')}>
-    <Link
-      to={`/gallery/${gallery.slug || gallery.id}`}
-      className={clsx(
-        viewMode === 'list'
-          ? 'mobile-list-card flex gap-4 border-y border-[var(--book-ink-line)] py-3 transition-all hover:border-[var(--book-ink-line)] w-full'
-          : 'block overflow-hidden border-y border-[var(--book-ink-line)] bg-transparent transition-all hover:border-[var(--book-ink-line)]'
-      )}
-    >
-      {viewMode === 'list' ? (
-        <>
-          <div className="mobile-list-thumb w-20 h-20 bg-surface-alt overflow-hidden flex-shrink-0">
-            <GalleryCover
-              gallery={gallery}
-              className="h-full w-full"
-              imageClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-sm font-medium text-text-primary group-hover:text-brand-gold transition-colors truncate">
-                {gallery.title}
-              </h3>
-              <span className="px-1.5 py-0.5 bg-surface-alt text-text-muted text-[10px] font-medium rounded-sm flex-shrink-0">
-                {Array.isArray(gallery.images) ? gallery.images.length : 0} 张
-              </span>
-              {gallery.status && gallery.status !== 'published' ? (
-                <span
-                  className={clsx(
-                    'px-1.5 py-0.5 text-[10px] font-medium rounded flex-shrink-0',
-                    getStatusClassName(gallery.status)
-                  )}
-                >
-                  {getStatusText(gallery.status)}
-                </span>
-              ) : null}
-            </div>
-            <p className="text-text-muted text-xs line-clamp-1">
-              {gallery.description || '暂无描述'}
-            </p>
-            <div className="flex items-center gap-3 text-text-muted text-[11px] mt-1">
-              <span className="flex items-center gap-1">
-                <Clock size={10} /> {formatDate(gallery.createdAt, 'yyyy-MM-dd')}
-              </span>
-              <span className="flex items-center gap-1">
-                <UserIcon size={10} />{' '}
-                {gallery.authorName ||
-                  (gallery.authorPublicId ? `#${gallery.authorPublicId}` : '匿名')}
-              </span>
-            </div>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className={clsx('relative overflow-hidden', VIEW_MODE_CONFIG[viewMode].cardHeight)}>
-            <GalleryCover
-              gallery={gallery}
-              className="h-full w-full"
-              imageClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            />
-            {gallery.status && gallery.status !== 'published' ? (
-              <div
-                className={clsx(
-                  'absolute left-2 top-2 px-2 py-0.5 text-[10px] font-medium rounded',
-                  getStatusClassName(gallery.status)
-                )}
-              >
-                {getStatusText(gallery.status)}
-              </div>
-            ) : null}
-          </div>
-          <div className="py-3">
-            <h3 className="text-sm font-medium text-text-primary mb-1 group-hover:text-brand-gold transition-colors truncate">
-              {gallery.title}
-            </h3>
-            <div className="flex flex-wrap gap-1 mb-2">
-              {gallery.tags?.slice(0, 3).map((tag: string) => (
-                <span
-                  key={tag}
-                  className="text-[10px] text-brand-gold bg-surface-alt px-1.5 py-0.5 rounded-sm"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-            <div className="flex items-center justify-between text-text-muted text-[11px]">
-              <span className="flex items-center gap-1">
-                <Clock size={10} /> {formatDate(gallery.createdAt, 'yyyy-MM-dd')}
-              </span>
-              <span className="flex items-center gap-1">
-                <UserIcon size={10} />{' '}
-                {gallery.authorName ||
-                  (gallery.authorPublicId ? `#${gallery.authorPublicId}` : '匿名')}
-              </span>
-            </div>
-          </div>
-        </>
-      )}
-    </Link>
-  </div>
-))
 
 const GalleryList = () => {
   const [, setSearchParams] = useSearchParams()
@@ -221,6 +81,9 @@ const GalleryList = () => {
   const visibleTotal = isIncrementalMode ? incrementalList.total : totalGalleries
   const hasPendingThumbnails =
     !isIncrementalMode && visibleGalleries.some(shouldWaitForGalleryThumbnail)
+  const canUpload = Boolean(
+    user && !isBanned && galleryAccessLoaded && (!isGalleryAdminOnly || isAdmin)
+  )
 
   useEffect(() => {
     if (!isIncrementalMode) return
@@ -306,42 +169,56 @@ const GalleryList = () => {
   }, [])
 
   return (
-    <div className="mobile-page-shell">
+    <div className="gufeng-gallery-page mobile-page-shell">
       <div className="mobile-page-container gallery-page">
-        {/* Header */}
         <header className="mobile-page-header">
           <div className="mobile-page-titlebar">
-            <h1 className="mobile-page-title">画廊</h1>
+            <div className="min-w-0">
+              <h1 className="mobile-page-title">画廊</h1>
+              <div className="mt-3 flex">
+                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+              </div>
+            </div>
             <div className="mobile-action-row">
               <ViewModeSelector
                 value={viewMode}
                 onChange={(mode) => void setScopedViewMode('gallery', mode)}
                 size="sm"
               />
-              {user && !isBanned && galleryAccessLoaded && (!isGalleryAdminOnly || isAdmin) && (
+              {canUpload && (
                 <button
+                  type="button"
                   onClick={() => navigate('/gallery/new')}
-                  className="px-5 py-2 theme-button-primary text-sm rounded active:scale-[0.98] transition-all flex items-center gap-2"
+                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all active:scale-[0.98]"
                 >
-                  <Plus size={15} /> 上传图集
+                  <Plus size={15} aria-hidden="true" /> 上传图集
                 </button>
               )}
             </div>
           </div>
         </header>
 
-        {/* Content */}
         {visibleGalleries.length > 0 ? (
           <>
             <div
               className={clsx(
-                'mobile-grid grid',
-                VIEW_MODE_CONFIG[viewMode].gridCols,
-                VIEW_MODE_CONFIG[viewMode].gap
+                viewMode === 'list'
+                  ? 'flex flex-col gap-0.5'
+                  : clsx(
+                      'mobile-grid grid',
+                      viewMode === 'large' && 'gallery-large-grid',
+                      VIEW_MODE_CONFIG[viewMode].gridCols,
+                      VIEW_MODE_CONFIG[viewMode].gap
+                    )
               )}
             >
-              {visibleGalleries.map((gallery) => (
-                <GalleryCard key={gallery.id} gallery={gallery} viewMode={viewMode} />
+              {visibleGalleries.map((gallery, index) => (
+                <GalleryCard
+                  key={gallery.id}
+                  gallery={gallery}
+                  viewMode={viewMode}
+                  priority={index < 3}
+                />
               ))}
             </div>
             {isIncrementalMode ? (
@@ -368,9 +245,11 @@ const GalleryList = () => {
             ) : null}
           </>
         ) : (
-          <div className="py-20 text-center text-text-muted italic tracking-[0.1em]">
-            <ImageIcon size={48} className="mx-auto text-border mb-6" />
-            暂无图集，快来上传吧！
+          <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+            <ImageIcon size={48} className="mx-auto mb-6 text-border" />
+            <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
+              暂无图集，快来上传吧！
+            </p>
           </div>
         )}
       </div>

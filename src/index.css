@@ -1541,6 +1541,10 @@ html {
   row-gap: 1.5rem !important;
 }
 
+.mobile-grid.gallery-large-grid {
+  row-gap: 1.75rem !important;
+}
+
 .mobile-grid.grid-cols-1 > * + *,
 .shared-ink-list > * + * {
   margin-top: -1px;
