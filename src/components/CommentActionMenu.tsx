@@ -55,9 +55,9 @@ export const CommentActionMenu = ({
         aria-haspopup="menu"
         aria-expanded={open}
         className={clsx(
-          'inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-text-muted transition-colors',
-          'hover:border-border hover:bg-surface-alt hover:text-brand-gold focus-visible:border-brand-gold focus-visible:outline-none',
-          open && 'border-border bg-surface-alt text-brand-gold'
+          'inline-flex h-7 w-7 items-center justify-center rounded border border-transparent text-text-muted transition-colors',
+          'hover:border-[var(--book-ink-line)] hover:bg-[var(--book-panel-bg)] hover:text-brand-gold focus-visible:border-brand-gold focus-visible:outline-none',
+          open && 'border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-brand-gold'
         )}
       >
         <MoreVertical size={14} />
@@ -67,7 +67,7 @@ export const CommentActionMenu = ({
         role="menu"
         aria-hidden={!open}
         className={clsx(
-          'absolute right-0 top-full z-30 mt-1 min-w-32 rounded-md border border-border bg-surface p-1 shadow-lg transition-all',
+          'absolute right-0 top-full z-30 mt-1 min-w-32 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] p-1 shadow-[var(--book-panel-shadow)] backdrop-blur-[12px] transition-all',
           open
             ? 'visible translate-y-0 opacity-100'
             : 'invisible -translate-y-1 opacity-0 pointer-events-none'

@@ -195,7 +195,7 @@ export default function MentionTextarea({
       {suggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="floating-dropdown absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded border border-border bg-surface"
+          className="floating-dropdown absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[var(--book-panel-shadow)] backdrop-blur-[12px]"
           data-state="open"
           role="listbox"
           aria-hidden={false}
@@ -211,7 +211,7 @@ export default function MentionTextarea({
                 handleSelect(suggestion)
               }}
               className={clsx(
-                'flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                'flex w-full items-center gap-2 border-b border-[var(--book-ink-line)] px-3 py-2 text-left text-sm transition-colors last:border-0',
                 index === selectedIndex
                   ? 'bg-[var(--color-theme-accent)] text-white'
                   : 'hover:bg-surface-alt'

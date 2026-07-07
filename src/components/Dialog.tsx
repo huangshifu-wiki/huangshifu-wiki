@@ -47,7 +47,7 @@ type PromptState = PromptOptions & {
 const DialogContext = createContext<DialogContextValue | undefined>(undefined)
 
 const PROMPT_FIELD_CLASS =
-  'mt-4 w-full rounded border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-brand-gold'
+  'mt-4 w-full rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-brand-gold'
 
 export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
