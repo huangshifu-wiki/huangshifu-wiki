@@ -1,4 +1,5 @@
 import React from 'react'
+import { BookEditorSection, BookFormField, bookInputClass } from '../../components/BookEditor'
 import { CharacterCount } from '../../components/CharacterCount'
 import MarkdownEditor from '../../components/MarkdownEditor'
 import { LocationTagInput } from '../../components/LocationTagInput'
@@ -36,135 +37,125 @@ const WikiEditorForm = React.memo(
 
     return (
       <>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label
-                htmlFor="wiki-title"
-                className="text-xs font-bold uppercase tracking-widest text-text-muted"
-              >
-                标题 <span className="theme-text-error">*</span>
-              </label>
-              <CharacterCount current={formData.title.length} max={CONTENT_LIMITS.wiki.title} />
-            </div>
-            <input
-              id="wiki-title"
-              type="text"
+        <BookEditorSection title="条目信息" className="border-t-0 pt-0">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <BookFormField
+              label="标题"
+              htmlFor="wiki-title"
               required
-              value={formData.title}
-              onChange={(e) => onFormDataChange({ title: e.target.value })}
-              maxLength={CONTENT_LIMITS.wiki.title}
-              placeholder="例如：黄诗扶"
-              className="theme-input w-full px-4 py-3 rounded text-base"
-            />
-          </div>
-          <div className="space-y-2">
-            <label
-              htmlFor="wiki-category"
-              className="text-xs font-bold uppercase tracking-widest text-text-muted"
+              counter={
+                <CharacterCount current={formData.title.length} max={CONTENT_LIMITS.wiki.title} />
+              }
             >
-              分类
-            </label>
-            <select
-              id="wiki-category"
-              value={formData.category}
-              onChange={(e) => onFormDataChange({ category: e.target.value })}
-              className="theme-input w-full px-4 py-3 rounded text-base appearance-none"
-            >
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label
-                htmlFor="wiki-event-date"
-                className="text-xs font-bold uppercase tracking-widest text-text-muted"
+              <input
+                id="wiki-title"
+                type="text"
+                required
+                value={formData.title}
+                onChange={(e) => onFormDataChange({ title: e.target.value })}
+                maxLength={CONTENT_LIMITS.wiki.title}
+                placeholder="例如：黄诗扶"
+                className={bookInputClass}
+              />
+            </BookFormField>
+            <BookFormField label="分类" htmlFor="wiki-category">
+              <select
+                id="wiki-category"
+                value={formData.category}
+                onChange={(e) => onFormDataChange({ category: e.target.value })}
+                className={`${bookInputClass} appearance-none`}
               >
-                事件日期 (可选)
-              </label>
-              <CharacterCount
-                current={formData.eventDate.length}
-                max={CONTENT_LIMITS.wiki.eventDate}
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </BookFormField>
+            <BookFormField
+              label="事件日期 (可选)"
+              htmlFor="wiki-event-date"
+              counter={
+                <CharacterCount
+                  current={formData.eventDate.length}
+                  max={CONTENT_LIMITS.wiki.eventDate}
+                />
+              }
+            >
+              <input
+                id="wiki-event-date"
+                type="date"
+                value={formData.eventDate}
+                onChange={(e) => onFormDataChange({ eventDate: e.target.value })}
+                maxLength={CONTENT_LIMITS.wiki.eventDate}
+                className={bookInputClass}
+              />
+            </BookFormField>
+          </div>
+        </BookEditorSection>
+
+        <BookEditorSection title="正文">
+          <BookFormField
+            label="内容 (Markdown)"
+            htmlFor="wiki-content"
+            required
+            counter={
+              <CharacterCount current={formData.content.length} max={WIKI_MAX_CONTENT_SIZE} />
+            }
+          >
+            <div id="wiki-content">
+              <MarkdownEditor
+                value={formData.content}
+                onChange={(content) =>
+                  onFormDataChange((prev) =>
+                    prev.content === content ? prev : { ...prev, content }
+                  )
+                }
+                height="500px"
+                placeholder="在这里输入百科内容，支持 Markdown 语法..."
+                ariaLabel="内容 (Markdown)"
+                enableWikiLinks={true}
+                maxLength={WIKI_MAX_CONTENT_SIZE}
+                variant="book"
               />
             </div>
-            <input
-              id="wiki-event-date"
-              type="date"
-              value={formData.eventDate}
-              onChange={(e) => onFormDataChange({ eventDate: e.target.value })}
-              maxLength={CONTENT_LIMITS.wiki.eventDate}
-              className="theme-input w-full px-4 py-3 rounded text-base"
-            />
-          </div>
-        </div>
+          </BookFormField>
+        </BookEditorSection>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <label
-              htmlFor="wiki-content"
-              className="text-xs font-bold uppercase tracking-widest text-text-muted"
-            >
-              内容 (Markdown) <span className="theme-text-error">*</span>
-            </label>
-            <CharacterCount current={formData.content.length} max={WIKI_MAX_CONTENT_SIZE} />
-          </div>
-          <div
-            id="wiki-content"
-            className="border border-border rounded overflow-hidden bg-surface"
-          >
-            <MarkdownEditor
-              value={formData.content}
-              onChange={(content) =>
-                onFormDataChange((prev) => (prev.content === content ? prev : { ...prev, content }))
-              }
-              height="500px"
-              placeholder="在这里输入百科内容，支持 Markdown 语法..."
-              ariaLabel="内容 (Markdown)"
-              enableWikiLinks={true}
-              maxLength={WIKI_MAX_CONTENT_SIZE}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <label
+        <BookEditorSection title="附加信息">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <BookFormField
+              label="标签 (逗号分隔)"
               htmlFor="wiki-tags"
-              className="text-xs font-bold uppercase tracking-widest text-text-muted"
+              counter={
+                <CharacterCount
+                  current={formData.tags.length}
+                  max={CONTENT_LIMITS.wiki.tag * CONTENT_LIMITS.wiki.tags}
+                />
+              }
             >
-              标签 (逗号分隔)
-            </label>
-            <CharacterCount
-              current={formData.tags.length}
-              max={CONTENT_LIMITS.wiki.tag * CONTENT_LIMITS.wiki.tags}
-            />
-          </div>
-          <input
-            id="wiki-tags"
-            type="text"
-            value={formData.tags}
-            onChange={(e) => onFormDataChange({ tags: e.target.value })}
-            maxLength={CONTENT_LIMITS.wiki.tag * CONTENT_LIMITS.wiki.tags}
-            placeholder="例如：古风, 原创, 歌手"
-            className="theme-input w-full px-4 py-3 rounded text-base"
-          />
-        </div>
+              <input
+                id="wiki-tags"
+                type="text"
+                value={formData.tags}
+                onChange={(e) => onFormDataChange({ tags: e.target.value })}
+                maxLength={CONTENT_LIMITS.wiki.tag * CONTENT_LIMITS.wiki.tags}
+                placeholder="例如：古风, 原创, 歌手"
+                className={bookInputClass}
+              />
+            </BookFormField>
 
-        <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-widest text-text-muted">
-            地点
-          </label>
-          <LocationTagInput
-            value={formData.locationName || null}
-            locationCode={formData.locationCode || null}
-            onChange={handleLocationChange}
-            onClear={handleLocationClear}
-          />
-        </div>
+            <BookFormField label="地点">
+              <LocationTagInput
+                value={formData.locationName || null}
+                locationCode={formData.locationCode || null}
+                onChange={handleLocationChange}
+                onClear={handleLocationClear}
+                variant="book"
+              />
+            </BookFormField>
+          </div>
+        </BookEditorSection>
       </>
     )
   }

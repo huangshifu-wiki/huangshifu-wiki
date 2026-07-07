@@ -19,7 +19,7 @@ const MINI_RELATION_GRAPH_DECORATION = {
   labelShadow: RELATION_GRAPH_COLOR_TOKENS.shadows.label,
   nodeShadowFilter: RELATION_GRAPH_COLOR_TOKENS.shadows.nodeFilter,
   centerTextShadow: RELATION_GRAPH_COLOR_TOKENS.shadows.centerText,
-  legendBackgroundClass: 'bg-surface/90',
+  legendBackgroundClass: 'bg-[var(--book-panel-bg-strong)]',
 } as const
 
 interface MiniRelationGraphProps {
@@ -166,12 +166,12 @@ const MiniRelationGraph: React.FC<MiniRelationGraphProps> = ({
   }
 
   return (
-    <div className="relative rounded border border-border bg-surface-alt overflow-hidden">
+    <div className="relative overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)]">
       <div className="absolute top-3 right-3 z-10 flex gap-2">
         <button
           type="button"
           onClick={handleZoomOut}
-          className="p-2 bg-surface rounded transition-all text-text-secondary hover:text-brand-gold"
+          className="rounded bg-[var(--book-panel-bg-strong)] p-2 text-text-secondary transition-all hover:text-brand-gold"
           title="缩小"
         >
           <ZoomOut size={16} />
@@ -179,7 +179,7 @@ const MiniRelationGraph: React.FC<MiniRelationGraphProps> = ({
         <button
           type="button"
           onClick={handleZoomIn}
-          className="p-2 bg-surface rounded transition-all text-text-secondary hover:text-brand-gold"
+          className="rounded bg-[var(--book-panel-bg-strong)] p-2 text-text-secondary transition-all hover:text-brand-gold"
           title="放大"
         >
           <ZoomIn size={16} />
@@ -187,7 +187,7 @@ const MiniRelationGraph: React.FC<MiniRelationGraphProps> = ({
         <button
           type="button"
           onClick={handleReset}
-          className="p-2 bg-surface rounded transition-all text-text-secondary hover:text-brand-gold"
+          className="rounded bg-[var(--book-panel-bg-strong)] p-2 text-text-secondary transition-all hover:text-brand-gold"
           title="重置"
         >
           <Maximize size={16} />
@@ -331,7 +331,7 @@ const MiniRelationGraph: React.FC<MiniRelationGraphProps> = ({
         })}
       </div>
 
-      <div className="absolute bottom-3 right-3 z-10 px-3 py-2 bg-surface/90 rounded text-[10px] text-text-secondary">
+      <div className="absolute bottom-3 right-3 z-10 rounded bg-[var(--book-panel-bg-strong)] px-3 py-2 text-[10px] text-text-secondary">
         <span className="font-bold">{nodes.length}</span> 个节点 ·{' '}
         <span className="font-bold">{graph.edges.length}</span> 条关联
       </div>

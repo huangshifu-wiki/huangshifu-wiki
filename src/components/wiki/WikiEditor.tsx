@@ -1,6 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import {
+  BookDangerZone,
+  BookEditorHeader,
+  BookEditorShell,
+  bookCompactInputClass,
+} from '../../components/BookEditor'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { useI18n } from '../../lib/i18n'
@@ -14,7 +20,7 @@ import {
 } from '../../lib/apiClient'
 import { metadataCache } from '../../lib/metadataCache'
 import { getWikiSaveResultText } from '../../lib/wikiWriteText'
-import { Trash2, X } from '@/src/components/icons'
+import { Trash2 } from '@/src/components/icons'
 import WikiEditorForm from './WikiEditorForm'
 import WikiEditorRelationPanel from './WikiEditorRelationPanel'
 import WikiEditorMetaSidebar from './WikiEditorMetaSidebar'
@@ -220,101 +226,94 @@ const WikiEditor = () => {
   }
 
   return (
-    <div className="mobile-page-shell">
-      <div className="mobile-page-container">
-        <div className="mobile-page-titlebar mb-8">
-          <h1 className="mobile-page-title">{isNew ? t('wiki.createWiki') : t('wiki.editWiki')}</h1>
+    <BookEditorShell>
+      <BookEditorHeader
+        title={isNew ? t('wiki.createWiki') : t('wiki.editWiki')}
+        description={
+          isNew
+            ? '整理条目内容、地点和关联关系，保存后进入百科详情。'
+            : '更新条目正文、元信息和关联关系，保存后回到百科详情。'
+        }
+        onClose={() => navigate(-1)}
+        closeLabel={isNew ? t('wiki.createWiki') : t('wiki.editWiki')}
+      />
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          handleSubmit('pending')
+        }}
+        className="space-y-7"
+      >
+        <WikiEditorForm
+          formData={formData}
+          categories={categories}
+          onFormDataChange={handleFormDataChange}
+        />
+
+        <WikiEditorRelationPanel
+          relations={formData.relations}
+          onRelationsChange={handleRelationsChange}
+          currentPage={
+            isNew
+              ? null
+              : {
+                  slug: formData.slug,
+                  title: formData.title,
+                  category: formData.category,
+                  content: formData.content,
+                  tags: formData.tags ? formData.tags.split(',').map((t) => t.trim()) : [],
+                  description: '',
+                }
+          }
+          metadataMap={metadataMap}
+          isNew={isNew}
+          slug={slug}
+          formDataTitle={formData.title}
+        />
+
+        <WikiEditorMetaSidebar
+          savingMode={savingMode}
+          isAdmin={isAdmin}
+          onSubmit={handleSubmit}
+          showAdvancedToggle={!isNew && isAdmin}
+          showAdvancedOptions={showAdvancedOptions}
+          onToggleAdvancedOptions={() => setShowAdvancedOptions((value) => !value)}
+        />
+      </form>
+
+      {!isNew && isAdmin && showAdvancedOptions && (
+        <BookDangerZone
+          id="wiki-advanced-options"
+          title={t('wiki.deleteZoneTitle')}
+          description={t('wiki.deleteZoneDescription')}
+        >
+          <label
+            htmlFor="wiki-delete-reason"
+            className="mt-4 block text-sm font-medium text-text-secondary"
+          >
+            {t('wiki.deleteReasonLabel')}
+          </label>
+          <textarea
+            id="wiki-delete-reason"
+            value={deleteReason}
+            onChange={(event) => setDeleteReason(event.target.value)}
+            maxLength={1000}
+            rows={3}
+            className={`${bookCompactInputClass} mt-2 focus:border-danger`}
+          />
           <button
             type="button"
-            onClick={() => navigate(-1)}
-            className="p-2 text-text-muted theme-icon-button-danger transition-colors"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <X size={24} />
+            <Trash2 size={16} />
+            {isDeleting ? t('wiki.deleting') : t('wiki.deleteWiki')}
           </button>
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            handleSubmit('pending')
-          }}
-          className="space-y-6"
-        >
-          <WikiEditorForm
-            formData={formData}
-            categories={categories}
-            onFormDataChange={handleFormDataChange}
-          />
-
-          <WikiEditorRelationPanel
-            relations={formData.relations}
-            onRelationsChange={handleRelationsChange}
-            currentPage={
-              isNew
-                ? null
-                : {
-                    slug: formData.slug,
-                    title: formData.title,
-                    category: formData.category,
-                    content: formData.content,
-                    tags: formData.tags ? formData.tags.split(',').map((t) => t.trim()) : [],
-                    description: '',
-                  }
-            }
-            metadataMap={metadataMap}
-            isNew={isNew}
-            slug={slug}
-            formDataTitle={formData.title}
-          />
-
-          <WikiEditorMetaSidebar
-            savingMode={savingMode}
-            isAdmin={isAdmin}
-            onSubmit={handleSubmit}
-            showAdvancedToggle={!isNew && isAdmin}
-            showAdvancedOptions={showAdvancedOptions}
-            onToggleAdvancedOptions={() => setShowAdvancedOptions((value) => !value)}
-          />
-        </form>
-
-        {!isNew && isAdmin && showAdvancedOptions && (
-          <section className="mt-4 flex justify-start text-left">
-            <div
-              id="wiki-advanced-options"
-              className="max-w-[520px] rounded border border-danger/30 bg-surface/60 p-5"
-            >
-              <h2 className="text-base font-bold text-danger tracking-[0.08em]">
-                {t('wiki.deleteZoneTitle')}
-              </h2>
-              <p className="mt-2 text-sm text-text-muted">{t('wiki.deleteZoneDescription')}</p>
-              <label
-                htmlFor="wiki-delete-reason"
-                className="mt-4 block text-sm font-medium text-text-secondary"
-              >
-                {t('wiki.deleteReasonLabel')}
-              </label>
-              <textarea
-                id="wiki-delete-reason"
-                value={deleteReason}
-                onChange={(event) => setDeleteReason(event.target.value)}
-                maxLength={1000}
-                rows={3}
-                className="mt-2 w-full rounded border border-border bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-danger"
-              />
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Trash2 size={16} />
-                {isDeleting ? t('wiki.deleting') : t('wiki.deleteWiki')}
-              </button>
-            </div>
-          </section>
-        )}
-      </div>
-    </div>
+        </BookDangerZone>
+      )}
+    </BookEditorShell>
   )
 }
 

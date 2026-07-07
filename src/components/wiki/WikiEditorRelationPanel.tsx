@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { X, BarChart3, ChevronDown, ChevronUp } from '@/src/components/icons'
 import { motion, AnimatePresence } from 'motion/react'
+import { BookEditorSection, bookPanelClass } from '../../components/BookEditor'
 import WikiRelations from './WikiRelations'
 import MiniRelationGraph from './MiniRelationGraph'
 import type { WikiRelationRecord } from './types'
@@ -36,7 +37,7 @@ const WikiEditorRelationPanel = React.memo(
     const [showGraphPreview, setShowGraphPreview] = useState(false)
 
     return (
-      <>
+      <BookEditorSection title="关联关系">
         <WikiRelations
           relations={relations}
           onRelationsChange={onRelationsChange}
@@ -48,10 +49,10 @@ const WikiEditorRelationPanel = React.memo(
           <button
             type="button"
             onClick={() => setShowGraphPreview(!showGraphPreview)}
-            className={`w-full px-4 py-3 rounded text-sm font-medium transition-all flex items-center justify-between border ${
+            className={`flex w-full items-center justify-between rounded border px-4 py-3 text-sm font-medium transition-all ${
               showGraphPreview
-                ? 'bg-[var(--color-theme-accent)] text-white border-transparent'
-                : 'bg-surface-alt text-text-secondary border-border hover:border-brand-gold hover:text-brand-gold'
+                ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
+                : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
             }`}
           >
             <div className="flex items-center gap-2">
@@ -72,13 +73,13 @@ const WikiEditorRelationPanel = React.memo(
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden"
               >
-                <div className="p-4 bg-surface rounded border border-border">
-                  <div className="flex items-center justify-between mb-3">
+                <div className={`${bookPanelClass} p-4`}>
+                  <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-text-primary">关联图谱</h3>
                     <button
                       type="button"
                       onClick={() => setShowGraphPreview(false)}
-                      className="p-1.5 text-text-muted hover:text-text-secondary rounded hover:bg-bg-tertiary"
+                      className="rounded p-1.5 text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
                     >
                       <X size={16} />
                     </button>
@@ -106,7 +107,7 @@ const WikiEditorRelationPanel = React.memo(
             )}
           </AnimatePresence>
         </div>
-      </>
+      </BookEditorSection>
     )
   }
 )

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { MapPin, X, Loader2 } from '@/src/components/icons'
+import { clsx } from 'clsx'
 import { MapPickerModal, type PickedLocation } from './MapPickerModal'
 import { apiGet, apiPost } from '../lib/apiClient'
 import { resolveLocationTagInputEnterSelectionIndex } from '../lib/locationTagInput'
@@ -18,6 +19,7 @@ interface LocationTagInputProps {
   locationCode: string | null
   onChange: (fullName: string, code: string) => void
   onClear: () => void
+  variant?: 'default' | 'book'
 }
 
 export const LocationTagInput = ({
@@ -25,6 +27,7 @@ export const LocationTagInput = ({
   locationCode,
   onChange,
   onClear,
+  variant = 'default',
 }: LocationTagInputProps) => {
   const [open, setOpen] = useState(false)
   const [mapPickerOpen, setMapPickerOpen] = useState(false)
@@ -161,19 +164,33 @@ export const LocationTagInput = ({
     }, 150)
   }
 
+  const isBook = variant === 'book'
+
   if (value && !inputValue) {
     return (
       <div className="flex items-center gap-1.5">
-        <span className="px-2 py-0.5 theme-tag rounded text-[10px] font-medium flex items-center gap-1">
+        <span
+          className={clsx(
+            'flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium',
+            isBook
+              ? 'rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-secondary'
+              : 'theme-tag rounded'
+          )}
+        >
           <MapPin size={11} />
           {value}
         </span>
         <button
           onClick={handleClear}
-          className="p-0.5 rounded hover:bg-surface-alt transition-colors"
+          className={clsx(
+            'rounded p-0.5 transition-colors',
+            isBook
+              ? 'text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-brand-gold'
+              : 'hover:bg-surface-alt'
+          )}
           type="button"
         >
-          <X size={11} className="text-text-muted" />
+          <X size={11} className={isBook ? undefined : 'text-text-muted'} />
         </button>
       </div>
     )
@@ -196,7 +213,12 @@ export const LocationTagInput = ({
             onFocus={handleFocus}
             onBlur={handleBlur}
             placeholder="输入或选择地点..."
-            className="theme-input w-full pl-9 pr-9 py-2.5 text-base rounded"
+            className={clsx(
+              'w-full rounded py-2.5 pl-9 pr-9 text-base',
+              isBook
+                ? 'border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-brand-gold'
+                : 'theme-input'
+            )}
           />
           {loading && (
             <Loader2
@@ -207,41 +229,69 @@ export const LocationTagInput = ({
           {!loading && inputValue && (
             <button
               onClick={handleClear}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-surface-alt"
+              className={clsx(
+                'absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5',
+                isBook
+                  ? 'text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-brand-gold'
+                  : 'hover:bg-surface-alt'
+              )}
               type="button"
             >
-              <X size={13} className="text-text-muted" />
+              <X size={13} className={isBook ? undefined : 'text-text-muted'} />
             </button>
           )}
         </div>
         <button
           onClick={() => setMapPickerOpen(true)}
-          className="p-2 border border-border rounded hover:border-brand-gold hover:text-brand-gold transition-all"
+          className={clsx(
+            'rounded border p-2 transition-all',
+            isBook
+              ? 'border-[var(--book-ink-line)] text-text-muted hover:border-brand-gold/50 hover:text-brand-gold'
+              : 'border-border hover:border-brand-gold hover:text-brand-gold'
+          )}
           type="button"
           title="在地图上选择"
         >
-          <MapPin size={15} className="text-text-muted" />
+          <MapPin size={15} className={isBook ? undefined : 'text-text-muted'} />
         </button>
       </div>
 
       {showDropdown && suggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute top-full left-0 right-0 mt-1 bg-surface rounded border border-border z-20 max-h-60 overflow-y-auto shadow-lg"
+          className={clsx(
+            'absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded border',
+            isBook
+              ? 'border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[var(--book-panel-shadow)] backdrop-blur-[12px]'
+              : 'border-border bg-surface shadow-lg'
+          )}
         >
           {suggestions.map((region, index) => (
             <button
               key={region.code}
               type="button"
               onClick={() => handleSelect(region)}
-              className={`w-full px-4 py-3 text-left border-b border-border last:border-b-0 transition-colors ${
-                index === selectedIndex ? 'bg-surface-alt' : 'hover:bg-surface-alt'
-              }`}
+              className={clsx(
+                'w-full border-b px-4 py-3 text-left transition-colors last:border-b-0',
+                isBook ? 'border-[var(--book-ink-line)]' : 'border-border',
+                index === selectedIndex
+                  ? isBook
+                    ? 'bg-[var(--book-panel-hover)]'
+                    : 'bg-surface-alt'
+                  : isBook
+                    ? 'hover:bg-[var(--book-panel-hover)]'
+                    : 'hover:bg-surface-alt'
+              )}
             >
               <div className="flex items-center gap-1.5">
                 <MapPin size={11} className="text-brand-gold flex-shrink-0" />
                 <span className="text-sm font-medium text-text-primary">{region.name}</span>
-                <span className="text-[10px] text-text-muted bg-surface-alt px-1 rounded">
+                <span
+                  className={clsx(
+                    'rounded px-1 text-[10px] text-text-muted',
+                    isBook ? 'bg-[var(--book-panel-bg)]' : 'bg-surface-alt'
+                  )}
+                >
                   {region.levelName}
                 </span>
               </div>

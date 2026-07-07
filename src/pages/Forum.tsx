@@ -63,6 +63,17 @@ import MentionText from '../components/MentionText'
 import NotFound from './NotFound'
 import { ForumFilters } from '../components/Forum/ForumFilters'
 import { PostCard } from '../components/Forum/PostCard'
+import {
+  BookDangerZone,
+  BookEditorActions,
+  BookEditorHeader,
+  BookEditorSection,
+  BookEditorShell,
+  BookFormField,
+  bookCompactInputClass,
+  bookInputClass,
+  bookSecondaryButtonClass,
+} from '../components/BookEditor'
 import type { MentionTarget } from '../lib/mentions'
 
 type PostItem = {
@@ -1411,138 +1422,148 @@ const PostEditor = () => {
   )
 
   if (loadingPost) {
-    return <PageSkeleton variant="forum" />
+    return (
+      <BookEditorShell>
+        <div className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
+          <div className="mb-4 h-10 w-2/3 animate-pulse rounded bg-[var(--book-panel-bg)]" />
+          <div className="h-5 w-1/2 animate-pulse rounded bg-[var(--book-panel-bg)]" />
+        </div>
+        <PageSkeleton variant="forum" />
+      </BookEditorShell>
+    )
   }
 
   return (
-    <div className="mobile-page-shell">
-      <div className="mobile-page-container">
-        <div className="mobile-page-titlebar mb-8">
-          <h1 className="mobile-page-title">
-            {isEditing ? t('forum.editPost') : t('forum.createPost')}
-          </h1>
-          <button
-            onClick={() => navigate(-1)}
-            className="mobile-card-action p-2 text-text-muted theme-icon-button-danger transition-colors"
-          >
-            <X size={24} />
-          </button>
-        </div>
+    <BookEditorShell>
+      <BookEditorHeader
+        title={isEditing ? t('forum.editPost') : t('forum.createPost')}
+        description={
+          isEditing
+            ? '调整帖子内容、板块和地点信息，保存后回到帖子详情。'
+            : '写下你的讨论内容，可先保存草稿，也可以直接提交审核。'
+        }
+        onClose={() => navigate(-1)}
+        closeLabel={isEditing ? t('forum.editPost') : t('forum.createPost')}
+      />
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            handleSubmit('pending')
-          }}
-          className="space-y-6"
-        >
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">
-                {t('forum.titleLabel')} <span className="theme-text-error">*</span>
-              </label>
-              <CharacterCount current={formData.title.length} max={CONTENT_LIMITS.post.title} />
-            </div>
-            <input
-              type="text"
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          handleSubmit('pending')
+        }}
+        className="space-y-7"
+      >
+        <BookEditorSection title="帖子信息" className="border-t-0 pt-0">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <BookFormField
+              label={t('forum.titleLabel')}
               required
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              maxLength={CONTENT_LIMITS.post.title}
-              placeholder={t('forum.titlePlaceholder')}
-              className="theme-input w-full px-4 py-3 rounded text-base"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-widest text-text-muted">
-              {t('forum.sectionLabel')} <span className="theme-text-error">*</span>
-            </label>
-            <select
-              value={formData.section}
-              onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-              className="theme-input w-full px-4 py-3 rounded text-base appearance-none"
+              counter={
+                <CharacterCount current={formData.title.length} max={CONTENT_LIMITS.post.title} />
+              }
             >
-              {sections.map((sec) => (
-                <option key={sec.id} value={sec.id}>
-                  {sec.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">
-                {t('forum.tagsLabel')}
-              </label>
-              <CharacterCount
-                current={formData.tags.length}
-                max={CONTENT_LIMITS.post.tag * CONTENT_LIMITS.post.tags}
+              <input
+                type="text"
+                required
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                maxLength={CONTENT_LIMITS.post.title}
+                placeholder={t('forum.titlePlaceholder')}
+                className={bookInputClass}
               />
-            </div>
-            <input
-              type="text"
-              value={formData.tags}
-              onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-              maxLength={CONTENT_LIMITS.post.tag * CONTENT_LIMITS.post.tags}
-              placeholder={t('forum.tagsPlaceholder')}
-              className="theme-input w-full px-4 py-3 rounded text-base"
-            />
-          </div>
+            </BookFormField>
 
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-widest text-text-muted">
-              {t('forum.locationLabel')}
-            </label>
-            <LocationTagInput
-              value={formData.locationName}
-              locationCode={formData.locationCode}
-              onChange={(name, code) => {
-                setFormData({
-                  ...formData,
-                  locationName: name,
-                  locationCode: code,
-                })
-              }}
-              onClear={() => {
-                setFormData({
-                  ...formData,
-                  locationName: null,
-                  locationCode: null,
-                })
-              }}
-            />
+            <BookFormField label={t('forum.sectionLabel')} required>
+              <select
+                value={formData.section}
+                onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                className={`${bookInputClass} appearance-none`}
+              >
+                {sections.map((sec) => (
+                  <option key={sec.id} value={sec.id}>
+                    {sec.name}
+                  </option>
+                ))}
+              </select>
+            </BookFormField>
           </div>
+        </BookEditorSection>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">
-                {t('forum.contentLabel')} <span className="theme-text-error">*</span>
-              </label>
+        <BookEditorSection title="附加信息">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <BookFormField
+              label={t('forum.tagsLabel')}
+              counter={
+                <CharacterCount
+                  current={formData.tags.length}
+                  max={CONTENT_LIMITS.post.tag * CONTENT_LIMITS.post.tags}
+                />
+              }
+            >
+              <input
+                type="text"
+                value={formData.tags}
+                onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                maxLength={CONTENT_LIMITS.post.tag * CONTENT_LIMITS.post.tags}
+                placeholder={t('forum.tagsPlaceholder')}
+                className={bookInputClass}
+              />
+            </BookFormField>
+
+            <BookFormField label={t('forum.locationLabel')}>
+              <LocationTagInput
+                value={formData.locationName}
+                locationCode={formData.locationCode}
+                onChange={(name, code) => {
+                  setFormData({
+                    ...formData,
+                    locationName: name,
+                    locationCode: code,
+                  })
+                }}
+                onClear={() => {
+                  setFormData({
+                    ...formData,
+                    locationName: null,
+                    locationCode: null,
+                  })
+                }}
+                variant="book"
+              />
+            </BookFormField>
+          </div>
+        </BookEditorSection>
+
+        <BookEditorSection title="正文">
+          <BookFormField
+            label={t('forum.contentLabel')}
+            required
+            counter={
               <CharacterCount current={formData.content.length} max={CONTENT_LIMITS.post.content} />
-            </div>
-            <div className="border border-border rounded overflow-hidden bg-surface">
-              <MarkdownEditor
-                value={formData.content}
-                onChange={(content) =>
-                  setFormData((prev) => (prev.content === content ? prev : { ...prev, content }))
-                }
-                height="400px"
-                placeholder={t('forum.contentPlaceholder')}
-                maxLength={CONTENT_LIMITS.post.content}
-              />
-            </div>
-          </div>
+            }
+          >
+            <MarkdownEditor
+              value={formData.content}
+              onChange={(content) =>
+                setFormData((prev) => (prev.content === content ? prev : { ...prev, content }))
+              }
+              height="400px"
+              placeholder={t('forum.contentPlaceholder')}
+              maxLength={CONTENT_LIMITS.post.content}
+              variant="book"
+            />
+          </BookFormField>
+        </BookEditorSection>
 
-          <div className="pt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {canManageEditablePost && (
+        <BookEditorActions
+          leading={
+            canManageEditablePost ? (
               <button
                 type="button"
                 onClick={() => setShowAdvancedOptions((value) => !value)}
                 aria-expanded={showAdvancedOptions}
                 aria-controls="post-advanced-options"
-                className="mr-auto flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+                className="mr-auto flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
               >
                 <ChevronDown
                   size={16}
@@ -1550,68 +1571,61 @@ const PostEditor = () => {
                 />{' '}
                 {t('forum.advancedOptions')}
               </button>
-            )}
-            <div className="flex w-full flex-wrap justify-end gap-3 sm:ml-auto sm:w-auto">
-              <button
-                type="button"
-                onClick={() => handleSubmit('draft')}
-                disabled={Boolean(savingMode)}
-                className="px-6 py-2.5 bg-surface-alt text-text-secondary border border-border rounded text-sm font-medium hover:border-brand-gold hover:text-brand-gold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Save size={16} />{' '}
-                {savingMode === 'draft' ? t('forum.saving') : t('forum.saveDraft')}
-              </button>
-              <button
-                type="submit"
-                disabled={Boolean(savingMode)}
-                className="px-8 py-2.5 theme-button-primary rounded text-sm font-medium active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send size={16} /> {submitButtonText}
-              </button>
-            </div>
-          </div>
-        </form>
+            ) : null
+          }
+        >
+          <button
+            type="button"
+            onClick={() => handleSubmit('draft')}
+            disabled={Boolean(savingMode)}
+            className={bookSecondaryButtonClass}
+          >
+            <Save size={16} /> {savingMode === 'draft' ? t('forum.saving') : t('forum.saveDraft')}
+          </button>
+          <button
+            type="submit"
+            disabled={Boolean(savingMode)}
+            className="inline-flex items-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Send size={16} /> {submitButtonText}
+          </button>
+        </BookEditorActions>
+      </form>
 
-        {canManageEditablePost && showAdvancedOptions && (
-          <section className="mt-4 flex justify-start text-left">
-            <div
-              id="post-advanced-options"
-              className="max-w-[520px] rounded border border-danger/30 bg-surface/60 p-5"
+      {canManageEditablePost && showAdvancedOptions && (
+        <BookDangerZone
+          id="post-advanced-options"
+          title={t('forum.deleteZoneTitle')}
+          description={t('forum.deleteZoneDescription')}
+        >
+          {editablePostAuthorUid !== user?.uid && (
+            <label
+              htmlFor="post-delete-reason"
+              className="mt-4 block text-sm font-medium text-text-secondary"
             >
-              <h2 className="text-base font-bold text-danger tracking-[0.08em]">
-                {t('forum.deleteZoneTitle')}
-              </h2>
-              <p className="mt-2 text-sm text-text-muted">{t('forum.deleteZoneDescription')}</p>
-              {editablePostAuthorUid !== user?.uid && (
-                <label
-                  htmlFor="post-delete-reason"
-                  className="mt-4 block text-sm font-medium text-text-secondary"
-                >
-                  {t('forum.deleteReasonLabel')}
-                  <textarea
-                    id="post-delete-reason"
-                    value={deleteReason}
-                    onChange={(event) => setDeleteReason(event.target.value)}
-                    maxLength={CONTENT_LIMITS.post.reviewNote}
-                    rows={3}
-                    className="mt-2 w-full rounded border border-border bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-danger"
-                  />
-                </label>
-              )}
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Trash2 size={16} />
-                {isDeleting ? t('forum.deletingPost') : t('forum.deletePost')}
-              </button>
-            </div>
-          </section>
-        )}
-      </div>
-    </div>
+              {t('forum.deleteReasonLabel')}
+              <textarea
+                id="post-delete-reason"
+                value={deleteReason}
+                onChange={(event) => setDeleteReason(event.target.value)}
+                maxLength={CONTENT_LIMITS.post.reviewNote}
+                rows={3}
+                className={`${bookCompactInputClass} mt-2 focus:border-danger`}
+              />
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Trash2 size={16} />
+            {isDeleting ? t('forum.deletingPost') : t('forum.deletePost')}
+          </button>
+        </BookDangerZone>
+      )}
+    </BookEditorShell>
   )
 }
 

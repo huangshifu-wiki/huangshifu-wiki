@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
-  ArrowLeft,
   Calendar,
   Image as ImageIcon,
   Loader2,
@@ -13,6 +12,15 @@ import {
   X,
 } from '@/src/components/icons'
 import MarkdownEditor from '../../components/MarkdownEditor'
+import {
+  BookEditorHeader,
+  BookEditorSection,
+  BookEditorShell,
+  bookCompactInputClass,
+  bookPanelClass,
+  bookSecondaryButtonClass,
+  bookSmallButtonClass,
+} from '../../components/BookEditor'
 import { PageSkeleton } from '../../components/PageSkeleton'
 import { SmartImage } from '../../components/SmartImage'
 import { useToast } from '../../components/Toast'
@@ -818,72 +826,70 @@ const AdminEventEdit = () => {
     coverUpload && coverUpload.status !== 'error' ? coverUpload.previewUrl : draft.coverUrl
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Link
-            to="/admin/events"
-            className="mb-2 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold"
+    <BookEditorShell admin>
+      <BookEditorHeader
+        title={isCreating ? '新增活动' : '编辑活动'}
+        description="维护活动正文、时间、票务、链接与图片资源，保存后回到活动管理。"
+        backTo="/admin/events"
+        backLabel="返回活动管理"
+        actions={
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={saving || hasPendingUploads}
+            className="inline-flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all disabled:cursor-wait disabled:opacity-60"
           >
-            <ArrowLeft size={16} />
-            返回活动管理
-          </Link>
-          <h1 className="text-2xl font-bold tracking-[0.12em] text-text-primary">
-            {isCreating ? '新增活动' : '编辑活动'}
-          </h1>
-        </div>
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={saving || hasPendingUploads}
-          className="rounded theme-button-primary px-4 py-2 text-sm transition-all disabled:cursor-wait disabled:opacity-60"
-        >
-          <Save size={14} className="mr-1 inline" />
-          {saving ? '保存中...' : '保存'}
-        </button>
-      </div>
+            <Save size={14} />
+            {saving ? '保存中...' : '保存'}
+          </button>
+        }
+      />
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0 space-y-5">
-          <section className="rounded border border-border bg-surface p-5">
-            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
-              <Calendar size={16} className="text-brand-gold" />
-              基本信息
-            </h2>
+        <div className="min-w-0 space-y-7">
+          <BookEditorSection
+            title="基本信息"
+            className="border-t-0 pt-0"
+            eyebrow={
+              <span className="inline-flex items-center gap-1">
+                <Calendar size={14} /> Event
+              </span>
+            }
+          >
             <div className="grid gap-4">
               <input
                 value={draft.title}
                 onChange={(event) => patchDraft({ title: event.target.value })}
                 maxLength={CONTENT_LIMITS.event.title}
                 placeholder="活动标题"
-                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none"
+                className={bookCompactInputClass}
               />
               <input
                 value={draft.location}
                 onChange={(event) => patchDraft({ location: event.target.value })}
                 maxLength={CONTENT_LIMITS.event.location}
                 placeholder="地点"
-                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none"
+                className={bookCompactInputClass}
               />
               <input
                 value={draft.tagsText}
                 onChange={(event) => patchDraft({ tagsText: event.target.value })}
                 placeholder="标签，逗号分隔"
-                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none"
+                className={bookCompactInputClass}
               />
             </div>
-          </section>
+          </BookEditorSection>
 
-          <section className="rounded border border-border bg-surface p-5">
-            <h2 className="mb-4 text-sm font-semibold text-text-primary">活动内容</h2>
+          <BookEditorSection title="活动内容">
             <MarkdownEditor
               value={draft.content}
               onChange={(content) => patchDraft({ content })}
               height="420px"
               placeholder="输入 Markdown 内容"
               maxLength={CONTENT_LIMITS.event.content}
+              variant="book"
             />
-          </section>
+          </BookEditorSection>
 
           <JsonEditableSection
             title="时间段"
@@ -915,7 +921,7 @@ const AdminEventEdit = () => {
                         type: event.target.value as EventTimeSlot['type'],
                       })
                     }
-                    className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+                    className={bookCompactInputClass}
                   >
                     <option value="datetime">日期时间</option>
                     <option value="date">仅日期</option>
@@ -924,13 +930,13 @@ const AdminEventEdit = () => {
                     type={slot.type === 'date' ? 'date' : 'datetime-local'}
                     value={slot.start}
                     onChange={(event) => updateTimeSlot(index, { start: event.target.value })}
-                    className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+                    className={bookCompactInputClass}
                   />
                   <input
                     type={slot.type === 'date' ? 'date' : 'datetime-local'}
                     value={slot.end || ''}
                     onChange={(event) => updateTimeSlot(index, { end: event.target.value })}
-                    className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+                    className={bookCompactInputClass}
                   />
                   <IconButton
                     label="删除时间段"
@@ -1001,7 +1007,7 @@ const AdminEventEdit = () => {
                         ),
                       })
                     }
-                    className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+                    className={bookCompactInputClass}
                   />
                   <input
                     value={item.note || ''}
@@ -1015,7 +1021,7 @@ const AdminEventEdit = () => {
                       })
                     }
                     placeholder="备注，可选"
-                    className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+                    className={bookCompactInputClass}
                   />
                   <IconButton
                     label="删除起售时间"
@@ -1060,12 +1066,12 @@ const AdminEventEdit = () => {
         </div>
 
         <aside className="grid min-w-0 gap-5 md:grid-cols-2 xl:block xl:space-y-5">
-          <section className="min-w-0 rounded border border-border bg-surface p-5">
-            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
+          <section className={clsx('min-w-0 p-5', bookPanelClass)}>
+            <h2 className="mb-4 flex items-center gap-2 text-[0.9375rem] font-semibold tracking-[0.08em] text-text-primary">
               <ImageIcon size={16} className="text-brand-gold" />
               封面
             </h2>
-            <div className="relative mb-3 aspect-[4/3] overflow-hidden rounded bg-surface-alt">
+            <div className="relative mb-3 aspect-[4/3] overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)]">
               {coverDisplayUrl ? (
                 <SmartImage
                   src={coverDisplayUrl}
@@ -1099,7 +1105,7 @@ const AdminEventEdit = () => {
                 type="button"
                 onClick={() => coverInputRef.current?.click()}
                 disabled={saving || isCoverUploading}
-                className="flex-1 rounded theme-button-secondary px-3 py-2 text-sm"
+                className={`flex-1 ${bookSecondaryButtonClass}`}
               >
                 <Upload size={14} className="mr-1 inline" />
                 {isCoverUploading ? '上传中...' : '上传'}
@@ -1114,7 +1120,7 @@ const AdminEventEdit = () => {
                     setCoverUpload(null)
                     patchDraft({ coverAssetId: null, coverUrl: null })
                   }}
-                  className="rounded border border-border px-3 py-2 text-sm text-text-muted hover:text-brand-gold"
+                  className={bookSmallButtonClass}
                 >
                   <X size={14} />
                 </button>
@@ -1129,7 +1135,7 @@ const AdminEventEdit = () => {
             />
           </section>
 
-          <section className="min-w-0 rounded border border-border bg-surface p-5">
+          <section className={clsx('min-w-0 p-5', bookPanelClass)}>
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <ImageIcon size={16} className="text-brand-gold" />
@@ -1139,7 +1145,7 @@ const AdminEventEdit = () => {
                 type="button"
                 onClick={() => postersInputRef.current?.click()}
                 disabled={saving}
-                className="rounded theme-button-secondary px-3 py-1.5 text-xs"
+                className={bookSmallButtonClass}
               >
                 <Upload size={13} className="mr-1 inline" />
                 上传
@@ -1161,7 +1167,7 @@ const AdminEventEdit = () => {
                     handlePosterDrop(index)
                   }}
                   className={clsx(
-                    'group relative aspect-[3/4] cursor-grab overflow-hidden rounded bg-surface-alt active:cursor-grabbing',
+                    'group relative aspect-[3/4] cursor-grab overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] active:cursor-grabbing',
                     draggingPosterIndex === index && 'opacity-60'
                   )}
                 >
@@ -1187,7 +1193,7 @@ const AdminEventEdit = () => {
                   <button
                     type="button"
                     onClick={() => removePoster(poster.clientId)}
-                    className="absolute right-1 top-1 rounded bg-surface/90 p-1 text-text-muted hover:text-brand-gold"
+                    className="absolute right-1 top-1 rounded bg-[var(--book-panel-bg-strong)] p-1 text-text-muted shadow-[0_6px_18px_rgba(42,37,32,0.08)] hover:text-[var(--color-error)]"
                     aria-label="删除海报"
                   >
                     <Trash2 size={13} />
@@ -1207,7 +1213,7 @@ const AdminEventEdit = () => {
           </section>
         </aside>
       </div>
-    </div>
+    </BookEditorShell>
   )
 }
 
@@ -1217,7 +1223,7 @@ const ListHeader = ({ title, onAdd }: { title: string; onAdd: () => void }) => (
       type="button"
       onClick={onAdd}
       aria-label={`添加${title}`}
-      className="rounded theme-button-secondary px-3 py-1.5 text-xs"
+      className={bookSmallButtonClass}
     >
       <Plus size={13} className="mr-1 inline" />
       添加
@@ -1229,7 +1235,7 @@ const IconButton = ({ label, onClick }: { label: string; onClick: () => void }) 
   <button
     type="button"
     onClick={onClick}
-    className="rounded border border-border px-3 py-2 text-text-muted transition-colors hover:text-brand-gold"
+    className="rounded border border-[var(--book-ink-line)] px-3 py-2 text-text-muted transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
     aria-label={label}
     title={label}
   >
@@ -1248,7 +1254,7 @@ const UploadProgressOverlay = ({
   status: UploadStatus
   error?: string
 }) => (
-  <div className="absolute inset-x-0 bottom-0 bg-surface/90 p-2 text-xs text-text-primary backdrop-blur-sm">
+  <div className="absolute inset-x-0 bottom-0 bg-[var(--book-panel-bg-strong)] p-2 text-xs text-text-primary backdrop-blur-sm">
     <div className="mb-1 flex items-center justify-between gap-2">
       <span className="flex min-w-0 items-center gap-1 truncate">
         {isBusyUploadStatus(status) && <Loader2 size={12} className="shrink-0 animate-spin" />}
@@ -1256,7 +1262,10 @@ const UploadProgressOverlay = ({
       </span>
       {status !== 'error' && <span className="shrink-0 tabular-nums">{progress}%</span>}
     </div>
-    <div className="h-1.5 overflow-hidden rounded-full bg-surface-alt" role="progressbar">
+    <div
+      className="h-1.5 overflow-hidden rounded-full bg-[var(--book-panel-bg)]"
+      role="progressbar"
+    >
       <div
         className={clsx(
           'h-full rounded-full transition-all',
@@ -1316,32 +1325,26 @@ const JsonEditableSection = ({
   }
 
   return (
-    <section className="rounded border border-border bg-surface p-5">
+    <BookEditorSection title={title}>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
+        <span className="text-sm text-text-muted">
+          {state.mode === 'json' ? '正在编辑原始 JSON' : '表单模式'}
+        </span>
         {state.mode === 'json' ? (
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={applyJson}
-              className="rounded theme-button-secondary px-3 py-1.5 text-xs"
-            >
+            <button type="button" onClick={applyJson} className={bookSmallButtonClass}>
               应用 JSON
             </button>
             <button
               type="button"
               onClick={() => onCloseJson(field)}
-              className="rounded border border-border px-3 py-1.5 text-xs text-text-muted hover:text-brand-gold"
+              className={bookSmallButtonClass}
             >
               表单
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={openJson}
-            className="rounded border border-border px-3 py-1.5 text-xs text-text-muted hover:text-brand-gold"
-          >
+          <button type="button" onClick={openJson} className={bookSmallButtonClass}>
             JSON
           </button>
         )}
@@ -1355,14 +1358,14 @@ const JsonEditableSection = ({
               setJsonError(null)
             }}
             spellCheck={false}
-            className="min-h-[180px] w-full rounded border border-border bg-surface-alt px-3 py-2 font-mono text-xs text-text-primary focus:border-brand-gold focus:outline-none"
+            className={`${bookCompactInputClass} min-h-[180px] font-mono text-xs`}
           />
           {jsonError && <p className="text-xs theme-text-error">{jsonError}</p>}
         </div>
       ) : (
         children
       )}
-    </section>
+    </BookEditorSection>
   )
 }
 
@@ -1420,7 +1423,7 @@ const TicketPriceEditor = ({
               onChange={(event) => updateItem(index, { description: event.target.value })}
               maxLength={CONTENT_LIMITS.event.ticketPriceDescription}
               placeholder="描述，可选"
-              className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+              className={bookCompactInputClass}
             />
             <input
               ref={(element) => {
@@ -1437,7 +1440,7 @@ const TicketPriceEditor = ({
                 insertItem(index + 1)
               }}
               placeholder="价格"
-              className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+              className={bookCompactInputClass}
             />
             <IconButton
               label="删除票价"
@@ -1501,13 +1504,13 @@ const EventLinksEditor = ({
               value={item.label}
               onChange={(event) => updateItem(index, { label: event.target.value })}
               placeholder="链接名称"
-              className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+              className={bookCompactInputClass}
             />
             <input
               value={item.url}
               onChange={(event) => updateItem(index, { url: event.target.value })}
               placeholder="https://"
-              className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+              className={bookCompactInputClass}
             />
             <IconButton
               label={deleteLabel}
@@ -1587,7 +1590,7 @@ const StringListEditor = ({
                 insertItem(index + 1)
               }}
               placeholder={placeholder}
-              className="rounded border border-border bg-surface-alt px-3 py-2 text-sm"
+              className={bookCompactInputClass}
             />
             <IconButton
               label={`删除${title}`}

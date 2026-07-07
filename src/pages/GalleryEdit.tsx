@@ -4,6 +4,18 @@ import { ArrowLeft, ChevronDown, Plus, Save, Send, Trash2, X } from '@/src/compo
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { CharacterCount } from '../components/CharacterCount'
+import {
+  BookDangerZone,
+  BookEditorActions,
+  BookEditorHeader,
+  BookEditorSection,
+  BookEditorShell,
+  BookEmptyState,
+  BookFormField,
+  bookCompactInputClass,
+  bookInputClass,
+  bookSecondaryButtonClass,
+} from '../components/BookEditor'
 import { LocationTagInput } from '../components/LocationTagInput'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { SmartImage } from '../components/SmartImage'
@@ -636,39 +648,31 @@ const GalleryEdit = () => {
 
   if (!draft || (!isCreating && !gallery)) {
     return (
-      <div className="mobile-page-shell">
-        <div className="mobile-page-container">
-          <button
-            type="button"
-            onClick={() => navigate('/gallery')}
-            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={16} /> {t('gallery.backToList')}
-          </button>
-          <div className="mt-6 bg-surface rounded border border-border p-10 text-center text-text-muted italic tracking-[0.1em]">
-            {t('gallery.notFound')}
-          </div>
-        </div>
-      </div>
+      <BookEditorShell>
+        <button
+          type="button"
+          onClick={() => navigate('/gallery')}
+          className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
+        >
+          <ArrowLeft size={16} /> {t('gallery.backToList')}
+        </button>
+        <BookEmptyState>{t('gallery.notFound')}</BookEmptyState>
+      </BookEditorShell>
     )
   }
 
   if (!canManage) {
     return (
-      <div className="mobile-page-shell">
-        <div className="mobile-page-container">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={16} /> 返回图集
-          </button>
-          <div className="mt-6 bg-surface rounded border border-border p-10 text-center text-text-muted italic tracking-[0.1em]">
-            {isCreating ? '无权上传图集' : '无权编辑该图集'}
-          </div>
-        </div>
-      </div>
+      <BookEditorShell>
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
+        >
+          <ArrowLeft size={16} /> 返回图集
+        </button>
+        <BookEmptyState>{isCreating ? '无权上传图集' : '无权编辑该图集'}</BookEmptyState>
+      </BookEditorShell>
     )
   }
 
@@ -678,8 +682,7 @@ const GalleryEdit = () => {
       : t(isAdmin ? 'gallery.publishGallery' : 'gallery.submitReview')
 
   return (
-    <div
-      className="mobile-page-shell"
+    <BookEditorShell
       onDragEnter={handlePageDragEnter}
       onDragOver={handlePageDragOver}
       onDragLeave={handlePageDragLeave}
@@ -687,58 +690,43 @@ const GalleryEdit = () => {
     >
       {pageDragDepth > 0 ? (
         <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-bg-antique)_82%,transparent)] px-4">
-          <div className="w-full max-w-3xl rounded border-2 border-dashed border-brand-gold bg-surface/95 px-8 py-12 text-center">
+          <div className="w-full max-w-3xl rounded border-2 border-dashed border-brand-gold bg-[var(--book-panel-bg-strong)] px-8 py-12 text-center shadow-[var(--book-panel-shadow)]">
             <p className="text-lg font-bold text-text-primary">{t('gallery.dropToUpload')}</p>
             <p className="mt-2 text-sm text-text-muted">{t('gallery.dropHint')}</p>
           </div>
         </div>
       ) : null}
 
-      <div className="mobile-page-container">
-        <div className="mobile-page-titlebar mb-8">
-          <div>
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-            >
-              <ArrowLeft size={16} /> 返回图集
-            </button>
-            <h1 className="mobile-page-title">{isCreating ? '上传新图集' : '编辑图集'}</h1>
-            <p className="mt-2 text-sm text-text-muted">
-              {isCreating
-                ? '填写图集信息并加入图片，保存后进入图集详情。'
-                : '调整图集信息、图片顺序和新增图片，保存后回到图集详情。'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="mobile-card-action p-2 text-text-muted theme-icon-button-danger transition-colors"
-            aria-label={t('gallery.cancelEdit')}
-          >
-            <X size={24} />
-          </button>
-        </div>
+      <BookEditorHeader
+        title={isCreating ? '上传新图集' : '编辑图集'}
+        description={
+          isCreating
+            ? '填写图集信息并加入图片，保存后进入图集详情。'
+            : '调整图集信息、图片顺序和新增图片，保存后回到图集详情。'
+        }
+        backTo={gallery ? `/gallery/${getGalleryPublicId(gallery)}` : '/gallery'}
+        backLabel="返回图集"
+        onClose={handleCancel}
+        closeLabel={t('gallery.cancelEdit')}
+      />
 
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            void handleSave('pending')
-          }}
-          className="space-y-8"
-        >
-          <section className="space-y-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <label
-                  htmlFor="gallery-title"
-                  className="text-xs font-bold uppercase tracking-widest text-text-muted"
-                >
-                  {t('gallery.titleLabel')} <span className="theme-text-error">*</span>
-                </label>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          void handleSave('pending')
+        }}
+        className="space-y-8"
+      >
+        <BookEditorSection title="图集信息" className="border-t-0 pt-0">
+          <div className="space-y-6">
+            <BookFormField
+              label={t('gallery.titleLabel')}
+              htmlFor="gallery-title"
+              required
+              counter={
                 <CharacterCount current={draft.title.length} max={CONTENT_LIMITS.gallery.title} />
-              </div>
+              }
+            >
               <input
                 id="gallery-title"
                 type="text"
@@ -749,23 +737,20 @@ const GalleryEdit = () => {
                 }
                 maxLength={CONTENT_LIMITS.gallery.title}
                 placeholder={t('gallery.titlePlaceholder')}
-                className="theme-input w-full px-4 py-3 rounded text-base"
+                className={bookInputClass}
               />
-            </div>
+            </BookFormField>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <label
-                  htmlFor="gallery-description"
-                  className="text-xs font-bold uppercase tracking-widest text-text-muted"
-                >
-                  {t('gallery.descriptionLabel')}
-                </label>
+            <BookFormField
+              label={t('gallery.descriptionLabel')}
+              htmlFor="gallery-description"
+              counter={
                 <CharacterCount
                   current={draft.description.length}
                   max={CONTENT_LIMITS.gallery.description}
                 />
-              </div>
+              }
+            >
               <textarea
                 id="gallery-description"
                 value={draft.description}
@@ -775,24 +760,21 @@ const GalleryEdit = () => {
                 maxLength={CONTENT_LIMITS.gallery.description}
                 placeholder={t('gallery.descriptionPlaceholder')}
                 rows={4}
-                className="theme-input w-full px-4 py-3 rounded text-base resize-none"
+                className={`${bookInputClass} resize-none`}
               />
-            </div>
+            </BookFormField>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div className="space-y-2">
-                <div className="flex min-h-5 items-center justify-between gap-3">
-                  <label
-                    htmlFor="gallery-tags"
-                    className="text-xs font-bold uppercase tracking-widest text-text-muted"
-                  >
-                    {t('gallery.tagsLabel')}
-                  </label>
+              <BookFormField
+                label={t('gallery.tagsLabel')}
+                htmlFor="gallery-tags"
+                counter={
                   <CharacterCount
                     current={draft.tagsText.length}
                     max={CONTENT_LIMITS.gallery.tag * CONTENT_LIMITS.gallery.tags}
                   />
-                </div>
+                }
+              >
                 <input
                   id="gallery-tags"
                   type="text"
@@ -802,23 +784,20 @@ const GalleryEdit = () => {
                   }
                   maxLength={CONTENT_LIMITS.gallery.tag * CONTENT_LIMITS.gallery.tags}
                   placeholder={t('gallery.tagsPlaceholder')}
-                  className="theme-input w-full px-4 py-3 rounded text-base"
+                  className={bookInputClass}
                 />
-              </div>
+              </BookFormField>
 
-              <div className="space-y-2">
-                <div className="flex min-h-5 items-center justify-between gap-3">
-                  <label
-                    htmlFor="gallery-copyright"
-                    className="text-xs font-bold uppercase tracking-widest text-text-muted"
-                  >
-                    {t('gallery.copyrightLabel')}
-                  </label>
+              <BookFormField
+                label={t('gallery.copyrightLabel')}
+                htmlFor="gallery-copyright"
+                counter={
                   <CharacterCount
                     current={draft.copyrightText.length}
                     max={CONTENT_LIMITS.gallery.copyright}
                   />
-                </div>
+                }
+              >
                 <input
                   id="gallery-copyright"
                   type="text"
@@ -830,20 +809,19 @@ const GalleryEdit = () => {
                   }
                   maxLength={CONTENT_LIMITS.gallery.copyright}
                   placeholder={t('gallery.copyrightPlaceholder')}
-                  className="theme-input w-full px-4 py-3 rounded text-base"
+                  className={bookInputClass}
                 />
-              </div>
+              </BookFormField>
 
-              <div className="space-y-2">
-                <div className="flex min-h-5 items-center justify-between gap-3">
-                  <label className="text-xs font-bold uppercase tracking-widest text-text-muted">
-                    地点
-                  </label>
+              <BookFormField
+                label="地点"
+                counter={
                   <CharacterCount
                     current={draft.locationName?.length || 0}
                     max={CONTENT_LIMITS.gallery.locationDetail}
                   />
-                </div>
+                }
+              >
                 <LocationTagInput
                   value={draft.locationName}
                   locationCode={draft.locationCode}
@@ -857,114 +835,109 @@ const GalleryEdit = () => {
                       prev ? { ...prev, locationName: null, locationCode: null } : prev
                     )
                   }}
+                  variant="book"
                 />
-              </div>
+              </BookFormField>
             </div>
-          </section>
+          </div>
+        </BookEditorSection>
 
-          <section className="border-t border-border pt-7">
-            <div className="mb-4">
-              <div>
-                <h2 className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold">
-                  {t('gallery.imageCount', { count: draft.images.length })}
-                </h2>
-              </div>
-            </div>
+        <BookEditorSection title={t('gallery.imageCount', { count: draft.images.length })}>
+          <input
+            ref={addImagesInputRef}
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/gif,image/webp,image/bmp"
+            className="hidden"
+            onChange={handleAddImages}
+          />
+          <input
+            ref={addFolderInputRef}
+            type="file"
+            // @ts-expect-error webkitdirectory is required for folder upload support.
+            webkitdirectory=""
+            directory=""
+            multiple
+            className="hidden"
+            onChange={handleAddImages}
+          />
 
-            <input
-              ref={addImagesInputRef}
-              type="file"
-              multiple
-              accept="image/jpeg,image/png,image/gif,image/webp,image/bmp"
-              className="hidden"
-              onChange={handleAddImages}
-            />
-            <input
-              ref={addFolderInputRef}
-              type="file"
-              // @ts-expect-error webkitdirectory is required for folder upload support.
-              webkitdirectory=""
-              directory=""
-              multiple
-              className="hidden"
-              onChange={handleAddImages}
-            />
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
-              {draft.images.map((image, index) => (
-                <div
-                  key={image.clientId || image.id}
-                  draggable={canManage}
-                  onDragStart={(event) => onThumbDragStart(event, index)}
-                  onDragOver={(event) => {
-                    if (!canManage) return
-                    event.preventDefault()
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault()
-                    onThumbDrop(index)
-                  }}
-                  className={clsx(
-                    'relative aspect-square cursor-grab overflow-hidden rounded group active:cursor-grabbing',
-                    draggingIndex === index && 'opacity-60'
-                  )}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
+            {draft.images.map((image, index) => (
+              <div
+                key={image.clientId || image.id}
+                draggable={canManage}
+                onDragStart={(event) => onThumbDragStart(event, index)}
+                onDragOver={(event) => {
+                  if (!canManage) return
+                  event.preventDefault()
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  onThumbDrop(index)
+                }}
+                className={clsx(
+                  'group relative aspect-square cursor-grab overflow-hidden rounded border border-[var(--book-ink-line)]/60 bg-[var(--book-panel-bg)] active:cursor-grabbing',
+                  draggingIndex === index && 'opacity-60'
+                )}
+              >
+                {getThumbnailSrc(image) ? (
+                  <SmartImage
+                    src={getThumbnailSrc(image)}
+                    alt={image.name || ''}
+                    className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-[var(--book-panel-bg)] px-2 text-center text-xs text-text-muted">
+                    {image.thumbnailStatus === 'failed' ? '缩略图生成失败' : '生成中...'}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteImage(index)}
+                  className="absolute left-1.5 top-1.5 z-10 rounded bg-[var(--book-panel-bg-strong)] p-1 text-text-muted shadow-[0_6px_18px_rgba(42,37,32,0.08)] transition-colors hover:text-[var(--color-error)]"
+                  title={t('gallery.deleteImage')}
                 >
-                  {getThumbnailSrc(image) ? (
-                    <SmartImage
-                      src={getThumbnailSrc(image)}
-                      alt={image.name || ''}
-                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-surface-alt px-2 text-center text-xs text-text-muted">
-                      {image.thumbnailStatus === 'failed' ? '缩略图生成失败' : '生成中...'}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteImage(index)}
-                    className="mobile-card-action absolute top-1.5 left-1.5 z-10 rounded bg-black/50 p-1 text-white transition-colors hover:bg-[var(--color-error)]/80"
-                    title={t('gallery.deleteImage')}
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                  {image.isPending ? (
-                    <span className="absolute top-1.5 right-1.5 z-10 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-theme-accent)] text-white">
-                      {t('gallery.pendingUpload')}
-                    </span>
-                  ) : null}
-                </div>
-              ))}
+                  <Trash2 size={12} />
+                </button>
+                {image.isPending ? (
+                  <span className="absolute right-1.5 top-1.5 z-10 inline-flex items-center gap-0.5 rounded bg-[var(--book-panel-bg-strong)] px-1.5 py-0.5 text-[10px] text-brand-gold shadow-[0_6px_18px_rgba(42,37,32,0.08)]">
+                    {t('gallery.pendingUpload')}
+                  </span>
+                ) : null}
+              </div>
+            ))}
 
-              <button
-                type="button"
-                onClick={() => addImagesInputRef.current?.click()}
-                disabled={uploading || Boolean(savingMode)}
-                className="flex aspect-square items-center justify-center rounded border border-dashed border-brand-gold/40 bg-surface-alt text-brand-gold transition-colors hover:border-brand-gold hover:bg-surface-alt disabled:opacity-50 disabled:cursor-not-allowed"
-                title={uploading ? t('gallery.uploading') : t('gallery.addImages')}
-              >
-                <Plus size={24} />
-              </button>
-              <button
-                type="button"
-                onClick={() => addFolderInputRef.current?.click()}
-                disabled={uploading || Boolean(savingMode)}
-                className="flex aspect-square items-center justify-center rounded border border-dashed border-border bg-surface-alt text-text-muted transition-colors hover:border-brand-gold hover:text-brand-gold disabled:opacity-50 disabled:cursor-not-allowed"
-                title="上传整个文件夹"
-              >
-                文件夹
-              </button>
-            </div>
-          </section>
+            <button
+              type="button"
+              onClick={() => addImagesInputRef.current?.click()}
+              disabled={uploading || Boolean(savingMode)}
+              className="flex aspect-square items-center justify-center rounded border border-dashed border-brand-gold/40 bg-[var(--book-panel-bg)] text-brand-gold transition-colors hover:border-brand-gold disabled:cursor-not-allowed disabled:opacity-50"
+              title={uploading ? t('gallery.uploading') : t('gallery.addImages')}
+            >
+              <Plus size={24} />
+            </button>
+            <button
+              type="button"
+              onClick={() => addFolderInputRef.current?.click()}
+              disabled={uploading || Boolean(savingMode)}
+              className="flex aspect-square items-center justify-center rounded border border-dashed border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-muted transition-colors hover:border-brand-gold/50 hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50"
+              title="上传整个文件夹"
+            >
+              文件夹
+            </button>
+          </div>
+        </BookEditorSection>
 
-          <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-end">
-            {!isCreating && gallery && (
+        <BookEditorActions
+          leading={
+            !isCreating && gallery ? (
               <button
                 type="button"
                 onClick={() => setShowAdvancedOptions((value) => !value)}
                 aria-expanded={showAdvancedOptions}
                 aria-controls="gallery-advanced-options"
-                className="mr-auto flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+                className="mr-auto flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
               >
                 <ChevronDown
                   size={16}
@@ -972,66 +945,62 @@ const GalleryEdit = () => {
                 />{' '}
                 {t('gallery.advancedOptions')}
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => void handleSave('draft')}
-              disabled={Boolean(savingMode) || uploading}
-              className="px-6 py-2.5 bg-surface-alt text-text-secondary border border-border rounded text-sm font-medium hover:border-brand-gold hover:text-brand-gold transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save size={16} />{' '}
-              {savingMode === 'draft' ? t('gallery.saving') : t('gallery.saveDraft')}
-            </button>
-            <button
-              type="submit"
-              disabled={Boolean(savingMode) || uploading}
-              className="px-8 py-2.5 theme-button-primary rounded text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Send size={16} /> {submitButtonText}
-            </button>
-          </div>
-        </form>
+            ) : null
+          }
+        >
+          <button
+            type="button"
+            onClick={() => void handleSave('draft')}
+            disabled={Boolean(savingMode) || uploading}
+            className={bookSecondaryButtonClass}
+          >
+            <Save size={16} />{' '}
+            {savingMode === 'draft' ? t('gallery.saving') : t('gallery.saveDraft')}
+          </button>
+          <button
+            type="submit"
+            disabled={Boolean(savingMode) || uploading}
+            className="inline-flex items-center justify-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Send size={16} /> {submitButtonText}
+          </button>
+        </BookEditorActions>
+      </form>
 
-        {!isCreating && gallery && showAdvancedOptions && (
-          <section className="mt-4 flex justify-start text-left">
-            <div
-              id="gallery-advanced-options"
-              className="max-w-[520px] rounded border border-danger/30 bg-surface/60 p-5"
+      {!isCreating && gallery && showAdvancedOptions && (
+        <BookDangerZone
+          id="gallery-advanced-options"
+          title={t('gallery.deleteZoneTitle')}
+          description={t('gallery.deleteZoneDescription')}
+        >
+          {gallery.authorUid !== user?.uid && (
+            <label
+              htmlFor="gallery-delete-reason"
+              className="mt-4 block text-sm font-medium text-text-secondary"
             >
-              <h2 className="text-base font-bold text-danger tracking-[0.08em]">
-                {t('gallery.deleteZoneTitle')}
-              </h2>
-              <p className="mt-2 text-sm text-text-muted">{t('gallery.deleteZoneDescription')}</p>
-              {gallery.authorUid !== user?.uid && (
-                <label
-                  htmlFor="gallery-delete-reason"
-                  className="mt-4 block text-sm font-medium text-text-secondary"
-                >
-                  {t('gallery.deleteReasonLabel')}
-                  <textarea
-                    id="gallery-delete-reason"
-                    value={deleteReason}
-                    onChange={(event) => setDeleteReason(event.target.value)}
-                    maxLength={CONTENT_LIMITS.gallery.reviewNote}
-                    rows={3}
-                    className="mt-2 w-full rounded border border-border bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-danger"
-                  />
-                </label>
-              )}
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Trash2 size={16} />
-                {isDeleting ? t('gallery.deletingGallery') : t('gallery.deleteGallery')}
-              </button>
-            </div>
-          </section>
-        )}
-      </div>
-    </div>
+              {t('gallery.deleteReasonLabel')}
+              <textarea
+                id="gallery-delete-reason"
+                value={deleteReason}
+                onChange={(event) => setDeleteReason(event.target.value)}
+                maxLength={CONTENT_LIMITS.gallery.reviewNote}
+                rows={3}
+                className={`${bookCompactInputClass} mt-2 focus:border-danger`}
+              />
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Trash2 size={16} />
+            {isDeleting ? t('gallery.deletingGallery') : t('gallery.deleteGallery')}
+          </button>
+        </BookDangerZone>
+      )}
+    </BookEditorShell>
   )
 }
 

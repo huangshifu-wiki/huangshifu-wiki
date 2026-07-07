@@ -1,7 +1,12 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { X, Filter, SortAsc, Search, ChevronDown, ChevronUp } from '@/src/components/icons'
+import { X, Filter, Search, ChevronDown, ChevronUp } from '@/src/components/icons'
 import { clsx } from 'clsx'
+import {
+  bookCompactInputClass,
+  bookPanelClass,
+  bookSecondaryButtonClass,
+} from '../../components/BookEditor'
 import { apiGet } from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
@@ -370,10 +375,10 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
   // 筛选控件
   const FilterControls = () => (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {/* 类型筛选 */}
         <div>
-          <label className="block text-xs font-medium text-text-muted mb-1">关联类型</label>
+          <label className="mb-1 block text-xs font-medium text-text-muted">关联类型</label>
           <select
             value={filterOptions.type}
             onChange={(e) =>
@@ -382,7 +387,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
                 type: e.target.value as FilterOptions['type'],
               })
             }
-            className="theme-input w-full px-3 py-2 rounded text-sm"
+            className={bookCompactInputClass}
           >
             <option value="all">全部类型</option>
             <option value="related_person">相关人物</option>
@@ -394,11 +399,11 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 
         {/* 排序方式 */}
         <div>
-          <label className="block text-xs font-medium text-text-muted mb-1">排序方式</label>
+          <label className="mb-1 block text-xs font-medium text-text-muted">排序方式</label>
           <select
             value={sortStrategy}
             onChange={(e) => setSortStrategy(e.target.value as SortStrategy)}
-            className="theme-input w-full px-3 py-2 rounded text-sm"
+            className={bookCompactInputClass}
           >
             <option value="quality">质量优先</option>
             <option value="type_grouped">类型分组</option>
@@ -409,7 +414,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 
         {/* 搜索框 */}
         <div>
-          <label className="block text-xs font-medium text-text-muted mb-1">搜索</label>
+          <label className="mb-1 block text-xs font-medium text-text-muted">搜索</label>
           <div className="relative">
             <Search
               size={14}
@@ -425,7 +430,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
                 })
               }
               placeholder="搜索标题、描述..."
-              className="theme-input w-full pl-9 pr-3 py-2 rounded text-sm"
+              className={`${bookCompactInputClass} pl-9`}
             />
           </div>
         </div>
@@ -459,17 +464,17 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
   return (
     <div className="space-y-4">
       {/* 标题栏 */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <label className="text-xs font-medium text-text-muted">相关页面</label>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setShowFilters(!showFilters)}
             className={clsx(
-              'px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1.5',
+              'flex items-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium transition-all',
               showFilters
-                ? 'bg-[var(--color-theme-accent)] text-white'
-                : 'bg-surface-alt text-text-secondary hover:bg-bg-tertiary'
+                ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
+                : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
             )}
           >
             <Filter size={14} />
@@ -479,7 +484,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
           <button
             type="button"
             onClick={handleAddRelation}
-            className="px-4 py-1.5 bg-brand-gold/10 text-brand-gold rounded text-xs font-medium hover:bg-brand-gold/20 transition-all"
+            className="rounded border border-[rgba(138,109,47,0.25)] px-4 py-1.5 text-xs font-medium text-brand-gold transition-all hover:border-brand-gold hover:bg-brand-gold hover:text-white"
           >
             + 添加关联
           </button>
@@ -495,7 +500,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="p-4 bg-surface-alt rounded border border-border">
+            <div className={`${bookPanelClass} p-4`}>
               <FilterControls />
             </div>
           </motion.div>
@@ -526,7 +531,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 
       {/* 空状态 */}
       {relations.length > 0 && filteredAndSortedRelations.length === 0 && (
-        <div className="p-8 text-center text-text-muted bg-surface-alt rounded border border-border">
+        <div className={`${bookPanelClass} p-8 text-center text-text-muted`}>
           <p className="text-sm">没有符合筛选条件的关联</p>
           <button
             type="button"
@@ -537,7 +542,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
               })
               setSortStrategy(DEFAULT_SORT_STRATEGY)
             }}
-            className="mt-2 text-brand-gold hover:underline text-sm"
+            className="mt-2 text-sm text-brand-gold hover:underline"
           >
             重置筛选条件
           </button>
@@ -547,21 +552,21 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
       {/* 编辑关联弹窗 */}
       {editModalPresence.mounted && editingRelation && editingIndex !== null && (
         <div
-          className="floating-overlay fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           data-state={editModalPresence.state}
           aria-hidden={!editingRelation}
           onClick={handleCancelEdit}
         >
           <div
-            className="floating-panel bg-surface rounded p-6 max-w-md w-full border border-border"
+            className="floating-panel w-full max-w-md rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] p-6 shadow-[var(--book-panel-shadow)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-text-primary">编辑关联</h3>
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="p-1.5 text-text-muted hover:text-text-secondary rounded hover:bg-surface-alt"
+                className="rounded p-1.5 text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
               >
                 <X size={20} />
               </button>
@@ -569,7 +574,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">
+                <label className="mb-1 block text-xs font-medium text-text-secondary">
                   关联类型
                 </label>
                 <select
@@ -580,7 +585,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
                       type: e.target.value as WikiRelationType,
                     })
                   }
-                  className="theme-input w-full px-3 py-2 rounded text-sm"
+                  className={bookCompactInputClass}
                 >
                   <option value="related_person">相关人物</option>
                   <option value="work_relation">作品关联</option>
@@ -590,19 +595,19 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">
+                <label className="mb-1 block text-xs font-medium text-text-secondary">
                   目标页面
                 </label>
                 <input
                   type="text"
                   value={editingRelation.targetSlug}
                   readOnly
-                  className="w-full px-3 py-2 bg-surface-alt rounded border border-border text-sm text-text-muted"
+                  className={`${bookCompactInputClass} text-text-muted`}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">
+                <label className="mb-1 block text-xs font-medium text-text-secondary">
                   显示名称
                 </label>
                 <input
@@ -616,7 +621,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
                   }
                   onKeyDown={handleEditModalKeyDown}
                   placeholder="可选"
-                  className="theme-input w-full px-3 py-2 rounded text-sm"
+                  className={bookCompactInputClass}
                 />
               </div>
 
@@ -631,25 +636,25 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
                         bidirectional: e.target.checked,
                       })
                     }
-                    className="rounded border border-border"
+                    className="rounded border border-[var(--book-ink-line)]"
                   />
                   双向关联
                 </label>
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="mt-6 flex gap-3">
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="flex-1 px-4 py-2 bg-surface-alt text-text-secondary rounded text-sm font-medium hover:bg-bg-tertiary transition-all"
+                className={`flex-1 ${bookSecondaryButtonClass}`}
               >
                 取消
               </button>
               <button
                 type="button"
                 onClick={handleSaveEdit}
-                className="flex-1 px-4 py-2 theme-button-primary rounded text-sm font-medium transition-all"
+                className="flex-1 rounded px-4 py-2 text-sm font-medium theme-button-primary transition-all"
               >
                 保存
               </button>
@@ -659,8 +664,8 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
       )}
 
       {/* 添加关联表单 */}
-      <div className="flex flex-col gap-3 p-4 bg-surface-alt rounded border border-border">
-        <div className="flex flex-col sm:flex-row gap-3">
+      <div className={`${bookPanelClass} flex flex-col gap-3 p-4`}>
+        <div className="flex flex-col gap-3 sm:flex-row">
           <select
             value={newRelation.type}
             onChange={(e) =>
@@ -669,7 +674,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
                 type: e.target.value as WikiRelationType,
               })
             }
-            className="theme-input px-4 py-2 rounded text-sm"
+            className={`${bookCompactInputClass} sm:w-auto`}
           >
             <option value="related_person">相关人物</option>
             <option value="work_relation">作品关联</option>
@@ -689,7 +694,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
                 handleRelationInputChange(pastedText, true)
               }}
               placeholder="粘贴链接或 [[页面标题]]"
-              className="theme-input w-full px-4 py-2 rounded text-sm"
+              className={bookCompactInputClass}
               onKeyDown={(e) => {
                 if (!showRelationDropdown) return
                 if (e.key === 'ArrowDown') {
@@ -715,12 +720,14 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
             />
             {relationDropdownPresence.mounted && (
               <div
-                className="floating-dropdown absolute z-50 mt-1 w-full bg-surface rounded border border-border shadow-lg max-h-60 overflow-auto"
+                className="floating-dropdown absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[var(--book-panel-shadow)] backdrop-blur-[12px]"
                 data-state={relationDropdownPresence.state}
                 aria-hidden={!showRelationDropdown}
               >
-                <div className="px-3 py-2 text-xs text-text-muted border-b border-border bg-surface-alt">
-                  直接输入 <code className="bg-surface-alt px-1 rounded">[[标题]]</code> 格式更快
+                <div className="border-b border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-2 text-xs text-text-muted">
+                  直接输入{' '}
+                  <code className="rounded bg-[var(--book-panel-hover)] px-1">[[标题]]</code>{' '}
+                  格式更快
                 </div>
                 {relationSearchLoading ? (
                   <div className="px-4 py-2 text-sm text-text-muted">搜索中...</div>
@@ -732,7 +739,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
                   relationSearchResults.map((result, idx) => (
                     <div
                       key={result.id}
-                      className={`px-4 py-2 cursor-pointer ${idx === relationSelectedIndex ? 'bg-brand-gold/10' : 'hover:bg-surface-alt'}`}
+                      className={`cursor-pointer px-4 py-2 ${idx === relationSelectedIndex ? 'bg-brand-gold/10' : 'hover:bg-[var(--book-panel-hover)]'}`}
                       onClick={() => {
                         setNewRelation({
                           ...newRelation,
@@ -743,8 +750,8 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
                       onMouseEnter={() => setRelationSelectedIndex(idx)}
                     >
                       <div className="text-sm font-medium text-text-primary">{result.text}</div>
-                      <div className="text-xs text-text-muted truncate flex items-center gap-2">
-                        <span className="bg-surface-alt px-1.5 py-0.5 rounded text-[10px]">
+                      <div className="flex items-center gap-2 truncate text-xs text-text-muted">
+                        <span className="rounded bg-[var(--book-panel-bg)] px-1.5 py-0.5 text-[10px]">
                           {result.id}
                         </span>
                         <span>{result.subtext}</span>
@@ -760,9 +767,9 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
             value={newRelation.label || ''}
             onChange={(e) => setNewRelation({ ...newRelation, label: e.target.value })}
             placeholder="显示名称 (可选)"
-            className="theme-input flex-1 px-4 py-2 rounded text-sm"
+            className={`${bookCompactInputClass} flex-1`}
           />
-          <label className="flex items-center gap-2 text-xs text-text-muted whitespace-nowrap">
+          <label className="flex items-center gap-2 whitespace-nowrap text-xs text-text-muted">
             <input
               type="checkbox"
               checked={newRelation.bidirectional}

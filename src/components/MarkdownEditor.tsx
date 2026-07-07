@@ -1,6 +1,7 @@
 import React from 'react'
 import MDEditor from '@uiw/react-md-editor/nohighlight'
 import '@uiw/react-md-editor/markdown-editor.css'
+import { clsx } from 'clsx'
 import { handleMarkdownTextPasteCapture } from '../lib/markdownEditorPaste'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import MarkdownRenderer from './MarkdownRenderer'
@@ -13,6 +14,7 @@ interface MarkdownEditorProps {
   ariaLabel?: string
   enableWikiLinks?: boolean
   maxLength?: number
+  variant?: 'default' | 'book'
 }
 
 const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
@@ -23,12 +25,18 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   ariaLabel,
   enableWikiLinks = false,
   maxLength,
+  variant = 'default',
 }) => {
   const { resolvedTheme } = useUserPreferences()
 
   return (
     <div
-      className="border border-border rounded overflow-hidden bg-surface"
+      className={clsx(
+        'overflow-hidden rounded border',
+        variant === 'book'
+          ? 'border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] shadow-[inset_0_1px_0_rgba(138,109,47,0.05)]'
+          : 'border-border bg-surface'
+      )}
       onPasteCapture={handleMarkdownTextPasteCapture}
       data-color-mode={resolvedTheme === 'dark' ? 'dark' : 'light'}
     >
