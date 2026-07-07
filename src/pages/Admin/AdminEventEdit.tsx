@@ -826,7 +826,7 @@ const AdminEventEdit = () => {
     coverUpload && coverUpload.status !== 'error' ? coverUpload.previewUrl : draft.coverUrl
 
   return (
-    <BookEditorShell admin>
+    <BookEditorShell embedded>
       <BookEditorHeader
         title={isCreating ? '新增活动' : '编辑活动'}
         description="维护活动正文、时间、票务、链接与图片资源，保存后回到活动管理。"

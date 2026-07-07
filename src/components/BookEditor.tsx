@@ -24,31 +24,26 @@ export const bookPanelClass =
 type BookEditorShellProps = React.HTMLAttributes<HTMLDivElement> & {
   children: React.ReactNode
   containerClassName?: string
-  admin?: boolean
+  embedded?: boolean
 }
 
 export const BookEditorShell = ({
   children,
   className,
   containerClassName,
-  admin = false,
+  embedded = false,
   ...props
 }: BookEditorShellProps) => (
   <div
     {...props}
     className={clsx(
-      'mobile-page-shell antique-detail text-[var(--color-text-antique)]',
-      admin && '-m-4 min-h-[calc(100vh-3.5rem)] p-4 md:-m-6 md:p-6',
+      embedded
+        ? 'text-[var(--color-text-antique)]'
+        : 'mobile-page-shell antique-detail text-[var(--color-text-antique)]',
       className
     )}
   >
-    <div
-      className={clsx(
-        'mobile-page-container',
-        admin && '!w-full !max-w-none !px-0 !py-0',
-        containerClassName
-      )}
-    >
+    <div className={clsx(embedded ? 'w-full' : 'mobile-page-container', containerClassName)}>
       {children}
     </div>
   </div>
