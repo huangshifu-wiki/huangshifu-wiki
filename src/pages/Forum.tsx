@@ -56,10 +56,13 @@ import { useToggleInteraction } from '../hooks/useToggleInteraction'
 import { submitFormOnModifierEnter } from '../lib/formShortcuts'
 import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
+import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import MentionTextarea from '../components/MentionTextarea'
 import MentionText from '../components/MentionText'
 import NotFound from './NotFound'
+import { ForumFilters } from '../components/Forum/ForumFilters'
+import { PostCard } from '../components/Forum/PostCard'
 import type { MentionTarget } from '../lib/mentions'
 
 type PostItem = {
@@ -126,75 +129,6 @@ const COMMENT_HIGHLIGHT_DURATION_MS = 3200
 const HIGHLIGHTED_COMMENT_CLASS =
   'bg-[color-mix(in_srgb,var(--color-theme-accent)_18%,var(--color-surface))]'
 
-interface PostCardProps {
-  post: PostItem
-  sectionName: string
-}
-
-const PostCard = React.memo(({ post, sectionName }: PostCardProps) => {
-  const { t } = useI18n()
-  return (
-    <div
-      className={clsx(
-        'relative border-y border-[var(--book-ink-line)] py-4 transition-all group hover:border-[var(--book-ink-line)]',
-        post.isPinned && 'border-l-[3px] border-l-[var(--color-theme-accent)]'
-      )}
-    >
-      <Link to={`/forum/${post.slug || post.id}`} className="block">
-        <div className="flex items-center gap-2 mb-2 flex-wrap">
-          {post.isPinned && (
-            <span className="flex items-center gap-1 px-2 py-0.5 theme-tag text-[10px] font-bold uppercase tracking-wider rounded-sm">
-              <Pin size={10} /> {t('forum.pinned')}
-            </span>
-          )}
-          <span className="px-2 py-0.5 theme-tag text-[10px] font-bold uppercase tracking-wider rounded-sm">
-            {sectionName}
-          </span>
-          <span className="text-border">|</span>
-          <span className="text-text-muted text-xs flex items-center gap-1">
-            <Clock size={10} /> {formatDate(post.updatedAt, 'yyyy-MM-dd')}
-          </span>
-          {post.status && post.status !== 'published' && (
-            <span
-              className={clsx(
-                'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border',
-                getStatusClassName(post.status)
-              )}
-            >
-              {getStatusText(post.status)}
-            </span>
-          )}
-        </div>
-        <h3 className="mb-2 pr-10 text-base font-bold text-text-primary transition-colors group-hover:text-brand-gold sm:pr-0">
-          {post.title}
-        </h3>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-4 text-xs text-text-muted">
-            <span className="flex items-center gap-1">
-              <Heart size={10} /> {post.likesCount || 0}
-            </span>
-            <span className="flex items-center gap-1">
-              <ThumbsDown size={10} /> {post.dislikesCount || 0}
-            </span>
-            <span className="flex items-center gap-1">
-              <MessageSquare size={10} /> {post.commentsCount || 0}
-            </span>
-          </div>
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="w-5 h-5 bg-surface-alt overflow-hidden flex items-center justify-center">
-              <UserIcon size={10} className="text-text-muted" />
-            </div>
-            <span className="truncate text-xs text-text-muted">
-              {post.authorName ||
-                (post.authorPublicId ? `#${post.authorPublicId}` : t('forum.anonymous'))}
-            </span>
-          </div>
-        </div>
-      </Link>
-    </div>
-  )
-})
-
 const PostList = () => {
   const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -205,7 +139,8 @@ const PostList = () => {
   const [loading, setLoading] = useState(true)
   const [totalPages, setTotalPages] = useState<number>()
   const { user, isBanned } = useAuth()
-  const { preferences } = useUserPreferences()
+  const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
+  const viewMode = getScopedViewMode('forum')
   const isIncrementalMode = preferences.listLoadMode === 'incremental'
   const pagination = useRoutedPagination({
     serverTotalPages: totalPages,
@@ -307,80 +242,59 @@ const PostList = () => {
   }
 
   return (
-    <div className="mobile-page-shell">
+    <div className="gufeng-forum-page mobile-page-shell">
       <div className="mobile-page-container">
-        <div className="mobile-page-titlebar mb-6">
-          <h1 className="mobile-page-title">{t('forum.title')}</h1>
-          <div className="mobile-action-row">
-            {user && !isBanned && (
-              <Link
-                to="/forum/new"
-                className="px-5 py-2 theme-button-primary text-sm rounded active:scale-[0.98] transition-all flex items-center gap-2"
-              >
-                <Plus size={15} /> {t('forum.newPost')}
-              </Link>
-            )}
-          </div>
-        </div>
-
-        <div className="mobile-filterbar">
-          <div className="mobile-filter-tabs">
-            <Link
-              to={getListUrl({ section: 'all' })}
-              className={clsx(
-                'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
-                section === 'all'
-                  ? 'text-brand-gold font-semibold'
-                  : 'text-text-muted hover:text-brand-gold'
+        <header className="mobile-page-header">
+          <div className="mobile-page-titlebar">
+            <div className="min-w-0">
+              <h1 className="mobile-page-title">{t('forum.title')}</h1>
+              <div className="mt-3 flex">
+                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+              </div>
+            </div>
+            <div className="mobile-action-row">
+              {user && !isBanned && (
+                <Link
+                  to="/forum/new"
+                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all active:scale-[0.98]"
+                >
+                  <Plus size={15} aria-hidden="true" /> {t('forum.newPost')}
+                </Link>
               )}
-            >
-              {t('forum.allSections')}
-            </Link>
-            {sections.map((sec) => (
-              <Link
-                key={sec.id}
-                to={getListUrl({ section: sec.id })}
-                className={clsx(
-                  'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
-                  section === sec.id
-                    ? 'text-brand-gold font-semibold'
-                    : 'text-text-muted hover:text-brand-gold'
-                )}
-              >
-                {sec.name}
-              </Link>
-            ))}
+            </div>
           </div>
+        </header>
 
-          <div className="mobile-filter-actions">
-            {(['latest', 'hot', 'recommended'] as const).map((s) => (
-              <Link
-                key={s}
-                to={getListUrl({ sort: s })}
-                className={clsx(
-                  'transition-colors',
-                  sort === s ? 'text-brand-gold font-medium' : 'hover:text-brand-gold'
-                )}
-              >
-                {s === 'latest'
-                  ? t('forum.sortLatest')
-                  : s === 'hot'
-                    ? t('forum.sortHot')
-                    : t('forum.sortRecommended')}
-              </Link>
-            ))}
-          </div>
-        </div>
+        <ForumFilters
+          sections={sections}
+          activeSection={section}
+          activeSort={sort}
+          viewMode={viewMode}
+          getListUrl={getListUrl}
+          onViewModeChange={(mode) => void setScopedViewMode('forum', mode)}
+        />
 
         {(isIncrementalMode ? incrementalList.loadingInitial : loading) ? (
           <PageSkeleton variant="forum" />
         ) : visiblePosts.length > 0 ? (
           <>
-            <div className="shared-ink-list">
+            <div
+              className={clsx(
+                viewMode === 'list'
+                  ? 'shared-ink-list'
+                  : clsx(
+                      'mobile-grid grid items-start',
+                      viewMode === 'large' && 'forum-large-grid',
+                      VIEW_MODE_CONFIG[viewMode].gridCols,
+                      VIEW_MODE_CONFIG[viewMode].gap
+                    )
+              )}
+            >
               {visiblePosts.map((post) => (
                 <PostCard
                   key={post.id}
                   post={post}
+                  viewMode={viewMode}
                   sectionName={sections.find((s) => s.id === post.section)?.name || post.section}
                 />
               ))}
@@ -403,9 +317,11 @@ const PostList = () => {
             ) : null}
           </>
         ) : (
-          <div className="border-y border-[var(--book-ink-line)] p-20 text-center">
-            <MessageSquare size={48} className="mx-auto text-border mb-6" />
-            <p className="text-text-muted italic">{t('forum.emptyPosts')}</p>
+          <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+            <MessageSquare size={48} className="mx-auto mb-6 text-border" />
+            <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
+              {t('forum.emptyPosts')}
+            </p>
           </div>
         )}
       </div>
