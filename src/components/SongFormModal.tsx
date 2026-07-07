@@ -12,6 +12,14 @@ import { MatchSuggestionModal } from './MatchSuggestionModal'
 import { FormModal } from './Modal/FormModal'
 import { CharacterCount } from './CharacterCount'
 import MarkdownEditor from './MarkdownEditor'
+import {
+  BookEditorSection,
+  BookFormField,
+  bookCompactInputClass,
+  bookPanelClass,
+  bookSecondaryButtonClass,
+  bookSmallButtonClass,
+} from './BookEditor'
 
 type SongFormData = {
   title: string
@@ -383,290 +391,325 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         loading={saving}
         maxWidth="max-w-3xl"
       >
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-3">
-            <label className="text-sm font-medium text-text-primary">
-              歌曲标题 <span className="theme-text-error">*</span>
-            </label>
-            <CharacterCount current={formData.title.length} max={CONTENT_LIMITS.music.title} />
-          </div>
-          <input
-            type="text"
-            value={formData.title}
-            onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
-            maxLength={CONTENT_LIMITS.music.title}
-            placeholder="歌曲名称"
-            className="theme-input w-full px-3 py-2 text-sm rounded"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-3">
-            <label className="text-sm font-medium text-text-primary">
-              艺术家 <span className="theme-text-error">*</span>
-            </label>
-            <CharacterCount
-              current={formData.artists.length}
-              max={CONTENT_LIMITS.music.artist * 10}
-            />
-          </div>
-          <input
-            type="text"
-            value={formData.artists}
-            onChange={(e) => setFormData((prev) => ({ ...prev, artists: e.target.value }))}
-            maxLength={CONTENT_LIMITS.music.artist * 10}
-            placeholder="歌手名称，多个用逗号分隔"
-            className="theme-input w-full px-3 py-2 text-sm rounded"
-          />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {creditFields.map(({ key, label, placeholder }) => (
-            <div className="space-y-1.5" key={key}>
-              <label className="text-sm font-medium text-text-primary">{label}</label>
-              <input
-                type="text"
-                value={formData[key]}
-                onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
-                maxLength={CONTENT_LIMITS.music.artist * 10}
-                placeholder={placeholder}
-                className="theme-input w-full px-3 py-2 text-sm rounded"
-              />
+        <BookEditorSection title="基础信息" className="border-t-0 pt-0">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <BookFormField
+                label="歌曲标题"
+                required
+                counter={
+                  <CharacterCount
+                    current={formData.title.length}
+                    max={CONTENT_LIMITS.music.title}
+                  />
+                }
+              >
+                <input
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
+                  maxLength={CONTENT_LIMITS.music.title}
+                  placeholder="歌曲名称"
+                  className={bookCompactInputClass}
+                />
+              </BookFormField>
+              <BookFormField
+                label="艺术家"
+                required
+                counter={
+                  <CharacterCount
+                    current={formData.artists.length}
+                    max={CONTENT_LIMITS.music.artist * 10}
+                  />
+                }
+              >
+                <input
+                  type="text"
+                  value={formData.artists}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, artists: e.target.value }))}
+                  maxLength={CONTENT_LIMITS.music.artist * 10}
+                  placeholder="歌手名称，多个用逗号分隔"
+                  className={bookCompactInputClass}
+                />
+              </BookFormField>
             </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-3">
-              <label className="text-sm font-medium text-text-primary">专辑</label>
-              <CharacterCount current={formData.album.length} max={CONTENT_LIMITS.music.album} />
-            </div>
-            <input
-              type="text"
-              value={formData.album}
-              onChange={(e) => setFormData((prev) => ({ ...prev, album: e.target.value }))}
-              maxLength={CONTENT_LIMITS.music.album}
-              placeholder="所属专辑（可选）"
-              className="theme-input w-full px-3 py-2 text-sm rounded"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-3">
-              <label className="text-sm font-medium text-text-primary">音频链接</label>
-              <CharacterCount
-                current={formData.audioUrl.length}
-                max={CONTENT_LIMITS.music.audioUrl}
-              />
-            </div>
-            <input
-              type="text"
-              value={formData.audioUrl}
-              onChange={(e) => setFormData((prev) => ({ ...prev, audioUrl: e.target.value }))}
-              maxLength={CONTENT_LIMITS.music.audioUrl}
-              placeholder="音频文件链接（可选）"
-              className="theme-input w-full px-3 py-2 text-sm rounded"
-            />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-text-primary">发行日期</label>
-            <input
-              type="date"
-              value={formData.releaseDate}
-              onChange={(e) => setFormData((prev) => ({ ...prev, releaseDate: e.target.value }))}
-              className="theme-input w-full px-3 py-2 text-sm rounded"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-text-primary">时长（毫秒）</label>
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={formData.durationMs}
-              onChange={(e) => setFormData((prev) => ({ ...prev, durationMs: e.target.value }))}
-              placeholder="例如 226000"
-              className="theme-input w-full px-3 py-2 text-sm rounded"
-            />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-3">
-            <label className="text-sm font-medium text-text-primary">歌词</label>
-            <CharacterCount
-              current={(formData.lyric || '').length}
-              max={CONTENT_LIMITS.music.lyric}
-            />
-          </div>
-          <textarea
-            value={formData.lyric || ''}
-            onChange={(e) => setFormData((prev) => ({ ...prev, lyric: e.target.value }))}
-            maxLength={CONTENT_LIMITS.music.lyric}
-            placeholder="歌词内容（可选，每行一句）"
-            rows={6}
-            className="theme-input w-full px-3 py-2 text-sm rounded resize-none"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-3">
-            <label className="text-sm font-medium text-text-primary">歌曲描述</label>
-            <CharacterCount
-              current={(formData.description || '').length}
-              max={CONTENT_LIMITS.music.description}
-            />
-          </div>
-          <MarkdownEditor
-            value={formData.description || ''}
-            onChange={(value) => setFormData((prev) => ({ ...prev, description: value }))}
-            height="260px"
-            placeholder="创作者的话、创作背景等（可选，支持 Markdown）"
-            ariaLabel="歌曲描述（支持 Markdown）"
-            maxLength={CONTENT_LIMITS.music.description}
-          />
-        </div>
 
-        <button
-          type="button"
-          onClick={() => setPlatformExpanded((prev) => !prev)}
-          className="w-full flex items-center justify-between p-3 rounded border border-border bg-surface-alt/60 hover:bg-surface-alt transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-text-primary">关联平台</span>
-            {linkedPlatforms.length > 0 && (
-              <span className="text-xs px-1.5 py-0.5 rounded theme-tag font-medium">
-                已关联 {linkedPlatforms.length} 个
-              </span>
-            )}
-          </div>
-          {platformExpanded ? (
-            <ChevronUp size={16} className="text-text-muted" />
-          ) : (
-            <ChevronDown size={16} className="text-text-muted" />
-          )}
-        </button>
-
-        {platformExpanded && (
-          <div className="space-y-2">
-            {platformFields.map((platform) => {
-              const currentId = platformSourceIds[platform.platform] || ''
-              const isLinked = Boolean(currentId)
-              return (
-                <div key={platform.platform} className="flex items-center gap-2">
-                  <span className="w-24 text-xs text-text-secondary shrink-0">
-                    {platform.label}
-                  </span>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {creditFields.map(({ key, label, placeholder }) => (
+                <BookFormField key={key} label={label}>
                   <input
                     type="text"
-                    value={currentId}
-                    onChange={(e) => handlePlatformIdChange(platform.platform, e.target.value)}
-                    maxLength={CONTENT_LIMITS.music.platformId}
-                    placeholder={isLinked ? '已关联' : '输入平台歌曲ID'}
-                    className="theme-input flex-1 px-3 py-2 text-sm rounded"
+                    value={formData[key]}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
+                    maxLength={CONTENT_LIMITS.music.artist * 10}
+                    placeholder={placeholder}
+                    className={bookCompactInputClass}
                   />
-                  {isLinked && (
-                    <a
-                      href={platform.urlPattern(currentId)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 text-text-muted hover:text-brand-gold transition-colors"
-                    >
-                      <ExternalLink size={14} />
-                    </a>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setMatchingPlatform(platform.platform)}
-                    className="px-3 py-2 rounded border border-border text-xs text-text-secondary hover:text-brand-gold hover:border-brand-gold transition-all flex items-center gap-1"
-                  >
-                    <Search size={13} />
-                    匹配
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        <div className="rounded border border-border bg-surface-alt/60 p-3 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-text-primary">自定义平台链接</p>
-              <p className="text-xs text-text-muted mt-0.5">例如哔哩哔哩、5sing 或其他发布平台</p>
+                </BookFormField>
+              ))}
             </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <BookFormField
+                label="专辑"
+                counter={
+                  <CharacterCount
+                    current={formData.album.length}
+                    max={CONTENT_LIMITS.music.album}
+                  />
+                }
+              >
+                <input
+                  type="text"
+                  value={formData.album}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, album: e.target.value }))}
+                  maxLength={CONTENT_LIMITS.music.album}
+                  placeholder="所属专辑（可选）"
+                  className={bookCompactInputClass}
+                />
+              </BookFormField>
+              <BookFormField
+                label="音频链接"
+                counter={
+                  <CharacterCount
+                    current={formData.audioUrl.length}
+                    max={CONTENT_LIMITS.music.audioUrl}
+                  />
+                }
+              >
+                <input
+                  type="text"
+                  value={formData.audioUrl}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, audioUrl: e.target.value }))}
+                  maxLength={CONTENT_LIMITS.music.audioUrl}
+                  placeholder="音频文件链接（可选）"
+                  className={bookCompactInputClass}
+                />
+              </BookFormField>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <BookFormField label="发行日期">
+                <input
+                  type="date"
+                  value={formData.releaseDate}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, releaseDate: e.target.value }))
+                  }
+                  className={bookCompactInputClass}
+                />
+              </BookFormField>
+              <BookFormField label="时长（毫秒）">
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={formData.durationMs}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, durationMs: e.target.value }))}
+                  placeholder="例如 226000"
+                  className={bookCompactInputClass}
+                />
+              </BookFormField>
+            </div>
+          </div>
+        </BookEditorSection>
+
+        <BookEditorSection title="文本内容">
+          <div className="space-y-4">
+            <BookFormField
+              label="歌词"
+              counter={
+                <CharacterCount
+                  current={(formData.lyric || '').length}
+                  max={CONTENT_LIMITS.music.lyric}
+                />
+              }
+            >
+              <textarea
+                value={formData.lyric || ''}
+                onChange={(e) => setFormData((prev) => ({ ...prev, lyric: e.target.value }))}
+                maxLength={CONTENT_LIMITS.music.lyric}
+                placeholder="歌词内容（可选，每行一句）"
+                rows={6}
+                className={`${bookCompactInputClass} resize-none`}
+              />
+            </BookFormField>
+            <BookFormField
+              label="歌曲描述"
+              counter={
+                <CharacterCount
+                  current={(formData.description || '').length}
+                  max={CONTENT_LIMITS.music.description}
+                />
+              }
+            >
+              <MarkdownEditor
+                value={formData.description || ''}
+                onChange={(value) => setFormData((prev) => ({ ...prev, description: value }))}
+                height="260px"
+                placeholder="创作者的话、创作背景等（可选，支持 Markdown）"
+                ariaLabel="歌曲描述（支持 Markdown）"
+                maxLength={CONTENT_LIMITS.music.description}
+                variant="book"
+              />
+            </BookFormField>
+          </div>
+        </BookEditorSection>
+
+        <BookEditorSection title="平台链接">
+          <div className="space-y-4">
             <button
               type="button"
-              onClick={handleAddCustomPlatformLink}
-              className="inline-flex items-center gap-1 px-2 py-1.5 rounded border border-border text-xs text-text-secondary hover:text-brand-gold hover:border-brand-gold transition-all"
+              onClick={() => setPlatformExpanded((prev) => !prev)}
+              className="flex w-full items-center justify-between rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] p-3 transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
             >
-              <Plus size={13} /> 添加链接
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-text-primary">关联平台</span>
+                {linkedPlatforms.length > 0 && (
+                  <span className="rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-1.5 py-0.5 text-xs font-medium text-brand-gold">
+                    已关联 {linkedPlatforms.length} 个
+                  </span>
+                )}
+              </div>
+              {platformExpanded ? (
+                <ChevronUp size={16} className="text-text-muted" />
+              ) : (
+                <ChevronDown size={16} className="text-text-muted" />
+              )}
             </button>
-          </div>
 
-          {customPlatformLinks.length > 0 ? (
-            <div className="space-y-2">
-              {customPlatformLinks.map((link, index) => {
-                const previewUrl = normalizeCustomPlatformLinkUrl(link.url)
-                return (
-                  <div
-                    key={`custom-link-${index}`}
-                    className="rounded border border-border bg-surface p-3 space-y-2"
-                  >
-                    <div className="flex items-center gap-2">
+            {platformExpanded && (
+              <div className="grid grid-cols-1 gap-2">
+                {platformFields.map((platform) => {
+                  const currentId = platformSourceIds[platform.platform] || ''
+                  const isLinked = Boolean(currentId)
+                  return (
+                    <div
+                      key={platform.platform}
+                      className={`${bookPanelClass} grid grid-cols-1 gap-2 p-3 sm:grid-cols-[6rem_minmax(0,1fr)_auto_auto] sm:items-center`}
+                    >
+                      <span className="w-24 shrink-0 text-xs text-text-secondary">
+                        {platform.label}
+                      </span>
                       <input
                         type="text"
-                        value={link.label}
-                        onChange={(e) =>
-                          handleCustomPlatformLinkChange(index, 'label', e.target.value)
-                        }
-                        maxLength={CONTENT_LIMITS.music.customPlatformLabel}
-                        placeholder="平台名称，例如 Bilibili"
-                        className="theme-input w-36 px-3 py-2 text-sm rounded"
+                        value={currentId}
+                        onChange={(e) => handlePlatformIdChange(platform.platform, e.target.value)}
+                        maxLength={CONTENT_LIMITS.music.platformId}
+                        placeholder={isLinked ? '已关联' : '输入平台歌曲ID'}
+                        className={`${bookCompactInputClass} flex-1`}
                       />
-                      <input
-                        type="text"
-                        value={link.url}
-                        onChange={(e) =>
-                          handleCustomPlatformLinkChange(index, 'url', e.target.value)
-                        }
-                        maxLength={CONTENT_LIMITS.music.customPlatformUrl}
-                        placeholder="链接地址"
-                        className="theme-input flex-1 px-3 py-2 text-sm rounded"
-                      />
-                      {previewUrl && (
+                      {isLinked && (
                         <a
-                          href={previewUrl}
+                          href={platform.urlPattern(currentId)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-1.5 text-text-muted hover:text-brand-gold transition-colors"
+                          className="inline-flex items-center justify-center rounded p-2 text-text-muted transition-colors hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
+                          aria-label={`打开${platform.label}`}
                         >
                           <ExternalLink size={14} />
                         </a>
                       )}
                       <button
                         type="button"
-                        onClick={() => handleRemoveCustomPlatformLink(index)}
-                        className="p-1.5 text-text-muted theme-icon-button-danger transition-colors"
+                        onClick={() => setMatchingPlatform(platform.platform)}
+                        className={bookSmallButtonClass}
                       >
-                        <Trash2 size={14} />
+                        <Search size={13} />
+                        匹配
                       </button>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
+            )}
+
+            <div className={`${bookPanelClass} space-y-3 p-3`}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-text-primary">自定义平台链接</p>
+                  <p className="mt-0.5 text-xs text-text-muted">
+                    例如哔哩哔哩、5sing 或其他发布平台
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddCustomPlatformLink}
+                  className={bookSecondaryButtonClass}
+                >
+                  <Plus size={13} /> 添加链接
+                </button>
+              </div>
+
+              {customPlatformLinks.length > 0 ? (
+                <div className="space-y-2">
+                  {customPlatformLinks.map((link, index) => {
+                    const previewUrl = normalizeCustomPlatformLinkUrl(link.url)
+                    return (
+                      <div key={`custom-link-${index}`} className={`${bookPanelClass} p-3`}>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[9rem_minmax(0,1fr)_auto_auto] sm:items-center">
+                          <input
+                            type="text"
+                            value={link.label}
+                            onChange={(e) =>
+                              handleCustomPlatformLinkChange(index, 'label', e.target.value)
+                            }
+                            maxLength={CONTENT_LIMITS.music.customPlatformLabel}
+                            placeholder="平台名称，例如 Bilibili"
+                            className={bookCompactInputClass}
+                          />
+                          <input
+                            type="text"
+                            value={link.url}
+                            onChange={(e) =>
+                              handleCustomPlatformLinkChange(index, 'url', e.target.value)
+                            }
+                            maxLength={CONTENT_LIMITS.music.customPlatformUrl}
+                            placeholder="链接地址"
+                            className={bookCompactInputClass}
+                          />
+                          {previewUrl ? (
+                            <a
+                              href={previewUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center rounded p-2 text-text-muted transition-colors hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
+                              aria-label="打开自定义平台链接"
+                            >
+                              <ExternalLink size={14} />
+                            </a>
+                          ) : (
+                            <span aria-hidden="true" className="hidden h-8 w-8 sm:block" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCustomPlatformLink(index)}
+                            className="inline-flex items-center justify-center rounded p-2 text-text-muted transition-colors hover:bg-[color-mix(in_srgb,var(--color-error)_10%,var(--book-panel-bg))] hover:text-danger"
+                            aria-label="删除自定义平台链接"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="rounded border border-dashed border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-4 text-center text-xs text-text-muted">
+                  暂无自定义平台链接
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="rounded border border-dashed border-border bg-surface/70 px-3 py-4 text-xs text-text-muted text-center">
-              暂无自定义平台链接
-            </div>
-          )}
-        </div>
+          </div>
+        </BookEditorSection>
 
         {isEdit && song && (
-          <div className="rounded border border-border bg-surface-alt/60 p-3">
+          <div className={`${bookPanelClass} p-3`}>
             <div className="flex items-center gap-3">
               <img
                 src={song.cover}
                 alt="封面"
-                className="w-12 h-12 rounded object-cover border border-border"
+                className="h-12 w-12 rounded border border-[var(--book-ink-line)] object-cover"
                 referrerPolicy="no-referrer"
               />
               <div className="min-w-0">

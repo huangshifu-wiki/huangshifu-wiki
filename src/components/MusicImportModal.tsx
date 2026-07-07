@@ -1,10 +1,18 @@
-import React, { useMemo, useState } from 'react'
+import React, { useState } from 'react'
 import { AlertTriangle, CheckCircle2, Loader2, Link2, X } from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 import { apiPost } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import {
+  BookEditorSection,
+  BookFormField,
+  bookCompactInputClass,
+  bookPanelClass,
+  bookSecondaryButtonClass,
+  bookSmallButtonClass,
+} from './BookEditor'
 
 type Platform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo'
 type ResourceType = 'song' | 'album' | 'playlist'
@@ -79,11 +87,6 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
   const [importResult, setImportResult] = useState<string>('')
 
   const selectedCount = selectedIds.size
-
-  const allSelected = useMemo(() => {
-    if (!preview || !preview.songs.length) return false
-    return preview.songs.every((song) => selectedIds.has(song.sourceId))
-  }, [preview, selectedIds])
 
   if (!presence.mounted) return null
 
@@ -170,209 +173,213 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
       data-state={presence.state}
       aria-hidden={!open}
     >
-      <div className="floating-panel w-full max-w-4xl max-h-[90vh] overflow-hidden bg-surface rounded border border-border flex flex-col">
-        <header className="px-5 md:px-6 py-4 border-b border-border flex items-center justify-between">
+      <div className="floating-panel flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+        <header className="flex items-center justify-between border-b border-[var(--book-ink-line)] px-5 py-4 md:px-6">
           <div>
-            <h3 className="text-base font-bold text-text-primary">导入音乐 / 专辑 / 歌单</h3>
-            <p className="text-xs text-text-muted mt-0.5">
+            <h3
+              className="text-base font-semibold tracking-[0.06em] text-text-primary"
+              style={{ fontFamily: 'var(--book-title-font)' }}
+            >
+              导入音乐 / 专辑 / 歌单
+            </h3>
+            <p className="mt-0.5 text-xs tracking-[0.04em] text-text-muted">
               粘贴链接后自动识别平台；导入前需二次确认
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-alt transition-colors"
+            className="rounded p-1.5 text-text-muted transition-colors hover:bg-[var(--book-panel-hover)] hover:text-text-primary"
             aria-label="关闭"
           >
             <X size={18} />
           </button>
         </header>
 
-        <div className="px-5 md:px-6 py-4 space-y-4 overflow-y-auto">
-          <div className="rounded border border-border bg-surface-alt/60 p-4">
-            <label className="text-sm font-medium text-text-primary inline-flex items-center gap-2 mb-3">
-              <Link2 size={15} /> 粘贴链接
-            </label>
-            <div className="flex flex-col md:flex-row gap-2">
-              <input
-                value={url}
-                onChange={(event) => {
-                  setUrl(event.target.value)
-                  setError('')
-                }}
-                placeholder="例如: https://music.163.com/#/playlist?id=3778678"
-                className="theme-input flex-1 px-3 py-2 text-sm rounded"
-              />
-              <button
-                onClick={handleParse}
-                disabled={parsing}
-                className="px-5 py-2 rounded theme-button-primary font-medium disabled:opacity-50 inline-flex items-center justify-center gap-2 text-sm transition-all"
-              >
-                {parsing ? <Loader2 size={14} className="animate-spin" /> : null}
-                {parsing ? '解析中' : '解析链接'}
-              </button>
+        <div className="space-y-6 overflow-y-auto px-5 py-4 md:px-6">
+          <BookEditorSection title="资源链接" className="border-t-0 pt-0">
+            <div className={`${bookPanelClass} p-4`}>
+              <BookFormField label="粘贴链接">
+                <div className="flex flex-col gap-2 md:flex-row">
+                  <div className="relative flex-1">
+                    <Link2
+                      size={15}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+                    />
+                    <input
+                      value={url}
+                      onChange={(event) => {
+                        setUrl(event.target.value)
+                        setError('')
+                      }}
+                      placeholder="例如: https://music.163.com/#/playlist?id=3778678"
+                      className={`${bookCompactInputClass} pl-9`}
+                    />
+                  </div>
+                  <button
+                    onClick={handleParse}
+                    disabled={parsing}
+                    className="inline-flex items-center justify-center gap-2 rounded px-5 py-2 text-sm font-medium theme-button-primary transition-all disabled:opacity-50"
+                  >
+                    {parsing ? <Loader2 size={14} className="animate-spin" /> : null}
+                    {parsing ? '解析中' : '解析链接'}
+                  </button>
+                </div>
+                {error ? <p className="mt-2 text-sm theme-text-error">{error}</p> : null}
+              </BookFormField>
             </div>
-            {error ? <p className="text-sm theme-text-error mt-2">{error}</p> : null}
-          </div>
+          </BookEditorSection>
 
           {preview && (
-            <section className="rounded border border-border bg-brand-gold/5 p-4 space-y-4">
-              <div className="flex flex-col md:flex-row gap-4 md:items-center md:justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-14 h-14 rounded overflow-hidden bg-surface-alt shrink-0 border border-border">
-                    {preview.cover && (
-                      <img
-                        src={preview.cover}
-                        alt="封面"
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-text-muted font-medium">
-                      {platformLabel(preview.platform)} · {resourceTypeLabel(preview.type)}
-                    </p>
-                    <h4 className="text-base font-bold text-text-primary truncate">
-                      {preview.title}
-                    </h4>
-                    <p className="text-sm text-text-secondary truncate">{preview.artist}</p>
-                  </div>
-                </div>
-                <a
-                  href={preview.platformUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-brand-gold hover:underline shrink-0"
-                >
-                  查看原始页面
-                </a>
-              </div>
-
-              {preview.description && (
-                <p className="text-sm text-text-secondary bg-surface rounded p-3 border border-border">
-                  {preview.description}
-                </p>
-              )}
-
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-text-secondary">
-                  共 {preview.totalSongs} 首，已选择 {selectedCount} 首
-                </span>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleSelectAll}
-                    className="text-brand-gold hover:underline text-xs"
-                  >
-                    全选
-                  </button>
-                  <button
-                    onClick={handleSelectNone}
-                    className="text-text-muted hover:underline text-xs"
-                  >
-                    清空
-                  </button>
-                </div>
-              </div>
-
-              <div className="max-h-64 overflow-y-auto bg-surface rounded border border-border">
-                {preview.songs.map((song, index) => {
-                  const checked = selectedIds.has(song.sourceId)
-                  return (
-                    <label
-                      key={`${song.sourceId}-${index}`}
-                      className={clsx(
-                        'px-4 py-3 flex items-center gap-3 cursor-pointer transition-colors border-b border-border last:border-b-0',
-                        checked && 'bg-brand-gold/10'
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleSong(song.sourceId)}
-                        className="w-4 h-4 accent-[var(--color-theme-accent)]"
-                      />
-                      <div className="w-10 h-10 rounded overflow-hidden bg-surface-alt shrink-0 border border-border">
-                        {song.cover && (
+            <BookEditorSection title="导入预览">
+              <div className="space-y-4">
+                <div className={`${bookPanelClass} space-y-4 p-4`}>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)]">
+                        {preview.cover && (
                           <img
-                            src={song.cover}
+                            src={preview.cover}
                             alt="封面"
-                            className="w-full h-full object-cover"
+                            className="h-full w-full object-cover"
                             referrerPolicy="no-referrer"
                           />
                         )}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-text-primary truncate">
-                          {song.title}
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-text-muted">
+                          {platformLabel(preview.platform)} · {resourceTypeLabel(preview.type)}
                         </p>
-                        <p className="text-xs text-text-muted truncate">
-                          {formatMusicCredits(song.artists, '未知歌手')} · {song.album}
-                        </p>
+                        <h4 className="truncate text-base font-bold text-text-primary">
+                          {preview.title}
+                        </h4>
+                        <p className="truncate text-sm text-text-secondary">{preview.artist}</p>
                       </div>
-                    </label>
-                  )
-                })}
-              </div>
-
-              {importResult ? (
-                <div className="flex items-center gap-2 text-sm theme-text-success theme-bg-success-soft border theme-border-success-soft rounded px-4 py-3">
-                  <CheckCircle2 size={15} />
-                  <span>{importResult}</span>
-                </div>
-              ) : null}
-
-              {!importResult &&
-                (!confirmingImport ? (
-                  <button
-                    onClick={() => {
-                      if (!selectedCount) {
-                        setError('请至少选择一首歌曲')
-                        return
-                      }
-                      setConfirmingImport(true)
-                      setError('')
-                    }}
-                    className="px-5 py-2 rounded theme-button-primary font-medium transition-all text-sm"
-                  >
-                    下一步：确认导入
-                  </button>
-                ) : (
-                  <div className="theme-status-warning-soft rounded px-4 py-3 space-y-3">
-                    <p className="text-sm flex items-center gap-2">
-                      <AlertTriangle size={15} />
-                      即将导入 {selectedCount} 首歌曲，确认后将写入数据库。
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={handleFinalImport}
-                        disabled={importing}
-                        className="px-4 py-2 rounded theme-button-primary font-medium disabled:opacity-50 inline-flex items-center gap-2 text-sm transition-all"
-                      >
-                        {importing ? <Loader2 size={14} className="animate-spin" /> : null}
-                        {importing ? '导入中' : '最终确认导入'}
-                      </button>
-                      <button
-                        onClick={() => setConfirmingImport(false)}
-                        className="px-4 py-2 rounded theme-button-secondary transition-all text-sm"
-                      >
-                        返回修改
-                      </button>
                     </div>
+                    <a
+                      href={preview.platformUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={bookSmallButtonClass}
+                    >
+                      查看原始页面
+                    </a>
                   </div>
-                ))}
-            </section>
+
+                  {preview.description && (
+                    <p className="rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] p-3 text-sm text-text-secondary">
+                      {preview.description}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                  <span className="text-text-secondary">
+                    共 {preview.totalSongs} 首，已选择 {selectedCount} 首
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={handleSelectAll} className={bookSmallButtonClass}>
+                      全选
+                    </button>
+                    <button onClick={handleSelectNone} className={bookSmallButtonClass}>
+                      清空
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-64 overflow-y-auto rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)]">
+                  {preview.songs.map((song, index) => {
+                    const checked = selectedIds.has(song.sourceId)
+                    return (
+                      <label
+                        key={`${song.sourceId}-${index}`}
+                        className={clsx(
+                          'flex cursor-pointer items-center gap-3 border-b border-[var(--book-ink-line)] px-4 py-3 transition-colors last:border-b-0 hover:bg-[var(--book-panel-hover)]',
+                          checked &&
+                            'bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)]'
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSong(song.sourceId)}
+                          className="h-4 w-4 accent-[var(--color-theme-accent)]"
+                        />
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)]">
+                          {song.cover && (
+                            <img
+                              src={song.cover}
+                              alt="封面"
+                              className="h-full w-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-text-primary">
+                            {song.title}
+                          </p>
+                          <p className="truncate text-xs text-text-muted">
+                            {formatMusicCredits(song.artists, '未知歌手')} · {song.album}
+                          </p>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+
+                {importResult ? (
+                  <div className="flex items-center gap-2 rounded border px-4 py-3 text-sm theme-bg-success-soft theme-border-success-soft theme-text-success">
+                    <CheckCircle2 size={15} />
+                    <span>{importResult}</span>
+                  </div>
+                ) : null}
+
+                {!importResult &&
+                  (!confirmingImport ? (
+                    <button
+                      onClick={() => {
+                        if (!selectedCount) {
+                          setError('请至少选择一首歌曲')
+                          return
+                        }
+                        setConfirmingImport(true)
+                        setError('')
+                      }}
+                      className="rounded px-5 py-2 text-sm font-medium theme-button-primary transition-all"
+                    >
+                      下一步：确认导入
+                    </button>
+                  ) : (
+                    <div className="space-y-3 rounded px-4 py-3 theme-status-warning-soft">
+                      <p className="flex items-center gap-2 text-sm">
+                        <AlertTriangle size={15} />
+                        即将导入 {selectedCount} 首歌曲，确认后将写入数据库。
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={handleFinalImport}
+                          disabled={importing}
+                          className="inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium theme-button-primary transition-all disabled:opacity-50"
+                        >
+                          {importing ? <Loader2 size={14} className="animate-spin" /> : null}
+                          {importing ? '导入中' : '最终确认导入'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmingImport(false)}
+                          className={bookSecondaryButtonClass}
+                        >
+                          返回修改
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </BookEditorSection>
           )}
         </div>
 
-        <footer className="px-5 md:px-6 py-3 border-t border-border bg-surface-alt/60 flex items-center justify-between">
-          <p className="text-xs text-text-muted inline-flex items-center gap-1">
-            <AlertTriangle size={13} />
-            仅管理员可导入，且始终保留原平台链接。
-          </p>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded theme-button-secondary transition-all text-sm"
-          >
+        <footer className="flex justify-end border-t border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-5 py-3 pb-safe md:px-6">
+          <button onClick={onClose} className={bookSecondaryButtonClass}>
             关闭
           </button>
         </footer>
