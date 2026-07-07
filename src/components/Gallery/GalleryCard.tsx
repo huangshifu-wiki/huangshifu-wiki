@@ -96,11 +96,18 @@ export const GalleryCard = React.memo(function GalleryCard({
   const isSmallGrid = viewMode === 'small'
 
   return (
-    <Link to={galleryUrl} className="group block min-w-0">
+    <Link
+      to={galleryUrl}
+      className={clsx(
+        'group block min-w-0 overflow-hidden rounded-lg',
+        'border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)]',
+        'transition-all duration-300 hover:shadow-[0_14px_36px_rgba(72,53,25,0.1)]',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary'
+      )}
+    >
       <div
         className={clsx(
-          'relative overflow-hidden rounded bg-surface-alt shadow-[0_4px_20px_rgba(42,37,32,0.06)]',
-          'transition-shadow duration-300 group-hover:shadow-[0_12px_48px_rgba(42,37,32,0.09)]',
+          'relative overflow-hidden bg-surface-alt',
           VIEW_MODE_CONFIG[viewMode].cardHeight
         )}
       >
@@ -113,7 +120,7 @@ export const GalleryCard = React.memo(function GalleryCard({
           <GalleryStatusBadge gallery={gallery} />
         </div>
       </div>
-      <div className={clsx(isSmallGrid ? 'pt-2' : 'pt-2.5')}>
+      <div className={clsx(isSmallGrid ? 'p-2.5' : 'space-y-2.5 p-3')}>
         <h3
           className={clsx(
             'truncate font-semibold tracking-[0.02em] text-text-primary transition-colors group-hover:text-brand-gold',
@@ -127,14 +134,14 @@ export const GalleryCard = React.memo(function GalleryCard({
             {gallery.tags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
-                className="max-w-full truncate rounded bg-surface-alt px-1.5 py-0.5 text-[0.6875rem] text-brand-gold"
+                className="max-w-full truncate rounded-sm px-1.5 py-0.5 text-[0.6875rem] theme-tag"
               >
                 {tag}
               </span>
             ))}
           </div>
         ) : null}
-        <div className="mt-1.5">
+        <div className={clsx(isSmallGrid ? 'mt-1.5' : '')}>
           <GalleryMeta gallery={gallery} compact={isSmallGrid} />
         </div>
       </div>
