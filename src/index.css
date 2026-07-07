@@ -1549,6 +1549,10 @@ html {
   row-gap: 1.5rem !important;
 }
 
+.mobile-grid.wiki-large-grid {
+  row-gap: 1.5rem !important;
+}
+
 .mobile-grid.grid-cols-1 > * + *,
 .shared-ink-list > * + * {
   margin-top: -1px;
@@ -1606,6 +1610,12 @@ html {
 .gufeng-gallery-page .mobile-grid .group:hover,
 .gufeng-gallery-page .mobile-grid [role='button']:hover,
 .gufeng-gallery-page .mobile-grid a:hover {
+  transform: none;
+}
+
+.gufeng-wiki-page .mobile-grid .group:hover,
+.gufeng-wiki-page .mobile-grid [role='button']:hover,
+.gufeng-wiki-page .mobile-grid a:hover {
   transform: none;
 }
 

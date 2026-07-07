@@ -3,11 +3,11 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Book, Plus } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { useUserPreferences } from '../../context/UserPreferencesContext'
-import { ViewModeSelector } from '../../components/ViewModeSelector'
 import { VIEW_MODE_CONFIG } from '../../lib/viewModes'
 import { clsx } from 'clsx'
 import { apiGet } from '../../lib/apiClient'
 import WikiCard from '../../components/wiki/WikiCard'
+import { WikiFilters } from '../../components/wiki/WikiFilters'
 import Pagination from '../../components/Pagination'
 import { IncrementalLoadFooter } from '../../components/IncrementalLoadFooter'
 import type { WikiItem } from './types'
@@ -119,56 +119,51 @@ const WikiList = () => {
   }
 
   return (
-    <div className="mobile-page-shell antique-page">
+    <div className="gufeng-wiki-page mobile-page-shell">
       <div className="mobile-page-container">
-        <div className="mobile-page-titlebar mb-6">
-          <h1 className="mobile-page-title">百科</h1>
-          <div className="mobile-action-row">
-            {user && !isBanned && (
-              <Link
-                to={'/wiki/new'}
-                className="px-5 py-2 theme-button-primary text-sm rounded transition-all flex items-center gap-2"
-              >
-                <Plus size={15} /> 创建页面
-              </Link>
-            )}
+        <header className="mobile-page-header">
+          <div className="mobile-page-titlebar">
+            <div className="min-w-0">
+              <h1 className="mobile-page-title">百科</h1>
+              <div className="mt-3 flex">
+                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+              </div>
+            </div>
+            <div className="mobile-action-row">
+              {user && !isBanned && (
+                <Link
+                  to="/wiki/new"
+                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all active:scale-[0.98]"
+                >
+                  <Plus size={15} aria-hidden="true" /> 创建页面
+                </Link>
+              )}
+            </div>
           </div>
-        </div>
+        </header>
 
-        <div className="mobile-filterbar">
-          <div className="mobile-filter-tabs">
-            {['all', ...categories.map((item) => item.id)].map((cat) => (
-              <Link
-                key={cat}
-                to={getCategoryUrl(cat)}
-                className={clsx(
-                  'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
-                  category === cat
-                    ? 'text-brand-gold font-semibold'
-                    : 'text-text-muted hover:text-brand-gold'
-                )}
-              >
-                {cat === 'all' ? '全部' : getCategoryLabel(cat)}
-              </Link>
-            ))}
-          </div>
-
-          <div className="mobile-filter-actions">
-            <ViewModeSelector
-              value={viewMode}
-              onChange={(mode) => void setScopedViewMode('wiki', mode)}
-              size="sm"
-            />
-            <span className="text-text-muted">{visibleTotal} 个页面</span>
-          </div>
-        </div>
+        <WikiFilters
+          categories={categories}
+          activeCategory={category}
+          total={visibleTotal}
+          viewMode={viewMode}
+          getCategoryUrl={getCategoryUrl}
+          getCategoryLabel={getCategoryLabel}
+          onViewModeChange={(mode) => void setScopedViewMode('wiki', mode)}
+        />
 
         {isInitialLoading ? (
           <div
             className={clsx(
-              'mobile-grid grid',
-              VIEW_MODE_CONFIG[viewMode].gridCols,
-              VIEW_MODE_CONFIG[viewMode].gap
+              viewMode === 'list'
+                ? 'flex flex-col gap-0.5'
+                : clsx(
+                    'mobile-grid grid',
+                    'items-start',
+                    viewMode === 'large' && 'wiki-large-grid',
+                    VIEW_MODE_CONFIG[viewMode].gridCols,
+                    VIEW_MODE_CONFIG[viewMode].gap
+                  )
             )}
           >
             {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -176,7 +171,7 @@ const WikiList = () => {
                 key={i}
                 className={clsx(
                   viewMode === 'list' ? 'h-24' : VIEW_MODE_CONFIG[viewMode].cardHeight,
-                  'book-skeleton border-y border-[var(--book-ink-line)]'
+                  'book-skeleton rounded border border-[var(--book-ink-line)]'
                 )}
               ></div>
             ))}
@@ -185,9 +180,15 @@ const WikiList = () => {
           <>
             <div
               className={clsx(
-                'mobile-grid grid',
-                VIEW_MODE_CONFIG[viewMode].gridCols,
-                VIEW_MODE_CONFIG[viewMode].gap
+                viewMode === 'list'
+                  ? 'flex flex-col gap-0.5'
+                  : clsx(
+                      'mobile-grid grid',
+                      'items-start',
+                      viewMode === 'large' && 'wiki-large-grid',
+                      VIEW_MODE_CONFIG[viewMode].gridCols,
+                      VIEW_MODE_CONFIG[viewMode].gap
+                    )
               )}
             >
               {visiblePages.map((page) => (
@@ -195,7 +196,6 @@ const WikiList = () => {
                   key={page.id}
                   page={page}
                   viewMode={viewMode}
-                  cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                   categoryLabel={getCategoryLabel(page.category)}
                 />
               ))}
@@ -222,9 +222,9 @@ const WikiList = () => {
             ) : null}
           </>
         ) : (
-          <div className="border-y border-[var(--book-ink-line)] p-20 text-center">
-            <Book size={48} className="mx-auto text-border-light mb-6" />
-            <p className="text-text-muted italic">暂无相关百科页面</p>
+          <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+            <Book size={48} className="mx-auto mb-6 text-border" />
+            <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">暂无相关百科页面</p>
           </div>
         )}
       </div>
