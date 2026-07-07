@@ -66,6 +66,19 @@ const buildDirectRelationGraph = (
   })
 }
 
+const SectionHeading = ({ children }: { children: React.ReactNode }) => (
+  <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold tracking-[0.1em] text-text-primary">
+    <span className="inline-block h-4 w-[3px] rounded-[1px] bg-brand-gold opacity-60" />
+    {children}
+  </h2>
+)
+
+const SidebarHeading = ({ children }: { children: React.ReactNode }) => (
+  <h3 className="mb-4 text-center text-[0.8125rem] tracking-[0.14em] text-text-muted uppercase">
+    {children}
+  </h3>
+)
+
 const WikiPageView = () => {
   const { slug } = useParams()
   const navigate = useNavigate()
@@ -138,17 +151,38 @@ const WikiPageView = () => {
 
   if (loading)
     return (
-      <div className="mobile-page-shell antique-page">
-        <div className="mobile-page-container text-center italic text-[var(--color-text-antique-muted)]">
-          {t('wiki.loading')}
+      <div className="mobile-page-shell antique-detail">
+        <div className="mobile-page-container">
+          <div className="mb-6 h-4 w-24 animate-pulse rounded bg-surface-alt" />
+          <div className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
+            <div className="mb-4 h-10 w-2/3 animate-pulse rounded bg-surface-alt" />
+            <div className="h-5 w-1/2 animate-pulse rounded bg-surface-alt" />
+          </div>
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((item) => (
+              <div
+                key={item}
+                className="h-5 animate-pulse rounded bg-surface-alt"
+                style={{ width: `${94 - item * 10}%` }}
+              />
+            ))}
+          </div>
         </div>
       </div>
     )
   if (!page)
     return (
-      <div className="mobile-page-shell antique-page">
-        <div className="mobile-page-container text-center italic text-[var(--color-text-antique-muted)]">
-          {t('wiki.notFound')}
+      <div className="mobile-page-shell antique-detail">
+        <div className="mobile-page-container">
+          <Link
+            to="/wiki"
+            className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
+          >
+            <ArrowLeft size={16} /> {t('wiki.backToList')}
+          </Link>
+          <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
+            {t('wiki.notFound')}
+          </div>
         </div>
       </div>
     )
@@ -207,67 +241,68 @@ const WikiPageView = () => {
   }
 
   return (
-    <div className="mobile-page-shell antique-detail">
+    <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
       <div className="mobile-page-container wiki-detail-page">
-        {/* Breadcrumb */}
         <Link
           to={'/wiki'}
-          className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
+          className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
         >
           <ArrowLeft size={18} /> {t('wiki.backToList')}
         </Link>
 
-        {/* Header */}
-        <header className="mb-7">
-          <div className="mobile-page-titlebar">
-            <h1 className="mobile-page-title">{page.title}</h1>
-            <div className="mobile-action-row">
+        <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
+          <div className="mobile-page-titlebar items-start">
+            <div className="min-w-0">
+              <h1 className="mobile-page-title">{page.title}</h1>
+            </div>
+            <div className="mobile-action-row mt-1 justify-start sm:justify-end">
               {canEditPage && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/edit`}
-                  className="px-4 py-2 text-[0.9375rem] rounded theme-button-primary transition-all flex items-center gap-2"
+                  className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
                 >
-                  <Edit3 size={16} /> {t('wiki.edit')}
+                  <Edit3 size={14} /> {t('wiki.edit')}
                 </Link>
               )}
               {canEditPage && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/history`}
-                  className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
+                  className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 >
-                  <History size={16} /> {t('wiki.history')}
+                  <History size={14} /> {t('wiki.history')}
                 </Link>
               )}
               {user && !isBanned && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/branches`}
-                  className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
+                  className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 >
-                  <GitBranch size={16} /> {t('wiki.branch')}
+                  <GitBranch size={14} /> {t('wiki.branch')}
                 </Link>
               )}
               <button
                 onClick={handleCopyPageLink}
-                className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
+                className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 title={t('wiki.copyInternalLink')}
               >
-                <Link2 size={16} /> {t('wiki.copy')}
+                <Link2 size={14} /> {t('wiki.copy')}
               </button>
             </div>
           </div>
-        </header>
 
-        {/* Filter bar style info bar */}
-        <div className="mobile-filterbar">
-          <div className="mobile-filter-tabs items-center">
-            <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold">
+          <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[0.8125rem] text-text-muted">
+            <span className="rounded-sm px-2 py-0.5 text-xs theme-tag">
               {getCategoryLabel(page.category)}
+            </span>
+            <span className="flex items-center gap-1">
+              <Clock size={14} />
+              {formatDate(page.updatedAt, 'yyyy-MM-dd HH:mm')}
             </span>
             {canSubmitReview && (
               <button
                 onClick={handleSubmitReview}
                 disabled={submittingReview}
-                className="px-3 py-1 text-[0.8125rem] rounded theme-status-warning hover:opacity-90 disabled:opacity-50 transition-all self-center mb-1"
+                className="rounded border border-[var(--book-ink-line)] px-3 py-1 text-[0.8125rem] text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold disabled:opacity-50"
               >
                 {submitButtonText}
               </button>
@@ -279,30 +314,18 @@ const WikiPageView = () => {
               </span>
             ) : null}
           </div>
-          <div className="mobile-filter-actions">
-            <span className="flex items-center gap-1">
-              <Clock size={14} />
-              {formatDate(page.updatedAt, 'yyyy-MM-dd HH:mm')}
-            </span>
-          </div>
-        </div>
+        </header>
 
-        {/* Two Column Layout */}
         <div className="mobile-detail-grid">
-          {/* Main Content */}
           <div>
-            {/* Markdown Content */}
             <div className="prose prose-lg max-w-none font-body leading-relaxed text-text-primary">
               <WikiMarkdown content={page.content} />
             </div>
 
-            {/* Relation Graph */}
             {showGraph && canShowRelationGraph && expandableRelationGraph && (
-              <div className="mt-12 pt-8 border-t border-border">
+              <div className="mt-12 border-t border-[var(--book-ink-line)] pt-8">
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                  <h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase flex items-center gap-2">
-                    <Network size={14} className="text-brand-gold" /> {t('wiki.relationGraph')}
-                  </h4>
+                  <SectionHeading>{t('wiki.relationGraph')}</SectionHeading>
                   <span className="text-xs text-text-muted">{t('wiki.graphClickHint')}</span>
                 </div>
                 <RelationGraph
@@ -313,27 +336,26 @@ const WikiPageView = () => {
               </div>
             )}
 
-            {/* Relations List */}
             {displayedRelations.length > 0 && !showGraph && (
-              <div className="mt-12 pt-8 border-t border-border">
-                <h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-5 flex items-center gap-2">
-                  <Book size={14} className="text-brand-gold" /> {t('wiki.relatedPages')}
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="mt-12 border-t border-[var(--book-ink-line)] pt-8">
+                <div className="mb-5">
+                  <SectionHeading>{t('wiki.relatedPages')}</SectionHeading>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {displayedRelations.map((relation, index: number) => (
                     <Link
                       key={`${relation.targetSlug}-${index}`}
                       to={`/wiki/${relation.targetSlug}`}
-                      className="min-w-0 p-3 bg-surface border border-border rounded hover:border-brand-gold transition-all group"
+                      className="group min-w-0 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] p-3 transition-all hover:border-brand-gold/50 hover:shadow-[0_10px_30px_rgba(72,53,25,0.08)]"
                     >
-                      <p className="text-xs text-brand-gold font-medium uppercase tracking-wider mb-1">
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wider text-brand-gold">
                         {relation.typeLabel || RELATION_TYPE_LABELS[relation.type] || relation.type}
                       </p>
-                      <p className="text-wrap-anywhere font-medium text-text-primary group-hover:text-brand-gold group-hover:underline underline-offset-4 transition-colors line-clamp-2">
+                      <p className="text-wrap-anywhere line-clamp-2 font-medium text-text-primary transition-colors group-hover:text-brand-gold">
                         {getWikiRelationDisplayTitle(relation)}
                       </p>
                       {relation.bidirectional && (
-                        <span className="inline-block mt-1 text-[10px] text-text-muted">
+                        <span className="mt-1 inline-block text-[10px] text-text-muted">
                           {t('wiki.bidirectionalRelation')}
                         </span>
                       )}
@@ -343,23 +365,22 @@ const WikiPageView = () => {
               </div>
             )}
 
-            {/* Backlinks */}
             {backlinks.length > 0 && (
-              <div className="mt-12 pt-8 border-t border-border">
-                <h4 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-5 flex items-center gap-2">
-                  <ChevronRight size={14} className="text-brand-gold" /> {t('wiki.backlinks')}
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="mt-12 border-t border-[var(--book-ink-line)] pt-8">
+                <div className="mb-5">
+                  <SectionHeading>{t('wiki.backlinks')}</SectionHeading>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {backlinks.map((link) => (
                     <Link
                       key={link.id}
                       to={`/wiki/${link.slug}`}
-                      className="min-w-0 p-3 bg-surface border border-border rounded hover:border-brand-gold transition-all group"
+                      className="group min-w-0 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] p-3 transition-all hover:border-brand-gold/50 hover:shadow-[0_10px_30px_rgba(72,53,25,0.08)]"
                     >
-                      <p className="text-wrap-anywhere font-medium text-text-primary group-hover:text-brand-gold group-hover:underline underline-offset-4 transition-colors line-clamp-2">
+                      <p className="text-wrap-anywhere line-clamp-2 font-medium text-text-primary transition-colors group-hover:text-brand-gold">
                         {link.title}
                       </p>
-                      <p className="text-xs text-text-muted mt-1 truncate">{link.slug}</p>
+                      <p className="mt-1 truncate text-xs text-text-muted">{link.slug}</p>
                     </Link>
                   ))}
                 </div>
@@ -367,22 +388,17 @@ const WikiPageView = () => {
             )}
           </div>
 
-          {/* Sidebar */}
           <aside className="mobile-detail-aside">
-            {/* Actions */}
-            <div className="py-5 border-b border-border">
-              <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">
-                {t('wiki.interaction')}
-              </h3>
+            <div className="py-5">
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={toggleLike}
                   disabled={!user || liking}
                   className={clsx(
-                    'flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5',
+                    'flex-1 rounded border px-3 py-2 text-sm font-medium transition-all flex items-center justify-center gap-1.5',
                     page.likedByMe
-                      ? 'theme-button-danger border border-transparent'
-                      : 'bg-surface border theme-button-danger-outline text-text-secondary',
+                      ? 'border-[color-mix(in_srgb,var(--color-error)_22%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_6%,transparent)] text-[var(--color-error)]'
+                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
                     (!user || liking) && 'opacity-50 cursor-not-allowed'
                   )}
                   title={page.likedByMe ? t('wiki.unlike') : t('wiki.like')}
@@ -393,10 +409,10 @@ const WikiPageView = () => {
                   onClick={toggleDislike}
                   disabled={!user || disliking}
                   className={clsx(
-                    'flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5',
+                    'flex-1 rounded border px-3 py-2 text-sm font-medium transition-all flex items-center justify-center gap-1.5',
                     page.dislikedByMe
-                      ? 'theme-button-warning border border-transparent'
-                      : 'bg-surface border theme-button-warning-outline text-text-secondary',
+                      ? 'border-[color-mix(in_srgb,var(--color-warning)_28%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_8%,transparent)] text-[var(--color-warning)]'
+                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
                     (!user || disliking) && 'opacity-50 cursor-not-allowed'
                   )}
                   title={page.dislikedByMe ? t('wiki.undislike') : t('wiki.dislike')}
@@ -404,15 +420,15 @@ const WikiPageView = () => {
                   <ThumbsDown size={15} /> {page.dislikesCount || 0}
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 <button
                   onClick={toggleFavorite}
                   disabled={!user || favoriting}
                   className={clsx(
-                    'flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5',
+                    'flex-1 rounded border px-3 py-2 text-sm font-medium transition-all flex items-center justify-center gap-1.5',
                     page.favoritedByMe
-                      ? 'bg-[var(--color-theme-accent)] text-white border border-transparent'
-                      : 'bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold',
+                      ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
+                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
                     (!user || favoriting) && 'opacity-50 cursor-not-allowed'
                   )}
                   title={page.favoritedByMe ? t('wiki.unfavorite') : t('wiki.favoritePage')}
@@ -421,7 +437,7 @@ const WikiPageView = () => {
                 </button>
                 <button
                   onClick={handleCopyPageLink}
-                  className="flex-1 px-3 py-2 rounded text-sm font-medium bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold transition-all flex items-center justify-center gap-1.5"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded border border-[var(--book-ink-line)] px-3 py-2 text-sm font-medium text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold"
                   title={t('wiki.share')}
                 >
                   <Share2 size={15} /> {t('wiki.share')}
@@ -432,10 +448,10 @@ const WikiPageView = () => {
                   onClick={togglePin}
                   disabled={pinning}
                   className={clsx(
-                    'w-full mt-2 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5',
+                    'mt-2 flex w-full items-center justify-center gap-1.5 rounded border px-3 py-2 text-sm font-medium transition-all',
                     page.isPinned
-                      ? 'bg-[var(--color-theme-accent)] text-white border border-transparent'
-                      : 'bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold',
+                      ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
+                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
                     pinning && 'opacity-50 cursor-not-allowed'
                   )}
                 >
@@ -446,10 +462,10 @@ const WikiPageView = () => {
                 <button
                   onClick={() => setShowGraph(!showGraph)}
                   className={clsx(
-                    'w-full mt-2 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5',
+                    'mt-2 flex w-full items-center justify-center gap-1.5 rounded border px-3 py-2 text-sm font-medium transition-all',
                     showGraph
-                      ? 'bg-[var(--color-theme-accent)] text-white border border-transparent'
-                      : 'bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
+                      ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
+                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
                   )}
                 >
                   <Network size={15} />{' '}
@@ -458,17 +474,13 @@ const WikiPageView = () => {
               )}
             </div>
 
-            {/* Status */}
-            <div className="py-5 border-b border-border">
-              <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">
-                {t('wiki.status')}
-              </h3>
+            <div className="border-t border-[var(--book-ink-line)] py-5">
               <div className="flex flex-col gap-2.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">{t('wiki.reviewStatus')}</span>
                   <span
                     className={clsx(
-                      'px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider',
+                      'rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider',
                       getStatusClassName(page.status)
                     )}
                   >
@@ -477,51 +489,46 @@ const WikiPageView = () => {
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">{t('wiki.editor')}</span>
-                  <span className="text-text-primary font-medium">
+                  <span className="text-text-primary">
                     {page.lastEditorName || t('wiki.anonymous')}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">{t('wiki.createdAt')}</span>
-                  <span className="text-text-primary font-medium">
+                  <span className="text-text-primary">
                     {formatDate(page.createdAt, 'yyyy-MM-dd')}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-muted">{t('wiki.updatedAt')}</span>
-                  <span className="text-text-primary font-medium">
+                  <span className="text-text-primary">
                     {formatDate(page.updatedAt, 'yyyy-MM-dd HH:mm')}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Tags */}
             {page.tags && page.tags.length > 0 && (
-              <div className="py-5 border-b border-border">
-                <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">
-                  {t('wiki.tags')}
-                </h3>
+              <div className="border-t border-[var(--book-ink-line)] py-5">
+                <SidebarHeading>{t('wiki.tags')}</SidebarHeading>
                 <div className="flex flex-wrap gap-2">
                   {page.tags.map((tag: string) => (
-                    <span
+                    <button
+                      type="button"
                       key={tag}
                       onClick={() => navigate(`/wiki?tag=${encodeURIComponent(tag)}`)}
-                      className="cursor-pointer px-2 py-1 bg-surface border border-border text-text-secondary text-xs rounded hover:text-brand-gold hover:border-brand-gold transition-all"
+                      className="cursor-pointer rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-2 py-1 text-xs text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold"
                     >
                       {tag}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Location */}
             {(page.locationDetail || page.locationName) && (
-              <div className="py-5">
-                <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">
-                  {t('wiki.location')}
-                </h3>
+              <div className="border-t border-[var(--book-ink-line)] py-5">
+                <SidebarHeading>{t('wiki.location')}</SidebarHeading>
                 <div className="flex items-center gap-2 text-sm text-text-secondary">
                   <MapPin size={14} className="text-brand-gold" />
                   <span>{page.locationDetail || page.locationName}</span>

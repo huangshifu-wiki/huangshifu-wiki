@@ -224,12 +224,12 @@ const RelationGraph = ({ graph, currentSlug, onNodeClick }: RelationGraphProps) 
         aria-label="Wiki 关系图谱"
       />
 
-      <div className="mt-6 flex flex-wrap gap-4 text-sm">
+      <div className="mt-6 flex flex-wrap gap-3 text-sm">
         {(Object.entries(RELATION_TYPE_LABELS) as [WikiRelationType, string][]).map(
           ([type, label]) => (
             <div
               key={type}
-              className="inline-flex items-center gap-2 rounded-sm bg-surface-alt px-3 py-1.5"
+              className="inline-flex items-center gap-2 rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-1.5"
             >
               <span
                 className={`inline-block h-3 w-3 rounded`}
@@ -239,7 +239,7 @@ const RelationGraph = ({ graph, currentSlug, onNodeClick }: RelationGraphProps) 
             </div>
           )
         )}
-        <div className="inline-flex items-center gap-2 rounded-sm bg-surface-alt/50 px-3 py-1.5">
+        <div className="inline-flex items-center gap-2 rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-1.5">
           <span className="text-text-muted font-medium">虚线表示反向推断关系</span>
         </div>
       </div>
