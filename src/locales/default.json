@@ -240,6 +240,7 @@
     "replyToPlaceholder": "回复 @{{name}}...",
     "commentPlaceholder": "发表你的看法...",
     "commentShortcutHint": "按 Ctrl/Cmd + Enter 发布评论",
+    "sendComment": "发送",
     "loginToComment": "请先登录后发表评论",
     "anonymousUser": "匿名用户",
     "emptyComments": "暂无评论，快来抢沙发吧！",
