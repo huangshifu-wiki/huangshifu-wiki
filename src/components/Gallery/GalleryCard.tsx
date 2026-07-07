@@ -108,7 +108,7 @@ export const GalleryCard = React.memo(function GalleryCard({
       <div
         className={clsx(
           'relative overflow-hidden bg-surface-alt',
-          VIEW_MODE_CONFIG[viewMode].cardHeight
+          isSmallGrid ? 'aspect-square' : VIEW_MODE_CONFIG[viewMode].cardHeight
         )}
       >
         <GalleryCover
