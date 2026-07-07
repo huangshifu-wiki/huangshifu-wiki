@@ -1,133 +1,19 @@
 import React, { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { Calendar, MapPin } from '@/src/components/icons'
+import { useSearchParams } from 'react-router-dom'
 import { clsx } from 'clsx'
-import { SmartImage } from '../components/SmartImage'
-import { ViewModeSelector } from '../components/ViewModeSelector'
+import { EventCard } from '../components/Events/EventCard'
+import { EventFilters, type EventSortOrder } from '../components/Events/EventFilters'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import Pagination from '../components/Pagination'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { apiGet } from '../lib/apiClient'
-import {
-  formatEventListDate,
-  formatEventTicketPriceRange,
-  getEventCoverSrc,
-  getEventListDayOffset,
-} from '../lib/eventFormat'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import type { EventListResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
 import type { ViewMode } from '../types/userPreferences'
 
 const DEFAULT_PAGE_SIZE = 12
-type EventSortOrder = 'asc' | 'desc'
-const EVENT_VIEW_MODES = ['large', 'list'] as const
-const TAG_FILTER_BASE_CLASS =
-  'relative pb-2 text-[1.125rem] tracking-[0.05em] transition-all cursor-pointer'
-
-const getTagFilterClassName = (active: boolean) =>
-  clsx(
-    TAG_FILTER_BASE_CLASS,
-    active
-      ? 'font-semibold text-brand-gold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:rounded-[1px] after:bg-[var(--color-theme-accent)]'
-      : 'text-text-muted hover:text-brand-gold'
-  )
-
-const EventCover = ({ event, className }: { event: EventItem; className?: string }) => {
-  const src = getEventCoverSrc(event)
-  if (src) {
-    return <SmartImage src={src} alt={event.title} className={clsx('object-cover', className)} />
-  }
-
-  return (
-    <div
-      className={clsx(
-        'flex flex-col items-center justify-center gap-2 bg-surface-alt text-text-muted',
-        className
-      )}
-    >
-      <Calendar size={24} className="text-brand-gold/60" />
-      <span className="text-xs">暂无封面</span>
-    </div>
-  )
-}
-
-const EventCard = ({ event, viewMode }: { event: EventItem; viewMode: ViewMode }) => {
-  const eventDate = formatEventListDate(event.timeSlots)
-  const dayOffset = getEventListDayOffset(event.timeSlots)
-  const isFutureOrToday = dayOffset !== null && dayOffset >= 0
-  const ticketPriceRange = formatEventTicketPriceRange(event.ticketPrices)
-  const isListMode = viewMode === 'list'
-
-  return (
-    <Link
-      to={`/events/${event.slug}`}
-      className={clsx(
-        'group overflow-hidden border-y border-[var(--book-ink-line)] bg-transparent transition-all hover:border-brand-gold',
-        isListMode ? 'flex gap-4 py-3' : 'block'
-      )}
-    >
-      <div
-        className={clsx(
-          'overflow-hidden bg-surface-alt',
-          isListMode ? 'h-24 w-24 flex-shrink-0' : 'aspect-[16/10]'
-        )}
-      >
-        <EventCover
-          event={event}
-          className="h-full w-full transition-transform duration-500 group-hover:scale-[1.04]"
-        />
-      </div>
-      <div className={clsx('min-w-0', isListMode ? 'flex-1 space-y-2 py-0.5' : 'space-y-3 py-4')}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            {dayOffset !== null && (
-              <span
-                className={clsx(
-                  'shrink-0 text-xs font-semibold tabular-nums',
-                  isFutureOrToday ? 'theme-text-success' : 'theme-text-error'
-                )}
-              >
-                {isFutureOrToday ? `+${dayOffset}` : dayOffset}
-              </span>
-            )}
-            <h2 className="truncate text-base font-semibold text-text-primary transition-colors group-hover:text-brand-gold">
-              {event.title}
-            </h2>
-          </div>
-          <span
-            className={clsx(
-              'shrink-0 text-right font-medium text-text-secondary tabular-nums',
-              isListMode ? 'text-xs' : 'text-sm'
-            )}
-          >
-            {ticketPriceRange || '票价待定'}
-          </span>
-        </div>
-        <div className="space-y-2 text-xs text-text-muted">
-          {event.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {event.tags.slice(0, 3).map((tag) => (
-                <span key={tag} className="rounded-sm px-2 py-0.5 text-[10px] theme-tag">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-          <p className="flex items-center gap-1.5">
-            <Calendar size={13} className="text-brand-gold" />
-            <span className="truncate">{eventDate || '时间待定'}</span>
-          </p>
-          <p className="flex items-center gap-1.5">
-            <MapPin size={13} className="text-brand-gold" />
-            <span className="truncate">{event.location || '地点待定'}</span>
-          </p>
-        </div>
-      </div>
-    </Link>
-  )
-}
 
 const Events = () => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -221,66 +107,41 @@ const Events = () => {
   if (loading) return <PageSkeleton />
 
   return (
-    <div className="mobile-page-shell">
+    <div className="gufeng-events-page mobile-page-shell">
       <div className="mobile-page-container">
-        <div className="mobile-page-titlebar mb-6">
-          <h1 className="mobile-page-title">游记</h1>
-        </div>
-
-        <div className="mobile-filterbar">
-          {tags.length > 0 ? (
-            <div className="mobile-filter-tabs">
-              <Link to={getTagUrl('')} className={getTagFilterClassName(!selectedTag)}>
-                全部标签
-              </Link>
-              {tags.map((tag) => (
-                <Link
-                  key={tag}
-                  to={getTagUrl(tag)}
-                  className={getTagFilterClassName(selectedTag === tag)}
-                >
-                  {tag}
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div />
-          )}
-
-          <div className="mobile-filter-actions">
-            <ViewModeSelector
-              value={viewMode}
-              modes={EVENT_VIEW_MODES}
-              onChange={(mode) => void setScopedViewMode('events', mode)}
-              size="sm"
-            />
-            <div className="inline-flex rounded border border-border bg-surface p-0.5">
-              {(['desc', 'asc'] as const).map((order) => (
-                <button
-                  key={order}
-                  type="button"
-                  onClick={() => handleSortOrderChange(order)}
-                  className={clsx(
-                    'rounded px-2.5 py-1.5 text-xs font-medium transition-all',
-                    sortOrder === order
-                      ? 'bg-[var(--color-theme-accent)] text-white'
-                      : 'text-text-muted hover:text-text-secondary'
-                  )}
-                >
-                  {order === 'desc' ? '时间倒序' : '时间正序'}
-                </button>
-              ))}
+        <header className="mobile-page-header">
+          <div className="mobile-page-titlebar">
+            <div className="min-w-0">
+              <h1 className="mobile-page-title">游记</h1>
+              <div className="mt-3 flex">
+                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+              </div>
             </div>
           </div>
-        </div>
+        </header>
+
+        <EventFilters
+          tags={tags}
+          selectedTag={selectedTag}
+          sortOrder={sortOrder}
+          viewMode={viewMode}
+          getTagUrl={getTagUrl}
+          onSortOrderChange={handleSortOrderChange}
+          onViewModeChange={(mode) => void setScopedViewMode('events', mode)}
+        />
 
         {events.length > 0 ? (
           <>
             <div
               className={clsx(
-                'mobile-grid grid',
-                VIEW_MODE_CONFIG[viewMode].gridCols,
-                VIEW_MODE_CONFIG[viewMode].gap
+                viewMode === 'list'
+                  ? 'flex flex-col gap-0.5'
+                  : clsx(
+                      'mobile-grid grid',
+                      viewMode === 'large' && 'events-large-grid',
+                      VIEW_MODE_CONFIG[viewMode].gridCols,
+                      VIEW_MODE_CONFIG[viewMode].gap
+                    )
               )}
             >
               {events.map((event) => (
@@ -292,8 +153,8 @@ const Events = () => {
             )}
           </>
         ) : (
-          <div className="border-y border-border py-16 text-center text-sm text-text-muted">
-            暂无活动
+          <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+            <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">暂无活动</p>
           </div>
         )}
       </div>
