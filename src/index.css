@@ -1593,6 +1593,16 @@ html {
   transform: translateY(-1px);
 }
 
+.gufeng-events-page .mobile-grid a:hover {
+  transform: none;
+}
+
+.gufeng-music-page .mobile-grid .group:hover,
+.gufeng-music-page .mobile-grid [role='button']:hover,
+.gufeng-music-page .mobile-grid a:hover {
+  transform: none;
+}
+
 .mobile-page-shell .bg-surface,
 [data-admin-scroll-container] .bg-surface {
   background-color: var(--book-panel-bg);

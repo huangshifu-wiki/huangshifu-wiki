@@ -166,7 +166,7 @@ const SongCard = React.memo(function SongCard({
         'group cursor-pointer overflow-hidden rounded-lg',
         'border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)]',
         'transition-all duration-300',
-        'hover:-translate-y-0.5 hover:shadow-[0_14px_36px_rgba(72,53,25,0.1)]',
+        'hover:shadow-[0_14px_36px_rgba(72,53,25,0.1)]',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
         isCurrentSong && 'border-brand-gold/30'
       )}
