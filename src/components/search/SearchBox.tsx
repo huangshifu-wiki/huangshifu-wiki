@@ -210,7 +210,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     <div ref={wrapperRef} className="mb-6 border-y border-[var(--book-ink-line)] py-4 sm:py-6">
       <form
         onSubmit={handleSubmit}
-        className="relative group mb-5"
+        className="group relative mb-5"
         role="search"
         onKeyDown={handleListboxKeyDown}
       >
@@ -236,10 +236,10 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           autoComplete="off"
           aria-owns="search-suggestions"
           aria-expanded={dropdownOpen}
-          className="theme-input w-full rounded py-4 pl-12 pr-12 text-base shadow-inner transition-all sm:pr-40"
+          className="w-full rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] py-4 pl-12 pr-14 text-base text-text-primary shadow-[inset_0_1px_0_rgba(138,109,47,0.06)] outline-none transition-all placeholder:text-text-muted focus:border-brand-gold sm:pr-40"
         />
         <SearchIcon
-          className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-gold transition-colors"
+          className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted transition-colors group-focus-within:text-brand-gold"
           size={20}
         />
 
@@ -252,7 +252,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
             aria-hidden={!currentDropdown}
           >
             {visibleDropdown.type === 'history' && (
-              <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-surface-alt">
+              <div className="flex items-center justify-between border-b border-[var(--book-ink-line)] bg-surface-alt px-4 py-2">
                 <div className="flex items-center gap-2 text-xs font-medium text-text-muted">
                   <Clock size={14} />
                   <span>搜索历史</span>
@@ -260,7 +260,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                 <button
                   type="button"
                   onClick={handleClearHistory}
-                  className="p-1.5 rounded text-text-muted hover:text-brand-gold hover:bg-surface transition-colors"
+                  className="rounded p-1.5 text-text-muted transition-colors hover:bg-surface hover:text-brand-gold"
                   title="清空搜索历史"
                   aria-label="清空搜索历史"
                 >
@@ -276,7 +276,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                     type="button"
                     onClick={() => handleSuggestionClick(s)}
                     className={clsx(
-                      'w-full text-left px-4 py-2.5 transition-colors border-b border-border last:border-0',
+                      'w-full border-b border-[var(--book-ink-line)] px-4 py-2.5 text-left transition-colors last:border-0',
                       i === highlightedIndex
                         ? 'bg-[var(--color-theme-accent)] text-white'
                         : 'hover:bg-surface-alt'
@@ -319,7 +319,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                   <div
                     key={item.query}
                     className={clsx(
-                      'flex items-center border-b border-border last:border-0 transition-colors',
+                      'flex items-center border-b border-[var(--book-ink-line)] transition-colors last:border-0',
                       i === highlightedIndex
                         ? 'bg-[var(--color-theme-accent)] text-white'
                         : 'hover:bg-surface-alt'
@@ -401,7 +401,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
       {/* 混合搜索模式切换 */}
       {semanticSearchEnabled && (
-        <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-4 flex flex-col gap-3 border-t border-[var(--book-ink-line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"

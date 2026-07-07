@@ -1557,6 +1557,10 @@ html {
   row-gap: 1.5rem !important;
 }
 
+.mobile-grid.search-large-grid {
+  row-gap: 1.5rem !important;
+}
+
 .mobile-grid.grid-cols-1 > * + *,
 .shared-ink-list > * + * {
   margin-top: -1px;
@@ -1630,6 +1634,16 @@ html {
 .gufeng-forum-page .mobile-grid .group:hover,
 .gufeng-forum-page .mobile-grid [role='button']:hover,
 .gufeng-forum-page .mobile-grid a:hover {
+  transform: none;
+}
+
+.gufeng-search-page .shared-ink-list > *:hover {
+  transform: none;
+}
+
+.gufeng-search-page .mobile-grid .group:hover,
+.gufeng-search-page .mobile-grid [role='button']:hover,
+.gufeng-search-page .mobile-grid a:hover {
   transform: none;
 }
 

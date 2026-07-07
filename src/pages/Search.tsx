@@ -37,19 +37,22 @@ const Search: React.FC = () => {
   }, [semanticSearchEnabled, state.filters.semanticImageSearch, updateFilters])
 
   return (
-    <div className="mobile-page-shell">
+    <div className="gufeng-search-page mobile-page-shell">
       <div className="mobile-page-container search-page">
-        {/* Header */}
         <header className="mobile-page-header">
           <div className="mobile-page-titlebar">
-            <h1 className="mobile-page-title">搜索</h1>
+            <div className="min-w-0">
+              <h1 className="mobile-page-title">搜索</h1>
+              <div className="mt-3 flex">
+                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+              </div>
+            </div>
             <div className="mobile-action-row">
               <ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
             </div>
           </div>
         </header>
 
-        {/* Search Box */}
         <SearchBox
           query={state.query}
           suggestions={state.suggestions}
@@ -70,7 +73,6 @@ const Search: React.FC = () => {
           onClearSearchHistory={clearSearchHistory}
         />
 
-        {/* Search Filters */}
         <SearchFilters
           filters={state.filters}
           hotKeywords={state.hotKeywords}
@@ -84,7 +86,6 @@ const Search: React.FC = () => {
           onSearchKeyword={(keyword) => performSearch(keyword)}
         />
 
-        {/* Search Results */}
         <SearchResults
           state={state}
           viewMode={viewMode}

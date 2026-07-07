@@ -175,16 +175,24 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     ? mixedResults.filter((result) => activeTab === 'semantic' || result.sourceType === activeTab)
     : []
   const resultGridClassName = clsx(
-    'mobile-grid grid',
-    VIEW_MODE_CONFIG[viewMode].gridCols,
-    VIEW_MODE_CONFIG[viewMode].gap
+    viewMode === 'list'
+      ? 'shared-ink-list'
+      : clsx(
+          'mobile-grid grid items-start',
+          viewMode === 'large' && 'search-large-grid',
+          VIEW_MODE_CONFIG[viewMode].gridCols,
+          VIEW_MODE_CONFIG[viewMode].gap
+        )
   )
 
   if (loading) {
     return (
-      <div className="space-y-3 animate-pulse">
+      <div className="animate-pulse space-y-3">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-24 book-skeleton border-y border-[var(--book-ink-line)]" />
+          <div
+            key={i}
+            className="h-24 rounded border border-[var(--book-ink-line)] book-skeleton"
+          />
         ))}
       </div>
     )
@@ -192,9 +200,11 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   if (!hasSearched && !hasFilters) {
     return (
-      <div className="border-y border-[var(--book-ink-line)] p-10 text-center sm:p-20">
-        <Tag size={48} className="mx-auto text-border mb-6" />
-        <p className="text-text-muted italic">输入关键词、上传图片或使用高级筛选开始探索</p>
+      <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+        <Tag size={48} className="mx-auto mb-6 text-border" />
+        <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
+          输入关键词、上传图片或使用高级筛选开始探索
+        </p>
       </div>
     )
   }
@@ -209,18 +219,20 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   if (!isMixedSearch && totalResults === 0 && (textSemanticResults?.length ?? 0) === 0) {
     return (
-      <div className="border-y border-[var(--book-ink-line)] p-10 text-center sm:p-20">
-        <SearchIcon size={48} className="mx-auto text-border mb-6" />
-        <p className="text-text-muted italic">未找到符合筛选条件的结果</p>
+      <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+        <SearchIcon size={48} className="mx-auto mb-6 text-border" />
+        <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
+          未找到符合筛选条件的结果
+        </p>
       </div>
     )
   }
 
   if (isMixedSearch && mixedResults.length === 0) {
     return (
-      <div className="border-y border-[var(--book-ink-line)] p-10 text-center sm:p-20">
-        <Sparkles size={48} className="mx-auto text-border mb-6" />
-        <p className="text-text-muted italic">未找到语义匹配的结果</p>
+      <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+        <Sparkles size={48} className="mx-auto mb-6 text-border" />
+        <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">未找到语义匹配的结果</p>
       </div>
     )
   }
@@ -235,14 +247,17 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={clsx(
-                'text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer',
+                'relative cursor-pointer pb-2 text-[1.0625rem] tracking-[0.06em] transition-all',
                 activeTab === tab.id
-                  ? 'text-brand-gold font-semibold'
-                  : 'text-text-muted hover:text-brand-gold'
+                  ? 'font-semibold text-text-primary'
+                  : 'text-text-muted hover:text-text-secondary'
               )}
             >
               {tab.label}
-              <span className="text-[0.8125rem] text-text-muted ml-1.5">{tab.count}</span>
+              <span className="ml-1.5 text-[0.8125rem] text-text-muted">{tab.count}</span>
+              {activeTab === tab.id && (
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand-gold" />
+              )}
             </button>
           ))}
         </div>
@@ -271,7 +286,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                     key={`${result.sourceType}-${result.sourceId}-${index}`}
                     result={result}
                     viewMode={viewMode}
-                    cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                     showSimilarity={true}
                   />
                 ))}
@@ -299,7 +313,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                           key={`${result.sourceType}-${result.sourceId}`}
                           config={textSemanticToConfig(result)}
                           viewMode={viewMode}
-                          cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                         />
                       ))}
                     </div>
@@ -323,7 +336,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                         key={page.id}
                         config={wikiToConfig(page)}
                         viewMode={viewMode}
-                        cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                       />
                     ))}
                   </div>
@@ -347,7 +359,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                         key={post.id}
                         config={postToConfig(post)}
                         viewMode={viewMode}
-                        cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                       />
                     ))}
                   </div>
@@ -372,7 +383,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                           key={gallery.id}
                           config={galleryToConfig(gallery)}
                           viewMode={viewMode}
-                          cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                         />
                       ))}
                     </div>
@@ -396,7 +406,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                         key={track.docId}
                         config={musicToConfig(track as SongItem)}
                         viewMode={viewMode}
-                        cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                       />
                     ))}
                   </div>
@@ -420,7 +429,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                         key={(album as AlbumItem).docId}
                         config={albumToConfig(album as AlbumItem)}
                         viewMode={viewMode}
-                        cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
                       />
                     ))}
                   </div>

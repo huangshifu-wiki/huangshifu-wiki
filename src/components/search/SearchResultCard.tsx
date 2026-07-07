@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { Book, Image as ImageIcon, Music, MessageSquare, Clock } from '@/src/components/icons'
 import { SmartImage } from '../SmartImage'
-import { CARD } from '../../styles/cardStyles'
+import type { ViewMode } from '../../types/userPreferences'
 
 export type SearchResultType = 'wiki' | 'gallery' | 'music' | 'album' | 'post'
 
@@ -24,8 +24,7 @@ export interface SearchResultCardConfig {
 
 interface SearchResultCardProps {
   config: SearchResultCardConfig
-  viewMode: string
-  cardHeight?: string
+  viewMode: ViewMode
 }
 
 const typeIconMap: Record<SearchResultType, React.ReactNode> = {
@@ -49,67 +48,82 @@ const MATCH_SOURCE_STYLES: Record<string, string> = {
 }
 
 export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(
-  ({ config, viewMode, cardHeight }) => {
+  ({ config, viewMode }) => {
     const isList = viewMode === 'list'
+    const isSmallGrid = viewMode === 'small'
+    const hasMedia = Boolean(config.image || config.imagePlaceholder)
     const fallbackContent = config.imagePlaceholder || typeIconMap[config.type]
+    const titleClassName = clsx(
+      'min-w-0 max-w-full text-wrap-anywhere font-semibold leading-snug tracking-[0.02em] text-text-primary transition-colors group-hover:text-brand-gold',
+      isSmallGrid ? 'text-[0.875rem]' : 'text-[1rem]'
+    )
+    const tagContent = (
+      <>
+        {config.tags &&
+          config.tags.length > 0 &&
+          config.tags.map((tag) => (
+            <span
+              key={tag}
+              className="max-w-full truncate rounded-sm px-2 py-0.5 text-[0.625rem] font-semibold tracking-[0.08em] theme-tag"
+            >
+              {tag}
+            </span>
+          ))}
+        {config.matchSource && (
+          <span
+            className={clsx(
+              'rounded px-2 py-0.5 text-[0.625rem] font-semibold tracking-[0.08em]',
+              MATCH_SOURCE_STYLES[config.matchSource]
+            )}
+          >
+            {MATCH_SOURCE_LABELS[config.matchSource]}
+          </span>
+        )}
+      </>
+    )
 
     return (
       <Link
         to={config.link}
         className={clsx(
-          CARD.base,
+          'group min-w-0 max-w-full transition-all duration-300',
           isList
-            ? clsx(CARD.listLayout, 'mobile-list-card')
-            : clsx(CARD.gridLayout, 'block', cardHeight)
+            ? 'flex w-full gap-4 rounded px-3 py-3 hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]'
+            : 'block overflow-hidden rounded-lg border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)] hover:shadow-[0_14px_36px_rgba(72,53,25,0.1)]'
         )}
       >
         {isList ? (
           <>
             {config.image ? (
-              <div className={clsx(CARD.imageWrapperList, 'mobile-list-thumb')}>
-                <SmartImage src={config.image} alt="" className={CARD.imageFill} />
+              <div className="mobile-list-thumb h-20 w-20 flex-shrink-0 overflow-hidden rounded bg-surface-alt">
+                <SmartImage
+                  src={config.image}
+                  alt=""
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+                />
               </div>
             ) : (
-              <div
-                className={clsx(
-                  CARD.imageWrapperList,
-                  'mobile-list-thumb flex items-center justify-center'
-                )}
-              >
+              <div className="mobile-list-thumb flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-surface-alt">
                 {fallbackContent}
               </div>
             )}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                {config.tags &&
-                  config.tags.length > 0 &&
-                  config.tags.map((tag) => (
-                    <span key={tag} className={CARD.tag}>
-                      {tag}
-                    </span>
-                  ))}
-                {config.matchSource && (
-                  <span
-                    className={clsx(
-                      'px-1.5 py-0.5 rounded text-[10px] font-medium',
-                      MATCH_SOURCE_STYLES[config.matchSource]
-                    )}
-                  >
-                    {MATCH_SOURCE_LABELS[config.matchSource]}
-                  </span>
-                )}
-              </div>
-              <h3 className={CARD.title}>{config.title}</h3>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2">{tagContent}</div>
+              <h3 className="truncate text-[0.975rem] font-semibold tracking-[0.04em] text-text-primary transition-colors group-hover:text-brand-gold">
+                {config.title}
+              </h3>
               {config.chunkPreview && (
                 <p className="text-xs theme-text-warning-soft mt-0.5 line-clamp-2 leading-relaxed">
                   {config.chunkPreview}
                 </p>
               )}
               {config.description && (
-                <p className={clsx(CARD.descMuted, 'italic')}>{config.description}</p>
+                <p className="line-clamp-2 text-xs leading-relaxed text-text-muted/80">
+                  {config.description}
+                </p>
               )}
               {config.meta && (
-                <p className="text-text-muted/70 text-[10px] mt-1 flex items-center gap-1">
+                <p className="mt-1 flex items-center gap-1 text-[0.6875rem] text-text-muted/70">
                   <Clock size={10} />
                   {config.meta}
                 </p>
@@ -118,13 +132,13 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(
           </>
         ) : (
           <>
-            {(config.image || config.imagePlaceholder) && (
-              <div className="overflow-hidden h-48 flex-shrink-0">
+            {hasMedia && (
+              <div className="aspect-[4/3] overflow-hidden bg-surface-alt">
                 {config.image ? (
                   <SmartImage
                     src={config.image}
                     alt=""
-                    className={clsx(CARD.imageFill, CARD.imageHoverZoom)}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center bg-surface-alt px-2 text-center text-xs text-text-muted">
@@ -133,45 +147,32 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(
                 )}
               </div>
             )}
-            <div
-              className={clsx(
-                'p-4',
-                !config.image && !config.imagePlaceholder && 'flex-1 flex flex-col'
-              )}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                {config.tags &&
-                  config.tags.length > 0 &&
-                  config.tags.map((tag) => (
-                    <span key={tag} className={CARD.tag}>
-                      {tag}
-                    </span>
-                  ))}
-                {config.matchSource && (
-                  <span
-                    className={clsx(
-                      'px-1.5 py-0.5 rounded text-[10px] font-medium',
-                      MATCH_SOURCE_STYLES[config.matchSource]
-                    )}
-                  >
-                    {MATCH_SOURCE_LABELS[config.matchSource]}
-                  </span>
+            <div className={clsx('p-3', !hasMedia && 'p-4')}>
+              <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">{tagContent}</div>
+              <h3
+                className={clsx(
+                  titleClassName,
+                  'mb-2 line-clamp-2',
+                  isSmallGrid ? 'min-h-[2.25rem]' : 'min-h-[2.55rem]'
                 )}
-              </div>
-              <h3 className={clsx(CARD.title, 'mb-2')}>{config.title}</h3>
+              >
+                {config.title}
+              </h3>
               {config.chunkPreview && (
-                <p className="text-xs theme-text-warning-soft mb-2 line-clamp-2 leading-relaxed">
+                <p className="mb-2 line-clamp-2 text-xs leading-relaxed theme-text-warning-soft">
                   {config.chunkPreview}
                 </p>
               )}
               {config.subtitle && (
-                <p className="text-xs text-text-muted truncate">{config.subtitle}</p>
+                <p className="truncate text-xs text-text-muted">{config.subtitle}</p>
               )}
-              {config.description && !config.image && (
-                <p className={clsx(CARD.descMuted, 'mb-3 italic flex-1')}>{config.description}</p>
+              {config.description && !hasMedia && (
+                <p className="mb-3 line-clamp-2 min-h-[2.5rem] text-xs leading-relaxed text-text-muted/80">
+                  {config.description}
+                </p>
               )}
               {config.meta && (
-                <div className="flex items-center gap-1 text-[10px] text-text-muted mt-auto">
+                <div className="mt-2 flex items-center gap-1 text-[0.6875rem] text-text-muted">
                   <Clock size={10} />
                   {config.meta}
                 </div>
