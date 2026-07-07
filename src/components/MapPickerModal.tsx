@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, MapPin, Search, Loader2 } from '@/src/components/icons'
 import { apiGet } from '../lib/apiClient'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
@@ -263,11 +264,11 @@ export const MapPickerModal = ({
     }
   }
 
-  if (!presence.mounted) return null
+  if (typeof document === 'undefined' || !presence.mounted) return null
 
-  return (
+  return createPortal(
     <div
-      className="floating-overlay fixed inset-0 z-[100] flex items-center justify-center"
+      className="floating-overlay fixed inset-0 z-[1200] flex items-center justify-center"
       data-state={presence.state}
       aria-hidden={!open}
     >
@@ -388,7 +389,8 @@ export const MapPickerModal = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

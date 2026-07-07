@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { MapPin, Check, X, Loader2 } from '@/src/components/icons'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 
@@ -30,11 +31,11 @@ export const LocationConfirmDialog = ({
 }: LocationConfirmDialogProps) => {
   const presence = useFloatingPresence(open)
 
-  if (!presence.mounted) return null
+  if (typeof document === 'undefined' || !presence.mounted) return null
 
-  return (
+  return createPortal(
     <div
-      className="floating-overlay fixed inset-0 z-[100] flex items-center justify-center"
+      className="floating-overlay fixed inset-0 z-[1200] flex items-center justify-center"
       data-state={presence.state}
       aria-hidden={!open}
     >
@@ -109,7 +110,8 @@ export const LocationConfirmDialog = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
