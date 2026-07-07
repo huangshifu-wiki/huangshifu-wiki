@@ -21,14 +21,14 @@ interface ConfirmModalProps {
 const variantStyles = {
   danger: {
     accent: 'bg-[var(--color-error)]',
-    border: 'border-[color-mix(in_srgb,var(--color-error)_38%,var(--color-border))]',
+    border: 'border-[color-mix(in_srgb,var(--color-error)_38%,var(--book-ink-line))]',
     glow: 'shadow-[0_24px_80px_rgba(0,0,0,0.36),0_0_0_1px_color-mix(in_srgb,var(--color-error)_18%,transparent),0_0_36px_color-mix(in_srgb,var(--color-error)_24%,transparent)]',
     iconText: 'theme-text-error',
     buttonBg: 'theme-button-danger',
   },
   warning: {
     accent: 'bg-[var(--color-warning)]',
-    border: 'border-[color-mix(in_srgb,var(--color-warning)_42%,var(--color-border))]',
+    border: 'border-[color-mix(in_srgb,var(--color-warning)_42%,var(--book-ink-line))]',
     glow: 'shadow-[0_24px_80px_rgba(0,0,0,0.32),0_0_0_1px_color-mix(in_srgb,var(--color-warning)_20%,transparent),0_0_34px_color-mix(in_srgb,var(--color-warning)_22%,transparent)]',
     iconText: 'theme-text-warning',
     buttonBg: 'theme-button-warning',
@@ -60,10 +60,8 @@ export const ConfirmModal = ({
   const titleId = useId()
   const messageId = useId()
 
-  // 取消按钮引用（用于焦点管理）
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
-  // 保存打开前的活动元素（用于关闭时恢复焦点）
   const previousActiveElement = useRef<HTMLElement | null>(null)
 
   const handleClose = useCallback(() => {
@@ -71,7 +69,6 @@ export const ConfirmModal = ({
     onClose()
   }, [loading, onClose])
 
-  // Escape 键关闭 + Tab 焦点循环
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -111,12 +108,9 @@ export const ConfirmModal = ({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [handleClose, open])
 
-  // 焦点管理：打开时聚焦到取消按钮，关闭时恢复到触发元素
   useEffect(() => {
     if (open) {
-      // 保存当前活动元素
       previousActiveElement.current = document.activeElement as HTMLElement
-      // 延迟一帧等待动画开始后聚焦
       setTimeout(() => {
         if (initialFocus === 'firstField') {
           const firstField = modalRef.current?.querySelector<HTMLElement>(
@@ -128,7 +122,6 @@ export const ConfirmModal = ({
         cancelButtonRef.current?.focus()
       }, 50)
     } else if (previousActiveElement.current) {
-      // 恢复到之前的活动元素
       previousActiveElement.current.focus()
       previousActiveElement.current = null
     }
@@ -150,7 +143,7 @@ export const ConfirmModal = ({
       <div
         className={clsx(
           'floating-panel',
-          'relative w-full max-w-md overflow-hidden rounded-sm border bg-[var(--book-panel-bg-strong)]',
+          'relative w-full max-w-md overflow-hidden rounded border bg-[var(--book-panel-bg-strong)]',
           variantStyle.border,
           variantStyle.glow
         )}
@@ -162,7 +155,7 @@ export const ConfirmModal = ({
         aria-describedby={messageId}
         aria-hidden={!open}
       >
-        <div className={clsx('h-1.5 w-full', variantStyle.accent)} />
+        <div className={clsx('h-1 w-full', variantStyle.accent)} />
 
         <div className="p-6">
           <div className="flex items-start gap-4 mb-4">
@@ -172,7 +165,8 @@ export const ConfirmModal = ({
             <div className="min-w-0 pt-1">
               <h3
                 id={titleId}
-                className="font-[var(--book-title-font)] text-2xl font-normal tracking-[0.1em] text-text-primary"
+                className="text-2xl font-normal tracking-[0.1em] text-text-primary"
+                style={{ fontFamily: 'var(--book-title-font)' }}
               >
                 {title}
               </h3>
@@ -191,7 +185,7 @@ export const ConfirmModal = ({
               type="button"
               onClick={handleClose}
               disabled={loading}
-              className="px-5 py-2.5 rounded-sm theme-button-secondary transition-all disabled:opacity-50 text-sm font-medium"
+              className="px-5 py-2.5 rounded border border-[var(--book-ink-line)] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all disabled:opacity-50 text-sm font-medium"
               aria-label="取消"
             >
               {cancelText}
@@ -201,7 +195,7 @@ export const ConfirmModal = ({
               onClick={onConfirm}
               disabled={loading}
               className={clsx(
-                'px-6 py-2.5 rounded-sm font-bold transition-all disabled:opacity-50 inline-flex items-center gap-2 text-sm shadow-lg',
+                'px-6 py-2.5 rounded font-bold transition-all disabled:opacity-50 inline-flex items-center gap-2 text-sm shadow-lg',
                 variantStyle.buttonBg
               )}
             >

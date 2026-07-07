@@ -255,24 +255,27 @@ const markdownComponents: Components = {
     <div className="overflow-x-auto my-8">
       <table
         {...props}
-        className="w-full border-collapse border border-border rounded overflow-hidden"
+        className="w-full border-collapse border border-[var(--book-ink-line)] rounded overflow-hidden"
       >
         {children}
       </table>
     </div>
   ),
   thead: ({ children, node: _node, ...props }) => (
-    <thead {...props} className="bg-surface-alt text-brand-gold">
+    <thead
+      {...props}
+      className="bg-[color-mix(in_srgb,var(--color-surface-alt)_84%,transparent)] text-brand-gold"
+    >
       {children}
     </thead>
   ),
   th: ({ children, node: _node, ...props }) => (
-    <th {...props} className="border border-border px-4 py-3 text-left font-bold">
+    <th {...props} className="border border-[var(--book-ink-line)] px-4 py-3 text-left font-bold">
       {children}
     </th>
   ),
   td: ({ children, node: _node, ...props }) => (
-    <td {...props} className="border border-border px-4 py-3">
+    <td {...props} className="border border-[var(--book-ink-line)] px-4 py-3">
       {children}
     </td>
   ),

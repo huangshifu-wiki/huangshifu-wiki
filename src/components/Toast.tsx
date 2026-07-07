@@ -82,11 +82,11 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[1100] pointer-events-none px-4">
           <div
             className={[
-              'min-w-[220px] max-w-[calc(100vw-2rem)] rounded border px-4 py-3 text-sm font-medium transition-all duration-200',
+              'min-w-[220px] max-w-[calc(100vw-2rem)] rounded border px-4 py-3 text-sm font-medium transition-all duration-200 shadow-[0_8px_30px_rgba(72,53,25,0.1)]',
               toast.visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2',
               toast.variant === 'error'
                 ? 'theme-status-error'
-                : 'bg-surface border-brand-gold/40 text-text-primary',
+                : 'bg-[var(--book-panel-bg-strong)] border-[var(--book-ink-line)] text-text-primary',
             ].join(' ')}
             role="status"
             aria-live="polite"

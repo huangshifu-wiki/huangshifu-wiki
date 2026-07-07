@@ -31,7 +31,7 @@ export const LyricsDisplay = ({ lyric, currentTime }: LyricsDisplayProps) => {
   }, [currentTime, lines])
 
   if (lines.length === 0) {
-    return <p className="text-sm text-text-muted italic">暂无歌词</p>
+    return <p className="text-[0.875rem] text-text-muted italic tracking-[0.08em]">暂无歌词</p>
   }
 
   const hasMetadata = metadata.lyricist || metadata.composer || metadata.arranger
@@ -39,7 +39,7 @@ export const LyricsDisplay = ({ lyric, currentTime }: LyricsDisplayProps) => {
   return (
     <div>
       {hasMetadata && (
-        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-text-muted mb-4">
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-[0.8125rem] text-text-muted mb-5 pb-4 border-b border-[var(--book-ink-line)]">
           {metadata.lyricist && (
             <span>
               作词：<span className="text-text-secondary">{metadata.lyricist}</span>
@@ -63,7 +63,7 @@ export const LyricsDisplay = ({ lyric, currentTime }: LyricsDisplayProps) => {
           <p
             key={`${line.time}-${index}`}
             className={clsx(
-              'transition-all duration-300',
+              'transition-all duration-300 leading-[2]',
               currentLineIndex === index
                 ? 'text-brand-gold font-semibold'
                 : currentLineIndex > index

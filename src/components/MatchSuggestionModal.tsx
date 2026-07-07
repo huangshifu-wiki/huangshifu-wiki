@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { ExternalLink, Loader2, Search, X, Check, AlertCircle } from '@/src/components/icons'
+import { clsx } from 'clsx'
 
 import { apiGet } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
@@ -128,10 +129,15 @@ export const MatchSuggestionModal = ({
       data-state={presence.state}
       aria-hidden={!open}
     >
-      <div className="floating-panel w-full max-w-lg max-h-[90vh] overflow-hidden bg-surface rounded border border-border flex flex-col">
-        <header className="px-5 py-4 border-b border-border flex items-center justify-between">
+      <div className="floating-panel w-full max-w-lg max-h-[90vh] overflow-hidden bg-[var(--book-panel-bg-strong)] rounded border border-[var(--book-ink-line)] flex flex-col shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+        <header className="px-5 py-4 border-b border-[var(--book-ink-line)] flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-text-primary">搜索匹配歌曲</h3>
+            <h3
+              className="text-base font-semibold text-text-primary tracking-[0.06em]"
+              style={{ fontFamily: 'var(--book-title-font)' }}
+            >
+              搜索匹配歌曲
+            </h3>
             <p className="text-xs text-text-muted mt-0.5">
               在{platformLabels[targetPlatform]}搜索：{title} - {artist}
             </p>
@@ -148,7 +154,7 @@ export const MatchSuggestionModal = ({
           {loading && (
             <div className="flex items-center justify-center py-12">
               <Loader2 size={28} className="animate-spin text-brand-gold" />
-              <span className="ml-3 text-sm text-text-secondary">搜索中...</span>
+              <span className="ml-3 text-sm text-text-secondary">搜索中…</span>
             </div>
           )}
 
@@ -165,26 +171,29 @@ export const MatchSuggestionModal = ({
                 <button
                   key={suggestion.sourceId}
                   onClick={() => setSelectedIndex(index)}
-                  className={`w-full text-left p-3 rounded border transition-all ${
+                  className={clsx(
+                    'w-full text-left p-3 rounded border transition-all duration-300',
                     selectedIndex === index
-                      ? 'border-brand-gold bg-brand-gold/10'
-                      : 'border-border hover:border-brand-gold hover:bg-surface-alt'
-                  }`}
+                      ? 'border-brand-gold bg-[color-mix(in_srgb,var(--color-theme-accent)_8%,transparent)]'
+                      : 'border-[var(--book-ink-line)] hover:border-brand-gold/50 hover:bg-surface-alt'
+                  )}
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      className={clsx(
+                        'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
                         selectedIndex === index
                           ? 'border-brand-gold bg-brand-gold'
                           : 'border-border'
-                      }`}
+                      )}
                     >
                       {selectedIndex === index && <Check size={12} className="text-white" />}
                     </div>
                     <img
                       src={suggestion.cover}
                       alt=""
-                      className="w-11 h-11 rounded object-cover shrink-0 border border-border"
+                      className="w-11 h-11 rounded object-cover shrink-0 border border-[var(--book-ink-line)] shadow-[0_1px_4px_rgba(42,37,32,0.08)]"
+                      style={{ filter: 'brightness(0.96) saturate(0.92)' }}
                       referrerPolicy="no-referrer"
                     />
                     <div className="min-w-0 flex-1">
@@ -196,13 +205,14 @@ export const MatchSuggestionModal = ({
                       </p>
                       <div className="flex items-center gap-2 mt-1">
                         <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          className={clsx(
+                            'text-[10px] px-1.5 py-0.5 rounded',
                             suggestion.score >= 80
                               ? 'theme-status-success'
                               : suggestion.score >= 60
                                 ? 'theme-status-warning'
                                 : 'bg-surface-alt text-text-muted'
-                          }`}
+                          )}
                         >
                           匹配度 {suggestion.score}%
                         </span>
@@ -239,7 +249,7 @@ export const MatchSuggestionModal = ({
           )}
 
           {existingPlatformId && (
-            <div className="p-3 rounded bg-surface-alt border border-border">
+            <div className="p-3 rounded bg-surface-alt border border-[var(--book-ink-line)]">
               <p className="text-xs text-text-muted">
                 该平台已有ID:{' '}
                 <span className="font-mono font-medium text-text-primary">
@@ -250,11 +260,11 @@ export const MatchSuggestionModal = ({
           )}
         </div>
 
-        <footer className="px-5 py-3 border-t border-border bg-surface-alt/60 flex justify-end gap-3 pb-safe">
+        <footer className="px-5 py-3 border-t border-[var(--book-ink-line)] bg-surface-alt/60 flex justify-end gap-3 pb-safe">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded theme-button-secondary transition-all text-sm"
+            className="px-4 py-2 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
           >
             取消
           </button>
@@ -264,7 +274,7 @@ export const MatchSuggestionModal = ({
             className="px-5 py-2 rounded theme-button-primary font-medium disabled:opacity-50 inline-flex items-center gap-2 text-sm transition-all"
           >
             {loading ? <Loader2 size={14} className="animate-spin" /> : null}
-            {loading ? '处理中...' : '确认'}
+            {loading ? '处理中…' : '确认'}
           </button>
         </footer>
       </div>

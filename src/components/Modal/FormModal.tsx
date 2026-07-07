@@ -31,12 +31,9 @@ export const FormModal = ({
 }: FormModalProps) => {
   const presence = useFloatingPresence(open)
 
-  // 关闭按钮引用（用于焦点管理）
   const closeButtonRef = useRef<HTMLButtonElement>(null)
-  // 保存打开前的活动元素（用于关闭时恢复焦点）
   const previousActiveElement = useRef<HTMLElement | null>(null)
 
-  // Escape 键关闭 + Tab 焦点循环
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -70,15 +67,11 @@ export const FormModal = ({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open, onClose])
 
-  // 焦点管理：打开时聚焦到关闭按钮，关闭时恢复到触发元素
   useEffect(() => {
     if (open) {
-      // 保存当前活动元素
       previousActiveElement.current = document.activeElement as HTMLElement
-      // 延迟一帧等待动画开始后聚焦
       setTimeout(() => closeButtonRef.current?.focus(), 50)
     } else if (previousActiveElement.current) {
-      // 恢复到之前的活动元素
       previousActiveElement.current.focus()
       previousActiveElement.current = null
     }
@@ -88,12 +81,12 @@ export const FormModal = ({
     <>
       <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">{children}</div>
 
-      <footer className="px-5 py-3 border-t border-border bg-surface-alt/60 flex justify-end gap-3 pb-safe">
+      <footer className="px-5 py-3 border-t border-[var(--book-ink-line)] bg-surface-alt/60 flex justify-end gap-3 pb-safe">
         <button
           type="button"
           onClick={onClose}
           disabled={loading}
-          className="px-4 py-2 rounded theme-button-secondary transition-all disabled:opacity-50 text-sm"
+          className="px-4 py-2 rounded border border-[var(--book-ink-line)] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all disabled:opacity-50 text-sm"
         >
           {cancelText}
         </button>
@@ -122,7 +115,8 @@ export const FormModal = ({
     >
       <div
         className={clsx(
-          'floating-panel w-full bg-surface rounded border border-border flex flex-col max-h-[90vh]',
+          'floating-panel w-full bg-[var(--book-panel-bg-strong)] rounded border border-[var(--book-ink-line)] flex flex-col max-h-[90vh]',
+          'shadow-[0_24px_80px_rgba(0,0,0,0.28)]',
           maxWidth
         )}
         onClick={(e) => e.stopPropagation()}
@@ -132,13 +126,20 @@ export const FormModal = ({
         aria-describedby={subtitle ? 'form-modal-subtitle' : undefined}
         aria-hidden={!open}
       >
-        <header className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <header className="px-5 py-4 border-b border-[var(--book-ink-line)] flex items-center justify-between">
           <div>
-            <h3 id="form-modal-title" className="text-base font-bold text-text-primary">
+            <h3
+              id="form-modal-title"
+              className="text-base font-semibold text-text-primary tracking-[0.06em]"
+              style={{ fontFamily: 'var(--book-title-font)' }}
+            >
               {title}
             </h3>
             {subtitle && (
-              <p className="text-xs text-text-muted mt-0.5" id="form-modal-subtitle">
+              <p
+                className="text-xs text-text-muted mt-0.5 tracking-[0.04em]"
+                id="form-modal-subtitle"
+              >
                 {subtitle}
               </p>
             )}

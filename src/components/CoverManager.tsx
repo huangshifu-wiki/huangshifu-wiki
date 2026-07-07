@@ -266,7 +266,7 @@ export const CoverManager = ({
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="px-4 py-2 rounded theme-button-secondary text-sm transition-all"
+        className="px-4 py-2 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
       >
         封面管理
       </button>
@@ -279,10 +279,15 @@ export const CoverManager = ({
       data-state={presence.state}
       aria-hidden={!isOpen}
     >
-      <div className="floating-panel w-full max-w-2xl max-h-[90vh] overflow-hidden bg-surface rounded border border-border flex flex-col">
-        <header className="px-5 py-4 border-b border-border flex items-center justify-between">
+      <div className="floating-panel w-full max-w-2xl max-h-[90vh] overflow-hidden bg-[var(--book-panel-bg-strong)] rounded border border-[var(--book-ink-line)] flex flex-col shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+        <header className="px-5 py-4 border-b border-[var(--book-ink-line)] flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-text-primary">{config.title}</h3>
+            <h3
+              className="text-base font-semibold text-text-primary tracking-[0.06em]"
+              style={{ fontFamily: 'var(--book-title-font)' }}
+            >
+              {config.title}
+            </h3>
             <p className="text-xs text-text-muted mt-0.5">{config.subtitle}</p>
           </div>
           <button
@@ -294,14 +299,15 @@ export const CoverManager = ({
         </header>
 
         <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
-          <div className="rounded border border-border bg-surface-alt/60 p-4">
+          <div className="rounded border border-[var(--book-ink-line)] bg-surface-alt/60 p-4">
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm font-medium text-text-primary">当前封面</span>
-              <div className="w-14 h-14 rounded overflow-hidden bg-surface-alt border border-border">
+              <div className="w-14 h-14 rounded overflow-hidden bg-surface-alt border border-[var(--book-ink-line)] shadow-[0_1px_4px_rgba(42,37,32,0.08)]">
                 <img
                   src={currentCover}
                   alt="封面"
                   className="w-full h-full object-cover"
+                  style={{ filter: 'brightness(0.96) saturate(0.92)' }}
                   referrerPolicy="no-referrer"
                 />
               </div>
@@ -330,7 +336,7 @@ export const CoverManager = ({
                 </button>
                 <button
                   onClick={handleSyncToSongsInternal}
-                  className="px-4 py-2.5 rounded theme-button-secondary text-sm transition-all"
+                  className="px-4 py-2.5 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                 >
                   同步到歌曲
                 </button>
@@ -361,7 +367,7 @@ export const CoverManager = ({
                   <button
                     type="button"
                     onClick={selectAllCovers}
-                    className="px-3 py-1.5 rounded border border-border text-xs text-text-secondary hover:text-brand-gold hover:border-brand-gold transition-all"
+                    className="px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-xs text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all"
                   >
                     {selectedCoverIds.size === covers.length ? '取消全选' : '全选'}
                   </button>
@@ -385,10 +391,10 @@ export const CoverManager = ({
                   <div
                     key={cover.id}
                     className={clsx(
-                      'relative rounded overflow-hidden border transition-all',
+                      'relative rounded-lg overflow-hidden border transition-all',
                       cover.isDefault
-                        ? 'border-brand-gold ring-1 ring-brand-gold/20'
-                        : 'border-border'
+                        ? 'border-brand-gold ring-1 ring-brand-gold/20 shadow-[0_4px_16px_rgba(138,109,47,0.12)]'
+                        : 'border-[var(--book-ink-line)] hover:border-brand-gold/30'
                     )}
                   >
                     <div className="aspect-square">
@@ -396,11 +402,12 @@ export const CoverManager = ({
                         src={cover.thumbnailUrl || cover.url}
                         alt="封面"
                         className="w-full h-full object-cover"
+                        style={{ filter: 'brightness(0.96) saturate(0.92)' }}
                         referrerPolicy="no-referrer"
                       />
                     </div>
                     {cover.isDefault && (
-                      <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-[var(--color-theme-accent)] text-white text-[10px] font-medium rounded flex items-center gap-1">
+                      <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-brand-gold text-white text-[10px] font-medium rounded flex items-center gap-1">
                         <Star size={10} /> 默认
                       </div>
                     )}
@@ -418,7 +425,7 @@ export const CoverManager = ({
                         <button
                           onClick={() => handleSetDefault(cover.id)}
                           disabled={settingDefault === cover.id}
-                          className="p-1.5 bg-surface rounded text-text-secondary hover:text-brand-gold transition-colors disabled:opacity-50"
+                          className="p-1.5 bg-[var(--book-panel-bg)] rounded text-text-secondary hover:text-brand-gold transition-colors disabled:opacity-50"
                           title="设为默认"
                         >
                           {settingDefault === cover.id ? (
@@ -431,7 +438,7 @@ export const CoverManager = ({
                       <button
                         onClick={() => handleDelete(cover.id)}
                         disabled={deleting === cover.id || cover.isDefault}
-                        className="p-1.5 bg-surface rounded theme-text-error transition-colors disabled:opacity-50"
+                        className="p-1.5 bg-[var(--book-panel-bg)] rounded theme-text-error transition-colors disabled:opacity-50"
                         title="删除"
                       >
                         {deleting === cover.id ? (
@@ -446,14 +453,16 @@ export const CoverManager = ({
               </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-text-muted text-sm">暂无额外封面</div>
+            <div className="text-center py-8 text-text-muted text-sm italic tracking-[0.08em]">
+              暂无额外封面
+            </div>
           )}
         </div>
 
-        <footer className="px-5 py-3 border-t border-border bg-surface-alt/60 flex justify-end">
+        <footer className="px-5 py-3 border-t border-[var(--book-ink-line)] bg-surface-alt/60 flex justify-end">
           <button
             onClick={() => setIsOpen(false)}
-            className="px-4 py-2 rounded theme-button-secondary text-sm transition-all"
+            className="px-4 py-2 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
           >
             关闭
           </button>

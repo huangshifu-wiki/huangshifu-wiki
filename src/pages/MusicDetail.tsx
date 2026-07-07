@@ -76,6 +76,8 @@ type PostItem = {
   updatedAt: string
 }
 
+const COVER_FILTER = 'brightness(0.96) saturate(0.92)'
+
 const getSongExternalUrl = (song: SongItem) => {
   const source = song.sources?.find((item) => item.isPrimary) || song.sources?.[0]
   if (!source) return null
@@ -87,6 +89,13 @@ const formatDate = (value: string | null | undefined) => {
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? '刚刚' : format(parsed, 'yyyy-MM-dd')
 }
+
+const SectionHeading = ({ children }: { children: React.ReactNode }) => (
+  <h2 className="text-[0.9375rem] font-semibold text-text-primary tracking-[0.1em] flex items-center gap-2">
+    <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
+    {children}
+  </h2>
+)
 
 const MusicDetail = () => {
   const { songId } = useParams()
@@ -204,9 +213,31 @@ const MusicDetail = () => {
 
   if (loading) {
     return (
-      <div className="mobile-page-shell antique-page">
+      <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
-          <div className="h-48 bg-surface-alt rounded animate-pulse" />
+          <div className="h-4 w-24 bg-surface-alt rounded animate-pulse mb-6" />
+          <div className="flex flex-col gap-5 sm:flex-row mb-8 pb-8 border-b border-[var(--book-ink-line)]">
+            <div className="h-40 w-40 rounded-lg bg-surface-alt animate-pulse flex-shrink-0" />
+            <div className="flex-1 space-y-3 py-2">
+              <div className="h-8 w-48 bg-surface-alt rounded animate-pulse" />
+              <div className="h-5 w-32 bg-surface-alt rounded animate-pulse" />
+              <div className="h-4 w-40 bg-surface-alt rounded animate-pulse" />
+              <div className="flex gap-2.5 mt-4">
+                <div className="h-9 w-20 bg-surface-alt rounded animate-pulse" />
+                <div className="h-9 w-16 bg-surface-alt rounded animate-pulse" />
+                <div className="h-9 w-20 bg-surface-alt rounded animate-pulse" />
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="h-5 bg-surface-alt rounded animate-pulse"
+                style={{ width: `${90 - i * 12}%` }}
+              />
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -214,7 +245,7 @@ const MusicDetail = () => {
 
   if (!song) {
     return (
-      <div className="mobile-page-shell antique-page">
+      <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
           <Link
             to="/music"
@@ -222,8 +253,8 @@ const MusicDetail = () => {
           >
             <ArrowLeft size={16} /> 返回音乐馆
           </Link>
-          <div className="mt-6 bg-surface rounded border border-border p-10 text-center text-text-muted italic tracking-[0.1em]">
-            歌曲不存在或已被删除
+          <div className="mt-8 py-16 text-center">
+            <p className="text-text-muted text-[0.9rem] tracking-[0.08em]">歌曲不存在或已被删除</p>
           </div>
         </div>
       </div>
@@ -255,62 +286,76 @@ const MusicDetail = () => {
           {/* Main Content */}
           <div>
             {/* Detail Header */}
-            <div className="mb-6 flex flex-col gap-5 border-b border-border pb-6 sm:flex-row">
+            <div className="mb-8 flex flex-col gap-6 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row">
               <button
                 type="button"
                 onClick={() => setCoverLightboxOpen(true)}
-                className="h-40 w-40 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:h-44 sm:w-44"
+                className="h-40 w-40 flex-shrink-0 overflow-hidden rounded-lg shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-400 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:h-44 sm:w-44"
                 aria-label={`查看 ${song.title} 封面原图`}
               >
                 <SmartImage
                   src={coverPreviewSrc}
                   alt={song.title}
                   className="w-full h-full object-cover"
+                  style={{ filter: COVER_FILTER }}
                 />
               </button>
               <div className="flex-1 flex flex-col justify-center min-w-0">
-                <h1 className="mobile-page-title mb-1.5">{song.title}</h1>
-                <p className="text-base text-text-secondary tracking-[0.08em] mb-3">
+                <h1 className="mobile-page-title mb-2">{song.title}</h1>
+                <p className="text-[0.95rem] text-text-secondary tracking-[0.06em] mb-3">
                   {artistsText}
                 </p>
-                <div className="flex flex-wrap gap-x-5 gap-y-2 mb-4 text-sm text-text-muted">
+                <div className="flex flex-wrap gap-x-5 gap-y-2 mb-5 text-[0.8125rem] text-text-muted">
                   <span>专辑：{song.album}</span>
                 </div>
-                <div className="mobile-action-row justify-start">
+                <div className="flex flex-wrap items-center gap-2.5">
                   <button
                     onClick={handlePlay}
                     disabled={!canPlay}
-                    className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                    className={clsx(
+                      'inline-flex items-center gap-2 px-5 py-2 rounded',
+                      'border border-[rgba(138,109,47,0.25)] text-brand-gold',
+                      'transition-all duration-300',
+                      canPlay
+                        ? 'bg-transparent hover:bg-brand-gold hover:text-white hover:border-brand-gold hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]'
+                        : 'opacity-50 cursor-not-allowed'
+                    )}
                   >
-                    <Play size={16} /> {canPlay ? '播放' : '暂无音源'}
+                    <Play size={15} fill="currentColor" className="ml-0.5" />
+                    <span className="text-[0.875rem] tracking-[0.06em]">
+                      {canPlay ? '播放' : '暂无音源'}
+                    </span>
                   </button>
                   <button
                     onClick={toggleFavorite}
                     disabled={favoriting}
                     className={clsx(
-                      'inline-flex items-center gap-2 px-5 py-2.5 border text-[0.9375rem] rounded transition-all',
+                      'inline-flex items-center gap-2 px-4 py-2 rounded border transition-all duration-300',
                       song.favoritedByMe
-                        ? 'theme-border-error-soft theme-text-error theme-bg-error-soft'
-                        : 'theme-button-danger-outline text-text-secondary',
+                        ? 'border-[color-mix(in_srgb,var(--color-error)_22%,transparent)] text-[var(--color-error)] bg-[color-mix(in_srgb,var(--color-error)_6%,transparent)]'
+                        : 'border-[var(--book-ink-line)] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50',
                       favoriting && 'opacity-50 cursor-not-allowed'
                     )}
                   >
-                    <Heart size={15} /> {song.favoritedByMe ? '已收藏' : '收藏'}
+                    <Heart size={14} fill={song.favoritedByMe ? 'currentColor' : 'none'} />
+                    <span className="text-[0.875rem]">
+                      {song.favoritedByMe ? '已收藏' : '收藏'}
+                    </span>
                   </button>
                   <button
                     onClick={handleCopyLink}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded border border-[var(--book-ink-line)] text-[0.875rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                   >
-                    <Link2 size={15} /> 复制内链
+                    <Link2 size={14} /> 复制内链
                   </button>
                   {externalUrl && (
                     <a
                       href={externalUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded border border-[var(--book-ink-line)] text-[0.875rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
-                      <ExternalLink size={15} /> 原始链接
+                      <ExternalLink size={14} /> 原始链接
                     </a>
                   )}
                 </div>
@@ -320,21 +365,18 @@ const MusicDetail = () => {
             {/* Lyrics */}
             <div className="mb-10">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  歌词
-                </h2>
+                <SectionHeading>歌词</SectionHeading>
                 {song?.lyric && (
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleCopyLyrics}
-                      className="text-xs px-3 py-1.5 border border-border text-text-muted hover:text-brand-gold hover:border-brand-gold rounded transition-all duration-300"
+                      className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
                       {lyricsCopied ? '已复制' : '复制歌词'}
                     </button>
                     <button
                       onClick={() => setLyricsExpanded(!lyricsExpanded)}
-                      className="text-xs px-3 py-1.5 border border-border text-text-muted hover:text-brand-gold hover:border-brand-gold rounded transition-all duration-300"
+                      className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
                       {lyricsExpanded ? '收起' : '展开'}
                     </button>
@@ -343,7 +385,7 @@ const MusicDetail = () => {
               </div>
               <div
                 className={clsx(
-                  'text-lg leading-normal text-text-secondary whitespace-pre-line tracking-[0.04em] py-3 px-1 overflow-hidden transition-all',
+                  'text-[1.0625rem] leading-[2] text-text-secondary whitespace-pre-line tracking-[0.03em] py-4 px-1 overflow-hidden transition-all',
                   !lyricsExpanded && 'max-h-[300px]'
                 )}
               >
@@ -354,13 +396,10 @@ const MusicDetail = () => {
             {/* Description */}
             {song?.description && (
               <div className="mb-10">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  歌曲描述
-                </h2>
+                <SectionHeading>歌曲描述</SectionHeading>
                 <div
                   className={clsx(
-                    'prose max-w-none text-text-secondary overflow-hidden transition-all',
+                    'prose max-w-none text-text-secondary overflow-hidden transition-all mt-4',
                     !descExpanded && 'max-h-[16rem]'
                   )}
                 >
@@ -368,7 +407,7 @@ const MusicDetail = () => {
                 </div>
                 <button
                   onClick={() => setDescExpanded(!descExpanded)}
-                  className="text-xs px-3 py-1.5 border border-border text-text-muted hover:text-brand-gold hover:border-brand-gold rounded transition-all duration-300 mt-3 inline-flex items-center gap-1"
+                  className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300 mt-3 inline-flex items-center gap-1"
                 >
                   {descExpanded ? (
                     <>
@@ -386,10 +425,7 @@ const MusicDetail = () => {
             {/* Related Posts */}
             <div className="mb-10">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  关联乐评
-                </h2>
+                <SectionHeading>关联乐评</SectionHeading>
                 <Link
                   to={`/forum/new?musicDocId=${song.docId}&musicTitle=${encodeURIComponent(song.title)}`}
                   className="px-4 py-2 theme-button-primary rounded text-xs font-semibold transition-all"
@@ -404,7 +440,7 @@ const MusicDetail = () => {
                     <Link
                       key={post.id}
                       to={`/forum/${post.slug || post.id}`}
-                      className="py-3.5 border-b border-border transition-colors group"
+                      className="py-3.5 border-b border-[var(--book-ink-line)] transition-colors group hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)] -mx-1 px-1 rounded"
                     >
                       <p className="text-[0.9375rem] text-text-primary mb-1 tracking-[0.04em] group-hover:text-brand-gold transition-colors">
                         {post.title}
@@ -424,7 +460,7 @@ const MusicDetail = () => {
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-text-muted italic tracking-[0.1em] py-6">
+                <div className="text-sm text-text-muted italic tracking-[0.08em] py-6">
                   暂无乐评，快来发表第一篇吧！
                 </div>
               )}
@@ -433,18 +469,15 @@ const MusicDetail = () => {
             {/* Custom Platform Links */}
             {customPlatformLinks.length > 0 && (
               <div className="mb-10">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  更多平台
-                </h2>
-                <div className="flex flex-col">
+                <SectionHeading>更多平台</SectionHeading>
+                <div className="flex flex-col mt-4">
                   {customPlatformLinks.map((link) => (
                     <a
                       key={`${link.label}-${link.url}`}
                       href={link.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2.5 py-2.5 border-b border-border text-sm text-text-secondary hover:text-brand-gold hover:pl-1 transition-all"
+                      className="flex items-center gap-2.5 py-2.5 border-b border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:pl-1 transition-all"
                     >
                       <ExternalLink size={16} className="text-text-muted flex-shrink-0" />
                       <span className="truncate">{link.label}</span>
@@ -457,14 +490,11 @@ const MusicDetail = () => {
             {/* Admin */}
             {isAdmin && song?.docId && (
               <div className="mb-10">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  管理功能
-                </h2>
-                <div className="flex flex-wrap gap-3">
+                <SectionHeading>管理功能</SectionHeading>
+                <div className="flex flex-wrap gap-3 mt-4">
                   <button
                     onClick={() => setIsEditModalOpen(true)}
-                    className="px-5 py-2 border border-border text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
+                    className="px-5 py-2 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                   >
                     编辑歌曲
                   </button>
@@ -498,11 +528,14 @@ const MusicDetail = () => {
 
           {/* Sidebar */}
           <aside className="mobile-detail-aside">
-            <div className="py-5 border-b border-border">
-              <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">
+            <div className="py-5">
+              <div className="flex justify-center mb-4">
+                <div className="h-px w-8 bg-gradient-to-r from-transparent via-brand-gold/30 to-transparent" />
+              </div>
+              <h3 className="text-[0.8125rem] tracking-[0.14em] text-text-muted uppercase mb-4 text-center">
                 歌曲信息
               </h3>
-              <div className="flex flex-col gap-2.5 text-sm">
+              <div className="flex flex-col gap-3 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-text-muted">歌手</span>
                   <span className="text-text-primary">{artistsText}</span>
