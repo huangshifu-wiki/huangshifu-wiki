@@ -10,8 +10,9 @@ import { usePublicFeatures } from '../hooks/usePublicFeatures'
 const Search: React.FC = () => {
   const { preferences, setViewMode } = useUserPreferences()
   const viewMode = preferences.viewMode
-  const { features } = usePublicFeatures()
+  const { features, loading: featuresLoading } = usePublicFeatures()
   const semanticSearchEnabled = features.semanticSearch
+  const hotKeywordsEnabled = featuresLoading ? false : features.searchHotKeywordsEnabled
 
   const {
     state,
@@ -28,7 +29,7 @@ const Search: React.FC = () => {
     dismissSuggestions,
     removeSearchHistoryItem,
     clearSearchHistory,
-  } = useSearchPage()
+  } = useSearchPage({ hotKeywordsEnabled })
 
   React.useEffect(() => {
     if (!semanticSearchEnabled && state.filters.semanticImageSearch) {

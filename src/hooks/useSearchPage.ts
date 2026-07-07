@@ -54,9 +54,10 @@ function getPendingGalleryIds(state: SearchState) {
   return Array.from(ids)
 }
 
-export function useSearchPage() {
+export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') || ''
+  const hotKeywordsEnabled = options?.hotKeywordsEnabled ?? true
 
   // 搜索历史管理
   const {
@@ -101,12 +102,17 @@ export function useSearchPage() {
   // 获取热门关键词 -- 委托给 traditionalSearch.getHotKeywords()
   useEffect(() => {
     const loadHotKeywords = async () => {
+      if (!hotKeywordsEnabled) {
+        setState((prev) => ({ ...prev, hotKeywords: [] }))
+        return
+      }
+
       const keywords = await traditionalSearch.getHotKeywords()
       setState((prev) => ({ ...prev, hotKeywords: keywords }))
     }
     loadHotKeywords()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [hotKeywordsEnabled])
 
   // 初始查询
   useEffect(() => {

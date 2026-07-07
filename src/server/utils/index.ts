@@ -279,6 +279,14 @@ export {
   isRegistrationOpen,
 } from './registration'
 
+export {
+  SEARCH_HOT_KEYWORDS_CONFIG_KEY,
+  SEARCH_HOT_KEYWORDS_CACHE_KEY,
+  getSearchHotKeywordsConfig,
+  setSearchHotKeywordsConfig,
+  isSearchHotKeywordsEnabled,
+} from './search-hot-keywords'
+
 // === 已有独立模块（保持原导出方式）===
 export * from './cache'
 export { calculateFileMD5, calculateBufferMD5 } from './hash'

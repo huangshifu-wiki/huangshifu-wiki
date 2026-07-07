@@ -41,22 +41,24 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
   return (
     <div className="mb-6 border-b border-[var(--book-ink-line)] pb-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="text-xs text-text-muted">热门:</span>
-          {hotKeywords.slice(0, 6).map((tag) => (
-            <button
-              key={tag}
-              onClick={() => onSearchKeyword(tag)}
-              className="min-h-8 rounded-sm border border-[var(--book-ink-line)] bg-transparent px-3 py-1 text-xs text-text-secondary transition-all cursor-pointer hover:border-brand-gold hover:text-brand-gold"
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
+        {hotKeywords.length > 0 && (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="text-xs text-text-muted">热门:</span>
+            {hotKeywords.slice(0, 6).map((tag) => (
+              <button
+                key={tag}
+                onClick={() => onSearchKeyword(tag)}
+                className="min-h-8 cursor-pointer rounded-sm border border-[var(--book-ink-line)] bg-transparent px-3 py-1 text-xs text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           onClick={onToggleShowFilters}
           className={clsx(
-            'flex items-center gap-2 rounded px-2 py-1 text-sm transition-colors',
+            'ml-auto flex items-center gap-2 rounded px-2 py-1 text-sm transition-colors',
             showFilters ? 'text-brand-gold' : 'text-text-muted hover:text-brand-gold'
           )}
         >
@@ -73,28 +75,29 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
             className="mt-5 overflow-hidden border-t border-[var(--book-ink-line)] pt-5"
           >
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4 lg:gap-6">
-              {/* 标签筛选 */}
-              <div className="space-y-3">
-                <h4 className="flex items-center gap-2 text-xs font-semibold tracking-[0.12em] text-text-secondary">
-                  <Tag size={12} /> 标签筛选
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {hotKeywords.map((tag) => (
-                    <button
-                      key={tag}
-                      onClick={() => onToggleTag(tag)}
-                      className={clsx(
-                        'rounded-sm px-3 py-1 text-xs transition-all',
-                        filters.selectedTags.includes(tag)
-                          ? 'theme-button-primary border border-transparent'
-                          : 'theme-button-secondary'
-                      )}
-                    >
-                      {tag}
-                    </button>
-                  ))}
+              {hotKeywords.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="flex items-center gap-2 text-xs font-semibold tracking-[0.12em] text-text-secondary">
+                    <Tag size={12} /> 标签筛选
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {hotKeywords.map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() => onToggleTag(tag)}
+                        className={clsx(
+                          'rounded-sm px-3 py-1 text-xs transition-all',
+                          filters.selectedTags.includes(tag)
+                            ? 'theme-button-primary border border-transparent'
+                            : 'theme-button-secondary'
+                        )}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* 时间范围 */}
               <div className="space-y-3">

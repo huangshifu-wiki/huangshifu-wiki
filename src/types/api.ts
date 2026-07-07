@@ -230,6 +230,10 @@ export interface RegistrationConfig {
   enabled: boolean
 }
 
+export interface SearchHotKeywordsConfig {
+  enabled: boolean
+}
+
 export type {
   RateLimitAdminConfig,
   RateLimitBucketConfig,

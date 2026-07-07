@@ -14,6 +14,9 @@ import {
   getRegistrationConfig,
   setRegistrationConfig,
   isRegistrationOpen,
+  getSearchHotKeywordsConfig,
+  setSearchHotKeywordsConfig,
+  isSearchHotKeywordsEnabled,
   parseQueryString,
   parseRouteParam,
 } from '../utils'
@@ -49,6 +52,7 @@ router.get('/features', async (_req, res) => {
     res.json({
       semanticSearch: isSemanticSearchEnabled(),
       registrationEnabled: await isRegistrationOpen(),
+      searchHotKeywordsEnabled: await isSearchHotKeywordsEnabled(),
     })
   } catch (error) {
     console.error('Get public features error:', error)
@@ -93,6 +97,34 @@ router.patch('/registration', requireAuth, requireSuperAdmin, async (req, res) =
   } catch (error) {
     console.error('Update registration config error:', error)
     res.status(500).json({ error: '更新注册配置失败' })
+  }
+})
+
+// GET /api/config/search-hot-keywords/admin - Get search hot keywords config
+router.get('/search-hot-keywords/admin', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    const config = await getSearchHotKeywordsConfig()
+    res.json(config)
+  } catch (error) {
+    console.error('Get search hot keywords config error:', error)
+    res.status(500).json({ error: '获取搜索热词配置失败' })
+  }
+})
+
+// PATCH /api/config/search-hot-keywords - Update search hot keywords config
+router.patch('/search-hot-keywords', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { enabled } = req.body as { enabled?: unknown }
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: 'enabled 必须是布尔值' })
+      return
+    }
+
+    const config = await setSearchHotKeywordsConfig({ enabled })
+    res.json({ success: true, config })
+  } catch (error) {
+    console.error('Update search hot keywords config error:', error)
+    res.status(500).json({ error: '更新搜索热词配置失败' })
   }
 })
 

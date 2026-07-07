@@ -27,6 +27,7 @@ import {
   enhancedCache,
   logger,
   isSemanticSearchEnabled,
+  isSearchHotKeywordsEnabled,
 } from '../utils'
 import { prisma } from '../prisma'
 import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
@@ -1192,6 +1193,11 @@ router.get(
 
 router.get('/hot-keywords', async (_req, res) => {
   try {
+    if (!(await isSearchHotKeywordsEnabled())) {
+      res.json({ keywords: [] })
+      return
+    }
+
     const keywords = await prisma.searchKeyword.findMany({
       orderBy: [{ count: 'desc' }, { updatedAt: 'desc' }],
       take: 20,
@@ -1336,16 +1342,21 @@ router.get('/suggest', searchLimiter, async (req: AuthenticatedRequest, res) => 
     }
 
     const normalized = normalizeKeyword(q)
-    const musicArtistMatchDocIds = await findMusicDocIdsByArtistPartial(q, 3)
+    const [musicArtistMatchDocIds, hotKeywordsEnabled] = await Promise.all([
+      findMusicDocIdsByArtistPartial(q, 3),
+      isSearchHotKeywordsEnabled(),
+    ])
 
     const [keywordMatches, wikiMatches, postMatches, musicMatches, albumMatches] =
       await Promise.all([
-        prisma.searchKeyword.findMany({
-          where: { keyword: { contains: normalized } },
-          orderBy: { count: 'desc' },
-          take: 5,
-          select: { keyword: true, count: true },
-        }),
+        hotKeywordsEnabled
+          ? prisma.searchKeyword.findMany({
+              where: { keyword: { contains: normalized } },
+              orderBy: { count: 'desc' },
+              take: 5,
+              select: { keyword: true, count: true },
+            })
+          : Promise.resolve([]),
         prisma.wikiPage.findMany({
           where: {
             ...buildWikiVisibilityWhere(req.authUser),

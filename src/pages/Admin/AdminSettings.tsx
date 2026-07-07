@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   Loader2,
   MailCheck,
   RefreshCw,
   Save,
+  Search,
   Settings,
   Shield,
   UserPlus,
@@ -22,7 +24,11 @@ import {
   generateApiCacheKey,
 } from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'
-import type { EmailVerificationAdminConfig, RegistrationConfig } from '../../types/api'
+import type {
+  EmailVerificationAdminConfig,
+  RegistrationConfig,
+  SearchHotKeywordsConfig,
+} from '../../types/api'
 
 type EmailVerificationForm = EmailVerificationAdminConfig & {
   smtpPass: string
@@ -71,6 +77,12 @@ const REGISTRATION_ADMIN_CONFIG_CACHE_KEY = generateApiCacheKey(
   'GET',
   REGISTRATION_ADMIN_CONFIG_PATH
 )
+const SEARCH_HOT_KEYWORDS_ADMIN_CONFIG_PATH = '/api/config/search-hot-keywords/admin'
+const SEARCH_HOT_KEYWORDS_ADMIN_CONFIG_CACHE_KEY = generateApiCacheKey(
+  'GET',
+  SEARCH_HOT_KEYWORDS_ADMIN_CONFIG_PATH
+)
+const PUBLIC_FEATURES_CONFIG_CACHE_KEY = generateApiCacheKey('GET', '/api/config/features')
 const RATE_LIMIT_ADMIN_CONFIG_PATH = '/api/admin/rate-limits/config'
 const RATE_LIMIT_ADMIN_CONFIG_CACHE_KEY = generateApiCacheKey('GET', RATE_LIMIT_ADMIN_CONFIG_PATH)
 const NO_CACHE_OPTIONS = { staleTime: 0, swr: false }
@@ -89,6 +101,102 @@ function parsePositiveInteger(value: string) {
   return Number.isInteger(parsed) && parsed >= 1 ? parsed : null
 }
 
+interface BooleanSettingSectionProps {
+  icon: ReactNode
+  title: string
+  loading: boolean
+  loadingText: string
+  loadError: boolean
+  errorText: string
+  retry: () => void
+  enabled: boolean
+  label: string
+  description: string
+  saving: boolean
+  save: () => void
+  toggle: () => void
+}
+
+function BooleanSettingSection({
+  icon,
+  title,
+  loading,
+  loadingText,
+  loadError,
+  errorText,
+  retry,
+  enabled,
+  label,
+  description,
+  saving,
+  save,
+  toggle,
+}: BooleanSettingSectionProps) {
+  return (
+    <section className="space-y-5 border border-border bg-surface p-5">
+      <div className="flex items-center gap-2 border-b border-border pb-3">
+        {icon}
+        <h2 className="text-base font-semibold text-text-primary">{title}</h2>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-text-secondary">
+          <Loader2 size={16} className="animate-spin" />
+          {loadingText}
+        </div>
+      ) : loadError ? (
+        <div className="flex flex-col gap-3 text-sm text-text-secondary" role="alert">
+          <p>{errorText}</p>
+          <button
+            type="button"
+            onClick={retry}
+            className="theme-button-secondary inline-flex w-fit items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
+          >
+            <RefreshCw size={14} />
+            重试
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-text-primary">{label}</p>
+            <p className="text-sm leading-6 text-text-secondary">{description}</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={enabled}
+              aria-label={label}
+              onClick={toggle}
+              className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${
+                enabled ? 'bg-brand-gold' : 'bg-border'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                  enabled ? 'translate-x-7' : 'translate-x-1'
+                }`}
+              />
+            </button>
+
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="theme-button-primary inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              {saving ? '保存中...' : '保存'}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 const AdminSettings = () => {
   const { show } = useToast()
   const [form, setForm] = useState<EmailVerificationForm>(DEFAULT_EMAIL_VERIFICATION_FORM)
@@ -101,6 +209,12 @@ const AdminSettings = () => {
   const [registrationLoading, setRegistrationLoading] = useState(true)
   const [registrationLoadError, setRegistrationLoadError] = useState(false)
   const [registrationSaving, setRegistrationSaving] = useState(false)
+  const [searchHotKeywordsConfig, setSearchHotKeywordsConfig] = useState<SearchHotKeywordsConfig>({
+    enabled: true,
+  })
+  const [searchHotKeywordsLoading, setSearchHotKeywordsLoading] = useState(true)
+  const [searchHotKeywordsLoadError, setSearchHotKeywordsLoadError] = useState(false)
+  const [searchHotKeywordsSaving, setSearchHotKeywordsSaving] = useState(false)
   const [rateLimitConfig, setRateLimitConfig] = useState<RateLimitAdminConfig | null>(null)
   const [rateLimitLoading, setRateLimitLoading] = useState(true)
   const [rateLimitLoadError, setRateLimitLoadError] = useState(false)
@@ -177,6 +291,43 @@ const AdminSettings = () => {
       cancelled = true
     }
   }, [loadRegistrationConfig])
+
+  const loadSearchHotKeywordsConfig = useCallback(
+    async (isActive: () => boolean = () => true) => {
+      setSearchHotKeywordsLoading(true)
+      setSearchHotKeywordsLoadError(false)
+
+      try {
+        const data = await apiRequest<SearchHotKeywordsConfig>(
+          SEARCH_HOT_KEYWORDS_ADMIN_CONFIG_PATH,
+          {
+            method: 'GET',
+            dedup: false,
+          }
+        )
+
+        if (!isActive()) return
+        setSearchHotKeywordsConfig(data)
+      } catch (error) {
+        if (!isActive()) return
+        console.error('Load search hot keywords config failed:', error)
+        setSearchHotKeywordsLoadError(true)
+        show('搜索热词配置加载失败', { variant: 'error' })
+      } finally {
+        if (isActive()) setSearchHotKeywordsLoading(false)
+      }
+    },
+    [show]
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    void loadSearchHotKeywordsConfig(() => !cancelled)
+
+    return () => {
+      cancelled = true
+    }
+  }, [loadSearchHotKeywordsConfig])
 
   const loadRateLimitConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
@@ -277,6 +428,32 @@ const AdminSettings = () => {
     }
   }
 
+  const saveSearchHotKeywordsConfig = async () => {
+    if (searchHotKeywordsLoading || searchHotKeywordsLoadError) {
+      show('请先成功加载搜索热词设置后再保存', { variant: 'error' })
+      return
+    }
+
+    setSearchHotKeywordsSaving(true)
+    try {
+      const result = await apiPatch<{
+        success: boolean
+        config: SearchHotKeywordsConfig
+      }>('/api/config/search-hot-keywords', {
+        enabled: searchHotKeywordsConfig.enabled,
+      })
+      clearApiCache(SEARCH_HOT_KEYWORDS_ADMIN_CONFIG_CACHE_KEY)
+      clearApiCache(PUBLIC_FEATURES_CONFIG_CACHE_KEY)
+      setSearchHotKeywordsConfig(result.config)
+      show('搜索热词设置已保存')
+    } catch (error) {
+      console.error('Save search hot keywords config failed:', error)
+      show(error instanceof Error ? error.message : '搜索热词设置保存失败', { variant: 'error' })
+    } finally {
+      setSearchHotKeywordsSaving(false)
+    }
+  }
+
   const saveRateLimitConfig = async () => {
     if (!rateLimitConfig || rateLimitLoading || rateLimitLoadError) {
       show('请先成功加载请求限流配置后再保存', { variant: 'error' })
@@ -354,78 +531,47 @@ const AdminSettings = () => {
         </h1>
       </div>
 
-      <section className="space-y-5 border border-border bg-surface p-5">
-        <div className="flex items-center gap-2 border-b border-border pb-3">
-          <UserPlus size={18} className="text-brand-gold" />
-          <h2 className="text-base font-semibold text-text-primary">账号注册</h2>
-        </div>
+      <BooleanSettingSection
+        icon={<UserPlus size={18} className="text-brand-gold" />}
+        title="账号注册"
+        loading={registrationLoading}
+        loadingText="正在加载注册配置..."
+        loadError={registrationLoadError}
+        errorText="注册配置加载失败，未加载成功前无法保存设置。"
+        retry={() => void loadRegistrationConfig()}
+        enabled={registrationConfig.enabled}
+        label="开放账号注册"
+        description="关闭后新用户无法注册，已有用户仍可登录。"
+        saving={registrationSaving}
+        save={saveRegistrationConfig}
+        toggle={() =>
+          setRegistrationConfig((current) => ({
+            ...current,
+            enabled: !current.enabled,
+          }))
+        }
+      />
 
-        {registrationLoading ? (
-          <div className="flex items-center gap-2 text-sm text-text-secondary">
-            <Loader2 size={16} className="animate-spin" />
-            正在加载注册配置...
-          </div>
-        ) : registrationLoadError ? (
-          <div className="flex flex-col gap-3 text-sm text-text-secondary" role="alert">
-            <p>注册配置加载失败，未加载成功前无法保存设置。</p>
-            <button
-              type="button"
-              onClick={() => void loadRegistrationConfig()}
-              className="theme-button-secondary inline-flex w-fit items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
-            >
-              <RefreshCw size={14} />
-              重试
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-text-primary">开放账号注册</p>
-              <p className="text-sm leading-6 text-text-secondary">
-                关闭后新用户无法注册，已有用户仍可登录。
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={registrationConfig.enabled}
-                aria-label="开放账号注册"
-                onClick={() =>
-                  setRegistrationConfig((current) => ({
-                    ...current,
-                    enabled: !current.enabled,
-                  }))
-                }
-                className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${
-                  registrationConfig.enabled ? 'bg-brand-gold' : 'bg-border'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                    registrationConfig.enabled ? 'translate-x-7' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-
-              <button
-                type="button"
-                onClick={saveRegistrationConfig}
-                disabled={registrationSaving}
-                className="theme-button-primary inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
-              >
-                {registrationSaving ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Save size={14} />
-                )}
-                {registrationSaving ? '保存中...' : '保存'}
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
+      <BooleanSettingSection
+        icon={<Search size={18} className="text-brand-gold" />}
+        title="搜索热词推荐"
+        loading={searchHotKeywordsLoading}
+        loadingText="正在加载搜索热词配置..."
+        loadError={searchHotKeywordsLoadError}
+        errorText="搜索热词配置加载失败，未加载成功前无法保存设置。"
+        retry={() => void loadSearchHotKeywordsConfig()}
+        enabled={searchHotKeywordsConfig.enabled}
+        label="显示搜索热词推荐"
+        description="关闭后前台不展示热门搜索词，也不在输入联想中返回热词项；搜索计数仍会继续累计。"
+        saving={searchHotKeywordsSaving}
+        save={saveSearchHotKeywordsConfig}
+        toggle={() =>
+          setSearchHotKeywordsConfig((current) => ({
+            ...current,
+            enabled: !current.enabled,
+          }))
+        }
+      />
 
       <section className="space-y-5 border border-border bg-surface p-5">
         <div className="flex items-center gap-2 border-b border-border pb-3">
