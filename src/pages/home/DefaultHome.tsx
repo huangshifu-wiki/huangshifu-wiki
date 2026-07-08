@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Calendar, Disc3, Image as ImageIcon, Music, Pause, Play } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { SmartImage } from '../../components/SmartImage'
+import { SiteFooterContent } from '../../components/SiteFooter'
 import { useMusic } from '../../context/MusicContext'
 import { apiGet } from '../../lib/apiClient'
 import { formatEventListDate, getEventCoverSrc } from '../../lib/eventFormat'
@@ -483,7 +484,9 @@ export const DefaultHome = () => {
       </main>
 
       <footer className="home-footer" role="contentinfo" aria-label="首页底部">
-        <p>黄诗扶 Wiki</p>
+        <p>
+          <SiteFooterContent />
+        </p>
       </footer>
     </div>
   )

@@ -8,6 +8,7 @@ import { Navbar } from './components/Navbar'
 import { BottomNav } from './components/BottomNav'
 import { AnnouncementBar } from './components/AnnouncementBar'
 import { GlobalMusicPlayer } from './components/GlobalMusicPlayer'
+import { SiteFooterContent } from './components/SiteFooter'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PageSkeleton } from './components/PageSkeleton'
 import { RouteGuard } from './components/RouteGuard'
@@ -196,7 +197,9 @@ const MainLayout = () => {
           aria-label="页面底部"
           style={{ marginBottom: currentSong ? '80px' : '0' }}
         >
-          <p>黄诗扶 Wiki</p>
+          <p>
+            <SiteFooterContent />
+          </p>
         </footer>
       )}
     </div>
