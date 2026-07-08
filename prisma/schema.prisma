@@ -644,6 +644,7 @@ model Gallery {
   authorUid  String
   authorName String
   tags       Json?
+  eventDate  String?
   locationCode  String?
   locationDetail String?
   copyright  String?
@@ -668,6 +669,7 @@ model Gallery {
   dislikes   GalleryDislike[]
 
   @@index([createdAt])
+  @@index([eventDate])
   @@index([published, updatedAt], map: "Gallery_published_idx")
   @@index([published, createdAt(sort: Desc)])
   @@index([status, authorUid])

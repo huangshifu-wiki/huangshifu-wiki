@@ -18,6 +18,7 @@ import { useAuth } from '../context/AuthContext'
 import { apiGet, apiPatch } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { PROFILE_SIGNATURE_MAX_LENGTH } from '../lib/contentLimits'
+import { formatDateOnly } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import {
   shouldWaitForGalleryThumbnail,
@@ -643,7 +644,10 @@ export default function UserProfile() {
                           {gallery.description || '暂无描述'}
                         </p>
                         <p className="mt-1 text-xs text-text-muted">
-                          {gallery.images?.length || 0} 张 · {formatTime(gallery.createdAt)}
+                          {gallery.images?.length || 0} 张 ·{' '}
+                          {gallery.eventDate
+                            ? formatDateOnly(gallery.eventDate, 'MM-dd')
+                            : formatTime(gallery.createdAt)}
                         </p>
                       </div>
                     </Link>

@@ -11,6 +11,7 @@ import {
   parseAssetIdList,
   parseBoolean,
   parsePagination,
+  normalizeOptionalDateOnlyString,
   normalizeGalleryWriteStatus,
   canViewGallery,
   createUploadSessionExpiresAt,
@@ -367,7 +368,7 @@ router.get(
               orderBy: { sortOrder: 'asc' },
             },
           },
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ eventDate: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
           take: limit,
           skip,
         }),
@@ -681,6 +682,7 @@ router.post(
         locationCode,
         locationDetail,
         copyright,
+        eventDate,
       } = req.body as {
         title?: string
         description?: string
@@ -691,6 +693,14 @@ router.post(
         locationCode?: string
         locationDetail?: string
         copyright?: string
+        eventDate?: string | null
+      }
+
+      const normalizedEventDate =
+        eventDate === undefined ? null : normalizeOptionalDateOnlyString(eventDate)
+      if (normalizedEventDate === undefined) {
+        res.status(400).json({ error: '日期格式无效，请使用 yyyy-MM-dd 格式' })
+        return
       }
 
       const normalizedAssetIds = parseAssetIdList(assetIds)
@@ -783,6 +793,7 @@ router.post(
               authorUid: req.authUser!.uid,
               authorName: req.authUser!.displayName,
               tags: finalTags,
+              eventDate: normalizedEventDate,
               locationCode: locationCode || null,
               locationDetail: locationDetail || null,
               copyright: normalizedCopyright,
@@ -904,6 +915,7 @@ router.post(
             authorUid: req.authUser!.uid,
             authorName: req.authUser!.displayName,
             tags: normalizedTags,
+            eventDate: normalizedEventDate,
             locationCode: locationCode || null,
             locationDetail: locationDetail || null,
             copyright: normalizedCopyright,
@@ -1019,6 +1031,14 @@ router.patch(
             ? req.body.copyright.trim()
             : null
           : undefined
+      const hasEventDate = Object.prototype.hasOwnProperty.call(req.body || {}, 'eventDate')
+      const eventDate = hasEventDate
+        ? normalizeOptionalDateOnlyString(req.body?.eventDate)
+        : undefined
+      if (hasEventDate && eventDate === undefined) {
+        res.status(400).json({ error: '日期格式无效，请使用 yyyy-MM-dd 格式' })
+        return
+      }
       if (
         !ensureGalleryTextLimits(res, {
           title,
@@ -1077,6 +1097,7 @@ router.patch(
         title?: string
         description?: string
         tags?: string[]
+        eventDate?: string | null
         locationCode?: string | null
         locationDetail?: string | null
         copyright?: string | null
@@ -1096,6 +1117,9 @@ router.patch(
       }
       if (tags !== undefined) {
         data.tags = tags
+      }
+      if (hasEventDate) {
+        data.eventDate = eventDate ?? null
       }
       if (locationCode !== undefined) {
         data.locationCode = locationCode

@@ -132,4 +132,84 @@ describe('gallery response transformers', () => {
     })
     expect(mockSiteConfigFindUnique).not.toHaveBeenCalled()
   })
+
+  it('serializes eventDate as string when provided', async () => {
+    const { toGalleryResponse } = await import('../../src/server/utils/response-transformers')
+
+    mockImageMapFindMany.mockResolvedValue([])
+
+    const result = await toGalleryResponse({
+      id: 'gallery-1',
+      title: '测试图集',
+      description: '',
+      authorUid: 'user-1',
+      authorName: '作者',
+      tags: [],
+      eventDate: '2024-06-15',
+      locationCode: null,
+      locationDetail: null,
+      copyright: null,
+      status: 'published',
+      published: true,
+      publishedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+      images: [],
+    })
+
+    expect(result.eventDate).toBe('2024-06-15')
+  })
+
+  it('serializes eventDate as null when not provided', async () => {
+    const { toGalleryResponse } = await import('../../src/server/utils/response-transformers')
+
+    mockImageMapFindMany.mockResolvedValue([])
+
+    const result = await toGalleryResponse({
+      id: 'gallery-1',
+      title: '测试图集',
+      description: '',
+      authorUid: 'user-1',
+      authorName: '作者',
+      tags: [],
+      locationCode: null,
+      locationDetail: null,
+      copyright: null,
+      status: 'published',
+      published: true,
+      publishedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+      images: [],
+    })
+
+    expect(result.eventDate).toBeNull()
+  })
+
+  it('serializes eventDate as null when explicitly null', async () => {
+    const { toGalleryResponse } = await import('../../src/server/utils/response-transformers')
+
+    mockImageMapFindMany.mockResolvedValue([])
+
+    const result = await toGalleryResponse({
+      id: 'gallery-1',
+      title: '测试图集',
+      description: '',
+      authorUid: 'user-1',
+      authorName: '作者',
+      tags: [],
+      eventDate: null,
+      locationCode: null,
+      locationDetail: null,
+      copyright: null,
+      status: 'published',
+      published: true,
+      publishedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+      images: [],
+    })
+
+    expect(result.eventDate).toBeNull()
+  })
 })

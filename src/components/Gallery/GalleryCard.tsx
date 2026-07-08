@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Clock, User as UserIcon } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
-import { formatDate } from '../../lib/dateUtils'
+import { formatDate, formatDateOnly } from '../../lib/dateUtils'
 import { VIEW_MODE_CONFIG } from '../../lib/viewModes'
 import type { GalleryItem } from '../../types/entities'
 import type { ViewMode } from '../../types/userPreferences'
@@ -39,7 +39,11 @@ const GalleryMeta = ({ gallery, compact = false }: { gallery: GalleryItem; compa
   >
     <span className="inline-flex min-w-0 items-center gap-1">
       <Clock size={compact ? 10 : 11} aria-hidden="true" />
-      <span className="truncate">{formatDate(gallery.createdAt, 'yyyy-MM-dd')}</span>
+      <span className="truncate">
+        {gallery.eventDate
+          ? formatDateOnly(gallery.eventDate)
+          : formatDate(gallery.createdAt, 'yyyy-MM-dd')}
+      </span>
     </span>
     <span className="inline-flex min-w-0 items-center gap-1">
       <UserIcon size={compact ? 10 : 11} aria-hidden="true" />

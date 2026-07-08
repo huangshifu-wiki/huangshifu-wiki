@@ -173,6 +173,7 @@ export interface GalleryItem {
   authorPublicId?: string | null
   authorName: string
   tags: string[]
+  eventDate?: string | null
   locationCode: string | null
   locationName: string | null
   locationDetail: string | null

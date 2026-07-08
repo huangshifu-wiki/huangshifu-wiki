@@ -34,6 +34,7 @@ import {
   WIKI_MAX_CONTENT_SIZE,
 } from '../lib/contentLimits'
 import { apiGet, apiPatch, apiPost, apiPut } from '../lib/apiClient'
+import { formatDateOnly } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import {
   shouldWaitForGalleryThumbnail,
@@ -697,7 +698,9 @@ const Settings = () => {
                     {gallery.title}
                   </p>
                   <p className="mt-1 text-xs text-text-muted">
-                    {format(new Date(gallery.createdAt), 'MM-dd HH:mm')}
+                    {gallery.eventDate
+                      ? formatDateOnly(gallery.eventDate, 'MM-dd')
+                      : format(new Date(gallery.createdAt), 'MM-dd HH:mm')}
                   </p>
                 </div>
               </Link>

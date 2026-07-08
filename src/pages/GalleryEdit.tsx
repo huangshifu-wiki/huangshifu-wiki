@@ -31,6 +31,7 @@ import {
 } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { splitTagsInput } from '../lib/contentUtils'
+import { toLocalDateInputValue } from '../lib/dateUtils'
 import { useI18n } from '../lib/i18n'
 import {
   shouldWaitForAnyGalleryThumbnail,
@@ -60,6 +61,7 @@ type GalleryDraft = {
   title: string
   description: string
   tagsText: string
+  eventDate: string
   locationName: string | null
   locationCode: string | null
   copyrightText: string
@@ -101,6 +103,7 @@ const createDraftFromGallery = (gallery: GalleryItem): GalleryDraft => ({
   title: gallery.title || '',
   description: gallery.description || '',
   tagsText: gallery.tags.join(', '),
+  eventDate: gallery.eventDate || '',
   locationName: gallery.locationDetail || gallery.locationName || null,
   locationCode: gallery.locationCode || null,
   copyrightText: gallery.copyright || '',
@@ -111,6 +114,7 @@ const createEmptyDraft = (): GalleryDraft => ({
   title: '',
   description: '',
   tagsText: '',
+  eventDate: toLocalDateInputValue(),
   locationName: null,
   locationCode: null,
   copyrightText: '',
@@ -533,6 +537,7 @@ const GalleryEdit = () => {
         title: currentDraft.title,
         description: currentDraft.description,
         tags: splitTagsInput(currentDraft.tagsText),
+        eventDate: currentDraft.eventDate || null,
         locationCode: currentDraft.locationCode,
         locationDetail: currentDraft.locationName,
         copyright: currentDraft.copyrightText.trim() || null,
@@ -809,6 +814,18 @@ const GalleryEdit = () => {
                   }
                   maxLength={CONTENT_LIMITS.gallery.copyright}
                   placeholder={t('gallery.copyrightPlaceholder')}
+                  className={bookInputClass}
+                />
+              </BookFormField>
+
+              <BookFormField label="拍摄/发生日期" htmlFor="gallery-event-date">
+                <input
+                  id="gallery-event-date"
+                  type="date"
+                  value={draft.eventDate}
+                  onChange={(event) =>
+                    applyDraft((prev) => (prev ? { ...prev, eventDate: event.target.value } : prev))
+                  }
                   className={bookInputClass}
                 />
               </BookFormField>

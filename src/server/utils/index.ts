@@ -25,6 +25,7 @@ export {
 export {
   parseDate,
   normalizeOptionalDateOnly,
+  normalizeOptionalDateOnlyString,
   normalizeOptionalDurationMs,
   parseInteger,
   firstString,

@@ -446,6 +446,7 @@ type GalleryInput = {
   author?: { publicId?: string; displayName?: string | null } | null
   authorName: string
   tags: unknown
+  eventDate?: string | null
   locationCode?: string | null
   locationDetail?: string | null
   copyright?: string | null
@@ -584,6 +585,7 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
     authorPublicId: gallery.author?.publicId || null,
     authorName: gallery.authorName,
     tags: serializeTags(gallery.tags),
+    eventDate: gallery.eventDate ?? null,
     locationCode: gallery.locationCode || null,
     locationName: gallery.location?.fullName || null,
     locationDetail: gallery.locationDetail || null,
@@ -663,6 +665,7 @@ export async function toGalleryListResponse(galleries: GalleryInput[], storageSt
     authorPublicId: gallery.author?.publicId || null,
     authorName: gallery.authorName,
     tags: serializeTags(gallery.tags),
+    eventDate: gallery.eventDate ?? null,
     locationCode: gallery.locationCode || null,
     locationName: gallery.location?.fullName || null,
     locationDetail: gallery.locationDetail || null,

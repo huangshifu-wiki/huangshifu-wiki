@@ -25,7 +25,7 @@ import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import { useI18n } from '../lib/i18n'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
-import { formatDateTime } from '../lib/dateUtils'
+import { formatDateOnly, formatDateTime } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import { submitFormOnModifierEnter } from '../lib/formShortcuts'
 import {
@@ -874,7 +874,10 @@ const GalleryDetail = () => {
 
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[0.8125rem] text-text-muted">
             <span className="flex items-center gap-1">
-              <Clock size={14} /> {formatDateTime(gallery.createdAt)}
+              <Clock size={14} />{' '}
+              {gallery.eventDate
+                ? formatDateOnly(gallery.eventDate)
+                : formatDateTime(gallery.createdAt)}
             </span>
             <span className="flex items-center gap-1">
               <UserIcon size={14} />{' '}

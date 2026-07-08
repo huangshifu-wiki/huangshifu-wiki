@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   parseDate,
   normalizeOptionalDateOnly,
+  normalizeOptionalDateOnlyString,
   parseInteger,
   parseBoolean,
   extractBase64Payload,
@@ -88,6 +89,26 @@ describe('parsers', () => {
       expect(normalizeOptionalDateOnly(null)).toBeNull()
       expect(normalizeOptionalDateOnly('')).toBeNull()
       expect(normalizeOptionalDateOnly('   ')).toBeNull()
+    })
+  })
+
+  describe('normalizeOptionalDateOnlyString', () => {
+    it('accepts valid date-only strings without applying local timezone offsets', () => {
+      expect(normalizeOptionalDateOnlyString('2024-06-15')).toBe('2024-06-15')
+      expect(normalizeOptionalDateOnlyString(' 2024-06-15 ')).toBe('2024-06-15')
+    })
+
+    it('rejects out-of-range calendar dates and non-date values', () => {
+      expect(normalizeOptionalDateOnlyString('2026-02-31')).toBeUndefined()
+      expect(normalizeOptionalDateOnlyString('2026-13-01')).toBeUndefined()
+      expect(normalizeOptionalDateOnlyString('2026-2-1')).toBeUndefined()
+      expect(normalizeOptionalDateOnlyString(20260201)).toBeUndefined()
+    })
+
+    it('normalizes empty values to null', () => {
+      expect(normalizeOptionalDateOnlyString(null)).toBeNull()
+      expect(normalizeOptionalDateOnlyString('')).toBeNull()
+      expect(normalizeOptionalDateOnlyString('   ')).toBeNull()
     })
   })
 

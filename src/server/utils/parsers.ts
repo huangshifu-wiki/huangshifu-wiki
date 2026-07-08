@@ -20,7 +20,7 @@ export function parseDate(date: string | Date | null | undefined) {
   return parsed
 }
 
-export function normalizeOptionalDateOnly(value: unknown) {
+export function normalizeOptionalDateOnlyString(value: unknown): string | null | undefined {
   if (value === null || value === '') return null
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
@@ -28,7 +28,14 @@ export function normalizeOptionalDateOnly(value: unknown) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return undefined
   const date = new Date(`${trimmed}T00:00:00.000Z`)
   if (Number.isNaN(date.getTime())) return undefined
-  return date.toISOString().slice(0, 10) === trimmed ? date : undefined
+  return date.toISOString().slice(0, 10) === trimmed ? trimmed : undefined
+}
+
+export function normalizeOptionalDateOnly(value: unknown): Date | null | undefined {
+  const normalized = normalizeOptionalDateOnlyString(value)
+  if (normalized === null) return null
+  if (normalized === undefined) return undefined
+  return new Date(`${normalized}T00:00:00.000Z`)
 }
 
 export function normalizeOptionalDurationMs(value: unknown) {
