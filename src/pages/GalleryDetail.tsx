@@ -873,22 +873,16 @@ const GalleryDetail = () => {
           {gallery.copyright && <p className="mt-2 text-xs text-text-muted">{gallery.copyright}</p>}
 
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[0.8125rem] text-text-muted">
-            <span className="flex items-center gap-1">
-              <Clock size={14} />{' '}
-              {gallery.eventDate
-                ? formatDateOnly(gallery.eventDate)
-                : formatDateTime(gallery.createdAt)}
-            </span>
+            {gallery.eventDate ? (
+              <span className="flex items-center gap-1">
+                <Clock size={14} /> {formatDateOnly(gallery.eventDate)}
+              </span>
+            ) : null}
             <span className="flex items-center gap-1">
               <UserIcon size={14} />{' '}
               {gallery.authorName ||
                 (gallery.authorPublicId ? `#${gallery.authorPublicId}` : '匿名')}
             </span>
-            {gallery.publishedAt ? (
-              <span>
-                {t('gallery.publishedAt')} {formatDateTime(gallery.publishedAt)}
-              </span>
-            ) : null}
           </div>
         </header>
 
