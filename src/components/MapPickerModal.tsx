@@ -2,17 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X, MapPin, Search, Loader2 } from '@/src/components/icons'
 import { apiGet } from '../lib/apiClient'
+import { loadAmapJsApi } from '../lib/amapLoader'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
-
-declare global {
-  interface Window {
-    AMap: any
-    _AMapSecurityConfig: {
-      securityJsCode?: string
-      serviceHost?: string
-    }
-  }
-}
 
 interface PickedLocation {
   lng: number
@@ -31,103 +22,11 @@ interface MapPickerModalProps {
   initialLocation?: { lng: number; lat: number } | null
 }
 
-const AMAP_JS_API_KEY = import.meta.env.VITE_AMAP_JS_API_KEY as string | undefined
-const AMAP_SECURITY_JS_CODE = import.meta.env.VITE_AMAP_SECURITY_JS_CODE as string | undefined
-
-let amapLoaded = false
-let amapLoadPromise: Promise<void> | null = null
-let amapCallbackSeq = 0
-
-function isAmapReady(): boolean {
-  return Boolean(window.AMap?.Map)
-}
-
-function waitForAmapReady(timeoutMs = 5000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const startTime = Date.now()
-    const check = () => {
-      if (isAmapReady()) {
-        amapLoaded = true
-        resolve()
-        return
-      }
-
-      if (Date.now() - startTime >= timeoutMs) {
-        reject(new Error('AMap JS API loaded but AMap is unavailable'))
-        return
-      }
-
-      window.setTimeout(check, 50)
-    }
-
-    check()
-  })
-}
-
-async function loadAmap(): Promise<void> {
-  if (amapLoaded && isAmapReady()) return
-  if (isAmapReady()) {
-    amapLoaded = true
-    return
-  }
-  if (amapLoadPromise) return amapLoadPromise
-  amapLoadPromise = new Promise((resolve, reject) => {
-    if (!AMAP_JS_API_KEY) {
-      reject(new Error('AMAP_JS_API_KEY is not configured'))
-      return
-    }
-    if (!AMAP_SECURITY_JS_CODE) {
-      reject(new Error('VITE_AMAP_SECURITY_JS_CODE is not configured'))
-      return
-    }
-
-    const callbackName = `__onAmapJsApiLoaded_${Date.now()}_${++amapCallbackSeq}`
-    const callbackRegistry = window as unknown as Record<string, unknown>
-    const cleanupCallback = () => {
-      delete callbackRegistry[callbackName]
-    }
-    const timeoutId = window.setTimeout(() => {
-      cleanupCallback()
-      amapLoadPromise = null
-      reject(
-        new Error(
-          '高德地图脚本加载超时。请检查 VITE_AMAP_JS_API_KEY、VITE_AMAP_SECURITY_JS_CODE、域名白名单，以及是否允许加载 https://webapi.amap.com'
-        )
-      )
-    }, 10000)
-
-    window._AMapSecurityConfig = { securityJsCode: AMAP_SECURITY_JS_CODE }
-
-    callbackRegistry[callbackName] = () => {
-      window.clearTimeout(timeoutId)
-      waitForAmapReady()
-        .then(() => {
-          cleanupCallback()
-          resolve()
-        })
-        .catch((err) => {
-          cleanupCallback()
-          amapLoadPromise = null
-          reject(err)
-        })
-    }
-
-    const script = document.createElement('script')
-    const url = new URL('https://webapi.amap.com/maps')
-    url.searchParams.set('v', '2.0')
-    url.searchParams.set('key', AMAP_JS_API_KEY)
-    url.searchParams.set('callback', callbackName)
-    script.src = url.toString()
-    script.async = true
-    script.onerror = () => {
-      window.clearTimeout(timeoutId)
-      cleanupCallback()
-      amapLoadPromise = null
-      reject(new Error('Failed to load AMap JS API'))
-    }
-    document.head.appendChild(script)
-  })
-  return amapLoadPromise
+interface AddressSearchResult {
+  name: string
+  address: string
+  coordinate: { lng: number; lat: number }
+  adcode: string
 }
 
 export const MapPickerModal = ({
@@ -138,37 +37,35 @@ export const MapPickerModal = ({
 }: MapPickerModalProps) => {
   const presence = useFloatingPresence(open)
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<any>(null)
-  const markerRef = useRef<any>(null)
+  const mapRef = useRef<AMap.Map | null>(null)
+  const markerRef = useRef<AMap.Marker | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
-  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchResults, setSearchResults] = useState<AddressSearchResult[]>([])
   const [selectedLocation, setSelectedLocation] = useState<PickedLocation | null>(null)
-  const [mapReady, setMapReady] = useState(false)
 
   const initMap = useCallback(async () => {
     if (!containerRef.current || !open) return
     try {
       setLoading(true)
       setError(null)
-      await loadAmap()
+      const amap = await loadAmapJsApi()
       const defaultCenter = initialLocation || { lng: 116.397428, lat: 39.90923 }
-      const map = new window.AMap.Map(containerRef.current, {
+      const map = new amap.Map(containerRef.current, {
         zoom: 13,
         center: [defaultCenter.lng, defaultCenter.lat],
         viewMode: '2D',
       })
       mapRef.current = map
-      map.on('click', async (e: any) => {
-        const { lng, lat } = e.lnglat
+      map.on('click', async (event: { lnglat: AMap.LngLat }) => {
+        const [lng, lat] = event.lnglat.toArray()
         await handleLocationSelect(lng, lat)
       })
       if (initialLocation) {
         await handleLocationSelect(initialLocation.lng, initialLocation.lat)
       }
-      setMapReady(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : '地图加载失败')
     } finally {
@@ -185,7 +82,7 @@ export const MapPickerModal = ({
         mapRef.current.destroy()
         mapRef.current = null
       }
-      setMapReady(false)
+      markerRef.current = null
     }
   }, [open, initMap])
 
@@ -199,25 +96,23 @@ export const MapPickerModal = ({
     mapRef.current.add(marker)
     try {
       const data = await apiGet<{
-        result?: {
+        result: {
           formattedAddress: string
           province: string
           city: string
           district: string
           adcode: string
         }
-      }>(`/api/regions/resolve?lng=${lng}&lat=${lat}`)
-      if (data.result) {
-        setSelectedLocation({
-          lng,
-          lat,
-          address: data.result.formattedAddress,
-          province: data.result.province,
-          city: data.result.city,
-          district: data.result.district,
-          adcode: data.result.adcode,
-        })
-      }
+      }>('/api/regions/resolve', { lng, lat })
+      setSelectedLocation({
+        lng,
+        lat,
+        address: data.result.formattedAddress,
+        province: data.result.province,
+        city: data.result.city,
+        district: data.result.district,
+        adcode: data.result.adcode,
+      })
     } catch (err) {
       console.error('Failed to resolve location:', err)
       setSelectedLocation({
@@ -233,14 +128,14 @@ export const MapPickerModal = ({
   }
 
   const handleSearch = async () => {
-    const query = searchInputRef.current?.value
+    const query = searchInputRef.current?.value.trim()
     if (!query || !mapRef.current) return
     setSearching(true)
     try {
-      const data = await apiGet<{ results?: any[] }>(
-        `/api/regions/search/address?q=${encodeURIComponent(query)}`
-      )
-      setSearchResults(data.results || [])
+      const data = await apiGet<{ results: AddressSearchResult[] }>('/api/regions/search/address', {
+        q: query.trim(),
+      })
+      setSearchResults(data.results)
     } catch (err) {
       console.error('Search failed:', err)
     } finally {
@@ -248,9 +143,9 @@ export const MapPickerModal = ({
     }
   }
 
-  const handleResultSelect = async (result: any) => {
+  const handleResultSelect = async (result: AddressSearchResult) => {
     const { coordinate } = result
-    if (!coordinate || !mapRef.current) return
+    if (!mapRef.current) return
     mapRef.current.setCenter([coordinate.lng, coordinate.lat])
     mapRef.current.setZoom(15)
     await handleLocationSelect(coordinate.lng, coordinate.lat)
@@ -344,11 +239,6 @@ export const MapPickerModal = ({
               <div className="text-center">
                 <MapPin size={28} className="text-text-muted mx-auto" />
                 <p className="mt-2 text-sm theme-text-error">{error}</p>
-                {!AMAP_JS_API_KEY && (
-                  <p className="mt-1 text-xs text-text-muted">
-                    请在 .env.local 中配置 VITE_AMAP_JS_API_KEY
-                  </p>
-                )}
               </div>
             </div>
           )}

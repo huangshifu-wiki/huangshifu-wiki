@@ -1,4 +1,5 @@
 export { validateBody } from './validate'
+export { coordinateSchema, addressSearchQuerySchema } from './location.schema'
 export {
   registerSchema,
   loginSchema,

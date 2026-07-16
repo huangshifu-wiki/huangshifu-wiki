@@ -959,6 +959,11 @@ tar -czf /root/backup/uploads_$(date +%F).tar.gz /root/huangshifu-wiki/uploads
 
 本项目配置了严格的 CSP（Content Security Policy）头部，以防止 XSS 和注入攻击。
 
+前端地图通过官方 `@amap/amap-jsapi-loader` 按需加载 JS API 2.0。加载前会设置
+`VITE_AMAP_SECURITY_JS_CODE`，该变量必须与 `VITE_AMAP_JS_API_KEY` 配套。两者属于浏览器端
+配置，会进入前端产物，不能与服务端 `AMAP_API_KEY` 混用。服务端 Key 仅用于后端调用 Web
+Service，浏览器不会直接请求 `restapi.amap.com`。
+
 **高德地图 JS API 白名单**（必须包含以下域名才能正常使用地图功能）：
 
 | 域名                     | 用途                 |
@@ -966,14 +971,13 @@ tar -czf /root/backup/uploads_$(date +%F).tar.gz /root/huangshifu-wiki/uploads
 | `webapi.amap.com`        | 高德 Web API 主域名  |
 | `jsapi.amap.com`         | 高德 JS API 域名     |
 | `jsapi-service.amap.com` | 高德 JS API 服务域名 |
-| `restapi.amap.com`       | 高德 REST API 域名   |
 | `mapplugin.amap.com`     | 高德地图插件域名     |
 
 **说明**：
 
-- CSP 配置位于 `server.ts` 中，共三处：开发环境中间件（line 51）、生产环境 `startServer` 函数（line 12777）、生产环境最终配置（line 12799）
-- `script-src` 和 `connect-src` 指令都需要包含上述所有高德域名
-- 如果地图功能无法加载（脚本被阻塞），请检查所有三处 CSP 配置是否一致
+- CSP 配置集中在 `server.ts` 的响应中间件中。
+- `script-src`、`connect-src` 和 `img-src` 需要允许高德 JS API 实际使用的域名。
+- 如果地图无法加载，请同时检查 Key 类型、配套安全密钥、控制台域名白名单和 CSP。
 
 ### 15.5 音乐播放音源架构
 

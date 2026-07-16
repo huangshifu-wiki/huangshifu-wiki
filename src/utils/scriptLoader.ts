@@ -322,17 +322,6 @@ export const commonThirdPartyScripts = {
     loadStrategy: 'idle',
     delay: 4000,
   }),
-
-  /**
-   * 高德地图 SDK
-   */
-  amap: (config: { key: string; version?: string }): ScriptConfig => ({
-    src: `https://webapi.amap.com/maps?v=${config.version || '2.0'}&key=${config.key}`,
-    async: true,
-    defer: true,
-    loadStrategy: 'idle',
-    delay: 2000,
-  }),
 }
 
 /**
@@ -345,7 +334,6 @@ export function initThirdPartyScripts(): void {
     'https://gator.volces.com',
     'https://analysis.chatglm.cn',
     'https://webapi.amap.com',
-    'https://restapi.amap.com',
   ])
 
   // 延迟加载非关键脚本

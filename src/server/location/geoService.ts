@@ -1,18 +1,30 @@
 import axios from 'axios'
+import { logger } from '../utils/logger'
 
-const AMAP_WEB_SERVICE_KEY = process.env.AMAP_API_KEY || ''
 const AMAP_BASE_URL = 'https://restapi.amap.com/v3'
+const AMAP_TIMEOUT_MS = 10000
+
+interface AmapBaseResponse {
+  status: string
+  infocode?: string
+}
+
+type AmapServiceErrorKind = 'not_configured' | 'upstream' | 'network'
+
+export class AmapServiceError extends Error {
+  constructor(
+    public readonly kind: AmapServiceErrorKind,
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options)
+    this.name = 'AmapServiceError'
+  }
+}
 
 export interface Coordinate {
   lng: number
   lat: number
-}
-
-export interface AddressComponent {
-  province: string
-  city: string
-  district: string
-  township?: string
 }
 
 export interface GeocodingResult {
@@ -37,74 +49,79 @@ export interface RegionResolveResult {
   formattedAddress: string
 }
 
-async function amapGet<T>(endpoint: string, params: Record<string, string>): Promise<T | null> {
-  if (!AMAP_WEB_SERVICE_KEY) {
-    console.warn('AMAP_API_KEY is not configured')
-    return null
-  }
+export interface AddressSearchResult {
+  name: string
+  address: string
+  coordinate: Coordinate
+  adcode: string
+}
+
+function getAmapKey(): string {
+  return process.env.AMAP_API_KEY?.trim() || ''
+}
+
+async function amapGet<T extends AmapBaseResponse>(
+  endpoint: string,
+  params: Record<string, string>
+): Promise<T> {
+  const key = getAmapKey()
+  if (!key) throw new AmapServiceError('not_configured', '高德地图服务未配置')
 
   try {
-    const response = await axios.get(`${AMAP_BASE_URL}${endpoint}`, {
-      params: {
-        key: AMAP_WEB_SERVICE_KEY,
-        ...params,
-      },
-      timeout: 10000,
+    const response = await axios.get<T>(`${AMAP_BASE_URL}${endpoint}`, {
+      params: { ...params, key },
+      timeout: AMAP_TIMEOUT_MS,
     })
 
     if (response.data.status !== '1') {
-      console.error('Amap API error:', response.data.info)
-      return null
+      logger.warn(
+        { endpoint, infocode: response.data.infocode },
+        'Amap Web Service rejected request'
+      )
+      throw new AmapServiceError('upstream', '高德地图服务返回错误')
     }
 
-    return response.data as T
+    return response.data
   } catch (error) {
-    console.error('Amap request failed:', error)
-    return null
+    if (error instanceof AmapServiceError) throw error
+    logger.warn({ err: error, endpoint }, 'Amap Web Service request failed')
+    throw new AmapServiceError('network', '高德地图服务请求失败', { cause: error })
   }
 }
 
-export async function addressToCoordinate(address: string): Promise<Coordinate | null> {
-  interface GeocodeResponse {
-    status: string
-    geocodes: Array<{
-      location: string
-      adcode: string
-    }>
-  }
-
-  const data = await amapGet<GeocodeResponse>('/geocode/geo', {
-    address,
-    output: 'json',
-  })
-
-  if (!data || !data.geocodes || data.geocodes.length === 0) {
-    return null
-  }
-
-  const [lng, lat] = data.geocodes[0].location.split(',').map(Number)
-  if (isNaN(lng) || isNaN(lat)) {
-    return null
-  }
-
+function parseCoordinate(value: string | undefined): Coordinate | null {
+  if (!value) return null
+  const parts = value.split(',')
+  if (parts.length !== 2) return null
+  const lng = Number(parts[0])
+  const lat = Number(parts[1])
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null
   return { lng, lat }
+}
+
+export async function addressToCoordinate(address: string): Promise<Coordinate | null> {
+  interface GeocodeResponse extends AmapBaseResponse {
+    geocodes?: Array<{ location?: string }>
+  }
+
+  const data = await amapGet<GeocodeResponse>('/geocode/geo', { address, output: 'json' })
+  return parseCoordinate(data.geocodes?.[0]?.location)
 }
 
 export async function coordinateToAddress(
   lng: number,
   lat: number
 ): Promise<GeocodingResult | null> {
-  interface RegeoResponse {
-    status: string
-    regeocode: {
-      addressComponent: {
-        province: string
-        city: string
-        district: string
-        township: string
-        adcode: string
+  interface RegeoResponse extends AmapBaseResponse {
+    regeocode?: {
+      addressComponent?: {
+        province?: string
+        city?: string | string[]
+        district?: string
+        township?: string
+        adcode?: string
       }
-      formatted_address: string
+      formatted_address?: string
     }
   }
 
@@ -113,21 +130,18 @@ export async function coordinateToAddress(
     extensions: 'base',
     output: 'json',
   })
-
-  if (!data || !data.regeocode) {
-    return null
-  }
-
-  const { addressComponent, formatted_address } = data.regeocode
+  const component = data.regeocode?.addressComponent
+  const adcode = component?.adcode
+  if (!component || !adcode || !data.regeocode?.formatted_address) return null
 
   return {
     coordinate: { lng, lat },
-    address: formatted_address,
-    province: addressComponent.province,
-    city: addressComponent.city,
-    district: addressComponent.district,
-    township: addressComponent.township,
-    adcode: addressComponent.adcode,
+    address: data.regeocode.formatted_address,
+    province: component.province || '',
+    city: typeof component.city === 'string' ? component.city : '',
+    district: component.district || '',
+    township: component.township || undefined,
+    adcode,
   }
 }
 
@@ -135,71 +149,55 @@ export async function resolveCoordinateToRegion(
   lng: number,
   lat: number
 ): Promise<RegionResolveResult | null> {
-  const addressResult = await coordinateToAddress(lng, lat)
-  if (!addressResult) {
-    return null
-  }
+  const result = await coordinateToAddress(lng, lat)
+  if (!result) return null
 
   return {
     coordinate: { lng, lat },
-    province: addressResult.province,
-    provinceCode: addressResult.adcode.slice(0, 2) + '0000',
-    city: addressResult.city || addressResult.province,
-    cityCode: addressResult.adcode.slice(0, 4) + '00',
-    district: addressResult.district,
-    districtCode: addressResult.adcode,
-    adcode: addressResult.adcode,
-    formattedAddress: addressResult.address,
+    province: result.province,
+    provinceCode: `${result.adcode.slice(0, 2)}0000`,
+    city: result.city || result.province,
+    cityCode: `${result.adcode.slice(0, 4)}00`,
+    district: result.district,
+    districtCode: result.adcode,
+    adcode: result.adcode,
+    formattedAddress: result.address,
   }
 }
 
 export async function searchAddress(
   keyword: string,
   city?: string
-): Promise<
-  Array<{
-    name: string
-    address: string
-    coordinate: Coordinate
-    adcode: string
-  }>
-> {
-  interface TextSearchResponse {
-    status: string
-    pois: Array<{
-      name: string
-      location: string
-      address: string
-      adcode: string
+): Promise<AddressSearchResult[]> {
+  interface TextSearchResponse extends AmapBaseResponse {
+    pois?: Array<{
+      name?: string
+      location?: string
+      address?: string | string[]
+      adcode?: string
     }>
   }
 
-  const params: Record<string, string> = {
+  const data = await amapGet<TextSearchResponse>('/place/text', {
     keywords: keyword,
     output: 'json',
-  }
+    ...(city ? { city } : {}),
+  })
 
-  if (city) {
-    params.city = city
-  }
-
-  const data = await amapGet<TextSearchResponse>('/place/text', params)
-
-  if (!data || !data.pois) {
-    return []
-  }
-
-  return data.pois.map((s) => {
-    const [lng, lat] = s.location.split(',').map(Number)
-    return {
-      name: s.name,
-      address: s.address,
-      coordinate: { lng: isNaN(lng) ? 0 : lng, lat: isNaN(lat) ? 0 : lat },
-      adcode: s.adcode,
-    }
+  return (data.pois || []).flatMap((poi) => {
+    const coordinate = parseCoordinate(poi.location)
+    if (!coordinate || !poi.name) return []
+    return [
+      {
+        name: poi.name,
+        address: typeof poi.address === 'string' ? poi.address : '',
+        coordinate,
+        adcode: poi.adcode || '',
+      },
+    ]
   })
 }
 
 export function isAmapConfigured(): boolean {
-  return Boolean(AMAP_WEB_SERVICE_KEY)
+  return Boolean(getAmapKey())
 }

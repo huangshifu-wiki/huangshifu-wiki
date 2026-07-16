@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type Response } from 'express'
 import {
   searchRegions,
   getRegionByCode,
@@ -9,10 +9,26 @@ import {
   suggestRegions,
   type RegionSearchResult,
 } from './locationService'
-import { resolveCoordinateToRegion, searchAddress, isAmapConfigured } from './geoService'
-import { parseInteger } from '../utils/parsers'
+import { AmapServiceError, resolveCoordinateToRegion, searchAddress } from './geoService'
+import { logger, parseInteger } from '../utils'
+import { addressSearchQuerySchema, coordinateSchema, validateBody } from '../schemas'
 
 const router = Router()
+
+function handleAmapRouteError(error: unknown, res: Response, operation: string) {
+  if (error instanceof AmapServiceError) {
+    if (error.kind === 'not_configured') {
+      res.status(503).json({ error: '地图服务未配置' })
+      return
+    }
+    logger.warn({ err: error, operation }, 'Amap operation failed')
+    res.status(502).json({ error: '地图服务暂时不可用' })
+    return
+  }
+
+  logger.error({ err: error, operation }, 'Location route failed')
+  res.status(500).json({ error: '地图服务处理失败' })
+}
 
 router.get('/', async (req, res) => {
   try {
@@ -136,18 +152,12 @@ router.get('/districts/:cityCode', async (req, res) => {
 
 router.get('/resolve', async (req, res) => {
   try {
-    if (!isAmapConfigured()) {
-      res.status(503).json({ error: '地图服务未配置' })
-      return
-    }
-
-    const lng = parseFloat(req.query.lng as string)
-    const lat = parseFloat(req.query.lat as string)
-
-    if (isNaN(lng) || isNaN(lat)) {
+    const parsed = coordinateSchema.safeParse(req.query)
+    if (!parsed.success) {
       res.status(400).json({ error: '无效的坐标参数' })
       return
     }
+    const { lng, lat } = parsed.data
 
     const result = await resolveCoordinateToRegion(lng, lat)
 
@@ -158,24 +168,13 @@ router.get('/resolve', async (req, res) => {
 
     res.json({ result })
   } catch (error) {
-    console.error('Resolve coordinate error:', error)
-    res.status(500).json({ error: '解析坐标失败' })
+    handleAmapRouteError(error, res, 'resolve-coordinate-get')
   }
 })
 
-router.post('/resolve', async (req, res) => {
+router.post('/resolve', validateBody(coordinateSchema), async (req, res) => {
   try {
-    if (!isAmapConfigured()) {
-      res.status(503).json({ error: '地图服务未配置' })
-      return
-    }
-
-    const { lng, lat } = req.body as { lng?: number; lat?: number }
-
-    if (typeof lng !== 'number' || typeof lat !== 'number' || isNaN(lng) || isNaN(lat)) {
-      res.status(400).json({ error: '无效的坐标参数' })
-      return
-    }
+    const { lng, lat } = req.body as { lng: number; lat: number }
 
     const result = await resolveCoordinateToRegion(lng, lat)
 
@@ -186,30 +185,22 @@ router.post('/resolve', async (req, res) => {
 
     res.json({ result })
   } catch (error) {
-    console.error('Resolve coordinate error:', error)
-    res.status(500).json({ error: '解析坐标失败' })
+    handleAmapRouteError(error, res, 'resolve-coordinate-post')
   }
 })
 
 router.get('/search/address', async (req, res) => {
   try {
-    if (!isAmapConfigured()) {
-      res.status(503).json({ error: '地图服务未配置' })
+    const parsed = addressSearchQuerySchema.safeParse(req.query)
+    if (!parsed.success) {
+      res.status(400).json({ error: '无效的地址搜索参数' })
       return
     }
 
-    const { q, city } = req.query
-
-    if (!q || typeof q !== 'string') {
-      res.json({ results: [] })
-      return
-    }
-
-    const results = await searchAddress(q, city as string | undefined)
+    const results = await searchAddress(parsed.data.q, parsed.data.city)
     res.json({ results })
   } catch (error) {
-    console.error('Search address error:', error)
-    res.status(500).json({ error: '搜索地址失败' })
+    handleAmapRouteError(error, res, 'search-address')
   }
 })
 
