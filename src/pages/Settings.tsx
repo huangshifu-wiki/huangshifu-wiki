@@ -122,9 +122,11 @@ const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'appearance',
 ])
 const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'wiki', 'galleries', 'comments'])
-const CONTENT_ITEM_LINK_CLASS = 'group -mx-3 block px-3 transition-colors hover:bg-surface-alt/70'
-const CONTENT_META_ROW_CLASS = 'flex items-start justify-between gap-3 text-xs text-text-muted'
-const CONTENT_STATUS_BADGE_CLASS = 'rounded border px-1.5 py-0.5 text-[10px]'
+const CONTENT_ITEM_LINK_CLASS =
+  'group -mx-3 block max-w-[calc(100%+1.5rem)] px-3 transition-colors hover:bg-surface-alt/70'
+const CONTENT_META_ROW_CLASS =
+  'flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1 text-xs text-text-muted'
+const CONTENT_STATUS_BADGE_CLASS = 'max-w-full break-words rounded border px-1.5 py-0.5 text-[10px]'
 
 function SettingsNavLink({
   item,
@@ -555,10 +557,10 @@ const Settings = () => {
                 rel="noopener noreferrer"
                 className={clsx(CONTENT_ITEM_LINK_CLASS, 'py-3')}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="min-w-0 flex-1">
                     <div className={CONTENT_META_ROW_CLASS}>
-                      <span className="min-w-0 text-text-muted">{post.section}</span>
+                      <span className="min-w-0 break-words text-text-muted">{post.section}</span>
                       {post.status && post.status !== 'published' ? (
                         <span
                           className={clsx(
@@ -601,10 +603,10 @@ const Settings = () => {
                 rel="noopener noreferrer"
                 className={clsx(CONTENT_ITEM_LINK_CLASS, 'py-3')}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="min-w-0 flex-1">
                     <div className={CONTENT_META_ROW_CLASS}>
-                      <span className="min-w-0 text-text-muted">{page.category}</span>
+                      <span className="min-w-0 break-words text-text-muted">{page.category}</span>
                       {page.status && page.status !== 'published' ? (
                         <span
                           className={clsx(
@@ -746,7 +748,7 @@ const Settings = () => {
                         to={sourceHref}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="pointer-events-auto text-brand-gold hover:underline"
+                        className="pointer-events-auto min-w-0 break-words text-brand-gold hover:underline"
                       >
                         {target.title}
                       </Link>
@@ -770,11 +772,11 @@ const Settings = () => {
                   ) : null}
                 </div>
                 {canOpenComment ? (
-                  <p className="max-w-[72ch] text-sm leading-7 text-text-secondary group-hover:text-brand-gold">
+                  <p className="max-w-[72ch] break-words text-sm leading-7 text-text-secondary group-hover:text-brand-gold">
                     {comment.content}
                   </p>
                 ) : (
-                  <p className="max-w-[72ch] text-sm leading-7 text-text-secondary">
+                  <p className="max-w-[72ch] break-words text-sm leading-7 text-text-secondary">
                     {comment.content}
                   </p>
                 )}
@@ -798,18 +800,18 @@ const Settings = () => {
           <h1 className="mobile-page-title">设置</h1>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <aside className="lg:sticky lg:top-[84px] lg:self-start lg:border-r lg:border-border lg:pr-4">
+        <div className="grid min-w-0 gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <aside className="min-w-0 max-w-full lg:sticky lg:top-[84px] lg:self-start lg:border-r lg:border-border lg:pr-4">
             <nav
-              className="flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:gap-5 lg:overflow-visible lg:pb-0"
+              className="flex max-w-full gap-1 overflow-x-auto overscroll-x-contain pb-2 lg:flex-col lg:gap-5 lg:overflow-visible lg:pb-0"
               aria-label="设置分类"
             >
-              <div className="flex gap-1 lg:flex-col">
+              <div className="flex shrink-0 gap-1 lg:flex-col">
                 {SECTION_NAV.map((item) => (
                   <SettingsNavLink key={item.id} item={item} isActive={activeSection === item.id} />
                 ))}
               </div>
-              <div className="flex gap-1 lg:flex-col lg:border-t lg:border-border lg:pt-4">
+              <div className="flex shrink-0 gap-1 lg:flex-col lg:border-t lg:border-border lg:pt-4">
                 {CONTENT_SECTION_NAV.map((item) => (
                   <SettingsNavLink key={item.id} item={item} isActive={activeSection === item.id} />
                 ))}
@@ -819,7 +821,7 @@ const Settings = () => {
 
           <main className="min-w-0 space-y-12">
             {activeSection === 'profile' && (
-              <section className="space-y-6" aria-labelledby="settings-public-profile">
+              <section className="min-w-0 space-y-6" aria-labelledby="settings-public-profile">
                 <div className="flex items-center gap-2 border-b border-border pb-3">
                   <UserRound size={18} className="text-brand-gold" />
                   <h2
@@ -830,8 +832,8 @@ const Settings = () => {
                   </h2>
                 </div>
 
-                <form onSubmit={handleProfileSubmit} className="max-w-3xl space-y-6">
-                  <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+                <form onSubmit={handleProfileSubmit} className="w-full max-w-3xl space-y-6">
+                  <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start">
                     <div className="relative w-24 shrink-0">
                       <img
                         src={profileForm.photoURL || DEFAULT_AVATAR}
@@ -851,7 +853,7 @@ const Settings = () => {
                       </IconButton>
                     </div>
 
-                    <div className="grid flex-1 gap-4">
+                    <div className="grid min-w-0 w-full flex-1 gap-4">
                       <div className="block">
                         <div className="mb-1 flex items-center justify-between gap-3">
                           <label
@@ -918,19 +920,21 @@ const Settings = () => {
                             max={WIKI_MAX_CONTENT_SIZE}
                           />
                         </div>
-                        <MarkdownEditor
-                          value={profileForm.bio}
-                          onChange={(bio) =>
-                            setProfileForm((current) => ({
-                              ...current,
-                              bio,
-                            }))
-                          }
-                          height="260px"
-                          placeholder="写下更完整的个人介绍..."
-                          ariaLabel="个人简介（支持 Markdown）"
-                          maxLength={WIKI_MAX_CONTENT_SIZE}
-                        />
+                        <div className="min-w-0 max-w-full overflow-hidden">
+                          <MarkdownEditor
+                            value={profileForm.bio}
+                            onChange={(bio) =>
+                              setProfileForm((current) => ({
+                                ...current,
+                                bio,
+                              }))
+                            }
+                            height="260px"
+                            placeholder="写下更完整的个人介绍..."
+                            ariaLabel="个人简介（支持 Markdown）"
+                            maxLength={WIKI_MAX_CONTENT_SIZE}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -950,7 +954,7 @@ const Settings = () => {
             )}
 
             {activeSection === 'content' && (
-              <section className="space-y-6" aria-labelledby="settings-content">
+              <section className="min-w-0 space-y-6" aria-labelledby="settings-content">
                 <div className="flex items-center gap-2 border-b border-border pb-3">
                   <FileText size={18} className="text-brand-gold" />
                   <h2 id="settings-content" className="text-base font-semibold text-text-primary">
@@ -958,7 +962,7 @@ const Settings = () => {
                   </h2>
                 </div>
 
-                <div className="max-w-3xl">
+                <div className="min-w-0 w-full max-w-3xl">
                   <div className="flex flex-wrap gap-2">
                     {[
                       { id: 'posts', label: '帖子', icon: FileText },
@@ -993,7 +997,7 @@ const Settings = () => {
             )}
 
             {activeSection === 'privacy' && (
-              <section className="space-y-6" aria-labelledby="settings-privacy">
+              <section className="min-w-0 space-y-6" aria-labelledby="settings-privacy">
                 <div className="flex items-center gap-2 border-b border-border pb-3">
                   <Eye size={18} className="text-brand-gold" />
                   <h2 id="settings-privacy" className="text-base font-semibold text-text-primary">
@@ -1027,7 +1031,7 @@ const Settings = () => {
             )}
 
             {activeSection === 'account' && (
-              <section className="space-y-6" aria-labelledby="settings-account">
+              <section className="min-w-0 space-y-6" aria-labelledby="settings-account">
                 <div className="flex items-center gap-2 border-b border-border pb-3">
                   <Shield size={18} className="text-brand-gold" />
                   <h2 id="settings-account" className="text-base font-semibold text-text-primary">
@@ -1035,7 +1039,7 @@ const Settings = () => {
                   </h2>
                 </div>
 
-                <div className="max-w-3xl">
+                <div className="min-w-0 w-full max-w-3xl">
                   <div className="pb-5">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                       <div className="min-w-0 space-y-1">
@@ -1043,7 +1047,7 @@ const Settings = () => {
                           <Mail size={16} className="text-brand-gold" />
                           <h3 className="text-sm font-semibold text-text-primary">邮箱</h3>
                         </div>
-                        <p className="truncate text-sm text-text-secondary">
+                        <p className="break-all text-sm text-text-secondary">
                           {user.email || '未设置'}
                         </p>
                         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -1068,7 +1072,7 @@ const Settings = () => {
                             )}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex max-w-full flex-wrap gap-2">
                         {canSendEmailVerification && (
                           <Button
                             type="button"
@@ -1099,7 +1103,7 @@ const Settings = () => {
                       <form
                         id="email-editor"
                         onSubmit={handleEmailSubmit}
-                        className="mt-5 grid max-w-xl gap-4"
+                        className="mt-5 grid min-w-0 w-full max-w-xl gap-4"
                       >
                         <label className="block">
                           <span className="mb-1 block text-xs font-medium text-text-muted">
@@ -1177,7 +1181,7 @@ const Settings = () => {
                       <form
                         id="password-editor"
                         onSubmit={handlePasswordSubmit}
-                        className="mt-5 grid max-w-xl gap-4"
+                        className="mt-5 grid min-w-0 w-full max-w-xl gap-4"
                       >
                         <label className="block">
                           <span className="mb-1 block text-xs font-medium text-text-muted">
@@ -1275,7 +1279,7 @@ const Settings = () => {
             )}
 
             {activeSection === 'appearance' && (
-              <section className="space-y-6" aria-labelledby="settings-appearance">
+              <section className="min-w-0 space-y-6" aria-labelledby="settings-appearance">
                 <div className="flex items-center gap-2 border-b border-border pb-3">
                   <SlidersHorizontal size={18} className="text-brand-gold" />
                   <h2
@@ -1286,16 +1290,16 @@ const Settings = () => {
                   </h2>
                 </div>
 
-                <div className="max-w-3xl">
-                  <ThemeToggle compact />
+                <div className="w-full max-w-3xl">
+                  <ThemeToggle compact fullWidth />
                 </div>
 
-                <div className="flex max-w-3xl items-center justify-between gap-4 border-t border-border pt-6">
-                  <div>
+                <div className="flex max-w-3xl flex-col items-stretch gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-text-primary">列表加载方式</p>
                   </div>
                   <div
-                    className="inline-flex rounded border border-border bg-surface p-1"
+                    className="flex w-full rounded border border-border bg-surface p-1 sm:w-auto"
                     role="group"
                     aria-label="列表加载方式"
                   >
@@ -1305,6 +1309,7 @@ const Settings = () => {
                         type="button"
                         size="sm"
                         variant={preferences.listLoadMode === option.value ? 'primary' : 'ghost'}
+                        className="min-w-0 flex-1 whitespace-nowrap sm:flex-none"
                         onClick={() => void updatePreferences({ listLoadMode: option.value })}
                         aria-pressed={preferences.listLoadMode === option.value}
                       >
@@ -1314,10 +1319,10 @@ const Settings = () => {
                   </div>
                 </div>
 
-                <div className="flex max-w-3xl items-center justify-between gap-4 border-t border-border pt-6">
+                <div className="flex max-w-3xl min-w-0 items-center justify-between gap-4 border-t border-border pt-6">
                   <label
                     htmlFor="settings-character-count-toggle"
-                    className="text-sm font-medium text-text-primary"
+                    className="min-w-0 text-sm font-medium text-text-primary"
                   >
                     展示字数限制
                   </label>
@@ -1332,10 +1337,10 @@ const Settings = () => {
                   />
                 </div>
 
-                <div className="flex max-w-3xl items-center justify-between gap-4 border-t border-border pt-6">
+                <div className="flex max-w-3xl min-w-0 items-center justify-between gap-4 border-t border-border pt-6">
                   <label
                     htmlFor="settings-mobile-song-sequence-toggle"
-                    className="text-sm font-medium text-text-primary"
+                    className="min-w-0 text-sm font-medium text-text-primary"
                   >
                     手机端显示歌曲序号
                   </label>
