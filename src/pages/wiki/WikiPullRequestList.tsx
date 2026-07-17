@@ -7,6 +7,7 @@ import { apiGet } from '../../lib/apiClient'
 import { formatDate } from '../../lib/dateUtils'
 import type { WikiPullRequestItem, WikiPullRequestStatus } from './types'
 import { getPrStatusText } from './types'
+import { Button } from '@/src/components/ui'
 
 const WikiPullRequestList = () => {
   const { slug } = useParams()
@@ -58,18 +59,17 @@ const WikiPullRequestList = () => {
           </Link>
           <div className="flex gap-2">
             {(['open', 'merged', 'rejected'] as const).map((item) => (
-              <button
+              <Button
+                type="button"
+                size="sm"
+                variant={status === item ? 'primary' : 'secondary'}
                 key={item}
                 onClick={() => setStatus(item)}
-                className={clsx(
-                  'px-4 py-2 rounded text-xs font-bold',
-                  status === item
-                    ? 'bg-[var(--color-theme-accent)] text-white'
-                    : 'bg-surface-alt text-text-muted hover:bg-bg-tertiary'
-                )}
+                className="font-bold"
+                aria-pressed={status === item}
               >
                 {getPrStatusText(item)}
-              </button>
+              </Button>
             ))}
           </div>
         </div>

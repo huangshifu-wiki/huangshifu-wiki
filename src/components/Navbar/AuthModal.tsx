@@ -5,6 +5,7 @@ import { useI18n } from '../../lib/i18n'
 import { AuthForm } from '../AuthForm'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import type { AuthMode } from './types'
+import { IconButton } from '@/src/components/ui'
 
 interface AuthModalProps {
   open: boolean
@@ -72,14 +73,9 @@ export const AuthModal = ({
       >
         <div className="flex items-center justify-between mb-5">
           <div />
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="关闭"
-            className="text-text-muted hover:text-brand-gold transition-colors"
-          >
+          <IconButton type="button" variant="ghost" size="sm" onClick={onClose} aria-label="关闭">
             <X size={20} />
-          </button>
+          </IconButton>
         </div>
         <AuthForm
           initialMode={authMode}

@@ -7,6 +7,7 @@ import AdminEmbeddings from './AdminEmbeddings'
 import AdminBackups from './AdminBackups'
 import AdminImages from './AdminImages'
 import AdminMarkdownLinks from './AdminMarkdownLinks'
+import { Button, Textarea } from '@/src/components/ui'
 
 type ToolType = 'embeddings' | 'backups' | 'images' | 'sensitive_check' | 'markdown_links'
 
@@ -58,20 +59,22 @@ export const AdminToolPage = ({ type: propType }: { type?: ToolType }) => {
         return (
           <div className="space-y-4">
             <p className="text-sm text-text-muted">输入文本内容进行敏感词检测</p>
-            <textarea
+            <Textarea
               className="w-full p-4 bg-surface-alt border border-border rounded focus:outline-none focus:border-brand-gold text-base"
               rows={8}
               placeholder="请输入要检测的文本内容..."
               value={sensitiveText}
               onChange={(e) => setSensitiveText(e.target.value)}
             />
-            <button
+            <Button
+              type="button"
               onClick={handleSensitiveCheck}
-              disabled={sensitiveLoading || !sensitiveText.trim()}
-              className="px-6 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
+              disabled={!sensitiveText.trim()}
+              loading={sensitiveLoading}
+              loadingText="检测中..."
             >
-              {sensitiveLoading ? '检测中...' : '开始检测'}
-            </button>
+              开始检测
+            </Button>
             {sensitiveResult.length > 0 ? (
               <div className="p-4 theme-status-error rounded">
                 <p className="text-sm font-medium theme-text-error mb-2">

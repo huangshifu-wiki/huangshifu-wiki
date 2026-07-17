@@ -3,6 +3,7 @@ import { Megaphone, X, ChevronRight } from '@/src/components/icons'
 import { motion, AnimatePresence } from 'motion/react'
 import { apiGet } from '../lib/apiClient'
 import type { AnnouncementItem } from '../types/entities'
+import { IconButton } from '@/src/components/ui'
 
 export const AnnouncementBar = () => {
   const [isVisible, setIsVisible] = useState(true)
@@ -57,13 +58,16 @@ export const AnnouncementBar = () => {
             </a>
           )}
         </div>
-        <button
+        <IconButton
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={() => setIsVisible(false)}
-          className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-black/10 rounded transition-colors cursor-pointer"
+          className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-black/10 hover:text-white"
+          aria-label="关闭公告"
         >
           <X size={16} />
-        </button>
+        </IconButton>
       </motion.div>
     </AnimatePresence>
   )

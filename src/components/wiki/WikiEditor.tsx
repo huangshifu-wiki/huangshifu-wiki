@@ -27,6 +27,7 @@ import WikiEditorMetaSidebar from './WikiEditorMetaSidebar'
 import type { WikiItemWithRelations, WikiRelationRecord } from './types'
 import type { WikiPageMetadata } from '../../lib/wikiLinkParser'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
+import { Button, Textarea } from '@/src/components/ui'
 
 const WikiEditor = () => {
   const { slug } = useParams()
@@ -294,7 +295,7 @@ const WikiEditor = () => {
           >
             {t('wiki.deleteReasonLabel')}
           </label>
-          <textarea
+          <Textarea
             id="wiki-delete-reason"
             value={deleteReason}
             onChange={(event) => setDeleteReason(event.target.value)}
@@ -302,15 +303,17 @@ const WikiEditor = () => {
             rows={3}
             className={`${bookCompactInputClass} mt-2 focus:border-danger`}
           />
-          <button
+          <Button
             type="button"
+            variant="danger"
             onClick={handleDelete}
-            disabled={isDeleting}
-            className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            loading={isDeleting}
+            loadingText={t('wiki.deleting')}
+            className="mt-4"
+            leftIcon={<Trash2 size={16} />}
           >
-            <Trash2 size={16} />
-            {isDeleting ? t('wiki.deleting') : t('wiki.deleteWiki')}
-          </button>
+            {t('wiki.deleteWiki')}
+          </Button>
         </BookDangerZone>
       )}
     </BookEditorShell>

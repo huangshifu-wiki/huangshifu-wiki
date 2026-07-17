@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { clsx } from 'clsx'
 import { Tag, Calendar, Book, Sparkles, Filter } from '@/src/components/icons'
 import type { SearchFilters as SearchFiltersType } from '../../hooks/useSearchPage'
+import { Button, Input } from '@/src/components/ui'
 
 interface SearchFiltersProps {
   filters: SearchFiltersType
@@ -45,17 +46,23 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="text-xs text-text-muted">热门:</span>
             {hotKeywords.slice(0, 6).map((tag) => (
-              <button
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
                 key={tag}
                 onClick={() => onSearchKeyword(tag)}
-                className="min-h-8 cursor-pointer rounded-sm border border-[var(--book-ink-line)] bg-transparent px-3 py-1 text-xs text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
+                className="cursor-pointer rounded-sm bg-transparent"
               >
                 {tag}
-              </button>
+              </Button>
             ))}
           </div>
         )}
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           onClick={onToggleShowFilters}
           className={clsx(
             'ml-auto flex items-center gap-2 rounded px-2 py-1 text-sm transition-colors',
@@ -63,7 +70,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
           )}
         >
           <Filter size={16} /> {showFilters ? '隐藏筛选' : '高级筛选'}
-        </button>
+        </Button>
       </div>
 
       <AnimatePresence>
@@ -82,18 +89,16 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     {hotKeywords.map((tag) => (
-                      <button
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={filters.selectedTags.includes(tag) ? 'primary' : 'secondary'}
                         key={tag}
                         onClick={() => onToggleTag(tag)}
-                        className={clsx(
-                          'rounded-sm px-3 py-1 text-xs transition-all',
-                          filters.selectedTags.includes(tag)
-                            ? 'theme-button-primary border border-transparent'
-                            : 'theme-button-secondary'
-                        )}
+                        className="rounded-sm"
                       >
                         {tag}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -105,7 +110,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                   <Calendar size={12} /> 时间范围
                 </h4>
                 <div className="grid grid-cols-2 gap-2">
-                  <input
+                  <Input
                     type="date"
                     value={filters.dateRange.start}
                     onChange={(e) =>
@@ -115,7 +120,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                     }
                     className="theme-input w-full rounded px-3 py-2 text-xs"
                   />
-                  <input
+                  <Input
                     type="date"
                     value={filters.dateRange.end}
                     onChange={(e) =>
@@ -135,20 +140,18 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {['all', 'wiki', 'posts', 'galleries', 'music', 'albums'].map((type) => (
-                    <button
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={filters.contentType === type ? 'primary' : 'secondary'}
                       key={type}
                       onClick={() =>
                         onUpdateFilters({ contentType: type as SearchFiltersType['contentType'] })
                       }
-                      className={clsx(
-                        'rounded-sm px-3 py-1 text-xs capitalize transition-all',
-                        filters.contentType === type
-                          ? 'theme-button-primary border border-transparent'
-                          : 'theme-button-secondary'
-                      )}
+                      className="rounded-sm capitalize"
                     >
                       {contentTypeLabels[type]}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -159,38 +162,36 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                     <Sparkles size={12} /> AI 搜图
                   </h4>
                   <div className="flex flex-wrap gap-2">
-                    <button
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={filters.semanticImageSearch ? 'primary' : 'secondary'}
                       onClick={() =>
                         onUpdateFilters({ semanticImageSearch: !filters.semanticImageSearch })
                       }
-                      className={clsx(
-                        'flex items-center gap-1.5 rounded-sm px-3 py-1 text-xs transition-all',
-                        filters.semanticImageSearch
-                          ? 'theme-button-primary border border-transparent'
-                          : 'theme-button-secondary'
-                      )}
+                      className="rounded-sm"
+                      leftIcon={<Sparkles size={12} />}
                     >
-                      <Sparkles size={12} />
                       智能混合搜索
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
             </div>
 
             <div className="mt-5 flex flex-wrap justify-end gap-3">
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={onResetFilters}
-                className="text-xs text-text-muted theme-icon-button-danger transition-colors"
+                className="text-text-muted theme-icon-button-danger"
               >
                 重置筛选
-              </button>
-              <button
-                onClick={onApplyFilters}
-                className="rounded px-5 py-2 text-xs font-medium theme-button-primary transition-all"
-              >
+              </Button>
+              <Button type="button" size="sm" onClick={onApplyFilters} className="px-5">
                 应用筛选
-              </button>
+              </Button>
             </div>
           </motion.div>
         )}

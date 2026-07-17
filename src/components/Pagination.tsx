@@ -1,6 +1,6 @@
 import React from 'react'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from '@/src/components/icons'
-import { clsx } from 'clsx'
+import { Button, IconButton, Select, cn } from '@/src/components/ui'
 
 interface PaginationProps {
   page: number
@@ -13,13 +13,6 @@ interface PaginationProps {
 }
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
-const NAV_BTN = clsx(
-  'inline-flex h-9 min-w-[36px] shrink-0 items-center justify-center rounded border',
-  'border-[var(--book-ink-line)] text-text-muted transition-colors',
-  'hover:border-brand-gold/50 hover:text-brand-gold',
-  'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[var(--book-ink-line)] disabled:hover:text-text-muted'
-)
-
 function generatePageNumbers(current: number, total: number): (number | 'ellipsis')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
 
@@ -79,40 +72,42 @@ export const Pagination: React.FC<PaginationProps> = ({
         {showPageSizeSelector && pageSize && onPageSizeChange && (
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-text-muted">每页</span>
-            <select
+            <Select
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
               aria-label="每页显示条数"
-              className="cursor-pointer rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-1.5 py-0.5 text-xs text-text-primary"
+              className="w-auto cursor-pointer px-1.5 py-0.5 text-xs"
             >
               {pageSizeOptions.map((size) => (
                 <option key={size} value={size}>
                   {size} 条
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
       </div>
       <div className="-mx-0.5 flex items-center gap-1 overflow-x-auto px-0.5">
-        <button
+        <IconButton
+          type="button"
+          variant="secondary"
+          size="sm"
           onClick={handleFirst}
           disabled={page <= 1}
           aria-label="首页"
-          aria-disabled={page <= 1}
-          className={NAV_BTN}
         >
           <ChevronsLeft size={14} />
-        </button>
-        <button
+        </IconButton>
+        <IconButton
+          type="button"
+          variant="secondary"
+          size="sm"
           onClick={handlePrev}
           disabled={page <= 1}
           aria-label="上一页"
-          aria-disabled={page <= 1}
-          className={NAV_BTN}
         >
           <ChevronLeft size={14} />
-        </button>
+        </IconButton>
 
         {pageNumbers.map((item, index) =>
           item === 'ellipsis' ? (
@@ -124,41 +119,41 @@ export const Pagination: React.FC<PaginationProps> = ({
               ...
             </span>
           ) : (
-            <button
+            <Button
+              type="button"
+              size="sm"
+              variant={item === page ? 'primary' : 'secondary'}
               key={item}
               onClick={() => onPageChange(item)}
               aria-label={`第 ${item} 页`}
               aria-current={item === page ? 'page' : undefined}
-              className={clsx(
-                'inline-flex h-9 min-w-[36px] shrink-0 items-center justify-center rounded px-2 text-xs transition-all',
-                item === page
-                  ? 'bg-brand-gold font-medium text-white'
-                  : 'border border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
-              )}
+              className={cn('h-8 min-w-8 shrink-0 px-2', item === page && 'font-medium')}
             >
               {item}
-            </button>
+            </Button>
           )
         )}
 
-        <button
+        <IconButton
+          type="button"
+          variant="secondary"
+          size="sm"
           onClick={handleNext}
           disabled={page >= totalPages}
           aria-label="下一页"
-          aria-disabled={page >= totalPages}
-          className={NAV_BTN}
         >
           <ChevronRight size={14} />
-        </button>
-        <button
+        </IconButton>
+        <IconButton
+          type="button"
+          variant="secondary"
+          size="sm"
           onClick={handleLast}
           disabled={page >= totalPages}
           aria-label="末页"
-          aria-disabled={page >= totalPages}
-          className={NAV_BTN}
         >
           <ChevronsRight size={14} />
-        </button>
+        </IconButton>
       </div>
     </footer>
   )

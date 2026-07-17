@@ -3,6 +3,7 @@ import type { FocusEvent } from 'react'
 import { Copy, MoreVertical } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useDismissableLayer } from '../hooks/useClickOutside'
+import { Button, IconButton } from '@/src/components/ui'
 
 interface CommentActionMenuProps {
   alignClassName?: string
@@ -48,20 +49,22 @@ export const CommentActionMenu = ({
         alignClassName
       )}
     >
-      <button
+      <IconButton
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={() => setOpen((current) => !current)}
         aria-label={menuLabel}
         aria-haspopup="menu"
         aria-expanded={open}
         className={clsx(
-          'inline-flex h-7 w-7 items-center justify-center rounded border border-transparent text-text-muted transition-colors',
+          'h-7 w-7 text-text-muted',
           'hover:border-[var(--book-ink-line)] hover:bg-[var(--book-panel-bg)] hover:text-brand-gold focus-visible:border-brand-gold focus-visible:outline-none',
           open && 'border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-brand-gold'
         )}
       >
         <MoreVertical size={14} />
-      </button>
+      </IconButton>
 
       <div
         role="menu"
@@ -73,16 +76,18 @@ export const CommentActionMenu = ({
             : 'invisible -translate-y-1 opacity-0 pointer-events-none'
         )}
       >
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           role="menuitem"
           tabIndex={open ? 0 : -1}
           onClick={() => void handleCopy()}
-          className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-xs font-medium text-text-secondary transition-colors hover:bg-surface-alt hover:text-brand-gold focus-visible:bg-surface-alt focus-visible:text-brand-gold focus-visible:outline-none"
+          className="w-full justify-start px-2.5"
+          leftIcon={<Copy size={12} />}
         >
-          <Copy size={12} />
           {copyLabel}
-        </button>
+        </Button>
       </div>
     </div>
   )

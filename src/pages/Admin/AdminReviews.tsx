@@ -9,6 +9,7 @@ import {
   REVIEW_FILTER_OPTIONS,
 } from './reviewQueue'
 import type { AdminReviewQueueMergedItem } from '../../types/api'
+import { Button } from '@/src/components/ui'
 
 export const AdminReviews = () => {
   const [items, setItems] = useState<AdminReviewQueueMergedItem[]>([])
@@ -54,25 +55,25 @@ export const AdminReviews = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">审核队列</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleRefreshQueue}
-            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
-          >
+          <Button type="button" variant="secondary" onClick={handleRefreshQueue}>
             刷新队列
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
             onClick={handleStartReview}
             disabled={loading || items.length === 0}
-            className="px-4 py-2 rounded text-sm theme-button-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             开始审核
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="bg-surface border border-border rounded p-4 flex flex-wrap items-center gap-3">
         {REVIEW_FILTER_OPTIONS.map((item) => (
-          <button
+          <Button
+            type="button"
+            size="sm"
+            variant={filter === item.id ? 'primary' : 'secondary'}
             key={item.id}
             onClick={() => {
               setSearchParams((prev) => {
@@ -85,15 +86,10 @@ export const AdminReviews = () => {
                 return next
               })
             }}
-            className={clsx(
-              'px-4 py-2 rounded text-xs font-medium transition-all',
-              filter === item.id
-                ? 'bg-brand-gold-dark text-white'
-                : 'bg-surface-alt text-text-secondary hover:bg-bg-tertiary'
-            )}
+            aria-pressed={filter === item.id}
           >
             {item.label}
-          </button>
+          </Button>
         ))}
       </div>
 

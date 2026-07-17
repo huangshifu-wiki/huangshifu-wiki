@@ -6,6 +6,7 @@ import WikiRelations from './WikiRelations'
 import MiniRelationGraph from './MiniRelationGraph'
 import type { WikiRelationRecord } from './types'
 import type { WikiPageMetadata } from '../../lib/wikiLinkParser'
+import { Button, IconButton } from '@/src/components/ui'
 
 interface WikiEditorRelationPanelProps {
   relations: WikiRelationRecord[]
@@ -46,14 +47,12 @@ const WikiEditorRelationPanel = React.memo(
 
         {/* 图谱预览面板 */}
         <div className="space-y-2">
-          <button
+          <Button
             type="button"
+            variant={showGraphPreview ? 'primary' : 'secondary'}
+            fullWidth
             onClick={() => setShowGraphPreview(!showGraphPreview)}
-            className={`flex w-full items-center justify-between rounded border px-4 py-3 text-sm font-medium transition-all ${
-              showGraphPreview
-                ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
-                : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
-            }`}
+            className="justify-between"
           >
             <div className="flex items-center gap-2">
               <BarChart3 size={16} />
@@ -63,7 +62,7 @@ const WikiEditorRelationPanel = React.memo(
               <span className="text-xs opacity-75">{relations.length} 个关联</span>
               {showGraphPreview ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </div>
-          </button>
+          </Button>
 
           <AnimatePresence>
             {showGraphPreview && (
@@ -76,13 +75,15 @@ const WikiEditorRelationPanel = React.memo(
                 <div className={`${bookPanelClass} p-4`}>
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-text-primary">关联图谱</h3>
-                    <button
+                    <IconButton
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setShowGraphPreview(false)}
-                      className="rounded p-1.5 text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
+                      aria-label="关闭关联图谱预览"
                     >
                       <X size={16} />
-                    </button>
+                    </IconButton>
                   </div>
                   {relations.length === 0 ? (
                     <div className="py-8 text-center text-text-muted text-sm">

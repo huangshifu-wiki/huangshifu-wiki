@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from 'react'
 import { Lock, RefreshCw, Trash2 } from '@/src/components/icons'
-import { WARNING_BUTTON_CLASSES } from '../../lib/buttonClasses'
 import { apiDelete, apiGet } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import type { EditLockItem } from '../../types/entities'
+import {
+  Button,
+  Checkbox,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/src/components/ui'
 
 export const AdminLocks = () => {
   const [data, setData] = useState<EditLockItem[]>([])
@@ -106,96 +115,99 @@ export const AdminLocks = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">编辑锁</h1>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            type="button"
+            variant="danger"
             onClick={releaseSelectedLocks}
-            disabled={!selectedIds.size || batchReleasing}
-            className="inline-flex items-center gap-1.5 rounded theme-button-danger px-4 py-2 text-sm transition-all disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!selectedIds.size}
+            loading={batchReleasing}
+            loadingText="释放中..."
+            leftIcon={<Trash2 size={14} />}
           >
-            <Trash2 size={14} />{' '}
-            {batchReleasing ? '释放中...' : `释放选中 ${selectedIds.size || ''}`}
-          </button>
-          <button
+            释放选中 {selectedIds.size || ''}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
             onClick={fetchData}
-            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
+            leftIcon={<RefreshCw size={14} />}
           >
-            <RefreshCw size={14} className="inline mr-1" /> 刷新
-          </button>
+            刷新
+          </Button>
         </div>
       </div>
 
       <div className="bg-surface border border-border rounded overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-surface-alt border-b border-border">
-                <th className="px-5 py-3 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                  <input
-                    type="checkbox"
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-surface-alt">
+                <TableHead className="px-5 py-3 text-[11px] uppercase tracking-wider">
+                  <Checkbox
                     checked={data.length > 0 && selectedIds.size === data.length}
-                    onChange={toggleAll}
-                    className="accent-brand-gold"
+                    onCheckedChange={toggleAll}
                     aria-label="选择全部编辑锁"
                   />
-                </th>
+                </TableHead>
                 {['资源', '锁定者', '到期时间', '操作'].map((col) => (
-                  <th
-                    key={col}
-                    className="px-5 py-3 text-[11px] font-semibold text-text-muted uppercase tracking-wider"
-                  >
+                  <TableHead key={col} className="px-5 py-3 text-[11px] uppercase tracking-wider">
                     {col}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {loading ? (
                 [1, 2, 3].map((i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td colSpan={5} className="px-5 py-4">
+                  <TableRow key={i} className="animate-pulse">
+                    <TableCell colSpan={5} className="px-5 py-4">
                       <div className="h-6 bg-surface-alt rounded" />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               ) : data.length > 0 ? (
                 data.map((item) => (
-                  <tr key={item.id} className="hover:bg-surface-alt transition-colors">
-                    <td className="px-5 py-4">
-                      <input
-                        type="checkbox"
+                  <TableRow key={item.id}>
+                    <TableCell className="px-5 py-4">
+                      <Checkbox
                         checked={selectedIds.has(item.id)}
-                        onChange={() => toggleSelected(item.id)}
-                        className="accent-brand-gold"
+                        onCheckedChange={() => toggleSelected(item.id)}
                         aria-label={`选择 ${item.collection} / ${item.recordId}`}
                       />
-                    </td>
-                    <td className="px-5 py-4">
+                    </TableCell>
+                    <TableCell className="px-5 py-4">
                       <p className="text-sm font-medium text-text-primary">
                         {item.collection} / {item.recordId}
                       </p>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-text-secondary">
+                    </TableCell>
+                    <TableCell className="px-5 py-4 text-text-secondary">
                       {item.username} ({item.userId?.slice(0, 8) ?? '未知'})
-                    </td>
-                    <td className="px-5 py-4 text-xs text-text-muted">
+                    </TableCell>
+                    <TableCell className="px-5 py-4 text-xs text-text-muted">
                       {formatDateTime(item.expiresAt, 'N/A')}
-                    </td>
-                    <td className="px-5 py-4 text-left">
-                      <button onClick={() => releaseLock(item)} className={WARNING_BUTTON_CLASSES}>
-                        <Lock size={14} />
+                    </TableCell>
+                    <TableCell className="px-5 py-4 text-left">
+                      <Button
+                        type="button"
+                        variant="warning"
+                        size="sm"
+                        onClick={() => releaseLock(item)}
+                        leftIcon={<Lock size={14} />}
+                      >
                         强制释放
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
+                <TableRow>
+                  <TableCell colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
                     暂无编辑锁
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     </div>

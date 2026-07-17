@@ -6,6 +6,7 @@ import { GalleryCard } from '../components/Gallery/GalleryCard'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import Pagination from '../components/Pagination'
 import { ViewModeSelector } from '../components/ViewModeSelector'
+import { Button } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
@@ -186,13 +187,13 @@ const GalleryList = () => {
                 size="sm"
               />
               {canUpload && (
-                <button
+                <Button
                   type="button"
                   onClick={() => navigate('/gallery/new')}
-                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
+                  leftIcon={<Plus size={15} aria-hidden="true" />}
                 >
-                  <Plus size={15} aria-hidden="true" /> 上传图集
-                </button>
+                  上传图集
+                </Button>
               )}
             </div>
           </div>

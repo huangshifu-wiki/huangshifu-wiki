@@ -19,6 +19,7 @@ import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import type { NotificationItem } from '../types/entities'
+import { Button } from '@/src/components/ui'
 
 type NotificationType = NotificationItem['type']
 
@@ -298,24 +299,28 @@ const Notifications = () => {
               {isIncrementalMode ? incrementalList.total : data.total} 条
             </p>
           </div>
-          <button
+          <Button
+            type="button"
             onClick={markAllNotificationsRead}
-            disabled={markingAllRead || data.unreadCount === 0}
-            className="inline-flex items-center gap-2 px-4 py-2 theme-button-primary text-sm rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={data.unreadCount === 0}
+            loading={markingAllRead}
+            loadingText="处理中..."
+            leftIcon={<CheckCheck size={16} />}
           >
-            <CheckCheck size={16} />
-            {markingAllRead ? '处理中...' : '全部标记已读'}
-          </button>
+            全部标记已读
+          </Button>
         </div>
 
         {/* Filter Tabs */}
         <div className="mb-6 flex items-center gap-1 overflow-x-auto border-b border-border">
           {FILTER_OPTIONS.map((option) => (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
               key={option.id}
               onClick={() => updateQuery(option.id, 1)}
               className={clsx(
-                'px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap relative',
+                'relative whitespace-nowrap rounded-none border-0 px-4 py-2.5',
                 filter === option.id
                   ? 'text-brand-gold'
                   : 'text-text-secondary hover:text-brand-gold'
@@ -325,7 +330,7 @@ const Notifications = () => {
               {filter === option.id && (
                 <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--color-theme-accent)] rounded-[1px]" />
               )}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -353,7 +358,9 @@ const Notifications = () => {
                     )}
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <button
+                      <Button
+                        type="button"
+                        variant="ghost"
                         onClick={() => {
                           if (!notif.isRead) {
                             markNotificationRead(notif.id)
@@ -362,7 +369,7 @@ const Notifications = () => {
                             navigate(link)
                           }
                         }}
-                        className="text-left flex-1"
+                        className="flex-1 flex-col items-stretch justify-start border-0 p-0 text-left hover:bg-transparent"
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <NotificationTypeIcon type={notif.type} />
@@ -384,15 +391,18 @@ const Notifications = () => {
                         <p className="text-xs text-text-muted mt-1">
                           {new Date(notif.createdAt).toLocaleString('zh-CN')}
                         </p>
-                      </button>
+                      </Button>
 
                       {!notif.isRead ? (
-                        <button
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
                           onClick={() => markNotificationRead(notif.id)}
-                          className="text-xs text-brand-gold hover:underline shrink-0"
+                          className="h-auto min-h-0 shrink-0 p-0 text-xs text-brand-gold hover:bg-transparent hover:underline"
                         >
                           标记已读
-                        </button>
+                        </Button>
                       ) : null}
                     </div>
                   </li>

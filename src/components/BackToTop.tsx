@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ChevronUp } from '@/src/components/icons'
+import { IconButton } from '@/src/components/ui'
 
 export default function BackToTop() {
   const [isVisible, setIsVisible] = useState(false)
@@ -20,7 +21,9 @@ export default function BackToTop() {
   if (!isVisible) return null
 
   return (
-    <button
+    <IconButton
+      type="button"
+      size="lg"
       onClick={scrollToTop}
       aria-label="返回顶部"
       className="
@@ -34,6 +37,6 @@ export default function BackToTop() {
 			"
     >
       <ChevronUp size={20} />
-    </button>
+    </IconButton>
   )
 }

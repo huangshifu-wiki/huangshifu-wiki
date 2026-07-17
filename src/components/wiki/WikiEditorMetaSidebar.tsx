@@ -1,8 +1,9 @@
 import React from 'react'
 import { ChevronDown, Save, Send } from '@/src/components/icons'
-import { BookEditorActions, bookSecondaryButtonClass } from '../../components/BookEditor'
+import { BookEditorActions } from '../../components/BookEditor'
 import { useI18n } from '../../lib/i18n'
 import { getWikiDraftButtonText, getWikiSubmitButtonText } from '../../lib/wikiWriteText'
+import { Button } from '@/src/components/ui'
 
 interface WikiEditorMetaSidebarProps {
   savingMode: 'draft' | 'pending' | null
@@ -26,38 +27,44 @@ const WikiEditorMetaSidebar = React.memo(
     const saveButtonText = getWikiDraftButtonText(t, savingMode)
     const submitButtonText = getWikiSubmitButtonText(t, isAdmin, savingMode === 'pending')
     const advancedToggle = showAdvancedToggle ? (
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={onToggleAdvancedOptions}
         aria-expanded={showAdvancedOptions}
         aria-controls="wiki-advanced-options"
-        className="mr-auto flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
+        className="mr-auto text-text-muted"
+        leftIcon={
+          <ChevronDown
+            size={16}
+            className={`transition-transform ${showAdvancedOptions ? 'rotate-180' : ''}`}
+          />
+        }
       >
-        <ChevronDown
-          size={16}
-          className={`transition-transform ${showAdvancedOptions ? 'rotate-180' : ''}`}
-        />{' '}
         {t('wiki.advancedOptions')}
-      </button>
+      </Button>
     ) : null
 
     return (
       <BookEditorActions leading={advancedToggle}>
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={() => onSubmit('draft')}
           disabled={Boolean(savingMode)}
-          className={bookSecondaryButtonClass}
+          leftIcon={<Save size={16} />}
         >
-          <Save size={16} /> {saveButtonText}
-        </button>
-        <button
+          {saveButtonText}
+        </Button>
+        <Button
           type="submit"
           disabled={Boolean(savingMode)}
-          className="inline-flex items-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
+          className="px-8"
+          leftIcon={<Send size={16} />}
         >
-          <Send size={16} /> {submitButtonText}
-        </button>
+          {submitButtonText}
+        </Button>
       </BookEditorActions>
     )
   }

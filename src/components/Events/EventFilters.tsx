@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { ArrowUpDown } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { ViewModeSelector } from '../ViewModeSelector'
+import { Button } from '@/src/components/ui'
 import type { ViewMode } from '../../types/userPreferences'
 
 type EventSortOrder = 'asc' | 'desc'
@@ -63,15 +64,17 @@ const EventFilters = ({
         size="sm"
       />
       <span className="text-border/50">|</span>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
-        className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 transition-colors hover:text-brand-gold"
+        className="h-auto min-h-0 cursor-pointer px-1.5 py-0.5"
+        rightIcon={<ArrowUpDown size={12} />}
         title={sortOrder === 'asc' ? '时间正序' : '时间倒序'}
       >
         <span>{sortOrder === 'desc' ? '时间倒序' : '时间正序'}</span>
-        <ArrowUpDown size={12} />
-      </button>
+      </Button>
     </div>
   </div>
 )

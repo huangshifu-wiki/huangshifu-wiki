@@ -1,5 +1,6 @@
 import { Sun, Moon, Monitor } from '@/src/components/icons'
 import { clsx } from 'clsx'
+import { Button } from '@/src/components/ui'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import type { ThemeMode } from '../types/userPreferences'
 
@@ -45,12 +46,14 @@ export function ThemeToggle({ fullWidth = false, compact = false }: ThemeToggleP
             : THEME_LABELS[mode]
 
         return (
-          <button
+          <Button
             key={mode}
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => void setTheme(mode)}
             className={clsx(
-              'inline-flex items-center justify-center gap-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 cursor-pointer',
+              'border-0 gap-1.5 cursor-pointer',
               compact ? 'min-h-8 rounded-[0.4rem] px-2 text-xs' : 'min-h-9 rounded-md px-3 text-sm',
               fullWidth && 'flex-1',
               isActive
@@ -63,7 +66,7 @@ export function ThemeToggle({ fullWidth = false, compact = false }: ThemeToggleP
           >
             <Icon size={16} />
             <span>{mode === 'default' ? '浅色' : mode === 'dark' ? '深色' : '系统'}</span>
-          </button>
+          </Button>
         )
       })}
     </div>

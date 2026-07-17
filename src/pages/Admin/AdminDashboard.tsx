@@ -14,6 +14,7 @@ import {
 } from '@/src/components/icons'
 import { apiGet } from '../../lib/apiClient'
 import { useAuth } from '../../context/AuthContext'
+import { Button } from '@/src/components/ui'
 
 const cards = [
   { key: 'wiki', label: '百科', path: '/admin/wiki', icon: Book },
@@ -90,13 +91,16 @@ export const AdminDashboard = () => {
           </h1>
           <p className="text-sm text-text-muted mt-1">总内容量：{total}</p>
         </div>
-        <button
+        <Button
+          type="button"
+          variant="secondary"
           onClick={() => fetchStats(true)}
-          disabled={refreshing}
-          className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm disabled:opacity-50"
+          loading={refreshing}
+          loadingText="刷新中..."
+          leftIcon={<RefreshCw size={16} />}
         >
-          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> 刷新
-        </button>
+          刷新
+        </Button>
       </div>
 
       {loading ? (

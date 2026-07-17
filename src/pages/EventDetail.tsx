@@ -9,6 +9,7 @@ import { formatDateTime } from '../lib/dateUtils'
 import { formatEventTicketPrices, formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
 import type { EventDetailResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
+import { Button } from '@/src/components/ui'
 
 type EventPosterImage = {
   id: string
@@ -181,13 +182,14 @@ const EventDetail = () => {
           <header className="flex flex-col gap-6 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row sm:items-start">
             <div className="flex w-full shrink-0 items-start justify-center overflow-hidden sm:w-auto sm:justify-start">
               {coverSrc ? (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={() => {
                     setLightboxIndex(0)
                     setLightboxOpen(true)
                   }}
-                  className="block max-h-56 max-w-56 overflow-hidden rounded-lg shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-300 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:max-h-72 sm:max-w-72"
+                  className="block h-auto max-h-56 max-w-56 overflow-hidden rounded-lg border-0 p-0 shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-300 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] sm:max-h-72 sm:max-w-72"
                   aria-label={`查看 ${event.title} 封面`}
                 >
                   <img
@@ -198,7 +200,7 @@ const EventDetail = () => {
                     loading="eager"
                     fetchPriority="high"
                   />
-                </button>
+                </Button>
               ) : (
                 <div className="flex h-56 w-56 flex-col items-center justify-center gap-2 rounded-lg border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-muted sm:h-72 sm:w-72">
                   <Calendar size={32} className="text-brand-gold/60" />
@@ -322,14 +324,15 @@ const EventDetail = () => {
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {posterImages.map((poster, index) => (
-                  <button
+                  <Button
                     key={poster.id}
                     type="button"
+                    variant="ghost"
                     onClick={() => {
                       setLightboxIndex(index)
                       setLightboxOpen(true)
                     }}
-                    className="group aspect-[3/4] overflow-hidden rounded border border-[var(--book-ink-line)]/60 bg-[var(--book-panel-bg)] shadow-[0_10px_30px_rgba(42,37,32,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                    className="group aspect-[3/4] h-auto overflow-hidden rounded border border-[var(--book-ink-line)]/60 bg-[var(--book-panel-bg)] p-0 shadow-[0_10px_30px_rgba(42,37,32,0.06)]"
                   >
                     <SmartImage
                       src={poster.url}
@@ -337,7 +340,7 @@ const EventDetail = () => {
                       className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
                       style={{ filter: COVER_FILTER }}
                     />
-                  </button>
+                  </Button>
                 ))}
               </div>
             </section>

@@ -33,6 +33,7 @@ import { useAuth } from '../../context/AuthContext'
 import { logoutRequest } from '../../lib/auth'
 import { HeaderUserControls } from '../HeaderUserControls'
 import { useToast } from '../Toast'
+import { IconButton } from '@/src/components/ui'
 import { usePendingReviewCount } from '../../hooks/usePendingReviewCount'
 import { usePublicFeatures } from '../../hooks/usePublicFeatures'
 
@@ -234,12 +235,16 @@ export const AdminLayout = () => {
       {/* Header */}
       <header className="h-14 border-b border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] backdrop-blur-[14px] flex items-center justify-between px-4 md:px-6 z-50 shrink-0 shadow-[0_1px_0_rgba(138,109,47,0.06)]">
         <div className="flex items-center gap-3">
-          <button
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={mobileOpen ? '关闭管理菜单' : '打开管理菜单'}
             className="md:hidden p-2 hover:bg-[var(--book-panel-hover)] rounded text-text-secondary"
             onClick={() => setMobileOpen((open) => !open)}
           >
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+          </IconButton>
           <Link
             to="/admin"
             className="font-[var(--book-title-font)] text-2xl font-normal tracking-[0.1em] text-text-primary hover:text-brand-gold transition-colors"
@@ -323,7 +328,11 @@ export const AdminLayout = () => {
           </nav>
 
           <div className="hidden md:block p-2 border-t border-[var(--book-ink-line)]">
-            <button
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className="w-full p-2 text-text-muted hover:text-brand-gold hover:bg-[var(--book-panel-hover)] rounded transition-colors flex items-center justify-center"
             >
@@ -332,7 +341,7 @@ export const AdminLayout = () => {
               ) : (
                 <ChevronRight size={16} className="rotate-180" />
               )}
-            </button>
+            </IconButton>
           </div>
         </aside>
 

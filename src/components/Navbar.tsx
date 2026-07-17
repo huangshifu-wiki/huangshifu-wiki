@@ -9,6 +9,7 @@ import type { AuthMode } from './Navbar/types'
 import { MobileMenu } from './Navbar/MobileMenu'
 import styles from './Navbar.module.css'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
+import { IconButton } from '@/src/components/ui'
 
 export const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -91,14 +92,16 @@ export const Navbar = () => {
             />
           </div>
 
-          <button
+          <IconButton
             type="button"
+            variant="ghost"
+            size="lg"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className={`${styles.siteNavToggle} mobile-touch-target`}
             aria-label={isMenuOpen ? '关闭菜单' : '打开菜单'}
           >
             {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
+          </IconButton>
         </div>
       </div>
 

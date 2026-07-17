@@ -5,6 +5,15 @@ import { clsx } from 'clsx'
 import { apiGet } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'
 import type { AdminDataItem } from '../../types/entities'
+import {
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/src/components/ui'
 
 function getModerationActionLabel(action: string | undefined) {
   if (action === 'approve') return '通过'
@@ -53,48 +62,47 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em] flex items-center gap-2">
           <Icon size={24} className="text-brand-gold" /> {title}
         </h1>
-        <button
+        <Button
+          type="button"
+          variant="secondary"
           onClick={fetchData}
-          className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
+          leftIcon={<RefreshCw size={14} />}
         >
-          <RefreshCw size={14} className="inline mr-1" /> 刷新
-        </button>
+          刷新
+        </Button>
       </div>
 
       <div className="bg-surface border border-border rounded overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-surface-alt border-b border-border">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-surface-alt">
                 {['时间', '操作者', '目标', '操作类型', '备注'].map((col) => (
-                  <th
-                    key={col}
-                    className="px-5 py-3 text-[11px] font-semibold text-text-muted uppercase tracking-wider"
-                  >
+                  <TableHead key={col} className="px-5 py-3 text-[11px] uppercase tracking-wider">
                     {col}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {loading ? (
                 [1, 2, 3, 4, 5].map((i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td colSpan={5} className="px-5 py-4">
+                  <TableRow key={i} className="animate-pulse">
+                    <TableCell colSpan={5} className="px-5 py-4">
                       <div className="h-6 bg-surface-alt rounded" />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               ) : data.length > 0 ? (
                 data.map((item) => (
-                  <tr key={item.id} className="hover:bg-surface-alt transition-colors">
-                    <td className="px-5 py-4 text-sm text-text-muted whitespace-nowrap">
+                  <TableRow key={item.id}>
+                    <TableCell className="px-5 py-4 text-text-muted whitespace-nowrap">
                       {formatDateTime(item.createdAt, 'N/A')}
-                    </td>
-                    <td className="px-5 py-4 text-sm font-medium text-text-primary">
+                    </TableCell>
+                    <TableCell className="px-5 py-4 font-medium">
                       {item.operatorName || item.operatorUid}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-text-secondary">
+                    </TableCell>
+                    <TableCell className="px-5 py-4 text-text-secondary">
                       {logType === 'ban_logs' ? (
                         <span className="font-medium text-text-primary">
                           {item.targetName || item.targetUid}
@@ -109,8 +117,8 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
                           </span>
                         </div>
                       )}
-                    </td>
-                    <td className="px-5 py-4">
+                    </TableCell>
+                    <TableCell className="px-5 py-4">
                       {logType === 'ban_logs' ? (
                         <span
                           className={clsx(
@@ -130,21 +138,21 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
                           {getModerationActionLabel(item.action)}
                         </span>
                       )}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-text-muted max-w-[200px] truncate">
+                    </TableCell>
+                    <TableCell className="max-w-[200px] truncate px-5 py-4 text-text-muted">
                       {item.note || '-'}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
+                <TableRow>
+                  <TableCell colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
                     暂无数据
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     </div>

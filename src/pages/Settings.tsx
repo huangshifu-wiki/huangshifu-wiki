@@ -48,6 +48,7 @@ import type { CommentItem, GalleryItem, PostItem } from '../types/entities'
 import type { ContentStatus } from '../types/common'
 import type { EmailVerificationPublicConfig } from '../types/api'
 import type { ListLoadMode } from '../types/userPreferences'
+import { Button, IconButton, Input, Switch, Textarea } from '@/src/components/ui'
 
 type PublicProfileForm = {
   displayName: string
@@ -184,22 +185,7 @@ function PrivacySwitch({
       <label htmlFor={id} className="text-sm font-medium text-text-primary">
         {label}
       </label>
-      <button
-        type="button"
-        id={id}
-        role="switch"
-        aria-checked={checked}
-        onClick={onToggle}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold focus:ring-offset-2 ${
-          checked ? 'bg-[var(--color-theme-accent)]' : 'bg-border'
-        }`}
-      >
-        <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-            checked ? 'translate-x-6' : 'translate-x-1'
-          }`}
-        />
-      </button>
+      <Switch id={id} checked={checked} onCheckedChange={onToggle} aria-label={label} />
     </div>
   )
 }
@@ -854,14 +840,15 @@ const Settings = () => {
                         referrerPolicy="no-referrer"
                         onError={handleAvatarError}
                       />
-                      <button
+                      <IconButton
                         type="button"
+                        variant="ghost"
                         onClick={() => setAvatarModalOpen(true)}
-                        className="absolute inset-0 flex items-center justify-center rounded-full bg-black/35 text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+                        className="absolute inset-0 h-full w-full rounded-full bg-black/35 text-white opacity-0 transition-opacity hover:bg-black/35 hover:text-white hover:opacity-100 focus-visible:opacity-100"
                         aria-label="修改头像"
                       >
                         <Camera size={20} />
-                      </button>
+                      </IconButton>
                     </div>
 
                     <div className="grid flex-1 gap-4">
@@ -878,7 +865,7 @@ const Settings = () => {
                             max={PROFILE_DISPLAY_NAME_MAX_LENGTH}
                           />
                         </div>
-                        <input
+                        <Input
                           id="settings-display-name"
                           type="text"
                           value={profileForm.displayName}
@@ -906,7 +893,7 @@ const Settings = () => {
                             max={PROFILE_SIGNATURE_MAX_LENGTH}
                           />
                         </div>
-                        <textarea
+                        <Textarea
                           id="settings-signature"
                           value={profileForm.signature}
                           onChange={(event) =>
@@ -949,18 +936,14 @@ const Settings = () => {
                   </div>
 
                   <div className="flex justify-end">
-                    <button
+                    <Button
                       type="submit"
-                      disabled={savingProfile}
-                      className="theme-button-primary inline-flex items-center gap-2 rounded px-5 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                      loading={savingProfile}
+                      loadingText="保存中..."
+                      leftIcon={<Save size={14} />}
                     >
-                      {savingProfile ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <Save size={14} />
-                      )}
-                      {savingProfile ? '保存中...' : '保存公开资料'}
-                    </button>
+                      保存公开资料
+                    </Button>
                   </div>
                 </form>
               </section>
@@ -1087,30 +1070,29 @@ const Settings = () => {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {canSendEmailVerification && (
-                          <button
+                          <Button
                             type="button"
+                            variant="secondary"
                             onClick={handleSendEmailVerification}
-                            disabled={sendingEmailVerification}
-                            className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                            loading={sendingEmailVerification}
+                            loadingText="发送中..."
+                            leftIcon={<MailCheck size={14} />}
                           >
-                            {sendingEmailVerification ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <MailCheck size={14} />
-                            )}
-                            {sendingEmailVerification ? '发送中...' : '发送验证邮件'}
-                          </button>
+                            发送验证邮件
+                          </Button>
                         )}
-                        <button
+                        <Button
                           type="button"
+                          variant="secondary"
                           onClick={isEmailEditorOpen ? closeEmailEditor : openEmailEditor}
-                          className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
+                          leftIcon={
+                            isEmailEditorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+                          }
                           aria-expanded={isEmailEditorOpen}
                           aria-controls="email-editor"
                         >
-                          {isEmailEditorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                           {isEmailEditorOpen ? '收起' : '修改邮箱'}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                     {isEmailEditorOpen && (
@@ -1123,7 +1105,7 @@ const Settings = () => {
                           <span className="mb-1 block text-xs font-medium text-text-muted">
                             当前密码
                           </span>
-                          <input
+                          <Input
                             type="password"
                             value={emailForm.currentPassword}
                             onChange={(event) =>
@@ -1140,7 +1122,7 @@ const Settings = () => {
                           <span className="mb-1 block text-xs font-medium text-text-muted">
                             新邮箱
                           </span>
-                          <input
+                          <Input
                             type="email"
                             value={emailForm.newEmail}
                             onChange={(event) =>
@@ -1154,25 +1136,17 @@ const Settings = () => {
                           />
                         </label>
                         <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={closeEmailEditor}
-                            className="theme-button-secondary rounded px-4 py-2 text-sm font-medium transition-all"
-                          >
+                          <Button type="button" variant="secondary" onClick={closeEmailEditor}>
                             取消
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="submit"
-                            disabled={savingEmail}
-                            className="theme-button-primary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                            loading={savingEmail}
+                            loadingText="更新中..."
+                            leftIcon={<Save size={14} />}
                           >
-                            {savingEmail ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <Save size={14} />
-                            )}
-                            {savingEmail ? '更新中...' : '保存邮箱'}
-                          </button>
+                            保存邮箱
+                          </Button>
                         </div>
                       </form>
                     )}
@@ -1186,16 +1160,18 @@ const Settings = () => {
                           <h3 className="text-sm font-semibold text-text-primary">密码</h3>
                         </div>
                       </div>
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
                         onClick={isPasswordEditorOpen ? closePasswordEditor : openPasswordEditor}
-                        className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
+                        leftIcon={
+                          isPasswordEditorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+                        }
                         aria-expanded={isPasswordEditorOpen}
                         aria-controls="password-editor"
                       >
-                        {isPasswordEditorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         {isPasswordEditorOpen ? '收起' : '修改密码'}
-                      </button>
+                      </Button>
                     </div>
                     {isPasswordEditorOpen && (
                       <form
@@ -1207,7 +1183,7 @@ const Settings = () => {
                           <span className="mb-1 block text-xs font-medium text-text-muted">
                             当前密码
                           </span>
-                          <input
+                          <Input
                             type="password"
                             value={passwordForm.currentPassword}
                             onChange={(event) =>
@@ -1233,7 +1209,7 @@ const Settings = () => {
                               max={PASSWORD_MAX_LENGTH}
                             />
                           </div>
-                          <input
+                          <Input
                             id="settings-new-password"
                             type="password"
                             value={passwordForm.newPassword}
@@ -1262,7 +1238,7 @@ const Settings = () => {
                               max={PASSWORD_MAX_LENGTH}
                             />
                           </div>
-                          <input
+                          <Input
                             id="settings-confirm-password"
                             type="password"
                             value={passwordForm.confirmPassword}
@@ -1279,25 +1255,17 @@ const Settings = () => {
                           />
                         </div>
                         <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={closePasswordEditor}
-                            className="theme-button-secondary rounded px-4 py-2 text-sm font-medium transition-all"
-                          >
+                          <Button type="button" variant="secondary" onClick={closePasswordEditor}>
                             取消
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="submit"
-                            disabled={savingPassword}
-                            className="theme-button-primary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                            loading={savingPassword}
+                            loadingText="更新中..."
+                            leftIcon={<Save size={14} />}
                           >
-                            {savingPassword ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <Save size={14} />
-                            )}
-                            {savingPassword ? '更新中...' : '保存密码'}
-                          </button>
+                            保存密码
+                          </Button>
                         </div>
                       </form>
                     )}
@@ -1332,18 +1300,16 @@ const Settings = () => {
                     aria-label="列表加载方式"
                   >
                     {LIST_LOAD_MODE_OPTIONS.map((option) => (
-                      <button
+                      <Button
                         key={option.value}
                         type="button"
+                        size="sm"
+                        variant={preferences.listLoadMode === option.value ? 'primary' : 'ghost'}
                         onClick={() => void updatePreferences({ listLoadMode: option.value })}
-                        className={`rounded px-3 py-1.5 text-sm transition-colors ${
-                          preferences.listLoadMode === option.value
-                            ? 'bg-[var(--color-theme-accent)] text-white'
-                            : 'text-text-secondary hover:text-brand-gold'
-                        }`}
+                        aria-pressed={preferences.listLoadMode === option.value}
                       >
                         {option.label}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -1355,28 +1321,16 @@ const Settings = () => {
                   >
                     展示字数限制
                   </label>
-                  <button
-                    type="button"
+                  <Switch
                     id="settings-character-count-toggle"
-                    role="switch"
-                    aria-checked={preferences.showCharacterCount}
-                    onClick={() =>
+                    checked={preferences.showCharacterCount}
+                    onCheckedChange={() =>
                       void updatePreferences({
                         showCharacterCount: !preferences.showCharacterCount,
                       })
                     }
-                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold focus:ring-offset-2 ${
-                      preferences.showCharacterCount
-                        ? 'bg-[var(--color-theme-accent)]'
-                        : 'bg-border'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                        preferences.showCharacterCount ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
+                    aria-label="展示字数限制"
+                  />
                 </div>
               </section>
             )}

@@ -21,6 +21,7 @@ import type { TextSearchResult } from '../../types/api'
 import { MixedSearchResultCard } from '../MixedSearchResultCard'
 import { SearchResultCard } from './SearchResultCard'
 import { getFirstGalleryImage, shouldWaitForGalleryThumbnail } from '../../lib/galleryThumbnails'
+import { Button } from '@/src/components/ui'
 
 interface SearchResultsProps {
   state: SearchState
@@ -243,11 +244,13 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
       <div className="mobile-filterbar">
         <div className="mobile-filter-tabs">
           {tabItems.map((tab) => (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={clsx(
-                'relative cursor-pointer pb-2 text-[1.0625rem] tracking-[0.06em] transition-all',
+                'relative min-h-0 cursor-pointer rounded-none border-0 px-0 pb-2 text-[1.0625rem] tracking-[0.06em]',
                 activeTab === tab.id
                   ? 'font-semibold text-text-primary'
                   : 'text-text-muted hover:text-text-secondary'
@@ -258,7 +261,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               {activeTab === tab.id && (
                 <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand-gold" />
               )}
-            </button>
+            </Button>
           ))}
         </div>
         <div className="mobile-filter-actions">

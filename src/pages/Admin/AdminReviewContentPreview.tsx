@@ -8,6 +8,7 @@ import WikiMarkdown from '../wiki/WikiMarkdown'
 import { formatDate, formatDateTime } from '../../lib/dateUtils'
 import type { AdminReviewQueueMergedItem } from '../../types/api'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
+import { Button } from '@/src/components/ui'
 
 type AdminReviewContentPreviewProps = {
   item: AdminReviewQueueMergedItem
@@ -203,11 +204,12 @@ const renderGalleryPreview = (
             const previewSrc = image.thumbnailUrl || image.url || ''
 
             return (
-              <button
+              <Button
                 key={image.id}
                 type="button"
+                variant="ghost"
                 onClick={() => onOpenLightbox(index)}
-                className="group relative aspect-[3/4] cursor-zoom-in overflow-hidden rounded"
+                className="group relative aspect-[3/4] h-auto cursor-zoom-in overflow-hidden rounded border-0 p-0"
               >
                 {previewSrc ? (
                   <SmartImage
@@ -225,7 +227,7 @@ const renderGalleryPreview = (
                     查看原图
                   </div>
                 </div>
-              </button>
+              </Button>
             )
           })}
         </div>

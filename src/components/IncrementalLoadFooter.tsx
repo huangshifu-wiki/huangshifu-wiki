@@ -1,5 +1,5 @@
-import { Loader2 } from '@/src/components/icons'
 import type { RefObject } from 'react'
+import { Button } from '@/src/components/ui'
 
 interface IncrementalLoadFooterProps {
   hasMore: boolean
@@ -25,15 +25,15 @@ export function IncrementalLoadFooter({
         已加载 {loaded} / {total} 条
       </p>
       {hasMore ? (
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={onLoadMore}
-          disabled={loading}
-          className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-sm text-brand-gold transition-all hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)] disabled:cursor-not-allowed disabled:opacity-60"
+          loading={loading}
+          loadingText="加载中..."
         >
-          {loading ? <Loader2 size={16} className="animate-spin" /> : null}
-          {loading ? '加载中...' : '加载更多'}
-        </button>
+          加载更多
+        </Button>
       ) : (
         <span className="text-[0.8125rem] text-text-muted/60">已经到底了</span>
       )}

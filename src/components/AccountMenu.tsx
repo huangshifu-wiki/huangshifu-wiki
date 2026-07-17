@@ -18,6 +18,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { usePendingReviewCount } from '../hooks/usePendingReviewCount'
 import type { AuthMode } from './Navbar/types'
 import styles from './AccountMenu.module.css'
+import { Button, IconButton } from '@/src/components/ui'
 
 interface AccountMenuProps {
   onLogout: () => void | Promise<void>
@@ -73,8 +74,9 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
       data-open={isAccountMenuOpen ? 'true' : 'false'}
       onBlur={handleAccountMenuBlur}
     >
-      <button
+      <IconButton
         type="button"
+        variant="ghost"
         onClick={() => {
           if (!isAuthResolved) {
             return
@@ -82,7 +84,7 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
 
           setIsAccountMenuOpen((open) => !open)
         }}
-        className={`${styles.avatarTrigger} ${
+        className={`${styles.avatarTrigger} min-h-0 border-0 p-0 ${
           loading ? styles.avatarTriggerPending : !isAuthenticated ? styles.avatarTriggerGuest : ''
         }`}
         aria-haspopup="menu"
@@ -110,7 +112,7 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
           </span>
         )}
         {hasPendingReviews && <span className={styles.notificationDot} aria-hidden="true" />}
-      </button>
+      </IconButton>
 
       <DropdownPanel open={isAccountMenuOpen} className={styles.accountMenuPanel}>
         <div aria-label="账户菜单" onMouseDownCapture={handleAccountMenuMouseDownCapture}>
@@ -211,8 +213,10 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
               <div className={styles.menuBlock}>
                 <div className={styles.menuLabel}>账号</div>
                 <div className={styles.authActions}>
-                  <button
+                  <Button
                     type="button"
+                    size="sm"
+                    fullWidth
                     onClick={() => {
                       closeAccountMenu()
                       onOpenAuth('login')
@@ -220,10 +224,13 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
                     className={styles.menuPrimaryAction}
                   >
                     登录
-                  </button>
+                  </Button>
                   {allowRegister ? (
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
+                      fullWidth
                       onClick={() => {
                         closeAccountMenu()
                         onOpenAuth('register')
@@ -231,7 +238,7 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
                       className={styles.menuSecondaryAction}
                     >
                       注册
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               </div>
@@ -243,8 +250,10 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
             </div>
 
             {isAuthenticated ? (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                fullWidth
                 onClick={() => {
                   closeAccountMenu()
                   void onLogout()
@@ -253,7 +262,7 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
               >
                 <LogOut size={16} />
                 <span>退出登录</span>
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>

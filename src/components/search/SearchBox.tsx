@@ -5,6 +5,7 @@ import { clsx } from 'clsx'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import type { SearchSuggestion } from '../../hooks/useSearch'
 import type { SearchHistoryItem } from '../../hooks/useSearchHistory'
+import { Button, IconButton, Input, Switch } from '@/src/components/ui'
 
 interface SearchBoxProps {
   query: string
@@ -214,7 +215,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
         role="search"
         onKeyDown={handleListboxKeyDown}
       >
-        <input
+        <Input
           type="text"
           value={query}
           onChange={(e) => {
@@ -257,26 +258,28 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                   <Clock size={14} />
                   <span>搜索历史</span>
                 </div>
-                <button
+                <IconButton
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={handleClearHistory}
-                  className="rounded p-1.5 text-text-muted transition-colors hover:bg-surface hover:text-brand-gold"
                   title="清空搜索历史"
                   aria-label="清空搜索历史"
                 >
                   <Trash2 size={14} />
-                </button>
+                </IconButton>
               </div>
             )}
 
             {visibleDropdown.type === 'suggestions'
               ? visibleDropdown.items.map((s, i) => (
-                  <button
+                  <Button
                     key={`${s.type}-${s.id || s.text}-${i}`}
                     type="button"
+                    variant="ghost"
                     onClick={() => handleSuggestionClick(s)}
                     className={clsx(
-                      'w-full border-b border-[var(--book-ink-line)] px-4 py-2.5 text-left transition-colors last:border-0',
+                      'w-full flex-col items-stretch justify-start rounded-none border-x-0 border-t-0 border-b border-[var(--book-ink-line)] px-4 py-2.5 text-left last:border-0',
                       i === highlightedIndex
                         ? 'bg-[var(--color-theme-accent)] text-white'
                         : 'hover:bg-surface-alt'
@@ -313,7 +316,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                         </span>
                       )}
                     </div>
-                  </button>
+                  </Button>
                 ))
               : visibleDropdown.items.map((item, i) => (
                   <div
@@ -328,10 +331,11 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                     aria-selected={i === highlightedIndex}
                     id={`suggestion-${i}`}
                   >
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       onClick={() => handleHistoryClick(item.query)}
-                      className="min-w-0 flex-1 px-4 py-2.5 text-left"
+                      className="min-w-0 flex-1 justify-start rounded-none border-0 px-4 py-2.5 text-left"
                     >
                       <div className="flex items-center gap-3">
                         <Clock
@@ -347,9 +351,11 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                           {item.query}
                         </span>
                       </div>
-                    </button>
-                    <button
+                    </Button>
+                    <IconButton
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={(e) => handleRemoveHistoryItem(e, item.query)}
                       className={clsx(
                         'mr-2 p-1.5 rounded transition-colors',
@@ -361,7 +367,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                       aria-label={`删除搜索历史：${item.query}`}
                     >
                       <X size={14} />
-                    </button>
+                    </IconButton>
                   </div>
                 ))}
           </div>
@@ -369,27 +375,24 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
         <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2">
           {semanticSearchEnabled && (
-            <button
+            <IconButton
               type="button"
+              variant="ghost"
               onClick={() => fileInputRef.current?.click()}
               disabled={aiSearching}
-              className="rounded bg-surface-alt p-2.5 text-text-muted transition-all hover:text-brand-gold"
+              className="bg-surface-alt text-text-muted"
               title="AI 图片搜索"
               aria-label="AI 图片搜索"
             >
               {aiSearching ? <Sparkles className="animate-spin" size={18} /> : <Camera size={18} />}
-            </button>
+            </IconButton>
           )}
-          <button
-            type="submit"
-            className="hidden rounded px-6 py-2.5 font-medium theme-button-primary transition-all sm:inline-flex"
-            aria-label="提交搜索"
-          >
+          <Button type="submit" className="hidden px-6 sm:inline-flex" aria-label="提交搜索">
             搜索
-          </button>
+          </Button>
         </div>
         {semanticSearchEnabled && (
-          <input
+          <Input
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
@@ -403,25 +406,12 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
       {semanticSearchEnabled && (
         <div className="mt-4 flex flex-col gap-3 border-t border-[var(--book-ink-line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
+            <Switch
               onClick={onToggleSemanticSearch}
-              className={clsx(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold focus:ring-offset-2',
-                semanticImageSearch ? 'bg-[var(--color-theme-accent)]' : 'bg-border'
-              )}
-              role="switch"
-              aria-checked={semanticImageSearch}
+              checked={semanticImageSearch}
               aria-label="切换智能混合搜索模式"
               id="hybrid-search-toggle"
-            >
-              <span
-                className={clsx(
-                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm',
-                  semanticImageSearch ? 'translate-x-6' : 'translate-x-1'
-                )}
-              />
-            </button>
+            />
             <label
               htmlFor="hybrid-search-toggle"
               className="text-sm text-text-secondary cursor-pointer select-none"

@@ -1,6 +1,7 @@
 import React from 'react'
 import { Grid2x2, Grid3X3, Grid3x2, List } from '@/src/components/icons'
 import { clsx } from 'clsx'
+import { Button } from '@/src/components/ui'
 import { VIEW_MODE_LABELS } from '../lib/viewModes'
 import type { ViewMode } from '../types/userPreferences'
 
@@ -29,21 +30,20 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({
   const showLabels = size === 'md'
 
   return (
-    <div
-      className={clsx(
-        'inline-flex shrink-0 overflow-hidden rounded border border-[var(--book-ink-line)]',
-        size === 'sm' ? '' : ''
-      )}
-    >
+    <div className="inline-flex shrink-0 overflow-hidden rounded border border-[var(--book-ink-line)]">
       {modes.map((mode) => {
         const label = VIEW_MODE_LABELS[mode]
         return (
-          <button
+          <Button
             key={mode}
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => onChange(mode)}
             aria-label={label}
+            aria-pressed={value === mode}
             className={clsx(
-              'inline-flex items-center justify-center gap-1 transition-all',
+              'min-h-0 rounded-none border-0',
               size === 'sm' ? 'p-1.5' : 'px-3 py-1.5',
               value === mode
                 ? 'bg-brand-gold text-white'
@@ -53,7 +53,7 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({
           >
             {VIEW_MODE_ICONS[mode]}
             {showLabels && <span className="ml-1.5 hidden sm:inline">{label}</span>}
-          </button>
+          </Button>
         )
       })}
     </div>

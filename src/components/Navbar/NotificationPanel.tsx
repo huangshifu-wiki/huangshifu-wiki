@@ -8,6 +8,7 @@ import { apiGet, apiPost } from '../../lib/apiClient'
 import { getNotificationLink, getNotificationText } from '../../lib/notifications'
 import type { NotificationsResponse } from '../../types/api'
 import type { NotificationItem } from '../../types/entities'
+import { Button, IconButton } from '@/src/components/ui'
 
 interface NotificationPanelProps {
   onNavigate: (link: string) => void
@@ -26,11 +27,12 @@ const NotificationItem = React.memo(
     const text = useMemo(() => getNotificationText(notif), [notif])
 
     return (
-      <button
+      <Button
         type="button"
+        variant="ghost"
         onClick={onClick}
         className={clsx(
-          'w-full text-left px-4 py-3 border-b border-border hover:bg-surface-alt transition-colors',
+          'w-full flex-col items-stretch justify-start rounded-none border-x-0 border-t-0 px-4 py-3 text-left hover:bg-surface-alt',
           !isItemRead && 'bg-brand-gold/5'
         )}
       >
@@ -45,7 +47,7 @@ const NotificationItem = React.memo(
         <p className="text-xs text-text-muted mt-0.5">
           {new Date(notif.createdAt).toLocaleString('zh-CN')}
         </p>
-      </button>
+      </Button>
     )
   }
 )
@@ -126,8 +128,10 @@ export const NotificationPanel = React.memo(({ onNavigate }: NotificationPanelPr
 
   return (
     <div ref={panelRef} className="relative">
-      <button
+      <IconButton
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={() => setNotifPanelOpen(!notifPanelOpen)}
         className="relative text-text-muted hover:text-brand-gold transition-colors"
         aria-label={`通知${unreadCount > 0 ? `，有${unreadCount}条未读` : ''}`}
@@ -139,7 +143,7 @@ export const NotificationPanel = React.memo(({ onNavigate }: NotificationPanelPr
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
-      </button>
+      </IconButton>
       <DropdownPanel
         open={notifPanelOpen}
         className="absolute right-0 top-full mt-2 w-80 bg-surface rounded border border-border z-50 overflow-hidden"
@@ -147,13 +151,15 @@ export const NotificationPanel = React.memo(({ onNavigate }: NotificationPanelPr
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="font-bold text-text-primary">通知</span>
           {unreadCount > 0 && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={markAllNotificationsRead}
-              className="text-xs text-brand-gold hover:underline"
+              className="h-auto min-h-0 p-0 text-xs text-brand-gold hover:bg-transparent hover:underline"
             >
               全部已读
-            </button>
+            </Button>
           )}
         </div>
         <div className="max-h-80 overflow-y-auto">

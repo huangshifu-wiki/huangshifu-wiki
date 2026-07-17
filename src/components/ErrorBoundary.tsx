@@ -1,4 +1,5 @@
 import React, { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Button } from '@/src/components/ui'
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -74,18 +75,10 @@ class ErrorBoundaryInner extends Component<ErrorBoundaryProps, ErrorBoundaryStat
               </pre>
             )}
             <div className="flex gap-3 justify-center">
-              <button
-                onClick={this.handleReset}
-                className="px-4 py-2 theme-button-primary text-sm rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
-              >
-                重试
-              </button>
-              <a
-                href="/"
-                className="px-4 py-2 bg-surface-alt text-text-secondary text-sm rounded hover:bg-bg-tertiary transition-colors inline-block no-underline focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
-              >
-                返回首页
-              </a>
+              <Button onClick={this.handleReset}>重试</Button>
+              <Button asChild variant="secondary">
+                <a href="/">返回首页</a>
+              </Button>
             </div>
           </div>
         </div>

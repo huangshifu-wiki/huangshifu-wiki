@@ -18,6 +18,7 @@ import { usePendingReviewCount } from '../../hooks/usePendingReviewCount'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import type { AuthMode } from './types'
 import styles from '../Navbar.module.css'
+import { Button } from '@/src/components/ui'
 
 interface MobileMenuProps {
   open: boolean
@@ -191,41 +192,47 @@ export const MobileMenu = ({
                     )}
                   </Link>
                 )}
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  fullWidth
                   onClick={() => {
                     onLogout()
                   }}
-                  className="w-full flex items-center gap-3 p-3 theme-status-error"
+                  className="justify-start gap-3 p-3 theme-status-error"
                 >
                   <LogOut size={20} />
                   <span className="text-sm font-medium">退出登录</span>
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="space-y-3">
                 {allowRegister && (
-                  <button
+                  <Button
                     type="button"
+                    fullWidth
+                    size="lg"
                     onClick={() => {
                       onOpenAuth('register')
                     }}
-                    className="w-full flex items-center justify-center gap-2 py-4 theme-button-primary rounded font-bold"
+                    className="font-bold"
+                    leftIcon={<MessageCircle size={20} />}
                   >
-                    <MessageCircle size={20} />
                     账号注册
-                  </button>
+                  </Button>
                 )}
-                <button
+                <Button
                   type="button"
+                  fullWidth
+                  size="lg"
                   onClick={() => {
                     onOpenAuth('login')
                   }}
-                  className="w-full flex items-center justify-center gap-2 py-4 theme-button-primary rounded font-bold"
+                  className="font-bold"
+                  leftIcon={<LogIn size={20} />}
                 >
-                  <LogIn size={20} />
                   账号登录
-                </button>
+                </Button>
               </div>
             )}
           </div>

@@ -10,6 +10,7 @@ import { formatDate } from '../../lib/dateUtils'
 import { submitFormOnModifierEnter } from '../../lib/formShortcuts'
 import type { WikiPullRequestItem, WikiPrDiffResponse } from './types'
 import { getPrStatusText } from './types'
+import { Button, Textarea } from '@/src/components/ui'
 
 const WikiPullRequestDetail = () => {
   const { slug, prId } = useParams()
@@ -181,20 +182,26 @@ const WikiPullRequestDetail = () => {
 
           {isAdmin && pullRequest.status === 'open' && (
             <div className="flex flex-wrap gap-2 mb-5">
-              <button
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
                 onClick={() => handleAdminAction('reject')}
                 disabled={saving}
-                className="px-4 py-2 rounded theme-status-error text-xs font-bold disabled:opacity-50"
+                className="font-bold"
               >
                 驳回
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
+                variant="success"
+                size="sm"
                 onClick={() => handleAdminAction('merge')}
                 disabled={saving}
-                className="px-4 py-2 rounded theme-status-success text-xs font-bold disabled:opacity-50"
+                className="font-bold"
               >
                 合并
-              </button>
+              </Button>
             </div>
           )}
 
@@ -259,7 +266,7 @@ const WikiPullRequestDetail = () => {
               }}
               className="space-y-2"
             >
-              <textarea
+              <Textarea
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
                 onKeyDown={submitFormOnModifierEnter}
@@ -269,13 +276,14 @@ const WikiPullRequestDetail = () => {
               />
               <p className="text-xs text-text-muted">按 Ctrl/Cmd + Enter 发布评论</p>
               <div className="flex justify-end">
-                <button
+                <Button
                   type="submit"
                   disabled={saving || !comment.trim()}
-                  className="px-5 py-2 rounded theme-button-primary text-xs font-medium disabled:opacity-50 transition-all"
+                  size="sm"
+                  className="px-5"
                 >
                   发表评论
-                </button>
+                </Button>
               </div>
             </form>
           )}

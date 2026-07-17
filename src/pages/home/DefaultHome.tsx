@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, Disc3, Image as ImageIcon, Music, Pause, Play } from '@/src/components/icons'
 import { clsx } from 'clsx'
+import { IconButton } from '@/src/components/ui'
 import { SmartImage } from '../../components/SmartImage'
 import { SiteFooterContent } from '../../components/SiteFooter'
 import { useMusic } from '../../context/MusicContext'
@@ -245,8 +246,10 @@ function SongRow({
           {song.album ? ` · ${song.album}` : ''}
         </div>
       </Link>
-      <button
+      <IconButton
         type="button"
+        variant="ghost"
+        size="sm"
         className={clsx('home-track-play', active && playing && 'home-track-play-active')}
         onClick={onPlay}
         aria-label={`播放 ${song.title}`}
@@ -257,7 +260,7 @@ function SongRow({
         ) : (
           <Play size={13} fill="currentColor" />
         )}
-      </button>
+      </IconButton>
     </div>
   )
 }
