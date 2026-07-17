@@ -133,7 +133,8 @@ const WikiList = () => {
               {user && !isBanned && (
                 <Link
                   to="/wiki/new"
-                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all active:scale-[0.98]"
+                  data-pressable
+                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
                 >
                   <Plus size={15} aria-hidden="true" /> 创建页面
                 </Link>

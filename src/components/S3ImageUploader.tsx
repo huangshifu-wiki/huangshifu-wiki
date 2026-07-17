@@ -146,11 +146,10 @@ export const S3ImageUploader: React.FC<S3ImageUploaderProps> = ({
   return (
     <div className={`space-y-3 ${className}`}>
       <div
-        onClick={() => !uploading && inputRef.current?.click()}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`relative border-2 border-dashed rounded p-6 text-center cursor-pointer transition-all ${
+        className={`relative border-2 border-dashed rounded p-6 text-center transition-all ${
           isDragging
             ? 'border-brand-gold bg-brand-gold/10'
             : 'border-border hover:border-brand-gold'
@@ -158,18 +157,25 @@ export const S3ImageUploader: React.FC<S3ImageUploaderProps> = ({
       >
         {previewUrl && !uploading && !error ? (
           <div className="relative">
-            <img
-              src={previewUrl}
-              alt="Preview"
-              className="max-h-56 mx-auto rounded object-contain"
-            />
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="block w-full cursor-pointer"
+              data-press-feedback="state"
+              aria-label="重新选择图片"
+            >
+              <img
+                src={previewUrl}
+                alt="Preview"
+                className="max-h-56 mx-auto rounded object-contain"
+              />
+            </button>
             {!uploadedUrl && (
               <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleRemove()
-                }}
+                type="button"
+                onClick={handleRemove}
                 className="absolute top-2 right-2 p-1 theme-button-danger rounded"
+                aria-label="移除图片"
               >
                 <X size={14} />
               </button>
@@ -205,10 +211,8 @@ export const S3ImageUploader: React.FC<S3ImageUploaderProps> = ({
               <p className="text-xs theme-text-error mt-1">{error.message}</p>
             </div>
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                handleRemove()
-              }}
+              type="button"
+              onClick={handleRemove}
               className="text-sm text-brand-gold hover:underline"
             >
               <RefreshCw size={13} className="inline mr-1" />
@@ -216,7 +220,12 @@ export const S3ImageUploader: React.FC<S3ImageUploaderProps> = ({
             </button>
           </div>
         ) : (
-          <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="w-full cursor-pointer space-y-3"
+            data-press-feedback="state"
+          >
             <div className="flex justify-center">
               <div className="w-14 h-14 rounded bg-surface-alt flex items-center justify-center">
                 <ImageIcon size={28} className="text-text-muted" />
@@ -230,7 +239,7 @@ export const S3ImageUploader: React.FC<S3ImageUploaderProps> = ({
                 支持 {accept === 'image/*' ? '图片' : accept}，{formatUploadLimit(maxSize)}
               </p>
             </div>
-          </div>
+          </button>
         )}
 
         {validationError && (

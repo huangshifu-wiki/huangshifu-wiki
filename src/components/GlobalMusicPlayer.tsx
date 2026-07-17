@@ -360,6 +360,7 @@ export const GlobalMusicPlayer = () => {
         <div className="flex flex-shrink-0 items-center gap-1 sm:gap-3">
           <button
             onClick={handlePlayPrevious}
+            aria-label="上一首"
             className="hidden rounded-full p-1.5 text-text-secondary transition-all hover:bg-[var(--book-panel-hover)] hover:text-brand-gold sm:inline-flex"
           >
             <SkipBack size={18} />
@@ -367,12 +368,13 @@ export const GlobalMusicPlayer = () => {
           <button
             onClick={togglePlay}
             aria-label={isPlaying ? '暂停' : '播放'}
-            className="flex h-9 w-9 items-center justify-center rounded-full theme-button-primary transition-all"
+            className="mobile-touch-target flex h-9 w-9 items-center justify-center rounded-full theme-button-primary transition-all"
           >
             {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
           </button>
           <button
             onClick={handlePlayNext}
+            aria-label="下一首"
             className="hidden rounded-full p-1.5 text-text-secondary transition-all hover:bg-[var(--book-panel-hover)] hover:text-brand-gold sm:inline-flex"
           >
             <SkipForward size={18} />
@@ -425,7 +427,8 @@ export const GlobalMusicPlayer = () => {
 
         <button
           onClick={() => setCurrentSong(null)}
-          className="p-1.5 text-text-muted theme-icon-button-danger hover:bg-[var(--book-panel-hover)] rounded-full transition-all flex-shrink-0"
+          aria-label="关闭播放器"
+          className="mobile-touch-target p-1.5 text-text-muted theme-icon-button-danger hover:bg-[var(--book-panel-hover)] rounded-full transition-all flex-shrink-0"
         >
           <X size={18} />
         </button>

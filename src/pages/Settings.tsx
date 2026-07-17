@@ -989,6 +989,7 @@ const Settings = () => {
                         <Link
                           key={item.id}
                           to={`/settings/content?tab=${item.id}`}
+                          data-pressable
                           className={clsx(
                             'inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm transition-colors',
                             isActive

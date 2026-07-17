@@ -501,12 +501,6 @@ a.mention-highlight:hover {
     transform 0.24s ease;
 }
 
-.theme-button-primary:hover {
-  background: var(--color-theme-accent-hover);
-  box-shadow: var(--shadow-brand-hover);
-  transform: translateY(-1px);
-}
-
 .theme-button-secondary {
   background: var(--book-panel-bg);
   border: 1px solid var(--book-ink-line);
@@ -518,22 +512,9 @@ a.mention-highlight:hover {
     transform 0.24s ease;
 }
 
-.theme-button-secondary:hover {
-  border-color: var(--color-theme-accent);
-  color: var(--color-theme-accent);
-  background: var(--book-panel-hover);
-  transform: translateY(-1px);
-}
-
 .theme-button-danger-outline {
   border-color: color-mix(in srgb, var(--color-error) 22%, transparent);
   color: color-mix(in srgb, var(--color-error-hover) 88%, var(--color-text-primary));
-}
-
-.theme-button-danger-outline:hover {
-  border-color: color-mix(in srgb, var(--color-error) 32%, transparent);
-  color: var(--color-error-hover);
-  background: color-mix(in srgb, var(--color-error) 10%, var(--color-surface));
 }
 
 .theme-button-danger {
@@ -541,17 +522,9 @@ a.mention-highlight:hover {
   color: var(--color-theme-button-contrast);
 }
 
-.theme-button-danger:hover {
-  background: var(--color-error);
-}
-
 .theme-button-warning {
   background: var(--color-warning-hover);
   color: var(--color-theme-button-contrast);
-}
-
-.theme-button-warning:hover {
-  background: var(--color-warning);
 }
 
 .theme-button-warning-outline {
@@ -559,10 +532,39 @@ a.mention-highlight:hover {
   color: color-mix(in srgb, var(--color-warning-hover) 88%, var(--color-text-primary));
 }
 
-.theme-button-warning-outline:hover {
-  border-color: color-mix(in srgb, var(--color-warning) 32%, transparent);
-  color: var(--color-warning-hover);
-  background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+@media (hover: hover) and (pointer: fine) {
+  .theme-button-primary:hover {
+    background: var(--color-theme-accent-hover);
+    box-shadow: var(--shadow-brand-hover);
+    transform: translateY(-1px);
+  }
+
+  .theme-button-secondary:hover {
+    border-color: var(--color-theme-accent);
+    color: var(--color-theme-accent);
+    background: var(--book-panel-hover);
+    transform: translateY(-1px);
+  }
+
+  .theme-button-danger-outline:hover {
+    border-color: color-mix(in srgb, var(--color-error) 32%, transparent);
+    color: var(--color-error-hover);
+    background: color-mix(in srgb, var(--color-error) 10%, var(--color-surface));
+  }
+
+  .theme-button-danger:hover {
+    background: var(--color-error);
+  }
+
+  .theme-button-warning:hover {
+    background: var(--color-warning);
+  }
+
+  .theme-button-warning-outline:hover {
+    border-color: color-mix(in srgb, var(--color-warning) 32%, transparent);
+    color: var(--color-warning-hover);
+    background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+  }
 }
 
 .theme-tag {
@@ -1168,48 +1170,82 @@ html {
   background: var(--color-brand-primary);
 }
 
-/* ========================================
-   Task 1: Touch-Active Utility Classes
-   Provides visual feedback on touch devices
-   when an element is pressed/active.
-   ======================================== */
-.touch-active:active {
-  opacity: 0.7;
-  transform: scale(0.97);
-  transition:
-    opacity 100ms ease,
-    transform 100ms ease;
+/* Material 风格按钮反馈：原生按钮自动启用，按钮式链接通过 data-pressable 加入。 */
+button:not([data-press-feedback='none']),
+[role='button']:not([data-press-feedback='none']),
+[role='link']:not([data-press-feedback='none']),
+a[href]:not([data-press-feedback='none']),
+[data-pressable]:not([data-press-feedback='none']) {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-.touch-active-sm:active {
-  opacity: 0.8;
-  transform: scale(0.98);
-  transition:
-    opacity 100ms ease,
-    transform 100ms ease;
+.material-ripple-surface {
+  position: fixed;
+  z-index: 2147483647;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none;
 }
 
-.touch-active-lg:active {
-  opacity: 0.6;
-  transform: scale(0.95);
-  transition:
-    opacity 100ms ease,
-    transform 100ms ease;
+.material-ripple {
+  position: absolute;
+  display: block;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0);
+  animation: material-ripple 520ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.touch-active-opacity:active {
-  opacity: 0.6;
-  transition: opacity 100ms ease;
+.material-state-layer {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  animation: material-state-layer 360ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.touch-active-scale:active {
-  transform: scale(0.96);
-  transition: transform 100ms ease;
+@keyframes material-ripple {
+  0% {
+    opacity: 0.18;
+    transform: scale(0);
+  }
+  68% {
+    opacity: 0.14;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
 }
 
-.touch-active-brightness:active {
-  filter: brightness(0.92);
-  transition: filter 100ms ease;
+@keyframes material-state-layer {
+  0% {
+    opacity: 0.1;
+  }
+  55% {
+    opacity: 0.08;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (pointer: coarse) {
+  button.theme-button-primary,
+  button.theme-button-secondary,
+  button.theme-button-danger,
+  button.theme-button-warning,
+  [data-pressable],
+  .mobile-touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* ========================================
@@ -1967,6 +2003,9 @@ html {
 }
 
 .home-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--home-gold);
   padding: 0.7rem 2.2rem;
   font-size: 0.85rem;

@@ -50,22 +50,37 @@ export const MobileMenu = ({
       <div>
         <div className={styles.siteMobileMenuInner}>
           <div className={styles.siteMobileLinks}>
-            <NavLink to="/music" onClick={onClose} className={styles.siteMobileLink}>
+            <NavLink to="/music" onClick={onClose} className={styles.siteMobileLink} data-pressable>
               音乐
             </NavLink>
-            <NavLink to="/gallery" onClick={onClose} className={styles.siteMobileLink}>
+            <NavLink
+              to="/gallery"
+              onClick={onClose}
+              className={styles.siteMobileLink}
+              data-pressable
+            >
               画廊
             </NavLink>
-            <NavLink to="/events" onClick={onClose} className={styles.siteMobileLink}>
+            <NavLink
+              to="/events"
+              onClick={onClose}
+              className={styles.siteMobileLink}
+              data-pressable
+            >
               游记
             </NavLink>
-            <NavLink to="/wiki" onClick={onClose} className={styles.siteMobileLink}>
+            <NavLink to="/wiki" onClick={onClose} className={styles.siteMobileLink} data-pressable>
               百科
             </NavLink>
-            <NavLink to="/forum" onClick={onClose} className={styles.siteMobileLink}>
+            <NavLink to="/forum" onClick={onClose} className={styles.siteMobileLink} data-pressable>
               论坛
             </NavLink>
-            <NavLink to="/search" onClick={onClose} className={styles.siteMobileLink}>
+            <NavLink
+              to="/search"
+              onClick={onClose}
+              className={styles.siteMobileLink}
+              data-pressable
+            >
               搜索
             </NavLink>
           </div>
@@ -86,6 +101,7 @@ export const MobileMenu = ({
                 <Link
                   to={`/users/${user.publicId}`}
                   onClick={onClose}
+                  data-pressable
                   className="flex items-center gap-3 p-2"
                 >
                   <img
@@ -106,6 +122,7 @@ export const MobileMenu = ({
                   <NavLink
                     to="/settings/content?tab=posts"
                     onClick={onClose}
+                    data-pressable
                     className={accountMenuStyles.menuAction}
                   >
                     <FileText size={16} />
@@ -114,6 +131,7 @@ export const MobileMenu = ({
                   <NavLink
                     to="/settings/content?tab=comments"
                     onClick={onClose}
+                    data-pressable
                     className={accountMenuStyles.menuAction}
                   >
                     <MessageSquare size={16} />
@@ -122,6 +140,7 @@ export const MobileMenu = ({
                   <NavLink
                     to={`/users/${user.publicId}/history`}
                     onClick={onClose}
+                    data-pressable
                     className={accountMenuStyles.menuAction}
                   >
                     <History size={16} />
@@ -130,6 +149,7 @@ export const MobileMenu = ({
                   <NavLink
                     to={`/users/${user.publicId}/favorites`}
                     onClick={onClose}
+                    data-pressable
                     className={accountMenuStyles.menuAction}
                   >
                     <Bookmark size={16} />
@@ -139,6 +159,7 @@ export const MobileMenu = ({
                 <Link
                   to="/settings/content"
                   onClick={onClose}
+                  data-pressable
                   className={accountMenuStyles.menuAction}
                 >
                   <FileText size={16} />
@@ -147,6 +168,7 @@ export const MobileMenu = ({
                 <Link
                   to="/settings/profile"
                   onClick={onClose}
+                  data-pressable
                   className={accountMenuStyles.menuAction}
                 >
                   <Settings size={16} />
@@ -156,6 +178,7 @@ export const MobileMenu = ({
                   <Link
                     to="/admin"
                     onClick={onClose}
+                    data-pressable
                     className="flex items-center gap-3 p-3 bg-[var(--home-bg-surface)] text-[var(--home-text-2)]"
                   >
                     <Shield size={20} />

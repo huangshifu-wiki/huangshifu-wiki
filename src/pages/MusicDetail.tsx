@@ -428,6 +428,7 @@ const MusicDetail = () => {
                 <SectionHeading>关联乐评</SectionHeading>
                 <Link
                   to={`/forum/new?musicDocId=${song.docId}&musicTitle=${encodeURIComponent(song.title)}`}
+                  data-pressable
                   className="px-4 py-2 theme-button-primary rounded text-xs font-semibold transition-all"
                 >
                   发表乐评

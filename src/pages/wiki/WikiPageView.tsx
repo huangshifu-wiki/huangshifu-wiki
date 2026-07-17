@@ -259,6 +259,7 @@ const WikiPageView = () => {
               {canEditPage && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/edit`}
+                  data-pressable
                   className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
                 >
                   <Edit3 size={14} /> {t('wiki.edit')}
@@ -267,6 +268,7 @@ const WikiPageView = () => {
               {canEditPage && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/history`}
+                  data-pressable
                   className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 >
                   <History size={14} /> {t('wiki.history')}
@@ -275,6 +277,7 @@ const WikiPageView = () => {
               {user && !isBanned && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/branches`}
+                  data-pressable
                   className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 >
                   <GitBranch size={14} /> {t('wiki.branch')}

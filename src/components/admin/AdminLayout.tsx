@@ -248,6 +248,7 @@ export const AdminLayout = () => {
           </Link>
           <Link
             to="/"
+            data-pressable
             className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-muted hover:text-brand-gold hover:bg-[var(--book-panel-hover)] rounded transition-colors"
           >
             <Home size={16} /> 返回主页

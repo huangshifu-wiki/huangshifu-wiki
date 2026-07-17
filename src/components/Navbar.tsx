@@ -94,7 +94,7 @@ export const Navbar = () => {
           <button
             type="button"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={styles.siteNavToggle}
+            className={`${styles.siteNavToggle} mobile-touch-target`}
             aria-label={isMenuOpen ? '关闭菜单' : '打开菜单'}
           >
             {isMenuOpen ? <X size={24} /> : <Menu size={24} />}

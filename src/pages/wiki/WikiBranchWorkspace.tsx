@@ -250,7 +250,8 @@ const WikiBranchWorkspace = () => {
           <div className="flex gap-2">
             <Link
               to={`/wiki/${slug}/prs`}
-              className="px-5 py-2 border border-border text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
+              data-pressable
+              className="inline-flex items-center px-5 py-2 border border-border text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
             >
               查看 PR 列表
             </Link>

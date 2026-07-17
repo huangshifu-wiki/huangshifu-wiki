@@ -320,9 +320,8 @@ const AlbumDetail = () => {
               return (
                 <div
                   key={track.docId}
-                  onClick={() => navigate(`/music/${track.slug || track.docId}`)}
                   className={clsx(
-                    'flex items-center gap-3 py-3 px-1 border-b border-border cursor-pointer transition-colors sm:gap-4',
+                    'flex items-center gap-3 py-3 px-1 border-b border-border transition-colors sm:gap-4',
                     currentSong?.docId === track.docId && 'bg-brand-gold/10'
                   )}
                 >
@@ -340,7 +339,12 @@ const AlbumDetail = () => {
                   >
                     <Play size={14} />
                   </button>
-                  <div className="flex-1 min-w-0">
+                  <Link
+                    to={`/music/${track.slug || track.docId}`}
+                    className="flex min-h-11 min-w-0 flex-1 flex-col justify-center"
+                    data-pressable
+                    data-press-feedback="state"
+                  >
                     <p className="text-base text-text-primary truncate hover:text-brand-gold transition-colors">
                       {track.title}
                     </p>
@@ -350,7 +354,7 @@ const AlbumDetail = () => {
                     {!playable ? (
                       <p className="text-xs text-text-muted truncate">暂无可播放音源</p>
                     ) : null}
-                  </div>
+                  </Link>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()

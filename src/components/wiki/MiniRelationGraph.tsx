@@ -281,8 +281,19 @@ const MiniRelationGraph: React.FC<MiniRelationGraphProps> = ({
               key={node.slug}
               transform={`translate(${node.x}, ${node.y})`}
               className={`transition-all ${canClick ? 'cursor-pointer hover:opacity-80' : ''}`}
+              data-pressable={canClick ? true : undefined}
+              data-press-feedback={canClick ? 'state' : 'none'}
+              role={canClick ? 'button' : undefined}
+              tabIndex={canClick ? 0 : undefined}
+              aria-label={canClick ? `查看关系页面 ${node.title}` : undefined}
               onClick={() => {
                 if (canClick) {
+                  onNodeClick?.(node.slug)
+                }
+              }}
+              onKeyDown={(event) => {
+                if (canClick && (event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault()
                   onNodeClick?.(node.slug)
                 }
               }}

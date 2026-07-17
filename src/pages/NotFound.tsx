@@ -24,13 +24,15 @@ const NotFound = ({ homePath = '/', homeLabel = '返回首页' }: NotFoundProps)
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
             to={homePath}
-            className="rounded bg-brand-gold px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-gold/90"
+            data-pressable
+            className="inline-flex items-center rounded bg-brand-gold px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-gold/90"
           >
             {homeLabel}
           </Link>
           <Link
             to="/search"
-            className="rounded border border-border px-5 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:border-brand-gold hover:text-brand-gold"
+            data-pressable
+            className="inline-flex items-center rounded border border-border px-5 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:border-brand-gold hover:text-brand-gold"
           >
             去搜索
           </Link>

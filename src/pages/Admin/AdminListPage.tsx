@@ -1022,7 +1022,8 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             {type === 'events' && (
               <Link
                 to="/admin/events/new"
-                className="rounded theme-button-primary px-4 py-2 text-sm transition-all"
+                data-pressable
+                className="inline-flex items-center rounded theme-button-primary px-4 py-2 text-sm transition-all"
               >
                 <Plus size={14} className="mr-1 inline" /> 新增活动
               </Link>

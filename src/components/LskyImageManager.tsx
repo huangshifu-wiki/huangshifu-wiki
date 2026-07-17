@@ -216,7 +216,17 @@ function UploadPanel() {
     <div>
       <div
         className={`lsky-upload-area ${uploading ? 'uploading' : ''}`}
-        onClick={() => document.getElementById('lsky-file-input')?.click()}
+        onClick={() => !uploading && document.getElementById('lsky-file-input')?.click()}
+        onKeyDown={(event) => {
+          if (!uploading && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault()
+            document.getElementById('lsky-file-input')?.click()
+          }
+        }}
+        role="button"
+        tabIndex={uploading ? -1 : 0}
+        aria-disabled={uploading}
+        data-press-feedback="state"
       >
         <input
           id="lsky-file-input"

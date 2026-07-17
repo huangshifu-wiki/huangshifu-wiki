@@ -57,7 +57,8 @@ const ResetPassword = () => {
           <div className="mt-6 flex justify-center">
             <Link
               to="/forgot-password"
-              className="theme-button-primary rounded px-4 py-2 text-sm font-medium transition-all"
+              data-pressable
+              className="theme-button-primary inline-flex items-center rounded px-4 py-2 text-sm font-medium transition-all"
             >
               重新发送邮件
             </Link>
@@ -120,7 +121,7 @@ const ResetPassword = () => {
           <button
             type="submit"
             disabled={loading}
-            className="theme-button-primary inline-flex w-full items-center justify-center gap-2 rounded px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.98] disabled:opacity-50"
+            className="theme-button-primary inline-flex w-full items-center justify-center gap-2 rounded px-4 py-2.5 text-sm font-medium transition-all disabled:opacity-50"
           >
             {loading && <Loader2 size={14} className="animate-spin" />}
             {loading ? '提交中...' : '重置密码'}

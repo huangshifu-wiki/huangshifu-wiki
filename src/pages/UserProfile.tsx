@@ -542,6 +542,7 @@ export default function UserProfile() {
             {isSelf ? (
               <Link
                 to="/settings/profile"
+                data-pressable
                 className="theme-button-secondary inline-flex shrink-0 items-center gap-1.5 self-start px-3 py-1.5 text-sm transition-all"
               >
                 <Settings size={14} /> 设置

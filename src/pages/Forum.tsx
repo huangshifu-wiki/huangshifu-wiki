@@ -274,7 +274,8 @@ const PostList = () => {
               {user && !isBanned && (
                 <Link
                   to="/forum/new"
-                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all active:scale-[0.98]"
+                  data-pressable
+                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
                 >
                   <Plus size={15} aria-hidden="true" /> {t('forum.newPost')}
                 </Link>
@@ -813,6 +814,7 @@ const PostDetail = () => {
               {canEditPost && (
                 <Link
                   to={`/forum/${postPublicId}/edit`}
+                  data-pressable
                   className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
                 >
                   <Edit3 size={14} /> {t('forum.edit')}
@@ -1585,7 +1587,7 @@ const PostEditor = () => {
           <button
             type="submit"
             disabled={Boolean(savingMode)}
-            className="inline-flex items-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Send size={16} /> {submitButtonText}
           </button>

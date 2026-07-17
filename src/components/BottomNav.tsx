@@ -32,9 +32,10 @@ export const BottomNav = () => {
           <NavLink
             key={to}
             to={to}
+            data-pressable
             className={({ isActive }) =>
               clsx(
-                'group flex min-w-[52px] flex-1 flex-col items-center gap-0.5 rounded px-1.5 py-1 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2',
+                'mobile-touch-target group flex min-w-[52px] flex-1 flex-col items-center gap-0.5 rounded px-1.5 py-1 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2',
                 'bottom-nav-link',
                 isActive
                   ? 'bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'

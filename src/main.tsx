@@ -7,6 +7,7 @@ import { ToastProvider } from './components/Toast'
 import { randomId } from './lib/randomId'
 import { initThirdPartyScripts } from './utils/scriptLoader'
 import { initWebVitals } from './utils/webVitals'
+import { initPressFeedback } from './utils/pressFeedback'
 import { applyResolvedTheme, readBootstrapThemeMode, resolveThemeMode } from './lib/theme'
 import './index.css'
 
@@ -22,6 +23,7 @@ if (globalThis.crypto && typeof globalThis.crypto.randomUUID !== 'function') {
 }
 
 applyResolvedTheme(resolveThemeMode(readBootstrapThemeMode()))
+initPressFeedback()
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

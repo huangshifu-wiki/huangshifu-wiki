@@ -74,21 +74,24 @@ const VerifyEmail = () => {
           {isSuccess && authLoading ? null : isSuccess && user ? (
             <Link
               to="/settings/account"
-              className="theme-button-primary rounded px-4 py-2 text-sm font-medium transition-all"
+              data-pressable
+              className="theme-button-primary inline-flex items-center rounded px-4 py-2 text-sm font-medium transition-all"
             >
               查看账户
             </Link>
           ) : isSuccess ? (
             <Link
               to="/login"
-              className="theme-button-primary rounded px-4 py-2 text-sm font-medium transition-all"
+              data-pressable
+              className="theme-button-primary inline-flex items-center rounded px-4 py-2 text-sm font-medium transition-all"
             >
               去登录
             </Link>
           ) : (
             <Link
               to="/"
-              className="theme-button-secondary rounded px-4 py-2 text-sm font-medium transition-all"
+              data-pressable
+              className="theme-button-secondary inline-flex items-center rounded px-4 py-2 text-sm font-medium transition-all"
             >
               返回首页
             </Link>

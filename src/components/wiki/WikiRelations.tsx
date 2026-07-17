@@ -739,6 +739,10 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
                   relationSearchResults.map((result, idx) => (
                     <div
                       key={result.id}
+                      data-pressable
+                      data-press-feedback="state"
+                      role="option"
+                      aria-selected={idx === relationSelectedIndex}
                       className={`cursor-pointer px-4 py-2 ${idx === relationSelectedIndex ? 'bg-brand-gold/10' : 'hover:bg-[var(--book-panel-hover)]'}`}
                       onClick={() => {
                         setNewRelation({

@@ -386,10 +386,10 @@ export const DefaultHome = () => {
           </h1>
           <p className="home-hero-subtitle">人生难得一知音</p>
           <div className="home-hero-actions">
-            <Link to="/gallery" className="home-btn home-btn-fill">
+            <Link to="/gallery" className="home-btn home-btn-fill" data-pressable>
               浏览图集
             </Link>
-            <Link to="/music" className="home-btn home-btn-ghost">
+            <Link to="/music" className="home-btn home-btn-ghost" data-pressable>
               探索音乐
             </Link>
           </div>

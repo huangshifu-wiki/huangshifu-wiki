@@ -54,7 +54,7 @@ const WikiEditorMetaSidebar = React.memo(
         <button
           type="submit"
           disabled={Boolean(savingMode)}
-          className="inline-flex items-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Send size={16} /> {submitButtonText}
         </button>
