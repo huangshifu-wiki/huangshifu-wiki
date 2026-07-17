@@ -1331,6 +1331,24 @@ const Settings = () => {
                     }
                   />
                 </div>
+
+                <div className="flex max-w-3xl items-center justify-between gap-4 border-t border-border pt-6">
+                  <label
+                    htmlFor="settings-mobile-song-sequence-toggle"
+                    className="text-sm font-medium text-text-primary"
+                  >
+                    手机端显示歌曲序号
+                  </label>
+                  <Switch
+                    id="settings-mobile-song-sequence-toggle"
+                    checked={preferences.showMobileSongSequence}
+                    onCheckedChange={(checked) =>
+                      void updatePreferences({
+                        showMobileSongSequence: checked,
+                      })
+                    }
+                  />
+                </div>
               </section>
             )}
           </main>

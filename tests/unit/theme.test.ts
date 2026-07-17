@@ -73,6 +73,7 @@ describe('theme helpers', () => {
       theme: 'dark',
       listLoadMode: 'pagination',
       showCharacterCount: true,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -111,6 +112,7 @@ describe('theme helpers', () => {
       theme: 'default',
       listLoadMode: 'pagination',
       showCharacterCount: true,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -161,6 +163,7 @@ describe('theme helpers', () => {
         theme: 'dark',
         listLoadMode: 'pagination',
         showCharacterCount: true,
+        showMobileSongSequence: false,
         publicFavorites: false,
         publicHistory: false,
       },
@@ -188,6 +191,7 @@ describe('theme helpers', () => {
       theme: 'default',
       listLoadMode: 'pagination',
       showCharacterCount: true,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -202,6 +206,7 @@ describe('theme helpers', () => {
           theme: 'default',
           listLoadMode: 'pagination',
           showCharacterCount: true,
+          showMobileSongSequence: false,
           publicFavorites: false,
           publicHistory: false,
         },
@@ -227,6 +232,7 @@ describe('theme helpers', () => {
       theme: 'dark',
       listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -250,6 +256,7 @@ describe('theme helpers', () => {
       theme: 'dark',
       listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })

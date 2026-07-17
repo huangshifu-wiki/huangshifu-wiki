@@ -334,6 +334,7 @@ const Music = () => {
                               ? index + 1
                               : (musicPagination.page - 1) * musicPagination.pageSize + index + 1
                           }
+                          showSequenceOnMobile={preferences.showMobileSongSequence}
                           viewMode={viewMode}
                           isCurrentSong={currentSong?.docId === song.docId}
                           isFavoriting={favoriting === song.docId}

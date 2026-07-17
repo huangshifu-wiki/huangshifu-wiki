@@ -213,6 +213,7 @@ describe('UserPreferencesProvider', () => {
       theme: 'system',
       listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -225,6 +226,7 @@ describe('UserPreferencesProvider', () => {
       theme: 'dark',
       listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -273,6 +275,7 @@ describe('UserPreferencesProvider', () => {
       theme: 'dark',
       listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -285,6 +288,7 @@ describe('UserPreferencesProvider', () => {
       theme: 'dark',
       listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })

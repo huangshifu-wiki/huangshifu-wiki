@@ -24,6 +24,7 @@ export interface UserPreferences {
   theme: ThemeMode
   listLoadMode: ListLoadMode
   showCharacterCount: boolean
+  showMobileSongSequence: boolean
   publicFavorites: boolean
   publicHistory: boolean
 }
@@ -34,6 +35,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   theme: 'system',
   listLoadMode: 'pagination',
   showCharacterCount: false,
+  showMobileSongSequence: false,
   publicFavorites: false,
   publicHistory: false,
 }

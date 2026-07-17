@@ -99,6 +99,9 @@ export function normalizeStoredPreferences(
     showCharacterCount: isBooleanPreference(value?.showCharacterCount)
       ? value.showCharacterCount
       : DEFAULT_PREFERENCES.showCharacterCount,
+    showMobileSongSequence: isBooleanPreference(value?.showMobileSongSequence)
+      ? value.showMobileSongSequence
+      : DEFAULT_PREFERENCES.showMobileSongSequence,
     publicFavorites: isBooleanPreference(value?.publicFavorites)
       ? value.publicFavorites
       : DEFAULT_PREFERENCES.publicFavorites,
@@ -122,6 +125,7 @@ export function hasStoredPreferenceValues(
     isThemeMode(value.theme) ||
     isListLoadMode(value.listLoadMode) ||
     isBooleanPreference(value.showCharacterCount) ||
+    isBooleanPreference(value.showMobileSongSequence) ||
     isBooleanPreference(value.publicFavorites) ||
     isBooleanPreference(value.publicHistory)
   )
@@ -160,6 +164,9 @@ export function mergeStoredPreferences(
     showCharacterCount: isBooleanPreference(value.showCharacterCount)
       ? value.showCharacterCount
       : normalizedBase.showCharacterCount,
+    showMobileSongSequence: isBooleanPreference(value.showMobileSongSequence)
+      ? value.showMobileSongSequence
+      : normalizedBase.showMobileSongSequence,
     publicFavorites: isBooleanPreference(value.publicFavorites)
       ? value.publicFavorites
       : normalizedBase.publicFavorites,

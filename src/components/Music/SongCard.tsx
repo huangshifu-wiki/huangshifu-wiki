@@ -14,6 +14,7 @@ interface SongCardProps {
   isCurrentSong: boolean
   isFavoriting: boolean
   sequenceNumber?: number
+  showSequenceOnMobile?: boolean
   viewMode?: ViewMode
   onPlay: (song: SongItem) => void
   onToggleFavorite: (song: SongItem) => void
@@ -26,6 +27,7 @@ const SongCard = React.memo(function SongCard({
   isCurrentSong,
   isFavoriting,
   sequenceNumber,
+  showSequenceOnMobile = false,
   viewMode = 'list',
   onPlay,
   onToggleFavorite,
@@ -67,7 +69,7 @@ const SongCard = React.memo(function SongCard({
           }
         }}
         className={clsx(
-          'group flex cursor-pointer items-center gap-3.5 rounded px-3 py-2.5',
+          'group flex cursor-pointer items-center gap-2 rounded px-3 py-2.5 sm:gap-3.5',
           'transition-all duration-300',
           isCurrentSong
             ? 'bg-[color-mix(in_srgb,var(--color-theme-accent)_8%,transparent)]'
@@ -79,7 +81,10 @@ const SongCard = React.memo(function SongCard({
       >
         {sequenceNumber !== undefined && (
           <span
-            className="hidden w-8 flex-shrink-0 text-right text-[0.8125rem] tabular-nums text-text-muted/50 sm:inline-block"
+            className={clsx(
+              'w-5 flex-shrink-0 text-right text-[0.8125rem] tabular-nums text-text-muted/50 sm:w-8',
+              showSequenceOnMobile ? 'inline-block' : 'hidden sm:inline-block'
+            )}
             aria-hidden="true"
           >
             {sequenceNumber}
