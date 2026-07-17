@@ -6,6 +6,7 @@ const RIPPLE_FALLBACK_SIZE = 44
 const RIPPLE_CLEANUP_DELAY = 700
 const CARD_FEEDBACK_MIN_HEIGHT = 64
 const CARD_FEEDBACK_MIN_AREA = 12_000
+const SURFACE_CLASS_PATTERN = /(?:^|:)(?:theme-(?:button|icon-button)|(?:home|lsky)-btn)/
 
 type PressFeedbackVariant = 'ripple' | 'state' | 'inline'
 
@@ -14,24 +15,85 @@ type PressPoint = {
   clientY: number
 }
 
-const isPressable = (element: Element): boolean => {
-  if (
-    element.getAttribute('data-press-feedback') === 'none' ||
-    element.getAttribute('aria-disabled') === 'true'
-  ) {
-    return false
-  }
-
-  return !(element instanceof HTMLButtonElement && element.disabled)
+type PressableTarget = {
+  element: Element
+  computedStyle?: CSSStyleDeclaration
 }
 
-const findPressable = (target: EventTarget | null): Element | null => {
+type FeedbackHandle = {
+  surface: HTMLSpanElement
+  elementRect: DOMRect
+  remove: () => void
+}
+
+type ActiveFeedback = Omit<FeedbackHandle, 'surface'> & {
+  element: Element
+}
+
+const hasVisiblePaint = (value: string): boolean =>
+  value !== '' && value !== 'none' && value !== 'transparent' && value !== 'rgba(0, 0, 0, 0)'
+
+const hasSurfaceClass = (element: Element): boolean => {
+  for (const className of element.classList) {
+    const utility = className.slice(className.lastIndexOf(':') + 1)
+    if (
+      (utility.startsWith('bg-') && utility !== 'bg-transparent') ||
+      SURFACE_CLASS_PATTERN.test(className)
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+const resolveButtonSurfaceStyle = (element: Element): CSSStyleDeclaration | null | undefined => {
+  if (
+    element.hasAttribute('data-pressable') ||
+    element.getAttribute('role') === 'switch' ||
+    hasSurfaceClass(element)
+  ) {
+    return undefined
+  }
+
+  const computedStyle = element.ownerDocument.defaultView?.getComputedStyle(element)
+  if (!computedStyle) {
+    return null
+  }
+
+  const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(
+    (side) =>
+      computedStyle.getPropertyValue(`border-${side.toLowerCase()}-style`) !== 'none' &&
+      Number.parseFloat(computedStyle.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0 &&
+      hasVisiblePaint(computedStyle.getPropertyValue(`border-${side.toLowerCase()}-color`))
+  )
+
+  return hasVisiblePaint(computedStyle.backgroundColor) ||
+    hasVisiblePaint(computedStyle.backgroundImage) ||
+    hasBorder
+    ? computedStyle
+    : null
+}
+
+const resolvePressable = (element: Element): PressableTarget | null => {
+  if (
+    element.getAttribute('data-press-feedback') === 'none' ||
+    element.getAttribute('aria-disabled') === 'true' ||
+    (element instanceof HTMLButtonElement && element.disabled)
+  ) {
+    return null
+  }
+
+  const computedStyle = resolveButtonSurfaceStyle(element)
+  return computedStyle === null ? null : { element, computedStyle }
+}
+
+const findPressable = (target: EventTarget | null): PressableTarget | null => {
   if (!(target instanceof Element)) {
     return null
   }
 
   const element = target.closest(PRESSABLE_SELECTOR)
-  return element && isPressable(element) ? element : null
+  return element ? resolvePressable(element) : null
 }
 
 const resolveVariant = (
@@ -69,10 +131,11 @@ const resolveVariant = (
 const resolveFeedbackRect = (
   element: Element,
   variant: PressFeedbackVariant,
+  initialRect: DOMRect,
   point?: PressPoint
 ): DOMRect => {
   if (variant !== 'inline') {
-    return element.getBoundingClientRect()
+    return initialRect
   }
 
   const lineRects = Array.from(element.getClientRects())
@@ -89,20 +152,21 @@ const resolveFeedbackRect = (
     }
   }
 
-  return lineRects[0] || element.getBoundingClientRect()
+  return lineRects[0] || initialRect
 }
 
 const createPressFeedback = (
   element: Element,
   onRemove: (surface: HTMLSpanElement) => void,
-  point?: PressPoint
-): HTMLSpanElement => {
+  point?: PressPoint,
+  computedStyle?: CSSStyleDeclaration
+): FeedbackHandle => {
   const ownerDocument = element.ownerDocument
   const ownerWindow = ownerDocument.defaultView
-  const computedStyle = ownerWindow?.getComputedStyle(element)
+  computedStyle ??= ownerWindow?.getComputedStyle(element)
   const initialRect = element.getBoundingClientRect()
   const variant = resolveVariant(element, initialRect, computedStyle)
-  const rect = resolveFeedbackRect(element, variant, point)
+  const rect = resolveFeedbackRect(element, variant, initialRect, point)
   const width = rect.width || element.clientWidth || RIPPLE_FALLBACK_SIZE
   const height = rect.height || element.clientHeight || RIPPLE_FALLBACK_SIZE
   const x = point ? Math.min(Math.max(point.clientX - rect.left, 0), width) : width / 2
@@ -136,18 +200,24 @@ const createPressFeedback = (
   surface.append(feedbackLayer)
   ownerDocument.body.append(surface)
 
+  let removed = false
+  let cleanupTimer: number | undefined
   const removeRipple = () => {
+    if (removed) return
+    removed = true
+    feedbackLayer.removeEventListener('animationend', removeRipple)
+    if (cleanupTimer !== undefined) ownerWindow?.clearTimeout(cleanupTimer)
     surface.remove()
     onRemove(surface)
   }
   feedbackLayer.addEventListener('animationend', removeRipple, { once: true })
-  ownerWindow?.setTimeout(removeRipple, RIPPLE_CLEANUP_DELAY)
+  cleanupTimer = ownerWindow?.setTimeout(removeRipple, RIPPLE_CLEANUP_DELAY)
 
-  return surface
+  return { surface, elementRect: initialRect, remove: removeRipple }
 }
 
 export const initPressFeedback = (root: Document | HTMLElement = document): (() => void) => {
-  const activeSurfaces = new Map<HTMLSpanElement, Element>()
+  const activeSurfaces = new Map<HTMLSpanElement, ActiveFeedback>()
   const ownerDocument = root instanceof Document ? root : root.ownerDocument
   const ownerWindow = ownerDocument.defaultView
   let staleCheckTimer: number | undefined
@@ -157,27 +227,34 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
   }
 
   const removeActiveSurfaces = () => {
-    activeSurfaces.forEach((_element, surface) => surface.remove())
-    activeSurfaces.clear()
+    if (staleCheckTimer !== undefined) {
+      ownerWindow?.clearTimeout(staleCheckTimer)
+      staleCheckTimer = undefined
+    }
+    activeSurfaces.forEach(({ remove }) => remove())
   }
 
   const removeStaleSurfaces = () => {
-    activeSurfaces.forEach((element, surface) => {
+    activeSurfaces.forEach(({ element, elementRect: initialRect, remove }) => {
+      if (!element.isConnected) {
+        remove()
+        return
+      }
+
       const rect = element.getBoundingClientRect()
       const hasMoved =
-        Math.abs(rect.top - Number.parseFloat(surface.style.top)) > 0.5 ||
-        Math.abs(rect.left - Number.parseFloat(surface.style.left)) > 0.5 ||
-        Math.abs(rect.width - Number.parseFloat(surface.style.width)) > 0.5 ||
-        Math.abs(rect.height - Number.parseFloat(surface.style.height)) > 0.5
+        Math.abs(rect.top - initialRect.top) > 0.5 ||
+        Math.abs(rect.left - initialRect.left) > 0.5 ||
+        Math.abs(rect.width - initialRect.width) > 0.5 ||
+        Math.abs(rect.height - initialRect.height) > 0.5
 
-      if (!element.isConnected || hasMoved) {
-        surface.remove()
-        activeSurfaces.delete(surface)
-      }
+      if (hasMoved) remove()
     })
   }
 
   const scheduleStaleSurfaceCheck = () => {
+    if (activeSurfaces.size === 0) return
+
     if (!ownerWindow) {
       removeStaleSurfaces()
       return
@@ -192,9 +269,13 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
     }, 0)
   }
 
-  const showFeedback = (element: Element, point?: PressPoint) => {
-    const surface = createPressFeedback(element, removeSurface, point)
-    activeSurfaces.set(surface, element)
+  const showFeedback = ({ element, computedStyle }: PressableTarget, point?: PressPoint) => {
+    const feedback = createPressFeedback(element, removeSurface, point, computedStyle)
+    activeSurfaces.set(feedback.surface, {
+      element,
+      elementRect: feedback.elementRect,
+      remove: feedback.remove,
+    })
   }
 
   const handlePointerDown = (event: Event) => {
@@ -203,9 +284,9 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
       return
     }
 
-    const element = findPressable(pointerEvent.target)
-    if (element) {
-      showFeedback(element, pointerEvent)
+    const target = findPressable(pointerEvent.target)
+    if (target) {
+      showFeedback(target, pointerEvent)
     }
   }
 
@@ -215,9 +296,9 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
       return
     }
 
-    const element = findPressable(keyboardEvent.target)
-    if (element) {
-      showFeedback(element)
+    const target = findPressable(keyboardEvent.target)
+    if (target) {
+      showFeedback(target)
       scheduleStaleSurfaceCheck()
     }
   }

@@ -38,7 +38,7 @@ export const buttonVariants = ({
   cn(
     'inline-flex select-none items-center justify-center gap-2 rounded border font-medium transition-all duration-200',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
-    'active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50',
+    'disabled:pointer-events-none disabled:opacity-50',
     variantClasses[variant],
     sizeClasses[size],
     fullWidth && 'w-full',

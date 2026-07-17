@@ -37,6 +37,7 @@ describe('pressFeedback', () => {
 
   it('从嵌套图标的触点创建独立且受按钮边界裁切的涟漪', () => {
     const button = document.createElement('button')
+    button.dataset.pressable = ''
     const icon = document.createElement('svg')
     button.append(icon)
     document.body.append(button)
@@ -70,6 +71,7 @@ describe('pressFeedback', () => {
 
   it.each(['Enter', ' '])('键盘 %s 从按钮中心创建涟漪', (key) => {
     const button = document.createElement('button')
+    button.dataset.pressable = ''
     document.body.append(button)
     vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
       x: 0,
@@ -102,10 +104,11 @@ describe('pressFeedback', () => {
     expect(getRipple()).not.toBeNull()
   })
 
-  it('自动覆盖紧凑链接并使用涟漪反馈', () => {
+  it('自动覆盖带背景的紧凑链接并使用涟漪反馈', () => {
     const link = document.createElement('a')
     link.href = '/wiki'
     link.style.display = 'inline-flex'
+    link.style.backgroundColor = 'rgb(120, 90, 40)'
     document.body.append(link)
     vi.spyOn(link, 'getBoundingClientRect').mockReturnValue({
       x: 10,
@@ -125,10 +128,33 @@ describe('pressFeedback', () => {
     expect(getRipple()).not.toBeNull()
   })
 
+  it('自动覆盖声明悬停背景的元素', () => {
+    const button = document.createElement('button')
+    button.className = 'rounded hover:bg-surface-alt'
+    document.body.append(button)
+
+    dispatchPointerDown(button)
+
+    expect(getRipple()).not.toBeNull()
+  })
+
+  it('无背景和边框的文字按钮不创建背景动画', () => {
+    const button = document.createElement('button')
+    button.className =
+      'border border-transparent text-brand-gold hover:bg-transparent hover:underline'
+    button.style.border = '1px solid transparent'
+    document.body.append(button)
+
+    dispatchPointerDown(button)
+
+    expect(getSurface()).toBeNull()
+  })
+
   it('大型链接和 role button 使用克制状态层', () => {
     const cardLink = document.createElement('a')
     cardLink.href = '/gallery/1'
     cardLink.style.display = 'block'
+    cardLink.style.backgroundColor = 'rgb(245, 240, 230)'
     document.body.append(cardLink)
     vi.spyOn(cardLink, 'getBoundingClientRect').mockReturnValue({
       x: 0,
@@ -149,6 +175,7 @@ describe('pressFeedback', () => {
 
     const customButton = document.createElement('div')
     customButton.setAttribute('role', 'button')
+    customButton.style.border = '1px solid currentColor'
     document.body.append(customButton)
     vi.spyOn(customButton, 'getBoundingClientRect').mockReturnValue({
       x: 0,
@@ -193,7 +220,7 @@ describe('pressFeedback', () => {
     expect(getRipple()).toBeNull()
   })
 
-  it('多行正文链接仅反馈实际点按的文字行', () => {
+  it('普通正文链接不创建背景动画', () => {
     const link = document.createElement('a')
     link.href = '/wiki/example'
     document.body.append(link)
@@ -235,16 +262,15 @@ describe('pressFeedback', () => {
 
     dispatchPointerDown(link, { clientX: 30, clientY: 50 })
 
-    expect(getSurface()?.dataset.pressVariant).toBe('inline')
-    expect(getSurface()?.style.top).toBe('42px')
-    expect(getSurface()?.style.width).toBe('60px')
-    expect(getStateLayer()).not.toBeNull()
+    expect(getSurface()).toBeNull()
   })
 
   it('嵌套控件只反馈最内层交互元素', () => {
     const card = document.createElement('div')
     card.setAttribute('role', 'button')
+    card.dataset.pressable = ''
     const button = document.createElement('button')
+    button.dataset.pressable = ''
     card.append(button)
     document.body.append(card)
 
@@ -266,6 +292,44 @@ describe('pressFeedback', () => {
     expect(getSurface()?.dataset.pressVariant).toBe(variant)
   })
 
+  it('显式行内反馈不会因裁切矩形小于元素矩形而被误清理', () => {
+    vi.useFakeTimers()
+    const link = document.createElement('a')
+    link.dataset.pressable = ''
+    link.dataset.pressFeedback = 'inline'
+    document.body.append(link)
+    vi.spyOn(link, 'getBoundingClientRect').mockReturnValue({
+      x: 10,
+      y: 20,
+      left: 10,
+      top: 20,
+      right: 130,
+      bottom: 60,
+      width: 120,
+      height: 40,
+      toJSON: () => ({}),
+    })
+    vi.spyOn(link, 'getClientRects').mockReturnValue([
+      {
+        x: 10,
+        y: 20,
+        left: 10,
+        top: 20,
+        right: 70,
+        bottom: 38,
+        width: 60,
+        height: 18,
+        toJSON: () => ({}),
+      },
+    ] as unknown as DOMRectList)
+
+    dispatchPointerDown(link, { clientX: 30, clientY: 30 })
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    vi.advanceTimersByTime(0)
+
+    expect(getSurface()).not.toBeNull()
+  })
+
   it.each([
     ['禁用按钮', '<button disabled></button>'],
     ['aria-disabled 元素', '<a data-pressable aria-disabled="true"></a>'],
@@ -281,6 +345,7 @@ describe('pressFeedback', () => {
 
   it('忽略非主键点击和键盘长按', () => {
     const button = document.createElement('button')
+    button.dataset.pressable = ''
     document.body.append(button)
 
     dispatchPointerDown(button, { button: 2 })
@@ -294,6 +359,7 @@ describe('pressFeedback', () => {
   it('在动画结束或兜底超时后清理涟漪', () => {
     vi.useFakeTimers()
     const button = document.createElement('button')
+    button.dataset.pressable = ''
     document.body.append(button)
 
     dispatchPointerDown(button)
@@ -311,6 +377,7 @@ describe('pressFeedback', () => {
 
   it('滚动、窗口变化和卸载时立即清理动画层', () => {
     const button = document.createElement('button')
+    button.dataset.pressable = ''
     document.body.append(button)
 
     dispatchPointerDown(button)
@@ -330,6 +397,7 @@ describe('pressFeedback', () => {
   it('按钮在点击后消失或移动时清理原位置的动画层', () => {
     vi.useFakeTimers()
     const button = document.createElement('button')
+    button.dataset.pressable = ''
     document.body.append(button)
     const rectSpy = vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
       x: 10,
@@ -371,7 +439,7 @@ describe('pressFeedback', () => {
     vi.useFakeTimers()
     const link = document.createElement('a')
     link.href = '/next'
-    link.style.display = 'inline-flex'
+    link.dataset.pressable = ''
     link.addEventListener('click', (event) => event.preventDefault())
     document.body.append(link)
 
@@ -385,6 +453,7 @@ describe('pressFeedback', () => {
 
     const customLink = document.createElement('div')
     customLink.setAttribute('role', 'link')
+    customLink.dataset.pressable = ''
     document.body.append(customLink)
     customLink.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
     customLink.remove()

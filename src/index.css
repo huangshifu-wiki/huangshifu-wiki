@@ -890,10 +890,6 @@ img {
   transform: scale(1.02);
 }
 
-.btn-cta:active {
-  transform: scale(0.98);
-}
-
 /* 纸面浮层样式：保留历史类名供旧组件复用 */
 .liquidGlass-wrapper {
   position: relative;
@@ -1183,7 +1179,7 @@ html {
   background: var(--color-brand-primary);
 }
 
-/* Material 风格按钮反馈：原生按钮自动启用，按钮式链接通过 data-pressable 加入。 */
+/* Material 风格按钮反馈：仅按钮表面和显式标记的特殊交互区域启用。 */
 button:not([data-press-feedback='none']),
 [role='button']:not([data-press-feedback='none']),
 [role='link']:not([data-press-feedback='none']),
