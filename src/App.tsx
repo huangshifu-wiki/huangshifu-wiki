@@ -50,6 +50,7 @@ const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m
 const AdminRoutes = lazy(() =>
   import('./pages/Admin/AdminRoutes').then((m) => ({ default: m.default }))
 )
+const UiShowcase = import.meta.env.DEV ? lazy(() => import('./pages/UiShowcase')) : null
 
 const MainLayout = () => {
   const { currentSong } = useMusic()
@@ -171,6 +172,7 @@ const MainLayout = () => {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
+              {UiShowcase && <Route path="/__ui" element={<UiShowcase />} />}
               <Route path="/users/:userId/:tab?" element={<UserProfile />} />
               <Route
                 path="/settings/:section?"

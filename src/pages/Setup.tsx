@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { CharacterCount } from '../components/CharacterCount'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { useToast } from '../components/Toast'
+import { Button, Input } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { PROFILE_DISPLAY_NAME_MAX_LENGTH } from '../lib/contentLimits'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
@@ -92,7 +93,7 @@ const Setup = () => {
             <label htmlFor="setup-email" className="sr-only">
               管理员邮箱
             </label>
-            <input
+            <Input
               id="setup-email"
               type="email"
               required
@@ -101,7 +102,7 @@ const Setup = () => {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="管理员邮箱"
               autoFocus
-              className="theme-input w-full rounded px-4 py-2.5 text-sm"
+              className="theme-input"
             />
           </div>
 
@@ -109,7 +110,7 @@ const Setup = () => {
             <label htmlFor="setup-display-name" className="sr-only">
               显示名称
             </label>
-            <input
+            <Input
               id="setup-display-name"
               type="text"
               required
@@ -117,7 +118,7 @@ const Setup = () => {
               onChange={(event) => setDisplayName(event.target.value)}
               placeholder="显示名称"
               maxLength={PROFILE_DISPLAY_NAME_MAX_LENGTH}
-              className="theme-input w-full rounded px-4 py-2.5 text-sm"
+              className="theme-input"
             />
             <div className="mt-1 flex justify-end">
               <CharacterCount current={displayName.length} max={PROFILE_DISPLAY_NAME_MAX_LENGTH} />
@@ -128,7 +129,7 @@ const Setup = () => {
             <label htmlFor="setup-password" className="sr-only">
               登录密码
             </label>
-            <input
+            <Input
               id="setup-password"
               type="password"
               required
@@ -138,20 +139,16 @@ const Setup = () => {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder={`登录密码（至少 ${PASSWORD_MIN_LENGTH} 位）`}
-              className="theme-input w-full rounded px-4 py-2.5 text-sm"
+              className="theme-input"
             />
             <div className="mt-1 flex justify-end">
               <CharacterCount current={password.length} max={PASSWORD_MAX_LENGTH} />
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="theme-button-primary w-full rounded px-4 py-2.5 text-sm font-medium transition-all disabled:opacity-50"
-          >
+          <Button type="submit" loading={submitting} fullWidth>
             {submitting ? '初始化中' : '创建超级管理员'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

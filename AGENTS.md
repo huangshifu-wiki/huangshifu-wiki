@@ -438,3 +438,14 @@ CI 使用 Node 22。
 - `backups/`
 - `node_modules/.prisma/`
 - `models/transformers/`
+
+## 18. 内部 UI 设计系统
+
+- 业务代码只从 `@/src/components/ui` 导入 UI 组件，禁止深层导入内部文件。
+- 优先组合现有 UI 组件；带领域语义的卡片和复杂业务组件仍放在对应业务目录。
+- Button 变体统一为 `primary`、`secondary`、`ghost`、`danger`、`warning`、`success`。
+- 表单控件使用 Field 关联 label、说明、错误和必填状态；IconButton 必须提供 `aria-label`。
+- UI 颜色只使用共享 CSS token 或主题语义类，不写颜色字面量。
+- 新组件必须透传原生属性、`className` 和 ref，不读取业务 Context，不发起网络请求。
+- 新增或修改 UI 组件时同步更新 `/__ui` 展厅、行为测试和 `docs/ui-design-system.md`。
+- 提交前执行 `npm run check:ui`；已迁移区域不得重新引入原生 button、input、select、textarea。

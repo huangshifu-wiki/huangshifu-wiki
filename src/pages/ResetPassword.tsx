@@ -1,10 +1,11 @@
 import { FormEvent, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, KeyRound, Loader2 } from '@/src/components/icons'
+import { AlertCircle, KeyRound } from '@/src/components/icons'
 import { confirmPasswordReset } from '../lib/auth'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
 import { CharacterCount } from '../components/CharacterCount'
 import { useToast } from '../components/Toast'
+import { Button, Input, LinkButton } from '../components/ui'
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams()
@@ -55,13 +56,9 @@ const ResetPassword = () => {
           </h1>
           <p className="mt-3 text-sm leading-6 text-text-secondary">重置链接无效</p>
           <div className="mt-6 flex justify-center">
-            <Link
-              to="/forgot-password"
-              data-pressable
-              className="theme-button-primary inline-flex items-center rounded px-4 py-2 text-sm font-medium transition-all"
-            >
+            <LinkButton to="/forgot-password" size="md">
               重新发送邮件
-            </Link>
+            </LinkButton>
           </div>
         </section>
       </div>
@@ -83,7 +80,7 @@ const ResetPassword = () => {
             <label htmlFor="reset-password-new" className="sr-only">
               新密码
             </label>
-            <input
+            <Input
               id="reset-password-new"
               type="password"
               required
@@ -93,7 +90,7 @@ const ResetPassword = () => {
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
               placeholder={`新密码（至少 ${PASSWORD_MIN_LENGTH} 位）`}
-              className="theme-input w-full rounded px-4 py-2.5 text-sm"
+              className="theme-input"
             />
             <div className="mt-1 flex justify-end">
               <CharacterCount current={newPassword.length} max={PASSWORD_MAX_LENGTH} />
@@ -104,7 +101,7 @@ const ResetPassword = () => {
             <label htmlFor="reset-password-confirm" className="sr-only">
               确认新密码
             </label>
-            <input
+            <Input
               id="reset-password-confirm"
               type="password"
               required
@@ -114,18 +111,13 @@ const ResetPassword = () => {
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               placeholder="确认新密码"
-              className="theme-input w-full rounded px-4 py-2.5 text-sm"
+              className="theme-input"
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="theme-button-primary inline-flex w-full items-center justify-center gap-2 rounded px-4 py-2.5 text-sm font-medium transition-all disabled:opacity-50"
-          >
-            {loading && <Loader2 size={14} className="animate-spin" />}
-            {loading ? '提交中...' : '重置密码'}
-          </button>
+          <Button type="submit" loading={loading} loadingText="提交中..." fullWidth>
+            重置密码
+          </Button>
         </form>
 
         <div className="mt-4">

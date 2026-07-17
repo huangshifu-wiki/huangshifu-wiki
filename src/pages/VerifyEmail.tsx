@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { AlertCircle, Loader2, MailCheck } from '@/src/components/icons'
 import { verifyEmail } from '../lib/auth'
 import { useAuth } from '../context/AuthContext'
+import { LinkButton } from '../components/ui'
 
 type VerifyState =
   | { status: 'loading'; message: string }
@@ -72,29 +73,13 @@ const VerifyEmail = () => {
         <p className="mt-3 text-sm leading-6 text-text-secondary">{state.message}</p>
         <div className="mt-6 flex justify-center gap-3">
           {isSuccess && authLoading ? null : isSuccess && user ? (
-            <Link
-              to="/settings/account"
-              data-pressable
-              className="theme-button-primary inline-flex items-center rounded px-4 py-2 text-sm font-medium transition-all"
-            >
-              查看账户
-            </Link>
+            <LinkButton to="/settings/account">查看账户</LinkButton>
           ) : isSuccess ? (
-            <Link
-              to="/login"
-              data-pressable
-              className="theme-button-primary inline-flex items-center rounded px-4 py-2 text-sm font-medium transition-all"
-            >
-              去登录
-            </Link>
+            <LinkButton to="/login">去登录</LinkButton>
           ) : (
-            <Link
-              to="/"
-              data-pressable
-              className="theme-button-secondary inline-flex items-center rounded px-4 py-2 text-sm font-medium transition-all"
-            >
+            <LinkButton to="/" variant="secondary">
               返回首页
-            </Link>
+            </LinkButton>
           )}
         </div>
       </section>

@@ -5,6 +5,7 @@ import { useI18n } from '../lib/i18n'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
 import { CharacterCount } from './CharacterCount'
 import { useToast } from './Toast'
+import { Button, Input } from '@/src/components/ui'
 import type { AuthMode } from './Navbar/types'
 
 interface AuthFormProps {
@@ -106,7 +107,7 @@ export const AuthForm = ({
             <label htmlFor="auth-display-name" className="sr-only">
               {t('auth.labelDisplayName')}
             </label>
-            <input
+            <Input
               id="auth-display-name"
               type="text"
               value={displayName}
@@ -118,7 +119,7 @@ export const AuthForm = ({
               }
               autoFocus={autoFocus}
               maxLength={isRegisterMode ? PROFILE_DISPLAY_NAME_MAX_LENGTH : undefined}
-              className="theme-input w-full rounded px-4 py-2.5 text-sm"
+              className="theme-input"
             />
             {isRegisterMode && (
               <div className="mt-1 flex justify-end">
@@ -136,7 +137,7 @@ export const AuthForm = ({
               <label htmlFor="auth-wechat-code" className="sr-only">
                 {t('auth.labelWechatCode')}
               </label>
-              <input
+              <Input
                 id="auth-wechat-code"
                 type="text"
                 required
@@ -144,20 +145,20 @@ export const AuthForm = ({
                 onChange={(e) => setWechatCode(e.target.value)}
                 placeholder={t('auth.placeholderWechatCode')}
                 autoFocus={autoFocus}
-                className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                className="theme-input"
               />
             </div>
             <div>
               <label htmlFor="auth-wechat-photo" className="sr-only">
                 {t('auth.labelPhotoURL')}
               </label>
-              <input
+              <Input
                 id="auth-wechat-photo"
                 type="url"
                 value={wechatPhotoURL}
                 onChange={(e) => setWechatPhotoURL(e.target.value)}
                 placeholder={t('auth.placeholderPhotoURL')}
-                className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                className="theme-input"
               />
             </div>
             <p className="text-xs leading-relaxed text-text-muted">{t('auth.mockCodeHint')}</p>
@@ -168,7 +169,7 @@ export const AuthForm = ({
               <label htmlFor="auth-email" className="sr-only">
                 {t('auth.labelEmail')}
               </label>
-              <input
+              <Input
                 id="auth-email"
                 type="email"
                 required
@@ -177,7 +178,7 @@ export const AuthForm = ({
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t('auth.placeholderEmail')}
                 autoFocus={autoFocus}
-                className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                className="theme-input"
               />
             </div>
             {!isForgotPasswordMode && (
@@ -185,7 +186,7 @@ export const AuthForm = ({
                 <label htmlFor="auth-password" className="sr-only">
                   {t('auth.labelPassword')}
                 </label>
-                <input
+                <Input
                   id="auth-password"
                   type="password"
                   required
@@ -199,7 +200,7 @@ export const AuthForm = ({
                       ? t('auth.placeholderRegisterPassword')
                       : t('auth.placeholderPassword')
                   }
-                  className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                  className="theme-input"
                 />
                 {isRegisterMode && (
                   <div className="mt-1 flex justify-end">
@@ -211,11 +212,7 @@ export const AuthForm = ({
           </>
         )}
 
-        <button
-          type="submit"
-          disabled={authLoading}
-          className="theme-button-primary w-full rounded px-4 py-2.5 text-sm font-medium transition-all disabled:opacity-50"
-        >
+        <Button type="submit" loading={authLoading} fullWidth>
           {authLoading
             ? authMode === 'login'
               ? t('auth.loggingIn')
@@ -231,46 +228,54 @@ export const AuthForm = ({
                 : authMode === 'forgot-password'
                   ? t('auth.sendResetEmail')
                   : t('auth.wechatLogin')}
-        </button>
+        </Button>
       </form>
 
       {isForgotPasswordMode ? (
         <div className="mt-4 flex items-center justify-start text-sm pb-safe">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
             onClick={() => setAuthMode('login')}
-            className="font-medium text-brand-gold hover:underline"
+            className="h-auto min-h-0 p-0 text-brand-gold hover:bg-transparent hover:underline"
           >
             {t('auth.backToLogin')}
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm pb-safe">
           {(allowRegister || authMode !== 'login') && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
               onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
-              className="font-medium text-brand-gold hover:underline"
+              className="h-auto min-h-0 p-0 text-brand-gold hover:bg-transparent hover:underline"
             >
               {authMode === 'login' ? t('auth.noAccountGoRegister') : t('auth.hasAccountGoLogin')}
-            </button>
+            </Button>
           )}
           {authMode === 'login' && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
               onClick={() => setAuthMode('forgot-password')}
-              className="font-medium text-brand-gold hover:underline"
+              className="h-auto min-h-0 p-0 text-brand-gold hover:bg-transparent hover:underline"
             >
               {t('auth.forgotPassword')}
-            </button>
+            </Button>
           )}
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
             onClick={() => setAuthMode(authMode === 'wechat' ? 'login' : 'wechat')}
-            className="font-medium text-brand-gold hover:underline"
+            className="h-auto min-h-0 p-0 text-brand-gold hover:bg-transparent hover:underline"
           >
             {authMode === 'wechat' ? t('auth.switchToAccount') : t('auth.switchToWechat')}
-          </button>
+          </Button>
         </div>
       )}
     </>

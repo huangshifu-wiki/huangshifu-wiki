@@ -9,6 +9,7 @@ import React, {
 } from 'react'
 
 import { ConfirmModal } from './Modal'
+import { Input, Textarea } from '@/src/components/ui'
 
 type DialogVariant = 'danger' | 'warning' | 'info'
 
@@ -45,9 +46,6 @@ type PromptState = PromptOptions & {
 }
 
 const DialogContext = createContext<DialogContextValue | undefined>(undefined)
-
-const PROMPT_FIELD_CLASS =
-  'mt-4 w-full rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-brand-gold'
 
 export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
@@ -108,22 +106,22 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const promptField = promptState?.multiline ? (
-    <textarea
+    <Textarea
       value={promptState.value}
       onChange={handlePromptValueChange}
       placeholder={promptState.placeholder}
       maxLength={promptState.maxLength}
-      className={`${PROMPT_FIELD_CLASS} min-h-24`}
+      className="mt-4 min-h-24"
     />
   ) : promptState ? (
-    <input
+    <Input
       type={promptState.inputType ?? 'text'}
       value={promptState.value}
       onChange={handlePromptValueChange}
       placeholder={promptState.placeholder}
       maxLength={promptState.maxLength}
       autoComplete={promptState.inputType === 'password' ? 'current-password' : undefined}
-      className={PROMPT_FIELD_CLASS}
+      className="mt-4"
     />
   ) : null
 

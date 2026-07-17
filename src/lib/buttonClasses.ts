@@ -1,12 +1,16 @@
-const BASE =
-  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all disabled:cursor-wait disabled:opacity-50'
+import { buttonVariants } from '@/src/components/ui'
 
-export const DANGER_BUTTON_CLASSES = `${BASE} btn-danger-bg text-error`
+/** @deprecated 请改用 Button variant。 */
+export const DANGER_BUTTON_CLASSES = buttonVariants({ variant: 'danger', size: 'sm' })
 
-export const SUCCESS_BUTTON_CLASSES = `${BASE} btn-success-bg text-success`
+/** @deprecated 请改用 Button variant。 */
+export const SUCCESS_BUTTON_CLASSES = buttonVariants({ variant: 'success', size: 'sm' })
 
-export const WARNING_BUTTON_CLASSES = `${BASE} btn-warning-bg text-warning`
+/** @deprecated 请改用 Button variant。 */
+export const WARNING_BUTTON_CLASSES = buttonVariants({ variant: 'warning', size: 'sm' })
 
-export const INFO_BUTTON_CLASSES = `${BASE} btn-info-bg text-info`
+/** @deprecated 请改用 Button variant。 */
+export const INFO_BUTTON_CLASSES = buttonVariants({ variant: 'primary', size: 'sm' })
 
-export const SECONDARY_BUTTON_CLASSES = `${BASE} btn-secondary-bg text-text-secondary`
+/** @deprecated 请改用 Button variant。 */
+export const SECONDARY_BUTTON_CLASSES = buttonVariants({ variant: 'secondary', size: 'sm' })

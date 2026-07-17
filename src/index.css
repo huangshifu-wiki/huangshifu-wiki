@@ -95,6 +95,8 @@
   --book-panel-shadow-hover: 0 22px 48px rgba(72, 53, 25, 0.13);
   --book-focus-ring: 0 0 0 3px rgba(176, 123, 23, 0.18);
   --book-title-font: 'Ma Shan Zheng HSF', 'STKaiti', 'KaiTi', var(--home-font-body);
+  --ui-overlay-bg: rgba(30, 24, 18, 0.58);
+  --ui-floating-shadow: 0 24px 80px rgba(42, 37, 32, 0.28);
 
   /* 高亮文字色 - 书卷金、朱砂、黛青、松绿 */
   --color-highlight-1: rgba(176, 123, 23, 0.82);
@@ -297,6 +299,8 @@ a.mention-highlight:hover {
   --glass-shadow: 0 10px 32px rgba(0, 0, 0, 0.35);
   --shadow-brand-soft: 0 2px 8px rgba(0, 0, 0, 0.18);
   --shadow-brand-hover: 0 10px 22px rgba(0, 0, 0, 0.28);
+  --ui-overlay-bg: rgba(8, 7, 6, 0.72);
+  --ui-floating-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
   --color-static-footer-bg: #1e1c1a;
   --color-static-footer-border: #3d3832;
   --color-static-footer-text: #7a7268;
@@ -527,6 +531,11 @@ a.mention-highlight:hover {
   color: var(--color-theme-button-contrast);
 }
 
+.theme-button-success {
+  background: var(--color-success-hover);
+  color: var(--color-theme-button-contrast);
+}
+
 .theme-button-warning-outline {
   border-color: color-mix(in srgb, var(--color-warning) 22%, transparent);
   color: color-mix(in srgb, var(--color-warning-hover) 88%, var(--color-text-primary));
@@ -558,6 +567,10 @@ a.mention-highlight:hover {
 
   .theme-button-warning:hover {
     background: var(--color-warning);
+  }
+
+  .theme-button-success:hover {
+    background: var(--color-success);
   }
 
   .theme-button-warning-outline:hover {
@@ -1241,6 +1254,7 @@ a[href]:not([data-press-feedback='none']),
   button.theme-button-secondary,
   button.theme-button-danger,
   button.theme-button-warning,
+  button.theme-button-success,
   [data-pressable],
   .mobile-touch-target {
     min-width: 44px;

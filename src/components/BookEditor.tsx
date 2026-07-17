@@ -2,21 +2,25 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, X } from '@/src/components/icons'
 import { clsx } from 'clsx'
+import { IconButton, buttonVariants, controlVariants } from '@/src/components/ui'
 
-export const bookInputClass =
-  'w-full rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-4 py-3 text-base text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-brand-gold'
+/** @deprecated 请改用 Input 或 controlVariants。 */
+export const bookInputClass = controlVariants('px-4 py-3 text-base')
 
-export const bookCompactInputClass =
-  'w-full rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-brand-gold'
+/** @deprecated 请改用 Input size 样式或 controlVariants。 */
+export const bookCompactInputClass = controlVariants()
 
-export const bookSecondaryButtonClass =
-  'inline-flex items-center justify-center gap-2 rounded border border-[var(--book-ink-line)] px-5 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:border-brand-gold/50 hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50'
+/** @deprecated 请改用 Button variant="secondary"。 */
+export const bookSecondaryButtonClass = buttonVariants({ variant: 'secondary' })
 
-export const bookSmallButtonClass =
-  'inline-flex items-center justify-center gap-1.5 rounded border border-[var(--book-ink-line)] px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-brand-gold/50 hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50'
+/** @deprecated 请改用 Button variant="secondary" size="sm"。 */
+export const bookSmallButtonClass = buttonVariants({ variant: 'secondary', size: 'sm' })
 
-export const bookIconButtonClass =
-  'inline-flex items-center justify-center rounded border border-[var(--book-ink-line)] p-2 text-text-muted transition-colors hover:border-brand-gold/50 hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50'
+/** @deprecated 请改用 IconButton。 */
+export const bookIconButtonClass = buttonVariants({
+  variant: 'secondary',
+  className: 'h-10 w-10 p-0 text-text-muted',
+})
 
 export const bookPanelClass =
   'rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)]'
@@ -96,14 +100,9 @@ export const BookEditorHeader = ({
     <div className="flex shrink-0 items-center gap-2">
       {actions}
       {onClose ? (
-        <button
-          type="button"
-          onClick={onClose}
-          className={bookIconButtonClass}
-          aria-label={closeLabel}
-        >
+        <IconButton type="button" onClick={onClose} variant="secondary" aria-label={closeLabel}>
           <X size={22} />
-        </button>
+        </IconButton>
       ) : null}
     </div>
   </header>
