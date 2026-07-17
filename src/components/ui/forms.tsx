@@ -159,25 +159,31 @@ export const Checkbox = React.forwardRef<
 >(({ className, label, id: idProp, ...props }, ref) => {
   const generatedId = useId()
   const id = idProp ?? `checkbox-${generatedId}`
-  return (
+  const control = (
+    <CheckboxPrimitive.Root
+      ref={ref}
+      id={id}
+      className={cn(
+        'flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-brand-gold data-[state=checked]:bg-[var(--color-theme-accent)] data-[state=checked]:text-[var(--color-theme-accent-contrast)]',
+        className
+      )}
+      {...props}
+    >
+      <CheckboxPrimitive.Indicator>
+        <Check className="h-3.5 w-3.5" />
+      </CheckboxPrimitive.Indicator>
+    </CheckboxPrimitive.Root>
+  )
+
+  return label === undefined ? (
+    control
+  ) : (
     <label
       htmlFor={id}
       className="inline-flex cursor-pointer items-center gap-2 text-sm text-text-primary"
     >
-      <CheckboxPrimitive.Root
-        ref={ref}
-        id={id}
-        className={cn(
-          'flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-brand-gold data-[state=checked]:bg-[var(--color-theme-accent)] data-[state=checked]:text-[var(--color-theme-accent-contrast)]',
-          className
-        )}
-        {...props}
-      >
-        <CheckboxPrimitive.Indicator>
-          <Check className="h-3.5 w-3.5" />
-        </CheckboxPrimitive.Indicator>
-      </CheckboxPrimitive.Root>
+      {control}
       {label}
     </label>
   )
@@ -231,22 +237,28 @@ export const Switch = React.forwardRef<React.ElementRef<typeof SwitchPrimitive.R
   ({ className, label, id: idProp, ...props }, ref) => {
     const generatedId = useId()
     const id = idProp ?? `switch-${generatedId}`
-    return (
+    const control = (
+      <SwitchPrimitive.Root
+        ref={ref}
+        id={id}
+        className={cn(
+          'relative h-6 w-11 shrink-0 rounded-full border border-[var(--book-ink-line)] bg-[var(--color-theme-surface-alt)] transition-colors data-[state=checked]:border-brand-gold data-[state=checked]:bg-brand-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] disabled:cursor-not-allowed disabled:opacity-50',
+          className
+        )}
+        {...props}
+      >
+        <SwitchPrimitive.Thumb className="block h-4 w-4 translate-x-1 rounded-full bg-[var(--color-theme-accent-contrast)] shadow-[var(--shadow-brand-soft)] transition-transform data-[state=checked]:translate-x-6" />
+      </SwitchPrimitive.Root>
+    )
+
+    return label === undefined ? (
+      control
+    ) : (
       <label
         htmlFor={id}
         className="inline-flex cursor-pointer items-center gap-3 text-sm text-text-primary"
       >
-        <SwitchPrimitive.Root
-          ref={ref}
-          id={id}
-          className={cn(
-            'relative h-6 w-11 shrink-0 rounded-full border border-[var(--book-ink-line)] bg-surface-alt transition-colors data-[state=checked]:border-brand-gold data-[state=checked]:bg-[var(--color-theme-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] disabled:cursor-not-allowed disabled:opacity-50',
-            className
-          )}
-          {...props}
-        >
-          <SwitchPrimitive.Thumb className="block h-4 w-4 translate-x-1 rounded-full bg-[var(--color-theme-accent-contrast)] shadow-[var(--shadow-brand-soft)] transition-transform data-[state=checked]:translate-x-6" />
-        </SwitchPrimitive.Root>
+        {control}
         {label}
       </label>
     )

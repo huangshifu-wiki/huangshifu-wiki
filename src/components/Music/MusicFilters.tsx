@@ -1,5 +1,6 @@
 import React from 'react'
 import { ArrowUpDown } from '@/src/components/icons'
+import { Checkbox } from '@/src/components/ui'
 import { clsx } from 'clsx'
 import { useI18n } from '../../lib/i18n'
 import { ViewModeSelector } from '../ViewModeSelector'
@@ -108,12 +109,16 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
               </button>
             </div>
             <span className="text-border/50">|</span>
-            <label className="flex cursor-pointer select-none items-center gap-1.5 transition-colors hover:text-text-secondary">
-              <input
-                type="checkbox"
+            <label
+              htmlFor="music-show-accompaniments"
+              className="flex cursor-pointer select-none items-center gap-1.5 transition-colors hover:text-text-secondary"
+            >
+              <Checkbox
+                id="music-show-accompaniments"
                 checked={showAccompaniments}
-                onChange={(e) => onShowAccompanimentsChange(e.target.checked)}
-                className="h-3 w-3 rounded-sm accent-[var(--color-theme-accent)]"
+                onCheckedChange={(checked) => onShowAccompanimentsChange(checked === true)}
+                className="h-3 w-3"
+                aria-label={t('music.showAccompaniments')}
               />
               <span className="hidden sm:inline">{t('music.showAccompaniments')}</span>
               <span className="sm:hidden">伴奏</span>

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   Button,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogTrigger,
@@ -71,6 +72,48 @@ describe('UI 设计系统', () => {
     control.focus()
     await user.keyboard(' ')
     expect(control).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('Switch 传递新状态并保留选中样式', async () => {
+    const user = userEvent.setup()
+    const onCheckedChange = vi.fn()
+    const { rerender } = render(
+      <Switch label="公开" checked={false} onCheckedChange={onCheckedChange} />
+    )
+    const control = screen.getByRole('switch', { name: '公开' })
+
+    await user.click(screen.getByText('公开'))
+    expect(onCheckedChange).toHaveBeenLastCalledWith(true)
+
+    rerender(<Switch label="公开" checked onCheckedChange={onCheckedChange} />)
+    expect(control).toHaveAttribute('data-state', 'checked')
+    expect(control).toHaveAttribute('aria-checked', 'true')
+    expect(control).not.toHaveClass('bg-surface-alt')
+    expect(control.className).toContain('data-[state=checked]:bg-')
+
+    rerender(<Switch label="公开" checked disabled onCheckedChange={onCheckedChange} />)
+    await user.click(screen.getByText('公开'))
+    expect(onCheckedChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('Checkbox 支持受控状态、标签点击和禁用态', async () => {
+    const user = userEvent.setup()
+    const onCheckedChange = vi.fn()
+    const { rerender } = render(
+      <Checkbox label="允许评论" checked={false} onCheckedChange={onCheckedChange} />
+    )
+    const control = screen.getByRole('checkbox', { name: '允许评论' })
+
+    await user.click(screen.getByText('允许评论'))
+    expect(onCheckedChange).toHaveBeenLastCalledWith(true)
+
+    rerender(<Checkbox label="允许评论" checked onCheckedChange={onCheckedChange} />)
+    expect(control).toHaveAttribute('data-state', 'checked')
+    expect(control).toHaveAttribute('aria-checked', 'true')
+
+    rerender(<Checkbox label="允许评论" checked disabled onCheckedChange={onCheckedChange} />)
+    await user.click(screen.getByText('允许评论'))
+    expect(onCheckedChange).toHaveBeenCalledTimes(1)
   })
 
   it('Dialog 限制焦点并在关闭后恢复触发点', async () => {

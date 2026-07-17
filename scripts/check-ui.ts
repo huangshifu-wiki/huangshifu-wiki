@@ -43,6 +43,15 @@ for (const file of sourceFiles) {
   if (/from\s+['"][^'"]*(?:components\/ui\/|@\/src\/components\/ui\/)[^'"]*['"]/.test(source)) {
     report(file, '业务代码只能从 @/src/components/ui 公共入口导入')
   }
+  if (/from\s+['"](?:\.\.?\/)+components\/ui['"]/.test(source)) {
+    report(file, '业务代码必须通过 @/src/components/ui 导入公共组件')
+  }
+  if (/<input\b[^>]*\btype=['"]checkbox['"]/s.test(source)) {
+    report(file, '业务代码的复选框必须使用公共 Checkbox')
+  }
+  if (/\brole=['"]switch['"]/.test(source)) {
+    report(file, '业务代码的开关必须使用公共 Switch')
+  }
 }
 
 const migratedFiles = [
@@ -79,6 +88,7 @@ const migratedFiles = [
   'src/pages/Admin/AdminDashboard.tsx',
   'src/pages/Admin/AdminLocks.tsx',
   'src/pages/Admin/AdminLogs.tsx',
+  'src/pages/Admin/AdminSettings.tsx',
   'src/pages/Admin/AdminReviewContentPreview.tsx',
   'src/pages/Admin/AdminReviews.tsx',
   'src/pages/Admin/AdminToolPage.tsx',

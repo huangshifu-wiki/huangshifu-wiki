@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Loader2, Trash2, Star, Upload, X } from '@/src/components/icons'
+import { Checkbox } from '@/src/components/ui'
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPatch, apiPost, invalidateApiCacheByPrefix } from '../lib/apiClient'
@@ -190,14 +191,11 @@ export const CoverManager = ({
     }
   }
 
-  const toggleSelectedCover = (coverId: string) => {
+  const setCoverSelected = (coverId: string, selected: boolean) => {
     setSelectedCoverIds((prev) => {
       const next = new Set(prev)
-      if (next.has(coverId)) {
-        next.delete(coverId)
-      } else {
-        next.add(coverId)
-      }
+      if (selected) next.add(coverId)
+      else next.delete(coverId)
       return next
     })
   }
@@ -411,12 +409,15 @@ export const CoverManager = ({
                         <Star size={10} /> 默认
                       </div>
                     )}
-                    <label className="absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded bg-black/55 text-white shadow-sm">
-                      <input
-                        type="checkbox"
+                    <label
+                      htmlFor={`cover-selection-${cover.id}`}
+                      className="absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded bg-black/55 text-white shadow-sm"
+                    >
+                      <Checkbox
+                        id={`cover-selection-${cover.id}`}
                         checked={selectedCoverIds.has(cover.id)}
-                        onChange={() => toggleSelectedCover(cover.id)}
-                        className="h-4 w-4 accent-brand-gold"
+                        onCheckedChange={(checked) => setCoverSelected(cover.id, checked === true)}
+                        className="h-4 w-4"
                         aria-label="选择封面"
                       />
                     </label>

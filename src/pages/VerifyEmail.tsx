@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { AlertCircle, Loader2, MailCheck } from '@/src/components/icons'
 import { verifyEmail } from '../lib/auth'
 import { useAuth } from '../context/AuthContext'
-import { LinkButton } from '../components/ui'
+import { LinkButton } from '@/src/components/ui'
 
 type VerifyState =
   | { status: 'loading'; message: string }

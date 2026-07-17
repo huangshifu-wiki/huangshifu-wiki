@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { X, Filter, Search, ChevronDown, ChevronUp } from '@/src/components/icons'
+import { Checkbox } from '@/src/components/ui'
 import { clsx } from 'clsx'
 import {
   bookCompactInputClass,
@@ -626,17 +627,21 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
               </div>
 
               <div>
-                <label className="flex items-center gap-2 text-sm text-text-secondary">
-                  <input
-                    type="checkbox"
+                <label
+                  htmlFor="edit-relation-bidirectional"
+                  className="flex items-center gap-2 text-sm text-text-secondary"
+                >
+                  <Checkbox
+                    id="edit-relation-bidirectional"
                     checked={editingRelation.bidirectional}
-                    onChange={(e) =>
+                    onCheckedChange={(checked) =>
                       setEditingRelation({
                         ...editingRelation,
-                        bidirectional: e.target.checked,
+                        bidirectional: checked === true,
                       })
                     }
                     className="rounded border border-[var(--book-ink-line)]"
+                    aria-label="双向关联"
                   />
                   双向关联
                 </label>
@@ -773,17 +778,21 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
             placeholder="显示名称 (可选)"
             className={`${bookCompactInputClass} flex-1`}
           />
-          <label className="flex items-center gap-2 whitespace-nowrap text-xs text-text-muted">
-            <input
-              type="checkbox"
+          <label
+            htmlFor="new-relation-bidirectional"
+            className="flex items-center gap-2 whitespace-nowrap text-xs text-text-muted"
+          >
+            <Checkbox
+              id="new-relation-bidirectional"
               checked={newRelation.bidirectional}
-              onChange={(e) =>
+              onCheckedChange={(checked) =>
                 setNewRelation({
                   ...newRelation,
-                  bidirectional: e.target.checked,
+                  bidirectional: checked === true,
                 })
               }
               className="rounded"
+              aria-label="双向关联"
             />
             双向关联
           </label>

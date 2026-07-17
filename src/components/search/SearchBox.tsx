@@ -17,7 +17,7 @@ interface SearchBoxProps {
   onQueryChange: (val: string) => void
   onSearch: (q: string) => void
   onImageSearch: (file: File) => void
-  onToggleSemanticSearch: () => void
+  onToggleSemanticSearch: (checked: boolean) => void
   onDismissSuggestions: () => void
   onRemoveSearchHistoryItem?: (query: string) => void
   onClearSearchHistory?: () => void
@@ -407,17 +407,11 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
         <div className="mt-4 flex flex-col gap-3 border-t border-[var(--book-ink-line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <Switch
-              onClick={onToggleSemanticSearch}
+              onCheckedChange={onToggleSemanticSearch}
               checked={semanticImageSearch}
-              aria-label="切换智能混合搜索模式"
               id="hybrid-search-toggle"
+              label={<span className="font-medium text-text-secondary">智能混合搜索</span>}
             />
-            <label
-              htmlFor="hybrid-search-toggle"
-              className="text-sm text-text-secondary cursor-pointer select-none"
-            >
-              <span className="font-medium">智能混合搜索</span>
-            </label>
           </div>
           <div className="text-xs text-text-muted">
             {semanticImageSearch ? (

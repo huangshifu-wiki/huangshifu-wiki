@@ -13,6 +13,7 @@ import {
   Clock,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
+import { Checkbox } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { SmartImage } from '../components/SmartImage'
 import { Lightbox } from '../components/Lightbox'
@@ -943,12 +944,15 @@ const GalleryDetail = () => {
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
               <SectionHeading>{t('gallery.comments')}</SectionHeading>
               {isAdmin && (
-                <label className="flex items-center gap-2 text-xs text-text-muted">
-                  <input
-                    type="checkbox"
+                <label
+                  htmlFor="gallery-show-deleted-comments"
+                  className="flex items-center gap-2 text-xs text-text-muted"
+                >
+                  <Checkbox
+                    id="gallery-show-deleted-comments"
                     checked={showDeletedComments}
-                    onChange={(event) => setShowDeletedComments(event.target.checked)}
-                    className="accent-brand-gold"
+                    onCheckedChange={(checked) => setShowDeletedComments(checked === true)}
+                    aria-label={t('gallery.showDeletedComments')}
                   />
                   {t('gallery.showDeletedComments')}
                 </label>

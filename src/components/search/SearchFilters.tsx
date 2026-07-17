@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { clsx } from 'clsx'
 import { Tag, Calendar, Book, Sparkles, Filter } from '@/src/components/icons'
 import type { SearchFilters as SearchFiltersType } from '../../hooks/useSearchPage'
-import { Button, Input } from '@/src/components/ui'
+import { Button, Input, Switch } from '@/src/components/ui'
 
 interface SearchFiltersProps {
   filters: SearchFiltersType
@@ -161,20 +161,11 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                   <h4 className="flex items-center gap-2 text-xs font-semibold tracking-[0.12em] text-text-secondary">
                     <Sparkles size={12} /> AI 搜图
                   </h4>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={filters.semanticImageSearch ? 'primary' : 'secondary'}
-                      onClick={() =>
-                        onUpdateFilters({ semanticImageSearch: !filters.semanticImageSearch })
-                      }
-                      className="rounded-sm"
-                      leftIcon={<Sparkles size={12} />}
-                    >
-                      智能混合搜索
-                    </Button>
-                  </div>
+                  <Switch
+                    label="智能混合搜索"
+                    checked={filters.semanticImageSearch}
+                    onCheckedChange={(checked) => onUpdateFilters({ semanticImageSearch: checked })}
+                  />
                 </div>
               )}
             </div>

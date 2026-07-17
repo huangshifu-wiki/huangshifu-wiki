@@ -3,6 +3,7 @@ import { apiGet, apiPost } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { clsx } from 'clsx'
+import { Checkbox } from '@/src/components/ui'
 
 interface LinkMapping {
   oldUrl: string
@@ -267,15 +268,11 @@ export default function AdminMarkdownLinks() {
             </select>
           </div>
           <div className="flex items-end">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={dryRun}
-                onChange={(e) => setDryRun(e.target.checked)}
-                className="w-4 h-4 accent-brand-gold"
-              />
-              <span className="text-sm text-text-secondary">预览模式（不实际修改）</span>
-            </label>
+            <Checkbox
+              checked={dryRun}
+              onCheckedChange={(checked) => setDryRun(checked === true)}
+              label={<span className="text-text-secondary">预览模式（不实际修改）</span>}
+            />
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -355,15 +352,13 @@ export default function AdminMarkdownLinks() {
               className="flex-1 px-3 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
               placeholder="新链接"
             />
-            <label className="flex items-center gap-1 px-3 py-2">
-              <input
-                type="checkbox"
+            <div className="px-3 py-2">
+              <Checkbox
                 checked={mapping.useRegex}
-                onChange={(e) => updateMapping(index, 'useRegex', e.target.checked)}
-                className="w-4 h-4 accent-brand-gold"
+                onCheckedChange={(checked) => updateMapping(index, 'useRegex', checked === true)}
+                label={<span className="text-text-secondary">正则</span>}
               />
-              <span className="text-sm text-text-secondary">正则</span>
-            </label>
+            </div>
             <button
               onClick={() => removeMapping(index)}
               className="px-3 py-2 theme-icon-button-danger hover:bg-surface-alt rounded transition-all"

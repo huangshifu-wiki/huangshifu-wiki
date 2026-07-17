@@ -29,6 +29,7 @@ import type {
   MediaHealthScanMode,
   MediaHealthScanResult,
 } from '../../types/api'
+import { Checkbox, Switch } from '@/src/components/ui'
 
 interface ImageMap {
   id: string
@@ -329,12 +330,14 @@ const AdminImages: React.FC = () => {
     [mediaHealthItems, selectedHealthItemSet]
   )
 
-  const toggleHealthItem = (item: MediaHealthItem) => {
+  const setHealthItemSelected = (item: MediaHealthItem, selected: boolean) => {
     if (!item.canCleanup) return
     const key = mediaHealthKey(item.recordType, item.id)
-    setSelectedHealthItems((current) =>
-      current.includes(key) ? current.filter((value) => value !== key) : [...current, key]
-    )
+    setSelectedHealthItems((current) => {
+      if (selected) return current.includes(key) ? current : [...current, key]
+      if (!current.includes(key)) return current
+      return current.filter((value) => value !== key)
+    })
   }
 
   const handleCleanupMediaHealth = async () => {
@@ -485,11 +488,11 @@ const AdminImages: React.FC = () => {
                       role={item.canCleanup ? 'button' : undefined}
                       tabIndex={item.canCleanup ? 0 : undefined}
                       key={key}
-                      onClick={() => toggleHealthItem(item)}
+                      onClick={() => setHealthItemSelected(item, !selected)}
                       onKeyDown={(event) => {
                         if (event.key !== 'Enter' && event.key !== ' ') return
                         event.preventDefault()
-                        toggleHealthItem(item)
+                        setHealthItemSelected(item, !selected)
                       }}
                       className={clsx(
                         'w-full text-left p-3 transition-colors',
@@ -498,13 +501,15 @@ const AdminImages: React.FC = () => {
                       )}
                     >
                       <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={selected}
                           disabled={!item.canCleanup}
-                          onChange={() => toggleHealthItem(item)}
+                          onCheckedChange={(checked) =>
+                            setHealthItemSelected(item, checked === true)
+                          }
                           onClick={(event) => event.stopPropagation()}
-                          className="mt-1 h-4 w-4 accent-brand-gold"
+                          className="mt-1 h-4 w-4"
+                          aria-label={`选择 ${item.label}`}
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
@@ -836,17 +841,13 @@ const AdminImages: React.FC = () => {
                 </select>
                 <p className="text-xs text-text-muted mt-1">图片加载时会优先使用选定的 URL</p>
               </div>
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
+              <div>
+                <Switch
                   id="fallback"
                   checked={preference.fallback}
-                  onChange={(e) => setPreference({ ...preference, fallback: e.target.checked })}
-                  className="w-4 h-4 accent-brand-gold"
+                  onCheckedChange={(checked) => setPreference({ ...preference, fallback: checked })}
+                  label={<span className="text-text-secondary">启用备用方案</span>}
                 />
-                <label htmlFor="fallback" className="text-sm text-text-secondary">
-                  启用备用方案
-                </label>
               </div>
               <p className="text-xs text-text-muted">
                 启用后，如果优先 URL 加载失败，会自动尝试其他可用 URL

@@ -41,6 +41,7 @@ import {
   WIKI_MAX_CONTENT_SIZE,
 } from '../../lib/contentLimits'
 import type { AdminDataItem } from '../../types/entities'
+import { Switch } from '@/src/components/ui'
 
 const ADMIN_USERS_API_PREFIX = '/api/admin/users'
 const ADMIN_PERMISSIONS_API_PATH = '/api/config/admin-permissions'
@@ -658,22 +659,11 @@ export const AdminUsers = () => {
             >
               邮箱验证状态
             </label>
-            <button
-              type="button"
+            <Switch
               id="admin-edit-email-verified"
-              role="switch"
-              aria-checked={editForm.emailVerified}
-              onClick={() => updateEditForm('emailVerified', !editForm.emailVerified)}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold focus:ring-offset-2 ${
-                editForm.emailVerified ? 'bg-[var(--color-theme-accent)]' : 'bg-border'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                  editForm.emailVerified ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+              checked={editForm.emailVerified}
+              onCheckedChange={(checked) => updateEditForm('emailVerified', checked)}
+            />
           </div>
 
           <label className="space-y-2 md:col-span-2">

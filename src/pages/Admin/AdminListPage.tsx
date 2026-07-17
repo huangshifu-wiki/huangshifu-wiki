@@ -43,6 +43,7 @@ import Pagination from '../../components/Pagination'
 import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
+import { Checkbox } from '@/src/components/ui'
 
 type ListType =
   | 'wiki'
@@ -694,24 +695,21 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     })
   }
 
-  const toggleSelectedRow = (rowId: string) => {
+  const setRowSelected = (rowId: string, selected: boolean) => {
     setSelectedRowIds((prev) => {
       const next = new Set(prev)
-      if (next.has(rowId)) {
-        next.delete(rowId)
-      } else {
-        next.add(rowId)
-      }
+      if (selected) next.add(rowId)
+      else next.delete(rowId)
       return next
     })
   }
 
-  const toggleAllRows = () => {
+  const setAllRowsSelected = (selected: boolean) => {
     const selectableIds = data.map(getAdminItemId).filter(Boolean)
-    setSelectedRowIds((prev) =>
-      prev.size === selectableIds.length ? new Set() : new Set(selectableIds)
-    )
+    setSelectedRowIds(selected ? new Set(selectableIds) : new Set())
   }
+
+  const toggleAllRows = () => setAllRowsSelected(selectedCount !== data.length)
 
   const handleBatchDisplaySubmit = async () => {
     if (type !== 'music' || !selectedRowIds.size || batchDisplaySaving) return
@@ -1191,17 +1189,15 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                     onChange={(e) => setNewItem({ ...newItem, order: Number(e.target.value) })}
                     className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
                   />
-                  <label className="flex items-center gap-2 rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-secondary">
-                    <input
-                      type="checkbox"
+                  <div className="rounded border border-border bg-surface-alt px-4 py-2">
+                    <Checkbox
                       checked={Boolean(newItem.requiresAdminEdit)}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, requiresAdminEdit: e.target.checked })
+                      onCheckedChange={(checked) =>
+                        setNewItem({ ...newItem, requiresAdminEdit: checked === true })
                       }
-                      className="accent-brand-gold"
+                      label={<span className="text-text-secondary">仅管理员编辑</span>}
                     />
-                    仅管理员编辑
-                  </label>
+                  </div>
                 </>
               )}
               {type === 'announcements' && (
@@ -1262,20 +1258,18 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                 }
                 className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
               />
-              <label className="flex items-center gap-2 rounded border border-border bg-surface-alt px-4 py-2 text-sm text-text-secondary">
-                <input
-                  type="checkbox"
+              <div className="rounded border border-border bg-surface-alt px-4 py-2">
+                <Checkbox
                   checked={Boolean(editingCategory.requiresAdminEdit)}
-                  onChange={(event) =>
+                  onCheckedChange={(checked) =>
                     setEditingCategory({
                       ...editingCategory,
-                      requiresAdminEdit: event.target.checked,
+                      requiresAdminEdit: checked === true,
                     })
                   }
-                  className="accent-brand-gold"
+                  label={<span className="text-text-secondary">仅管理员编辑</span>}
                 />
-                仅管理员编辑
-              </label>
+              </div>
               <button
                 type="button"
                 onClick={() => void handleUpdateWikiCategory()}
@@ -1301,11 +1295,9 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                 <tr className="border-b border-border bg-surface-alt">
                   {isSelectableList && (
                     <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={data.length > 0 && selectedCount === data.length}
-                        onChange={toggleAllRows}
-                        className="accent-brand-gold"
+                        onCheckedChange={(checked) => setAllRowsSelected(checked === true)}
                         aria-label="选择全部歌曲"
                       />
                     </th>
@@ -1348,11 +1340,9 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                       >
                         {isSelectableList && (
                           <td className="px-5 py-4 align-top">
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={selectedRowIds.has(rowId)}
-                              onChange={() => toggleSelectedRow(rowId)}
-                              className="accent-brand-gold"
+                              onCheckedChange={(checked) => setRowSelected(rowId, checked === true)}
                               aria-label={`选择 ${toText(item.title || item.id || rowId)}`}
                             />
                           </td>

@@ -173,19 +173,19 @@ function PrivacySwitch({
   id,
   label,
   checked,
-  onToggle,
+  onCheckedChange,
 }: {
   id: string
   label: string
   checked: boolean
-  onToggle: () => void
+  onCheckedChange: (checked: boolean) => void
 }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-border pb-5 last:border-b-0">
       <label htmlFor={id} className="text-sm font-medium text-text-primary">
         {label}
       </label>
-      <Switch id={id} checked={checked} onCheckedChange={onToggle} aria-label={label} />
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   )
 }
@@ -1006,9 +1006,9 @@ const Settings = () => {
                     id="settings-public-favorites-toggle"
                     label="公开我的收藏"
                     checked={preferences.publicFavorites}
-                    onToggle={() =>
+                    onCheckedChange={(checked) =>
                       void updatePreferences({
-                        publicFavorites: !preferences.publicFavorites,
+                        publicFavorites: checked,
                       })
                     }
                   />
@@ -1016,9 +1016,9 @@ const Settings = () => {
                     id="settings-public-history-toggle"
                     label="公开我的浏览历史"
                     checked={preferences.publicHistory}
-                    onToggle={() =>
+                    onCheckedChange={(checked) =>
                       void updatePreferences({
-                        publicHistory: !preferences.publicHistory,
+                        publicHistory: checked,
                       })
                     }
                   />
@@ -1324,12 +1324,11 @@ const Settings = () => {
                   <Switch
                     id="settings-character-count-toggle"
                     checked={preferences.showCharacterCount}
-                    onCheckedChange={() =>
+                    onCheckedChange={(checked) =>
                       void updatePreferences({
-                        showCharacterCount: !preferences.showCharacterCount,
+                        showCharacterCount: checked,
                       })
                     }
-                    aria-label="展示字数限制"
                   />
                 </div>
               </section>

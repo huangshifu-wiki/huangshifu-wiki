@@ -29,6 +29,7 @@ import type {
   RegistrationConfig,
   SearchHotKeywordsConfig,
 } from '../../types/api'
+import { Button, Checkbox, Input, Switch, Textarea } from '@/src/components/ui'
 
 type EmailVerificationForm = EmailVerificationAdminConfig & {
   smtpPass: string
@@ -114,7 +115,7 @@ interface BooleanSettingSectionProps {
   description: string
   saving: boolean
   save: () => void
-  toggle: () => void
+  onEnabledChange: (enabled: boolean) => void
 }
 
 function BooleanSettingSection({
@@ -130,7 +131,7 @@ function BooleanSettingSection({
   description,
   saving,
   save,
-  toggle,
+  onEnabledChange,
 }: BooleanSettingSectionProps) {
   return (
     <section className="space-y-5 border border-border bg-surface p-5">
@@ -147,14 +148,14 @@ function BooleanSettingSection({
       ) : loadError ? (
         <div className="flex flex-col gap-3 text-sm text-text-secondary" role="alert">
           <p>{errorText}</p>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={retry}
-            className="theme-button-secondary inline-flex w-fit items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
+            className="w-fit"
+            leftIcon={<RefreshCw size={14} />}
           >
-            <RefreshCw size={14} />
             重试
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -164,32 +165,16 @@ function BooleanSettingSection({
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={enabled}
-              aria-label={label}
-              onClick={toggle}
-              className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${
-                enabled ? 'bg-brand-gold' : 'bg-border'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                  enabled ? 'translate-x-7' : 'translate-x-1'
-                }`}
-              />
-            </button>
+            <Switch checked={enabled} aria-label={label} onCheckedChange={onEnabledChange} />
 
-            <button
-              type="button"
+            <Button
               onClick={save}
-              disabled={saving}
-              className="theme-button-primary inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+              loading={saving}
+              loadingText="保存中..."
+              leftIcon={<Save size={14} />}
             >
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              {saving ? '保存中...' : '保存'}
-            </button>
+              保存
+            </Button>
           </div>
         </div>
       )}
@@ -544,10 +529,10 @@ const AdminSettings = () => {
         description="关闭后新用户无法注册，已有用户仍可登录。"
         saving={registrationSaving}
         save={saveRegistrationConfig}
-        toggle={() =>
+        onEnabledChange={(enabled) =>
           setRegistrationConfig((current) => ({
             ...current,
-            enabled: !current.enabled,
+            enabled,
           }))
         }
       />
@@ -565,10 +550,10 @@ const AdminSettings = () => {
         description="关闭后前台不展示热门搜索词，也不在输入联想中返回热词项；搜索计数仍会继续累计。"
         saving={searchHotKeywordsSaving}
         save={saveSearchHotKeywordsConfig}
-        toggle={() =>
+        onEnabledChange={(enabled) =>
           setSearchHotKeywordsConfig((current) => ({
             ...current,
-            enabled: !current.enabled,
+            enabled,
           }))
         }
       />
@@ -587,14 +572,14 @@ const AdminSettings = () => {
         ) : rateLimitLoadError || !rateLimitConfig ? (
           <div className="flex flex-col gap-3 text-sm text-text-secondary" role="alert">
             <p>请求限流配置加载失败，未加载成功前无法保存设置。</p>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => void loadRateLimitConfig()}
-              className="theme-button-secondary inline-flex w-fit items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
+              className="w-fit"
+              leftIcon={<RefreshCw size={14} />}
             >
-              <RefreshCw size={14} />
               重试
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -615,23 +600,22 @@ const AdminSettings = () => {
                       <p className="mt-1 text-xs leading-5 text-text-muted">{bucket.description}</p>
                     </div>
 
-                    <label className="flex items-center gap-2 text-sm text-text-secondary lg:col-span-2">
-                      <input
-                        type="checkbox"
+                    <div className="flex items-center lg:col-span-2">
+                      <Switch
+                        label="启用"
                         checked={config.enabled}
-                        onChange={(event) =>
-                          setRateLimitField(bucket.id, 'enabled', event.target.checked)
+                        onCheckedChange={(checked) =>
+                          setRateLimitField(bucket.id, 'enabled', checked)
                         }
-                        className="h-4 w-4 rounded border-border"
+                        aria-label={`启用${bucket.label}`}
                       />
-                      启用
-                    </label>
+                    </div>
 
                     <label className="block lg:col-span-2">
                       <span className="mb-1 block text-xs font-medium text-text-muted">
                         窗口（秒）
                       </span>
-                      <input
+                      <Input
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
@@ -640,7 +624,7 @@ const AdminSettings = () => {
                           const value = parsePositiveInteger(event.target.value)
                           if (value) setRateLimitField(bucket.id, 'windowMs', value * 1000)
                         }}
-                        className="theme-input w-full rounded px-3 py-2 text-sm"
+                        className="py-2"
                       />
                     </label>
 
@@ -648,7 +632,7 @@ const AdminSettings = () => {
                       <span className="mb-1 block text-xs font-medium text-text-muted">
                         最大请求数
                       </span>
-                      <input
+                      <Input
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
@@ -657,7 +641,7 @@ const AdminSettings = () => {
                           const value = parsePositiveInteger(event.target.value)
                           if (value) setRateLimitField(bucket.id, 'max', value)
                         }}
-                        className="theme-input w-full rounded px-3 py-2 text-sm"
+                        className="py-2"
                       />
                     </label>
 
@@ -665,13 +649,13 @@ const AdminSettings = () => {
                       <span className="mb-1 block text-xs font-medium text-text-muted">
                         429 提示
                       </span>
-                      <input
+                      <Input
                         type="text"
                         value={config.message}
                         onChange={(event) =>
                           setRateLimitField(bucket.id, 'message', event.target.value)
                         }
-                        className="theme-input w-full rounded px-3 py-2 text-sm"
+                        className="py-2"
                       />
                     </label>
                   </div>
@@ -680,33 +664,26 @@ const AdminSettings = () => {
             </div>
 
             <div className="flex flex-col gap-3 md:flex-row md:justify-end">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 onClick={resetRateLimitConfig}
                 disabled={rateLimitResetting || rateLimitSaving}
-                className="theme-button-secondary inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                loading={rateLimitResetting}
+                loadingText="重置中..."
+                leftIcon={<RefreshCw size={14} />}
               >
-                {rateLimitResetting ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <RefreshCw size={14} />
-                )}
-                {rateLimitResetting ? '重置中...' : '恢复默认'}
-              </button>
+                恢复默认
+              </Button>
 
-              <button
-                type="button"
+              <Button
                 onClick={saveRateLimitConfig}
                 disabled={rateLimitSaving || rateLimitResetting}
-                className="theme-button-primary inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                loading={rateLimitSaving}
+                loadingText="保存中..."
+                leftIcon={<Save size={14} />}
               >
-                {rateLimitSaving ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Save size={14} />
-                )}
-                {rateLimitSaving ? '保存中...' : '保存请求限流'}
-              </button>
+                保存请求限流
+              </Button>
             </div>
           </div>
         )}
@@ -726,14 +703,14 @@ const AdminSettings = () => {
         ) : loadError ? (
           <div className="flex flex-col gap-3 text-sm text-text-secondary" role="alert">
             <p>邮件服务配置加载失败，未加载成功前无法保存设置。</p>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => void loadConfig()}
-              className="theme-button-secondary inline-flex w-fit items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
+              className="w-fit"
+              leftIcon={<RefreshCw size={14} />}
             >
-              <RefreshCw size={14} />
               重试
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="space-y-5">
@@ -745,32 +722,20 @@ const AdminSettings = () => {
                 </p>
               </div>
 
-              <button
-                type="button"
-                role="switch"
-                aria-checked={form.enabled}
+              <Switch
+                checked={form.enabled}
                 aria-label="启用账号邮件"
-                onClick={() => setField('enabled', !form.enabled)}
-                className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${
-                  form.enabled ? 'bg-brand-gold' : 'bg-border'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                    form.enabled ? 'translate-x-7' : 'translate-x-1'
-                  }`}
-                />
-              </button>
+                onCheckedChange={(checked) => setField('enabled', checked)}
+              />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="block md:col-span-2">
                 <span className="mb-1 block text-xs font-medium text-text-muted">站点公网地址</span>
-                <input
+                <Input
                   type="url"
                   value={form.publicBaseUrl}
                   onChange={(event) => setField('publicBaseUrl', event.target.value)}
-                  className="theme-input w-full rounded px-4 py-2.5 text-sm"
                   placeholder="https://wiki.example.com"
                 />
               </label>
@@ -779,57 +744,52 @@ const AdminSettings = () => {
                 <span className="mb-1 block text-xs font-medium text-text-muted">
                   链接有效期（分钟）
                 </span>
-                <input
+                <Input
                   type="number"
                   min={5}
                   max={10080}
                   value={form.tokenTtlMinutes}
                   onChange={(event) => setField('tokenTtlMinutes', Number(event.target.value))}
-                  className="theme-input w-full rounded px-4 py-2.5 text-sm"
                 />
               </label>
 
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-text-muted">SMTP Host</span>
-                <input
+                <Input
                   type="text"
                   value={form.smtpHost}
                   onChange={(event) => setField('smtpHost', event.target.value)}
-                  className="theme-input w-full rounded px-4 py-2.5 text-sm"
                   placeholder="smtp.example.com"
                 />
               </label>
 
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-text-muted">SMTP 端口</span>
-                <input
+                <Input
                   type="number"
                   min={1}
                   max={65535}
                   value={form.smtpPort}
                   onChange={(event) => setField('smtpPort', Number(event.target.value))}
-                  className="theme-input w-full rounded px-4 py-2.5 text-sm"
                 />
               </label>
 
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-text-muted">SMTP 用户名</span>
-                <input
+                <Input
                   type="text"
                   value={form.smtpUser}
                   onChange={(event) => setField('smtpUser', event.target.value)}
-                  className="theme-input w-full rounded px-4 py-2.5 text-sm"
                   autoComplete="username"
                 />
               </label>
 
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-text-muted">SMTP 密码</span>
-                <input
+                <Input
                   type="password"
                   value={form.smtpPass}
                   onChange={(event) => setField('smtpPass', event.target.value)}
-                  className="theme-input w-full rounded px-4 py-2.5 text-sm"
                   autoComplete="new-password"
                   placeholder={form.smtpPassSet ? '已保存，留空保持不变' : ''}
                 />
@@ -837,11 +797,10 @@ const AdminSettings = () => {
 
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-text-muted">发件人</span>
-                <input
+                <Input
                   type="text"
                   value={form.smtpFrom}
                   onChange={(event) => setField('smtpFrom', event.target.value)}
-                  className="theme-input w-full rounded px-4 py-2.5 text-sm"
                   placeholder="黄诗扶 Wiki <no-reply@example.com>"
                 />
               </label>
@@ -883,21 +842,20 @@ const AdminSettings = () => {
                     <div className="grid gap-3">
                       <label className="block">
                         <span className="mb-1 block text-xs font-medium text-text-muted">主题</span>
-                        <input
+                        <Input
                           type="text"
                           value={form.verificationSubject}
                           onChange={(e) => setField('verificationSubject', e.target.value)}
-                          className="theme-input w-full rounded px-4 py-2.5 text-sm"
                         />
                       </label>
                       <label className="block">
                         <span className="mb-1 block text-xs font-medium text-text-muted">
                           纯文本正文
                         </span>
-                        <textarea
+                        <Textarea
                           value={form.verificationTextBody}
                           onChange={(e) => setField('verificationTextBody', e.target.value)}
-                          className="theme-input w-full rounded px-4 py-2.5 text-sm font-mono"
+                          className="font-mono"
                           rows={6}
                         />
                       </label>
@@ -905,10 +863,10 @@ const AdminSettings = () => {
                         <span className="mb-1 block text-xs font-medium text-text-muted">
                           HTML 正文
                         </span>
-                        <textarea
+                        <Textarea
                           value={form.verificationHtmlBody}
                           onChange={(e) => setField('verificationHtmlBody', e.target.value)}
-                          className="theme-input w-full rounded px-4 py-2.5 text-sm font-mono"
+                          className="font-mono"
                           rows={6}
                         />
                       </label>
@@ -919,21 +877,20 @@ const AdminSettings = () => {
                     <div className="grid gap-3">
                       <label className="block">
                         <span className="mb-1 block text-xs font-medium text-text-muted">主题</span>
-                        <input
+                        <Input
                           type="text"
                           value={form.resetSubject}
                           onChange={(e) => setField('resetSubject', e.target.value)}
-                          className="theme-input w-full rounded px-4 py-2.5 text-sm"
                         />
                       </label>
                       <label className="block">
                         <span className="mb-1 block text-xs font-medium text-text-muted">
                           纯文本正文
                         </span>
-                        <textarea
+                        <Textarea
                           value={form.resetTextBody}
                           onChange={(e) => setField('resetTextBody', e.target.value)}
-                          className="theme-input w-full rounded px-4 py-2.5 text-sm font-mono"
+                          className="font-mono"
                           rows={6}
                         />
                       </label>
@@ -941,10 +898,10 @@ const AdminSettings = () => {
                         <span className="mb-1 block text-xs font-medium text-text-muted">
                           HTML 正文
                         </span>
-                        <textarea
+                        <Textarea
                           value={form.resetHtmlBody}
                           onChange={(e) => setField('resetHtmlBody', e.target.value)}
-                          className="theme-input w-full rounded px-4 py-2.5 text-sm font-mono"
+                          className="font-mono"
                           rows={6}
                         />
                       </label>
@@ -955,36 +912,27 @@ const AdminSettings = () => {
             </details>
 
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <label className="inline-flex items-center gap-2 text-sm text-text-secondary">
-                <input
-                  type="checkbox"
-                  checked={form.smtpSecure}
-                  onChange={(event) => setField('smtpSecure', event.target.checked)}
-                  className="h-4 w-4 rounded border-border"
-                />
-                使用 SSL/TLS
-              </label>
+              <Checkbox
+                label="使用 SSL/TLS"
+                checked={form.smtpSecure}
+                onCheckedChange={(checked) => setField('smtpSecure', checked === true)}
+              />
 
-              <label className="inline-flex items-center gap-2 text-sm text-text-secondary">
-                <input
-                  type="checkbox"
-                  checked={form.clearSmtpPass}
-                  disabled={!form.smtpPassSet}
-                  onChange={(event) => setField('clearSmtpPass', event.target.checked)}
-                  className="h-4 w-4 rounded border-border disabled:opacity-50"
-                />
-                清空已保存的 SMTP 密码
-              </label>
+              <Checkbox
+                label="清空已保存的 SMTP 密码"
+                checked={form.clearSmtpPass}
+                disabled={!form.smtpPassSet}
+                onCheckedChange={(checked) => setField('clearSmtpPass', checked === true)}
+              />
 
-              <button
-                type="button"
+              <Button
                 onClick={saveConfig}
-                disabled={saving}
-                className="theme-button-primary inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                loading={saving}
+                loadingText="保存中..."
+                leftIcon={<Save size={14} />}
               >
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                {saving ? '保存中...' : '保存'}
-              </button>
+                保存
+              </Button>
             </div>
           </div>
         )}

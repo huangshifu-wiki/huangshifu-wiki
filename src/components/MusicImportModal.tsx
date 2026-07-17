@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { AlertTriangle, CheckCircle2, Loader2, Link2, X } from '@/src/components/icons'
+import { Checkbox } from '@/src/components/ui'
 import { clsx } from 'clsx'
 
 import { apiPost } from '../lib/apiClient'
@@ -117,12 +118,12 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
     }
   }
 
-  const toggleSong = (sourceId: string) => {
+  const setSongSelected = (sourceId: string, selected: boolean) => {
     resetResult()
     setSelectedIds((prev) => {
       const next = new Set(prev)
-      if (next.has(sourceId)) next.delete(sourceId)
-      else next.add(sourceId)
+      if (selected) next.add(sourceId)
+      else next.delete(sourceId)
       return next
     })
   }
@@ -292,17 +293,21 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
                     return (
                       <label
                         key={`${song.sourceId}-${index}`}
+                        htmlFor={`music-import-selection-${song.sourceId}-${index}`}
                         className={clsx(
                           'flex cursor-pointer items-center gap-3 border-b border-[var(--book-ink-line)] px-4 py-3 transition-colors last:border-b-0 hover:bg-[var(--book-panel-hover)]',
                           checked &&
                             'bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)]'
                         )}
                       >
-                        <input
-                          type="checkbox"
+                        <Checkbox
+                          id={`music-import-selection-${song.sourceId}-${index}`}
                           checked={checked}
-                          onChange={() => toggleSong(song.sourceId)}
-                          className="h-4 w-4 accent-[var(--color-theme-accent)]"
+                          onCheckedChange={(nextChecked) =>
+                            setSongSelected(song.sourceId, nextChecked === true)
+                          }
+                          className="h-4 w-4"
+                          aria-label={`选择 ${song.title}`}
                         />
                         <div className="h-10 w-10 shrink-0 overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)]">
                           {song.cover && (

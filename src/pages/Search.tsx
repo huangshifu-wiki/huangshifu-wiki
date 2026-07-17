@@ -64,9 +64,9 @@ const Search: React.FC = () => {
           onQueryChange={handleQueryChange}
           onSearch={performSearch}
           onImageSearch={handleImageSearch}
-          onToggleSemanticSearch={() => {
+          onToggleSemanticSearch={(checked) => {
             if (semanticSearchEnabled) {
-              updateFilters({ semanticImageSearch: !state.filters.semanticImageSearch })
+              updateFilters({ semanticImageSearch: checked })
             }
           }}
           onDismissSuggestions={dismissSuggestions}
