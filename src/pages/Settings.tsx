@@ -48,7 +48,16 @@ import type { CommentItem, GalleryItem, PostItem } from '../types/entities'
 import type { ContentStatus } from '../types/common'
 import type { EmailVerificationPublicConfig } from '../types/api'
 import type { ListLoadMode } from '../types/userPreferences'
-import { Button, IconButton, Input, Switch, Textarea } from '@/src/components/ui'
+import {
+  Button,
+  IconButton,
+  Input,
+  SegmentedControl,
+  SettingRow,
+  SettingsSection,
+  Switch,
+  Textarea,
+} from '@/src/components/ui'
 
 type PublicProfileForm = {
   displayName: string
@@ -183,12 +192,12 @@ function PrivacySwitch({
   onCheckedChange: (checked: boolean) => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-border pb-5 last:border-b-0">
-      <label htmlFor={id} className="text-sm font-medium text-text-primary">
-        {label}
-      </label>
-      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
-    </div>
+    <SettingRow
+      label={label}
+      labelFor={id}
+      control={<Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />}
+      className="border-t-0 border-b pb-5 pt-0 last:border-b-0"
+    />
   )
 }
 
@@ -821,17 +830,11 @@ const Settings = () => {
 
           <main className="min-w-0 space-y-12">
             {activeSection === 'profile' && (
-              <section className="min-w-0 space-y-6" aria-labelledby="settings-public-profile">
-                <div className="flex items-center gap-2 border-b border-border pb-3">
-                  <UserRound size={18} className="text-brand-gold" />
-                  <h2
-                    id="settings-public-profile"
-                    className="text-base font-semibold text-text-primary"
-                  >
-                    公开资料
-                  </h2>
-                </div>
-
+              <SettingsSection
+                title="公开资料"
+                headingId="settings-public-profile"
+                icon={<UserRound size={18} />}
+              >
                 <form onSubmit={handleProfileSubmit} className="w-full max-w-3xl space-y-6">
                   <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start">
                     <div className="relative w-24 shrink-0">
@@ -950,18 +953,15 @@ const Settings = () => {
                     </Button>
                   </div>
                 </form>
-              </section>
+              </SettingsSection>
             )}
 
             {activeSection === 'content' && (
-              <section className="min-w-0 space-y-6" aria-labelledby="settings-content">
-                <div className="flex items-center gap-2 border-b border-border pb-3">
-                  <FileText size={18} className="text-brand-gold" />
-                  <h2 id="settings-content" className="text-base font-semibold text-text-primary">
-                    内容管理
-                  </h2>
-                </div>
-
+              <SettingsSection
+                title="内容管理"
+                headingId="settings-content"
+                icon={<FileText size={18} />}
+              >
                 <div className="min-w-0 w-full max-w-3xl">
                   <div className="flex flex-wrap gap-2">
                     {[
@@ -993,18 +993,15 @@ const Settings = () => {
 
                   <div className="mt-4">{renderContentPanel()}</div>
                 </div>
-              </section>
+              </SettingsSection>
             )}
 
             {activeSection === 'privacy' && (
-              <section className="min-w-0 space-y-6" aria-labelledby="settings-privacy">
-                <div className="flex items-center gap-2 border-b border-border pb-3">
-                  <Eye size={18} className="text-brand-gold" />
-                  <h2 id="settings-privacy" className="text-base font-semibold text-text-primary">
-                    隐私设置
-                  </h2>
-                </div>
-
+              <SettingsSection
+                title="隐私设置"
+                headingId="settings-privacy"
+                icon={<Eye size={18} />}
+              >
                 <div className="max-w-3xl space-y-5">
                   <PrivacySwitch
                     id="settings-public-favorites-toggle"
@@ -1027,18 +1024,15 @@ const Settings = () => {
                     }
                   />
                 </div>
-              </section>
+              </SettingsSection>
             )}
 
             {activeSection === 'account' && (
-              <section className="min-w-0 space-y-6" aria-labelledby="settings-account">
-                <div className="flex items-center gap-2 border-b border-border pb-3">
-                  <Shield size={18} className="text-brand-gold" />
-                  <h2 id="settings-account" className="text-base font-semibold text-text-primary">
-                    账户
-                  </h2>
-                </div>
-
+              <SettingsSection
+                title="账户"
+                headingId="settings-account"
+                icon={<Shield size={18} />}
+              >
                 <div className="min-w-0 w-full max-w-3xl">
                   <div className="pb-5">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -1275,86 +1269,66 @@ const Settings = () => {
                     )}
                   </div>
                 </div>
-              </section>
+              </SettingsSection>
             )}
 
             {activeSection === 'appearance' && (
-              <section className="min-w-0 space-y-6" aria-labelledby="settings-appearance">
-                <div className="flex items-center gap-2 border-b border-border pb-3">
-                  <SlidersHorizontal size={18} className="text-brand-gold" />
-                  <h2
-                    id="settings-appearance"
-                    className="text-base font-semibold text-text-primary"
-                  >
-                    外观
-                  </h2>
-                </div>
-
+              <SettingsSection
+                title="外观"
+                headingId="settings-appearance"
+                icon={<SlidersHorizontal size={18} />}
+              >
                 <div className="w-full max-w-3xl">
                   <ThemeToggle compact fullWidth />
                 </div>
 
-                <div className="flex max-w-3xl flex-col items-stretch gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-text-primary">列表加载方式</p>
-                  </div>
-                  <div
-                    className="flex w-full rounded border border-border bg-surface p-1 sm:w-auto"
-                    role="group"
-                    aria-label="列表加载方式"
-                  >
-                    {LIST_LOAD_MODE_OPTIONS.map((option) => (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        size="sm"
-                        variant={preferences.listLoadMode === option.value ? 'primary' : 'ghost'}
-                        className="min-w-0 flex-1 whitespace-nowrap sm:flex-none"
-                        onClick={() => void updatePreferences({ listLoadMode: option.value })}
-                        aria-pressed={preferences.listLoadMode === option.value}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+                <SettingRow
+                  label="列表加载方式"
+                  stackOnMobile
+                  control={
+                    <SegmentedControl
+                      value={preferences.listLoadMode}
+                      options={LIST_LOAD_MODE_OPTIONS}
+                      onValueChange={(value) =>
+                        void updatePreferences({ listLoadMode: value as ListLoadMode })
+                      }
+                      aria-label="列表加载方式"
+                    />
+                  }
+                />
 
-                <div className="flex max-w-3xl min-w-0 items-center justify-between gap-4 border-t border-border pt-6">
-                  <label
-                    htmlFor="settings-character-count-toggle"
-                    className="min-w-0 text-sm font-medium text-text-primary"
-                  >
-                    展示字数限制
-                  </label>
-                  <Switch
-                    id="settings-character-count-toggle"
-                    checked={preferences.showCharacterCount}
-                    onCheckedChange={(checked) =>
-                      void updatePreferences({
-                        showCharacterCount: checked,
-                      })
-                    }
-                  />
-                </div>
+                <SettingRow
+                  label="展示字数限制"
+                  labelFor="settings-character-count-toggle"
+                  control={
+                    <Switch
+                      id="settings-character-count-toggle"
+                      checked={preferences.showCharacterCount}
+                      onCheckedChange={(checked) =>
+                        void updatePreferences({
+                          showCharacterCount: checked,
+                        })
+                      }
+                    />
+                  }
+                />
 
-                <div className="flex max-w-3xl min-w-0 items-center justify-between gap-4 border-t border-border pt-6">
-                  <label
-                    htmlFor="settings-mobile-song-sequence-toggle"
-                    className="min-w-0 text-sm font-medium text-text-primary"
-                  >
-                    手机端显示歌曲序号
-                  </label>
-                  <Switch
-                    id="settings-mobile-song-sequence-toggle"
-                    checked={preferences.showMobileSongSequence}
-                    onCheckedChange={(checked) =>
-                      void updatePreferences({
-                        showMobileSongSequence: checked,
-                      })
-                    }
-                  />
-                </div>
-              </section>
+                <SettingRow
+                  label="手机端显示歌曲序号"
+                  labelFor="settings-mobile-song-sequence-toggle"
+                  control={
+                    <Switch
+                      id="settings-mobile-song-sequence-toggle"
+                      checked={preferences.showMobileSongSequence}
+                      onCheckedChange={(checked) =>
+                        void updatePreferences({
+                          showMobileSongSequence: checked,
+                        })
+                      }
+                    />
+                  }
+                />
+              </SettingsSection>
             )}
           </main>
         </div>

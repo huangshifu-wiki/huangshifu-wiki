@@ -16,6 +16,9 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  SegmentedControl,
+  SettingRow,
+  SettingsSection,
   Switch,
   Table,
   TableBody,
@@ -234,5 +237,44 @@ describe('UI 设计系统', () => {
     expect(screen.getByRole('table')).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: '标题' })).toHaveAttribute('scope', 'col')
     expect(screen.getByRole('cell', { name: '山鬼' })).toBeInTheDocument()
+  })
+
+  it('SettingsSection 自动关联标题并允许设置项标签控制开关', async () => {
+    const user = userEvent.setup()
+    render(
+      <SettingsSection title="外观">
+        <SettingRow
+          label="显示序号"
+          labelFor="sequence-toggle"
+          control={<Switch id="sequence-toggle" />}
+        />
+      </SettingsSection>
+    )
+
+    const section = screen.getByRole('region', { name: '外观' })
+    const control = screen.getByRole('switch', { name: '显示序号' })
+    expect(section).toBeInTheDocument()
+    await user.click(screen.getByText('显示序号'))
+    expect(control).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('SegmentedControl 暴露选中状态并传递新值', async () => {
+    const user = userEvent.setup()
+    const onValueChange = vi.fn()
+    render(
+      <SegmentedControl
+        value="pagination"
+        options={[
+          { value: 'pagination', label: '分页模式' },
+          { value: 'incremental', label: '分段加载' },
+        ]}
+        onValueChange={onValueChange}
+        aria-label="加载方式"
+      />
+    )
+
+    expect(screen.getByRole('button', { name: '分页模式' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: '分段加载' }))
+    expect(onValueChange).toHaveBeenCalledWith('incremental')
   })
 })

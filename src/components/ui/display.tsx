@@ -1,5 +1,5 @@
 import { Loader2 } from '@/src/components/icons'
-import React from 'react'
+import React, { useId } from 'react'
 import { cn } from './utils'
 
 export const Panel = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
@@ -102,3 +102,80 @@ export const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
   )
 )
 EmptyState.displayName = 'EmptyState'
+
+export interface SettingsSectionProps extends Omit<React.HTMLAttributes<HTMLElement>, 'title'> {
+  title: React.ReactNode
+  icon?: React.ReactNode
+  headingId?: string
+}
+
+export const SettingsSection = React.forwardRef<HTMLElement, SettingsSectionProps>(
+  ({ title, icon, headingId: headingIdProp, className, children, ...props }, ref) => {
+    const generatedId = useId()
+    const headingId = headingIdProp ?? `settings-section-${generatedId}`
+
+    return (
+      <section
+        ref={ref}
+        className={cn('min-w-0 space-y-6', className)}
+        aria-labelledby={headingId}
+        {...props}
+      >
+        <div className="flex min-w-0 items-center gap-2 border-b border-border pb-3">
+          {icon && <span className="shrink-0 text-brand-gold">{icon}</span>}
+          <h2 id={headingId} className="min-w-0 text-base font-semibold text-text-primary">
+            {title}
+          </h2>
+        </div>
+        {children}
+      </section>
+    )
+  }
+)
+SettingsSection.displayName = 'SettingsSection'
+
+export interface SettingRowProps extends React.HTMLAttributes<HTMLDivElement> {
+  label: React.ReactNode
+  description?: React.ReactNode
+  control: React.ReactNode
+  labelFor?: string
+  stackOnMobile?: boolean
+}
+
+export const SettingRow = React.forwardRef<HTMLDivElement, SettingRowProps>(
+  ({ label, description, control, labelFor, stackOnMobile = false, className, ...props }, ref) => {
+    const labelContent = (
+      <>
+        <span className="block break-words text-sm font-medium text-text-primary">{label}</span>
+        {description && (
+          <span className="mt-1 block break-words text-xs leading-relaxed text-text-muted">
+            {description}
+          </span>
+        )}
+      </>
+    )
+
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          'flex min-w-0 max-w-3xl items-center justify-between gap-4 border-t border-border pt-6',
+          stackOnMobile &&
+            'flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
+          className
+        )}
+        {...props}
+      >
+        {labelFor ? (
+          <label htmlFor={labelFor} className="min-w-0">
+            {labelContent}
+          </label>
+        ) : (
+          <div className="min-w-0">{labelContent}</div>
+        )}
+        <div className={cn('shrink-0', stackOnMobile && 'w-full sm:w-auto')}>{control}</div>
+      </div>
+    )
+  }
+)
+SettingRow.displayName = 'SettingRow'

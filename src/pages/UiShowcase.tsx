@@ -21,8 +21,11 @@ import {
   PopoverTrigger,
   RadioGroup,
   RadioGroupItem,
+  SegmentedControl,
   Select,
   Separator,
+  SettingRow,
+  SettingsSection,
   Skeleton,
   Spinner,
   Switch,
@@ -48,6 +51,7 @@ const variants = ['primary', 'secondary', 'ghost', 'danger', 'warning', 'success
 
 const UiShowcase = () => {
   const [dark, setDark] = useState(false)
+  const [loadMode, setLoadMode] = useState('pagination')
   const { show } = useToast()
 
   return (
@@ -133,6 +137,34 @@ const UiShowcase = () => {
             </Panel>
           </div>
           <EmptyState title="暂无修订" description="完成第一次编辑后，修订记录会出现在这里。" />
+        </ShowcaseSection>
+
+        <ShowcaseSection title="响应式设置布局">
+          <div className="min-w-0 max-w-3xl">
+            <SettingsSection title="阅读偏好" icon={<Settings className="h-4 w-4" />}>
+              <SettingRow
+                label="列表加载方式"
+                description="窄屏时说明和操作区自动纵向排列，不会撑宽页面。"
+                stackOnMobile
+                control={
+                  <SegmentedControl
+                    value={loadMode}
+                    options={[
+                      { value: 'pagination', label: '分页模式' },
+                      { value: 'incremental', label: '分段加载' },
+                    ]}
+                    onValueChange={setLoadMode}
+                    aria-label="示例列表加载方式"
+                  />
+                }
+              />
+              <SettingRow
+                label="包含连续超长内容的设置项ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                labelFor="show-sequence-example"
+                control={<Switch id="show-sequence-example" />}
+              />
+            </SettingsSection>
+          </div>
         </ShowcaseSection>
 
         <ShowcaseSection title="浮层与导航">

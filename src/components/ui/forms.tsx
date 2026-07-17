@@ -3,6 +3,7 @@ import * as RadioGroupPrimitive from '@radix-ui/react-radio-group'
 import * as SwitchPrimitive from '@radix-ui/react-switch'
 import { Check } from '@/src/components/icons'
 import React, { createContext, useContext, useId } from 'react'
+import { Button } from './actions'
 import { cn } from './utils'
 
 type FieldContextValue = {
@@ -191,6 +192,46 @@ export const Checkbox = React.forwardRef<
 Checkbox.displayName = 'Checkbox'
 
 export const RadioGroup = RadioGroupPrimitive.Root
+
+export interface SegmentedControlOption {
+  value: string
+  label: React.ReactNode
+}
+
+export interface SegmentedControlProps extends Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  'onChange'
+> {
+  value: string
+  options: readonly SegmentedControlOption[]
+  onValueChange: (value: string) => void
+}
+
+export const SegmentedControl = React.forwardRef<HTMLDivElement, SegmentedControlProps>(
+  ({ value, options, onValueChange, className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn('flex min-w-0 w-full rounded border border-border bg-surface p-1', className)}
+      role="group"
+      {...props}
+    >
+      {options.map((option) => (
+        <Button
+          key={option.value}
+          type="button"
+          size="sm"
+          variant={value === option.value ? 'primary' : 'ghost'}
+          className="min-w-0 flex-1 whitespace-nowrap"
+          aria-pressed={value === option.value}
+          onClick={() => onValueChange(option.value)}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  )
+)
+SegmentedControl.displayName = 'SegmentedControl'
 
 export interface RadioGroupItemProps extends React.ComponentPropsWithoutRef<
   typeof RadioGroupPrimitive.Item
