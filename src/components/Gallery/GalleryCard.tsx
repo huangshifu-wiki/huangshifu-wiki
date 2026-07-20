@@ -4,7 +4,6 @@ import { Clock, User as UserIcon } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { formatDate, formatDateOnly } from '../../lib/dateUtils'
-import { VIEW_MODE_CONFIG } from '../../lib/viewModes'
 import type { GalleryItem } from '../../types/entities'
 import type { ViewMode } from '../../types/userPreferences'
 import { GalleryCover } from './GalleryCover'
@@ -109,12 +108,7 @@ export const GalleryCard = React.memo(function GalleryCard({
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary'
       )}
     >
-      <div
-        className={clsx(
-          'relative overflow-hidden bg-surface-alt',
-          isSmallGrid ? 'aspect-square' : VIEW_MODE_CONFIG[viewMode].cardHeight
-        )}
-      >
+      <div className="relative aspect-square overflow-hidden bg-surface-alt">
         <GalleryCover
           gallery={gallery}
           priority={priority}
