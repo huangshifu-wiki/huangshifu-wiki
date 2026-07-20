@@ -164,7 +164,7 @@ const EventDetail = () => {
     )
   }
 
-  const coverSrc = getEventCoverSrc(event, true)
+  const coverSrc = getEventCoverSrc(event)
   const ticketPrices = formatEventTicketPrices(event.ticketPrices)
 
   return (
