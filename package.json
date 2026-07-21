@@ -75,7 +75,7 @@
     "@radix-ui/react-toast": "^1.2.19",
     "@radix-ui/react-tooltip": "^1.2.12",
     "adm-zip": "^0.6.0",
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "axios": "^1.18.1",
     "bcryptjs": "^2.4.3",
     "blurhash": "^2.0.5",
