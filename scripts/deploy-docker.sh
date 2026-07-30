@@ -12,6 +12,8 @@ SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_MIGRATE="${SKIP_MIGRATE:-0}"
 SKIP_SEED="${SKIP_SEED:-0}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-60}"
+# 默认清理部署过程中产生的旧 Docker 资源；持久化 volume 不会被删除。
+PRUNE_IMAGES="${PRUNE_IMAGES:-1}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -143,6 +145,48 @@ compose() {
   APP_ENV_FILE="$ENV_FILE" "${args[@]}" "$@"
 }
 
+# 清理已退出的 compose run 一次性容器，避免每次部署累积 stopped 容器。
+cleanup_one_off_containers() {
+  local project_name="${COMPOSE_PROJECT_NAME:-$(basename "$ROOT_DIR")}"
+  local containers=()
+
+  while IFS= read -r container_id; do
+    [[ -n "$container_id" ]] && containers+=("$container_id")
+  done < <(
+    docker ps -aq \
+      --filter "label=com.docker.compose.project=${project_name}" \
+      --filter 'label=com.docker.compose.oneoff' \
+      --filter 'status=exited' \
+      2>/dev/null
+  )
+
+  if (( ${#containers[@]} > 0 )); then
+    log "removing ${#containers[@]} stale one-off container(s)"
+    docker rm "${containers[@]}" >/dev/null
+  fi
+}
+
+# 语义搜索关闭时移除之前启动的 Qdrant 容器，但保留 qdrant_storage volume。
+cleanup_disabled_services() {
+  if is_semantic_enabled; then
+    return
+  fi
+
+  log 'removing stale qdrant container because semantic search is disabled'
+  APP_ENV_FILE="$ENV_FILE" docker compose --env-file "$ENV_FILE" --profile semantic \
+    rm --stop --force qdrant >/dev/null 2>&1 || true
+}
+
+# 只清理悬挂镜像，不触碰数据库、模型缓存和上传文件等持久化资源。
+cleanup_stale_images() {
+  if [[ "$PRUNE_IMAGES" == '1' ]]; then
+    log 'removing dangling Docker images'
+    docker image prune --force >/dev/null
+  else
+    warn 'PRUNE_IMAGES=0, keeping dangling Docker images'
+  fi
+}
+
 # PostgreSQL 必须先可用，后续 Prisma 迁移和 seed 才能执行。
 wait_for_postgres() {
   log 'waiting for postgres to be ready'
@@ -235,9 +279,12 @@ main() {
   mkdir -p "$ROOT_DIR/uploads" "$ROOT_DIR/backups"
   chown -R 1001:1001 "$ROOT_DIR/uploads" "$ROOT_DIR/backups" 2>/dev/null || true
 
+
   # 先校验 compose 配置，避免执行到一半才发现 YAML 或变量错误。
   log 'validating docker compose configuration'
   compose config >/dev/null
+  cleanup_one_off_containers
+  cleanup_disabled_services
 
   # 应用镜像来源由 DEPLOY_IMAGE_MODE 控制：
   # pull 适合低内存服务器，直接使用 GitHub Actions 推送的预构建镜像；
@@ -256,13 +303,13 @@ main() {
 
   # 数据库先启动，后续迁移和 seed 都依赖它。
   log 'starting postgres'
-  compose up -d postgres
+  compose up -d --remove-orphans postgres
   wait_for_postgres
 
   # 语义搜索默认可关闭，避免首次部署被 Qdrant 或模型缓存阻塞。
   if is_semantic_enabled; then
     log 'semantic search enabled; starting qdrant'
-    compose up -d qdrant
+    compose up -d --remove-orphans qdrant
     wait_for_qdrant
   else
     log 'semantic search disabled; qdrant profile will not be started'
@@ -286,8 +333,11 @@ main() {
 
   # 最后启动应用，并等待健康检查通过。
   log 'starting app'
-  compose up -d app
+  compose up -d --remove-orphans app
   wait_for_app
+
+  cleanup_one_off_containers
+  cleanup_stale_images
 
   echo
   log 'deployment completed successfully'

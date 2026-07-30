@@ -54,6 +54,15 @@ chmod +x scripts/deploy-docker.sh
 - 启动应用容器
 - 检查 `http://127.0.0.1:3003/healthz`
 
+部署脚本会自动处理重复部署留下的资源：
+
+- `docker compose up --remove-orphans` 会移除不再由当前 Compose 配置管理的孤儿容器
+- 关闭语义搜索时，会停止并移除之前启动的 Qdrant 容器，但保留 `qdrant_storage` 数据卷
+- 会移除被中断的迁移或 seed 产生的一次性容器
+- 默认执行 `docker image prune`，只清理悬挂镜像；如需保留，可设置 `PRUNE_IMAGES=0`
+
+脚本不会删除 PostgreSQL、Qdrant 或 Transformers 数据卷，也不会删除 `uploads/` 和 `backups/`。
+
 空数据库首次访问站点时，会进入 `/setup` 页面创建超级管理员账号。
 
 ## 3. 常用操作
