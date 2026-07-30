@@ -78,6 +78,9 @@ function existingSong(overrides: Record<string, unknown> = {}) {
     album: '',
     audioUrl: '',
     lyric: null,
+    lyricType: null,
+    lyricPlain: null,
+    lyricSource: null,
     description: null,
     releaseDate: null,
     durationMs: null,
@@ -209,6 +212,122 @@ describe('song JSON import service', () => {
     const song = preview.items[0].input
 
     expect(song.customPlatformLinks).toEqual([{ label: '官网', url: 'https://example.com/song' }])
+  })
+
+  it('imports the collected lyricTimed shape without losing word markers', async () => {
+    const { previewSongJsonImport } = await importService()
+    const lyricTimed = '[00:00.00]<0,443>归<443,443>来'
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '归来',
+          artists: ['黄诗扶'],
+          lyricTimed,
+          lyricPlain: '归来',
+          lyricType: 'word',
+          source: 'tencent',
+        },
+      ],
+    })
+
+    expect(preview.invalidItems).toHaveLength(0)
+    expect(preview.items[0].input).toMatchObject({
+      lyric: lyricTimed,
+      lyricType: 'word',
+      lyricPlain: '归来',
+      lyricSource: 'tencent',
+    })
+  })
+
+  it('prefers explicit lyric over lyricTimed and derives missing metadata', async () => {
+    const { previewSongJsonImport } = await importService()
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '归来',
+          artists: ['黄诗扶'],
+          lyric: '权威纯文本',
+          lyricTimed: '[00:00]<0,100>旧',
+        },
+      ],
+    })
+
+    expect(preview.items[0].input).toMatchObject({
+      lyric: '权威纯文本',
+      lyricType: 'plain',
+      lyricPlain: '权威纯文本',
+      lyricSource: null,
+    })
+  })
+  it('falls back to lyricTimed when lyric is only whitespace', async () => {
+    const { previewSongJsonImport } = await importService()
+    const lyricTimed = '[00:00]<0,100>有效歌词'
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '空白歌词回退',
+          artists: ['黄诗扶'],
+          lyric: '   ',
+          lyricTimed,
+        },
+      ],
+    })
+
+    expect(preview.items[0].input).toMatchObject({
+      lyric: lyricTimed,
+      lyricType: 'word',
+      lyricPlain: '有效歌词',
+    })
+  })
+
+  it('treats lyricType none as an intentionally empty lyric', async () => {
+    const { previewSongJsonImport } = await importService()
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '未获取歌词',
+          artists: ['黄诗扶'],
+          lyricTimed: '[00:00]不应写入',
+          lyricPlain: '不应写入',
+          lyricType: 'none',
+          source: 'netease',
+        },
+      ],
+    })
+
+    expect(preview.items[0].input).toMatchObject({
+      lyric: null,
+      lyricType: null,
+      lyricPlain: null,
+      lyricSource: null,
+    })
+  })
+
+  it('rejects unsupported lyric types and sources', async () => {
+    const { previewSongJsonImport } = await importService()
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '非法歌词元数据',
+          artists: ['黄诗扶'],
+          lyric: '歌词',
+          lyricType: 'karaoke',
+          lyricSource: 'unknown',
+        },
+      ],
+    })
+
+    expect(preview.items[0].validationErrors).toEqual(
+      expect.arrayContaining([
+        '歌词类型只能是 plain、line、word 或 none',
+        '歌词来源必须是 netease、tencent、kugou、baidu 或 kuwo',
+      ])
+    )
   })
 
   it('reports validation errors and does not write invalid songs', async () => {
@@ -447,6 +566,65 @@ describe('song JSON import service', () => {
     })
   })
 
+  it('fills lyric metadata only when the stored raw lyric is identical', async () => {
+    const { previewSongJsonImport, executeSongJsonImport } = await importService()
+    const lyric = '[00:00]<0,100>归<100,100>来'
+    mockPrisma.musicTrack.findFirst.mockResolvedValue(
+      existingSong({ lyric, lyricType: null, lyricPlain: null, lyricSource: null })
+    )
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '惊鸿',
+          artists: ['黄诗扶'],
+          lyricTimed: lyric,
+          lyricPlain: '归来',
+          lyricType: 'word',
+          source: 'tencent',
+        },
+      ],
+    })
+    await executeSongJsonImport(preview, new Map([[0, 'fill']]))
+
+    expect(mockPrisma.musicTrack.update).toHaveBeenCalledWith({
+      where: { docId: 'song-doc-1' },
+      data: {
+        lyricType: 'word',
+        lyricPlain: '归来',
+        lyricSource: 'tencent',
+      },
+    })
+  })
+
+  it('does not attach lyric metadata to a different stored raw lyric', async () => {
+    const { previewSongJsonImport, executeSongJsonImport } = await importService()
+    mockPrisma.musicTrack.findFirst.mockResolvedValue(
+      existingSong({
+        lyric: '[00:00]数据库版本',
+        lyricType: null,
+        lyricPlain: null,
+        lyricSource: null,
+      })
+    )
+
+    const preview = await previewSongJsonImport({
+      songs: [
+        {
+          title: '惊鸿',
+          artists: ['黄诗扶'],
+          lyricTimed: '[00:00]<0,100>导入版本',
+          lyricPlain: '导入版本',
+          lyricType: 'word',
+          source: 'tencent',
+        },
+      ],
+    })
+    await executeSongJsonImport(preview, new Map([[0, 'fill']]))
+
+    expect(mockPrisma.musicTrack.update).not.toHaveBeenCalled()
+  })
+
   it('overwrites duplicate songs and replaces sources', async () => {
     const { previewSongJsonImport, executeSongJsonImport } = await importService()
     const song = existingSong({
@@ -466,6 +644,9 @@ describe('song JSON import service', () => {
       data: expect.objectContaining({
         album: '专辑',
         lyric: '[00:00]歌词',
+        lyricType: 'line',
+        lyricPlain: '歌词',
+        lyricSource: null,
       }),
     })
     expect(mockPrisma.musicExternalSource.deleteMany).toHaveBeenCalledWith({

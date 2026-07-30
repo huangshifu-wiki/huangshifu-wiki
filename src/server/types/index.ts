@@ -4,6 +4,7 @@ import type { ParsedQs } from 'qs'
 import { JwtPayload } from 'jsonwebtoken'
 import { Prisma, UserRole as PrismaUserRole } from '@prisma/client'
 import type { WikiRelationType } from '../../lib/relationConstants'
+import type { LyricType } from '../../lib/lrcParser'
 
 type UserStatus = 'active' | 'banned'
 type ContentStatus = 'draft' | 'pending' | 'published' | 'rejected'
@@ -77,6 +78,9 @@ type MusicTrackWithRelations = {
   album: string
   audioUrl: string
   lyric: string | null
+  lyricType: LyricType | null
+  lyricPlain: string | null
+  lyricSource: MusicPlatform | null
   description: string | null
   releaseDate: Date | null
   durationMs: number | null

@@ -5,6 +5,7 @@ import { prisma, PLAY_URL_CACHE_TTL_MS, DEFAULT_MUSIC_PLATFORMS } from './config
 import { enhancedCache, CACHE_KEYS } from './cache'
 import { parseInteger } from './parsers'
 import { withNumericSlugTransaction } from './numericSlug'
+import { normalizeLyricStorage } from './lyrics'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { firstMusicCredit, normalizeStringListInput } from '../../lib/musicCredits'
 import type {
@@ -740,6 +741,9 @@ export async function createOrUpdateImportedSong(params: {
     const resolvedAudioUrl = resolvedAudioUrlRaw || ''
     const resolvedLyric = resolvedLyricRaw || ''
 
+    const lyricUpdate = resolvedLyric
+      ? normalizeLyricStorage({ lyric: resolvedLyric, lyricSource: platform }).data
+      : {}
     const song = await prisma.musicTrack.update({
       where: { docId: existingSource.song.docId },
       data: {
@@ -747,7 +751,7 @@ export async function createOrUpdateImportedSong(params: {
         artists,
         album,
         audioUrl: resolvedAudioUrl || '',
-        lyric: resolvedLyric || null,
+        ...lyricUpdate,
         description: existingSource.song.description ?? null,
       },
     })
@@ -784,6 +788,8 @@ export async function createOrUpdateImportedSong(params: {
   const resolvedCover = resolvedCoverRaw || track.cover
   const resolvedAudioUrl = resolvedAudioUrlRaw || ''
   const resolvedLyric = resolvedLyricRaw || ''
+  const lyricStorage = normalizeLyricStorage({ lyric: resolvedLyric, lyricSource: platform })
+  const lyricUpdate = resolvedLyric ? lyricStorage.data : {}
 
   if (existingByTitleArtist) {
     const updatedSong = await prisma.musicTrack.update({
@@ -793,7 +799,7 @@ export async function createOrUpdateImportedSong(params: {
         artists,
         album,
         audioUrl: resolvedAudioUrl || '',
-        lyric: resolvedLyric || null,
+        ...lyricUpdate,
         description: existingByTitleArtist.description ?? null,
       },
     })
@@ -830,7 +836,7 @@ export async function createOrUpdateImportedSong(params: {
         artists,
         album,
         audioUrl: resolvedAudioUrl || '',
-        lyric: resolvedLyric || null,
+        ...lyricStorage.data,
         description: null,
         externalSources: {
           create: {

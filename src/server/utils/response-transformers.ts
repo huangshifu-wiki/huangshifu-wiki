@@ -15,6 +15,7 @@ import { Prisma, UserRole as PrismaUserRole } from '@prisma/client'
 import type { VariantStatus } from '@prisma/client'
 import { normalizeStringListInput } from '../../lib/musicCredits'
 import { isPlayableSong } from '../../lib/musicPlayback'
+import type { LyricType } from '../../lib/lrcParser'
 import { RELATION_TYPE_LABELS } from '../../lib/relationConstants'
 
 import type {
@@ -1110,7 +1111,14 @@ export function toSongResponse(
 
   const withOptionalFields = {
     ...base,
-    ...(options?.excludeLyric ? {} : { lyric: song.lyric }),
+    ...(options?.excludeLyric
+      ? {}
+      : {
+          lyric: song.lyric,
+          lyricType: song.lyricType,
+          lyricPlain: song.lyricPlain,
+          lyricSource: song.lyricSource,
+        }),
     ...(options?.excludeDescription ? {} : { description: song.description }),
   }
 

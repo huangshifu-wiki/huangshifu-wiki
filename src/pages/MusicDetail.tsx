@@ -33,6 +33,7 @@ import { getPlatformExternalUrl } from '../lib/musicPlatformUrls'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { formatTime } from '../lib/formatUtils'
 import { isPlayableSong } from '../lib/musicPlayback'
+import { parseLyrics } from '../lib/lrcParser'
 import type { MusicExternalSource } from '../types/entities'
 
 type CustomPlatformLink = {
@@ -54,6 +55,7 @@ type SongItem = {
   coverThumbnail?: string
   audioUrl: string
   lyric?: string | null
+  lyricPlain?: string | null
   description?: string | null
   releaseDate?: string | null
   durationMs?: number | null
@@ -110,7 +112,7 @@ const MusicDetail = () => {
   const [lyricsCopied, setLyricsCopied] = useState(false)
   const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
   const { user, isAdmin } = useAuth()
-  const { setCurrentSong, setIsPlaying, setPlaylist } = useMusic()
+  const { currentSong, currentTime, setCurrentSong, setIsPlaying, setPlaylist } = useMusic()
   const dialog = useDialog()
   const { show } = useToast()
   const { t } = useI18n()
@@ -179,8 +181,9 @@ const MusicDetail = () => {
 
   const handleCopyLyrics = async () => {
     if (!song?.lyric) return
+    const plainLyrics = song.lyricPlain || parseLyrics(song.lyric).plainText
     try {
-      await navigator.clipboard.writeText(song.lyric)
+      await navigator.clipboard.writeText(plainLyrics)
       setLyricsCopied(true)
       setTimeout(() => setLyricsCopied(false), 2000)
     } catch {
@@ -389,7 +392,10 @@ const MusicDetail = () => {
                   !lyricsExpanded && 'max-h-[300px]'
                 )}
               >
-                <LyricsDisplay lyric={song?.lyric || ''} />
+                <LyricsDisplay
+                  lyric={song?.lyric || ''}
+                  currentTime={song?.docId === currentSong?.docId ? currentTime : undefined}
+                />
               </div>
             </div>
 

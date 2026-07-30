@@ -1,4 +1,5 @@
 import type { ContentStatus, FavoriteTargetType, AdminRole, UserStatus, Platform } from './common'
+import type { LyricType } from '../lib/lrcParser'
 
 export interface UserProfile {
   uid: string
@@ -47,6 +48,9 @@ export interface SongItem {
   releaseDate?: string | null
   durationMs?: number | null
   lyric?: string | null
+  lyricType?: LyricType | null
+  lyricPlain?: string | null
+  lyricSource?: Platform | null
   description?: string | null
   favoritedByMe?: boolean
   sources?: MusicExternalSource[]

@@ -39,6 +39,7 @@ import {
   allocateNumericSlug,
   isNumericSlug,
   withNumericSlugTransaction,
+  normalizeLyricStorage,
 } from '../utils'
 import { parseMusicUrl } from '../music/musicUrlParser'
 import {
@@ -345,7 +346,9 @@ router.post(
       const vocals = normalizeStringListInput(body.vocals)
       const album = typeof body.album === 'string' ? body.album.trim() : ''
       const audioUrl = typeof body.audioUrl === 'string' ? body.audioUrl.trim() : ''
-      const lyric = typeof body.lyric === 'string' ? body.lyric : null
+      const lyricStorage = normalizeLyricStorage({
+        lyric: typeof body.lyric === 'string' ? body.lyric : null,
+      })
       const description = normalizeNullableMarkdown(body.description)
       const hasReleaseDate = Object.prototype.hasOwnProperty.call(body, 'releaseDate')
       const hasDurationMs = Object.prototype.hasOwnProperty.call(body, 'durationMs')
@@ -406,7 +409,10 @@ router.post(
             vocals,
             album,
             audioUrl,
-            lyric,
+            lyric: lyricStorage.data.lyric,
+            lyricType: lyricStorage.data.lyricType,
+            lyricPlain: lyricStorage.data.lyricPlain,
+            lyricSource: null,
             description: description ?? null,
             releaseDate,
             durationMs,
@@ -1032,7 +1038,13 @@ router.patch(
         updateData.vocals = normalizeStringListInput(body.vocals)
       if (typeof body.album === 'string') updateData.album = body.album.trim()
       if (typeof body.audioUrl === 'string') updateData.audioUrl = body.audioUrl.trim()
-      if (typeof body.lyric === 'string' || body.lyric === null) updateData.lyric = body.lyric
+      if (typeof body.lyric === 'string' || body.lyric === null) {
+        const lyricStorage = normalizeLyricStorage({ lyric: body.lyric })
+        updateData.lyric = lyricStorage.data.lyric
+        updateData.lyricType = lyricStorage.data.lyricType
+        updateData.lyricPlain = lyricStorage.data.lyricPlain
+        updateData.lyricSource = null
+      }
       if (typeof body.description === 'string' || body.description === null) {
         updateData.description = normalizeNullableMarkdown(body.description)
       }

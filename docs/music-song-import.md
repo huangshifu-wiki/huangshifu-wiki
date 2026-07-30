@@ -88,7 +88,10 @@ npm run songs:import -- --print-output-path
       "album": "专辑名",
       "audioUrl": "https://example.com/song.mp3",
       "coverUrl": "https://example.com/cover.jpg",
-      "lyric": "[00:00]歌词",
+      "lyric": "[00:00]<0,200>歌<200,300>词",
+      "lyricPlain": "歌词",
+      "lyricType": "word",
+      "lyricSource": "netease",
       "description": "歌曲说明",
       "releaseDate": "2026-01-01",
       "durationMs": 180000,
@@ -118,6 +121,15 @@ npm run songs:import -- --print-output-path
 - `kugou`
 - `baidu`
 - `kuwo`
+
+歌词字段：
+
+- `lyric` 保存权威原文；逐行或逐字歌词中的时间标记会原样入库。
+- 采集文件也可以提供 `lyricTimed`。权威原文优先级为 `lyric`、`lyricTimed`、`lyricPlain`；空白字符串会被视为空值并继续回退。
+- `lyricType` 可选 `plain`、`line`、`word`；采集失败项可以使用 `none`，在 `fill` 策略下不会写入或清空已有歌词，使用 `overwrite` 时会把四个歌词字段清空。
+- `lyricPlain`、`lyricType` 缺失时会从权威原文解析生成。
+- `lyricSource` 表示歌词来源平台；兼容采集文件使用 `source` 作为别名。
+- `lyricSource` 与 `sources` 用途不同：前者记录歌词版本来源，后者记录歌曲平台链接。
 
 ## huangshifu-songs.json 兼容格式
 
@@ -163,6 +175,8 @@ npm run songs:import -- --print-output-path
 
 - `fill` 只写入已有歌曲为空的字段，并追加缺失的平台来源。
 - `overwrite` 覆盖歌曲字段，并用 JSON 中的来源替换该歌曲现有来源。
+- `fill` 只有在目标歌词为空，或目标原文与输入原文完全一致时，才会补充 `lyricType`、`lyricPlain`、`lyricSource`，防止把另一版歌词的元数据挂到现有原文上。
+- `overwrite` 会同步替换原始歌词及三个歌词元数据字段。
 - `skip` 不修改已有歌曲。
 
 封面处理：

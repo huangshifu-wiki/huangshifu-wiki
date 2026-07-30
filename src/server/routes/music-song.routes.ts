@@ -1,5 +1,11 @@
 import { Router } from 'express'
-import { prisma, resolveMusicPlayUrl, toSongResponse, normalizeMusicImportTracks } from '../utils'
+import {
+  normalizeLyricStorage,
+  normalizeMusicImportTracks,
+  prisma,
+  resolveMusicPlayUrl,
+  toSongResponse,
+} from '../utils'
 import {
   getMusicResourcePreview,
   resolveAudioUrl as resolveMetingAudioUrl,
@@ -74,6 +80,7 @@ router.get('/song/:id', async (req, res) => {
 
     const audioUrl = await resolveMetingAudioUrl('netease', track.urlId)
     const lyric = await resolveMetingLyric('netease', track.lyricId)
+    const lyricStorage = normalizeLyricStorage({ lyric, lyricSource: 'netease' })
 
     res.json({
       docId: null,
@@ -90,7 +97,7 @@ router.get('/song/:id', async (req, res) => {
       cover: track.cover || preview.cover,
       audioUrl: audioUrl || '',
       playUrl: audioUrl || '',
-      lyric: lyric || null,
+      ...lyricStorage.data,
       sources: [
         {
           id: `preview-netease-${track.sourceId}`,

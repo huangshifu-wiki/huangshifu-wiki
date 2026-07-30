@@ -42,6 +42,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Paged Music Test Song' } },
           { title: { startsWith: '000 Paged Music Test Song' } },
           { title: { startsWith: 'Release Date Sort Test Song' } },
+          { title: { startsWith: 'Lyric Storage Test Song' } },
         ],
       },
     })
@@ -80,6 +81,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Paged Music Test Song' } },
           { title: { startsWith: '000 Paged Music Test Song' } },
           { title: { startsWith: 'Release Date Sort Test Song' } },
+          { title: { startsWith: 'Lyric Storage Test Song' } },
         ],
       },
     })
@@ -147,6 +149,69 @@ describe('Music API - 音乐接口测试', () => {
     expect(response.status).toBe(201)
     expect(response.body.song.releaseDate).toBeNull()
     expect(response.body.song.durationMs).toBeNull()
+  })
+
+  it('创建、更新和清空歌词时同步维护结构化字段', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const rawWordLyric = '[00:12.34]<0,200>你<200,300>好'
+
+    const createResponse = await agent
+      .post('/api/music')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: 'Lyric Storage Test Song',
+        artists: ['Lyric Storage Test Artist'],
+        lyric: rawWordLyric,
+      })
+
+    expect(createResponse.status).toBe(201)
+    expect(createResponse.body.song).toMatchObject({
+      lyric: rawWordLyric,
+      lyricType: 'word',
+      lyricPlain: '你好',
+      lyricSource: null,
+    })
+
+    const songDocId = createResponse.body.song.docId as string
+    await prisma.musicTrack.update({
+      where: { docId: songDocId },
+      data: { lyricSource: 'tencent' },
+    })
+
+    const updateResponse = await agent
+      .patch(`/api/music/${songDocId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ lyric: '[00:01]新歌词' })
+
+    expect(updateResponse.status).toBe(200)
+    expect(updateResponse.body.song).toMatchObject({
+      lyric: '[00:01]新歌词',
+      lyricType: 'line',
+      lyricPlain: '新歌词',
+      lyricSource: null,
+    })
+
+    const clearResponse = await agent
+      .patch(`/api/music/${songDocId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ lyric: null })
+
+    expect(clearResponse.status).toBe(200)
+    expect(clearResponse.body.song).toMatchObject({
+      lyric: null,
+      lyricType: null,
+      lyricPlain: null,
+      lyricSource: null,
+    })
+    await expect(
+      prisma.musicTrack.findUnique({
+        where: { docId: songDocId },
+        select: { lyric: true, lyricType: true, lyricPlain: true, lyricSource: true },
+      })
+    ).resolves.toEqual({ lyric: null, lyricType: null, lyricPlain: null, lyricSource: null })
   })
 
   it('创建歌曲时拒绝非法发行日期和时长', async () => {

@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { normalizeStringListInput } from '../../lib/musicCredits'
+import type { LyricType } from '../../lib/lrcParser'
 import { getMusicResourcePreview, resolveCoverUrlCandidates } from '../music/metingService'
 import {
   addSongCoverFromUrl,
@@ -13,6 +14,7 @@ import {
   normalizeSongCustomPlatformLinks,
   prisma,
   withNumericSlugTransaction,
+  normalizeLyricStorage,
 } from '../utils'
 import type { MusicPlatform, SongCustomPlatformLink } from '../types'
 
@@ -33,6 +35,9 @@ export interface NormalizedSongJsonInput {
   audioUrl: string
   coverUrl: string
   lyric: string | null
+  lyricType: LyricType | null
+  lyricPlain: string | null
+  lyricSource: MusicPlatform | null
   description: string | null
   releaseDate: Date | null
   durationMs: number | null
@@ -51,6 +56,9 @@ export interface SongImportExistingSong {
   album: string
   audioUrl: string
   lyric: string | null
+  lyricType: LyricType | null
+  lyricPlain: string | null
+  lyricSource: MusicPlatform | null
   description: string | null
   releaseDate: Date | null
   durationMs: number | null
@@ -207,7 +215,19 @@ function normalizeSongRecord(
     stringValue(platformRecord.albumName)
   const audioUrl = stringValue(record.audioUrl)
   const coverUrl = stringValue(record.coverUrl)
-  const lyric = nullableText(record.lyric)
+  const rawLyric =
+    [record.lyric, record.lyricTimed, record.lyricPlain].find(
+      (value): value is string => typeof value === 'string' && Boolean(value.trim())
+    ) ?? null
+  const lyricStorage = normalizeLyricStorage({
+    lyric: rawLyric,
+    lyricPlain: record.lyricPlain,
+    lyricType: record.lyricType,
+    lyricSource: Object.prototype.hasOwnProperty.call(record, 'lyricSource')
+      ? record.lyricSource
+      : record.source,
+  })
+  const { lyric, lyricType, lyricPlain, lyricSource } = lyricStorage.data
   const description = nullableText(record.description)
   const releaseDateValue = valueFromRecordOrPlatformRecord(record, platformRecord, 'releaseDate')
   const releaseDate =
@@ -224,12 +244,14 @@ function normalizeSongRecord(
   if (!artists.length) errors.push('缺少歌手 artists')
   if (releaseDate === undefined) errors.push('releaseDate 必须是 YYYY-MM-DD')
   if (durationMs === undefined) errors.push('durationMs 必须是非负整数毫秒')
+  errors.push(...lyricStorage.errors)
 
   validateLength(errors, title, '歌曲标题', CONTENT_LIMITS.music.title)
   validateLength(errors, album, '专辑名', CONTENT_LIMITS.music.album)
   validateLength(errors, audioUrl, '音频链接', CONTENT_LIMITS.music.audioUrl)
   validateLength(errors, coverUrl, '封面链接', CONTENT_LIMITS.url)
   validateLength(errors, lyric, '歌词', CONTENT_LIMITS.music.lyric)
+  validateLength(errors, lyricPlain, '纯文本歌词', CONTENT_LIMITS.music.lyric)
   validateLength(errors, description, '歌曲描述', CONTENT_LIMITS.music.description)
   validateCredits(errors, artists, '歌手')
   validateCredits(errors, lyricists, '作词')
@@ -255,6 +277,9 @@ function normalizeSongRecord(
       audioUrl,
       coverUrl,
       lyric,
+      lyricType,
+      lyricPlain,
+      lyricSource,
       description,
       releaseDate: releaseDate ?? null,
       durationMs: durationMs ?? null,
@@ -433,7 +458,16 @@ function buildFillUpdateData(input: NormalizedSongJsonInput, existing: SongImpor
   if (!hasList(existing.vocals) && input.vocals.length) data.vocals = input.vocals
   if (!hasText(existing.album) && input.album) data.album = input.album
   if (!hasText(existing.audioUrl) && input.audioUrl) data.audioUrl = input.audioUrl
-  if (!hasText(existing.lyric) && input.lyric) data.lyric = input.lyric
+  if (!hasText(existing.lyric) && input.lyric) {
+    data.lyric = input.lyric
+    data.lyricType = input.lyricType
+    data.lyricPlain = input.lyricPlain
+    data.lyricSource = input.lyricSource
+  } else if (existing.lyric === input.lyric) {
+    if (!existing.lyricType && input.lyricType) data.lyricType = input.lyricType
+    if (!hasText(existing.lyricPlain) && input.lyricPlain) data.lyricPlain = input.lyricPlain
+    if (!existing.lyricSource && input.lyricSource) data.lyricSource = input.lyricSource
+  }
   if (!hasText(existing.description) && input.description) data.description = input.description
   if (!existing.releaseDate && input.releaseDate) data.releaseDate = input.releaseDate
   if (existing.durationMs === null && input.durationMs !== null) data.durationMs = input.durationMs
@@ -459,6 +493,9 @@ function buildSongData(input: NormalizedSongJsonInput) {
     album: input.album,
     audioUrl: input.audioUrl,
     lyric: input.lyric,
+    lyricType: input.lyricType,
+    lyricPlain: input.lyricPlain,
+    lyricSource: input.lyricSource,
     description: input.description,
     releaseDate: input.releaseDate,
     durationMs: input.durationMs,

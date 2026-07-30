@@ -98,6 +98,12 @@ enum MusicPlatform {
   kuwo
 }
 
+enum LyricType {
+  plain
+  line
+  word
+}
+
 enum DisplayAlbumMode {
   none
   linked
@@ -889,6 +895,9 @@ model MusicTrack {
   album     String   @default("")
   audioUrl  String   @default("")
   lyric     String?
+  lyricType LyricType?
+  lyricPlain String?
+  lyricSource MusicPlatform?
   description String?
   releaseDate DateTime? @db.Date
   durationMs  Int?
