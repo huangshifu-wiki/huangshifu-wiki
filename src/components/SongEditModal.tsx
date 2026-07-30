@@ -22,6 +22,7 @@ type SongItem = {
   vocals?: string[]
   album: string
   cover: string
+  coverThumbnail?: string
   audioUrl: string
   lyric?: string | null
   description?: string | null

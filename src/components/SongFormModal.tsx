@@ -64,6 +64,7 @@ type SongItem = {
   vocals?: string[]
   album: string
   cover: string
+  coverThumbnail?: string
   audioUrl: string
   lyric?: string | null
   description?: string | null
@@ -707,7 +708,7 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
           <div className={`${bookPanelClass} p-3`}>
             <div className="flex items-center gap-3">
               <img
-                src={song.cover}
+                src={song.coverThumbnail || song.cover}
                 alt="封面"
                 className="h-12 w-12 rounded border border-[var(--book-ink-line)] object-cover"
                 referrerPolicy="no-referrer"

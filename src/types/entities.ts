@@ -386,6 +386,7 @@ export interface AdminDataItem {
   bio?: string
   photoURL?: string
   cover?: string
+  coverThumbnail?: string
   content?: string
   description?: string
   artist?: string

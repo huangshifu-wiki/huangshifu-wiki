@@ -327,7 +327,7 @@ const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementT
         />
       ) : type === 'music' ? (
         <SmartImage
-          src={item.cover || ''}
+          src={item.coverThumbnail || item.cover || ''}
           alt=""
           className="h-11 w-11 rounded bg-surface-alt object-cover"
         />
