@@ -46,6 +46,7 @@ COPY --from=prod-deps --chown=appuser:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=appuser:nodejs /app/dist ./dist
 COPY --chown=appuser:nodejs package.json package-lock.json tsconfig.json server.ts ./
 COPY --chown=appuser:nodejs prisma ./prisma
+COPY --chown=appuser:nodejs scripts ./scripts
 COPY --chown=appuser:nodejs config ./config
 COPY --chown=appuser:nodejs public/sensitive-words ./public/sensitive-words
 COPY --chown=appuser:nodejs src/lib ./src/lib
