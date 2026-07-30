@@ -4,6 +4,7 @@ const STATE_LAYER_CLASS = 'material-state-layer'
 const RIPPLE_SURFACE_CLASS = 'material-ripple-surface'
 const RIPPLE_FALLBACK_SIZE = 44
 const RIPPLE_CLEANUP_DELAY = 700
+const STALE_CHECK_INTERVAL = 16
 const CARD_FEEDBACK_MIN_HEIGHT = 64
 const CARD_FEEDBACK_MIN_AREA = 12_000
 const SURFACE_CLASS_PATTERN = /(?:^|:)(?:theme-(?:button|icon-button)|(?:home|lsky)-btn)/
@@ -224,6 +225,11 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
 
   const removeSurface = (surface: HTMLSpanElement) => {
     activeSurfaces.delete(surface)
+
+    if (activeSurfaces.size === 0 && staleCheckTimer !== undefined) {
+      ownerWindow?.clearTimeout(staleCheckTimer)
+      staleCheckTimer = undefined
+    }
   }
 
   const removeActiveSurfaces = () => {
@@ -252,6 +258,15 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
     })
   }
 
+  const runStaleSurfaceCheck = () => {
+    staleCheckTimer = undefined
+    removeStaleSurfaces()
+
+    if (activeSurfaces.size > 0 && ownerWindow) {
+      staleCheckTimer = ownerWindow.setTimeout(runStaleSurfaceCheck, STALE_CHECK_INTERVAL)
+    }
+  }
+
   const scheduleStaleSurfaceCheck = () => {
     if (activeSurfaces.size === 0) return
 
@@ -263,10 +278,7 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
     if (staleCheckTimer !== undefined) {
       ownerWindow.clearTimeout(staleCheckTimer)
     }
-    staleCheckTimer = ownerWindow.setTimeout(() => {
-      staleCheckTimer = undefined
-      removeStaleSurfaces()
-    }, 0)
+    staleCheckTimer = ownerWindow.setTimeout(runStaleSurfaceCheck, 0)
   }
 
   const showFeedback = ({ element, computedStyle }: PressableTarget, point?: PressPoint) => {
@@ -276,6 +288,7 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
       elementRect: feedback.elementRect,
       remove: feedback.remove,
     })
+    scheduleStaleSurfaceCheck()
   }
 
   const handlePointerDown = (event: Event) => {
@@ -299,7 +312,6 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
     const target = findPressable(keyboardEvent.target)
     if (target) {
       showFeedback(target)
-      scheduleStaleSurfaceCheck()
     }
   }
 
@@ -315,9 +327,6 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
     root.removeEventListener('click', scheduleStaleSurfaceCheck)
     root.removeEventListener('scroll', removeActiveSurfaces, true)
     ownerWindow?.removeEventListener('resize', removeActiveSurfaces)
-    if (staleCheckTimer !== undefined) {
-      ownerWindow?.clearTimeout(staleCheckTimer)
-    }
     removeActiveSurfaces()
   }
 }
