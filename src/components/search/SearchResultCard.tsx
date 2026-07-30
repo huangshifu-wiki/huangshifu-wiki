@@ -133,7 +133,14 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(
         ) : (
           <>
             {hasMedia && (
-              <div className="aspect-[4/3] overflow-hidden bg-surface-alt">
+              <div
+                className={clsx(
+                  'overflow-hidden bg-surface-alt',
+                  config.type === 'music' || config.type === 'album'
+                    ? 'aspect-square'
+                    : 'aspect-[4/3]'
+                )}
+              >
                 {config.image ? (
                   <SmartImage
                     src={config.image}
