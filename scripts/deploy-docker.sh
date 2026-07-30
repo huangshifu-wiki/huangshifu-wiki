@@ -12,8 +12,8 @@ SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_MIGRATE="${SKIP_MIGRATE:-0}"
 SKIP_SEED="${SKIP_SEED:-0}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-60}"
-# 默认清理部署过程中产生的旧 Docker 资源；持久化 volume 不会被删除。
-PRUNE_IMAGES="${PRUNE_IMAGES:-1}"
+# 默认不清理 Docker 主机上的悬挂镜像；持久化 volume 不会被删除。
+PRUNE_IMAGES="${PRUNE_IMAGES:-0}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -149,6 +149,7 @@ compose() {
 cleanup_one_off_containers() {
   local project_name="${COMPOSE_PROJECT_NAME:-$(basename "$ROOT_DIR")}"
   local containers=()
+  local remove_output
 
   while IFS= read -r container_id; do
     [[ -n "$container_id" ]] && containers+=("$container_id")
@@ -160,10 +161,22 @@ cleanup_one_off_containers() {
       2>/dev/null
   )
 
-  if (( ${#containers[@]} > 0 )); then
-    log "removing ${#containers[@]} stale one-off container(s)"
-    docker rm "${containers[@]}" >/dev/null
+  if (( ${#containers[@]} == 0 )); then
+    return
   fi
+
+  log "removing ${#containers[@]} stale one-off container(s)"
+  for container_id in "${containers[@]}"; do
+    if remove_output=$(docker rm "$container_id" 2>&1); then
+      continue
+    fi
+    if [[ "$remove_output" == *'No such container'* || "$remove_output" == *'removal of container'*'already in progress'* ]]; then
+      warn "one-off container $container_id was already removed or is being removed"
+      continue
+    fi
+    error "$remove_output"
+    return 1
+  done
 }
 
 # 语义搜索关闭时移除之前启动的 Qdrant 容器，但保留 qdrant_storage volume。
@@ -174,10 +187,10 @@ cleanup_disabled_services() {
 
   log 'removing stale qdrant container because semantic search is disabled'
   APP_ENV_FILE="$ENV_FILE" docker compose --env-file "$ENV_FILE" --profile semantic \
-    rm --stop --force qdrant >/dev/null 2>&1 || true
+    rm --stop --force qdrant >/dev/null
 }
 
-# 只清理悬挂镜像，不触碰数据库、模型缓存和上传文件等持久化资源。
+# 可选清理整个 Docker 主机上的悬挂镜像，不触碰数据库、模型缓存和上传文件等持久化资源。
 cleanup_stale_images() {
   if [[ "$PRUNE_IMAGES" == '1' ]]; then
     log 'removing dangling Docker images'
@@ -278,7 +291,6 @@ main() {
   log 'creating persistent directories'
   mkdir -p "$ROOT_DIR/uploads" "$ROOT_DIR/backups"
   chown -R 1001:1001 "$ROOT_DIR/uploads" "$ROOT_DIR/backups" 2>/dev/null || true
-
 
   # 先校验 compose 配置，避免执行到一半才发现 YAML 或变量错误。
   log 'validating docker compose configuration'

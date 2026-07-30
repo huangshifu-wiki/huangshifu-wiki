@@ -59,7 +59,7 @@ chmod +x scripts/deploy-docker.sh
 - `docker compose up --remove-orphans` 会移除不再由当前 Compose 配置管理的孤儿容器
 - 关闭语义搜索时，会停止并移除之前启动的 Qdrant 容器，但保留 `qdrant_storage` 数据卷
 - 会移除被中断的迁移或 seed 产生的一次性容器
-- 默认执行 `docker image prune`，只清理悬挂镜像；如需保留，可设置 `PRUNE_IMAGES=0`
+- 默认不执行全局的 `docker image prune`；如确认需要清理整个 Docker 主机上的悬挂镜像，可设置 `PRUNE_IMAGES=1`
 
 脚本不会删除 PostgreSQL、Qdrant 或 Transformers 数据卷，也不会删除 `uploads/` 和 `backups/`。
 
