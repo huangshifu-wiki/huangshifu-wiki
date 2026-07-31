@@ -195,7 +195,7 @@ export default function MentionTextarea({
       {suggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="floating-dropdown absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[var(--book-panel-shadow)] backdrop-blur-[12px]"
+          className="floating-dropdown absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] shadow-[var(--book-panel-shadow)]"
           data-state="open"
           role="listbox"
           aria-hidden={false}

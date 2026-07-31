@@ -687,11 +687,11 @@ const AdminImages: React.FC = () => {
 
       {editModalPresence.mounted && editingImage && (
         <div
-          className="floating-overlay fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          className="floating-overlay fixed inset-0 bg-[var(--ui-overlay-bg)] flex items-center justify-center z-50 p-4"
           data-state={editModalPresence.state}
           aria-hidden={!editingImage}
         >
-          <div className="floating-panel bg-surface border border-border rounded p-6 max-w-2xl w-full">
+          <div className="floating-panel p-6 max-w-2xl w-full">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-text-primary">编辑图片映射</h3>
               <button
@@ -809,11 +809,11 @@ const AdminImages: React.FC = () => {
 
       {preferenceModalPresence.mounted && (
         <div
-          className="floating-overlay fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          className="floating-overlay fixed inset-0 bg-[var(--ui-overlay-bg)] flex items-center justify-center z-50 p-4"
           data-state={preferenceModalPresence.state}
           aria-hidden={!showPreferenceModal}
         >
-          <div className="floating-panel bg-surface border border-border rounded p-6 max-w-md w-full">
+          <div className="floating-panel p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-text-primary">图片加载策略</h3>
               <button
@@ -933,11 +933,11 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) =
 
   return (
     <div
-      className="floating-overlay fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="floating-overlay fixed inset-0 bg-[var(--ui-overlay-bg)] flex items-center justify-center z-50 p-4"
       data-state={presence.state}
       aria-hidden={!open}
     >
-      <div className="floating-panel bg-surface border border-border rounded p-6 max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="floating-panel p-6 max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-text-primary">批量导入图片映射</h3>
           <button onClick={onClose} className="p-2 hover:bg-surface-alt rounded">

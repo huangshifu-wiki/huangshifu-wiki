@@ -404,7 +404,7 @@ export const GlobalMusicPlayer = () => {
           {volumePresence.mounted && (
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2">
               <div
-                className="floating-popover-up px-3 py-2 bg-[var(--book-panel-bg-strong)] rounded border border-[var(--book-ink-line)] flex items-center gap-2 shadow-[var(--book-panel-shadow)]"
+                className="floating-popover-up px-3 py-2 bg-[var(--ui-floating-bg)] rounded border border-[var(--book-ink-line)] flex items-center gap-2 shadow-[var(--book-panel-shadow)]"
                 data-state={volumePresence.state}
                 aria-hidden={!volumeSliderExpanded}
               >

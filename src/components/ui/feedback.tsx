@@ -43,7 +43,7 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
               if (!open) setToast(null)
             }}
             className={cn(
-              'grid min-w-56 max-w-[calc(100vw-2rem)] grid-cols-[1fr_auto] items-center gap-3 rounded border bg-[var(--book-panel-bg-strong)] px-4 py-3 text-sm shadow-[var(--ui-floating-shadow)]',
+              'grid min-w-56 max-w-[calc(100vw-2rem)] grid-cols-[1fr_auto] items-center gap-3 rounded border bg-[var(--ui-floating-bg)] px-4 py-3 text-sm shadow-[var(--ui-floating-shadow)]',
               'data-[state=open]:animate-in data-[state=closed]:animate-out',
               toast.variant === 'error' && 'border-[var(--color-error)] text-[var(--color-error)]',
               toast.variant === 'warning' &&

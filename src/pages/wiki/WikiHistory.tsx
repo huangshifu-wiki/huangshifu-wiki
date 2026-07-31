@@ -141,11 +141,11 @@ const WikiHistory = () => {
 
         {previewPresence.mounted && previewRevision && (
           <div
-            className="floating-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+            className="floating-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--ui-overlay-bg)]"
             data-state={previewPresence.state}
             aria-hidden={!selectedRevision}
           >
-            <div className="floating-panel bg-surface rounded w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col border border-border">
+            <div className="floating-panel w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
               <div className="p-8 border-b border-border flex justify-between items-center">
                 <div>
                   <h3 className="text-2xl font-serif font-bold text-brand-gold">版本预览</h3>

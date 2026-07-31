@@ -164,11 +164,11 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
 
   return (
     <div
-      className="floating-overlay fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center"
+      className="floating-overlay fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] p-4 flex items-center justify-center"
       data-state={presence.state}
       aria-hidden={!open}
     >
-      <div className="floating-panel flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+      <div className="floating-panel flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden">
         <header className="flex items-center justify-between border-b border-[var(--book-ink-line)] px-5 py-4 md:px-6">
           <div>
             <h3

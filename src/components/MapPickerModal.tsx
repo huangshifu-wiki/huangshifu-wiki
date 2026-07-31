@@ -167,8 +167,8 @@ export const MapPickerModal = ({
       data-state={presence.state}
       aria-hidden={!open}
     >
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="floating-panel relative bg-surface rounded border border-border w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden">
+      <div className="absolute inset-0 bg-[var(--ui-overlay-bg)]" onClick={onClose} />
+      <div className="floating-panel relative w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h2 className="text-base font-bold text-text-primary">选择地点</h2>
           <button

@@ -246,7 +246,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
         {dropdownPresence.mounted && visibleDropdown && visibleDropdown.items.length > 0 && (
           <div
-            className="floating-dropdown absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[var(--book-panel-shadow)]"
+            className="floating-dropdown absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-sm border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] shadow-[var(--book-panel-shadow)]"
             data-state={dropdownPresence.state}
             role="listbox"
             id="search-suggestions"

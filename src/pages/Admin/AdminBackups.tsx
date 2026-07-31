@@ -505,13 +505,13 @@ const AdminBackups = () => {
 
       {dialogPresence.mounted && visibleDialog && (
         <div
-          className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay-bg)]"
           data-state={dialogPresence.state}
           aria-hidden={!dialog}
           onClick={closeDialog}
         >
           <div
-            className="floating-panel bg-surface border border-border rounded w-full max-w-md mx-4 p-6 space-y-5"
+            className="floating-panel w-full max-w-md mx-4 p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">

@@ -553,15 +553,12 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
       {/* 编辑关联弹窗 */}
       {editModalPresence.mounted && editingRelation && editingIndex !== null && (
         <div
-          className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay-bg)] p-4"
           data-state={editModalPresence.state}
           aria-hidden={!editingRelation}
           onClick={handleCancelEdit}
         >
-          <div
-            className="floating-panel w-full max-w-md rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] p-6 shadow-[var(--book-panel-shadow)]"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="floating-panel w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-text-primary">编辑关联</h3>
               <button
@@ -725,7 +722,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
             />
             {relationDropdownPresence.mounted && (
               <div
-                className="floating-dropdown absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[var(--book-panel-shadow)] backdrop-blur-[12px]"
+                className="floating-dropdown absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] shadow-[var(--book-panel-shadow)]"
                 data-state={relationDropdownPresence.state}
                 aria-hidden={!showRelationDropdown}
               >

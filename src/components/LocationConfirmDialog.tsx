@@ -39,8 +39,8 @@ export const LocationConfirmDialog = ({
       data-state={presence.state}
       aria-hidden={!open}
     >
-      <div className="absolute inset-0 bg-black/40" onClick={onSkip} />
-      <div className="floating-panel relative bg-surface rounded border border-border w-[90vw] max-w-md overflow-hidden">
+      <div className="absolute inset-0 bg-[var(--ui-overlay-bg)]" onClick={onSkip} />
+      <div className="floating-panel relative w-[90vw] max-w-md overflow-hidden">
         <div className="p-5">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded bg-brand-gold/10">

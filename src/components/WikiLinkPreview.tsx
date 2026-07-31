@@ -112,7 +112,7 @@ export default function WikiLinkPreview({ slug, children }: WikiLinkPreviewProps
         <div
           className={clsx(
             'absolute z-50 left-0 w-72 p-4 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary',
-            'bg-[var(--book-panel-bg-strong)] shadow-[0_14px_36px_rgba(72,53,25,0.08)] backdrop-blur-[12px]',
+            'bg-[var(--ui-floating-bg)] shadow-[0_14px_36px_rgba(72,53,25,0.08)]',
             position === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2'
           )}
         >

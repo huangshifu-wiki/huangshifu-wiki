@@ -97,6 +97,7 @@
   --book-title-font: 'Ma Shan Zheng HSF', 'STKaiti', 'KaiTi', var(--home-font-body);
   --ui-overlay-bg: rgba(30, 24, 18, 0.58);
   --ui-floating-shadow: 0 24px 80px rgba(42, 37, 32, 0.28);
+  --ui-floating-bg: #fffcf5;
 
   /* 高亮文字色 - 书卷金、朱砂、黛青、松绿 */
   --color-highlight-1: rgba(176, 123, 23, 0.82);
@@ -301,6 +302,7 @@ a.mention-highlight:hover {
   --shadow-brand-hover: 0 10px 22px rgba(0, 0, 0, 0.28);
   --ui-overlay-bg: rgba(8, 7, 6, 0.72);
   --ui-floating-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+  --ui-floating-bg: #2a231e;
   --color-static-footer-bg: #1e1c1a;
   --color-static-footer-border: #3d3832;
   --color-static-footer-text: #7a7268;
@@ -1073,6 +1075,10 @@ img {
 }
 
 .floating-panel {
+  border: 1px solid var(--book-ink-line);
+  border-radius: 0.25rem;
+  background: var(--ui-floating-bg);
+  box-shadow: var(--ui-floating-shadow);
   opacity: 0;
   transform: translateY(14px);
   transition:

@@ -290,11 +290,11 @@ export const CoverManager = ({
 
   return (
     <div
-      className="floating-overlay fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center"
+      className="floating-overlay fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] p-4 flex items-center justify-center"
       data-state={presence.state}
       aria-hidden={!isOpen}
     >
-      <div className="floating-panel w-full max-w-2xl max-h-[90vh] overflow-hidden bg-[var(--book-panel-bg-strong)] rounded border border-[var(--book-ink-line)] flex flex-col shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+      <div className="floating-panel w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <header className="px-5 py-4 border-b border-[var(--book-ink-line)] flex items-center justify-between">
           <div>
             <h3

@@ -12,7 +12,7 @@ import { cn } from './utils'
 const overlayClasses =
   'fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] data-[state=open]:animate-in data-[state=closed]:animate-out'
 const contentClasses =
-  'fixed left-1/2 top-1/2 z-[121] max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[var(--ui-floating-shadow)] focus:outline-none'
+  'fixed left-1/2 top-1/2 z-[121] max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] shadow-[var(--ui-floating-shadow)] focus:outline-none'
 
 export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
@@ -137,7 +137,7 @@ export const PopoverContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-[130] w-72 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] p-4 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
+        'z-[130] w-72 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-4 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
         className
       )}
       {...props}
@@ -170,7 +170,7 @@ export const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-[130] min-w-44 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] p-1.5 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
+        'z-[130] min-w-44 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-1.5 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
         className
       )}
       {...props}
@@ -207,7 +207,7 @@ export const TooltipContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-[140] max-w-xs rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] px-3 py-1.5 text-xs text-text-primary shadow-[var(--ui-floating-shadow)]',
+        'z-[140] max-w-xs rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] px-3 py-1.5 text-xs text-text-primary shadow-[var(--ui-floating-shadow)]',
         className
       )}
       {...props}
