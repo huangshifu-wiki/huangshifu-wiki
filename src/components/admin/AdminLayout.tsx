@@ -24,8 +24,10 @@ import {
   Menu,
   X,
   ChevronRight,
+  ChevronDown,
   HardDrive,
   RefreshCw,
+  Sparkles,
   Settings as SettingsIcon,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
@@ -33,7 +35,7 @@ import { useAuth } from '../../context/AuthContext'
 import { logoutRequest } from '../../lib/auth'
 import { HeaderUserControls } from '../HeaderUserControls'
 import { useToast } from '../Toast'
-import { IconButton } from '@/src/components/ui'
+import { Button, IconButton } from '@/src/components/ui'
 import { usePendingReviewCount } from '../../hooks/usePendingReviewCount'
 import { usePublicFeatures } from '../../hooks/usePublicFeatures'
 
@@ -65,12 +67,15 @@ const contentNav: AdminNavItem[] = [
   { id: 'announcements', label: '公告管理', path: '/admin/announcements', icon: Megaphone },
 ]
 
-const siteNav: AdminNavItem[] = [
+const operationNav: AdminNavItem[] = [
   { id: 'reviews', label: '审核队列', path: '/admin/reviews', icon: CheckCircle },
   { id: 'users', label: '用户管理', path: '/admin/users', icon: Users },
   { id: 'locks', label: '编辑锁', path: '/admin/locks', icon: Lock },
   { id: 'moderation_logs', label: '操作日志', path: '/admin/moderation_logs', icon: FileText },
   { id: 'ban_logs', label: '封禁日志', path: '/admin/ban_logs', icon: Shield },
+]
+
+const toolsNav: AdminNavItem[] = [
   { id: 'embeddings', label: '向量管理', path: '/admin/embeddings', icon: Cpu },
   {
     id: 'backups',
@@ -88,8 +93,11 @@ const siteNav: AdminNavItem[] = [
     id: 'music-cover-thumbnails',
     label: '封面缩略图',
     path: '/admin/music-cover-thumbnails',
-    icon: Image,
+    icon: Sparkles,
   },
+]
+
+const settingsNav: AdminNavItem[] = [
   {
     id: 'settings',
     label: '站点设置',
@@ -158,44 +166,72 @@ const SidebarNavLink = ({
   )
 }
 
+const readCollapsedGroups = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem('hsf:admin:nav-groups')
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    return new Set(Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
 const NavGroup = ({
+  groupId,
   title,
   items,
   currentPath,
   sidebarCollapsed,
   mobileOpen,
   onClick,
+  collapsed,
+  onToggleCollapsed,
   showReviewDot = false,
 }: {
+  groupId: string
   title: string
   items: AdminNavItem[]
   currentPath: string
   sidebarCollapsed: boolean
   mobileOpen: boolean
   onClick: () => void
+  collapsed: boolean
+  onToggleCollapsed: () => void
   showReviewDot?: boolean
 }) => (
   <div className="mb-3">
     {(!sidebarCollapsed || mobileOpen) && (
-      <div className="px-3 py-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        fullWidth
+        className="justify-between px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted hover:text-brand-gold"
+        rightIcon={collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        onClick={onToggleCollapsed}
+        aria-expanded={!collapsed}
+      >
         {title}
+      </Button>
+    )}
+    {!collapsed && (
+      <div className="space-y-0.5">
+        {items.map((item) => {
+          return (
+            <SidebarNavLink
+              key={item.id}
+              item={item}
+              currentPath={currentPath}
+              sidebarCollapsed={sidebarCollapsed}
+              mobileOpen={mobileOpen}
+              onClick={onClick}
+              showDot={showReviewDot && item.id === 'reviews'}
+            />
+          )
+        })}
       </div>
     )}
-    <div className="space-y-0.5">
-      {items.map((item) => {
-        return (
-          <SidebarNavLink
-            key={item.id}
-            item={item}
-            currentPath={currentPath}
-            sidebarCollapsed={sidebarCollapsed}
-            mobileOpen={mobileOpen}
-            onClick={onClick}
-            showDot={showReviewDot && item.id === 'reviews'}
-          />
-        )
-      })}
-    </div>
   </div>
 )
 
@@ -207,15 +243,36 @@ export const AdminLayout = () => {
   const { features } = usePublicFeatures()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(readCollapsedGroups)
   const pendingReviewCount = usePendingReviewCount(isAdmin)
 
   const currentPath = location.pathname
   const closeMobileMenu = () => setMobileOpen(false)
-  const visibleSiteNav = siteNav.filter(
+  const visibleToolsNav = toolsNav.filter(
     (item) =>
       (!item.superAdminOnly || user?.role === 'super_admin') &&
       (item.id !== 'embeddings' || features.semanticSearch)
   )
+  const visibleSettingsNav = settingsNav.filter(
+    (item) => !item.superAdminOnly || user?.role === 'super_admin'
+  )
+
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupId)) {
+        next.delete(groupId)
+      } else {
+        next.add(groupId)
+      }
+      try {
+        localStorage.setItem('hsf:admin:nav-groups', JSON.stringify([...next]))
+      } catch {
+        // localStorage 不可用时仅本次会话生效
+      }
+      return next
+    })
+  }
 
   const handleLogout = async () => {
     try {
@@ -314,22 +371,52 @@ export const AdminLayout = () => {
             </div>
 
             <NavGroup
+              groupId="content"
               title="内容管理"
               items={contentNav}
               currentPath={currentPath}
               sidebarCollapsed={sidebarCollapsed}
               mobileOpen={mobileOpen}
               onClick={closeMobileMenu}
+              collapsed={collapsedGroups.has('content')}
+              onToggleCollapsed={() => toggleGroup('content')}
             />
 
             <NavGroup
-              title="站务管理"
-              items={visibleSiteNav}
+              groupId="operations"
+              title="运营管理"
+              items={operationNav}
               currentPath={currentPath}
               sidebarCollapsed={sidebarCollapsed}
               mobileOpen={mobileOpen}
               onClick={closeMobileMenu}
+              collapsed={collapsedGroups.has('operations')}
+              onToggleCollapsed={() => toggleGroup('operations')}
               showReviewDot={pendingReviewCount > 0}
+            />
+
+            <NavGroup
+              groupId="tools"
+              title="系统工具"
+              items={visibleToolsNav}
+              currentPath={currentPath}
+              sidebarCollapsed={sidebarCollapsed}
+              mobileOpen={mobileOpen}
+              onClick={closeMobileMenu}
+              collapsed={collapsedGroups.has('tools')}
+              onToggleCollapsed={() => toggleGroup('tools')}
+            />
+
+            <NavGroup
+              groupId="settings"
+              title="设置"
+              items={visibleSettingsNav}
+              currentPath={currentPath}
+              sidebarCollapsed={sidebarCollapsed}
+              mobileOpen={mobileOpen}
+              onClick={closeMobileMenu}
+              collapsed={collapsedGroups.has('settings')}
+              onToggleCollapsed={() => toggleGroup('settings')}
             />
           </nav>
 
