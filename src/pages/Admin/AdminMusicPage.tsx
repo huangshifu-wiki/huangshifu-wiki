@@ -495,6 +495,8 @@ export const AdminMusicPage = () => {
           songs={songs}
           loading={loading}
           selectedIds={selectedSongIds}
+          page={songPagination.page}
+          pageSize={songPagination.pageSize}
           onSelect={(id, selected) =>
             setSelectedSongIds((previous) => {
               const next = new Set(previous)
@@ -515,6 +517,8 @@ export const AdminMusicPage = () => {
         <AlbumTable
           albums={albums}
           loading={loading}
+          page={albumPagination.page}
+          pageSize={albumPagination.pageSize}
           onEdit={(item) => {
             setEditingAlbum(item)
             setAlbumFormOpen(true)
@@ -612,6 +616,8 @@ const SongTable = ({
   songs,
   loading,
   selectedIds,
+  page,
+  pageSize,
   onSelect,
   onEdit,
   onManage,
@@ -624,6 +630,8 @@ const SongTable = ({
   songs: AdminDataItem[]
   loading: boolean
   selectedIds: Set<string>
+  page: number
+  pageSize: number
   onSelect: (id: string, selected: boolean) => void
   onEdit: (item: AdminDataItem) => void
   onManage: (item: AdminDataItem) => void
@@ -637,6 +645,7 @@ const SongTable = ({
     loading={loading}
     empty="暂无歌曲"
     headers={[
+      '#',
       '',
       '封面 / 标题 / 艺术家',
       '平台来源',
@@ -645,11 +654,14 @@ const SongTable = ({
       '操作',
     ]}
   >
-    {songs.map((song) => {
+    {songs.map((song, index) => {
       const id = itemId(song)
       const sources = sourceList(song)
       return (
         <tr key={id} className="border-b border-border align-top hover:bg-surface-alt">
+          <td className="px-3 py-4 text-xs tabular-nums text-text-muted">
+            {(page - 1) * pageSize + index + 1}
+          </td>
           <td className="px-3 py-4">
             <Checkbox
               checked={selectedIds.has(id)}
@@ -732,6 +744,8 @@ const SongTable = ({
 const AlbumTable = ({
   albums,
   loading,
+  page,
+  pageSize,
   onEdit,
   onManage,
   onCover,
@@ -742,6 +756,8 @@ const AlbumTable = ({
 }: {
   albums: AdminDataItem[]
   loading: boolean
+  page: number
+  pageSize: number
   onEdit: (item: AdminDataItem) => void
   onManage: (item: AdminDataItem) => void
   onCover: (item: AdminDataItem) => void
@@ -754,6 +770,7 @@ const AlbumTable = ({
     loading={loading}
     empty="暂无专辑"
     headers={[
+      '#',
       '封面 / 标题 / 艺术家',
       '曲目数 / Disc 数',
       '平台来源',
@@ -761,11 +778,14 @@ const AlbumTable = ({
       '操作',
     ]}
   >
-    {albums.map((album) => {
+    {albums.map((album, index) => {
       const id = itemId(album)
       const sources = sourceList(album)
       return (
         <tr key={id} className="border-b border-border align-top hover:bg-surface-alt">
+          <td className="px-3 py-4 text-xs tabular-nums text-text-muted">
+            {(page - 1) * pageSize + index + 1}
+          </td>
           <td className="px-3 py-4">
             <div className="flex gap-3">
               <MusicListCover
