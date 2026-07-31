@@ -1,7 +1,7 @@
 import * as CheckboxPrimitive from '@radix-ui/react-checkbox'
 import * as RadioGroupPrimitive from '@radix-ui/react-radio-group'
 import * as SwitchPrimitive from '@radix-ui/react-switch'
-import { Check } from '@/src/components/icons'
+import { Check, ChevronDown } from '@/src/components/icons'
 import React, { createContext, useContext, useId } from 'react'
 import { Button } from './actions'
 import { cn } from './utils'
@@ -137,12 +137,18 @@ export const Select = React.forwardRef<
     { className, id, 'aria-describedby': describedBy, 'aria-invalid': invalid, required, ...props },
     ref
   ) => (
-    <select
-      ref={ref}
-      className={controlVariants(cn('appearance-none', className))}
-      {...useFieldProps(id, describedBy, invalid, required)}
-      {...props}
-    />
+    <div className="relative">
+      <select
+        ref={ref}
+        className={controlVariants(cn('peer appearance-none pr-10', className))}
+        {...useFieldProps(id, describedBy, invalid, required)}
+        {...props}
+      />
+      <ChevronDown
+        aria-hidden="true"
+        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted peer-disabled:opacity-50"
+      />
+    </div>
   )
 )
 Select.displayName = 'Select'

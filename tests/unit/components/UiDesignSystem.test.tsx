@@ -19,6 +19,7 @@ import {
   SegmentedControl,
   SettingRow,
   SettingsSection,
+  Select,
   Switch,
   Table,
   TableBody,
@@ -66,6 +67,28 @@ describe('UI 设计系统', () => {
     expect(input).toHaveAttribute('aria-invalid', 'true')
     expect(describedBy.split(' ')).toHaveLength(2)
     expect(screen.getByRole('alert')).toHaveTextContent('标题不能为空')
+  })
+
+  it('Select 显示下拉标记并保留原生选择行为', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <Field label="分类">
+        <Select defaultValue="music" onChange={onChange}>
+          <option value="music">音乐</option>
+          <option value="event">事件</option>
+        </Select>
+      </Field>
+    )
+
+    const select = screen.getByRole('combobox', { name: '分类' })
+    expect(select).toHaveClass('peer', 'appearance-none', 'pr-10')
+    expect(select.parentElement).toHaveClass('relative')
+    expect(select.parentElement?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+
+    await user.selectOptions(select, 'event')
+    expect(onChange).toHaveBeenCalledOnce()
+    expect(select).toHaveValue('event')
   })
 
   it('Switch 支持键盘切换', async () => {
