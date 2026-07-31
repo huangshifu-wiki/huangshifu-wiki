@@ -31,7 +31,7 @@ const DEFAULT_FILTERS: MusicAdminFilterState = {
   platform: 'all',
   cover: 'all',
   displayAlbum: 'all',
-  sortBy: 'updatedAt',
+  sortBy: 'releaseDate',
   sortOrder: 'desc',
   includeDeleted: false,
 }
