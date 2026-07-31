@@ -350,7 +350,6 @@ export const AdminMusicPage = () => {
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-[0.12em] text-text-primary">
             <Music size={24} className="text-brand-gold" /> 音乐工作台
           </h1>
-          <p className="mt-1 text-sm text-text-muted">集中维护歌曲、专辑、来源、封面与曲目关系。</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
