@@ -51,7 +51,7 @@ export const LyricSearchResultCard: React.FC<LyricSearchResultCardProps> = React
             {item.cover ? (
               <div className="mobile-list-thumb h-20 w-20 flex-shrink-0 overflow-hidden rounded bg-surface-alt">
                 <SmartImage
-                  src={item.cover}
+                  src={item.coverThumbnail || item.cover}
                   alt=""
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
                 />
@@ -83,7 +83,7 @@ export const LyricSearchResultCard: React.FC<LyricSearchResultCardProps> = React
             <div className="aspect-square overflow-hidden bg-surface-alt">
               {item.cover ? (
                 <SmartImage
-                  src={item.cover}
+                  src={item.coverThumbnail || item.cover}
                   alt=""
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
                 />
