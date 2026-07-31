@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { Music, Plus, RefreshCw } from '@/src/components/icons'
 import { AdminMusicFilters, type MusicAdminFilterState } from '../../components/AdminMusicFilters'
@@ -666,7 +666,18 @@ const SongTable = ({
               />
               <div>
                 <p className="font-medium text-text-primary">
-                  {text(song.title)}{' '}
+                  {song.slug && !song.isDeleted ? (
+                    <Link
+                      to={`/music/${song.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-brand-gold hover:underline"
+                    >
+                      {text(song.title)}
+                    </Link>
+                  ) : (
+                    text(song.title)
+                  )}{' '}
                   {song.isDeleted && <span className="theme-text-error">（已删除）</span>}
                 </p>
                 <p className="text-xs text-text-muted">
@@ -764,7 +775,18 @@ const AlbumTable = ({
               />
               <div>
                 <p className="font-medium text-text-primary">
-                  {text(album.title)}{' '}
+                  {album.slug && !album.isDeleted ? (
+                    <Link
+                      to={`/album/${album.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-brand-gold hover:underline"
+                    >
+                      {text(album.title)}
+                    </Link>
+                  ) : (
+                    text(album.title)
+                  )}{' '}
                   {album.isDeleted && <span className="theme-text-error">（已删除）</span>}
                 </p>
                 <p className="text-xs text-text-muted">{text(album.artist, '未知艺术家')}</p>
