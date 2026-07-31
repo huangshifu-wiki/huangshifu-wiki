@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Database,
@@ -14,12 +14,7 @@ import {
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'
-import {
-  DANGER_BUTTON_CLASSES,
-  INFO_BUTTON_CLASSES,
-  SECONDARY_BUTTON_CLASSES,
-  SUCCESS_BUTTON_CLASSES,
-} from '../../lib/buttonClasses'
+import { Button } from '@/src/components/ui'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -457,34 +452,42 @@ const AdminBackups = () => {
                   <td className="px-5 py-4 text-sm text-text-secondary">{backup.sizeFormatted}</td>
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-start gap-2">
-                      <button
+                      <Button
                         onClick={() => openNoteDialog(backup)}
-                        className={INFO_BUTTON_CLASSES}
+                        variant="info"
+                        soft
+                        size="sm"
+                        leftIcon={<Pencil size={14} />}
                       >
-                        <Pencil size={14} />
                         备注
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => handleDownload(backup.filename)}
-                        className={SECONDARY_BUTTON_CLASSES}
+                        variant="secondary"
+                        soft
+                        size="sm"
+                        leftIcon={<Download size={14} />}
                       >
-                        <Download size={14} />
                         下载
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => openRestoreExistingDialog(backup.filename)}
-                        className={SUCCESS_BUTTON_CLASSES}
+                        variant="success"
+                        soft
+                        size="sm"
+                        leftIcon={<RotateCcw size={14} />}
                       >
-                        <RotateCcw size={14} />
                         恢复
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => openDeleteDialog(backup.filename)}
-                        className={DANGER_BUTTON_CLASSES}
+                        variant="danger"
+                        soft
+                        size="sm"
+                        leftIcon={<Trash2 size={14} />}
                       >
-                        <Trash2 size={14} />
                         删除
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>

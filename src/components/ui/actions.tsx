@@ -4,7 +4,14 @@ import React from 'react'
 import { Link, type LinkProps } from 'react-router-dom'
 import { cn } from './utils'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'warning' | 'success'
+export type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'ghost'
+  | 'danger'
+  | 'warning'
+  | 'success'
+  | 'info'
 
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
@@ -16,7 +23,26 @@ const variantClasses: Record<ButtonVariant, string> = {
   danger: 'theme-button-danger border-transparent',
   warning: 'theme-button-warning border-transparent',
   success: 'theme-button-success border-transparent',
+  info: 'theme-button-info border-transparent',
 }
+
+const softVariantClasses: Record<ButtonVariant, string> = {
+  primary: variantClasses.primary,
+  secondary: 'btn-secondary-bg text-text-secondary border-transparent',
+  ghost: variantClasses.ghost,
+  danger: 'btn-danger-bg text-error border-transparent',
+  warning: 'btn-warning-bg text-warning border-transparent',
+  success: 'btn-success-bg text-success border-transparent',
+  info: 'btn-info-bg text-info border-transparent',
+}
+
+const SOFT_VARIANTS: ReadonlySet<ButtonVariant> = new Set([
+  'secondary',
+  'danger',
+  'warning',
+  'success',
+  'info',
+])
 
 const sizeClasses: Record<ButtonSize, string> = {
   sm: 'min-h-8 px-3 py-1.5 text-xs',
@@ -28,19 +54,22 @@ export const buttonVariants = ({
   variant = 'primary',
   size = 'md',
   fullWidth = false,
+  soft = false,
   className,
 }: {
   variant?: ButtonVariant
   size?: ButtonSize
   fullWidth?: boolean
+  soft?: boolean
   className?: string
 } = {}) =>
   cn(
     'inline-flex select-none items-center justify-center gap-2 rounded border font-medium transition-all duration-200',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
     'disabled:pointer-events-none disabled:opacity-50',
-    variantClasses[variant],
+    soft ? softVariantClasses[variant] : variantClasses[variant],
     sizeClasses[size],
+    soft && SOFT_VARIANTS.has(variant) && 'gap-1.5 rounded-lg border-0 min-h-0',
     fullWidth && 'w-full',
     className
   )
@@ -52,6 +81,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   loading?: boolean
   loadingText?: React.ReactNode
   fullWidth?: boolean
+  soft?: boolean
   leftIcon?: React.ReactNode
   rightIcon?: React.ReactNode
 }
@@ -65,6 +95,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       loading = false,
       loadingText,
       fullWidth = false,
+      soft = false,
       leftIcon,
       rightIcon,
       className,
@@ -80,7 +111,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <Component
         ref={ref}
         type={asChild ? undefined : type}
-        className={buttonVariants({ variant, size, fullWidth, className })}
+        className={buttonVariants({ variant, size, fullWidth, soft, className })}
         disabled={asChild ? undefined : disabled || loading}
         aria-disabled={disabled || loading || undefined}
         aria-busy={loading || undefined}
@@ -96,7 +127,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = 'Button'
 
 export type LinkButtonProps = LinkProps &
-  Pick<ButtonProps, 'variant' | 'size' | 'fullWidth' | 'leftIcon' | 'rightIcon'>
+  Pick<ButtonProps, 'variant' | 'size' | 'fullWidth' | 'soft' | 'leftIcon' | 'rightIcon'>
 
 export const LinkButton = React.forwardRef<HTMLAnchorElement, LinkButtonProps>(
   (
@@ -104,6 +135,7 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, LinkButtonProps>(
       variant = 'primary',
       size = 'md',
       fullWidth = false,
+      soft = false,
       leftIcon,
       rightIcon,
       className,
@@ -114,7 +146,7 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, LinkButtonProps>(
   ) => (
     <Link
       ref={ref}
-      className={buttonVariants({ variant, size, fullWidth, className })}
+      className={buttonVariants({ variant, size, fullWidth, soft, className })}
       data-pressable
       {...props}
     >

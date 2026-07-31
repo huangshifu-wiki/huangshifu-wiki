@@ -55,6 +55,37 @@ describe('UI 设计系统', () => {
     expect(button).toHaveAttribute('aria-busy', 'true')
   })
 
+  it('Button soft 变体使用浅色底与语义文字色', () => {
+    render(
+      <>
+        <Button variant="warning" soft>
+          强制释放
+        </Button>
+        <Button variant="info" soft>
+          备注
+        </Button>
+      </>
+    )
+    const warning = screen.getByRole('button', { name: '强制释放' })
+    const info = screen.getByRole('button', { name: '备注' })
+    expect(warning).toHaveClass('btn-warning-bg', 'text-warning', 'border-0', 'min-h-0')
+    expect(warning).not.toHaveClass('theme-button-warning')
+    expect(info).toHaveClass('btn-info-bg', 'text-info')
+  })
+
+  it('Button soft 在 primary 与 ghost 下等同原样式', () => {
+    render(
+      <>
+        <Button variant="primary" soft>
+          保存
+        </Button>
+        <Button variant="primary">保存</Button>
+      </>
+    )
+    const [softButton, plainButton] = screen.getAllByRole('button', { name: '保存' })
+    expect(softButton.className).toBe(plainButton.className)
+  })
+
   it('Field 自动关联 label、说明和错误', () => {
     render(
       <Field label="标题" description="公开显示" error="标题不能为空" required>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FocusEvent } from 'react'
 import {
   Trash2,
@@ -12,13 +12,7 @@ import {
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { CharacterCount } from '../../components/CharacterCount'
-import {
-  DANGER_BUTTON_CLASSES,
-  INFO_BUTTON_CLASSES,
-  SECONDARY_BUTTON_CLASSES,
-  SUCCESS_BUTTON_CLASSES,
-  WARNING_BUTTON_CLASSES,
-} from '../../lib/buttonClasses'
+import { Button, Switch } from '@/src/components/ui'
 import {
   apiDelete,
   apiGet,
@@ -41,7 +35,6 @@ import {
   WIKI_MAX_CONTENT_SIZE,
 } from '../../lib/contentLimits'
 import type { AdminDataItem } from '../../types/entities'
-import { Switch } from '@/src/components/ui'
 
 const ADMIN_USERS_API_PREFIX = '/api/admin/users'
 const ADMIN_PERMISSIONS_API_PATH = '/api/config/admin-permissions'
@@ -504,54 +497,62 @@ export const AdminUsers = () => {
                       <td className="px-5 py-4 text-left">
                         <div className="flex items-center justify-start gap-2">
                           {canManageUser(item) && (
-                            <button
+                            <Button
                               onClick={() => openEditModal(item)}
-                              className={INFO_BUTTON_CLASSES}
+                              variant="info"
+                              soft
+                              size="sm"
+                              leftIcon={<Pencil size={14} />}
                             >
-                              <Pencil size={14} />
                               编辑
-                            </button>
+                            </Button>
                           )}
                           {isSuperAdmin &&
                             !isCurrentUser(item.uid) &&
                             item.role !== 'super_admin' && (
-                              <button
+                              <Button
                                 onClick={() => toggleRole(item)}
-                                className={INFO_BUTTON_CLASSES}
+                                variant="info"
+                                soft
+                                size="sm"
+                                leftIcon={
+                                  getNextRole(item.role) === 'admin' ? (
+                                    <CheckCircle size={14} />
+                                  ) : (
+                                    <XCircle size={14} />
+                                  )
+                                }
                               >
-                                {getNextRole(item.role) === 'admin' ? (
-                                  <CheckCircle size={14} />
-                                ) : (
-                                  <XCircle size={14} />
-                                )}
                                 {getNextRole(item.role) === 'admin' ? '升为管理员' : '降为普通'}
-                              </button>
+                              </Button>
                             )}
                           {canManageUser(item) && (
-                            <button
+                            <Button
                               onClick={() => toggleBan(item)}
-                              className={
-                                item.status === 'banned'
-                                  ? SUCCESS_BUTTON_CLASSES
-                                  : WARNING_BUTTON_CLASSES
+                              variant={item.status === 'banned' ? 'success' : 'warning'}
+                              soft
+                              size="sm"
+                              leftIcon={
+                                item.status === 'banned' ? (
+                                  <CheckCircle size={14} />
+                                ) : (
+                                  <AlertTriangle size={14} />
+                                )
                               }
                             >
-                              {item.status === 'banned' ? (
-                                <CheckCircle size={14} />
-                              ) : (
-                                <AlertTriangle size={14} />
-                              )}
                               {item.status === 'banned' ? '解封' : '封禁'}
-                            </button>
+                            </Button>
                           )}
                           {canManageUser(item) && (
-                            <button
+                            <Button
                               onClick={() => void handleDeleteUser(item)}
-                              className={DANGER_BUTTON_CLASSES}
+                              variant="danger"
+                              soft
+                              size="sm"
+                              leftIcon={<Trash2 size={14} />}
                             >
-                              <Trash2 size={14} />
                               删除
-                            </button>
+                            </Button>
                           )}
                           {superAdminRoleAction && (
                             <div
@@ -559,21 +560,22 @@ export const AdminUsers = () => {
                               onBlur={handleActionsMenuBlur}
                               className="relative"
                             >
-                              <button
-                                type="button"
+                              <Button
                                 onClick={() =>
                                   setOpenMenuUid((current) =>
                                     current === item.uid ? null : item.uid!
                                   )
                                 }
-                                className={SECONDARY_BUTTON_CLASSES}
+                                variant="secondary"
+                                soft
+                                size="sm"
+                                leftIcon={<MoreVertical size={14} />}
                                 aria-haspopup="menu"
                                 aria-expanded={openMenuUid === item.uid}
                                 aria-label={`${item.displayName || item.uid} 的其他选项`}
                               >
-                                <MoreVertical size={14} />
                                 更多
-                              </button>
+                              </Button>
                               {openMenuUid === item.uid && (
                                 <div
                                   role="menu"

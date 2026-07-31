@@ -1,18 +1,5 @@
-import React from 'react'
-
-import {
-  Edit3,
-  Image as ImageIcon,
-  List,
-  RefreshCw,
-  RotateCcw,
-  Trash2,
-} from '@/src/components/icons'
-import {
-  DANGER_BUTTON_CLASSES,
-  SUCCESS_BUTTON_CLASSES,
-  WARNING_BUTTON_CLASSES,
-} from '@/src/lib/buttonClasses'
+import { Edit3, Image as ImageIcon, List, RotateCcw, Trash2 } from '@/src/components/icons'
+import { Button } from '@/src/components/ui'
 
 export type AdminResourcePendingAction = 'delete' | 'restore' | 'permanentDelete' | null
 
@@ -39,57 +26,64 @@ export const AdminResourceActions = ({
 }: AdminResourceActionsProps) => {
   if (pendingAction) {
     return (
-      <button
-        type="button"
-        disabled
-        className={pendingAction === 'restore' ? SUCCESS_BUTTON_CLASSES : DANGER_BUTTON_CLASSES}
-      >
-        <RefreshCw size={14} className="animate-spin" />
+      <Button variant={pendingAction === 'restore' ? 'success' : 'danger'} soft size="sm" loading>
         {pendingAction === 'delete'
           ? '删除中...'
           : pendingAction === 'restore'
             ? '恢复中...'
             : '永久删除中...'}
-      </button>
+      </Button>
     )
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       {!isDeleted && onEdit && (
-        <button type="button" onClick={onEdit} className={WARNING_BUTTON_CLASSES}>
-          <Edit3 size={14} />
+        <Button variant="warning" soft size="sm" onClick={onEdit} leftIcon={<Edit3 size={14} />}>
           编辑
-        </button>
+        </Button>
       )}
       {!isDeleted && onManage && (
-        <button type="button" onClick={onManage} className={WARNING_BUTTON_CLASSES}>
-          <List size={14} />
+        <Button variant="warning" soft size="sm" onClick={onManage} leftIcon={<List size={14} />}>
           管理
-        </button>
+        </Button>
       )}
       {!isDeleted && onCover && (
-        <button type="button" onClick={onCover} className={WARNING_BUTTON_CLASSES}>
-          <ImageIcon size={14} />
+        <Button
+          variant="warning"
+          soft
+          size="sm"
+          onClick={onCover}
+          leftIcon={<ImageIcon size={14} />}
+        >
           封面
-        </button>
+        </Button>
       )}
       {isDeleted ? (
         <>
-          <button type="button" onClick={onRestore} className={SUCCESS_BUTTON_CLASSES}>
-            <RotateCcw size={14} />
+          <Button
+            variant="success"
+            soft
+            size="sm"
+            onClick={onRestore}
+            leftIcon={<RotateCcw size={14} />}
+          >
             恢复
-          </button>
-          <button type="button" onClick={onPermanentDelete} className={DANGER_BUTTON_CLASSES}>
-            <Trash2 size={14} />
+          </Button>
+          <Button
+            variant="danger"
+            soft
+            size="sm"
+            onClick={onPermanentDelete}
+            leftIcon={<Trash2 size={14} />}
+          >
             永久删除
-          </button>
+          </Button>
         </>
       ) : (
-        <button type="button" onClick={onDelete} className={DANGER_BUTTON_CLASSES}>
-          <Trash2 size={14} />
+        <Button variant="danger" soft size="sm" onClick={onDelete} leftIcon={<Trash2 size={14} />}>
           删除
-        </button>
+        </Button>
       )}
     </div>
   )

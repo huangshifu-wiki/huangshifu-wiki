@@ -13,7 +13,7 @@
 
 ## 变体与 Token
 
-Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`、`success`，尺寸固定为 `sm`、`md`、`lg`。颜色必须来自 `src/index.css` 的 CSS 变量或主题语义类，UI 内部禁止十六进制、RGB、HSL 字面量。
+Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`、`success`、`info`，尺寸固定为 `sm`、`md`、`lg`。`soft` 修饰符提供浅色底 + 语义文字色的轻量按钮（用于列表行内操作），对 `secondary`、`danger`、`warning`、`success`、`info` 生效，`primary` 与 `ghost` 下等同原样式。颜色必须来自 `src/index.css` 的 CSS 变量或主题语义类，UI 内部禁止十六进制、RGB、HSL 字面量。
 
 调用方可通过 `className` 扩展布局，但不应复制组件的基础视觉样式。合并 class 使用 `cn()`，以便 Tailwind 冲突由 `tailwind-merge` 处理。
 

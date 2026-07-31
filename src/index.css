@@ -536,6 +536,11 @@ a.mention-highlight:hover {
   color: var(--color-theme-button-contrast);
 }
 
+.theme-button-info {
+  background: var(--color-info-hover);
+  color: var(--color-theme-button-contrast);
+}
+
 .theme-button-warning-outline {
   border-color: color-mix(in srgb, var(--color-warning) 22%, transparent);
   color: color-mix(in srgb, var(--color-warning-hover) 88%, var(--color-text-primary));
@@ -571,6 +576,10 @@ a.mention-highlight:hover {
 
   .theme-button-success:hover {
     background: var(--color-success);
+  }
+
+  .theme-button-info:hover {
+    background: var(--color-info);
   }
 
   .theme-button-warning-outline:hover {

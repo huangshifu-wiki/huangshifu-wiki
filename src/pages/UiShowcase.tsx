@@ -47,7 +47,9 @@ import {
   useToast,
 } from '@/src/components/ui'
 
-const variants = ['primary', 'secondary', 'ghost', 'danger', 'warning', 'success'] as const
+const variants = ['primary', 'secondary', 'ghost', 'danger', 'warning', 'success', 'info'] as const
+
+const softVariants = ['secondary', 'danger', 'warning', 'success', 'info'] as const
 
 const UiShowcase = () => {
   const [dark, setDark] = useState(false)
@@ -73,6 +75,13 @@ const UiShowcase = () => {
             {variants.map((variant) => (
               <Button key={variant} variant={variant}>
                 {variant}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {softVariants.map((variant) => (
+              <Button key={variant} variant={variant} soft>
+                {variant} soft
               </Button>
             ))}
           </div>

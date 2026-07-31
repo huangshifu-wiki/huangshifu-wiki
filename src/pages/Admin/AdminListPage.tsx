@@ -24,11 +24,6 @@ import {
   apiPost,
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
-import {
-  DANGER_BUTTON_CLASSES,
-  SUCCESS_BUTTON_CLASSES,
-  WARNING_BUTTON_CLASSES,
-} from '../../lib/buttonClasses'
 import { formatDateTime } from '../../lib/dateUtils'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { useDialog } from '../../components/Dialog'
@@ -36,7 +31,7 @@ import { useToast } from '../../components/Toast'
 import { SmartImage } from '../../components/SmartImage'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
-import { Checkbox } from '@/src/components/ui'
+import { Button, Checkbox, LinkButton } from '@/src/components/ui'
 
 type ListType =
   | 'wiki'
@@ -723,73 +718,85 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
 
     return (
       <div className="flex items-center justify-start gap-2">
-        {pendingAction && (
-          <button
-            disabled
-            className={pendingAction === 'restore' ? SUCCESS_BUTTON_CLASSES : DANGER_BUTTON_CLASSES}
+        {isPending && (
+          <Button
+            variant={pendingAction === 'restore' ? 'success' : 'danger'}
+            soft
+            size="sm"
+            loading
           >
-            <RefreshCw size={14} className="animate-spin" />
             {pendingAction === 'delete'
               ? '删除中...'
               : pendingAction === 'restore'
                 ? '恢复中...'
                 : '永久删除中...'}
-          </button>
+          </Button>
         )}
         {type === 'announcements' && !item.isDeleted && (
-          <button
+          <Button
             onClick={() => toggleAnnouncement(item)}
             disabled={isPending}
-            className={WARNING_BUTTON_CLASSES}
+            variant="warning"
+            soft
+            size="sm"
+            leftIcon={item.active ? <CheckCircle size={14} /> : <XCircle size={14} />}
           >
-            {item.active ? <CheckCircle size={14} /> : <XCircle size={14} />}
             {item.active ? '禁用' : '启用'}
-          </button>
+          </Button>
         )}
         {type === 'wiki-categories' && !item.isDeleted && !isPending && (
-          <button
+          <Button
             onClick={() => setEditingCategory(item)}
-            disabled={isPending}
-            className={WARNING_BUTTON_CLASSES}
+            variant="warning"
+            soft
+            size="sm"
+            leftIcon={<Edit3 size={14} />}
           >
-            <Edit3 size={14} />
             编辑
-          </button>
+          </Button>
         )}
         {type === 'events' && !item.isDeleted && !isPending && item.id && (
-          <Link to={`/admin/events/${item.id}/edit`} className={WARNING_BUTTON_CLASSES}>
-            <Edit3 size={14} />
+          <LinkButton
+            to={`/admin/events/${item.id}/edit`}
+            variant="warning"
+            soft
+            size="sm"
+            leftIcon={<Edit3 size={14} />}
+          >
             编辑
-          </Link>
+          </LinkButton>
         )}
         {!isPending && item.isDeleted ? (
           <>
-            <button
+            <Button
               onClick={() => handleRestore(rowId)}
-              disabled={isPending}
-              className={SUCCESS_BUTTON_CLASSES}
+              variant="success"
+              soft
+              size="sm"
+              leftIcon={<RotateCcw size={14} />}
             >
-              <RotateCcw size={14} />
               恢复
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => handlePermanentDelete(rowId)}
-              disabled={isPending}
-              className={DANGER_BUTTON_CLASSES}
+              variant="danger"
+              soft
+              size="sm"
+              leftIcon={<Trash2 size={14} />}
             >
-              <Trash2 size={14} />
               永久删除
-            </button>
+            </Button>
           </>
         ) : !isPending ? (
-          <button
+          <Button
             onClick={() => handleDelete(rowId)}
-            disabled={isPending}
-            className={DANGER_BUTTON_CLASSES}
+            variant="danger"
+            soft
+            size="sm"
+            leftIcon={<Trash2 size={14} />}
           >
-            <Trash2 size={14} />
             删除
-          </button>
+          </Button>
         ) : null}
       </div>
     )

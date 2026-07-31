@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Lock, RefreshCw, Trash2 } from '@/src/components/icons'
 import { apiDelete, apiGet } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'
@@ -190,6 +190,7 @@ export const AdminLocks = () => {
                       <Button
                         type="button"
                         variant="warning"
+                        soft
                         size="sm"
                         onClick={() => releaseLock(item)}
                         leftIcon={<Lock size={14} />}
