@@ -20,6 +20,7 @@ import type { WikiItem, PostItem, GalleryItem, SongItem, AlbumItem } from '../..
 import type { TextSearchResult } from '../../types/api'
 import { MixedSearchResultCard } from '../MixedSearchResultCard'
 import { SearchResultCard } from './SearchResultCard'
+import { LyricSearchResultCard } from './LyricSearchResultCard'
 import { getFirstGalleryImage, shouldWaitForGalleryThumbnail } from '../../lib/galleryThumbnails'
 import { Button } from '@/src/components/ui'
 
@@ -216,9 +217,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     results.galleries.length +
     results.music.length +
     results.albums.length +
-    (textSemanticResults?.length ?? 0)
+    results.lyrics.length +
+    textSemanticResults.length
 
-  if (!isMixedSearch && totalResults === 0 && (textSemanticResults?.length ?? 0) === 0) {
+  if (!isMixedSearch && totalResults === 0) {
     return (
       <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
         <SearchIcon size={48} className="mx-auto mb-6 text-border" />
@@ -407,7 +409,31 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                     {results.music.map((track) => (
                       <SearchResultCard
                         key={track.docId}
-                        config={musicToConfig(track as SongItem)}
+                        config={musicToConfig(track)}
+                        viewMode={viewMode}
+                      />
+                    ))}
+                  </div>
+                </motion.section>
+              )}
+
+              {/* Lyrics Results */}
+              {(activeTab === 'all' || activeTab === 'lyrics') && results.lyrics.length > 0 && (
+                <motion.section
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  className="space-y-4"
+                >
+                  <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
+                    <FileText size={14} className="text-brand-gold" /> 歌词匹配
+                  </h2>
+                  <div className={resultGridClassName}>
+                    {results.lyrics.map((item) => (
+                      <LyricSearchResultCard
+                        key={item.docId}
+                        item={item}
+                        query={state.searchMeta?.query ?? state.query}
                         viewMode={viewMode}
                       />
                     ))}
@@ -429,8 +455,8 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                   <div className={resultGridClassName}>
                     {results.albums.map((album) => (
                       <SearchResultCard
-                        key={(album as AlbumItem).docId}
-                        config={albumToConfig(album as AlbumItem)}
+                        key={album.docId}
+                        config={albumToConfig(album)}
                         viewMode={viewMode}
                       />
                     ))}

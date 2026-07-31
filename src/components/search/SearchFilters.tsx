@@ -24,6 +24,7 @@ const contentTypeLabels: Record<string, string> = {
   posts: '帖子',
   galleries: '图集',
   music: '音乐',
+  lyrics: '歌词',
   albums: '专辑',
 }
 
@@ -139,15 +140,15 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                   <Book size={12} /> 内容类型
                 </h4>
                 <div className="flex flex-wrap gap-2">
-                  {['all', 'wiki', 'posts', 'galleries', 'music', 'albums'].map((type) => (
+                  {(
+                    ['all', 'wiki', 'posts', 'galleries', 'music', 'lyrics', 'albums'] as const
+                  ).map((type) => (
                     <Button
                       type="button"
                       size="sm"
                       variant={filters.contentType === type ? 'primary' : 'secondary'}
                       key={type}
-                      onClick={() =>
-                        onUpdateFilters({ contentType: type as SearchFiltersType['contentType'] })
-                      }
+                      onClick={() => onUpdateFilters({ contentType: type })}
                       className="rounded-sm capitalize"
                     >
                       {contentTypeLabels[type]}

@@ -46,6 +46,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Lyric Storage Test Song' } },
           { title: { startsWith: 'Display Sync Test Song' } },
           { title: { startsWith: 'Duplicate Relation Test Song' } },
+          { title: { startsWith: 'Lyric Search Contract Song' } },
         ],
       },
     })
@@ -91,6 +92,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Lyric Storage Test Song' } },
           { title: { startsWith: 'Display Sync Test Song' } },
           { title: { startsWith: 'Duplicate Relation Test Song' } },
+          { title: { startsWith: 'Lyric Search Contract Song' } },
         ],
       },
     })
@@ -379,6 +381,66 @@ describe('Music API - 音乐接口测试', () => {
         (item: { type: string; id?: string }) => item.type === 'music' && item.id === song.slug
       )
     ).toBe(true)
+  })
+
+  it('音乐搜索不索引歌词，歌词类型搜索按行返回并集中展示', async () => {
+    const song = await prisma.musicTrack.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: 'Lyric Search Contract Song',
+        artists: ['黄诗扶'],
+        album: '',
+        lyric: '第一行歌词\n第二行独特歌词XYZ\n第三行歌词',
+        lyricPlain: '第一行歌词\n第二行独特歌词XYZ\n第三行歌词',
+        lyricType: 'plain',
+      },
+    })
+
+    // 1. 普通音乐搜索不命中歌词
+    const musicRes = await request(app)
+      .get('/api/search')
+      .query({ q: '独特歌词XYZ', type: 'music' })
+
+    expect(musicRes.status).toBe(200)
+    expect(musicRes.body.music.some((m: { docId: string }) => m.docId === song.docId)).toBe(false)
+
+    // 2. 歌词类型搜索按行返回
+    const lyricRes = await request(app)
+      .get('/api/search')
+      .query({ q: '独特歌词XYZ', type: 'lyrics' })
+
+    expect(lyricRes.status).toBe(200)
+    expect(lyricRes.body.lyrics).toHaveLength(1)
+    expect(lyricRes.body.lyrics[0].matchedLines.map((l: { text: string }) => l.text)).toEqual([
+      '第二行独特歌词XYZ',
+    ])
+
+    // 3. 同一首歌多行命中集中返回、保持原顺序
+    const multiRes = await request(app).get('/api/search').query({ q: '歌词', type: 'lyrics' })
+
+    expect(multiRes.status).toBe(200)
+    const multiSong = multiRes.body.lyrics.find(
+      (item: { docId: string }) => item.docId === song.docId
+    )
+    expect(multiSong).toBeTruthy()
+    expect(multiSong.matchedLines.map((l: { text: string }) => l.text)).toEqual([
+      '第一行歌词',
+      '第二行独特歌词XYZ',
+      '第三行歌词',
+    ])
+
+    // 4. 歌词响应不含整段歌词字段
+    expect(multiSong.lyric).toBeUndefined()
+
+    // 5. 默认全部类型搜索也返回歌词结果（歌词独立成区块，不污染音乐结果）
+    const allRes = await request(app).get('/api/search').query({ q: '独特歌词XYZ', type: 'all' })
+
+    expect(allRes.status).toBe(200)
+    expect(allRes.body.music.some((m: { docId: string }) => m.docId === song.docId)).toBe(false)
+    expect(allRes.body.lyrics).toHaveLength(1)
+    expect(allRes.body.lyrics[0].matchedLines.map((l: { text: string }) => l.text)).toEqual([
+      '第二行独特歌词XYZ',
+    ])
   })
 
   it('后台音乐列表支持艺术家名称部分匹配', async () => {

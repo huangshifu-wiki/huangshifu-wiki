@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import type { WikiItem, PostItem, GalleryItem, SongItem, AlbumItem } from '../types/entities'
+import type {
+  WikiItem,
+  PostItem,
+  GalleryItem,
+  SongItem,
+  AlbumItem,
+  LyricSearchItem,
+} from '../types/entities'
 import type { MixedSearchResult, SearchSuggestion, SearchFilters, SearchMeta } from './useSearch'
 import { useMixedSearch, useTraditionalSearch } from './useSearch'
 import type { GalleryDetailResponse, TextSearchResult } from '../types/api'
@@ -22,6 +29,7 @@ export interface SearchResults {
   galleries: GalleryItem[]
   music: SongItem[]
   albums: AlbumItem[]
+  lyrics: LyricSearchItem[]
 }
 
 export interface SearchState {
@@ -73,7 +81,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
 
   const [state, setState] = useState<SearchState>({
     query: initialQuery,
-    results: { wiki: [], posts: [], galleries: [], music: [], albums: [] },
+    results: { wiki: [], posts: [], galleries: [], music: [], albums: [], lyrics: [] },
     loading: false,
     hasSearched: Boolean(initialQuery),
     activeTab: 'all',
@@ -257,11 +265,12 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         setState((prev) => ({
           ...prev,
           results: {
-            wiki: data.wiki.filter(filterFn) as WikiItem[],
-            posts: data.posts.filter(filterFn) as PostItem[],
-            galleries: data.galleries.filter(filterFn) as GalleryItem[],
+            wiki: data.wiki.filter(filterFn),
+            posts: data.posts.filter(filterFn),
+            galleries: data.galleries.filter(filterFn),
             music: data.music as SongItem[],
             albums: data.albums as AlbumItem[],
+            lyrics: data.lyrics,
           },
           isMixedSearch: false,
           mixedResults: [],
@@ -358,7 +367,8 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     state.results.galleries.length +
     state.results.music.length +
     state.results.albums.length +
-    (state.textSemanticResults?.length ?? 0)
+    state.results.lyrics.length +
+    state.textSemanticResults.length
 
   const getMixedResultsCount = (type: 'gallery' | 'wiki' | 'post') => {
     return state.mixedResults.filter((r) => r.sourceType === type).length
@@ -376,7 +386,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         ...(state.textSemanticResults.length > 0
           ? [
               {
-                id: 'textSemantic' as const,
+                id: 'textSemantic',
                 label: '语义匹配',
                 count: state.textSemanticResults.length,
               },
@@ -386,6 +396,9 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         { id: 'posts', label: '帖子', count: state.results.posts.length },
         { id: 'galleries', label: '图集', count: state.results.galleries.length },
         { id: 'music', label: '音乐', count: state.results.music.length },
+        ...(state.results.lyrics.length > 0
+          ? [{ id: 'lyrics', label: '歌词', count: state.results.lyrics.length }]
+          : []),
         { id: 'albums', label: '专辑', count: state.results.albums.length },
       ]
 

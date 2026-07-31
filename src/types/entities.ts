@@ -58,6 +58,22 @@ export interface SongItem {
   createdAt?: string
 }
 
+export interface LyricMatchLine {
+  index: number
+  text: string
+}
+
+export interface LyricSearchItem {
+  docId: string
+  slug: string
+  title: string
+  artists: string[]
+  album: string
+  cover: string
+  coverThumbnail?: string
+  matchedLines: LyricMatchLine[]
+}
+
 export interface AlbumItem {
   docId?: string
   slug?: string

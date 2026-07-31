@@ -4,6 +4,7 @@ import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { normalizeStringListInput } from '../../lib/musicCredits'
 import type { LyricType } from '../../lib/lrcParser'
 import { getMusicResourcePreview, resolveCoverUrlCandidates } from '../music/metingService'
+import { enqueueMusicTextEmbeddingsDeferred } from '../vector/textEmbeddingSync'
 import {
   addSongCoverFromUrl,
   autoLinkInstrumental,
@@ -709,7 +710,7 @@ export async function executeSongJsonImport(
 ): Promise<SongImportExecutionResult> {
   const summary = createSummary()
   const results: SongImportResultItem[] = []
-  let changed = false
+  const touchedDocIds: string[] = []
 
   for (const item of preview.items) {
     summary.sourceConflicts += item.sourceConflicts.length
@@ -757,7 +758,7 @@ export async function executeSongJsonImport(
           item.input.artists[0] || '未知歌手'
         )
         summary.created += 1
-        changed = true
+        touchedDocIds.push(song.docId)
         results.push({
           index: item.input.index,
           title: item.input.title,
@@ -805,6 +806,7 @@ export async function executeSongJsonImport(
         const coverResult = await tryMaybeAddCover(item.input, item.existingSong, summary, options)
         coverError = coverResult.error
         summary.overwritten += 1
+        touchedDocIds.push(item.existingSong.docId)
       } else {
         const data = buildFillUpdateData(item.input, item.existingSong)
         const hasDataChanges = Object.keys(data).length > 0
@@ -819,12 +821,11 @@ export async function executeSongJsonImport(
         const coverChanged = coverResult.changed
         coverError = coverResult.error
         summary.filled += 1
-        changed = changed || hasDataChanges || sourcesChanged || coverChanged
+        if (hasDataChanges || sourcesChanged || coverChanged) {
+          touchedDocIds.push(item.existingSong.docId)
+        }
       }
 
-      if (action === 'overwrite') {
-        changed = true
-      }
       results.push({
         index: item.input.index,
         title: item.input.title,
@@ -846,8 +847,10 @@ export async function executeSongJsonImport(
     }
   }
 
-  if (changed) {
+  // 有实际变更（create/overwrite/fill 命中变更）的 docId 已全部收集于 touchedDocIds
+  if (touchedDocIds.length) {
     enhancedCache.invalidateByPrefix('music_list:')
+    enqueueMusicTextEmbeddingsDeferred(prisma, touchedDocIds)
   }
 
   return {

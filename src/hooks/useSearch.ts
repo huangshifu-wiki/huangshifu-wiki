@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { apiGet, apiUpload } from '../lib/apiClient'
-import type { GalleryItem, WikiItem, PostItem } from '../types/entities'
+import type { GalleryItem, WikiItem, PostItem, LyricSearchItem } from '../types/entities'
 import type { TextSearchResult, TextSearchResponse } from '../types/api'
 
 /**
@@ -83,7 +83,17 @@ export interface TraditionalSearchResults {
   galleries: GalleryItem[]
   music: unknown[]
   albums: unknown[]
+  lyrics: LyricSearchItem[]
   searchMeta?: SearchMeta
+}
+
+const EMPTY_TRADITIONAL_RESULTS: TraditionalSearchResults = {
+  wiki: [],
+  posts: [],
+  galleries: [],
+  music: [],
+  albums: [],
+  lyrics: [],
 }
 
 /**
@@ -92,7 +102,7 @@ export interface TraditionalSearchResults {
 export interface SearchFilters {
   selectedTags: string[]
   dateRange: { start: string; end: string }
-  contentType: 'all' | 'wiki' | 'posts' | 'galleries' | 'music' | 'albums'
+  contentType: 'all' | 'wiki' | 'posts' | 'galleries' | 'music' | 'albums' | 'lyrics'
   semanticImageSearch: boolean
 }
 
@@ -208,13 +218,7 @@ export function useMixedSearch() {
  * 使用传统搜索的 Hook
  */
 export function useTraditionalSearch() {
-  const [results, setResults] = useState<TraditionalSearchResults>({
-    wiki: [],
-    posts: [],
-    galleries: [],
-    music: [],
-    albums: [],
-  })
+  const [results, setResults] = useState<TraditionalSearchResults>(EMPTY_TRADITIONAL_RESULTS)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -228,8 +232,8 @@ export function useTraditionalSearch() {
       options?: { mode?: 'keyword' | 'vector' | 'hybrid' }
     ): Promise<TraditionalSearchResults> => {
       if (!query.trim()) {
-        setResults({ wiki: [], posts: [], galleries: [], music: [], albums: [] })
-        return { wiki: [], posts: [], galleries: [], music: [], albums: [] }
+        setResults(EMPTY_TRADITIONAL_RESULTS)
+        return EMPTY_TRADITIONAL_RESULTS
       }
 
       setLoading(true)
@@ -242,6 +246,7 @@ export function useTraditionalSearch() {
           galleries: 'galleries',
           music: 'music',
           albums: 'albums',
+          lyrics: 'lyrics',
         }
         const apiType =
           filters?.contentType === 'all' || !filters?.contentType
@@ -265,6 +270,7 @@ export function useTraditionalSearch() {
           galleries: data.galleries || [],
           music: data.music || [],
           albums: data.albums || [],
+          lyrics: data.lyrics || [],
           searchMeta: data.searchMeta,
         }
 
@@ -274,7 +280,7 @@ export function useTraditionalSearch() {
         const errorMsg = err instanceof Error ? err.message : '搜索失败'
         setError(errorMsg)
         console.error('Traditional search error:', err)
-        return { wiki: [], posts: [], galleries: [], music: [], albums: [] }
+        return EMPTY_TRADITIONAL_RESULTS
       } finally {
         setLoading(false)
       }
@@ -320,7 +326,7 @@ export function useTraditionalSearch() {
    * 清空结果
    */
   const clearResults = useCallback(() => {
-    setResults({ wiki: [], posts: [], galleries: [], music: [], albums: [] })
+    setResults(EMPTY_TRADITIONAL_RESULTS)
     setError(null)
   }, [])
 

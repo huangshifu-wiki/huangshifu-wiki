@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer'
 import path from 'path'
@@ -32,6 +33,8 @@ import {
 import { prisma } from '../prisma'
 import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
 import { formatMusicCredits } from '../../lib/musicCredits'
+import { parseLyrics } from '../../lib/lrcParser'
+import type { LyricMatchLine, LyricSearchItem } from '../../types/entities'
 import type { ImageSourceType, ImageEmbeddingPayload } from '../vector/qdrantService'
 import { createUploadStorageInfo } from '../uploadPath'
 
@@ -41,6 +44,66 @@ const IMAGE_SEARCH_RESULT_LIMIT = Math.max(1, Number(process.env.IMAGE_SEARCH_RE
 const VECTOR_SEARCH_CANDIDATE_LIMIT = 200
 const QDRANT_TIMEOUT_MS = Number(process.env.QDRANT_TIMEOUT_MS || 2000)
 export const RRF_K = 60
+const LYRICS_SEARCH_TAKE = 100
+const MAX_MATCHED_LINES_PER_SONG = 30
+// 音乐搜索与歌词搜索共用的歌曲字段，覆盖 toMusicResponse 全部入参
+const MUSIC_SEARCH_SELECT = {
+  docId: true,
+  slug: true,
+  title: true,
+  artists: true,
+  lyricists: true,
+  composers: true,
+  arrangers: true,
+  vocals: true,
+  album: true,
+  audioUrl: true,
+  releaseDate: true,
+  durationMs: true,
+  coverId: true,
+  coverAlbumDocId: true,
+  displayAlbumMode: true,
+  manualAlbumName: true,
+  externalSources: {
+    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+  },
+  covers: {
+    orderBy: { sortOrder: 'asc' },
+    select: {
+      id: true,
+      publicUrl: true,
+      thumbnailUrl: true,
+      isDefault: true,
+      sortOrder: true,
+    },
+  },
+  albumRelations: {
+    include: {
+      album: {
+        select: {
+          docId: true,
+          slug: true,
+          title: true,
+          artist: true,
+          releaseDate: true,
+          coverId: true,
+          covers: {
+            orderBy: { sortOrder: 'asc' },
+            select: {
+              id: true,
+              publicUrl: true,
+              thumbnailUrl: true,
+              isDefault: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+  },
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.MusicTrackSelect
 const SEMANTIC_SEARCH_DISABLED_MESSAGE = '语义搜索功能未启用'
 
 type ClipEmbeddingModule = typeof import('../vector/clipEmbedding')
@@ -91,6 +154,7 @@ interface HybridSearchResponse {
   galleries: Awaited<ReturnType<typeof toGalleryResponse>>[]
   music: Awaited<ReturnType<typeof toMusicResponse>>[]
   albums: Awaited<ReturnType<typeof toAlbumResponse>>[]
+  lyrics?: LyricSearchItem[]
   searchMeta: {
     mode: string
     query: string
@@ -248,6 +312,52 @@ async function fetchPostData(
     result.set(post.id, toPostResponse(post))
   }
   return result
+}
+
+type LyricSearchTrack = Parameters<typeof toMusicResponse>[0] & {
+  lyric: string | null
+  lyricPlain: string | null
+}
+
+/**
+ * 从命中歌词的歌曲中提取匹配行，按歌曲分组返回
+ */
+function buildLyricSearchItems(tracks: LyricSearchTrack[], q: string): LyricSearchItem[] {
+  const items: LyricSearchItem[] = []
+
+  for (const track of tracks) {
+    const parsedLines: LyricMatchLine[] = track.lyric
+      ? parseLyrics(track.lyric).lines.map((line, index) => ({ index, text: line.text }))
+      : []
+    const plainLines: LyricMatchLine[] = track.lyricPlain
+      ? track.lyricPlain.split(/\r?\n/).map((text, index) => ({ index, text }))
+      : []
+
+    // 优先用解析后的歌词行匹配（剥离时间标签/元数据）；无命中时兑底 lyricPlain
+    let matchedLines = parsedLines
+      .filter((line) => line.text.includes(q))
+      .slice(0, MAX_MATCHED_LINES_PER_SONG)
+    if (matchedLines.length === 0) {
+      matchedLines = plainLines
+        .filter((line) => line.text.includes(q))
+        .slice(0, MAX_MATCHED_LINES_PER_SONG)
+    }
+    if (matchedLines.length === 0) continue
+
+    const song = toMusicResponse(track)
+    items.push({
+      docId: song.docId,
+      slug: song.slug,
+      title: song.title,
+      artists: song.artists,
+      album: song.album,
+      cover: song.cover,
+      coverThumbnail: song.coverThumbnail,
+      matchedLines,
+    })
+  }
+
+  return items
 }
 
 /**
@@ -710,6 +820,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const wantsGalleries = type === 'all' || type === 'galleries'
     const wantsMusic = type === 'all' || type === 'music'
     const wantsAlbums = type === 'all' || type === 'albums'
+    const wantsLyrics = type === 'all' || type === 'lyrics'
 
     if (q) {
       increaseSearchKeywordCount(q)
@@ -874,70 +985,11 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                       ? [{ docId: { in: musicArtistMatchDocIds } }]
                       : []),
                     { album: { contains: q } },
-                    { lyric: { contains: q } },
                   ],
                 }
               : {}),
           },
-          select: {
-            docId: true,
-            slug: true,
-            title: true,
-            artists: true,
-            lyricists: true,
-            composers: true,
-            arrangers: true,
-            vocals: true,
-            album: true,
-            audioUrl: true,
-            releaseDate: true,
-            durationMs: true,
-            coverId: true,
-            coverAlbumDocId: true,
-            displayAlbumMode: true,
-            manualAlbumName: true,
-            customPlatformLinks: true,
-            externalSources: {
-              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-            },
-            covers: {
-              orderBy: { sortOrder: 'asc' },
-              select: {
-                id: true,
-                publicUrl: true,
-                thumbnailUrl: true,
-                isDefault: true,
-                sortOrder: true,
-              },
-            },
-            albumRelations: {
-              include: {
-                album: {
-                  select: {
-                    docId: true,
-                    slug: true,
-                    title: true,
-                    artist: true,
-                    releaseDate: true,
-                    coverId: true,
-                    covers: {
-                      orderBy: { sortOrder: 'asc' },
-                      select: {
-                        id: true,
-                        publicUrl: true,
-                        thumbnailUrl: true,
-                        isDefault: true,
-                      },
-                    },
-                  },
-                },
-              },
-              orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
-            },
-            instrumentalLinks: { select: { id: true } },
-            createdAt: true,
-            updatedAt: true,
-          },
+          select: MUSIC_SEARCH_SELECT,
           orderBy: { updatedAt: 'desc' },
           take: 100,
         })
@@ -1022,15 +1074,33 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
         })
       : Promise.resolve([])
 
-    const [wiki, posts, galleries, music, albums] = await Promise.all([
+    const lyricsPromise =
+      wantsLyrics && q
+        ? prisma.musicTrack.findMany({
+            where: {
+              deletedAt: null,
+              OR: [{ lyric: { contains: q } }, { lyricPlain: { contains: q } }],
+            },
+            select: {
+              ...MUSIC_SEARCH_SELECT,
+              lyric: true,
+              lyricPlain: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: LYRICS_SEARCH_TAKE,
+          })
+        : Promise.resolve([])
+
+    const [wiki, posts, galleries, music, albums, lyrics] = await Promise.all([
       wikiPromise,
       postsPromise,
       galleriesPromise,
       musicPromise,
       albumsPromise,
+      lyricsPromise,
     ])
 
-    if ((mode === 'hybrid' || mode === 'vector') && q) {
+    if ((mode === 'hybrid' || mode === 'vector') && q && type !== 'lyrics') {
       const keywordRaw = {
         wiki: wiki.map(toWikiResponse),
         posts: posts.map(toPostResponse),
@@ -1039,13 +1109,15 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
         albums: albums,
       }
 
+      let hybridResponse: HybridSearchResponse
+
       if (!isSemanticSearchEnabled()) {
         if (mode === 'vector') {
           res.status(404).json({ error: SEMANTIC_SEARCH_DISABLED_MESSAGE })
           return
         }
 
-        const hybridResponse = buildHybridResponse(
+        hybridResponse = buildHybridResponse(
           keywordRaw,
           [],
           mode,
@@ -1054,62 +1126,70 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
           SEMANTIC_SEARCH_DISABLED_MESSAGE,
           []
         )
-        enhancedCache.set(cacheKey, hybridResponse, 30)
-        return res.json(hybridResponse)
-      }
+      } else {
+        let vectorResults: SemanticSearchResult[] = []
+        let textResults: TextSearchResult[] = []
+        let degraded = false
+        let degradationReason: string | undefined
 
-      let vectorResults: SemanticSearchResult[] = []
-      let textResults: TextSearchResult[] = []
-      let degraded = false
-      let degradationReason: string | undefined
+        const [vectorResponse, textResponse] = await Promise.all([
+          fetchVectorSearchWithTimeout(
+            q,
+            VECTOR_SEARCH_CANDIDATE_LIMIT,
+            0.25,
+            QDRANT_TIMEOUT_MS,
+            req.authUser
+          ).catch((error) => {
+            degraded = true
+            degradationReason =
+              '向量搜索不可用：' + (error instanceof Error ? error.message : '未知错误')
+            logger.warn({ err: error }, 'Vector search failed, degrading to keyword-only')
+            return { results: [] as SemanticSearchResult[], timedOut: false }
+          }),
+          fetchTextVectorSearchWithTimeout(
+            q,
+            VECTOR_SEARCH_CANDIDATE_LIMIT,
+            0.25,
+            QDRANT_TIMEOUT_MS,
+            req.authUser
+          ).catch((error) => {
+            logger.warn({ err: error }, 'Text vector search failed')
+            return { results: [] as TextSearchResult[], timedOut: false }
+          }),
+        ])
 
-      const [vectorResponse, textResponse] = await Promise.all([
-        fetchVectorSearchWithTimeout(
-          q,
-          VECTOR_SEARCH_CANDIDATE_LIMIT,
-          0.25,
-          QDRANT_TIMEOUT_MS,
-          req.authUser
-        ).catch((error) => {
+        vectorResults = vectorResponse.results
+        textResults = textResponse.results
+
+        if (vectorResponse.timedOut || textResponse.timedOut) {
           degraded = true
           degradationReason =
-            '向量搜索不可用：' + (error instanceof Error ? error.message : '未知错误')
-          logger.warn({ err: error }, 'Vector search failed, degrading to keyword-only')
-          return { results: [] as SemanticSearchResult[], timedOut: false }
-        }),
-        fetchTextVectorSearchWithTimeout(
+            '向量搜索超时（>' + QDRANT_TIMEOUT_MS / 1000 + 's），已自动降级为关键词搜索模式'
+        }
+
+        hybridResponse = buildHybridResponse(
+          keywordRaw,
+          vectorResults,
+          mode,
           q,
-          VECTOR_SEARCH_CANDIDATE_LIMIT,
-          0.25,
-          QDRANT_TIMEOUT_MS,
-          req.authUser
-        ).catch((error) => {
-          logger.warn({ err: error }, 'Text vector search failed')
-          return { results: [] as TextSearchResult[], timedOut: false }
-        }),
-      ])
-
-      vectorResults = vectorResponse.results
-      textResults = textResponse.results
-
-      if (vectorResponse.timedOut || textResponse.timedOut) {
-        degraded = true
-        degradationReason =
-          '向量搜索超时（>' + QDRANT_TIMEOUT_MS / 1000 + 's），已自动降级为关键词搜索模式'
+          degraded,
+          degradationReason,
+          textResults
+        )
       }
 
-      const hybridResponse = buildHybridResponse(
-        keywordRaw,
-        vectorResults,
-        mode,
-        q,
-        degraded,
-        degradationReason,
-        textResults
-      )
+      // 歌词结果是纯关键词行为：独立附加、不参与向量融合，keyword 与 hybrid 模式均返回
+      if (wantsLyrics) {
+        const builtLyrics = buildLyricSearchItems(lyrics, q)
+        hybridResponse.lyrics = builtLyrics
+        hybridResponse.searchMeta.keywordResultCount += builtLyrics.length
+      }
+
       enhancedCache.set(cacheKey, hybridResponse, 30)
       return res.json(hybridResponse)
     }
+
+    const builtLyrics = buildLyricSearchItems(lyrics, q)
 
     const keywordResult = {
       wiki: wiki.map(toWikiResponse),
@@ -1117,12 +1197,18 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
       galleries: await toGalleryListResponse(galleries),
       music: music.map(toMusicResponse),
       albums: albums.map(toAlbumResponse),
+      lyrics: builtLyrics,
       searchMeta: {
         mode: 'keyword',
         query: q,
         degraded: false,
         keywordResultCount:
-          wiki.length + posts.length + galleries.length + music.length + albums.length,
+          wiki.length +
+          posts.length +
+          galleries.length +
+          music.length +
+          albums.length +
+          builtLyrics.length,
         vectorResultCount: 0,
         textVectorResultCount: 0,
       },

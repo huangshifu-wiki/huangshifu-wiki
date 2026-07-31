@@ -12,6 +12,9 @@ import {
   deleteTextEmbeddingPointsBySource,
 } from './qdrantService'
 
+type TextEmbeddingSourceType = 'wiki' | 'post' | 'music' | 'album'
+const TEXT_EMBEDDING_SOURCE_TYPES: TextEmbeddingSourceType[] = ['wiki', 'post', 'music', 'album']
+
 export function chunkText(
   text: string,
   maxChars: number = 150,
@@ -112,7 +115,7 @@ export function stripMarkdown(text: string): string {
 
 export function prepareEntityText(
   entity: Record<string, unknown>,
-  sourceType: 'wiki' | 'post' | 'music' | 'album'
+  sourceType: TextEmbeddingSourceType
 ): string {
   switch (sourceType) {
     case 'wiki':
@@ -120,14 +123,9 @@ export function prepareEntityText(
     case 'post':
       return stripMarkdown(`${entity.title || ''}\n\n${entity.content || ''}`)
     case 'music': {
-      const parts = [
-        `${entity.title || ''} - ${formatMusicCredits(entity.artists, '')} | ${entity.album || ''}`,
-      ]
-      const lyric = entity.lyric as string | null | undefined
-      if (lyric) {
-        parts.push(lyric.slice(0, 500))
-      }
-      return parts.join('\n\n')
+      return stripMarkdown(
+        `${entity.title || ''} - ${formatMusicCredits(entity.artists, '')} | ${entity.album || ''}`
+      )
     }
     case 'album': {
       const parts = [`${entity.title || ''} - ${entity.artist || ''}`]
@@ -273,7 +271,7 @@ export async function enqueueMusicTextEmbeddings(
 
   const tracks = await prisma.musicTrack.findMany({
     where: { docId: { in: uniqueIds } },
-    select: { docId: true, title: true, artists: true, album: true, lyric: true },
+    select: { docId: true, title: true, artists: true, album: true },
   })
 
   let queued = 0
@@ -281,6 +279,12 @@ export async function enqueueMusicTextEmbeddings(
   const vectorSize = getEmbeddingVectorSize()
 
   for (const track of tracks) {
+    // 先删后建：内容变更后重入队不会残留旧 chunk
+    await prisma.textEmbeddingChunk.deleteMany({
+      where: { sourceType: 'music', sourceId: track.docId },
+    })
+    await deleteTextEmbeddingPointsBySource('music', track.docId)
+
     const text = prepareEntityText(track as unknown as Record<string, unknown>, 'music')
     const chunks = chunkText(text)
 
@@ -317,6 +321,11 @@ export async function enqueueMusicTextEmbeddings(
   return { requested: uniqueIds.length, queued }
 }
 
+// fire-and-forget 重入队：歌曲保存/导入/平台同步后调用，不阻塞请求链路（不得改为 await）
+export function enqueueMusicTextEmbeddingsDeferred(prisma: PrismaClient, musicIds: string[]): void {
+  void Promise.allSettled([enqueueMusicTextEmbeddings(prisma, musicIds)])
+}
+
 export async function enqueueAlbumTextEmbeddings(
   prisma: PrismaClient,
   albumIds: string[]
@@ -336,6 +345,12 @@ export async function enqueueAlbumTextEmbeddings(
   const vectorSize = getEmbeddingVectorSize()
 
   for (const album of albums) {
+    // 先删后建：内容变更后重入队不会残留旧 chunk
+    await prisma.textEmbeddingChunk.deleteMany({
+      where: { sourceType: 'album', sourceId: album.docId },
+    })
+    await deleteTextEmbeddingPointsBySource('album', album.docId)
+
     const text = prepareEntityText(album as unknown as Record<string, unknown>, 'album')
     const chunks = chunkText(text)
 
@@ -374,12 +389,10 @@ export async function enqueueAlbumTextEmbeddings(
 
 export async function enqueueMissingTextEmbeddings(
   prisma: PrismaClient,
-  sourceType?: 'wiki' | 'post' | 'music' | 'album',
+  sourceType?: TextEmbeddingSourceType,
   limit: number = 100
 ): Promise<{ queued: number }> {
-  const types: Array<'wiki' | 'post' | 'music' | 'album'> = sourceType
-    ? [sourceType]
-    : ['wiki', 'post', 'music', 'album']
+  const types = sourceType ? [sourceType] : TEXT_EMBEDDING_SOURCE_TYPES
   let totalQueued = 0
 
   for (const type of types) {
@@ -591,7 +604,7 @@ export async function deleteTextEmbeddingsForSource(
 
 export async function retryFailedTextEmbeddings(
   prisma: PrismaClient,
-  options: { limit?: number; sourceType?: 'wiki' | 'post' | 'music' | 'album' } = {}
+  options: { limit?: number; sourceType?: TextEmbeddingSourceType } = {}
 ): Promise<
   { resetCount: number; processedCount: number } & Awaited<
     ReturnType<typeof syncTextEmbeddingBatch>
@@ -623,22 +636,37 @@ export async function retryFailedTextEmbeddings(
 
 export async function rebuildAllTextEmbeddings(
   prisma: PrismaClient,
-  options: { limit?: number; sourceType?: 'wiki' | 'post' | 'music' | 'album' } = {}
+  options: { limit?: number; sourceType?: TextEmbeddingSourceType } = {}
 ): Promise<{ resetCount: number } & Awaited<ReturnType<typeof syncTextEmbeddingBatch>>> {
-  const where: { sourceType?: string } = {}
-  if (options.sourceType) {
-    where.sourceType = options.sourceType
-  }
+  const types = options.sourceType ? [options.sourceType] : TEXT_EMBEDDING_SOURCE_TYPES
+  let resetCount = 0
 
-  const updated = await prisma.textEmbeddingChunk.updateMany({
-    where,
-    data: { status: EmbeddingStatus.pending, lastError: null },
-  })
+  // 真重建：删光该类型全部 chunk 与 Qdrant 点后重新入队，使 chunk 文本与当前内容一致
+  for (const type of types) {
+    const chunks = await prisma.textEmbeddingChunk.findMany({
+      where: { sourceType: type },
+      select: { qdrantPointId: true },
+    })
+    resetCount += chunks.length
+
+    for (const chunk of chunks) {
+      if (!chunk.qdrantPointId) continue
+      await deleteTextEmbeddingPoint(chunk.qdrantPointId).catch((e) => {
+        console.debug(
+          '[textEmbeddingSync] Failed to delete qdrant point:',
+          chunk.qdrantPointId,
+          String(e)
+        )
+      })
+    }
+    await prisma.textEmbeddingChunk.deleteMany({ where: { sourceType: type } })
+    await enqueueMissingTextEmbeddings(prisma, type, options.limit ?? 100)
+  }
 
   const syncResult = await syncTextEmbeddingBatch(prisma, {
     limit: options.limit ?? 100,
     includeFailed: true,
   })
 
-  return { resetCount: updated.count, ...syncResult }
+  return { resetCount, ...syncResult }
 }

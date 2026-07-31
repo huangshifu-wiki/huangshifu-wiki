@@ -50,6 +50,7 @@ import {
 } from '../music/metingService'
 import { cleanupUnusedMediaAssetById } from '../services/mediaAssetCleanupService'
 import { deleteMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
+import { enqueueMusicTextEmbeddingsDeferred } from '../vector/textEmbeddingSync'
 import type { AuthenticatedRequest, ContentStatus } from '../types'
 import { Prisma } from '@prisma/client'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -442,6 +443,7 @@ router.post(
         song: hydrated ? toSongResponse(hydrated) : song,
       })
       enhancedCache.invalidateByPrefix('music_list:')
+      enqueueMusicTextEmbeddingsDeferred(prisma, [song.docId])
     } catch (error) {
       console.error('Add music error:', error)
       res.status(500).json({ error: '添加歌曲失败' })
@@ -1178,6 +1180,7 @@ router.patch(
 
       res.json({ song: toSongResponse(song) })
       enhancedCache.invalidateByPrefix('music_list:')
+      enqueueMusicTextEmbeddingsDeferred(prisma, [docId])
     } catch (error) {
       console.error('Update music error:', error)
       res.status(500).json({ error: '更新歌曲失败' })

@@ -25,6 +25,7 @@ import {
 } from '../music/metingService'
 import { generateMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
 import { localizeImageUrlAsMediaAsset } from './remoteImageAsset'
+import { enqueueMusicTextEmbeddingsDeferred } from '../vector/textEmbeddingSync'
 
 export async function findMusicDocIdsByArtistPartial(
   query: string,
@@ -781,6 +782,7 @@ export async function createOrUpdateImportedSong(params: {
     if (resolvedCover && !existingSource.song.coverId && !existingSource.song.coverAlbumDocId) {
       await maybeAddImportedSongCover(song.docId, resolvedCover, true)
     }
+    enqueueMusicTextEmbeddingsDeferred(prisma, [song.docId])
     return {
       song,
       created: false,
@@ -839,6 +841,7 @@ export async function createOrUpdateImportedSong(params: {
         isPrimary: !existingByTitleArtist.externalSources.length,
       },
     })
+    enqueueMusicTextEmbeddingsDeferred(prisma, [updatedSong.docId])
     return {
       song: updatedSong,
       created: false,
@@ -878,6 +881,7 @@ export async function createOrUpdateImportedSong(params: {
   }
 
   await autoLinkInstrumental(song.docId, title, primaryArtist, track.isInstrumental)
+  enqueueMusicTextEmbeddingsDeferred(prisma, [song.docId])
 
   return {
     song,

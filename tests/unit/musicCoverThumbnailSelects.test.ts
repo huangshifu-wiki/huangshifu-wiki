@@ -24,8 +24,8 @@ describe('music cover thumbnail selects', () => {
       'utf8'
     )
 
-    expectSelectsThumbnail(searchRoutes, 'const musicPromise = wantsMusic')
-    expectSelectsThumbnail(searchRoutes, 'albumRelations: {\n              include:')
+    expectSelectsThumbnail(searchRoutes, 'const MUSIC_SEARCH_SELECT = {')
+    expectSelectsThumbnail(searchRoutes, 'albumRelations: {\n    include:')
     expectSelectsThumbnail(searchRoutes, 'const albumsPromise = wantsAlbums')
     expectSelectsThumbnail(searchRoutes, 'songRelations: {\n              include:')
     expectSelectsThumbnail(adminRoutes, 'prisma.musicTrack.findMany({')
