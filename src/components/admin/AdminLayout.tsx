@@ -85,6 +85,12 @@ const siteNav: AdminNavItem[] = [
   { id: 'disk-monitor', label: '磁盘监控', path: '/admin/disk-monitor', icon: HardDrive },
   { id: 'variant-manager', label: '变体管理', path: '/admin/variant-manager', icon: RefreshCw },
   {
+    id: 'music-cover-thumbnails',
+    label: '封面缩略图',
+    path: '/admin/music-cover-thumbnails',
+    icon: Image,
+  },
+  {
     id: 'settings',
     label: '站点设置',
     path: '/admin/settings',

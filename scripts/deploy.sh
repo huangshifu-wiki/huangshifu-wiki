@@ -229,6 +229,9 @@ if [[ "$USE_DOCKER" == "1" ]]; then
   log "building app Docker image"
   docker compose build app
 
+  log "applying prisma migrations"
+  docker compose run --rm app npx prisma migrate deploy
+
   log "starting app container"
   docker compose up -d app
 
