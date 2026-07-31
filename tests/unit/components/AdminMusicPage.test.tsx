@@ -151,4 +151,19 @@ describe('AdminMusicPage list covers', () => {
     })
     expect(covers[1]).toHaveTextContent('无封面')
   })
+
+  it('loads both song and album tab counts on mount', async () => {
+    mockedApiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/admin/music')
+        return {
+          data: [{ docId: 's1', title: '歌曲一', artists: ['歌手'] }],
+          total: 12,
+        } as never
+      if (path === '/api/admin/albums') return { data: [], total: 7 } as never
+      throw new Error(`unexpected apiGet path: ${path}`)
+    })
+    renderPage()
+    expect(await screen.findByText('歌曲 (12)')).toBeInTheDocument()
+    expect(await screen.findByText('专辑 (7)')).toBeInTheDocument()
+  })
 })

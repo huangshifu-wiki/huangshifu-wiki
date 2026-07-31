@@ -190,12 +190,33 @@ export const AdminMusicPage = () => {
     [albumPagination.page, appliedFilters, show]
   )
 
+  const fetchInactiveCount = useCallback(
+    async (activeTab: 'songs' | 'albums', signal?: AbortSignal) => {
+      const resource = activeTab === 'songs' ? 'albums' : 'songs'
+      try {
+        const response = await apiGet<AdminMusicListResponse | AdminAlbumListResponse>(
+          resource === 'songs' ? '/api/admin/music' : '/api/admin/albums',
+          queryParams(resource, 1, 1),
+          undefined,
+          signal
+        )
+        if (signal?.aborted) return
+        if (resource === 'songs') setSongTotal(response.total || 0)
+        else setAlbumTotal(response.total || 0)
+      } catch {
+        // 非激活 tab 数量获取失败：保留旧值、不弹 toast，避免打断当前列表
+      }
+    },
+    [appliedFilters]
+  )
+
   useEffect(() => {
     const controller = new AbortController()
+    void fetchInactiveCount(tab, controller.signal)
     if (tab === 'songs') void fetchSongs(controller.signal)
     else void fetchAlbums(controller.signal)
     return () => controller.abort()
-  }, [fetchAlbums, fetchSongs, tab])
+  }, [fetchAlbums, fetchInactiveCount, fetchSongs, tab])
 
   const refreshCurrent = async () => {
     invalidateMusicApiCaches()
