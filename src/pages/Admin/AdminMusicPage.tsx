@@ -11,6 +11,7 @@ import AlbumTrackEditor from '../../components/AlbumTrackEditor'
 import { AlbumFormModal } from '../../components/AlbumFormModal'
 import { CoverManager } from '../../components/CoverManager'
 import { MusicImportModal } from '../../components/MusicImportModal'
+import { SmartImage } from '../../components/SmartImage'
 import { Button, Checkbox, Input, Select } from '@/src/components/ui'
 import { SongAlbumRelationsModal } from '../../components/SongAlbumRelationsModal'
 import { SongFormModal } from '../../components/SongFormModal'
@@ -48,6 +49,24 @@ const isMusicSource = (source: unknown): source is MusicSource => {
 }
 const sourceList = (item: AdminDataItem) =>
   Array.isArray(item.sources) ? item.sources.filter(isMusicSource) : []
+
+const MusicListCover = ({ src, alt }: { src?: string | null; alt: string }): React.ReactElement => (
+  <div
+    data-testid="music-list-cover"
+    className="relative aspect-square h-12 w-12 shrink-0 overflow-hidden rounded bg-surface-alt"
+  >
+    <SmartImage
+      src={src || undefined}
+      alt={alt}
+      className="block h-full w-full"
+      fallback={
+        <div className="flex h-full w-full items-center justify-center text-xs text-text-muted">
+          无封面
+        </div>
+      }
+    />
+  </div>
+)
 
 export const AdminMusicPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -620,10 +639,9 @@ const SongTable = ({
           </td>
           <td className="px-3 py-4">
             <div className="flex gap-3">
-              <img
-                src={text(song.coverThumbnail || song.cover, '')}
-                alt=""
-                className="h-12 w-12 rounded object-cover"
+              <MusicListCover
+                src={song.coverThumbnail || song.cover}
+                alt={`${text(song.title)} 封面`}
               />
               <div>
                 <p className="font-medium text-text-primary">
@@ -719,10 +737,9 @@ const AlbumTable = ({
         <tr key={id} className="border-b border-border align-top hover:bg-surface-alt">
           <td className="px-3 py-4">
             <div className="flex gap-3">
-              <img
-                src={text(album.coverThumbnail || album.cover, '')}
-                alt=""
-                className="h-12 w-12 rounded object-cover"
+              <MusicListCover
+                src={album.coverThumbnail || album.cover}
+                alt={`${text(album.title)} 封面`}
               />
               <div>
                 <p className="font-medium text-text-primary">
