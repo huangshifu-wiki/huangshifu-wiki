@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Disc3,
@@ -8,16 +8,13 @@ import {
   Link2,
   ChevronDown,
   ChevronUp,
-  Trash2,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
 import { useMusic } from '../context/MusicContext'
 import { useAuth } from '../context/AuthContext'
-import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
-import { CoverManager } from '../components/CoverManager'
 import { SmartImage } from '../components/SmartImage'
 import { Lightbox } from '../components/Lightbox'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
@@ -61,17 +58,14 @@ const compareTracks = (a: SongItem, b: SongItem) =>
 
 const AlbumDetail = () => {
   const { albumId } = useParams()
-  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [album, setAlbum] = useState<AlbumResponse['album'] | null>(null)
   const [favoriting, setFavoriting] = useState<string | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
   const [descExpanded, setDescExpanded] = useState(false)
   const [descNeedExpand, setDescNeedExpand] = useState(false)
   const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
   const descRef = useRef<HTMLDivElement>(null)
-  const { user, isAdmin } = useAuth()
-  const dialog = useDialog()
+  const { user } = useAuth()
 
   useEffect(() => {
     if (descRef.current && !descExpanded) {
@@ -171,29 +165,6 @@ const AlbumDetail = () => {
       return
     }
     show('复制链接失败，请稍后重试', { variant: 'error' })
-  }
-
-  const handleDeleteAlbum = async () => {
-    if (!album?.docId || isDeleting) return
-    const confirmed = await dialog.confirm({
-      title: '删除专辑',
-      message: `确定要删除专辑《${album.title}》吗？删除后可在回收站恢复。`,
-      confirmText: '删除',
-      variant: 'danger',
-    })
-    if (!confirmed) return
-
-    try {
-      setIsDeleting(true)
-      await apiDelete(`/api/albums/${album.docId}`)
-      show('专辑已删除')
-      navigate('/music')
-    } catch (error) {
-      console.error('Delete album failed:', error)
-      show(error instanceof Error ? error.message : '删除专辑失败', { variant: 'error' })
-    } finally {
-      setIsDeleting(false)
-    }
   }
 
   if (loading) {
@@ -382,41 +353,6 @@ const AlbumDetail = () => {
             </div>
           ) : null}
         </div>
-
-        {/* Admin */}
-        {isAdmin && album.docId && (
-          <div className="mb-10">
-            <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 flex items-center gap-2">
-              <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-              管理功能
-            </h2>
-            <div className="flex flex-wrap gap-3">
-              <CoverManager
-                resourceType="album"
-                resourceId={album.docId}
-                currentCover={album.cover}
-                onCoverUpdated={(cover) =>
-                  setAlbum((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          cover: cover.url,
-                          coverThumbnail: cover.thumbnailUrl || undefined,
-                        }
-                      : prev
-                  )
-                }
-              />
-              <button
-                onClick={handleDeleteAlbum}
-                disabled={isDeleting}
-                className="inline-flex items-center gap-2 px-5 py-2 theme-button-danger rounded text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Trash2 size={15} /> {isDeleting ? '删除中...' : '删除专辑'}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       <Lightbox

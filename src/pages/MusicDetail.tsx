@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Clock,
@@ -10,22 +10,18 @@ import {
   Play,
   ChevronDown,
   ChevronUp,
-  Trash2,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
-import { apiDelete, apiGet } from '../lib/apiClient'
+import { apiGet } from '../lib/apiClient'
 import { useAuth } from '../context/AuthContext'
 import { useMusic } from '../context/MusicContext'
-import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
 import { useToggleInteraction } from '../hooks/useToggleInteraction'
 import { useI18n } from '../lib/i18n'
-import { CoverManager } from '../components/CoverManager'
 import { SmartImage } from '../components/SmartImage'
 import { Lightbox } from '../components/Lightbox'
-import { SongEditModal } from '../components/SongEditModal'
 import { LyricsDisplay } from '../components/LyricsDisplay'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
@@ -101,19 +97,15 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
 
 const MusicDetail = () => {
   const { songId } = useParams()
-  const navigate = useNavigate()
   const [song, setSong] = useState<SongItem | null>(null)
   const [posts, setPosts] = useState<PostItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
   const [descExpanded, setDescExpanded] = useState(false)
   const [lyricsExpanded, setLyricsExpanded] = useState(false)
   const [lyricsCopied, setLyricsCopied] = useState(false)
   const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
-  const { user, isAdmin } = useAuth()
+  const { user } = useAuth()
   const { currentSong, currentTime, setCurrentSong, setIsPlaying, setPlaylist } = useMusic()
-  const dialog = useDialog()
   const { show } = useToast()
   const { t } = useI18n()
 
@@ -188,29 +180,6 @@ const MusicDetail = () => {
       setTimeout(() => setLyricsCopied(false), 2000)
     } catch {
       show('复制失败，请手动复制', { variant: 'error' })
-    }
-  }
-
-  const handleDeleteSong = async () => {
-    if (!song?.docId || isDeleting) return
-    const confirmed = await dialog.confirm({
-      title: '删除歌曲',
-      message: `确定要删除歌曲《${song.title}》吗？删除后可在回收站恢复。`,
-      confirmText: '删除',
-      variant: 'danger',
-    })
-    if (!confirmed) return
-
-    try {
-      setIsDeleting(true)
-      await apiDelete(`/api/music/${song.docId}`)
-      show('歌曲已删除')
-      navigate('/music')
-    } catch (error) {
-      console.error('Delete song failed:', error)
-      show(error instanceof Error ? error.message : '删除歌曲失败', { variant: 'error' })
-    } finally {
-      setIsDeleting(false)
     }
   }
 
@@ -493,44 +462,6 @@ const MusicDetail = () => {
                 </div>
               </div>
             )}
-
-            {/* Admin */}
-            {isAdmin && song?.docId && (
-              <div className="mb-10">
-                <SectionHeading>管理功能</SectionHeading>
-                <div className="flex flex-wrap gap-3 mt-4">
-                  <button
-                    onClick={() => setIsEditModalOpen(true)}
-                    className="px-5 py-2 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
-                  >
-                    编辑歌曲
-                  </button>
-                  <button
-                    onClick={handleDeleteSong}
-                    disabled={isDeleting}
-                    className="inline-flex items-center gap-2 px-5 py-2 theme-button-danger rounded text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 size={15} /> {isDeleting ? '删除中...' : '删除歌曲'}
-                  </button>
-                  <CoverManager
-                    resourceType="song"
-                    resourceId={song.docId}
-                    currentCover={song.cover}
-                    onCoverUpdated={(cover) =>
-                      setSong((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              cover: cover.url,
-                              coverThumbnail: cover.thumbnailUrl || undefined,
-                            }
-                          : prev
-                      )
-                    }
-                  />
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Sidebar */}
@@ -582,19 +513,6 @@ const MusicDetail = () => {
           </aside>
         </div>
       </div>
-
-      {isAdmin && song && (
-        <SongEditModal
-          open={isEditModalOpen}
-          onClose={() => setIsEditModalOpen(false)}
-          onSuccess={() => {
-            if (songId) {
-              apiGet<SongDetailResponse>(`/api/music/${songId}`).then((res) => setSong(res.song))
-            }
-          }}
-          song={song}
-        />
-      )}
 
       <Lightbox
         open={coverLightboxOpen}
