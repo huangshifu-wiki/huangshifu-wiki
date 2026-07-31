@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, ExternalLink, Plus, Search, Trash2 } from '@/src/components/icons'
 
-import { apiPatch, apiPost } from '../lib/apiClient'
+import { apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
-import { getPlatformExternalUrl } from '../lib/musicPlatformUrls'
+import { getPlatformExternalUrl, MUSIC_PLATFORM_OPTIONS } from '../lib/musicPlatformUrls'
 import { formatMusicCredits, normalizeStringListInput } from '../lib/musicCredits'
 import type { Platform } from '../types/common'
 import type { MusicExternalSource } from '../types/entities'
@@ -83,37 +83,10 @@ interface SongFormModalProps {
   song?: SongItem
 }
 
-const platformFields: Array<{
-  platform: Platform
-  label: string
-  urlPattern: (id: string) => string
-}> = [
-  {
-    platform: 'netease',
-    label: '网易云音乐',
-    urlPattern: (id) => getPlatformExternalUrl('netease', id) || '#',
-  },
-  {
-    platform: 'tencent',
-    label: 'QQ音乐',
-    urlPattern: (id) => getPlatformExternalUrl('tencent', id) || '#',
-  },
-  {
-    platform: 'kugou',
-    label: '酷狗音乐',
-    urlPattern: (id) => getPlatformExternalUrl('kugou', id) || '#',
-  },
-  {
-    platform: 'baidu',
-    label: '百度音乐',
-    urlPattern: (id) => getPlatformExternalUrl('baidu', id) || '#',
-  },
-  {
-    platform: 'kuwo',
-    label: '酷我音乐',
-    urlPattern: (id) => getPlatformExternalUrl('kuwo', id) || '#',
-  },
-]
+const platformFields = MUSIC_PLATFORM_OPTIONS.map(({ value: platform, label }) => ({
+  platform,
+  label,
+}))
 
 export type PlatformSourceIds = Partial<Record<Platform, string | null>>
 
@@ -333,6 +306,7 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         await apiPost('/api/music', payload)
         show('歌曲已创建')
       }
+      invalidateMusicApiCaches()
       onSuccess()
       onClose()
     } catch (error) {
@@ -602,7 +576,7 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
                       />
                       {isLinked && (
                         <a
-                          href={platform.urlPattern(currentId)}
+                          href={getPlatformExternalUrl(platform.platform, currentId) || '#'}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center justify-center rounded p-2 text-text-muted transition-colors hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"

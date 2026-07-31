@@ -1,4 +1,5 @@
 import type { AlbumItem, EventItem, GalleryItem, SongItem } from './entities'
+import type { AdminDataItem } from './entities'
 
 export interface ApiResponse<T> {
   data: T
@@ -406,6 +407,17 @@ export interface AlbumListResponse {
   limit: number
   hasMore: boolean
 }
+
+export interface AdminMusicListResponse {
+  data: AdminDataItem[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  hasMore: boolean
+}
+
+export interface AdminAlbumListResponse extends AdminMusicListResponse {}
 
 export interface MusicDetailResponse {
   song: {

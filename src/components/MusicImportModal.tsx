@@ -3,8 +3,9 @@ import { AlertTriangle, CheckCircle2, Loader2, Link2, X } from '@/src/components
 import { Checkbox } from '@/src/components/ui'
 import { clsx } from 'clsx'
 
-import { apiPost } from '../lib/apiClient'
+import { apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
+import { getMusicPlatformLabel } from '../lib/musicPlatformUrls'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import {
   BookEditorSection,
@@ -14,8 +15,8 @@ import {
   bookSecondaryButtonClass,
   bookSmallButtonClass,
 } from './BookEditor'
+import type { Platform } from '../types/common'
 
-type Platform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo'
 type ResourceType = 'song' | 'album' | 'playlist'
 
 type PreviewSong = {
@@ -60,14 +61,6 @@ interface MusicImportModalProps {
   open: boolean
   onClose: () => void
   onImported: () => Promise<void> | void
-}
-
-function platformLabel(platform: Platform) {
-  if (platform === 'netease') return '网易云音乐'
-  if (platform === 'tencent') return 'QQ音乐'
-  if (platform === 'kugou') return '酷狗音乐'
-  if (platform === 'baidu') return '百度音乐'
-  return '酷我音乐'
 }
 
 function resourceTypeLabel(type: ResourceType) {
@@ -159,6 +152,7 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
       if (summary.failed) parts.push(`失败 ${summary.failed} 首`)
       if (response.collection) parts.push(`已更新专辑：${response.collection.title}`)
       setImportResult(parts.join('，'))
+      invalidateMusicApiCaches()
       setConfirmingImport(false)
       await onImported()
     } catch (err) {
@@ -248,7 +242,8 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-text-muted">
-                          {platformLabel(preview.platform)} · {resourceTypeLabel(preview.type)}
+                          {getMusicPlatformLabel(preview.platform)} ·{' '}
+                          {resourceTypeLabel(preview.type)}
                         </p>
                         <h4 className="truncate text-base font-bold text-text-primary">
                           {preview.title}

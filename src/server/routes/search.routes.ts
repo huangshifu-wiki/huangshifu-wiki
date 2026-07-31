@@ -1,5 +1,4 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
-import { Prisma } from '@prisma/client'
 import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
@@ -17,6 +16,7 @@ import {
   buildPostVisibilityWhere,
   buildGalleryVisibilityWhere,
   fetchSongsWithRelations,
+  findMusicDocIdsByArtistPartial,
   toWikiResponse,
   toPostResponse,
   toGalleryResponse,
@@ -42,23 +42,6 @@ const VECTOR_SEARCH_CANDIDATE_LIMIT = 200
 const QDRANT_TIMEOUT_MS = Number(process.env.QDRANT_TIMEOUT_MS || 2000)
 export const RRF_K = 60
 const SEMANTIC_SEARCH_DISABLED_MESSAGE = '语义搜索功能未启用'
-
-async function findMusicDocIdsByArtistPartial(query: string, take: number) {
-  if (!query) return [] as string[]
-  const rows = await prisma.$queryRaw<Array<{ docId: string }>>(Prisma.sql`
-    SELECT "docId"
-    FROM "MusicTrack"
-    WHERE "deletedAt" IS NULL
-      AND EXISTS (
-        SELECT 1
-        FROM unnest("artists") AS artist_name(name)
-        WHERE artist_name.name LIKE ${`%${query}%`}
-      )
-    ORDER BY "updatedAt" DESC
-    LIMIT ${take}
-  `)
-  return rows.map((row) => row.docId)
-}
 
 type ClipEmbeddingModule = typeof import('../vector/clipEmbedding')
 type QdrantServiceModule = typeof import('../vector/qdrantService')

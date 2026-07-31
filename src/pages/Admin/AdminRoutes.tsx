@@ -6,6 +6,7 @@ import AdminDashboard from './AdminDashboard'
 import AdminReviews from './AdminReviews'
 import AdminReviewWorkbench from './AdminReviewWorkbench'
 import AdminListPage from './AdminListPage'
+import AdminMusicPage from './AdminMusicPage'
 import AdminUsers from './AdminUsers'
 import AdminLocks from './AdminLocks'
 import AdminLogs from './AdminLogs'
@@ -50,7 +51,7 @@ export const AdminRoutes = () => (
       <Route path="reviews/workbench" element={<AdminReviewWorkbench />} />
       <Route path="wiki" element={<AdminListPage type="wiki" />} />
       <Route path="wiki-categories" element={<AdminListPage type="wiki-categories" />} />
-      <Route path="music" element={<AdminListPage type="music" />} />
+      <Route path="music" element={<AdminMusicPage />} />
       <Route path="posts" element={<AdminListPage type="posts" />} />
       <Route path="galleries" element={<AdminListPage type="galleries" />} />
       <Route path="events" element={<AdminListPage type="events" />} />

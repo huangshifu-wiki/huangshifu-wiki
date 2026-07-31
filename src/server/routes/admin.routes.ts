@@ -28,9 +28,12 @@ import {
   toUserResponse,
   toEditLockResponse,
   toMusicResponse,
+  toAlbumResponse,
   parseContentStatus,
   parseDisplayAlbumMode,
+  parseMusicPlatform,
   parsePagination,
+  normalizeTrackDiscPayload,
   normalizeModerationTargetType,
   createNotification,
   parseDatabaseUrl,
@@ -59,10 +62,12 @@ import {
   resolveDeleteReason,
   normalizeDeleteReason,
   enhancedCache,
+  findMusicDocIdsByArtistPartial,
   CACHE_KEYS,
   clearWikiRelationCache,
   notifyMentionUsers,
 } from '../utils'
+import { formatMusicCredits } from '../../lib/musicCredits'
 import {
   cleanupUnusedMediaAssetById,
   cleanupUntrackedUploadImageByUrl,
@@ -125,6 +130,109 @@ function canManageTargetUserRole(
   return false
 }
 
+const ADMIN_MUSIC_PLATFORMS = ['netease', 'tencent', 'kugou', 'baidu', 'kuwo'] as const
+type AdminMusicSortBy = 'updatedAt' | 'releaseDate' | 'title' | 'artist'
+type AdminMusicSortOrder = 'asc' | 'desc'
+
+function normalizeAdminQuery(value: unknown, maxLength: number) {
+  return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
+}
+
+function parseAdminMusicSortBy(value: unknown): AdminMusicSortBy {
+  return value === 'releaseDate' || value === 'title' || value === 'artist' || value === 'updatedAt'
+    ? value
+    : 'updatedAt'
+}
+
+function parseAdminMusicSortOrder(value: unknown): AdminMusicSortOrder {
+  return value === 'asc' || value === 'desc' ? value : 'desc'
+}
+
+function parseAdminCoverFilter(value: unknown) {
+  return value === 'with' || value === 'without' ? value : 'all'
+}
+
+async function buildAdminMusicWhere(req: AuthenticatedRequest) {
+  const query = normalizeAdminQuery(req.query.q, CONTENT_LIMITS.music.title)
+  const platform = parseMusicPlatform(req.query.platform)
+  const cover = parseAdminCoverFilter(req.query.cover)
+  const displayAlbum = parseDisplayAlbumMode(req.query.displayAlbum)
+  const includeDeleted = includeDeletedFromQuery(req.query)
+  const where: Record<string, unknown> = {
+    ...deletedAtFilter(includeDeleted),
+  }
+
+  if (query) {
+    const artistMatchDocIds = await findMusicDocIdsByArtistPartial(query, undefined, includeDeleted)
+    where.OR = [
+      { title: { contains: query, mode: 'insensitive' } },
+      { album: { contains: query, mode: 'insensitive' } },
+      { manualAlbumName: { contains: query, mode: 'insensitive' } },
+      { externalSources: { some: { sourceId: { contains: query, mode: 'insensitive' } } } },
+      ...(artistMatchDocIds.length ? [{ docId: { in: artistMatchDocIds } }] : []),
+    ]
+  }
+  if (platform) where.externalSources = { some: { platform } }
+  if (cover === 'with') {
+    const coverWhere = [{ coverId: { not: null } }, { coverAlbumDocId: { not: null } }]
+    if (where.OR) {
+      where.AND = [{ OR: where.OR }, { OR: coverWhere }]
+      delete where.OR
+    } else {
+      where.OR = coverWhere
+    }
+  } else if (cover === 'without') {
+    where.AND = [...((where.AND as unknown[]) || []), { coverId: null }, { coverAlbumDocId: null }]
+  }
+  if (displayAlbum) where.displayAlbumMode = displayAlbum
+  return { where, query }
+}
+
+function compareAdminMusicRows(
+  a: { docId: string; title: string; artists: string[]; updatedAt: Date; releaseDate: Date | null },
+  b: { docId: string; title: string; artists: string[]; updatedAt: Date; releaseDate: Date | null },
+  sortBy: AdminMusicSortBy,
+  sortOrder: AdminMusicSortOrder
+) {
+  const direction = sortOrder === 'asc' ? 1 : -1
+  let result = 0
+  if (sortBy === 'title') result = a.title.localeCompare(b.title, 'zh-CN')
+  if (sortBy === 'artist') {
+    result = formatMusicCredits(a.artists, '').localeCompare(
+      formatMusicCredits(b.artists, ''),
+      'zh-CN'
+    )
+  }
+  if (sortBy === 'releaseDate') {
+    const aDate = a.releaseDate?.getTime() ?? Number.POSITIVE_INFINITY
+    const bDate = b.releaseDate?.getTime() ?? Number.POSITIVE_INFINITY
+    result = aDate - bDate
+  }
+  if (sortBy === 'updatedAt') result = a.updatedAt.getTime() - b.updatedAt.getTime()
+  if (result !== 0) return result * direction
+  return a.docId.localeCompare(b.docId)
+}
+
+function buildAdminAlbumWhere(req: AuthenticatedRequest) {
+  const query = normalizeAdminQuery(req.query.q, CONTENT_LIMITS.album.title)
+  const platform = parseMusicPlatform(req.query.platform)
+  const cover = parseAdminCoverFilter(req.query.cover)
+  const where: Record<string, unknown> = {
+    ...deletedAtFilter(includeDeletedFromQuery(req.query)),
+  }
+  if (query) {
+    where.OR = [
+      { title: { contains: query, mode: 'insensitive' } },
+      { artist: { contains: query, mode: 'insensitive' } },
+      { description: { contains: query, mode: 'insensitive' } },
+      { externalSources: { some: { sourceId: { contains: query, mode: 'insensitive' } } } },
+    ]
+  }
+  if (platform) where.externalSources = { some: { platform } }
+  if (cover === 'with') where.coverId = { not: null }
+  if (cover === 'without') where.coverId = null
+  return { where, query }
+}
 const execFileAsync = promisify(execFile)
 
 function isString(value: string | null): value is string {
@@ -2558,35 +2666,143 @@ router.get(
 
       if (tab === 'music') {
         const { limit, page, offset: skip } = parsePagination(req.query)
-        const [total, data] = await Promise.all([
-          prisma.musicTrack.count({ where: activeWhere }),
-          prisma.musicTrack.findMany({
-            where: activeWhere,
+        const sortBy = parseAdminMusicSortBy(req.query.sortBy)
+        const sortOrder = parseAdminMusicSortOrder(req.query.sortOrder)
+        const { where } = await buildAdminMusicWhere(req)
+        const select = {
+          docId: true,
+          slug: true,
+          title: true,
+          artists: true,
+          lyricists: true,
+          composers: true,
+          arrangers: true,
+          vocals: true,
+          album: true,
+          audioUrl: true,
+          lyric: true,
+          description: true,
+          releaseDate: true,
+          durationMs: true,
+          coverId: true,
+          coverAlbumDocId: true,
+          displayAlbumMode: true,
+          manualAlbumName: true,
+          deletedAt: true,
+          deletedBy: true,
+          createdAt: true,
+          updatedAt: true,
+          externalSources: {
+            orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
+          },
+          covers: {
+            orderBy: { sortOrder: 'asc' as const },
+            select: { id: true, publicUrl: true, thumbnailUrl: true, isDefault: true },
+          },
+          albumRelations: {
+            select: {
+              album: {
+                select: {
+                  docId: true,
+                  coverId: true,
+                  covers: {
+                    orderBy: { sortOrder: 'asc' as const },
+                    select: { id: true, publicUrl: true, thumbnailUrl: true, isDefault: true },
+                  },
+                },
+              },
+            },
+            where: { album: { deletedAt: null } },
+            orderBy: [{ discNumber: 'asc' as const }, { trackOrder: 'asc' as const }],
+          },
+        }
+        const fetchRows = () => {
+          if (sortBy === 'title' || sortBy === 'artist') {
+            return (async () => {
+              const orderedIds = (
+                await prisma.musicTrack.findMany({
+                  where: where as never,
+                  select: {
+                    docId: true,
+                    title: true,
+                    artists: true,
+                    updatedAt: true,
+                    releaseDate: true,
+                  },
+                })
+              )
+                .sort((a, b) => compareAdminMusicRows(a, b, sortBy, sortOrder))
+                .slice(skip, skip + limit)
+                .map((row) => row.docId)
+              if (!orderedIds.length) return []
+
+              const rows = await prisma.musicTrack.findMany({
+                where: { AND: [where, { docId: { in: orderedIds } }] } as never,
+                select,
+              })
+              const order = new Map(orderedIds.map((id, index) => [id, index]))
+              return rows.sort((a, b) => (order.get(a.docId) ?? 0) - (order.get(b.docId) ?? 0))
+            })()
+          }
+          if (sortBy === 'updatedAt') {
+            return prisma.musicTrack.findMany({
+              where: where as never,
+              select,
+              orderBy: [{ updatedAt: sortOrder }, { docId: 'asc' as const }],
+              skip,
+              take: limit,
+            })
+          }
+          return prisma.musicTrack.findMany({
+            where: where as never,
+            select,
+            orderBy: [
+              { releaseDate: { sort: sortOrder, nulls: 'last' as const } },
+              { updatedAt: 'desc' as const },
+              { docId: 'asc' as const },
+            ],
+            skip,
+            take: limit,
+          })
+        }
+        const [total, orderedRows] = await Promise.all([
+          prisma.musicTrack.count({ where: where as never }),
+          fetchRows(),
+        ])
+        const totalPages = Math.max(1, Math.ceil(total / limit))
+        res.json({
+          data: orderedRows.map(toMusicResponse),
+          total,
+          page,
+          limit,
+          totalPages,
+          hasMore: skip + orderedRows.length < total,
+        })
+        return
+      }
+
+      if (tab === 'albums') {
+        const { limit, page, offset: skip } = parsePagination(req.query)
+        const sortBy = parseAdminMusicSortBy(req.query.sortBy)
+        const sortOrder = parseAdminMusicSortOrder(req.query.sortOrder)
+        const { where } = buildAdminAlbumWhere(req)
+        const [total, albums] = await Promise.all([
+          prisma.album.count({ where: where as never }),
+          prisma.album.findMany({
+            where: where as never,
             select: {
               docId: true,
               slug: true,
               title: true,
-              artists: true,
-              lyricists: true,
-              composers: true,
-              arrangers: true,
-              vocals: true,
-              album: true,
-              audioUrl: true,
-              lyric: true,
-              releaseDate: true,
-              durationMs: true,
+              artist: true,
+              description: true,
+              tracks: true,
               coverId: true,
-              coverAlbumDocId: true,
-              displayAlbumMode: true,
-              manualAlbumName: true,
+              releaseDate: true,
               deletedAt: true,
               deletedBy: true,
               createdAt: true,
               updatedAt: true,
-              externalSources: {
-                orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-              },
               covers: {
                 orderBy: { sortOrder: 'asc' },
                 select: {
@@ -2594,46 +2810,48 @@ router.get(
                   publicUrl: true,
                   thumbnailUrl: true,
                   isDefault: true,
+                  sortOrder: true,
                 },
               },
-              albumRelations: {
-                select: {
-                  album: {
-                    select: {
-                      docId: true,
-                      coverId: true,
-                      covers: {
-                        orderBy: { sortOrder: 'asc' },
-                        select: {
-                          id: true,
-                          publicUrl: true,
-                          thumbnailUrl: true,
-                          isDefault: true,
-                        },
-                      },
-                    },
-                  },
-                },
-                orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+              externalSources: {
+                orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+              },
+              songRelations: {
+                where: { song: { deletedAt: null } },
+                select: { songDocId: true },
               },
             },
-            orderBy: { updatedAt: 'desc' },
+            orderBy:
+              sortBy === 'updatedAt'
+                ? [{ updatedAt: sortOrder }, { docId: 'asc' }]
+                : sortBy === 'releaseDate'
+                  ? [
+                      { releaseDate: { sort: sortOrder, nulls: 'last' } },
+                      { updatedAt: 'desc' },
+                      { docId: 'asc' },
+                    ]
+                  : sortBy === 'title'
+                    ? [{ title: sortOrder }, { updatedAt: 'desc' }, { docId: 'asc' }]
+                    : [{ artist: sortOrder }, { updatedAt: 'desc' }, { docId: 'asc' }],
             skip,
             take: limit,
           }),
         ])
         const totalPages = Math.max(1, Math.ceil(total / limit))
         res.json({
-          data: data.map(toMusicResponse),
+          data: albums.map((album) => ({
+            ...toAlbumResponse({ ...album, songRelations: undefined }),
+            trackCount: album.songRelations.length,
+            discCount: normalizeTrackDiscPayload(album.tracks).length,
+          })),
           total,
           page,
           limit,
           totalPages,
-          hasMore: skip + data.length < total,
+          hasMore: skip + albums.length < total,
         })
         return
       }
-
       if (tab === 'announcements') {
         const data = await prisma.announcement.findMany({
           where: activeWhere,

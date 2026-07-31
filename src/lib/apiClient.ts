@@ -153,8 +153,8 @@ async function executeRequest<T>(path: string, options: RequestOptions = {}): Pr
 export async function apiRequest<T>(path: string, options: RequestOptions = {}) {
   const { dedup = true, dedupOptions, method = 'GET', body } = options
 
-  // 只有 GET 请求默认启用去重
-  const shouldDedup = dedup && method.toUpperCase() === 'GET'
+  // 可取消请求不能参与共享去重，否则一个组件卸载会取消其他调用方的请求
+  const shouldDedup = dedup && method.toUpperCase() === 'GET' && !options.signal
 
   if (shouldDedup) {
     const url = buildUrl(path, options.query)
@@ -372,6 +372,19 @@ export { invalidateCache as invalidateApiCache }
  * 使匹配前缀的所有缓存失效
  */
 export { invalidateCacheByPrefix as invalidateApiCacheByPrefix }
+
+/** 使音乐管理、公开音乐、专辑和搜索缓存同时失效。 */
+export function invalidateMusicApiCaches() {
+  for (const prefix of [
+    '/api/admin/music',
+    '/api/admin/albums',
+    '/api/music',
+    '/api/albums',
+    '/api/search',
+  ]) {
+    invalidateCacheByPrefix(prefix)
+  }
+}
 
 /**
  * 预加载数据到缓存

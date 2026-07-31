@@ -4,9 +4,9 @@ import { clsx } from 'clsx'
 
 import { apiGet } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
+import { getMusicPlatformLabel } from '../lib/musicPlatformUrls'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
-
-type Platform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo'
+import type { Platform } from '../types/common'
 
 type MatchSuggestion = {
   sourceId: string
@@ -33,14 +33,6 @@ interface MatchSuggestionModalProps {
   targetPlatform: Platform
   existingPlatformId?: string | null
   onSelect: (sourceId: string) => void
-}
-
-const platformLabels: Record<Platform, string> = {
-  netease: '网易云音乐',
-  tencent: 'QQ音乐',
-  kugou: '酷狗音乐',
-  baidu: '百度音乐',
-  kuwo: '酷我音乐',
 }
 
 function buildPlatformSongUrl(platform: Platform, id: string): string {
@@ -104,7 +96,7 @@ export const MatchSuggestionModal = ({
       setSuggestions(data.suggestions || [])
       setSearched(true)
       if (data.suggestions.length === 0) {
-        setError(`在${platformLabels[targetPlatform]}未找到匹配歌曲`)
+        setError(`在${getMusicPlatformLabel(targetPlatform)}未找到匹配歌曲`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '搜索失败')
@@ -139,7 +131,7 @@ export const MatchSuggestionModal = ({
               搜索匹配歌曲
             </h3>
             <p className="text-xs text-text-muted mt-0.5">
-              在{platformLabels[targetPlatform]}搜索：{title} - {artist}
+              在{getMusicPlatformLabel(targetPlatform)}搜索：{title} - {artist}
             </p>
           </div>
           <button

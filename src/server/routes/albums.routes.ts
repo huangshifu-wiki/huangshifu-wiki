@@ -17,6 +17,7 @@ import {
   normalizeOptionalDateOnly,
   applyAlbumTracksToRelations,
   normalizeMusicExternalSourceInputs,
+  invalidateMusicContentCaches,
   enhancedCache,
   ensureTextLimit,
   softDeleteData,
@@ -203,21 +204,16 @@ router.get('/:slug', async (req: AuthenticatedRequest, res) => {
     }
 
     const relations = await prisma.songAlbumRelation.findMany({
-      where: { albumDocId: album.docId },
+      where: { albumDocId: album.docId, song: { deletedAt: null } },
       include: {
         song: {
           include: {
-            covers: {
-              orderBy: { sortOrder: 'asc' },
-            },
+            covers: { orderBy: { sortOrder: 'asc' } },
             albumRelations: {
+              where: { album: { deletedAt: null } },
               include: {
                 album: {
-                  include: {
-                    covers: {
-                      orderBy: { sortOrder: 'asc' },
-                    },
-                  },
+                  include: { covers: { orderBy: { sortOrder: 'asc' } } },
                 },
               },
               orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
@@ -440,7 +436,7 @@ router.post('/', requireAdmin, async (req, res) => {
     res.status(201).json({
       album: toAlbumResponse(created),
     })
-    enhancedCache.invalidateByPrefix('album_list:')
+    invalidateMusicContentCaches()
   } catch (error) {
     console.error('Create album error:', error)
     res.status(500).json({ error: '创建专辑失败' })
@@ -559,7 +555,7 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
     })
 
     res.json({ album: toAlbumResponse(updated) })
-    enhancedCache.invalidateByPrefix('album_list:')
+    invalidateMusicContentCaches()
   } catch (error) {
     console.error('Update album error:', error)
     res.status(500).json({ error: '更新专辑失败' })
@@ -587,7 +583,7 @@ router.delete('/:docId', requireAdmin, async (req: AuthenticatedRequest, res) =>
     })
 
     res.json({ success: true })
-    enhancedCache.invalidateByPrefix('album_list:')
+    invalidateMusicContentCaches()
   } catch (error) {
     console.error('Delete album error:', error)
     res.status(500).json({ error: '删除专辑失败' })
@@ -599,14 +595,24 @@ router.get('/:docId/covers', async (req, res) => {
   try {
     const album = await prisma.album.findUnique({
       where: { docId: req.params.docId },
-      include: {
+      select: {
+        deletedAt: true,
         covers: {
           orderBy: { sortOrder: 'asc' },
+          select: {
+            id: true,
+            assetId: true,
+            storageKey: true,
+            publicUrl: true,
+            thumbnailUrl: true,
+            isDefault: true,
+            sortOrder: true,
+          },
         },
       },
     })
 
-    if (!album) {
+    if (!album || album.deletedAt) {
       res.status(404).json({ error: '专辑不存在' })
       return
     }
@@ -641,7 +647,7 @@ router.post('/:docId/covers', requireAdmin, async (req, res) => {
     }
 
     const album = await prisma.album.findUnique({ where: { docId: albumDocId } })
-    if (!album) {
+    if (!album || album.deletedAt) {
       res.status(404).json({ error: '专辑不存在' })
       return
     }
@@ -675,9 +681,9 @@ router.delete(
       const albumDocId = req.params.docId
       const album = await prisma.album.findUnique({
         where: { docId: albumDocId },
-        select: { docId: true },
+        select: { docId: true, deletedAt: true },
       })
-      if (!album) {
+      if (!album || album.deletedAt) {
         res.status(404).json({ error: '专辑不存在' })
         return
       }
@@ -694,8 +700,7 @@ router.delete(
         return
       }
 
-      enhancedCache.invalidateByPrefix('album_list:')
-      enhancedCache.invalidateByPrefix('music_list:')
+      invalidateMusicContentCaches()
       res.json({ success: true, deleted })
     } catch (error) {
       console.error('Batch delete album covers error:', error)
@@ -713,8 +718,7 @@ router.delete('/:docId/covers/:coverId', requireAdmin, async (req, res) => {
       return
     }
 
-    enhancedCache.invalidateByPrefix('album_list:')
-    enhancedCache.invalidateByPrefix('music_list:')
+    invalidateMusicContentCaches()
     res.json({ success: true })
   } catch (error) {
     console.error('Delete album cover error:', error)
@@ -773,7 +777,7 @@ router.post('/:docId/sync-covers-to-songs', requireAdmin, async (req, res) => {
         covers: true,
       },
     })
-    if (!album) {
+    if (!album || album.deletedAt) {
       res.status(404).json({ error: '专辑不存在' })
       return
     }
@@ -829,7 +833,7 @@ router.post('/:docId/discs', requireAdmin, async (req, res) => {
   try {
     const docId = req.params.docId
     const album = await prisma.album.findUnique({ where: { docId } })
-    if (!album) {
+    if (!album || album.deletedAt) {
       res.status(404).json({ error: '专辑不存在' })
       return
     }
@@ -886,7 +890,7 @@ router.delete('/:docId/discs/:discNumber', requireAdmin, async (req, res) => {
     }
 
     const album = await prisma.album.findUnique({ where: { docId } })
-    if (!album) {
+    if (!album || album.deletedAt) {
       res.status(404).json({ error: '专辑不存在' })
       return
     }
@@ -922,7 +926,7 @@ router.patch('/:docId/tracks/reorder', requireAdmin, async (req, res) => {
   try {
     const docId = req.params.docId
     const album = await prisma.album.findUnique({ where: { docId } })
-    if (!album) {
+    if (!album || album.deletedAt) {
       res.status(404).json({ error: '专辑不存在' })
       return
     }
@@ -975,25 +979,17 @@ router.post('/:docId/sync-display-to-songs', requireAdmin, async (req, res) => {
     }
 
     await prisma.songAlbumRelation.updateMany({
-      where: {
-        songDocId: { in: targetSongDocIds },
-      },
-      data: {
-        isDisplay: false,
-      },
+      where: { songDocId: { in: targetSongDocIds } },
+      data: { isDisplay: false },
     })
 
-    for (const songDocId of targetSongDocIds) {
-      await prisma.songAlbumRelation.updateMany({
-        where: {
-          songDocId,
-          albumDocId,
-        },
-        data: {
-          isDisplay: true,
-        },
-      })
-    }
+    await prisma.songAlbumRelation.updateMany({
+      where: {
+        albumDocId,
+        songDocId: { in: targetSongDocIds },
+      },
+      data: { isDisplay: true },
+    })
 
     await prisma.musicTrack.updateMany({
       where: { docId: { in: targetSongDocIds } },
@@ -1001,6 +997,7 @@ router.post('/:docId/sync-display-to-songs', requireAdmin, async (req, res) => {
         displayAlbumMode: 'linked',
       },
     })
+    invalidateMusicContentCaches()
 
     res.json({ success: true, updated: targetSongDocIds.length })
   } catch (error) {

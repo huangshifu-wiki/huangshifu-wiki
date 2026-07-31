@@ -179,6 +179,7 @@ export {
   fetchSongsWithRelations,
   fetchSongsWithRelationsByDocIds,
   fetchSongWithRelationsByDocId,
+  findMusicDocIdsByArtistPartial,
   ensureDisplayRelation,
 } from './music'
 

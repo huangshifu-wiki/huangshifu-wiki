@@ -29,6 +29,6 @@ describe('music cover thumbnail selects', () => {
     expectSelectsThumbnail(searchRoutes, 'const albumsPromise = wantsAlbums')
     expectSelectsThumbnail(searchRoutes, 'songRelations: {\n              include:')
     expectSelectsThumbnail(adminRoutes, 'prisma.musicTrack.findMany({')
-    expectSelectsThumbnail(adminRoutes, 'albumRelations: {\n                select:')
+    expectSelectsThumbnail(adminRoutes, 'albumRelations:')
   })
 })

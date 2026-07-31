@@ -3,7 +3,14 @@ import { Loader2, Trash2, Star, Upload, X } from '@/src/components/icons'
 import { Checkbox } from '@/src/components/ui'
 import { clsx } from 'clsx'
 
-import { apiDelete, apiGet, apiPatch, apiPost, invalidateApiCacheByPrefix } from '../lib/apiClient'
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  invalidateApiCacheByPrefix,
+  invalidateMusicApiCaches,
+} from '../lib/apiClient'
 import { useDialog } from './Dialog'
 import { useToast } from './Toast'
 import { uploadImageWithStrategy, type UploadImageResult } from '../services/imageService'
@@ -83,7 +90,12 @@ export const CoverManager = ({
       setCovers(nextCovers)
       setSelectedCoverIds((prev) => {
         const existingIds = new Set(nextCovers.map((cover) => cover.id))
-        return new Set([...prev].filter((coverId) => existingIds.has(coverId)))
+        for (const coverId of prev) {
+          if (!existingIds.has(coverId)) {
+            return new Set([...prev].filter((id) => existingIds.has(id)))
+          }
+        }
+        return prev
       })
       return nextCovers
     } catch (error) {
@@ -125,6 +137,7 @@ export const CoverManager = ({
       if (!result.assetId) throw new Error('上传失败')
       await apiPost(`${config.apiPrefix}/${resourceId}/covers`, { assetId: result.assetId })
       show('封面上传成功')
+      invalidateMusicApiCaches()
       fetchCovers()
     } catch (error) {
       console.error('Upload cover failed:', error)
@@ -148,6 +161,7 @@ export const CoverManager = ({
         })
       }
       show('默认封面已更新')
+      invalidateMusicApiCaches()
     } catch (error) {
       console.error('Set default cover failed:', error)
       show('设置默认封面失败', { variant: 'error' })
@@ -183,6 +197,7 @@ export const CoverManager = ({
         })
       }
       show('封面已删除')
+      invalidateMusicApiCaches()
     } catch (error) {
       console.error('Delete cover failed:', error)
       show('删除封面失败', { variant: 'error' })
@@ -234,6 +249,7 @@ export const CoverManager = ({
         })
       }
       show('封面已批量删除')
+      invalidateMusicApiCaches()
     } catch (error) {
       console.error('Batch delete covers failed:', error)
       show(error instanceof Error ? error.message : '批量删除封面失败', { variant: 'error' })
@@ -253,6 +269,7 @@ export const CoverManager = ({
     try {
       await apiPost(`${config.apiPrefix}/${resourceId}/sync-covers-to-songs`)
       show('封面已同步到专辑内歌曲')
+      invalidateMusicApiCaches()
       onSyncToSongs?.()
     } catch (error) {
       console.error('Sync covers to songs failed:', error)

@@ -38,11 +38,14 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Markdown Description Test Song' } },
           { title: { startsWith: 'Optional Metadata Test Song' } },
           { title: { startsWith: 'Artist Partial Search Test Song' } },
+          { title: { startsWith: 'Artist Partial Admin Search Test Song' } },
           { title: { startsWith: 'Display Relation Song' } },
           { title: { startsWith: 'Paged Music Test Song' } },
           { title: { startsWith: '000 Paged Music Test Song' } },
           { title: { startsWith: 'Release Date Sort Test Song' } },
           { title: { startsWith: 'Lyric Storage Test Song' } },
+          { title: { startsWith: 'Display Sync Test Song' } },
+          { title: { startsWith: 'Duplicate Relation Test Song' } },
         ],
       },
     })
@@ -51,6 +54,9 @@ describe('Music API - 音乐接口测试', () => {
         OR: [
           { title: { startsWith: 'Display Relation Album' } },
           { title: { startsWith: 'Optional Album' } },
+          { title: { startsWith: 'Display Sync Current Album' } },
+          { title: { startsWith: 'Display Sync Other Album' } },
+          { title: { startsWith: 'Duplicate Relation Test Album' } },
         ],
       },
     })
@@ -77,11 +83,14 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Markdown Description Test Song' } },
           { title: { startsWith: 'Optional Metadata Test Song' } },
           { title: { startsWith: 'Artist Partial Search Test Song' } },
+          { title: { startsWith: 'Artist Partial Admin Search Test Song' } },
           { title: { startsWith: 'Display Relation Song' } },
           { title: { startsWith: 'Paged Music Test Song' } },
           { title: { startsWith: '000 Paged Music Test Song' } },
           { title: { startsWith: 'Release Date Sort Test Song' } },
           { title: { startsWith: 'Lyric Storage Test Song' } },
+          { title: { startsWith: 'Display Sync Test Song' } },
+          { title: { startsWith: 'Duplicate Relation Test Song' } },
         ],
       },
     })
@@ -90,6 +99,9 @@ describe('Music API - 音乐接口测试', () => {
         OR: [
           { title: { startsWith: 'Display Relation Album' } },
           { title: { startsWith: 'Optional Album' } },
+          { title: { startsWith: 'Display Sync Current Album' } },
+          { title: { startsWith: 'Display Sync Other Album' } },
+          { title: { startsWith: 'Duplicate Relation Test Album' } },
         ],
       },
     })
@@ -367,6 +379,108 @@ describe('Music API - 音乐接口测试', () => {
         (item: { type: string; id?: string }) => item.type === 'music' && item.id === song.slug
       )
     ).toBe(true)
+  })
+
+  it('后台音乐列表支持艺术家名称部分匹配', async () => {
+    const song = await prisma.musicTrack.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: 'Artist Partial Admin Search Test Song',
+        artists: ['黄诗扶'],
+        album: '',
+      },
+    })
+    const { agent } = await createAuthenticatedAgent(adminUser.user.email, adminUser.plainPassword)
+
+    const response = await agent.get('/api/admin/music').query({ q: '诗扶', limit: 20 })
+
+    expect(response.status).toBe(200)
+    expect(response.body.data.some((item: { docId: string }) => item.docId === song.docId)).toBe(
+      true
+    )
+  })
+
+  it('同步展示专辑时清除目标歌曲的其他展示关系', async () => {
+    const [currentAlbum, otherAlbum, song] = await Promise.all([
+      prisma.album.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: 'Display Sync Current Album',
+          artist: 'Test Artist',
+        },
+      }),
+      prisma.album.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: 'Display Sync Other Album',
+          artist: 'Test Artist',
+        },
+      }),
+      prisma.musicTrack.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: 'Display Sync Test Song',
+          artists: ['Test Artist'],
+        },
+      }),
+    ])
+    await prisma.songAlbumRelation.createMany({
+      data: [
+        { songDocId: song.docId, albumDocId: currentAlbum.docId, isDisplay: false },
+        { songDocId: song.docId, albumDocId: otherAlbum.docId, isDisplay: true },
+      ],
+    })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const response = await agent
+      .post(`/api/albums/${currentAlbum.docId}/sync-display-to-songs`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ songDocIds: [song.docId] })
+
+    expect(response.status).toBe(200)
+    const relations = await prisma.songAlbumRelation.findMany({ where: { songDocId: song.docId } })
+    expect(
+      relations.find((relation) => relation.albumDocId === currentAlbum.docId)?.isDisplay
+    ).toBe(true)
+    expect(relations.find((relation) => relation.albumDocId === otherAlbum.docId)?.isDisplay).toBe(
+      false
+    )
+  })
+
+  it('并发创建相同歌曲专辑关系时只成功一次', async () => {
+    const [album, song] = await Promise.all([
+      prisma.album.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: 'Duplicate Relation Test Album',
+          artist: 'Test Artist',
+        },
+      }),
+      prisma.musicTrack.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: 'Duplicate Relation Test Song',
+          artists: ['Test Artist'],
+        },
+      }),
+    ])
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const responses = await Promise.all(
+      [0, 1].map(() =>
+        agent
+          .post(`/api/music/${song.docId}/albums`)
+          .set('X-XSRF-TOKEN', xsrfToken)
+          .send({ albumDocId: album.docId, discNumber: 1, trackOrder: 0 })
+      )
+    )
+
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409])
   })
 
   it('音乐列表分页返回总数并支持跨页排序', async () => {

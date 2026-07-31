@@ -41,6 +41,38 @@ describe('apiClient', () => {
     })
   })
 
+  it('does not share GET requests that have independent abort signals', async () => {
+    let callCount = 0
+    fetchMock.mockImplementation((_input, init) => {
+      callCount += 1
+      if (callCount === 1) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('signal is aborted without reason', 'AbortError')),
+            { once: true }
+          )
+        })
+      }
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    })
+
+    const firstController = new AbortController()
+    const secondController = new AbortController()
+    const firstRequest = apiGet('/api/abortable-get', undefined, undefined, firstController.signal)
+    firstController.abort()
+    const secondRequest = apiGet(
+      '/api/abortable-get',
+      undefined,
+      undefined,
+      secondController.signal
+    )
+
+    await expect(firstRequest).rejects.toThrow('signal is aborted without reason')
+    await expect(secondRequest).resolves.toEqual({ ok: true })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('sends JSON body for write requests', async () => {
     vi.stubGlobal('document', {
       cookie: 'XSRF-TOKEN=test-xsrf-token',

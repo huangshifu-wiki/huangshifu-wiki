@@ -26,6 +26,29 @@ import {
 import { generateMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
 import { localizeImageUrlAsMediaAsset } from './remoteImageAsset'
 
+export async function findMusicDocIdsByArtistPartial(
+  query: string,
+  take?: number,
+  includeDeleted = false
+) {
+  if (!query) return [] as string[]
+  const deletedFilter = includeDeleted ? Prisma.empty : Prisma.sql`"deletedAt" IS NULL AND`
+  const limitClause = take === undefined ? Prisma.empty : Prisma.sql`LIMIT ${take}`
+  const rows = await prisma.$queryRaw<Array<{ docId: string }>>(Prisma.sql`
+    SELECT "docId"
+    FROM "MusicTrack"
+    WHERE ${deletedFilter}
+      EXISTS (
+        SELECT 1
+        FROM unnest("artists") AS artist_name(name)
+        WHERE artist_name.name ILIKE ${`%${query}%`}
+      )
+    ORDER BY "updatedAt" DESC
+    ${limitClause}
+  `)
+  return rows.map((row) => row.docId)
+}
+
 // ─── 显示辅助函数 ───────────────────────────────────────────────
 
 export function resolveSongDisplayAlbum(song: {

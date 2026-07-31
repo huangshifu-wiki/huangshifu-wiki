@@ -141,6 +141,12 @@ export const enhancedCache = new EnhancedCache({
   checkperiod: 60,
 })
 
+export function invalidateMusicContentCaches() {
+  enhancedCache.invalidateByPrefix('music_list:')
+  enhancedCache.invalidateByPrefix('album_list:')
+  enhancedCache.invalidateByPrefix('search:')
+}
+
 export const CACHE_KEYS = {
   ANNOUNCEMENT_LATEST: 'announcement:latest',
   AUTH_USER: 'auth:user',
