@@ -481,7 +481,8 @@ router.post(
 
       try {
         await variantGenerator.enqueue({
-          imageMapId: imageId,
+          targetType: 'imageMap',
+          targetId: imageId,
           localFilePath: file.path,
           priority: 'normal',
         })

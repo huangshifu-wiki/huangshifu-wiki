@@ -59,7 +59,7 @@ describe('AdminLayout 导航分组', () => {
 
     expect(screen.getByRole('link', { name: /审核队列/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /向量管理/ })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /封面缩略图/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /变体管理/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /站点设置/ })).not.toBeInTheDocument()
   })
 
@@ -69,7 +69,7 @@ describe('AdminLayout 导航分组', () => {
 
     await user.click(screen.getByRole('button', { name: /系统工具/ }))
 
-    expect(screen.queryByRole('link', { name: /封面缩略图/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /变体管理/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /向量管理/ })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /审核队列/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /百科管理/ })).toBeInTheDocument()
@@ -84,10 +84,10 @@ describe('AdminLayout 导航分组', () => {
     first.unmount()
 
     renderLayout()
-    expect(screen.queryByRole('link', { name: /封面缩略图/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /变体管理/ })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /系统工具/ }))
-    expect(screen.getByRole('link', { name: /封面缩略图/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /变体管理/ })).toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem('hsf:admin:nav-groups') ?? '[]')).toEqual([])
   })
 })

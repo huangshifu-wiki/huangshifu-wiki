@@ -1,8 +1,8 @@
 /**
- * 变体生成器 - v2.1 增强版（带超时保护）
+ * 变体生成器 - v2.2 统一引擎（图片变体 + 音乐封面缩略图）
  *
  * 功能：
- * 1. 异步生成单一 WebP 变体 (height=1080, width auto)
+ * 1. 统一生成图片变体（1080h WebP）与音乐封面缩略图（320px WebP）
  * 2. 任务超时保护（防止单个任务卡死）
  * 3. 队列等待时间限制
  * 4. Sharp 内存限制（防止 OOM）
@@ -15,14 +15,26 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { resolveUploadPathByUrl } from '../utils/upload'
+import {
+  buildUploadPublicUrl,
+  createUploadStorageInfo,
+  resolveUploadPathByStorageKey,
+} from '../uploadPath'
+import {
+  MUSIC_COVER_THUMBNAIL_SIZE,
+  MUSIC_COVER_THUMBNAIL_QUALITY,
+} from './musicCoverThumbnail.service'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const uploadsDir = process.env.UPLOADS_PATH || path.join(__dirname, '..', '..', '..', 'uploads')
 
+export type VariantTargetType = 'imageMap' | 'songCover' | 'albumCover'
+
 export interface VariantTask {
-  imageMapId: string
+  targetType: VariantTargetType
+  targetId: string
   localFilePath: string
   priority: 'high' | 'normal' | 'low'
   createdAt: Date
@@ -47,6 +59,13 @@ export interface VariantGeneratorStats {
   timeoutCount: number
 }
 
+interface VariantSpec {
+  name: string
+  maxWidth: number | null
+  maxHeight: number | null
+  quality: number
+}
+
 interface VariantGeneratorOptions {
   autoStart?: boolean
   processOnEnqueue?: boolean
@@ -64,7 +83,9 @@ export class VariantGenerator {
     sharpMemoryLimitMb: parseInt(process.env.VARIANT_SHARP_MEMORY_LIMIT_MB || '512', 10),
   }
 
-  private variantSpecs = [{ name: '1080h', maxWidth: null, maxHeight: 1080, quality: 85 }]
+  private imageMapVariantSpecs: VariantSpec[] = [
+    { name: '1080h', maxWidth: null, maxHeight: 1080, quality: 85 },
+  ]
 
   private stats = {
     completedToday: 0,
@@ -95,43 +116,87 @@ export class VariantGenerator {
   }
 
   /**
-   * 恢复未完成的任务
+   * 生成任务去重键
+   */
+  getTaskKey(task: { targetType: VariantTargetType; targetId: string }): string {
+    return `${task.targetType}:${task.targetId}`
+  }
+
+  /**
+   * 恢复未完成的任务（图片 + 音乐封面，三表查询）
    */
   private async recoverPendingTasks(): Promise<void> {
     try {
-      const pendingTasks = await prisma.imageMap.findMany({
-        where: {
-          deletedAt: null,
-          variantStatus: { in: ['pending', 'processing'] },
-        },
-        take: 100,
-      })
+      const [imageMaps, songCovers, albumCovers] = await Promise.all([
+        prisma.imageMap.findMany({
+          where: {
+            deletedAt: null,
+            variantStatus: { in: ['pending', 'processing'] },
+          },
+          take: 100,
+        }),
+        prisma.songCover.findMany({
+          where: {
+            variantStatus: { in: ['pending', 'processing'] },
+          },
+          take: 100,
+        }),
+        prisma.albumCover.findMany({
+          where: {
+            variantStatus: { in: ['pending', 'processing'] },
+          },
+          take: 100,
+        }),
+      ])
 
-      if (pendingTasks.length > 0) {
-        console.log(`[Variant] 🔄 Recovering ${pendingTasks.length} pending tasks...`)
+      const pendingCount = imageMaps.length + songCovers.length + albumCovers.length
 
-        for (const imageMap of pendingTasks) {
-          const filePath = this.urlToAbsolutePath(imageMap.localUrl)
+      if (pendingCount > 0) {
+        console.log(`[Variant] 🔄 Recovering ${pendingCount} pending tasks...`)
+      }
 
-          try {
-            await fs.promises.access(filePath, fs.constants.R_OK)
-
-            this.enqueue({
-              imageMapId: imageMap.id,
-              localFilePath: filePath,
-              priority: 'low',
-            })
-          } catch {
-            console.warn(`[Variant] ⚠️ Skipping recovery for ${imageMap.id}: file not found`)
-            await prisma.imageMap.update({
-              where: { id: imageMap.id },
-              data: { variantStatus: 'failed' },
-            })
-          }
-        }
+      for (const imageMap of imageMaps) {
+        await this.recoverTask('imageMap', imageMap.id, this.urlToAbsolutePath(imageMap.localUrl))
+      }
+      for (const cover of songCovers) {
+        await this.recoverTask(
+          'songCover',
+          cover.id,
+          resolveUploadPathByStorageKey(cover.storageKey, uploadsDir)
+        )
+      }
+      for (const cover of albumCovers) {
+        await this.recoverTask(
+          'albumCover',
+          cover.id,
+          resolveUploadPathByStorageKey(cover.storageKey, uploadsDir)
+        )
       }
     } catch (error) {
       console.error('[Variant] ❌ Error recovering pending tasks:', error)
+    }
+  }
+
+  private async recoverTask(
+    targetType: VariantTargetType,
+    targetId: string,
+    filePath: string | null
+  ): Promise<void> {
+    try {
+      if (!filePath) {
+        throw new Error('Source file path invalid')
+      }
+      await fs.promises.access(filePath, fs.constants.R_OK)
+
+      await this.enqueue({
+        targetType,
+        targetId,
+        localFilePath: filePath,
+        priority: 'low',
+      })
+    } catch {
+      console.warn(`[Variant] ⚠️ Skipping recovery for ${targetType}:${targetId}: file not found`)
+      await this.markAsFailed(targetType, targetId, 'Source file missing')
     }
   }
 
@@ -139,11 +204,13 @@ export class VariantGenerator {
    * 入队变体生成任务
    */
   async enqueue(task: Omit<VariantTask, 'retryCount' | 'maxRetries' | 'createdAt'>): Promise<void> {
+    const taskKey = this.getTaskKey(task)
+
     if (
-      this.processing.has(task.imageMapId) ||
-      this.queue.some((queuedTask) => queuedTask.imageMapId === task.imageMapId)
+      this.processing.has(taskKey) ||
+      this.queue.some((queuedTask) => this.getTaskKey(queuedTask) === taskKey)
     ) {
-      console.log(`[Variant] ⏭️ Task already queued or processing: ${task.imageMapId}`)
+      console.log(`[Variant] ⏭️ Task already queued or processing: ${taskKey}`)
       return
     }
 
@@ -160,7 +227,7 @@ export class VariantGenerator {
       this.queue.push(fullTask)
     }
 
-    console.log(`[Variant] 📥 Task enqueued: ${task.imageMapId}`)
+    console.log(`[Variant] 📥 Task enqueued: ${taskKey}`)
     if (this.processOnEnqueue) {
       this.processNext()
     }
@@ -192,7 +259,8 @@ export class VariantGenerator {
     if (this.queue.length === 0) return
 
     const task = this.queue.shift()!
-    this.processing.add(task.imageMapId)
+    const taskKey = this.getTaskKey(task)
+    this.processing.add(taskKey)
     this.isProcessing = true
 
     try {
@@ -200,7 +268,7 @@ export class VariantGenerator {
     } catch (error) {
       console.error('[Variant] ❌ Task processing error:', error)
     } finally {
-      this.processing.delete(task.imageMapId)
+      this.processing.delete(taskKey)
       this.isProcessing = false
 
       if (this.queue.length > 0 || this.processing.size < this.config.maxConcurrent) {
@@ -213,9 +281,10 @@ export class VariantGenerator {
    * 处理单个变体生成任务（带超时保护）
    */
   private async processTask(task: VariantTask): Promise<void> {
+    const taskKey = this.getTaskKey(task)
+
     console.log(
-      `[Variant] ⚙️ Processing: ${task.imageMapId} ` +
-        `(retry=${task.retryCount}/${task.maxRetries})`
+      `[Variant] ⚙️ Processing: ${taskKey} ` + `(retry=${task.retryCount}/${task.maxRetries})`
     )
 
     const startTime = Date.now()
@@ -225,9 +294,9 @@ export class VariantGenerator {
       const waitTime = Date.now() - task.createdAt.getTime()
       if (waitTime > this.config.queueMaxWaitMs) {
         console.warn(
-          `[Variant] ⏰ Task ${task.imageMapId} exceeded max wait time (${waitTime}ms), skipping`
+          `[Variant] ⏰ Task ${taskKey} exceeded max wait time (${waitTime}ms), skipping`
         )
-        await this.markAsFailed(task, 'Queue wait timeout')
+        await this.markAsFailed(task.targetType, task.targetId, 'Queue wait timeout')
         return
       }
 
@@ -236,15 +305,12 @@ export class VariantGenerator {
         await fs.promises.access(task.localFilePath, fs.constants.R_OK)
       } catch {
         console.error(`[Variant] ❌ File not found: ${task.localFilePath}`)
-        await this.markAsFailed(task, 'Source file missing')
+        await this.markAsFailed(task.targetType, task.targetId, 'Source file missing')
         return
       }
 
       // ===== 更新状态为 processing =====
-      await prisma.imageMap.update({
-        where: { id: task.imageMapId },
-        data: { variantStatus: 'processing' },
-      })
+      await this.markAsProcessing(task)
 
       // ===== 执行变体生成（带超时保护）=====
       let timeoutId: NodeJS.Timeout
@@ -266,13 +332,13 @@ export class VariantGenerator {
         this.stats.totalProcessingTime += processingTime
         this.stats.processedCount++
 
-        console.log(`[Variant] ✅ Completed: ${task.imageMapId} (${processingTime}ms)`)
+        console.log(`[Variant] ✅ Completed: ${taskKey} (${processingTime}ms)`)
       } catch (error) {
         clearTimeout(timeoutId)
 
         if (error.message.includes('timeout')) {
           this.stats.timeoutCount++
-          console.error(`[Variant] ⏰ Timeout: ${task.imageMapId}`)
+          console.error(`[Variant] ⏰ Timeout: ${taskKey}`)
 
           // 触发垃圾回收（如果可用）
           if ((global as any).gc) {
@@ -285,7 +351,7 @@ export class VariantGenerator {
         }
       }
     } catch (error) {
-      console.error(`[Variant] ❌ Failed: ${task.imageMapId}:`, error)
+      console.error(`[Variant] ❌ Failed: ${taskKey}:`, error)
 
       this.stats.failedToday++
 
@@ -303,7 +369,7 @@ export class VariantGenerator {
         }, delay)
       } else {
         console.error(`[Variant] 💀 Gave up after ${task.maxRetries} retries`)
-        await this.markAsFailed(task, error.message)
+        await this.markAsFailed(task.targetType, task.targetId, error.message)
       }
     }
   }
@@ -325,48 +391,82 @@ export class VariantGenerator {
       }).metadata()
 
       console.log(
-        `[Variant] Processing ${task.imageMapId}: ` +
+        `[Variant] Processing ${task.targetType}:${task.targetId}: ` +
           `${metadata.width}x${metadata.height} ${metadata.format}`
       )
 
-      // 确保输出目录存在
-      const outputDir = path.join(uploadsDir, 'variants', task.imageMapId)
-      await fs.promises.mkdir(outputDir, { recursive: true })
+      if (task.targetType === 'imageMap') {
+        // 图片变体：单一 1080h WebP → uploads/variants/{id}/
+        const outputDir = path.join(uploadsDir, 'variants', task.targetId)
+        await fs.promises.mkdir(outputDir, { recursive: true })
 
-      // 并行生成所有变体
-      const variantPromises = this.variantSpecs.map(async (spec) => {
-        const outputPath = path.join(outputDir, `${spec.name}.webp`)
+        const variantPromises = this.imageMapVariantSpecs.map(async (spec) => {
+          const outputPath = path.join(outputDir, `${spec.name}.webp`)
+
+          const result = await sharp(task.localFilePath)
+            .resize(spec.maxWidth ?? undefined, spec.maxHeight ?? undefined, {
+              fit: 'inside',
+              withoutEnlargement: true,
+            })
+            .webp({ quality: spec.quality })
+            .toFile(outputPath)
+
+          const stat = await fs.promises.stat(outputPath)
+
+          const variantMeta: VariantMetadata = {
+            name: spec.name,
+            path: `/uploads/variants/${task.targetId}/${spec.name}.webp`,
+            sizeBytes: stat.size,
+            width: result.width,
+            height: result.height,
+          }
+
+          variants.set(spec.name, variantMeta)
+
+          console.log(
+            `[Variant] Generated ${spec.name}: ${result.width}x${result.height} ` +
+              `(${this.formatBytes(stat.size)})`
+          )
+        })
+
+        await Promise.all(variantPromises)
+      } else {
+        // 音乐封面缩略图：320px/quality80 WebP → uploads/music-covers/thumbnails/
+        const sourceBaseName =
+          path.basename(task.localFilePath, path.extname(task.localFilePath)) || 'cover'
+        const storageInfo = createUploadStorageInfo(
+          uploadsDir,
+          'music-covers/thumbnails',
+          `${sourceBaseName}.webp`
+        )
+        const outputPath = path.join(storageInfo.absoluteDir, storageInfo.fileName)
 
         const result = await sharp(task.localFilePath)
-          .resize(spec.maxWidth ?? undefined, spec.maxHeight ?? undefined, {
+          .resize(MUSIC_COVER_THUMBNAIL_SIZE, MUSIC_COVER_THUMBNAIL_SIZE, {
             fit: 'inside',
             withoutEnlargement: true,
           })
-          .webp({ quality: spec.quality })
+          .webp({ quality: MUSIC_COVER_THUMBNAIL_QUALITY })
           .toFile(outputPath)
 
         const stat = await fs.promises.stat(outputPath)
 
-        const variantMeta: VariantMetadata = {
-          name: spec.name,
-          path: `/uploads/variants/${task.imageMapId}/${spec.name}.webp`,
+        variants.set('thumb', {
+          name: 'thumb',
+          path: buildUploadPublicUrl(storageInfo.storageKey),
           sizeBytes: stat.size,
           width: result.width,
           height: result.height,
-        }
-
-        variants.set(spec.name, variantMeta)
+        })
 
         console.log(
-          `[Variant] Generated ${spec.name}: ${result.width}x${result.height} ` +
+          `[Variant] Generated thumb: ${result.width}x${result.height} ` +
             `(${this.formatBytes(stat.size)})`
         )
-      })
-
-      await Promise.all(variantPromises)
+      }
 
       // 保存到数据库
-      await this.saveVariantUrls(task.imageMapId, variants)
+      await this.saveVariantUrls(task, variants)
 
       return variants
     } catch (error) {
@@ -378,33 +478,92 @@ export class VariantGenerator {
   }
 
   /**
-   * 保存变体 URL 到数据库
+   * 保存变体 URL 到数据库（按目标类型分发）
    */
   private async saveVariantUrls(
-    imageMapId: string,
+    task: VariantTask,
     variants: Map<string, VariantMetadata>
   ): Promise<void> {
-    const variant = variants.get('1080h')
+    if (task.targetType === 'imageMap') {
+      const variant = variants.get('1080h')
 
-    await prisma.imageMap.update({
-      where: { id: imageMapId },
-      data: {
-        thumbnailUrl: variant?.path || null,
-        variantStatus: 'completed',
-      },
+      await prisma.imageMap.update({
+        where: { id: task.targetId },
+        data: {
+          thumbnailUrl: variant?.path || null,
+          variantStatus: 'completed',
+        },
+      })
+      return
+    }
+
+    const thumbnailUrl = variants.get('thumb')?.path || null
+
+    await this.updateCover(task.targetType, task.targetId, {
+      thumbnailUrl,
+      variantStatus: 'completed',
+      variantGeneratedAt: new Date(),
+      lastError: null,
     })
+  }
+
+  /**
+   * 标记任务为 processing
+   */
+  private async markAsProcessing(task: VariantTask): Promise<void> {
+    if (task.targetType === 'imageMap') {
+      await prisma.imageMap.update({
+        where: { id: task.targetId },
+        data: { variantStatus: 'processing' },
+      })
+    } else {
+      await this.updateCover(task.targetType, task.targetId, {
+        variantStatus: 'processing',
+      })
+    }
   }
 
   /**
    * 标记任务为失败
    */
-  private async markAsFailed(task: VariantTask, reason: string): Promise<void> {
-    await prisma.imageMap.update({
-      where: { id: task.imageMapId },
-      data: { variantStatus: 'failed' as const },
-    })
+  private async markAsFailed(
+    targetType: VariantTargetType,
+    targetId: string,
+    reason: string
+  ): Promise<void> {
+    if (targetType === 'imageMap') {
+      await prisma.imageMap.update({
+        where: { id: targetId },
+        data: { variantStatus: 'failed' as const },
+      })
+    } else {
+      await this.updateCover(targetType, targetId, {
+        variantStatus: 'failed',
+        lastError: reason,
+      })
+    }
 
-    console.error(`[Variant] ❌ Marked as failed: ${task.imageMapId} - ${reason}`)
+    console.error(`[Variant] ❌ Marked as failed: ${targetType}:${targetId} - ${reason}`)
+  }
+
+  /**
+   * 按目标类型更新封面变体状态（songCover / albumCover）
+   */
+  private async updateCover(
+    targetType: 'songCover' | 'albumCover',
+    targetId: string,
+    data: {
+      thumbnailUrl?: string | null
+      variantStatus?: 'pending' | 'processing' | 'completed' | 'failed'
+      variantGeneratedAt?: Date | null
+      lastError?: string | null
+    }
+  ): Promise<void> {
+    if (targetType === 'songCover') {
+      await prisma.songCover.update({ where: { id: targetId }, data })
+    } else {
+      await prisma.albumCover.update({ where: { id: targetId }, data })
+    }
   }
 
   /**
@@ -441,7 +600,7 @@ export class VariantGenerator {
   }
 
   /**
-   * 获取当前正在处理的 imageMapId 集合（供 VariantCleanup 互斥使用）
+   * 获取当前正在处理的 taskKey 集合（供 VariantCleanup 互斥使用）
    */
   getProcessingIds(): Set<string> {
     return this.processing

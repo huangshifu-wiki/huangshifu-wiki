@@ -1,7 +1,7 @@
 // 音乐平台解析、播放URL、导入、CRUD 全链路
 
 import { Prisma } from '@prisma/client'
-import { prisma, PLAY_URL_CACHE_TTL_MS, DEFAULT_MUSIC_PLATFORMS } from './config'
+import { prisma, PLAY_URL_CACHE_TTL_MS, DEFAULT_MUSIC_PLATFORMS, uploadsDir } from './config'
 import { enhancedCache, CACHE_KEYS } from './cache'
 import { parseInteger } from './parsers'
 import { withNumericSlugTransaction } from './numericSlug'
@@ -23,7 +23,8 @@ import {
   resolveLyric as resolveMetingLyric,
   resolveCoverUrl as resolveMetingCoverUrl,
 } from '../music/metingService'
-import { generateMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
+import { variantGenerator } from '../services/variantGenerator'
+import { resolveUploadPathByStorageKey } from '../uploadPath'
 import { localizeImageUrlAsMediaAsset } from './remoteImageAsset'
 import { enqueueMusicTextEmbeddingsDeferred } from '../vector/textEmbeddingSync'
 
@@ -169,12 +170,28 @@ export function resolveAlbumCoverThumbnailUrl(album: Parameters<typeof resolveAl
   )
 }
 
-async function tryGenerateMusicCoverThumbnail(storageKey: string) {
+async function enqueueMusicCoverThumbnail(
+  targetType: 'songCover' | 'albumCover',
+  coverId: string,
+  storageKey: string
+) {
+  const localFilePath = resolveUploadPathByStorageKey(storageKey, uploadsDir)
+  if (!localFilePath) {
+    console.warn(
+      `[Music] Cannot resolve cover source file for ${targetType} ${coverId}: ${storageKey}`
+    )
+    return
+  }
+
   try {
-    return await generateMusicCoverThumbnail(storageKey)
+    await variantGenerator.enqueue({
+      targetType,
+      targetId: coverId,
+      localFilePath,
+      priority: 'normal',
+    })
   } catch (error) {
-    console.warn(`Generate music cover thumbnail failed for ${storageKey}:`, error)
-    return null
+    console.error(`[Music] Enqueue cover thumbnail failed for ${targetType} ${coverId}:`, error)
   }
 }
 
@@ -594,16 +611,14 @@ export async function addSongCoverFromAsset(
   }
 
   const currentCount = await prisma.songCover.count({ where: { songDocId } })
-  const thumbnailUrl = await tryGenerateMusicCoverThumbnail(asset.storageKey)
 
-  return prisma.$transaction(async (tx) => {
+  const cover = await prisma.$transaction(async (tx) => {
     const cover = await tx.songCover.create({
       data: {
         songDocId,
         assetId: asset.id,
         storageKey: asset.storageKey,
         publicUrl: asset.publicUrl,
-        thumbnailUrl,
         sortOrder: currentCount,
         isDefault: markDefault,
       },
@@ -631,6 +646,10 @@ export async function addSongCoverFromAsset(
 
     return cover
   })
+
+  await enqueueMusicCoverThumbnail('songCover', cover.id, asset.storageKey)
+
+  return cover
 }
 
 export async function addSongCoverFromUrl(
@@ -667,16 +686,14 @@ export async function addAlbumCoverFromAsset(
   }
 
   const currentCount = await prisma.albumCover.count({ where: { albumDocId } })
-  const thumbnailUrl = await tryGenerateMusicCoverThumbnail(asset.storageKey)
 
-  return prisma.$transaction(async (tx) => {
+  const cover = await prisma.$transaction(async (tx) => {
     const cover = await tx.albumCover.create({
       data: {
         albumDocId,
         assetId: asset.id,
         storageKey: asset.storageKey,
         publicUrl: asset.publicUrl,
-        thumbnailUrl,
         sortOrder: currentCount,
         isDefault: markDefault,
       },
@@ -703,6 +720,10 @@ export async function addAlbumCoverFromAsset(
 
     return cover
   })
+
+  await enqueueMusicCoverThumbnail('albumCover', cover.id, asset.storageKey)
+
+  return cover
 }
 
 export async function addAlbumCoverFromUrl(

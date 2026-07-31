@@ -14,7 +14,6 @@ import AdminToolPage from './AdminToolPage'
 import AdminEventEdit from './AdminEventEdit'
 import AdminDiskMonitor from './AdminDiskMonitor'
 import AdminVariantManager from './AdminVariantManager'
-import AdminMusicCoverThumbnails from './AdminMusicCoverThumbnails'
 import AdminSettings from './AdminSettings'
 import NotFound from '../NotFound'
 import { usePublicFeatures } from '../../hooks/usePublicFeatures'
@@ -78,7 +77,6 @@ export const AdminRoutes = () => (
       <Route path="markdown_links" element={<AdminToolPage type="markdown_links" />} />
       <Route path="disk-monitor" element={<AdminDiskMonitor />} />
       <Route path="variant-manager" element={<AdminVariantManager />} />
-      <Route path="music-cover-thumbnails" element={<AdminMusicCoverThumbnails />} />
       <Route
         path="settings"
         element={

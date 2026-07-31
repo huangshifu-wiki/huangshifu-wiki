@@ -13,6 +13,7 @@ import { prisma } from '../prisma'
 import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/auth'
 import { variantCleanup, CleanupTrigger } from '../services/variantCleanup.service'
 import { variantGenerator } from '../services/variantGenerator'
+import { resolveUploadPathByStorageKey } from '../uploadPath'
 import { resolveUploadPathByUrl } from '../utils'
 import fs from 'fs'
 import path from 'path'
@@ -132,6 +133,7 @@ router.post('/cleanup/all', requireAuth, requireAdmin, async (_req, res) => {
 // ============================================================================
 
 interface RebuildRequest {
+  type?: 'imageMap' | 'songCover' | 'albumCover' | 'all'
   scope?: 'all' | 'failed' | 'missing' | 'outdated'
   batchSize?: number
   dryRun?: boolean
@@ -150,10 +152,214 @@ interface RebuildResponse {
   estimatedTimeSeconds?: number
 }
 
+const REBUILD_TYPES = ['imageMap', 'songCover', 'albumCover'] as const
+type RebuildTargetType = (typeof REBUILD_TYPES)[number]
+
+function buildVariantWhereClause(scope: string, force: boolean): Record<string, unknown> {
+  const whereClause: Record<string, unknown> = {}
+
+  switch (scope) {
+    case 'all':
+      if (!force) {
+        whereClause.variantStatus = { not: 'completed' }
+      }
+      break
+
+    case 'failed':
+      whereClause.variantStatus = 'failed'
+      break
+
+    case 'missing':
+      whereClause.OR = [{ thumbnailUrl: null }, { variantStatus: 'pending' }]
+      break
+
+    case 'outdated':
+      whereClause.variantStatus = 'completed'
+      // TODO: 需要增加 generatedAt 字段才能支持此功能
+      break
+  }
+
+  return whereClause
+}
+
+async function queueRebuildForType(
+  type: RebuildTargetType,
+  scope: string,
+  batchSize: number,
+  dryRun: boolean,
+  force: boolean
+): Promise<{
+  totalScanned: number
+  queuedForRebuild: number
+  skipped: number
+  errors: number
+}> {
+  const baseWhere = type === 'imageMap' ? { deletedAt: null } : {}
+  const whereClause = { ...baseWhere, ...buildVariantWhereClause(scope, force) }
+
+  if (type === 'imageMap') {
+    return queueImageMapRebuild(whereClause, batchSize, dryRun)
+  }
+  return queueCoverRebuild(type, whereClause, batchSize, dryRun)
+}
+
+async function queueImageMapRebuild(
+  whereClause: Record<string, unknown>,
+  batchSize: number,
+  dryRun: boolean
+): Promise<{
+  totalScanned: number
+  queuedForRebuild: number
+  skipped: number
+  errors: number
+}> {
+  const totalCount = await prisma.imageMap.count({ where: whereClause })
+
+  let processedCount = 0
+  let skippedCount = 0
+  let errorCount = 0
+
+  for (let offset = 0; offset < totalCount; offset += batchSize) {
+    const batch = await prisma.imageMap.findMany({
+      where: whereClause,
+      take: batchSize,
+      skip: offset,
+      select: { id: true, localUrl: true },
+    })
+
+    for (const record of batch) {
+      try {
+        if (dryRun) {
+          processedCount++
+          continue
+        }
+
+        const localFilePath = resolveUploadPathByUrl(record.localUrl)
+
+        if (!localFilePath) {
+          console.warn(`[Admin] Skipping imageMap:${record.id}: source file path is invalid`)
+          skippedCount++
+          continue
+        }
+
+        try {
+          await fs.promises.access(localFilePath, fs.constants.R_OK)
+        } catch {
+          console.warn(`[Admin] Skipping imageMap:${record.id}: source file not found`)
+          skippedCount++
+          continue
+        }
+
+        await variantGenerator.enqueue({
+          targetType: 'imageMap',
+          targetId: record.id,
+          localFilePath,
+          priority: 'low',
+        })
+
+        processedCount++
+      } catch (error) {
+        console.error(`[Admin] Error queuing imageMap:${record.id}:`, error)
+        errorCount++
+      }
+    }
+  }
+
+  return {
+    totalScanned: totalCount,
+    queuedForRebuild: processedCount,
+    skipped: skippedCount,
+    errors: errorCount,
+  }
+}
+
+async function queueCoverRebuild(
+  type: 'songCover' | 'albumCover',
+  whereClause: Record<string, unknown>,
+  batchSize: number,
+  dryRun: boolean
+): Promise<{
+  totalScanned: number
+  queuedForRebuild: number
+  skipped: number
+  errors: number
+}> {
+  const totalCount =
+    type === 'songCover'
+      ? await prisma.songCover.count({ where: whereClause })
+      : await prisma.albumCover.count({ where: whereClause })
+
+  let processedCount = 0
+  let skippedCount = 0
+  let errorCount = 0
+
+  for (let offset = 0; offset < totalCount; offset += batchSize) {
+    const batch =
+      type === 'songCover'
+        ? await prisma.songCover.findMany({
+            where: whereClause,
+            take: batchSize,
+            skip: offset,
+            select: { id: true, storageKey: true },
+          })
+        : await prisma.albumCover.findMany({
+            where: whereClause,
+            take: batchSize,
+            skip: offset,
+            select: { id: true, storageKey: true },
+          })
+
+    for (const record of batch) {
+      try {
+        if (dryRun) {
+          processedCount++
+          continue
+        }
+
+        const localFilePath = resolveUploadPathByStorageKey(record.storageKey, uploadsDir)
+
+        if (!localFilePath) {
+          console.warn(`[Admin] Skipping ${type}:${record.id}: source file path is invalid`)
+          skippedCount++
+          continue
+        }
+
+        try {
+          await fs.promises.access(localFilePath, fs.constants.R_OK)
+        } catch {
+          console.warn(`[Admin] Skipping ${type}:${record.id}: source file not found`)
+          skippedCount++
+          continue
+        }
+
+        await variantGenerator.enqueue({
+          targetType: type,
+          targetId: record.id,
+          localFilePath,
+          priority: 'low',
+        })
+
+        processedCount++
+      } catch (error) {
+        console.error(`[Admin] Error queuing ${type}:${record.id}:`, error)
+        errorCount++
+      }
+    }
+  }
+
+  return {
+    totalScanned: totalCount,
+    queuedForRebuild: processedCount,
+    skipped: skippedCount,
+    errors: errorCount,
+  }
+}
+
 /**
- * POST /api/admin/images/rebuild-all-variants - 批量重建图片变体
+ * POST /api/admin/images/rebuild-all-variants - 批量重建变体
  *
  * 查询参数：
+ * - type: imageMap | songCover | albumCover | all (默认 imageMap)
  * - scope: all | failed | missing | outdated (默认 missing)
  * - batchSize: 每批处理数量 (默认 50)
  * - dryRun: 试运行，不实际执行 (默认 false)
@@ -166,11 +372,19 @@ router.post(
   async (req: AuthenticatedRequest, res) => {
     try {
       const {
+        type = 'imageMap',
         scope = 'missing',
         batchSize = 50,
         dryRun = false,
         force = false,
       } = req.body as RebuildRequest
+
+      if (![...REBUILD_TYPES, 'all'].includes(type)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid type: ${type}. Must be one of: imageMap, songCover, albumCover, all`,
+        })
+      }
 
       if (!['all', 'failed', 'missing', 'outdated'].includes(scope)) {
         return res.status(400).json({
@@ -180,38 +394,26 @@ router.post(
       }
 
       console.log(
-        `[Admin] Starting variant rebuild: scope=${scope}, ` +
+        `[Admin] Starting variant rebuild: type=${type}, scope=${scope}, ` +
           `batchSize=${batchSize}, dryRun=${dryRun}, force=${force}`
       )
 
-      // 构建查询条件
-      let whereClause: any = { deletedAt: null }
+      const targetTypes: RebuildTargetType[] = type === 'all' ? [...REBUILD_TYPES] : [type]
 
-      switch (scope) {
-        case 'all':
-          if (!force) {
-            whereClause.variantStatus = { not: 'completed' }
-          }
-          break
+      let totalScanned = 0
+      let queuedForRebuild = 0
+      let skipped = 0
+      let errors = 0
 
-        case 'failed':
-          whereClause.variantStatus = 'failed'
-          break
-
-        case 'missing':
-          whereClause.OR = [{ thumbnailUrl: null }, { variantStatus: 'pending' }]
-          break
-
-        case 'outdated':
-          whereClause.variantStatus = 'completed'
-          // TODO: 需要增加 generatedAt 字段才能支持此功能
-          break
+      for (const targetType of targetTypes) {
+        const summary = await queueRebuildForType(targetType, scope, batchSize, dryRun, force)
+        totalScanned += summary.totalScanned
+        queuedForRebuild += summary.queuedForRebuild
+        skipped += summary.skipped
+        errors += summary.errors
       }
 
-      // 查询符合条件的记录总数
-      const totalCount = await prisma.imageMap.count({ where: whereClause })
-
-      if (totalCount === 0) {
+      if (totalScanned === 0) {
         return res.json({
           jobId: `dry-run-${Date.now()}`,
           status: 'completed' as const,
@@ -221,84 +423,31 @@ router.post(
             skipped: 0,
             errors: 0,
           },
-          message: 'No images need to be rebuilt',
+          message: 'No records need to be rebuilt',
           timestamp: new Date().toISOString(),
         })
-      }
-
-      // 分批查询并入队
-      let processedCount = 0
-      let skippedCount = 0
-      let errorCount = 0
-
-      for (let offset = 0; offset < totalCount; offset += batchSize) {
-        const batch = await prisma.imageMap.findMany({
-          where: whereClause,
-          take: batchSize,
-          skip: offset,
-          select: {
-            id: true,
-            localUrl: true,
-            variantStatus: true,
-          },
-        })
-
-        for (const imageMap of batch) {
-          try {
-            if (dryRun) {
-              processedCount++
-              continue
-            }
-
-            const localFilePath = resolveUploadPathByUrl(imageMap.localUrl)
-            if (!localFilePath) {
-              console.warn(`[Admin] Skipping ${imageMap.id}: source file path is invalid`)
-              skippedCount++
-              continue
-            }
-
-            try {
-              await fs.promises.access(localFilePath, fs.constants.R_OK)
-            } catch {
-              console.warn(`[Admin] Skipping ${imageMap.id}: source file not found`)
-              skippedCount++
-              continue
-            }
-
-            await variantGenerator.enqueue({
-              imageMapId: imageMap.id,
-              localFilePath,
-              priority: 'low',
-            })
-
-            processedCount++
-          } catch (error) {
-            console.error(`[Admin] Error queuing ${imageMap.id}:`, error)
-            errorCount++
-          }
-        }
       }
 
       const response: RebuildResponse = {
         jobId: `rebuild-${Date.now()}`,
         status: dryRun ? 'completed' : 'queued',
         summary: {
-          totalScanned: totalCount,
-          queuedForRebuild: processedCount,
-          skipped: skippedCount,
-          errors: errorCount,
+          totalScanned,
+          queuedForRebuild,
+          skipped,
+          errors,
         },
       }
 
-      if (!dryRun && processedCount > 0) {
+      if (!dryRun && queuedForRebuild > 0) {
         response.estimatedTimeSeconds = Math.ceil(
-          (processedCount * 2) / variantGenerator.getMaxConcurrent()
+          (queuedForRebuild * 2) / variantGenerator.getMaxConcurrent()
         )
       }
 
       console.log(
         `[Admin] Variant rebuild initiated: ` +
-          `${processedCount} images queued, ${skippedCount} skipped, ${errorCount} errors`
+          `${queuedForRebuild} tasks queued, ${skipped} skipped, ${errors} errors`
       )
 
       res.status(200).json({

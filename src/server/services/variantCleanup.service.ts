@@ -61,7 +61,7 @@ export class VariantCleanupService {
     try {
       // 互斥检查：跳过正在被 VariantGenerator 处理的 ID
       const processingIds = variantGenerator.getProcessingIds()
-      if (processingIds.has(imageMapId)) {
+      if (processingIds.has(`imageMap:${imageMapId}`)) {
         logger.warn(
           `[Cleanup] Skipping ${imageMapId}: currently being processed by VariantGenerator`
         )
@@ -180,7 +180,7 @@ export class VariantCleanupService {
 
       const processingIds = variantGenerator.getProcessingIds()
       for (const imageMapId of subDirs) {
-        if (processingIds.has(imageMapId)) {
+        if (processingIds.has(`imageMap:${imageMapId}`)) {
           logger.warn(
             `[Cleanup] Skipping orphaned directory ${imageMapId}: currently being processed`
           )

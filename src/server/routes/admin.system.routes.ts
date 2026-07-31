@@ -315,15 +315,48 @@ router.post('/disk/monitor/resume', requireAuth, requireAdmin, async (_req, res)
 // ============================================================================
 
 /**
- * GET /api/admin/variants/stats - 获取变体生成统计
+ * GET /api/admin/variants/stats - 获取变体生成统计（队列 + 分类型状态）
  */
 router.get('/variants/stats', requireAuth, requireAdmin, async (_req, res) => {
   try {
     const stats = variantGenerator.getQueueStats()
 
+    const countByStatus = async (model: 'imageMap' | 'songCover' | 'albumCover') => {
+      const whereBase = model === 'imageMap' ? { deletedAt: null } : {}
+      const countFor = (where: Record<string, unknown>) => {
+        if (model === 'imageMap') return prisma.imageMap.count({ where })
+        if (model === 'songCover') return prisma.songCover.count({ where })
+        return prisma.albumCover.count({ where })
+      }
+      const [total, completed, failed] = await Promise.all([
+        countFor(whereBase),
+        countFor({ ...whereBase, variantStatus: 'completed' }),
+        countFor({ ...whereBase, variantStatus: 'failed' }),
+      ])
+      return {
+        total,
+        completed,
+        failed,
+        pending: total - completed - failed,
+      }
+    }
+
+    const [imageMap, songCover, albumCover] = await Promise.all([
+      countByStatus('imageMap'),
+      countByStatus('songCover'),
+      countByStatus('albumCover'),
+    ])
+
     res.json({
       success: true,
-      data: stats,
+      data: {
+        ...stats,
+        byType: {
+          imageMap,
+          songCover,
+          albumCover,
+        },
+      },
       timestamp: new Date().toISOString(),
     })
   } catch (error) {

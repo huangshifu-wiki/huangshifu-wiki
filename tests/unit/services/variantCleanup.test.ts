@@ -128,7 +128,7 @@ describe('VariantCleanupService - 清理变体', () => {
   })
 
   it('ImageMap 正在生成变体时应该跳过清理', async () => {
-    mockGetProcessingIds.mockReturnValue(new Set(['processing-id']))
+    mockGetProcessingIds.mockReturnValue(new Set(['imageMap:processing-id']))
 
     const result = await service.cleanupByImageMapId('processing-id', 'on_delete')
 
@@ -201,7 +201,7 @@ describe('VariantCleanupService - 孤儿文件检测', () => {
   })
 
   it('cleanupOrphanedVariants 应该跳过正在生成的孤儿目录', async () => {
-    mockGetProcessingIds.mockReturnValue(new Set(['orphan-id']))
+    mockGetProcessingIds.mockReturnValue(new Set(['imageMap:orphan-id']))
     mockReaddir.mockResolvedValue([{ name: 'orphan-id', isDirectory: () => true }])
 
     const result = await service.cleanupOrphanedVariants()

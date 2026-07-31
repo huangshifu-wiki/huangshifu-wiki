@@ -27,7 +27,6 @@ import {
   ChevronDown,
   HardDrive,
   RefreshCw,
-  Sparkles,
   Settings as SettingsIcon,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
@@ -89,12 +88,6 @@ const toolsNav: AdminNavItem[] = [
   { id: 'markdown_links', label: '链接更新', path: '/admin/markdown_links', icon: LinkIcon },
   { id: 'disk-monitor', label: '磁盘监控', path: '/admin/disk-monitor', icon: HardDrive },
   { id: 'variant-manager', label: '变体管理', path: '/admin/variant-manager', icon: RefreshCw },
-  {
-    id: 'music-cover-thumbnails',
-    label: '封面缩略图',
-    path: '/admin/music-cover-thumbnails',
-    icon: Sparkles,
-  },
 ]
 
 const settingsNav: AdminNavItem[] = [

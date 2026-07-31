@@ -11,10 +11,18 @@ import {
   Zap,
   Clock,
   BarChart3,
+  Music,
 } from '@/src/components/icons'
 import { apiGet, apiPost } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
 import { clsx } from 'clsx'
+
+interface TypeVariantStats {
+  total: number
+  completed: number
+  failed: number
+  pending: number
+}
 
 interface VariantStats {
   queueLength: number
@@ -23,6 +31,11 @@ interface VariantStats {
   failedToday: number
   averageProcessingTime: number
   timeoutCount: number
+  byType: {
+    imageMap: TypeVariantStats
+    songCover: TypeVariantStats
+    albumCover: TypeVariantStats
+  }
 }
 
 interface CleanupStats {
@@ -54,6 +67,13 @@ export const AdminVariantManager: React.FC = () => {
   const [rebuildScope, setRebuildScope] = useState<string>('missing')
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildResult, setRebuildResult] = useState<RebuildResponse | null>(null)
+  const [coverRebuilding, setCoverRebuilding] = useState(false)
+  const [coverRebuildResult, setCoverRebuildResult] = useState<{
+    totalScanned: number
+    queuedForRebuild: number
+    skipped: number
+    errors: number
+  } | null>(null)
   const [cleaning, setCleaning] = useState(false)
   const [cleanupResult, setCleanupResult] = useState<{
     type: string
@@ -120,6 +140,47 @@ export const AdminVariantManager: React.FC = () => {
       setError(err instanceof Error ? err.message : '重建失败')
     } finally {
       setRebuilding(false)
+    }
+  }
+
+  const handleRebuildMusicCovers = async () => {
+    const confirmed = await dialog.confirm({
+      title: '补齐缺失封面',
+      message: '确定为歌曲和专辑封面补全缺失的缩略图吗？',
+      confirmText: '补齐',
+      variant: 'warning',
+    })
+    if (!confirmed) return
+    try {
+      setCoverRebuilding(true)
+      setCoverRebuildResult(null)
+      let totalScanned = 0
+      let queuedForRebuild = 0
+      let skipped = 0
+      let errors = 0
+
+      for (const type of ['songCover', 'albumCover']) {
+        const result = await apiPost<RebuildResponse>('/api/admin/rebuild-all-variants', {
+          type,
+          scope: 'missing',
+          batchSize: 100,
+          dryRun: false,
+        })
+        if (!result.success) {
+          throw new Error(result.error || '补齐失败')
+        }
+        totalScanned += result.summary?.totalScanned ?? 0
+        queuedForRebuild += result.summary?.queuedForRebuild ?? 0
+        skipped += result.summary?.skipped ?? 0
+        errors += result.summary?.errors ?? 0
+      }
+
+      setCoverRebuildResult({ totalScanned, queuedForRebuild, skipped, errors })
+      setTimeout(() => fetchStats(), 2000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '补齐失败')
+    } finally {
+      setCoverRebuilding(false)
     }
   }
 
@@ -459,6 +520,105 @@ export const AdminVariantManager: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* 音乐封面（统一变体引擎） */}
+      {variantStats && (
+        <div className="bg-surface border border-border rounded p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Music size={16} className="text-text-muted" />
+            <h3 className="text-sm font-semibold text-text-secondary">音乐封面</h3>
+          </div>
+          <p className="text-xs text-text-muted mb-4">
+            歌曲与专辑封面的缩略图由统一变体引擎异步生成，上传后自动补全
+          </p>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            {[
+              { label: '歌曲封面总数', value: variantStats.byType?.songCover.total ?? 0 },
+              {
+                label: '歌曲完成',
+                value: variantStats.byType?.songCover.completed ?? 0,
+                badge: 'theme-status-success',
+              },
+              {
+                label: '歌曲失败',
+                value: variantStats.byType?.songCover.failed ?? 0,
+                badge: 'theme-status-error',
+              },
+              {
+                label: '歌曲待处理',
+                value: variantStats.byType?.songCover.pending ?? 0,
+                badge: 'theme-status-warning',
+              },
+              { label: '专辑封面总数', value: variantStats.byType?.albumCover.total ?? 0 },
+              {
+                label: '专辑完成',
+                value: variantStats.byType?.albumCover.completed ?? 0,
+                badge: 'theme-status-success',
+              },
+              {
+                label: '专辑失败',
+                value: variantStats.byType?.albumCover.failed ?? 0,
+                badge: 'theme-status-error',
+              },
+              {
+                label: '专辑待处理',
+                value: variantStats.byType?.albumCover.pending ?? 0,
+                badge: 'theme-status-warning',
+              },
+            ].map((item) => (
+              <div key={item.label} className="bg-surface-alt rounded p-3">
+                <span className="text-[11px] text-text-muted">{item.label}</span>
+                <p className={`text-lg font-bold ${item.badge ?? 'text-text-primary'}`}>
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={handleRebuildMusicCovers}
+            disabled={coverRebuilding}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
+          >
+            {coverRebuilding ? <Loader2 size={14} className="animate-spin" /> : <Music size={14} />}
+            {coverRebuilding ? '正在处理...' : '补齐缺失封面'}
+          </button>
+
+          {coverRebuildResult && (
+            <div className="mt-4 p-3 rounded theme-status-success">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle size={16} className="theme-text-success" />
+                <p className="text-sm font-medium theme-text-success">封面补齐任务已提交</p>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <span className="text-text-muted">扫描总数</span>
+                  <p className="font-medium text-text-primary">{coverRebuildResult.totalScanned}</p>
+                </div>
+                <div>
+                  <span className="text-text-muted">入队数量</span>
+                  <p className="font-medium text-text-primary">
+                    {coverRebuildResult.queuedForRebuild}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-text-muted">跳过数量</span>
+                  <p className="font-medium text-text-primary">{coverRebuildResult.skipped}</p>
+                </div>
+                <div>
+                  <span className="text-text-muted">错误数量</span>
+                  <p
+                    className={`font-medium ${coverRebuildResult.errors > 0 ? 'theme-text-error' : 'text-text-primary'}`}
+                  >
+                    {coverRebuildResult.errors}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="bg-surface border border-border rounded p-5">
         <div className="flex items-center gap-2 mb-4">

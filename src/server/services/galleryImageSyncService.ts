@@ -87,7 +87,8 @@ async function enqueueVariantIfNeeded(
 
   try {
     await variantGenerator.enqueue({
-      imageMapId: imageMap.id,
+      targetType: 'imageMap',
+      targetId: imageMap.id,
       localFilePath: filePath,
       priority,
     })

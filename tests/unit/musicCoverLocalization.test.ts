@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import path from 'path'
+import os from 'os'
 
 const mockLocalizeImageUrlAsMediaAsset = vi.hoisted(() => vi.fn())
-const mockGenerateMusicCoverThumbnail = vi.hoisted(() => vi.fn())
+const mockEnqueue = vi.hoisted(() => vi.fn())
 
 const mockPrisma = vi.hoisted(() => ({
   mediaAsset: {
@@ -28,18 +30,23 @@ const mockPrisma = vi.hoisted(() => ({
   $transaction: vi.fn(),
 }))
 
+const TEST_UPLOADS_DIR = path.join(os.tmpdir(), 'huangshifu-music-cover-test-uploads')
+
 vi.mock('../../src/server/utils/config', () => ({
   prisma: mockPrisma,
   PLAY_URL_CACHE_TTL_MS: 600000,
   DEFAULT_MUSIC_PLATFORMS: ['netease', 'tencent', 'kugou', 'baidu', 'kuwo'],
+  uploadsDir: TEST_UPLOADS_DIR,
 }))
 
 vi.mock('../../src/server/utils/remoteImageAsset', () => ({
   localizeImageUrlAsMediaAsset: mockLocalizeImageUrlAsMediaAsset,
 }))
 
-vi.mock('../../src/server/services/musicCoverThumbnail.service', () => ({
-  generateMusicCoverThumbnail: mockGenerateMusicCoverThumbnail,
+vi.mock('../../src/server/services/variantGenerator', () => ({
+  variantGenerator: {
+    enqueue: mockEnqueue,
+  },
 }))
 
 vi.mock('../../src/server/music/metingService', () => ({
@@ -53,7 +60,7 @@ describe('music cover localization', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockLocalizeImageUrlAsMediaAsset.mockResolvedValue({ assetId: 'asset-1' })
-    mockGenerateMusicCoverThumbnail.mockResolvedValue('/uploads/music-covers/thumbnails/thumb.webp')
+    mockEnqueue.mockResolvedValue(undefined)
     mockPrisma.mediaAsset.findUnique.mockResolvedValue({
       id: 'asset-1',
       storageKey: 'music-covers/songs/cover.jpg',
@@ -108,10 +115,9 @@ describe('music cover localization', () => {
     expect(mockPrisma.mediaAsset.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'asset-1' } })
     )
-    expect(mockGenerateMusicCoverThumbnail).toHaveBeenCalledWith('music-covers/songs/cover.jpg')
   })
 
-  it('stores generated song cover thumbnails on cover records', async () => {
+  it('creates song covers without thumbnailUrl and enqueues async generation', async () => {
     const tx = {
       songCover: {
         create: vi.fn().mockResolvedValue({ id: 'cover-1' }),
@@ -127,14 +133,22 @@ describe('music cover localization', () => {
 
     await addSongCoverFromUrl('song-1', 'https://example.com/cover.jpg', true)
 
-    expect(tx.songCover.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        thumbnailUrl: '/uploads/music-covers/thumbnails/thumb.webp',
-      }),
+    const createCall = tx.songCover.create.mock.calls[0][0]
+    expect(createCall.data).toMatchObject({
+      songDocId: 'song-1',
+      storageKey: 'music-covers/songs/cover.jpg',
+    })
+    expect(createCall.data).not.toHaveProperty('thumbnailUrl')
+
+    expect(mockEnqueue).toHaveBeenCalledWith({
+      targetType: 'songCover',
+      targetId: 'cover-1',
+      localFilePath: expect.stringContaining('music-covers/songs/cover.jpg'),
+      priority: 'normal',
     })
   })
 
-  it('localizes remote album covers before creating cover records', async () => {
+  it('localizes remote album covers and enqueues albumCover thumbnail generation', async () => {
     const { addAlbumCoverFromUrl } = await import('../../src/server/utils/music')
 
     await addAlbumCoverFromUrl('album-1', 'https://example.com/album.jpg', true)
@@ -143,7 +157,12 @@ describe('music cover localization', () => {
       namespace: 'music-covers/albums',
       fallbackName: 'album-1.jpg',
     })
-    expect(mockGenerateMusicCoverThumbnail).toHaveBeenCalledWith('music-covers/songs/cover.jpg')
+    expect(mockEnqueue).toHaveBeenCalledWith({
+      targetType: 'albumCover',
+      targetId: 'album-cover-1',
+      localFilePath: expect.stringContaining('music-covers/songs/cover.jpg'),
+      priority: 'normal',
+    })
   })
 
   it('does not fail automatic song import when cover localization fails', async () => {

@@ -946,13 +946,16 @@ model MusicExternalSource {
 }
 
 model SongCover {
-  id         String    @id @default(cuid())
-  songDocId  String
-  assetId    String?
-  storageKey String    @unique
-  publicUrl  String
-  thumbnailUrl String?
-  isDefault  Boolean   @default(false)
+  id                  String        @id @default(cuid())
+  songDocId           String
+  assetId             String?
+  storageKey          String        @unique
+  publicUrl           String
+  thumbnailUrl        String?
+  variantStatus       VariantStatus @default(pending)
+  variantGeneratedAt  DateTime?
+  lastError           String?
+  isDefault           Boolean       @default(false)
   sortOrder  Int       @default(0)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -965,13 +968,16 @@ model SongCover {
 }
 
 model AlbumCover {
-  id         String    @id @default(cuid())
-  albumDocId String
-  assetId    String?
-  storageKey String    @unique
-  publicUrl  String
-  thumbnailUrl String?
-  isDefault  Boolean   @default(false)
+  id                  String        @id @default(cuid())
+  albumDocId          String
+  assetId             String?
+  storageKey          String        @unique
+  publicUrl           String
+  thumbnailUrl        String?
+  variantStatus       VariantStatus @default(pending)
+  variantGeneratedAt  DateTime?
+  lastError           String?
+  isDefault           Boolean       @default(false)
   sortOrder  Int       @default(0)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt

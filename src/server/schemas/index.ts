@@ -37,5 +37,4 @@ export {
   adminBatchAlbumCoversSchema,
   adminBatchEditLocksSchema,
   adminBatchMusicDisplaySchema,
-  adminMusicCoverThumbnailBackfillSchema,
 } from './admin.schema'
