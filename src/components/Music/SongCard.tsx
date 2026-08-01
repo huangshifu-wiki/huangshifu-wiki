@@ -44,12 +44,16 @@ const SongCard = React.memo(function SongCard({
   const metaItems = [artistsText, albumText, releaseDateText].filter(Boolean)
 
   const handlePlayClick = (e: React.MouseEvent) => {
+    // 必须 preventDefault：Link 的 preventDefault 在自身 onClick 里，仅
+    // stopPropagation 会把它拦掉，导致 <a href> 原生默认导航整页跳转
+    e.preventDefault()
     e.stopPropagation()
     if (!canPlay) return
     onPlay(song)
   }
 
   const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.preventDefault()
     e.stopPropagation()
     onToggleFavorite(song)
   }
