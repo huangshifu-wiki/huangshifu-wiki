@@ -81,10 +81,10 @@ const WikiHistory = () => {
       <div className="mobile-page-container">
         <SmartBackLink
           fallbackTo={`/wiki/${slug}`}
+          fallbackLabel="返回页面"
+          icon={<ArrowLeft size={18} />}
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
-        >
-          <ArrowLeft size={18} /> 返回页面
-        </SmartBackLink>
+        />
 
         <div className="bg-surface rounded border border-border p-8 sm:p-10">
           <h2 className="text-3xl font-serif font-bold text-brand-gold mb-8 flex items-center gap-3">

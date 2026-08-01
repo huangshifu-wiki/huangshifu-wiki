@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronDown, Plus, Save, Send, Trash2, X } from '@/src/components/icons'
+import { ArrowLeft, ChevronDown, Plus, Save, Send, Trash2 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { CharacterCount } from '../components/CharacterCount'
@@ -657,10 +657,9 @@ const GalleryEdit = () => {
       <BookEditorShell>
         <SmartBackLink
           fallbackTo="/gallery"
+          fallbackLabel={t('gallery.backToList')}
           className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-        >
-          <ArrowLeft size={16} /> {t('gallery.backToList')}
-        </SmartBackLink>
+        />
         <BookEmptyState>{t('gallery.notFound')}</BookEmptyState>
       </BookEditorShell>
     )

@@ -1,14 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import {
-  ArrowLeft,
-  Disc3,
-  Play,
-  Heart,
-  Link2,
-  ChevronDown,
-  ChevronUp,
-} from '@/src/components/icons'
+import { Disc3, Play, Heart, Link2, ChevronDown, ChevronUp } from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
@@ -185,10 +177,9 @@ const AlbumDetail = () => {
         <div className="mobile-page-container">
           <SmartBackLink
             fallbackTo="/music"
+            fallbackLabel="返回音乐馆"
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={16} /> 返回音乐馆
-          </SmartBackLink>
+          />
           <div className="mt-6 bg-surface rounded border border-border p-10 text-center text-text-muted italic tracking-[0.1em]">
             专辑不存在或已被删除
           </div>
@@ -204,10 +195,9 @@ const AlbumDetail = () => {
       <div className="mobile-page-container">
         <SmartBackLink
           fallbackTo="/music"
+          fallbackLabel="返回音乐馆"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
-        >
-          <ArrowLeft size={16} /> 返回音乐馆
-        </SmartBackLink>
+        />
 
         {/* Detail Header */}
         <div className="mb-6 flex flex-col gap-5 border-b border-border pb-6 sm:flex-row">

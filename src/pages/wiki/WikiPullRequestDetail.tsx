@@ -140,10 +140,10 @@ const WikiPullRequestDetail = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SmartBackLink
             fallbackTo={`/wiki/${pullRequest.pageSlug}/prs`}
+            fallbackLabel="返回 PR 列表"
+            icon={<ArrowLeft size={18} />}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={18} /> 返回 PR 列表
-          </SmartBackLink>
+          />
           <Link
             to={`/wiki/${pullRequest.pageSlug}`}
             className="text-xs text-brand-gold hover:underline"

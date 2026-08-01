@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Calendar, ExternalLink, MapPin, Tag } from '@/src/components/icons'
+import { Calendar, ExternalLink, MapPin, Tag } from '@/src/components/icons'
 import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
 import { CoverPlaceholder } from '../components/CoverPlaceholder'
@@ -154,10 +154,9 @@ const EventDetail = () => {
         <div className="mobile-page-container">
           <SmartBackLink
             fallbackTo="/events"
+            fallbackLabel="返回活动"
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-          >
-            <ArrowLeft size={16} /> 返回活动
-          </SmartBackLink>
+          />
           <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
             活动不存在或已删除
           </div>
@@ -174,11 +173,9 @@ const EventDetail = () => {
       <div className="mobile-page-container max-w-[1000px]">
         <SmartBackLink
           fallbackTo="/events"
+          fallbackLabel="返回活动"
           className="mb-6 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-        >
-          <ArrowLeft size={16} />
-          返回活动
-        </SmartBackLink>
+        />
 
         <article className="space-y-10">
           <header className="flex flex-col gap-6 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row sm:items-start">

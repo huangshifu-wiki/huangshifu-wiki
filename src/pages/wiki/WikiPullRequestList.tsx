@@ -54,10 +54,10 @@ const WikiPullRequestList = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SmartBackLink
             fallbackTo={slug ? `/wiki/${slug}/branches` : '/wiki'}
+            fallbackLabel="返回"
+            icon={<ArrowLeft size={18} />}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={18} /> 返回
-          </SmartBackLink>
+          />
           <div className="flex gap-2">
             {(['open', 'merged', 'rejected'] as const).map((item) => (
               <Button

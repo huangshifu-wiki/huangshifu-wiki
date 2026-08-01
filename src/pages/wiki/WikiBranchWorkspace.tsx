@@ -244,10 +244,10 @@ const WikiBranchWorkspace = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SmartBackLink
             fallbackTo={`/wiki/${slug}`}
+            fallbackLabel="返回百科页面"
+            icon={<ArrowLeft size={18} />}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={18} /> 返回百科页面
-          </SmartBackLink>
+          />
           <div className="flex gap-2">
             <Link
               to={`/wiki/${slug}/prs`}

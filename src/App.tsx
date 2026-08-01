@@ -5,6 +5,7 @@ import { MusicProvider, useMusic } from './context/MusicContext'
 import { useNetworkStatus } from './hooks/useNetworkStatus'
 
 import { Navbar } from './components/Navbar'
+import { BackLinkTracker } from './components/SmartBackLink'
 import { BottomNav } from './components/BottomNav'
 import { AnnouncementBar } from './components/AnnouncementBar'
 import { GlobalMusicPlayer } from './components/GlobalMusicPlayer'
@@ -247,6 +248,7 @@ export default function App() {
 
   return (
     <Router>
+      <BackLinkTracker />
       <AuthProvider>
         <MusicProvider>
           <MainLayout />

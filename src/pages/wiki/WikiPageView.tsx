@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
-  Book,
-  ChevronRight,
   Clock,
   ArrowLeft,
   Heart,
@@ -177,10 +175,9 @@ const WikiPageView = () => {
         <div className="mobile-page-container">
           <SmartBackLink
             fallbackTo="/wiki"
+            fallbackLabel={t('wiki.backToList')}
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-          >
-            <ArrowLeft size={16} /> {t('wiki.backToList')}
-          </SmartBackLink>
+          />
           <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
             {t('wiki.notFound')}
           </div>
@@ -246,10 +243,10 @@ const WikiPageView = () => {
       <div className="mobile-page-container wiki-detail-page">
         <SmartBackLink
           fallbackTo="/wiki"
+          fallbackLabel={t('wiki.backToList')}
+          icon={<ArrowLeft size={18} />}
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-        >
-          <ArrowLeft size={18} /> {t('wiki.backToList')}
-        </SmartBackLink>
+        />
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">

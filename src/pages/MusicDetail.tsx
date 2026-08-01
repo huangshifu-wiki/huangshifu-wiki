@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft,
   Clock,
   ExternalLink,
   Heart,
@@ -224,10 +223,9 @@ const MusicDetail = () => {
         <div className="mobile-page-container">
           <SmartBackLink
             fallbackTo="/music"
+            fallbackLabel="返回音乐馆"
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={16} /> 返回音乐馆
-          </SmartBackLink>
+          />
           <div className="mt-8 py-16 text-center">
             <p className="text-text-muted text-[0.9rem] tracking-[0.08em]">歌曲不存在或已被删除</p>
           </div>
@@ -252,10 +250,9 @@ const MusicDetail = () => {
       <div className="mobile-page-container">
         <SmartBackLink
           fallbackTo="/music"
+          fallbackLabel="返回音乐馆"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
-        >
-          <ArrowLeft size={16} /> 返回音乐馆
-        </SmartBackLink>
+        />
 
         <div className="mobile-detail-grid">
           {/* Main Content */}

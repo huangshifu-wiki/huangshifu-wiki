@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import {
-  ArrowLeft,
   Edit3,
   Link2,
   Heart,
@@ -758,10 +757,9 @@ const GalleryDetail = () => {
         <div className="mobile-page-container">
           <SmartBackLink
             fallbackTo="/gallery"
+            fallbackLabel={t('gallery.backToList')}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={16} /> {t('gallery.backToList')}
-          </SmartBackLink>
+          />
           <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
             {t('gallery.notFound')}
           </div>
@@ -775,10 +773,9 @@ const GalleryDetail = () => {
       <div className="mobile-page-container gallery-detail-page">
         <SmartBackLink
           fallbackTo="/gallery"
+          fallbackLabel={t('gallery.backToList')}
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-        >
-          <ArrowLeft size={16} /> {t('gallery.backToList')}
-        </SmartBackLink>
+        />
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">
@@ -1139,10 +1136,10 @@ const GalleryDetail = () => {
         <div className="mt-10 border-t border-[var(--book-ink-line)] pt-6 text-right">
           <SmartBackLink
             fallbackTo="/gallery"
+            fallbackLabel={t('gallery.backToList')}
+            icon={null}
             className="text-xs text-text-muted transition-colors hover:text-brand-gold"
-          >
-            {t('gallery.backToList')}
-          </SmartBackLink>
+          />
         </div>
       </div>
 

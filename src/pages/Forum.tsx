@@ -17,8 +17,6 @@ import {
   Share2,
   Plus,
   Clock,
-  User as UserIcon,
-  ArrowLeft,
   Save,
   X,
   Send,
@@ -618,10 +616,9 @@ const PostDetail = () => {
         <div className="mobile-page-container">
           <SmartBackLink
             fallbackTo="/forum"
+            fallbackLabel={t('forum.backToList')}
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-          >
-            <ArrowLeft size={16} /> {t('forum.backToList')}
-          </SmartBackLink>
+          />
           <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
             {t('forum.postNotFound')}
           </div>
@@ -782,10 +779,9 @@ const PostDetail = () => {
       <div className="mobile-page-container wiki-detail-page">
         <SmartBackLink
           fallbackTo="/forum"
+          fallbackLabel={t('forum.backToList')}
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-        >
-          <ArrowLeft size={16} /> {t('forum.backToList')}
-        </SmartBackLink>
+        />
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">
