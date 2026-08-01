@@ -49,6 +49,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Duplicate Relation Test Song' } },
           { title: { startsWith: 'Lyric Search Contract Song' } },
           { title: { startsWith: 'Admin List Fields Test Song' } },
+          { title: { startsWith: 'Admin Search Desc Test Song' } },
         ],
       },
     })
@@ -96,6 +97,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Duplicate Relation Test Song' } },
           { title: { startsWith: 'Lyric Search Contract Song' } },
           { title: { startsWith: 'Admin List Fields Test Song' } },
+          { title: { startsWith: 'Admin Search Desc Test Song' } },
         ],
       },
     })
@@ -444,6 +446,26 @@ describe('Music API - 音乐接口测试', () => {
     expect(allRes.body.lyrics[0].matchedLines.map((l: { text: string }) => l.text)).toEqual([
       '第二行独特歌词XYZ',
     ])
+  })
+
+  it('音乐关键词搜索匹配歌曲描述', async () => {
+    const song = await prisma.musicTrack.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: 'Admin Search Desc Test Song',
+        artists: ['黄诗扶'],
+        album: '',
+        description: '独特描述词XYZ 背景介绍',
+      },
+    })
+    const response = await request(app)
+      .get('/api/search')
+      .query({ q: '独特描述词XYZ', type: 'music' })
+
+    expect(response.status).toBe(200)
+    expect(response.body.music.some((item: { docId: string }) => item.docId === song.docId)).toBe(
+      true
+    )
   })
 
   it('后台音乐列表支持艺术家名称部分匹配', async () => {

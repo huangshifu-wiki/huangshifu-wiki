@@ -987,6 +987,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                       ? [{ docId: { in: musicArtistMatchDocIds } }]
                       : []),
                     { album: { contains: q } },
+                    { description: { contains: q } },
                   ],
                 }
               : {}),

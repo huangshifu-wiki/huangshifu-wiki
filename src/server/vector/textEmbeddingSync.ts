@@ -123,9 +123,14 @@ export function prepareEntityText(
     case 'post':
       return stripMarkdown(`${entity.title || ''}\n\n${entity.content || ''}`)
     case 'music': {
-      return stripMarkdown(
-        `${entity.title || ''} - ${formatMusicCredits(entity.artists, '')} | ${entity.album || ''}`
-      )
+      const parts = [
+        `${entity.title || ''} - ${formatMusicCredits(entity.artists, '')} | ${entity.album || ''}`,
+      ]
+      const description = entity.description as string | null | undefined
+      if (description) {
+        parts.push(description)
+      }
+      return parts.join('\n\n')
     }
     case 'album': {
       const parts = [`${entity.title || ''} - ${entity.artist || ''}`]
@@ -271,7 +276,7 @@ export async function enqueueMusicTextEmbeddings(
 
   const tracks = await prisma.musicTrack.findMany({
     where: { docId: { in: uniqueIds } },
-    select: { docId: true, title: true, artists: true, album: true },
+    select: { docId: true, title: true, artists: true, album: true, description: true },
   })
 
   let queued = 0

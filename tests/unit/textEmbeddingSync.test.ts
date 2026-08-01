@@ -32,6 +32,7 @@ describe('textEmbeddingSync', () => {
             title: '测试歌曲',
             artists: ['歌手A', '歌手B'],
             album: '专辑X',
+            description: '独特描述词XYZ 背景介绍',
             lyric: '[00:00.00]歌词第一行\n[00:05.00]歌词第二行',
             lyricPlain: '歌词第一行\n歌词第二行',
           },
@@ -64,10 +65,11 @@ describe('textEmbeddingSync', () => {
     expect(order[1]).toBe('qdrant-delete')
     expect(deletePointsMock).toHaveBeenCalledWith('music', 'song-1')
     expect(order.slice(2).every((step) => step === 'upsert')).toBe(true)
-    // chunk 文本只含标题/艺人/专辑，绝不携带歌词
+    // chunk 文本只含标题/艺人/专辑/描述，绝不携带歌词
     for (const [args] of prismaMock.textEmbeddingChunk.upsert.mock.calls) {
       const chunkText: string = args.create.chunkText
       expect(chunkText).toContain('测试歌曲')
+      expect(chunkText).toContain('独特描述词XYZ')
       expect(chunkText).not.toContain('歌词第一行')
       expect(chunkText).not.toContain('歌词第二行')
     }
