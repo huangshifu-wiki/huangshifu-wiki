@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import path from 'path'
 import os from 'os'
+import {
+  addAlbumCoverFromUrl,
+  addSongCoverFromUrl,
+  createOrUpdateImportedSong,
+} from '../../src/server/utils/music'
 
 const mockLocalizeImageUrlAsMediaAsset = vi.hoisted(() => vi.fn())
 const mockEnqueue = vi.hoisted(() => vi.fn())
@@ -10,7 +15,7 @@ const mockPrisma = vi.hoisted(() => ({
     findUnique: vi.fn(),
   },
   musicExternalSource: {
-    findUnique: vi.fn(),
+    findMany: vi.fn(),
     create: vi.fn(),
   },
   songCover: {
@@ -30,7 +35,12 @@ const mockPrisma = vi.hoisted(() => ({
   $transaction: vi.fn(),
 }))
 
-const TEST_UPLOADS_DIR = path.join(os.tmpdir(), 'huangshifu-music-cover-test-uploads')
+// vi.hoisted 在 import 之前执行，factory 内不能引用顶层 import，只能自行 require
+const TEST_UPLOADS_DIR = vi.hoisted(() => {
+  const nodePath = require('path') as typeof import('path')
+  const nodeOs = require('os') as typeof import('os')
+  return nodePath.join(nodeOs.tmpdir(), 'huangshifu-music-cover-test-uploads')
+})
 
 vi.mock('../../src/server/utils/config', () => ({
   prisma: mockPrisma,
@@ -69,7 +79,7 @@ describe('music cover localization', () => {
     })
     mockPrisma.songCover.count.mockResolvedValue(0)
     mockPrisma.albumCover.count.mockResolvedValue(0)
-    mockPrisma.musicExternalSource.findUnique.mockResolvedValue(null)
+    mockPrisma.musicExternalSource.findMany.mockResolvedValue([])
     mockPrisma.musicExternalSource.create.mockResolvedValue({})
     mockPrisma.musicTrack.findFirst.mockResolvedValue(null)
     mockPrisma.musicTrack.create.mockResolvedValue({
@@ -104,8 +114,6 @@ describe('music cover localization', () => {
   })
 
   it('localizes remote song covers before creating cover records', async () => {
-    const { addSongCoverFromUrl } = await import('../../src/server/utils/music')
-
     await addSongCoverFromUrl('song-1', 'https://example.com/cover.jpg', true)
 
     expect(mockLocalizeImageUrlAsMediaAsset).toHaveBeenCalledWith('https://example.com/cover.jpg', {
@@ -128,8 +136,6 @@ describe('music cover localization', () => {
       },
     }
     mockPrisma.$transaction.mockImplementationOnce(async (callback) => callback(tx))
-
-    const { addSongCoverFromUrl } = await import('../../src/server/utils/music')
 
     await addSongCoverFromUrl('song-1', 'https://example.com/cover.jpg', true)
 
@@ -166,8 +172,6 @@ describe('music cover localization', () => {
     }
     mockPrisma.$transaction.mockImplementationOnce(async (callback) => callback(tx))
 
-    const { addAlbumCoverFromUrl } = await import('../../src/server/utils/music')
-
     await addAlbumCoverFromUrl('album-1', 'https://example.com/album.jpg', true)
 
     expect(mockLocalizeImageUrlAsMediaAsset).toHaveBeenCalledWith('https://example.com/album.jpg', {
@@ -190,9 +194,99 @@ describe('music cover localization', () => {
     })
   })
 
+  it('导入命中软删除歌曲时新建，而非把删除的歌曲当作占用者', async () => {
+    mockPrisma.musicExternalSource.findMany.mockResolvedValue([
+      {
+        platform: 'netease',
+        sourceId: 'song-1',
+        song: { docId: 'deleted-song', title: '已删除歌曲', deletedAt: new Date() },
+      },
+    ])
+
+    await createOrUpdateImportedSong({
+      platform: 'netease',
+      track: {
+        sourceId: 'song-1',
+        title: 'Song',
+        artists: ['Artist'],
+        album: 'Album',
+        picId: 'pic-1',
+        urlId: 'url-1',
+        lyricId: 'lyric-1',
+        cover: '',
+        sourceUrl: 'https://music.163.com/#/song?id=song-1',
+      },
+    })
+
+    expect(mockPrisma.musicTrack.create).toHaveBeenCalled()
+    expect(mockPrisma.musicTrack.update).not.toHaveBeenCalled()
+  })
+
+  it('导入命中多个活占用者时新建，避免覆写任意一首共享歌曲', async () => {
+    mockPrisma.musicExternalSource.findMany.mockResolvedValue([
+      {
+        platform: 'netease',
+        sourceId: 'song-1',
+        song: { docId: 'song-a', title: 'A', artists: ['A'], deletedAt: null },
+      },
+      {
+        platform: 'netease',
+        sourceId: 'song-1',
+        song: { docId: 'song-b', title: 'B', artists: ['B'], deletedAt: null },
+      },
+    ])
+
+    await createOrUpdateImportedSong({
+      platform: 'netease',
+      track: {
+        sourceId: 'song-1',
+        title: 'Song',
+        artists: ['Artist'],
+        album: 'Album',
+        picId: 'pic-1',
+        urlId: 'url-1',
+        lyricId: 'lyric-1',
+        cover: '',
+        sourceUrl: 'https://music.163.com/#/song?id=song-1',
+      },
+    })
+
+    expect(mockPrisma.musicTrack.create).toHaveBeenCalled()
+    expect(mockPrisma.musicTrack.update).not.toHaveBeenCalled()
+  })
+
+  it('导入命中唯一活占用者时合并更新该歌曲', async () => {
+    mockPrisma.musicExternalSource.findMany.mockResolvedValue([
+      {
+        platform: 'netease',
+        sourceId: 'song-1',
+        song: { docId: 'song-a', title: 'A', artists: ['A'], deletedAt: null },
+      },
+    ])
+
+    await createOrUpdateImportedSong({
+      platform: 'netease',
+      track: {
+        sourceId: 'song-1',
+        title: 'Song',
+        artists: ['Artist'],
+        album: 'Album',
+        picId: 'pic-1',
+        urlId: 'url-1',
+        lyricId: 'lyric-1',
+        cover: '',
+        sourceUrl: 'https://music.163.com/#/song?id=song-1',
+      },
+    })
+
+    expect(mockPrisma.musicTrack.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { docId: 'song-a' } })
+    )
+    expect(mockPrisma.musicTrack.create).not.toHaveBeenCalled()
+  })
+
   it('does not fail automatic song import when cover localization fails', async () => {
     mockLocalizeImageUrlAsMediaAsset.mockRejectedValueOnce(new Error('cover unavailable'))
-    const { createOrUpdateImportedSong } = await import('../../src/server/utils/music')
 
     await expect(
       createOrUpdateImportedSong({

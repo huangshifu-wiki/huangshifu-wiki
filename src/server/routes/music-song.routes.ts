@@ -22,6 +22,8 @@ router.get('/song/:id', async (req, res) => {
         resourceType: 'song',
         sourceId: id,
       },
+      // 同一 id 可被多首歌共享，固定取最早占用者
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       include: {
         song: {
           include: {

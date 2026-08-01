@@ -17,6 +17,7 @@ import {
   normalizeOptionalDateOnly,
   applyAlbumTracksToRelations,
   normalizeMusicExternalSourceInputs,
+  findDuplicateAlbumSources,
   invalidateMusicContentCaches,
   enhancedCache,
   ensureTextLimit,
@@ -358,21 +359,9 @@ router.post('/', requireAdmin, async (req, res) => {
       return
     }
 
-    if (sources.length) {
-      const existingSource = await prisma.musicExternalSource.findFirst({
-        where: {
-          resourceType: 'album',
-          OR: sources.map((source) => ({
-            platform: source.platform,
-            sourceId: source.sourceId,
-          })),
-        },
-      })
-      if (existingSource) {
-        res.status(409).json({ error: '专辑来源已存在' })
-        return
-      }
-    }
+    // 同一平台 id 可被多张专辑共享，重复时只提醒不拒绝。
+    // 必须先检查再创建：若并行，新建专辑自身的来源行会被当成重复上报。
+    const duplicateSources = await findDuplicateAlbumSources(sources)
 
     const created = await prisma.$transaction(async (tx) => {
       const slug = await allocateNumericSlug(tx, 'Album')
@@ -435,6 +424,7 @@ router.post('/', requireAdmin, async (req, res) => {
 
     res.status(201).json({
       album: toAlbumResponse(created),
+      duplicates: duplicateSources,
     })
     invalidateMusicContentCaches()
   } catch (error) {
@@ -480,46 +470,41 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
 
     const shouldReplaceSources = Object.prototype.hasOwnProperty.call(body, 'sources')
     const sources = shouldReplaceSources ? normalizeMusicExternalSourceInputs(body.sources) : []
-    if (sources.length) {
-      const conflict = await prisma.musicExternalSource.findFirst({
-        where: {
-          resourceType: 'album',
-          OR: sources.map((source) => ({
-            platform: source.platform,
-            sourceId: source.sourceId,
-          })),
-          albumDocId: { not: docId },
-        },
-      })
-      if (conflict) {
-        res.status(409).json({ error: '专辑来源已存在' })
-        return
-      }
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.album.update({
-        where: { docId },
-        data: updateData,
-      })
-      if (shouldReplaceSources) {
-        await tx.musicExternalSource.deleteMany({
-          where: { resourceType: 'album', albumDocId: docId },
+    // 同一平台 id 可被多张专辑共享，重复时只提醒不拒绝（排除当前专辑自身）；
+    // 检查与写事务互不依赖（写事务只替换当前专辑自身的来源行），并行执行；
+    // 检查失败只丢失提醒，不影响写入与缓存失效
+    const duplicateSourcesPromise = shouldReplaceSources
+      ? findDuplicateAlbumSources(sources, docId).catch((error) => {
+          console.warn('重复来源检查失败，跳过提醒:', error)
+          return []
         })
-        if (sources.length) {
-          await tx.musicExternalSource.createMany({
-            data: sources.map((source) => ({
-              resourceType: 'album',
-              albumDocId: docId,
-              platform: source.platform,
-              sourceId: source.sourceId,
-              sourceUrl: source.sourceUrl,
-              isPrimary: source.isPrimary,
-            })),
+      : Promise.resolve([])
+    const [, duplicateSources] = await Promise.all([
+      prisma.$transaction(async (tx) => {
+        await tx.album.update({
+          where: { docId },
+          data: updateData,
+        })
+        if (shouldReplaceSources) {
+          await tx.musicExternalSource.deleteMany({
+            where: { resourceType: 'album', albumDocId: docId },
           })
+          if (sources.length) {
+            await tx.musicExternalSource.createMany({
+              data: sources.map((source) => ({
+                resourceType: 'album',
+                albumDocId: docId,
+                platform: source.platform,
+                sourceId: source.sourceId,
+                sourceUrl: source.sourceUrl,
+                isPrimary: source.isPrimary,
+              })),
+            })
+          }
         }
-      }
-    })
+      }),
+      duplicateSourcesPromise,
+    ])
 
     const updated = await prisma.album.findUniqueOrThrow({
       where: { docId },
@@ -554,7 +539,7 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
       },
     })
 
-    res.json({ album: toAlbumResponse(updated) })
+    res.json({ album: toAlbumResponse(updated), duplicates: duplicateSources })
     invalidateMusicContentCaches()
   } catch (error) {
     console.error('Update album error:', error)

@@ -288,6 +288,98 @@ export function buildPlaybackPlatformCandidates(song: {
   return [...deduped.values()]
 }
 
+export type DuplicateSongSourceWarning = {
+  platform: MusicPlatform
+  sourceId: string
+  song: { docId: string; title: string; artists: string[] }
+}
+
+export type DuplicateAlbumSourceWarning = {
+  platform: MusicPlatform
+  sourceId: string
+  album: { docId: string; title: string }
+}
+
+function externalSourceConflictWhere(
+  sources: Array<{ platform: MusicPlatform; sourceId: string }>,
+  excludeField: 'songDocId' | 'albumDocId',
+  excludeDocId?: string
+) {
+  return {
+    OR: sources.map((source) => ({ platform: source.platform, sourceId: source.sourceId })),
+    ...(excludeDocId ? { [excludeField]: { not: excludeDocId } } : {}),
+  }
+}
+
+/** 同一 platform:sourceId 可能被多首歌/专辑共享，这里每个 key 只保留第一条占用记录。 */
+function firstPerPlatformSourceId<T extends { platform: MusicPlatform; sourceId: string }>(
+  rows: T[]
+): T[] {
+  const seen = new Set<string>()
+  return rows.filter((row) => {
+    const key = `${row.platform}:${row.sourceId}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/**
+ * 检测歌曲来源中已被其他歌曲占用的平台 id（同一 id 可被多首歌共享，这里只做提醒）。
+ * 每个 platform:sourceId 只返回第一条占用记录。
+ */
+export async function findDuplicateSongSources(
+  sources: Array<{ platform: MusicPlatform; sourceId: string }>,
+  excludeSongDocId?: string
+): Promise<DuplicateSongSourceWarning[]> {
+  if (!sources.length) return []
+  const rows = await prisma.musicExternalSource.findMany({
+    where: {
+      resourceType: 'song',
+      // 软删除歌曲与悬空行（无歌曲）不算占用，避免提醒里出现已删除歌曲或漏报
+      song: { is: { deletedAt: null } },
+      ...externalSourceConflictWhere(sources, 'songDocId', excludeSongDocId),
+    },
+    select: {
+      platform: true,
+      sourceId: true,
+      song: { select: { docId: true, title: true, artists: true } },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  })
+  return firstPerPlatformSourceId(rows).flatMap((row) =>
+    row.song ? [{ platform: row.platform, sourceId: row.sourceId, song: row.song }] : []
+  )
+}
+
+/**
+ * 检测专辑来源中已被其他专辑占用的平台 id（同一 id 可被多张专辑共享，这里只做提醒）。
+ * 每个 platform:sourceId 只返回第一条占用记录。
+ */
+export async function findDuplicateAlbumSources(
+  sources: Array<{ platform: MusicPlatform; sourceId: string }>,
+  excludeAlbumDocId?: string
+): Promise<DuplicateAlbumSourceWarning[]> {
+  if (!sources.length) return []
+  const rows = await prisma.musicExternalSource.findMany({
+    where: {
+      resourceType: 'album',
+      // 软删除专辑与悬空行（无专辑）不算占用，避免提醒里出现已删除专辑或漏报
+      album: { is: { deletedAt: null } },
+      ...externalSourceConflictWhere(sources, 'albumDocId', excludeAlbumDocId),
+    },
+    select: {
+      platform: true,
+      sourceId: true,
+      album: { select: { docId: true, title: true } },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  })
+  return firstPerPlatformSourceId(rows).flatMap((row) =>
+    row.album ? [{ platform: row.platform, sourceId: row.sourceId, album: row.album }] : []
+  )
+}
+
 export function normalizeMusicExternalSourceInputs(value: unknown) {
   if (!Array.isArray(value)) return []
   const deduped = new Set<string>()
@@ -811,20 +903,29 @@ export async function createOrUpdateImportedSong(params: {
   const { platform, track, albumNameFallback } = params
   const platformId = track.sourceId
 
-  const existingSource = await prisma.musicExternalSource.findUnique({
+  const existingSources = await prisma.musicExternalSource.findMany({
     where: {
-      resourceType_platform_sourceId: {
-        resourceType: 'song',
-        platform,
-        sourceId: platformId,
-      },
+      resourceType: 'song',
+      platform,
+      sourceId: platformId,
+      // 软删除歌曲不再占用 id，避免重复导入无限新建；悬空行（无歌曲）一并排除
+      song: { is: { deletedAt: null } },
     },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     include: {
       song: true,
     },
   })
 
-  if (existingSource?.song && !existingSource.song.deletedAt) {
+  // 同一 id 可被多首歌共享：仅当恰好一个活歌曲占用时合并导入数据，
+  // 多个占用者或没有占用者时新建，避免覆写已人工整理的歌曲；
+  // where 已过滤软删除，这里再留一道防御
+  const existingSong =
+    existingSources.length === 1 && !existingSources[0].song?.deletedAt
+      ? existingSources[0].song
+      : null
+
+  if (existingSong) {
     const fallbackTitle = `未命名歌曲 ${track.sourceId}`
     const title = track.title || fallbackTitle
     const artists = track.artists.length ? track.artists : ['未知歌手']
@@ -843,17 +944,17 @@ export async function createOrUpdateImportedSong(params: {
       ? normalizeLyricStorage({ lyric: resolvedLyric, lyricSource: platform }).data
       : {}
     const song = await prisma.musicTrack.update({
-      where: { docId: existingSource.song.docId },
+      where: { docId: existingSong.docId },
       data: {
         title,
         artists,
         album,
         audioUrl: resolvedAudioUrl || '',
         ...lyricUpdate,
-        description: existingSource.song.description ?? null,
+        description: existingSong.description ?? null,
       },
     })
-    if (resolvedCover && !existingSource.song.coverId && !existingSource.song.coverAlbumDocId) {
+    if (resolvedCover && !existingSong.coverId && !existingSong.coverAlbumDocId) {
       await maybeAddImportedSongCover(song.docId, resolvedCover, true)
     }
     enqueueMusicTextEmbeddingsDeferred(prisma, [song.docId])

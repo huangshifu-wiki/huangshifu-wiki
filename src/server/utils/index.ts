@@ -163,6 +163,8 @@ export {
   getPlatformSourceId,
   buildPlaybackPlatformCandidates,
   normalizeMusicExternalSourceInputs,
+  findDuplicateSongSources,
+  findDuplicateAlbumSources,
   clearExpiredPlayUrlCache,
   getCachedPlayUrl,
   setCachedPlayUrl,
@@ -182,6 +184,8 @@ export {
   findMusicDocIdsByArtistPartial,
   ensureDisplayRelation,
 } from './music'
+
+export type { DuplicateSongSourceWarning, DuplicateAlbumSourceWarning } from './music'
 
 // === 通知与用户行为 ===
 export {

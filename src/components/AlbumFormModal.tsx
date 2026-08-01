@@ -3,9 +3,15 @@ import React, { useEffect, useState } from 'react'
 import { ExternalLink } from '@/src/components/icons'
 import { apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
-import { getPlatformExternalUrl, MUSIC_PLATFORM_OPTIONS } from '../lib/musicPlatformUrls'
+import {
+  getMusicPlatformLabel,
+  getPlatformExternalUrl,
+  MUSIC_PLATFORM_OPTIONS,
+} from '../lib/musicPlatformUrls'
 import type { Platform } from '../types/common'
 import type { AdminDataItem } from '../types/entities'
+import type { DuplicateAlbumSourceWarning } from '../types/api'
+import { useDialog } from './Dialog'
 import { useToast } from './Toast'
 import { BookEditorSection, BookFormField, bookCompactInputClass } from './BookEditor'
 import { FormModal } from './Modal/FormModal'
@@ -64,6 +70,7 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
   const [sources, setSources] = useState<AlbumSourceDraft[]>([])
   const [saving, setSaving] = useState(false)
   const { show } = useToast()
+  const dialog = useDialog()
   const isEdit = mode === 'edit'
 
   useEffect(() => {
@@ -125,10 +132,42 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
       sources: normalizedSources,
     }
     try {
-      if (isEdit && album?.docId) await apiPatch(`/api/albums/${album.docId}`, payload)
-      else await apiPost('/api/albums', payload)
+      let duplicateSources: DuplicateAlbumSourceWarning[] = []
+      if (isEdit && album?.docId) {
+        const result = await apiPatch<{ duplicates?: DuplicateAlbumSourceWarning[] }>(
+          `/api/albums/${album.docId}`,
+          payload
+        )
+        duplicateSources = result?.duplicates || []
+      } else {
+        const result = await apiPost<{ duplicates?: DuplicateAlbumSourceWarning[] }>(
+          '/api/albums',
+          payload
+        )
+        duplicateSources = result?.duplicates || []
+      }
       invalidateMusicApiCaches()
-      show(isEdit ? '专辑已更新' : '专辑已创建')
+      if (duplicateSources.length) {
+        const message = duplicateSources
+          .map(
+            (duplicate) =>
+              `${getMusicPlatformLabel(duplicate.platform)} ID ${duplicate.sourceId} 已被专辑「${duplicate.album.title}」使用，已保存为共享引用`
+          )
+          .join('；')
+        const confirmed = await dialog.confirm({
+          title: '平台ID重复提醒',
+          message,
+          confirmText: '知道了',
+          cancelText: null,
+          variant: 'info',
+        })
+        // Esc/遮罩关闭弹窗时仍要有成功反馈，避免误判保存失败而重复提交
+        if (!confirmed) {
+          show(isEdit ? '专辑已更新' : '专辑已创建')
+        }
+      } else {
+        show(isEdit ? '专辑已更新' : '专辑已创建')
+      }
       onSuccess()
       onClose()
     } catch (error) {

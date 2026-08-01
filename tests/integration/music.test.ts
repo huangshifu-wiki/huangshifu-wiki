@@ -51,6 +51,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Admin List Fields Test Song' } },
           { title: { startsWith: 'Admin Search Desc Test Song' } },
           { title: { startsWith: 'Admin Search All Mode Test Song' } },
+          { title: { startsWith: 'Shared Source Test Song' } },
         ],
       },
     })
@@ -100,6 +101,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Admin List Fields Test Song' } },
           { title: { startsWith: 'Admin Search Desc Test Song' } },
           { title: { startsWith: 'Admin Search All Mode Test Song' } },
+          { title: { startsWith: 'Shared Source Test Song' } },
         ],
       },
     })
@@ -170,6 +172,84 @@ describe('Music API - 音乐接口测试', () => {
     expect(response.status).toBe(201)
     expect(response.body.song.releaseDate).toBeNull()
     expect(response.body.song.durationMs).toBeNull()
+  })
+
+  it('同一平台ID可被多首歌共享，重复时返回提醒但不拒绝', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const sharedSourceId = `shared_${Date.now()}`
+
+    const firstResponse = await agent
+      .post('/api/music')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: 'Shared Source Test Song A',
+        artists: ['Shared Source Test Artist'],
+        sources: [{ platform: 'netease', sourceId: sharedSourceId, isPrimary: true }],
+      })
+    expect(firstResponse.status).toBe(201)
+    expect(firstResponse.body.duplicates).toEqual([])
+
+    const secondResponse = await agent
+      .post('/api/music')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: 'Shared Source Test Song B',
+        artists: ['Shared Source Test Artist'],
+        sources: [{ platform: 'netease', sourceId: sharedSourceId, isPrimary: true }],
+      })
+    expect(secondResponse.status).toBe(201)
+    expect(secondResponse.body.duplicates).toHaveLength(1)
+    expect(secondResponse.body.duplicates[0]).toMatchObject({
+      platform: 'netease',
+      sourceId: sharedSourceId,
+      song: { title: 'Shared Source Test Song A' },
+    })
+
+    const sources = await prisma.musicExternalSource.findMany({
+      where: { resourceType: 'song', platform: 'netease', sourceId: sharedSourceId },
+    })
+    expect(sources).toHaveLength(2)
+  })
+
+  it('更新歌曲共享来源时排除自身，不把自己当作重复', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const sharedSourceId = `shared_update_${Date.now()}`
+
+    const createResponse = await agent
+      .post('/api/music')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: 'Shared Source Test Song C',
+        artists: ['Shared Source Test Artist'],
+        sources: [{ platform: 'netease', sourceId: sharedSourceId, isPrimary: true }],
+      })
+    expect(createResponse.status).toBe(201)
+
+    const docId = createResponse.body.song.docId
+    const updateResponse = await agent
+      .patch(`/api/music/${docId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        sources: [{ platform: 'netease', sourceId: sharedSourceId, isPrimary: true }],
+      })
+    expect(updateResponse.status).toBe(200)
+    expect(updateResponse.body.duplicates).toEqual([])
+
+    const sourcesAfter = await prisma.musicExternalSource.findMany({
+      where: {
+        resourceType: 'song',
+        songDocId: docId,
+        platform: 'netease',
+        sourceId: sharedSourceId,
+      },
+    })
+    expect(sourcesAfter).toHaveLength(1)
   })
 
   it('创建、更新和清空歌词时同步维护结构化字段', async () => {

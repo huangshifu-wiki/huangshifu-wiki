@@ -946,7 +946,6 @@ model MusicExternalSource {
   song         MusicTrack?                @relation(fields: [songDocId], references: [docId], onDelete: Cascade)
   album        Album?                     @relation(fields: [albumDocId], references: [docId], onDelete: Cascade)
 
-  @@unique([resourceType, platform, sourceId])
   @@index([songDocId])
   @@index([albumDocId])
   @@index([platform, sourceId])

@@ -16,6 +16,26 @@ describe('Modal 兼容层', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it('ConfirmModal 传 cancelText null 时只渲染确认按钮', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const onConfirm = vi.fn()
+    render(
+      <ConfirmModal
+        open
+        onClose={onClose}
+        onConfirm={onConfirm}
+        title="提醒"
+        message="已保存"
+        confirmText="知道了"
+        cancelText={null}
+      />
+    )
+    expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '知道了' }))
+    expect(onConfirm).toHaveBeenCalledOnce()
+  })
+
   it('FormModal 提交且保留可访问标题', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn((event) => event.preventDefault())

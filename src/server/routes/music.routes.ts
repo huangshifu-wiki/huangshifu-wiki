@@ -13,6 +13,7 @@ import {
   createOrUpdateImportedSong,
   resolveMusicPlayUrl,
   normalizeMusicExternalSourceInputs,
+  findDuplicateSongSources,
   parseMusicPlatform,
   parseDisplayAlbumMode,
   normalizeSongCustomPlatformLinks,
@@ -383,32 +384,9 @@ router.post(
         return
       }
 
-      if (sources.length) {
-        const conflict = await prisma.musicExternalSource.findFirst({
-          where: {
-            resourceType: 'song',
-            OR: sources.map((source) => ({
-              platform: source.platform,
-              sourceId: source.sourceId,
-            })),
-          },
-          include: {
-            song: { select: { docId: true, title: true, artists: true } },
-          },
-        })
-        if (conflict?.song) {
-          res.status(409).json({
-            error: `该平台来源已被歌曲「${conflict.song.title}」使用`,
-            conflict: true,
-            conflictingSong: {
-              docId: conflict.song.docId,
-              title: conflict.song.title,
-              artists: conflict.song.artists,
-            },
-          })
-          return
-        }
-      }
+      // 同一平台 id 可被多首歌共享，重复时只提醒不拒绝。
+      // 必须先检查再创建：若并行，新建歌曲自身的来源行会被当成重复上报。
+      const duplicateSources = await findDuplicateSongSources(sources)
 
       const song = await prisma.$transaction(async (tx) => {
         const slug = await allocateNumericSlug(tx, 'MusicTrack')
@@ -454,6 +432,7 @@ router.post(
       const hydrated = await fetchSongWithRelationsByDocId(song.docId)
       res.status(201).json({
         song: hydrated ? toSongResponse(hydrated) : song,
+        duplicates: duplicateSources,
       })
       enhancedCache.invalidateByPrefix('music_list:')
       enqueueMusicTextEmbeddingsDeferred(prisma, [song.docId])
@@ -609,14 +588,15 @@ router.post(
       let albumListChanged = false
 
       if (tracksPayload.length) {
-        const existingAlbumSource = await prisma.musicExternalSource.findUnique({
+        const existingAlbumSources = await prisma.musicExternalSource.findMany({
           where: {
-            resourceType_platform_sourceId: {
-              resourceType: 'album',
-              platform: preview.platform,
-              sourceId: preview.id,
-            },
+            resourceType: 'album',
+            platform: preview.platform,
+            sourceId: preview.id,
+            // 软删除专辑不再占用 id；悬空行（无专辑）一并排除
+            album: { is: { deletedAt: null } },
           },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           select: {
             album: {
               select: {
@@ -630,7 +610,9 @@ router.post(
             },
           },
         })
-        const existingAlbum = existingAlbumSource?.album || null
+        // 同一 id 可被多张专辑共享：仅当恰好一个活专辑占用时合并，多个占用者时新建
+        const existingAlbum =
+          existingAlbumSources.length === 1 ? existingAlbumSources[0].album : null
 
         if (existingAlbum) {
           collection = {
@@ -911,35 +893,13 @@ router.get(
         autoSelectedIndex = 0
       }
 
-      const sourceIds = scored.map((item) => item.sourceId)
-      const existingSongsByPlatformId = sourceIds.length
-        ? await prisma.musicExternalSource.findMany({
-            where: {
-              resourceType: 'song',
-              platform: parsedPlatform,
-              sourceId: { in: sourceIds },
-            },
-            include: {
-              song: {
-                select: {
-                  docId: true,
-                  title: true,
-                  artists: true,
-                },
-              },
-            },
-          })
-        : []
+      const existingSources = await findDuplicateSongSources(
+        scored.map((item) => ({ platform: parsedPlatform, sourceId: item.sourceId }))
+      )
 
       const existingMap = new Map<string, { docId: string; title: string; artists: string[] }>()
-      for (const source of existingSongsByPlatformId) {
-        if (source.song) {
-          existingMap.set(source.sourceId, {
-            docId: source.song.docId,
-            title: source.song.title,
-            artists: source.song.artists,
-          })
-        }
+      for (const source of existingSources) {
+        existingMap.set(source.sourceId, source.song)
       }
 
       const suggestions = scored.map((item, index) => {
@@ -1149,57 +1109,41 @@ router.patch(
 
       const shouldReplaceSources = Object.prototype.hasOwnProperty.call(body, 'sources')
       const sources = shouldReplaceSources ? normalizeMusicExternalSourceInputs(body.sources) : []
-      if (sources.length) {
-        const conflict = await prisma.musicExternalSource.findFirst({
-          where: {
-            resourceType: 'song',
-            OR: sources.map((source) => ({
-              platform: source.platform,
-              sourceId: source.sourceId,
-            })),
-            songDocId: { not: docId },
-          },
-          include: {
-            song: { select: { docId: true, title: true, artists: true } },
-          },
-        })
-        if (conflict?.song) {
-          res.status(409).json({
-            error: `该平台来源已被歌曲「${conflict.song.title}」使用`,
-            conflict: true,
-            conflictingSong: {
-              docId: conflict.song.docId,
-              title: conflict.song.title,
-              artists: conflict.song.artists,
-            },
+      // 同一平台 id 可被多首歌共享，重复时只提醒不拒绝（排除当前歌曲自身）；
+      // 检查与写事务互不依赖（写事务只替换当前歌曲自身的来源行），并行执行；
+      // 检查失败只丢失提醒，不影响写入与缓存失效
+      const duplicateSourcesPromise = shouldReplaceSources
+        ? findDuplicateSongSources(sources, docId).catch((error) => {
+            console.warn('重复来源检查失败，跳过提醒:', error)
+            return []
           })
-          return
-        }
-      }
-
-      await prisma.$transaction(async (tx) => {
-        await tx.musicTrack.update({
-          where: { docId },
-          data: updateData,
-        })
-        if (shouldReplaceSources) {
-          await tx.musicExternalSource.deleteMany({
-            where: { resourceType: 'song', songDocId: docId },
+        : Promise.resolve([])
+      const [, duplicateSources] = await Promise.all([
+        prisma.$transaction(async (tx) => {
+          await tx.musicTrack.update({
+            where: { docId },
+            data: updateData,
           })
-          if (sources.length) {
-            await tx.musicExternalSource.createMany({
-              data: sources.map((source) => ({
-                resourceType: 'song',
-                songDocId: docId,
-                platform: source.platform,
-                sourceId: source.sourceId,
-                sourceUrl: source.sourceUrl,
-                isPrimary: source.isPrimary,
-              })),
+          if (shouldReplaceSources) {
+            await tx.musicExternalSource.deleteMany({
+              where: { resourceType: 'song', songDocId: docId },
             })
+            if (sources.length) {
+              await tx.musicExternalSource.createMany({
+                data: sources.map((source) => ({
+                  resourceType: 'song',
+                  songDocId: docId,
+                  platform: source.platform,
+                  sourceId: source.sourceId,
+                  sourceUrl: source.sourceUrl,
+                  isPrimary: source.isPrimary,
+                })),
+              })
+            }
           }
-        }
-      })
+        }),
+        duplicateSourcesPromise,
+      ])
 
       const song = await fetchSongWithRelationsByDocId(docId)
       if (!song) {
@@ -1207,7 +1151,7 @@ router.patch(
         return
       }
 
-      res.json({ song: toSongResponse(song) })
+      res.json({ song: toSongResponse(song), duplicates: duplicateSources })
       enhancedCache.invalidateByPrefix('music_list:')
       enqueueMusicTextEmbeddingsDeferred(prisma, [docId])
     } catch (error) {

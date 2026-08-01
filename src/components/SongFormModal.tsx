@@ -13,10 +13,16 @@ import { SmartImage } from './SmartImage'
 import { CoverPlaceholder } from './CoverPlaceholder'
 import { apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
-import { getPlatformExternalUrl, MUSIC_PLATFORM_OPTIONS } from '../lib/musicPlatformUrls'
+import {
+  getMusicPlatformLabel,
+  getPlatformExternalUrl,
+  MUSIC_PLATFORM_OPTIONS,
+} from '../lib/musicPlatformUrls'
 import { formatMusicCredits, normalizeStringListInput } from '../lib/musicCredits'
 import type { Platform } from '../types/common'
 import type { MusicExternalSource, MusicPlayableOverride } from '../types/entities'
+import type { DuplicateSongSourceWarning } from '../types/api'
+import { useDialog } from './Dialog'
 import { useToast } from './Toast'
 import { MatchSuggestionModal } from './MatchSuggestionModal'
 import { FormModal } from './Modal/FormModal'
@@ -201,6 +207,7 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
   const [matchingPlatform, setMatchingPlatform] = useState<Platform | null>(null)
   const [saving, setSaving] = useState(false)
   const { show } = useToast()
+  const dialog = useDialog()
 
   useEffect(() => {
     if (!open) return
@@ -290,13 +297,17 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         customPlatformLinks: normalizedCustomPlatformLinks.filter((link) => link.label && link.url),
       }
 
+      let duplicateSources: DuplicateSongSourceWarning[] = []
       if (isEdit && song) {
         const sourcesPatch = buildSourcesPatchFromPlatformSourceIds(platformSourceIds, song.sources)
         if (sourcesPatch) {
           payload.sources = sourcesPatch
         }
-        await apiPatch(`/api/music/${song.docId}`, payload)
-        show('歌曲已更新')
+        const result = await apiPatch<{ duplicates?: DuplicateSongSourceWarning[] }>(
+          `/api/music/${song.docId}`,
+          payload
+        )
+        duplicateSources = result?.duplicates || []
       } else {
         const sources = platformFields
           .map((field) => {
@@ -318,23 +329,38 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
             isPrimary: primaryIndex >= 0 ? index === primaryIndex : index === 0,
           }))
         }
-        await apiPost('/api/music', payload)
-        show('歌曲已创建')
+        const result = await apiPost<{ duplicates?: DuplicateSongSourceWarning[] }>(
+          '/api/music',
+          payload
+        )
+        duplicateSources = result?.duplicates || []
       }
       invalidateMusicApiCaches()
+      if (duplicateSources.length) {
+        const message = duplicateSources
+          .map(
+            (duplicate) =>
+              `${getMusicPlatformLabel(duplicate.platform)} ID ${duplicate.sourceId} 已被歌曲「${duplicate.song.title}」使用，已保存为共享引用`
+          )
+          .join('；')
+        const confirmed = await dialog.confirm({
+          title: '平台ID重复提醒',
+          message,
+          confirmText: '知道了',
+          cancelText: null,
+          variant: 'info',
+        })
+        // Esc/遮罩关闭弹窗时仍要有成功反馈，避免误判保存失败而重复提交
+        if (!confirmed) {
+          show(isEdit ? '歌曲已更新' : '歌曲已创建')
+        }
+      } else {
+        show(isEdit ? '歌曲已更新' : '歌曲已创建')
+      }
       onSuccess()
       onClose()
     } catch (error) {
-      const err = error as {
-        conflict?: boolean
-        conflictingSong?: { docId: string; title: string; artists: string[] }
-        message?: string
-      }
-      if (err.conflict && err.conflictingSong) {
-        show(`该平台ID已被歌曲「${err.conflictingSong.title}」使用`, { variant: 'error' })
-      } else {
-        show(error instanceof Error ? error.message : '保存失败', { variant: 'error' })
-      }
+      show(error instanceof Error ? error.message : '保存失败', { variant: 'error' })
     } finally {
       setSaving(false)
     }

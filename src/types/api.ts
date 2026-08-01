@@ -1,5 +1,6 @@
 import type { AlbumItem, EventItem, GalleryItem, SongItem } from './entities'
 import type { AdminDataItem } from './entities'
+import type { Platform } from './common'
 
 export interface ApiResponse<T> {
   data: T
@@ -439,6 +440,18 @@ export interface MusicDetailResponse {
     durationMs?: number | null
     createdAt: string
   }
+}
+
+export interface DuplicateSongSourceWarning {
+  platform: Platform
+  sourceId: string
+  song: { docId: string; title: string; artists: string[] }
+}
+
+export interface DuplicateAlbumSourceWarning {
+  platform: Platform
+  sourceId: string
+  album: { docId: string; title: string }
 }
 
 export type MusicPlayUrlMode = 'manual' | 'cache' | 'resolved' | 'outer' | 'none' | 'disabled'

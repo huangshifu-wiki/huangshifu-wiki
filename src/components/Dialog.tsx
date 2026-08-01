@@ -17,7 +17,7 @@ type ConfirmOptions = {
   title: string
   message: string
   confirmText?: string
-  cancelText?: string
+  cancelText?: string | null
   variant?: DialogVariant
 }
 
