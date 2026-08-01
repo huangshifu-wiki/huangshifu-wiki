@@ -409,11 +409,17 @@ export async function resolveMusicPlayUrl(song: {
 
   const candidates = buildPlaybackPlatformCandidates(song)
   const errors: Array<{ platform: MusicPlatform; reason: string }> = []
+  // 服务器 IP 拿不到网易云地址时，记录 sourceId 供浏览器直连外链回退
+  let neteaseFallbackSourceId = ''
 
   for (const platform of candidates) {
     const sourceId = getPlatformSourceId(song.externalSources, platform)
     if (!sourceId) {
       continue
+    }
+
+    if (platform === 'netease' && !neteaseFallbackSourceId) {
+      neteaseFallbackSourceId = sourceId
     }
 
     // v2：网易云解析改为 https 直链后作废旧缓存（旧条目仍指向 media/outer 混合内容地址）
@@ -453,6 +459,21 @@ export async function resolveMusicPlayUrl(song: {
       }
     } catch (error) {
       errors.push({ platform, reason: error instanceof Error ? error.message : 'resolve_failed' })
+    }
+  }
+
+  // 网易云解析失败（典型：服务器 IP 被风控）时，回退到外链由浏览器直连，
+  // 用用户 IP 获取播放权；不缓存，避免阻止 eapi 恢复后重新解析
+  if (neteaseFallbackSourceId) {
+    return {
+      platform: 'netease',
+      sourceId: neteaseFallbackSourceId,
+      playUrl: `https://music.163.com/song/media/outer/url?id=${neteaseFallbackSourceId}.mp3`,
+      cached: false,
+      cacheExpiresAt: null,
+      fallback: true,
+      playable: true,
+      errors,
     }
   }
 
