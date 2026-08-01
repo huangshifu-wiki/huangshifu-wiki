@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { Music } from '@/src/components/icons'
 import { SmartImage } from '../SmartImage'
+import { CoverPlaceholder } from '../CoverPlaceholder'
 import { formatMusicCredits } from '../../lib/musicCredits'
 import type { ViewMode } from '../../types/userPreferences'
 import type { LyricSearchItem } from '../../types/entities'
@@ -57,8 +58,8 @@ export const LyricSearchResultCard: React.FC<LyricSearchResultCardProps> = React
                 />
               </div>
             ) : (
-              <div className="mobile-list-thumb flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-surface-alt">
-                <Music size={24} className="text-brand-gold/40" />
+              <div className="mobile-list-thumb h-20 w-20 flex-shrink-0 overflow-hidden rounded bg-surface-alt">
+                <CoverPlaceholder icon={<Music size={20} />} />
               </div>
             )}
             <div className="min-w-0 flex-1">
@@ -88,9 +89,7 @@ export const LyricSearchResultCard: React.FC<LyricSearchResultCardProps> = React
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center bg-surface-alt">
-                  <Music size={24} className="text-brand-gold/40" />
-                </div>
+                <CoverPlaceholder icon={<Music size={20} />} />
               )}
             </div>
             <div className="p-3">

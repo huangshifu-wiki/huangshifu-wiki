@@ -4,6 +4,7 @@ import { Calendar, Disc3, Image as ImageIcon, Music, Pause, Play } from '@/src/c
 import { clsx } from 'clsx'
 import { IconButton } from '@/src/components/ui'
 import { SmartImage } from '../../components/SmartImage'
+import { CoverPlaceholder } from '../../components/CoverPlaceholder'
 import { SiteFooterContent } from '../../components/SiteFooter'
 import { useMusic } from '../../context/MusicContext'
 import { apiGet } from '../../lib/apiClient'
@@ -108,20 +109,23 @@ function EmptyState({ label }: { label: string }) {
   return <div className="home-empty">{label}</div>
 }
 
-function CoverFallback({
+function HomeCoverPlaceholder({
   icon,
   label,
-  className,
+  labelClassName,
 }: {
   icon: React.ReactNode
   label: string
-  className?: string
+  labelClassName?: string
 }) {
   return (
-    <div className={clsx('home-cover-fallback', className)}>
-      <span>{icon}</span>
-      <span>{label}</span>
-    </div>
+    <CoverPlaceholder
+      icon={icon}
+      label={label}
+      bgClassName="bg-[var(--home-bg-surface)]"
+      iconClassName="text-[var(--home-gold)]"
+      labelClassName={labelClassName ?? 'text-[var(--home-text-3)]'}
+    />
   )
 }
 
@@ -147,10 +151,9 @@ function GalleryImage({
   }
 
   return (
-    <CoverFallback
+    <HomeCoverPlaceholder
       icon={<ImageIcon size={22} />}
       label={getGalleryThumbnailPlaceholderLabel(image)}
-      className="home-gallery-fallback"
     />
   )
 }
@@ -180,7 +183,7 @@ function EventCover({ event }: { event: EventItem }) {
     return <SmartImage src={src} alt={event.title} className="home-list-cover-img" loading="lazy" />
   }
 
-  return <CoverFallback icon={<Calendar size={18} />} label="暂无封面" />
+  return <HomeCoverPlaceholder icon={<Calendar size={18} />} label="无封面" />
 }
 
 function EventRow({ event }: { event: EventItem }) {
@@ -215,10 +218,10 @@ function SongCover({ song, active }: { song: SongItem; active: boolean }) {
   }
 
   return (
-    <CoverFallback
+    <HomeCoverPlaceholder
       icon={<Music size={18} />}
       label="无封面"
-      className={clsx(active && 'home-cover-fallback-active')}
+      labelClassName={active ? 'text-[var(--home-gold)]' : undefined}
     />
   )
 }
@@ -279,7 +282,7 @@ function AlbumFeature({ album }: { album: AlbumItem }) {
             loading="lazy"
           />
         ) : (
-          <CoverFallback icon={<Disc3 size={20} />} label="无封面" />
+          <HomeCoverPlaceholder icon={<Disc3 size={20} />} label="无封面" />
         )}
       </div>
       <div className="home-album-info">

@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext'
 import { useToast } from '../components/Toast'
 import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
+import { CoverPlaceholder } from '../components/CoverPlaceholder'
 import { Lightbox } from '../components/Lightbox'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { formatMusicCredits } from '../lib/musicCredits'
@@ -220,6 +221,7 @@ const AlbumDetail = () => {
               src={coverPreviewSrc}
               alt={album.title}
               className="w-full h-full object-cover"
+              fallback={<CoverPlaceholder icon={<Disc3 size={24} />} label="无封面" />}
             />
           </button>
           <div className="flex-1 flex flex-col justify-center min-w-0">

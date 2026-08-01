@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { Image as ImageIcon, Book, MessageSquare, Sparkles, Clock } from '@/src/components/icons'
 import { SmartImage } from './SmartImage'
+import { CoverPlaceholder } from './CoverPlaceholder'
 import type { MixedSearchResult, ImageSourceType } from '../hooks/useSearch'
 import type { GalleryItem, WikiItem, PostItem } from '../types/entities'
 import { formatDate } from '../lib/dateUtils'
@@ -80,9 +81,7 @@ export const MixedSearchResultCard = React.memo(
         生成中...
       </div>
     ) : (
-      <div className="flex h-full w-full items-center justify-center bg-surface-alt">
-        <SourceIcon size={20} className="text-brand-gold/40" />
-      </div>
+      <CoverPlaceholder icon={<SourceIcon size={20} />} />
     )
 
     if (viewMode === 'list') {

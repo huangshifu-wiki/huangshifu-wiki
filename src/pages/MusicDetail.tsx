@@ -7,6 +7,7 @@ import {
   Heart,
   Link2,
   MessageSquare,
+  Music,
   Play,
   ChevronDown,
   ChevronUp,
@@ -22,6 +23,7 @@ import { useToggleInteraction } from '../hooks/useToggleInteraction'
 import { useI18n } from '../lib/i18n'
 import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
+import { CoverPlaceholder } from '../components/CoverPlaceholder'
 import { Lightbox } from '../components/Lightbox'
 import { LyricsDisplay } from '../components/LyricsDisplay'
 import MarkdownRenderer from '../components/MarkdownRenderer'
@@ -271,6 +273,7 @@ const MusicDetail = () => {
                   alt={song.title}
                   className="w-full h-full object-cover"
                   style={{ filter: COVER_FILTER }}
+                  fallback={<CoverPlaceholder icon={<Music size={24} />} label="无封面" />}
                 />
               </button>
               <div className="flex-1 flex flex-col justify-center min-w-0">

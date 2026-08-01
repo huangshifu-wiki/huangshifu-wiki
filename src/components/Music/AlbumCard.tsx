@@ -1,8 +1,9 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { List, ChevronRight } from '@/src/components/icons'
+import { Disc3, List, ChevronRight } from '@/src/components/icons'
 import { useI18n } from '../../lib/i18n'
 import { SmartImage } from '../SmartImage'
+import { CoverPlaceholder } from '../CoverPlaceholder'
 import type { AlbumItem } from '../../types/entities'
 
 interface AlbumCardProps {
@@ -27,6 +28,7 @@ const AlbumCard = React.memo(function AlbumCard({ album, viewMode = 'grid' }: Al
             alt={album.title}
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
             style={{ filter: COVER_FILTER }}
+            fallback={<CoverPlaceholder icon={<Disc3 size={18} />} label="无封面" />}
           />
         </div>
         <div className="min-w-0 flex-1">
@@ -67,6 +69,7 @@ const AlbumCard = React.memo(function AlbumCard({ album, viewMode = 'grid' }: Al
             alt={album.title}
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
             style={{ filter: COVER_FILTER }}
+            fallback={<CoverPlaceholder icon={<Disc3 size={18} />} label="无封面" />}
           />
           {trackCount > 0 && (
             <div className="absolute right-2 top-2 flex items-center gap-1 rounded bg-black/40 px-2 py-0.5 text-xs text-white backdrop-blur-sm">

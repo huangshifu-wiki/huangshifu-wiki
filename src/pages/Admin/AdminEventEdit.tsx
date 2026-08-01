@@ -23,6 +23,7 @@ import {
 } from '../../components/BookEditor'
 import { PageSkeleton } from '../../components/PageSkeleton'
 import { SmartImage } from '../../components/SmartImage'
+import { CoverPlaceholder } from '../../components/CoverPlaceholder'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -1079,9 +1080,7 @@ const AdminEventEdit = () => {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-sm text-text-muted">
-                  暂无封面
-                </div>
+                <CoverPlaceholder icon={<ImageIcon size={20} />} label="无封面" />
               )}
               {coverUpload && coverUpload.status !== 'error' && (
                 <UploadProgressOverlay

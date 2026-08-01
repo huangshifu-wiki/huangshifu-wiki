@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, ExternalLink, Plus, Search, Trash2 } from '@/src/components/icons'
+import {
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Music,
+  Plus,
+  Search,
+  Trash2,
+} from '@/src/components/icons'
 
+import { SmartImage } from './SmartImage'
+import { CoverPlaceholder } from './CoverPlaceholder'
 import { apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { getPlatformExternalUrl, MUSIC_PLATFORM_OPTIONS } from '../lib/musicPlatformUrls'
@@ -681,11 +691,11 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         {isEdit && song && (
           <div className={`${bookPanelClass} p-3`}>
             <div className="flex items-center gap-3">
-              <img
+              <SmartImage
                 src={song.coverThumbnail || song.cover}
                 alt="封面"
-                className="h-12 w-12 rounded border border-[var(--book-ink-line)] object-cover"
-                referrerPolicy="no-referrer"
+                className="h-12 w-12 rounded border border-[var(--book-ink-line)]"
+                fallback={<CoverPlaceholder icon={<Music size={14} />} label="无封面" />}
               />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-text-primary truncate">{song.title}</p>

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Calendar, ExternalLink, MapPin, Tag } from '@/src/components/icons'
 import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
+import { CoverPlaceholder } from '../components/CoverPlaceholder'
 import { Lightbox } from '../components/Lightbox'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { apiGet } from '../lib/apiClient'
@@ -203,10 +204,13 @@ const EventDetail = () => {
                   />
                 </Button>
               ) : (
-                <div className="flex h-56 w-56 flex-col items-center justify-center gap-2 rounded-lg border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-muted sm:h-72 sm:w-72">
-                  <Calendar size={32} className="text-brand-gold/60" />
-                  <span className="text-sm">暂无封面</span>
-                </div>
+                <CoverPlaceholder
+                  icon={<Calendar size={32} />}
+                  label="无封面"
+                  className="h-56 w-56 rounded-lg border border-[var(--book-ink-line)] sm:h-72 sm:w-72"
+                  bgClassName="bg-[var(--book-panel-bg)]"
+                  labelClassName="text-sm"
+                />
               )}
             </div>
 

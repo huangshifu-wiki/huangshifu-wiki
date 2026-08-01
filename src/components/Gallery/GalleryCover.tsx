@@ -1,6 +1,7 @@
 import { Image as ImageIcon } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { SmartImage } from '../SmartImage'
+import { CoverPlaceholder } from '../CoverPlaceholder'
 import {
   getFirstGalleryImage,
   getGalleryThumbnailPlaceholderLabel,
@@ -38,16 +39,11 @@ export const GalleryCover = ({
   }
 
   return (
-    <div
-      className={clsx(
-        'flex h-full w-full flex-col items-center justify-center gap-2 bg-surface-alt text-text-muted',
-        className
-      )}
-    >
-      <ImageIcon size={22} className="text-brand-gold/50" aria-hidden="true" />
-      <span className="max-w-[8rem] px-2 text-center text-[0.6875rem] leading-relaxed text-text-muted/70">
-        {getGalleryThumbnailPlaceholderLabel(image)}
-      </span>
-    </div>
+    <CoverPlaceholder
+      icon={<ImageIcon size={22} />}
+      label={getGalleryThumbnailPlaceholderLabel(image)}
+      labelClassName="max-w-[8rem]"
+      className={className}
+    />
   )
 }

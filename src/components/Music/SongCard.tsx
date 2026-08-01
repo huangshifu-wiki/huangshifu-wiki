@@ -1,11 +1,12 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { Play, Heart } from '@/src/components/icons'
+import { Music, Play, Heart } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useI18n } from '../../lib/i18n'
 import { formatMusicCredits } from '../../lib/musicCredits'
 import { isPlayableSong } from '../../lib/musicPlayback'
 import { SmartImage } from '../SmartImage'
+import { CoverPlaceholder } from '../CoverPlaceholder'
 import type { SongItem } from '../../types/entities'
 import type { ViewMode } from '../../types/userPreferences'
 
@@ -85,6 +86,7 @@ const SongCard = React.memo(function SongCard({
             className="h-full w-full object-cover"
             style={{ filter: COVER_FILTER }}
             lazy={false}
+            fallback={<CoverPlaceholder icon={<Music size={18} />} label="无封面" />}
           />
         </div>
 
@@ -165,6 +167,7 @@ const SongCard = React.memo(function SongCard({
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
           style={{ filter: COVER_FILTER }}
           lazy={false}
+          fallback={<CoverPlaceholder icon={<Music size={18} />} label="无封面" />}
         />
         <button
           type="button"

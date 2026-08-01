@@ -12,6 +12,7 @@ import { AlbumFormModal } from '../../components/AlbumFormModal'
 import { CoverManager } from '../../components/CoverManager'
 import { MusicImportModal } from '../../components/MusicImportModal'
 import { SmartImage } from '../../components/SmartImage'
+import { CoverPlaceholder } from '../../components/CoverPlaceholder'
 import { Button, Checkbox, Input, Select } from '@/src/components/ui'
 import { SongAlbumRelationsModal } from '../../components/SongAlbumRelationsModal'
 import { SongFormModal } from '../../components/SongFormModal'
@@ -59,11 +60,7 @@ const MusicListCover = ({ src, alt }: { src?: string | null; alt: string }): Rea
       src={src || undefined}
       alt={alt}
       className="block h-full w-full"
-      fallback={
-        <div className="flex h-full w-full items-center justify-center text-xs text-text-muted">
-          无封面
-        </div>
-      }
+      fallback={<CoverPlaceholder icon={<Music size={14} />} label="无封面" />}
     />
   </div>
 )

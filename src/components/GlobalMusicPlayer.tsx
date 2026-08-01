@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { Music, Pause, Play, SkipBack, SkipForward, Volume2, X } from '@/src/components/icons'
 import { SmartImage } from './SmartImage'
+import { CoverPlaceholder } from './CoverPlaceholder'
 import { useMusic } from '../context/MusicContext'
 import { formatTime } from '../lib/formatUtils'
 import { formatMusicCredits } from '../lib/musicCredits'
@@ -342,10 +343,11 @@ export const GlobalMusicPlayer = () => {
           className="h-10 w-10 flex-shrink-0 rounded shadow-[0_6px_18px_rgba(72,53,25,0.12)] sm:h-11 sm:w-11"
           lazy={false}
           fallback={
-            <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-surface-alt text-text-muted">
-              <Music size={16} />
-              <span className="text-[0.65rem] leading-none">无封面</span>
-            </div>
+            <CoverPlaceholder
+              icon={<Music size={16} />}
+              label="无封面"
+              labelClassName="text-[0.65rem] leading-none"
+            />
           }
         />
 
