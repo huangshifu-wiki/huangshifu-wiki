@@ -112,13 +112,17 @@ function normalizeText(value: unknown, fallback = '') {
   return normalized || fallback
 }
 
+function upgradeToHttps(url: string) {
+  // Upgrade HTTP to HTTPS to avoid Mixed Content warnings
+  return url.replace(/^http:\/\//i, 'https://')
+}
+
 function normalizeImageUrl(value: unknown, fallback = '') {
   const url = normalizeText(value, fallback)
   if (!url) {
     return url
   }
-  // Upgrade HTTP to HTTPS to avoid Mixed Content warnings
-  return url.replace(/^http:\/\//i, 'https://')
+  return upgradeToHttps(url)
 }
 
 function normalizeArtist(value: unknown, fallback = '未知歌手') {
@@ -505,7 +509,7 @@ export async function resolveAudioUrl(platform: MusicPlatform, urlId: string) {
   }
 
   if (platform === 'netease') {
-    return `https://music.163.com/song/media/outer/url?id=${urlId}.mp3`
+    return resolveNeteaseAudioUrl(urlId)
   }
 
   try {
@@ -513,6 +517,35 @@ export async function resolveAudioUrl(platform: MusicPlatform, urlId: string) {
     const raw = ensureString(await withTimeout(client.url(urlId, 320), METING_API_TIMEOUT_MS))
     const parsed = parseJsonSafe<unknown>(raw, {})
     return extractSingleFieldAsString(parsed, 'url')
+  } catch {
+    return ''
+  }
+}
+
+async function resolveNeteaseAudioUrl(urlId: string) {
+  // 优先走官方 eapi 接口：返回 CDN 直链（http），升级为 https 避免混合内容拦截
+  try {
+    const client = createClient('netease', true)
+    const raw = ensureString(await withTimeout(client.url(urlId, 320), METING_API_TIMEOUT_MS))
+    const url = extractSingleFieldAsString(parseJsonSafe<unknown>(raw, {}), 'url')
+    if (url) {
+      return upgradeToHttps(url)
+    }
+  } catch {
+    // 继续尝试外链兜底
+  }
+
+  // 兜底：media/outer 会 302 重定向到 http CDN 地址，跟随重定向后升级为 https
+  try {
+    const response = await fetch(`https://music.163.com/song/media/outer/url?id=${urlId}.mp3`, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(METING_API_TIMEOUT_MS),
+    })
+    if (!response.ok) {
+      return ''
+    }
+    await response.body?.cancel()
+    return upgradeToHttps(response.url)
   } catch {
     return ''
   }

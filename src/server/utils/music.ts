@@ -405,7 +405,8 @@ export async function resolveMusicPlayUrl(song: {
       continue
     }
 
-    const cacheKey = `${song.docId}:${platform}:${sourceId}`
+    // v2：网易云解析改为 https 直链后作废旧缓存（旧条目仍指向 media/outer 混合内容地址）
+    const cacheKey = `v2:${song.docId}:${platform}:${sourceId}`
     const cached = getCachedPlayUrl(cacheKey)
     if (cached?.url) {
       return {
