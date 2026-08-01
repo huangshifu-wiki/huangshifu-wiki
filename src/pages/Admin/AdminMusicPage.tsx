@@ -599,15 +599,15 @@ export const AdminMusicPage = () => {
         onClose={() => setTracksAlbum(null)}
         onChanged={() => void refreshCurrent()}
       />
-      {coverTarget && (
-        <CoverManager
-          resourceType={coverTarget.resourceType}
-          resourceId={itemId(coverTarget.item)}
-          currentCover={text(coverTarget.item.cover, '')}
-          onCoverUpdated={() => void refreshCurrent()}
-          onSyncToSongs={() => void refreshCurrent()}
-        />
-      )}
+      <CoverManager
+        open={Boolean(coverTarget)}
+        resourceType={coverTarget ? coverTarget.resourceType : 'song'}
+        resourceId={coverTarget ? itemId(coverTarget.item) : ''}
+        currentCover={coverTarget ? text(coverTarget.item.cover, '') : ''}
+        onClose={() => setCoverTarget(null)}
+        onCoverUpdated={() => void refreshCurrent()}
+        onSyncToSongs={() => void refreshCurrent()}
+      />
     </div>
   )
 }

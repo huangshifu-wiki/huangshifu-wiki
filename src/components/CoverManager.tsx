@@ -57,6 +57,8 @@ interface CoverManagerProps {
   resourceType: ResourceType
   resourceId: string
   currentCover: string
+  open?: boolean
+  onClose?: () => void
   onCoverUpdated?: (cover: CoverUpdate) => void
   onSyncToSongs?: () => void
 }
@@ -65,6 +67,8 @@ export const CoverManager = ({
   resourceType,
   resourceId,
   currentCover,
+  open,
+  onClose,
   onCoverUpdated,
   onSyncToSongs,
 }: CoverManagerProps) => {
@@ -76,8 +80,7 @@ export const CoverManager = ({
   const [deleting, setDeleting] = useState<string | null>(null)
   const [batchDeleting, setBatchDeleting] = useState(false)
   const [selectedCoverIds, setSelectedCoverIds] = useState<Set<string>>(new Set())
-  const [isOpen, setIsOpen] = useState(false)
-  const presence = useFloatingPresence(isOpen)
+  const presence = useFloatingPresence(Boolean(open))
   const dialog = useDialog()
   const { show } = useToast()
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -111,10 +114,10 @@ export const CoverManager = ({
   }, [config.apiPrefix, resourceId])
 
   React.useEffect(() => {
-    if (isOpen) {
+    if (open) {
       fetchCovers()
     }
-  }, [isOpen, fetchCovers])
+  }, [open, fetchCovers])
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -277,22 +280,13 @@ export const CoverManager = ({
     }
   }
 
-  if (!presence.mounted) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="px-4 py-2 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
-      >
-        封面管理
-      </button>
-    )
-  }
+  if (!presence.mounted) return null
 
   return (
     <div
       className="floating-overlay fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] p-4 flex items-center justify-center"
       data-state={presence.state}
-      aria-hidden={!isOpen}
+      aria-hidden={!open}
     >
       <div className="floating-panel w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <header className="px-5 py-4 border-b border-[var(--book-ink-line)] flex items-center justify-between">
@@ -306,7 +300,7 @@ export const CoverManager = ({
             <p className="text-xs text-text-muted mt-0.5">{config.subtitle}</p>
           </div>
           <button
-            onClick={() => setIsOpen(false)}
+            onClick={onClose}
             className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-alt transition-colors"
           >
             <X size={18} />
@@ -479,7 +473,7 @@ export const CoverManager = ({
 
         <footer className="px-5 py-3 border-t border-[var(--book-ink-line)] bg-surface-alt/60 flex justify-end">
           <button
-            onClick={() => setIsOpen(false)}
+            onClick={onClose}
             className="px-4 py-2 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
           >
             关闭
