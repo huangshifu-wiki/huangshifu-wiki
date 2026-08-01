@@ -3,6 +3,7 @@ import type { ParamsFlatDictionary } from 'express-serve-static-core'
 import type { ParsedQs } from 'qs'
 import { JwtPayload } from 'jsonwebtoken'
 import { Prisma, UserRole as PrismaUserRole } from '@prisma/client'
+import type { MusicPlayableOverride } from '@prisma/client'
 import type { WikiRelationType } from '../../lib/relationConstants'
 import type { LyricType } from '../../lib/lrcParser'
 
@@ -77,6 +78,7 @@ type MusicTrackWithRelations = {
   vocals: string[]
   album: string
   audioUrl: string
+  playableOverride: MusicPlayableOverride
   lyric: string | null
   lyricType: LyricType | null
   lyricPlain: string | null

@@ -106,12 +106,14 @@ export const GlobalMusicPlayer = () => {
         const nextUrl =
           data.playable !== false && typeof data.playUrl === 'string' && data.playUrl.trim()
             ? data.playUrl.trim()
-            : currentSong.playUrl || fallback
+            : data.mode === 'disabled'
+              ? ''
+              : currentSong.playUrl || fallback
         if (cancelled) return
         setResolvedPlayUrl({ docId: currentSong.docId, url: nextUrl })
         if (!nextUrl) {
           setIsPlaying(false)
-          setPlayUrlError('暂无可播放音源')
+          setPlayUrlError(data.mode === 'disabled' ? '该歌曲暂不可播放' : '暂无可播放音源')
         }
       } catch (error) {
         if (cancelled) return

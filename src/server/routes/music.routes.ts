@@ -359,6 +359,17 @@ router.post(
       const durationMs = hasDurationMs ? normalizeOptionalDurationMs(body.durationMs) : null
       const sources = normalizeMusicExternalSourceInputs(body.sources)
       const customPlatformLinks = normalizeSongCustomPlatformLinks(body.customPlatformLinks)
+      const rawPlayableOverride = body.playableOverride
+      const playableOverride: 'auto' | 'enabled' | 'disabled' | undefined =
+        rawPlayableOverride === 'auto' ||
+        rawPlayableOverride === 'enabled' ||
+        rawPlayableOverride === 'disabled'
+          ? rawPlayableOverride
+          : undefined
+      if (rawPlayableOverride !== undefined && playableOverride === undefined) {
+        res.status(400).json({ error: '播放状态无效' })
+        return
+      }
       if (!ensureMusicTextLimits(res, body)) {
         return
       }
@@ -422,6 +433,7 @@ router.post(
             customPlatformLinks: customPlatformLinks.length
               ? (customPlatformLinks as unknown as Prisma.InputJsonValue)
               : undefined,
+            ...(playableOverride !== undefined ? { playableOverride } : {}),
             ...(sources.length
               ? {
                   externalSources: {
@@ -1059,6 +1071,14 @@ router.patch(
         updateData.vocals = normalizeStringListInput(body.vocals)
       if (typeof body.album === 'string') updateData.album = body.album.trim()
       if (typeof body.audioUrl === 'string') updateData.audioUrl = body.audioUrl.trim()
+      if (Object.prototype.hasOwnProperty.call(body, 'playableOverride')) {
+        const value = body.playableOverride
+        if (value !== 'auto' && value !== 'enabled' && value !== 'disabled') {
+          res.status(400).json({ error: '播放状态无效' })
+          return
+        }
+        updateData.playableOverride = value
+      }
       if (typeof body.lyric === 'string' || body.lyric === null) {
         const lyricStorage = normalizeLyricStorage({ lyric: body.lyric })
         updateData.lyric = lyricStorage.data.lyric

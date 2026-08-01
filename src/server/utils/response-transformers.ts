@@ -12,7 +12,7 @@ import {
 } from './music'
 
 import { Prisma, UserRole as PrismaUserRole } from '@prisma/client'
-import type { VariantStatus } from '@prisma/client'
+import type { MusicPlayableOverride, VariantStatus } from '@prisma/client'
 import { normalizeStringListInput } from '../../lib/musicCredits'
 import { isPlayableSong } from '../../lib/musicPlayback'
 import type { LyricType } from '../../lib/lrcParser'
@@ -884,6 +884,7 @@ export function toMusicResponse(track: {
   vocals?: string[]
   album: string
   audioUrl: string
+  playableOverride?: MusicPlayableOverride
   lyric?: string | null
   releaseDate?: Date | null
   durationMs?: number | null
@@ -946,6 +947,7 @@ export function toMusicResponse(track: {
     durationMs: track.durationMs ?? null,
     sources: serializeMusicExternalSources(track.externalSources || []),
     playable: isPlayableSong(track),
+    playableOverride: track.playableOverride ?? 'auto',
     displayAlbumMode: track.displayAlbumMode,
     manualAlbumName: track.manualAlbumName || null,
     isDeleted: Boolean(track.deletedAt),
@@ -1080,6 +1082,7 @@ export function toSongResponse(
     durationMs: song.durationMs ?? null,
     sources: serializeMusicExternalSources(song.externalSources),
     playable: isPlayableSong(song),
+    playableOverride: song.playableOverride,
     customPlatformLinks,
     displayAlbumMode: song.displayAlbumMode,
     displayAlbum,

@@ -441,7 +441,7 @@ export interface MusicDetailResponse {
   }
 }
 
-export type MusicPlayUrlMode = 'manual' | 'cache' | 'resolved' | 'outer' | 'none'
+export type MusicPlayUrlMode = 'manual' | 'cache' | 'resolved' | 'outer' | 'none' | 'disabled'
 
 export interface MusicPlayUrlResponse {
   playUrl: string

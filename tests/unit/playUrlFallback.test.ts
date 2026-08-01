@@ -78,4 +78,19 @@ describe('resolveMusicPlayUrl 网易云外链回退', () => {
     expect(result.playUrl).toBe('')
     expect(result.mode).toBe('none')
   })
+
+  it('管理员禁用播放时直接返回不可播放，即使有 audioUrl', async () => {
+    mockResolveAudioUrl.mockResolvedValue('https://m801.music.126.net/example.mp3')
+
+    const result = await resolveMusicPlayUrl({
+      docId: 'doc-disabled',
+      audioUrl: 'https://example.com/a.mp3',
+      playableOverride: 'disabled',
+      externalSources: [],
+    })
+
+    expect(result.playable).toBe(false)
+    expect(result.playUrl).toBe('')
+    expect(result.mode).toBe('disabled')
+  })
 })

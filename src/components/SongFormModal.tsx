@@ -16,7 +16,7 @@ import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { getPlatformExternalUrl, MUSIC_PLATFORM_OPTIONS } from '../lib/musicPlatformUrls'
 import { formatMusicCredits, normalizeStringListInput } from '../lib/musicCredits'
 import type { Platform } from '../types/common'
-import type { MusicExternalSource } from '../types/entities'
+import type { MusicExternalSource, MusicPlayableOverride } from '../types/entities'
 import { useToast } from './Toast'
 import { MatchSuggestionModal } from './MatchSuggestionModal'
 import { FormModal } from './Modal/FormModal'
@@ -40,6 +40,7 @@ type SongFormData = {
   vocals: string
   album: string
   audioUrl: string
+  playableOverride: MusicPlayableOverride
   releaseDate: string
   durationMs: string
   lyric?: string | null
@@ -82,6 +83,7 @@ type SongItem = {
   durationMs?: number | null
   favoritedByMe?: boolean
   sources?: MusicExternalSource[]
+  playableOverride?: MusicPlayableOverride
   customPlatformLinks?: CustomPlatformLink[]
 }
 
@@ -178,6 +180,7 @@ const emptyFormData: SongFormData = {
   vocals: '',
   album: '',
   audioUrl: '',
+  playableOverride: 'auto',
   releaseDate: '',
   durationMs: '',
   lyric: '',
@@ -211,6 +214,7 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         vocals: formatMusicCredits(song.vocals),
         album: song.album || '',
         audioUrl: song.audioUrl || '',
+        playableOverride: song.playableOverride || 'auto',
         releaseDate: song.releaseDate || '',
         durationMs: typeof song.durationMs === 'number' ? String(song.durationMs) : '',
         lyric: song.lyric || '',
@@ -278,6 +282,7 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         vocals: normalizeStringListInput(formData.vocals),
         album: formData.album.trim(),
         audioUrl: formData.audioUrl.trim(),
+        playableOverride: formData.playableOverride,
         releaseDate: formData.releaseDate || null,
         durationMs: formData.durationMs ? Number(formData.durationMs) : null,
         lyric: formData.lyric?.trim() || null,
@@ -472,6 +477,26 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
                 />
               </BookFormField>
             </div>
+
+            <BookFormField label="播放状态">
+              <select
+                value={formData.playableOverride}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    playableOverride: e.target.value as MusicPlayableOverride,
+                  }))
+                }
+                className={bookCompactInputClass}
+              >
+                <option value="auto">自动判断（默认）</option>
+                <option value="enabled">允许播放</option>
+                <option value="disabled">禁止播放</option>
+              </select>
+              <p className="mt-1 text-xs text-text-muted">
+                禁止播放：前台不显示播放按钮、不解析播放地址；允许播放：即使自动判定失败也按可播放处理。
+              </p>
+            </BookFormField>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <BookFormField label="发行日期">

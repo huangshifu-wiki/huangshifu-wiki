@@ -894,6 +894,7 @@ model MusicTrack {
   vocals    String[] @default([])
   album     String   @default("")
   audioUrl  String   @default("")
+  playableOverride MusicPlayableOverride @default(auto)
   lyric     String?
   lyricType LyricType?
   lyricPlain String?
@@ -923,6 +924,12 @@ model MusicTrack {
   @@index([coverAlbumDocId])
   @@index([createdAt])
   @@index([deletedAt])
+}
+
+enum MusicPlayableOverride {
+  auto
+  enabled
+  disabled
 }
 
 model MusicExternalSource {

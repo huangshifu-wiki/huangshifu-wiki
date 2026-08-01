@@ -27,6 +27,8 @@ export interface MusicExternalSource {
   updatedAt?: string
 }
 
+export type MusicPlayableOverride = 'auto' | 'enabled' | 'disabled'
+
 export interface SongItem {
   docId: string
   slug?: string
@@ -55,6 +57,7 @@ export interface SongItem {
   favoritedByMe?: boolean
   sources?: MusicExternalSource[]
   playable?: boolean
+  playableOverride?: MusicPlayableOverride
   createdAt?: string
 }
 

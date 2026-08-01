@@ -1,6 +1,7 @@
 // 音乐平台解析、播放URL、导入、CRUD 全链路
 
 import { Prisma } from '@prisma/client'
+import type { MusicPlayableOverride } from '@prisma/client'
 import { prisma, PLAY_URL_CACHE_TTL_MS, DEFAULT_MUSIC_PLATFORMS, uploadsDir } from './config'
 import { enhancedCache, CACHE_KEYS } from './cache'
 import { parseInteger } from './parsers'
@@ -389,9 +390,23 @@ export function setCachedPlayUrl(
 export async function resolveMusicPlayUrl(song: {
   docId: string
   audioUrl: string
+  playableOverride?: MusicPlayableOverride
   externalSources: Array<{ platform: MusicPlatform; sourceId: string; isPrimary: boolean }>
 }) {
   clearExpiredPlayUrlCache()
+
+  if (song.playableOverride === 'disabled') {
+    return {
+      mode: 'disabled' as const,
+      platform: null,
+      sourceId: null,
+      playUrl: '',
+      cached: false,
+      cacheExpiresAt: null,
+      playable: false,
+      errors: [],
+    }
+  }
 
   const fallbackUrl = song.audioUrl?.trim() || ''
   if (fallbackUrl) {

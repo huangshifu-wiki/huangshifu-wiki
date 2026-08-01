@@ -59,7 +59,7 @@ router.get('/song/:id', async (req, res) => {
       const song = toSongResponse(existing)
       res.json({
         ...song,
-        playUrl: resolved.playUrl || song.audioUrl,
+        playUrl: resolved.mode === 'disabled' ? '' : resolved.playUrl || song.audioUrl,
         playMeta: {
           platform: resolved.platform,
           sourceId: resolved.sourceId,

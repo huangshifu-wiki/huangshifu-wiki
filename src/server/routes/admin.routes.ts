@@ -2692,6 +2692,7 @@ router.get(
           deletedBy: true,
           createdAt: true,
           updatedAt: true,
+          playableOverride: true,
           externalSources: {
             orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
           },
