@@ -536,12 +536,17 @@ async function resolveNeteaseAudioUrl(urlId: string) {
   }
 
   // 兜底：media/outer 会 302 重定向到 http CDN 地址，跟随重定向后升级为 https
+  // 不可播放的歌曲会重定向到 404 页面（HTTP 200、text/html），必须校验音频类型
   try {
     const response = await fetch(`https://music.163.com/song/media/outer/url?id=${urlId}.mp3`, {
       redirect: 'follow',
       signal: AbortSignal.timeout(METING_API_TIMEOUT_MS),
     })
     if (!response.ok) {
+      return ''
+    }
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.startsWith('audio/')) {
       return ''
     }
     await response.body?.cancel()

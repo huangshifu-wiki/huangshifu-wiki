@@ -328,6 +328,17 @@ export function normalizeMusicExternalSourceInputs(value: unknown) {
 
 // ─── 播放缓存函数 ────────────────────────────────────────────────
 
+function isValidPlayUrl(url: string) {
+  if (!url.startsWith('http')) {
+    return false
+  }
+  // 网易云不可播放时 media/outer 会重定向到 404 页面（HTTP 200），不能作为播放地址
+  if (url.includes('music.163.com/404')) {
+    return false
+  }
+  return true
+}
+
 export function clearExpiredPlayUrlCache() {
   const prefix = `${CACHE_KEYS.MUSIC_PLAY_URL}:`
   const allKeys = enhancedCache.getNativeStats().keys as unknown as string[] | undefined
@@ -408,7 +419,7 @@ export async function resolveMusicPlayUrl(song: {
     // v2：网易云解析改为 https 直链后作废旧缓存（旧条目仍指向 media/outer 混合内容地址）
     const cacheKey = `v2:${song.docId}:${platform}:${sourceId}`
     const cached = getCachedPlayUrl(cacheKey)
-    if (cached?.url) {
+    if (cached?.url && isValidPlayUrl(cached.url)) {
       return {
         platform: cached.platform,
         sourceId: cached.sourceId,
