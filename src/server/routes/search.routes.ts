@@ -46,7 +46,8 @@ const QDRANT_TIMEOUT_MS = Number(process.env.QDRANT_TIMEOUT_MS || 2000)
 export const RRF_K = 60
 const LYRICS_SEARCH_TAKE = 100
 const MAX_MATCHED_LINES_PER_SONG = 30
-// 音乐搜索与歌词搜索共用的歌曲字段，覆盖 toMusicResponse 全部入参
+// 音乐搜索与歌词搜索共用的歌曲字段，覆盖 toMusicResponse 必填入参
+// （description/customPlatformLinks 为可选字段，搜索结果有意不取）
 const MUSIC_SEARCH_SELECT = {
   docId: true,
   slug: true,

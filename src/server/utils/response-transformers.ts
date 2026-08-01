@@ -884,6 +884,8 @@ export function toMusicResponse(track: {
   vocals?: string[]
   album: string
   audioUrl: string
+  description?: string | null
+  customPlatformLinks?: unknown
   playableOverride?: MusicPlayableOverride
   lyric?: string | null
   releaseDate?: Date | null
@@ -953,6 +955,10 @@ export function toMusicResponse(track: {
     isDeleted: Boolean(track.deletedAt),
     deletedAt: track.deletedAt ? track.deletedAt.toISOString() : null,
     deletedBy: track.deletedBy ?? null,
+    ...(track.description !== undefined ? { description: track.description } : {}),
+    ...(track.customPlatformLinks !== undefined
+      ? { customPlatformLinks: normalizeSongCustomPlatformLinks(track.customPlatformLinks) }
+      : {}),
     createdAt: track.createdAt.toISOString(),
     updatedAt: track.updatedAt.toISOString(),
   }

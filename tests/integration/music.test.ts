@@ -1,5 +1,6 @@
 import { describe, beforeEach, afterEach, it, expect } from 'vitest'
 import request from 'supertest'
+import { Prisma } from '@prisma/client'
 import { app } from '../../server'
 import { prisma, createTestUser, nextTestNumericSlug } from './setup'
 import { applyAlbumTracksToRelations } from '../../src/server/utils/music'
@@ -47,6 +48,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Display Sync Test Song' } },
           { title: { startsWith: 'Duplicate Relation Test Song' } },
           { title: { startsWith: 'Lyric Search Contract Song' } },
+          { title: { startsWith: 'Admin List Fields Test Song' } },
         ],
       },
     })
@@ -93,6 +95,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Display Sync Test Song' } },
           { title: { startsWith: 'Duplicate Relation Test Song' } },
           { title: { startsWith: 'Lyric Search Contract Song' } },
+          { title: { startsWith: 'Admin List Fields Test Song' } },
         ],
       },
     })
@@ -460,6 +463,29 @@ describe('Music API - 音乐接口测试', () => {
     expect(response.body.data.some((item: { docId: string }) => item.docId === song.docId)).toBe(
       true
     )
+  })
+
+  it('后台音乐列表返回歌曲描述与自定义平台链接', async () => {
+    const song = await prisma.musicTrack.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: 'Admin List Fields Test Song',
+        artists: ['黄诗扶'],
+        album: '',
+        description: '后台列表应返回的歌曲描述',
+        customPlatformLinks: [
+          { label: '个人主页', url: 'https://example.com/huangshifu' },
+        ] as unknown as Prisma.InputJsonValue,
+      },
+    })
+    const { agent } = await createAuthenticatedAgent(adminUser.user.email, adminUser.plainPassword)
+    const response = await agent.get('/api/admin/music').query({ limit: 100 })
+    const row = response.body.data.find((item: { docId: string }) => item.docId === song.docId)
+    expect(row).toBeTruthy()
+    expect(row.description).toBe('后台列表应返回的歌曲描述')
+    expect(row.customPlatformLinks).toEqual([
+      { label: '个人主页', url: 'https://example.com/huangshifu' },
+    ])
   })
 
   it('同步展示专辑时清除目标歌曲的其他展示关系', async () => {

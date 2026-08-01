@@ -2682,6 +2682,7 @@ router.get(
           audioUrl: true,
           lyric: true,
           description: true,
+          customPlatformLinks: true,
           releaseDate: true,
           durationMs: true,
           coverId: true,
