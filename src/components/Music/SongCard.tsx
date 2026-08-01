@@ -1,5 +1,5 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Play, Heart } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useI18n } from '../../lib/i18n'
@@ -33,7 +33,6 @@ const SongCard = React.memo(function SongCard({
   onToggleFavorite,
 }: SongCardProps) {
   const { t } = useI18n()
-  const navigate = useNavigate()
   const isList = viewMode === 'list'
   const isSmallGrid = viewMode === 'small'
   const artistsText = formatMusicCredits(song.artists, '未知歌手')
@@ -42,10 +41,6 @@ const SongCard = React.memo(function SongCard({
   const releaseDateText = song.releaseDate || null
   const coverSrc = song.coverThumbnail || song.cover
   const metaItems = [artistsText, albumText, releaseDateText].filter(Boolean)
-
-  const handleRowClick = () => {
-    navigate(`/music/${song.slug || song.docId}`)
-  }
 
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -60,14 +55,8 @@ const SongCard = React.memo(function SongCard({
 
   if (isList) {
     return (
-      <div
-        onClick={handleRowClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            handleRowClick()
-          }
-        }}
+      <Link
+        to={`/music/${song.slug || song.docId}`}
         className={clsx(
           'group flex cursor-pointer items-center gap-2 rounded px-3 py-2.5 sm:gap-3.5',
           'transition-all duration-300',
@@ -75,8 +64,6 @@ const SongCard = React.memo(function SongCard({
             ? 'bg-[color-mix(in_srgb,var(--color-theme-accent)_8%,transparent)]'
             : 'hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]'
         )}
-        role="button"
-        tabIndex={0}
         aria-label={`${song.title} - ${artistsText}`}
       >
         {sequenceNumber !== undefined && (
@@ -154,19 +141,13 @@ const SongCard = React.memo(function SongCard({
             <Play size={13} fill="currentColor" className="ml-0.5" />
           </button>
         </div>
-      </div>
+      </Link>
     )
   }
 
   return (
-    <div
-      onClick={handleRowClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          handleRowClick()
-        }
-      }}
+    <Link
+      to={`/music/${song.slug || song.docId}`}
       className={clsx(
         'group cursor-pointer overflow-hidden rounded-lg',
         'border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)]',
@@ -175,8 +156,6 @@ const SongCard = React.memo(function SongCard({
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
         isCurrentSong && 'border-brand-gold/30'
       )}
-      role="button"
-      tabIndex={0}
       aria-label={`${song.title} - ${artistsText}`}
     >
       <div className="relative aspect-square overflow-hidden bg-surface-alt">
@@ -255,7 +234,7 @@ const SongCard = React.memo(function SongCard({
           <Heart size={isSmallGrid ? 13 : 14} fill={song.favoritedByMe ? 'currentColor' : 'none'} />
         </button>
       </div>
-    </div>
+    </Link>
   )
 })
 

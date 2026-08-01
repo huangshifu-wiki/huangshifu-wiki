@@ -517,14 +517,13 @@ const WikiPageView = () => {
                 <SidebarHeading>{t('wiki.tags')}</SidebarHeading>
                 <div className="flex flex-wrap gap-2">
                   {page.tags.map((tag: string) => (
-                    <button
-                      type="button"
+                    <Link
                       key={tag}
-                      onClick={() => navigate(`/wiki?tag=${encodeURIComponent(tag)}`)}
+                      to={`/wiki?tag=${encodeURIComponent(tag)}`}
                       className="cursor-pointer rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-2 py-1 text-xs text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold"
                     >
                       {tag}
-                    </button>
+                    </Link>
                   ))}
                 </div>
               </div>

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { Image as ImageIcon, Plus } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { GalleryCard } from '../components/Gallery/GalleryCard'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import Pagination from '../components/Pagination'
 import { ViewModeSelector } from '../components/ViewModeSelector'
-import { Button } from '@/src/components/ui'
+import { LinkButton } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
@@ -33,7 +33,6 @@ const GalleryList = () => {
   const [galleryAccessLoaded, setGalleryAccessLoaded] = useState(false)
   const [totalGalleries, setTotalGalleries] = useState<number>()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
-  const navigate = useNavigate()
   const viewMode = getScopedViewMode('gallery')
   const isIncrementalMode = preferences.listLoadMode === 'incremental'
 
@@ -187,13 +186,9 @@ const GalleryList = () => {
                 size="sm"
               />
               {canUpload && (
-                <Button
-                  type="button"
-                  onClick={() => navigate('/gallery/new')}
-                  leftIcon={<Plus size={15} aria-hidden="true" />}
-                >
+                <LinkButton to="/gallery/new" leftIcon={<Plus size={15} aria-hidden="true" />}>
                   上传图集
-                </Button>
+                </LinkButton>
               )}
             </div>
           </div>

@@ -18,6 +18,7 @@ import {
 } from '../components/BookEditor'
 import { LocationTagInput } from '../components/LocationTagInput'
 import { PageSkeleton } from '../components/PageSkeleton'
+import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
 import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
@@ -654,13 +655,12 @@ const GalleryEdit = () => {
   if (!draft || (!isCreating && !gallery)) {
     return (
       <BookEditorShell>
-        <button
-          type="button"
-          onClick={() => navigate('/gallery')}
+        <SmartBackLink
+          fallbackTo="/gallery"
           className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
         >
           <ArrowLeft size={16} /> {t('gallery.backToList')}
-        </button>
+        </SmartBackLink>
         <BookEmptyState>{t('gallery.notFound')}</BookEmptyState>
       </BookEditorShell>
     )

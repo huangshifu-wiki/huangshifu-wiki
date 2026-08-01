@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Search as SearchIcon, Camera, Clock, Sparkles, Trash2, X } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
@@ -132,8 +132,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   }
 
   const handleSuggestionClick = (s: SearchSuggestion) => {
-    setHighlightedIndex(-1)
-    setInputFocused(false)
+    dismissSuggestionList()
     if (s.type === 'keyword') {
       onSearch(s.text)
     } else {
@@ -147,6 +146,20 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
         navigate(`/album/${s.id}`)
       }
     }
+  }
+
+  // 建议条目对应目标页；keyword 类型无 URL（触发搜索）
+  const getSuggestionUrl = (s: SearchSuggestion): string | null => {
+    if (s.type === 'wiki' && s.id) return `/wiki/${s.id}`
+    if (s.type === 'post' && s.id) return `/forum/${s.id}`
+    if (s.type === 'music' && s.id) return `/music/${s.id}`
+    if (s.type === 'album' && s.id) return `/album/${s.id}`
+    return null
+  }
+
+  const dismissSuggestionList = () => {
+    setHighlightedIndex(-1)
+    setInputFocused(false)
   }
 
   const handleHistoryClick = (historyQuery: string) => {
@@ -272,52 +285,101 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
             )}
 
             {visibleDropdown.type === 'suggestions'
-              ? visibleDropdown.items.map((s, i) => (
-                  <Button
-                    key={`${s.type}-${s.id || s.text}-${i}`}
-                    type="button"
-                    variant="ghost"
-                    onClick={() => handleSuggestionClick(s)}
-                    className={clsx(
-                      'w-full flex-col items-stretch justify-start rounded-none border-x-0 border-t-0 border-b border-[var(--book-ink-line)] px-4 py-2.5 text-left last:border-0',
-                      i === highlightedIndex
-                        ? 'bg-[var(--color-theme-accent)] text-white'
-                        : 'hover:bg-surface-alt'
-                    )}
-                    role="option"
-                    aria-selected={i === highlightedIndex}
-                    id={`suggestion-${i}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={clsx(
-                          'px-2 py-0.5 rounded text-[10px] font-medium',
-                          getSuggestionTypeClass(s.type)
-                        )}
-                      >
-                        {getSuggestionTypeLabel(s.type)}
-                      </span>
-                      <span
-                        className={clsx(
-                          'text-sm',
-                          i === highlightedIndex ? 'text-white' : 'text-text-primary'
-                        )}
-                      >
-                        {s.text}
-                      </span>
-                      {s.subtext && (
+              ? visibleDropdown.items.map((s, i) => {
+                  const suggestionUrl = getSuggestionUrl(s)
+                  return suggestionUrl ? (
+                    <Button
+                      key={`${s.type}-${s.id || s.text}-${i}`}
+                      asChild
+                      variant="ghost"
+                      role="option"
+                      aria-selected={i === highlightedIndex}
+                      id={`suggestion-${i}`}
+                      className={clsx(
+                        'w-full flex-col items-stretch justify-start rounded-none border-x-0 border-t-0 border-b border-[var(--book-ink-line)] px-4 py-2.5 text-left last:border-0',
+                        i === highlightedIndex
+                          ? 'bg-[var(--color-theme-accent)] text-white'
+                          : 'hover:bg-surface-alt'
+                      )}
+                    >
+                      <Link to={suggestionUrl} onClick={dismissSuggestionList}>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={clsx(
+                              'px-2 py-0.5 rounded text-[10px] font-medium',
+                              getSuggestionTypeClass(s.type)
+                            )}
+                          >
+                            {getSuggestionTypeLabel(s.type)}
+                          </span>
+                          <span
+                            className={clsx(
+                              'text-sm',
+                              i === highlightedIndex ? 'text-white' : 'text-text-primary'
+                            )}
+                          >
+                            {s.text}
+                          </span>
+                          {s.subtext && (
+                            <span
+                              className={clsx(
+                                'text-xs',
+                                i === highlightedIndex ? 'text-white/80' : 'text-text-muted'
+                              )}
+                            >
+                              {s.subtext}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      key={`${s.type}-${s.id || s.text}-${i}`}
+                      type="button"
+                      variant="ghost"
+                      onClick={() => handleSuggestionClick(s)}
+                      className={clsx(
+                        'w-full flex-col items-stretch justify-start rounded-none border-x-0 border-t-0 border-b border-[var(--book-ink-line)] px-4 py-2.5 text-left last:border-0',
+                        i === highlightedIndex
+                          ? 'bg-[var(--color-theme-accent)] text-white'
+                          : 'hover:bg-surface-alt'
+                      )}
+                      role="option"
+                      aria-selected={i === highlightedIndex}
+                      id={`suggestion-${i}`}
+                    >
+                      <div className="flex items-center gap-3">
                         <span
                           className={clsx(
-                            'text-xs',
-                            i === highlightedIndex ? 'text-white/80' : 'text-text-muted'
+                            'px-2 py-0.5 rounded text-[10px] font-medium',
+                            getSuggestionTypeClass(s.type)
                           )}
                         >
-                          {s.subtext}
+                          {getSuggestionTypeLabel(s.type)}
                         </span>
-                      )}
-                    </div>
-                  </Button>
-                ))
+                        <span
+                          className={clsx(
+                            'text-sm',
+                            i === highlightedIndex ? 'text-white' : 'text-text-primary'
+                          )}
+                        >
+                          {s.text}
+                        </span>
+                        {s.subtext && (
+                          <span
+                            className={clsx(
+                              'text-xs',
+                              i === highlightedIndex ? 'text-white/80' : 'text-text-muted'
+                            )}
+                          >
+                            {s.subtext}
+                          </span>
+                        )}
+                      </div>
+                    </Button>
+                  )
+                })
               : visibleDropdown.items.map((item, i) => (
                   <div
                     key={item.query}
