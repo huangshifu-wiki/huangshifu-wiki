@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useState, ReactNode } from 'react'
 import { isPlayableSong } from '../lib/musicPlayback'
-import type { MusicExternalSource } from '../types/entities'
+import type { MusicExternalSource, MusicPlayableOverride } from '../types/entities'
 
 interface Song {
   docId?: string
@@ -17,6 +17,7 @@ interface Song {
   durationMs?: number | null
   sources?: MusicExternalSource[]
   playable?: boolean
+  playableOverride?: MusicPlayableOverride
 }
 
 interface MusicContextType {

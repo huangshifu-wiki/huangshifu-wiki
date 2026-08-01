@@ -1082,7 +1082,7 @@ export function toSongResponse(
     durationMs: song.durationMs ?? null,
     sources: serializeMusicExternalSources(song.externalSources),
     playable: isPlayableSong(song),
-    playableOverride: song.playableOverride,
+    playableOverride: song.playableOverride ?? 'auto',
     customPlatformLinks,
     displayAlbumMode: song.displayAlbumMode,
     displayAlbum,

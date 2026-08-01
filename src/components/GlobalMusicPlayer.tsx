@@ -44,6 +44,7 @@ export const GlobalMusicPlayer = () => {
     useState<ResolvedPlayUrlState>(EMPTY_RESOLVED_PLAY_URL)
   const [resolvingPlayUrl, setResolvingPlayUrl] = useState(false)
   const [playUrlError, setPlayUrlError] = useState('')
+  const [blockedSongDocId, setBlockedSongDocId] = useState('')
   const [volumeSliderExpanded, setVolumeSliderExpanded] = useState(false)
   const [audioStats, setAudioStats] = useState<AudioStats>({
     bufferHealth: 0,
@@ -58,8 +59,12 @@ export const GlobalMusicPlayer = () => {
   const currentSongDocId = currentSong?.docId || ''
   const currentResolvedPlayUrl =
     currentSongDocId && resolvedPlayUrl.docId === currentSongDocId ? resolvedPlayUrl.url : ''
-  const activeAudioUrl =
-    currentResolvedPlayUrl || currentSong?.playUrl || currentSong?.audioUrl || ''
+  const playbackBlocked =
+    currentSong?.playableOverride === 'disabled' ||
+    Boolean(currentSongDocId && currentSongDocId === blockedSongDocId)
+  const activeAudioUrl = playbackBlocked
+    ? ''
+    : currentResolvedPlayUrl || currentSong?.playUrl || currentSong?.audioUrl || ''
   const waitingForResolvedPlayUrl =
     Boolean(currentSongDocId) &&
     !activeAudioUrl &&
@@ -81,6 +86,7 @@ export const GlobalMusicPlayer = () => {
       if (!currentSong) {
         setResolvedPlayUrl(EMPTY_RESOLVED_PLAY_URL)
         setResolvingPlayUrl(false)
+        setBlockedSongDocId('')
         setPlayUrlError('')
         return
       }
@@ -103,6 +109,8 @@ export const GlobalMusicPlayer = () => {
         const data = await apiGet<MusicPlayUrlResponse>(
           `/api/music/${encodeURIComponent(currentSong.docId)}/play-url`
         )
+        if (cancelled) return
+        setBlockedSongDocId(data.mode === 'disabled' ? currentSong.docId : '')
         const nextUrl =
           data.playable !== false && typeof data.playUrl === 'string' && data.playUrl.trim()
             ? data.playUrl.trim()
@@ -167,7 +175,7 @@ export const GlobalMusicPlayer = () => {
       }
       audio.pause()
       setIsPlaying(false)
-      setPlayUrlError('暂无可播放音源')
+      setPlayUrlError(playbackBlocked ? '该歌曲暂不可播放' : '暂无可播放音源')
       return
     }
 

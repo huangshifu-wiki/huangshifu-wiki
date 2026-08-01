@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React, { useEffect } from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { GlobalMusicPlayer } from '../../../src/components/GlobalMusicPlayer'
@@ -113,5 +113,34 @@ describe('GlobalMusicPlayer cover display', () => {
 
     const image = await screen.findByAltText('有封面歌 封面')
     expect(image).toHaveAttribute('src', 'https://example.com/cover.jpg')
+  })
+
+  it('播放状态 disabled 时不回退备用地址播放，并提示该歌曲暂不可播放', async () => {
+    mockedApiGet.mockResolvedValue({
+      playUrl: '',
+      mode: 'disabled',
+      playable: false,
+    } as never)
+
+    const { container } = render(
+      <MusicProvider>
+        <Harness
+          song={{
+            docId: 's3',
+            title: '禁用歌',
+            artists: ['歌手C'],
+            album: '',
+            cover: '',
+            audioUrl: 'https://example.com/fallback.mp3',
+            playUrl: 'https://example.com/play.mp3',
+          }}
+        />
+      </MusicProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('该歌曲暂不可播放')).toBeInTheDocument()
+    })
+    expect(container.querySelector('audio')?.getAttribute('src')).toBeNull()
   })
 })
