@@ -824,6 +824,9 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const wantsAlbums = type === 'all' || type === 'albums'
     const wantsLyrics = type === 'all' || type === 'lyrics'
 
+    // 搜索详情开关：关闭时只匹配标题/元数据等浅层字段，不匹配描述/正文/歌词
+    const includeDetail = parseBoolean(req.query.detail)
+
     if (q) {
       increaseSearchKeywordCount(q)
     }
@@ -832,7 +835,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const postVisibilityWhere = buildPostVisibilityWhere(req.authUser)
     const galleryVisibilityWhere = buildGalleryVisibilityWhere(req.authUser)
 
-    const cacheKey = `search:${q}:${category || 'all'}:${type}:${mode}:${req.authUser?.role || 'anonymous'}`
+    const cacheKey = `search:${q}:${category || 'all'}:${type}:${mode}:${req.authUser?.role || 'anonymous'}:${includeDetail ? 'detail' : 'title'}`
     const cached = enhancedCache.get(cacheKey)
     if (cached) return res.json(cached)
     const musicArtistMatchDocIds =
@@ -847,8 +850,8 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
               ? {
                   OR: [
                     { title: { contains: q } },
-                    { content: { contains: q } },
                     { slug: { contains: q } },
+                    ...(includeDetail ? [{ content: { contains: q } }] : []),
                   ],
                 }
               : {}),
@@ -899,7 +902,10 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
             ...(category ? { section: category } : {}),
             ...(q
               ? {
-                  OR: [{ title: { contains: q } }, { content: { contains: q } }],
+                  OR: [
+                    { title: { contains: q } },
+                    ...(includeDetail ? [{ content: { contains: q } }] : []),
+                  ],
                 }
               : {}),
             ...(startDate || endDate
@@ -949,7 +955,10 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
             ...galleryVisibilityWhere,
             ...(q
               ? {
-                  OR: [{ title: { contains: q } }, { description: { contains: q } }],
+                  OR: [
+                    { title: { contains: q } },
+                    ...(includeDetail ? [{ description: { contains: q } }] : []),
+                  ],
                 }
               : {}),
             ...(startDate || endDate
@@ -987,7 +996,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                       ? [{ docId: { in: musicArtistMatchDocIds } }]
                       : []),
                     { album: { contains: q } },
-                    { description: { contains: q } },
+                    ...(includeDetail ? [{ description: { contains: q } }] : []),
                   ],
                 }
               : {}),
@@ -1007,7 +1016,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                   OR: [
                     { title: { contains: q } },
                     { artist: { contains: q } },
-                    { description: { contains: q } },
+                    ...(includeDetail ? [{ description: { contains: q } }] : []),
                   ],
                 }
               : {}),
@@ -1078,7 +1087,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
       : Promise.resolve([])
 
     const lyricsPromise =
-      wantsLyrics && q
+      wantsLyrics && q && includeDetail
         ? prisma.musicTrack.findMany({
             where: {
               deletedAt: null,
@@ -1103,7 +1112,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
       lyricsPromise,
     ])
 
-    if ((mode === 'hybrid' || mode === 'vector') && q && type !== 'lyrics') {
+    if ((mode === 'hybrid' || mode === 'vector') && q && type !== 'lyrics' && includeDetail) {
       const keywordRaw = {
         wiki: wiki.map(toWikiResponse),
         posts: posts.map(toPostResponse),
@@ -1239,6 +1248,12 @@ router.get(
 
       if (!q) {
         res.status(400).json({ error: '请提供搜索文字 (q 参数)' })
+        return
+      }
+
+      // 搜索详情开关关闭时，文本语义搜索同样不可用（与主搜索端点一致）
+      if (!parseBoolean(req.query.detail)) {
+        res.json({ results: [], total: 0, query: q, minScore })
         return
       }
 

@@ -21,6 +21,7 @@ const Search: React.FC = () => {
     performSearch,
     handleQueryChange,
     handleImageSearch,
+    toggleDetail,
     toggleTag,
     updateFilters,
     resetFilters,
@@ -59,6 +60,7 @@ const Search: React.FC = () => {
           suggestions={state.suggestions}
           aiSearching={state.aiSearching}
           semanticImageSearch={state.filters.semanticImageSearch}
+          includeDetail={state.includeDetail}
           semanticSearchEnabled={semanticSearchEnabled}
           searchHistory={searchHistory}
           onQueryChange={handleQueryChange}
@@ -69,6 +71,7 @@ const Search: React.FC = () => {
               updateFilters({ semanticImageSearch: checked })
             }
           }}
+          onToggleDetail={toggleDetail}
           onDismissSuggestions={dismissSuggestions}
           onRemoveSearchHistoryItem={removeSearchHistoryItem}
           onClearSearchHistory={clearSearchHistory}

@@ -50,6 +50,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Lyric Search Contract Song' } },
           { title: { startsWith: 'Admin List Fields Test Song' } },
           { title: { startsWith: 'Admin Search Desc Test Song' } },
+          { title: { startsWith: 'Admin Search All Mode Test Song' } },
         ],
       },
     })
@@ -98,6 +99,7 @@ describe('Music API - 音乐接口测试', () => {
           { title: { startsWith: 'Lyric Search Contract Song' } },
           { title: { startsWith: 'Admin List Fields Test Song' } },
           { title: { startsWith: 'Admin Search Desc Test Song' } },
+          { title: { startsWith: 'Admin Search All Mode Test Song' } },
         ],
       },
     })
@@ -388,7 +390,7 @@ describe('Music API - 音乐接口测试', () => {
     ).toBe(true)
   })
 
-  it('音乐搜索不索引歌词，歌词类型搜索按行返回并集中展示', async () => {
+  it('音乐搜索不索引歌词，歌词搜索受搜索详情开关约束并按行返回', async () => {
     const song = await prisma.musicTrack.create({
       data: {
         slug: nextTestNumericSlug(),
@@ -409,10 +411,18 @@ describe('Music API - 音乐接口测试', () => {
     expect(musicRes.status).toBe(200)
     expect(musicRes.body.music.some((m: { docId: string }) => m.docId === song.docId)).toBe(false)
 
-    // 2. 歌词类型搜索按行返回
-    const lyricRes = await request(app)
+    // 1b. 未开启搜索详情时，歌词搜索返回空（歌词属于详情）
+    const lyricNoDetailRes = await request(app)
       .get('/api/search')
       .query({ q: '独特歌词XYZ', type: 'lyrics' })
+
+    expect(lyricNoDetailRes.status).toBe(200)
+    expect(lyricNoDetailRes.body.lyrics).toHaveLength(0)
+
+    // 2. 歌词类型搜索按行返回（歌词属于详情，需开启搜索详情开关）
+    const lyricRes = await request(app)
+      .get('/api/search')
+      .query({ q: '独特歌词XYZ', type: 'lyrics', detail: '1' })
 
     expect(lyricRes.status).toBe(200)
     expect(lyricRes.body.lyrics).toHaveLength(1)
@@ -421,7 +431,9 @@ describe('Music API - 音乐接口测试', () => {
     ])
 
     // 3. 同一首歌多行命中集中返回、保持原顺序
-    const multiRes = await request(app).get('/api/search').query({ q: '歌词', type: 'lyrics' })
+    const multiRes = await request(app)
+      .get('/api/search')
+      .query({ q: '歌词', type: 'lyrics', detail: '1' })
 
     expect(multiRes.status).toBe(200)
     const multiSong = multiRes.body.lyrics.find(
@@ -438,7 +450,9 @@ describe('Music API - 音乐接口测试', () => {
     expect(multiSong.lyric).toBeUndefined()
 
     // 5. 默认全部类型搜索也返回歌词结果（歌词独立成区块，不污染音乐结果）
-    const allRes = await request(app).get('/api/search').query({ q: '独特歌词XYZ', type: 'all' })
+    const allRes = await request(app)
+      .get('/api/search')
+      .query({ q: '独特歌词XYZ', type: 'all', detail: '1' })
 
     expect(allRes.status).toBe(200)
     expect(allRes.body.music.some((m: { docId: string }) => m.docId === song.docId)).toBe(false)
@@ -448,7 +462,7 @@ describe('Music API - 音乐接口测试', () => {
     ])
   })
 
-  it('音乐关键词搜索匹配歌曲描述', async () => {
+  it('音乐关键词搜索匹配歌曲描述（受搜索详情开关控制）', async () => {
     const song = await prisma.musicTrack.create({
       data: {
         slug: nextTestNumericSlug(),
@@ -458,14 +472,73 @@ describe('Music API - 音乐接口测试', () => {
         description: '独特描述词XYZ 背景介绍',
       },
     })
-    const response = await request(app)
-      .get('/api/search')
-      .query({ q: '独特描述词XYZ', type: 'music' })
 
-    expect(response.status).toBe(200)
-    expect(response.body.music.some((item: { docId: string }) => item.docId === song.docId)).toBe(
+    // 默认关闭搜索详情：描述命中不返回
+    const plain = await request(app).get('/api/search').query({ q: '独特描述词XYZ', type: 'music' })
+    expect(plain.status).toBe(200)
+    expect(plain.body.music.some((item: { docId: string }) => item.docId === song.docId)).toBe(
+      false
+    )
+
+    // 开启搜索详情：描述命中返回
+    const withDetail = await request(app)
+      .get('/api/search')
+      .query({ q: '独特描述词XYZ', type: 'music', detail: '1' })
+    expect(withDetail.status).toBe(200)
+    expect(withDetail.body.music.some((item: { docId: string }) => item.docId === song.docId)).toBe(
       true
     )
+  })
+
+  it('搜索详情开关约束全部类型搜索与混合模式', async () => {
+    const song = await prisma.musicTrack.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: 'Admin Search All Mode Test Song',
+        artists: ['黄诗扶'],
+        album: '',
+        description: '独特描述词XYZ 背景介绍',
+      },
+    })
+
+    // 1. type=all 关闭详情：描述与歌词均不命中
+    const plainAll = await request(app)
+      .get('/api/search')
+      .query({ q: '独特描述词XYZ', type: 'all' })
+    expect(plainAll.status).toBe(200)
+    expect(plainAll.body.music.some((item: { docId: string }) => item.docId === song.docId)).toBe(
+      false
+    )
+    expect(plainAll.body.lyrics).toHaveLength(0)
+
+    // 2. type=all 开启详情：描述命中（同 q 两次结果不同，验证 detail 维度进入缓存键）
+    const detailAll = await request(app)
+      .get('/api/search')
+      .query({ q: '独特描述词XYZ', type: 'all', detail: '1' })
+    expect(detailAll.status).toBe(200)
+    expect(detailAll.body.music.some((item: { docId: string }) => item.docId === song.docId)).toBe(
+      true
+    )
+
+    // 3. 混合模式关闭详情：退化为 keyword 形状响应，描述不命中
+    const plainHybrid = await request(app)
+      .get('/api/search')
+      .query({ q: '独特描述词XYZ', type: 'music', mode: 'hybrid' })
+    expect(plainHybrid.status).toBe(200)
+    expect(plainHybrid.body.searchMeta.mode).toBe('keyword')
+    expect(plainHybrid.body.searchMeta.vectorResultCount).toBe(0)
+    expect(
+      plainHybrid.body.music.some((item: { docId: string }) => item.docId === song.docId)
+    ).toBe(false)
+
+    // 4. 混合模式开启详情：关键词部分命中描述
+    const detailHybrid = await request(app)
+      .get('/api/search')
+      .query({ q: '独特描述词XYZ', type: 'music', mode: 'hybrid', detail: '1' })
+    expect(detailHybrid.status).toBe(200)
+    expect(
+      detailHybrid.body.music.some((item: { docId: string }) => item.docId === song.docId)
+    ).toBe(true)
   })
 
   it('后台音乐列表支持艺术家名称部分匹配', async () => {

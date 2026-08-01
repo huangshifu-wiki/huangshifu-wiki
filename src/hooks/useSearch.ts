@@ -229,7 +229,7 @@ export function useTraditionalSearch() {
     async (
       query: string,
       filters?: Partial<SearchFilters>,
-      options?: { mode?: 'keyword' | 'vector' | 'hybrid' }
+      options?: { mode?: 'keyword' | 'vector' | 'hybrid'; includeDetail?: boolean }
     ): Promise<TraditionalSearchResults> => {
       if (!query.trim()) {
         setResults(EMPTY_TRADITIONAL_RESULTS)
@@ -259,6 +259,7 @@ export function useTraditionalSearch() {
           q: query.trim(),
           type: apiType,
           mode,
+          ...(options?.includeDetail ? { detail: '1' } : {}),
           ...(filters?.dateRange?.start ? { startDate: filters.dateRange.start } : {}),
           ...(filters?.dateRange?.end ? { endDate: filters.dateRange.end } : {}),
           ...(filters?.selectedTags?.length ? { tags: filters.selectedTags.join(',') } : {}),
@@ -350,7 +351,7 @@ export function useTextSemanticSearch() {
   const search = useCallback(
     async (
       query: string,
-      options?: { limit?: number; minScore?: number }
+      options?: { limit?: number; minScore?: number; includeDetail?: boolean }
     ): Promise<TextSearchResult[]> => {
       if (!query.trim()) {
         setResults([])
@@ -370,6 +371,7 @@ export function useTextSemanticSearch() {
           q: query.trim(),
           limit: options?.limit || 24,
           ...(options?.minScore !== undefined ? { minScore: options.minScore } : {}),
+          ...(options?.includeDetail ? { detail: '1' } : {}),
         })
 
         setResults(data.results || [])

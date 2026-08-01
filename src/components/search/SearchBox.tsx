@@ -13,11 +13,13 @@ interface SearchBoxProps {
   searchHistory?: SearchHistoryItem[]
   aiSearching: boolean
   semanticImageSearch: boolean
+  includeDetail: boolean
   semanticSearchEnabled?: boolean
   onQueryChange: (val: string) => void
   onSearch: (q: string) => void
   onImageSearch: (file: File) => void
   onToggleSemanticSearch: (checked: boolean) => void
+  onToggleDetail: (checked: boolean) => void
   onDismissSuggestions: () => void
   onRemoveSearchHistoryItem?: (query: string) => void
   onClearSearchHistory?: () => void
@@ -33,11 +35,13 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   searchHistory = [],
   aiSearching,
   semanticImageSearch,
+  includeDetail,
   semanticSearchEnabled = true,
   onQueryChange,
   onSearch,
   onImageSearch,
   onToggleSemanticSearch,
+  onToggleDetail,
   onDismissSuggestions,
   onRemoveSearchHistoryItem,
   onClearSearchHistory,
@@ -464,26 +468,32 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
         )}
       </form>
 
-      {/* 混合搜索模式切换 */}
-      {semanticSearchEnabled && (
-        <div className="mt-4 flex flex-col gap-3 border-t border-[var(--book-ink-line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
+      {/* 搜索模式工具栏：搜索详情开关恒可用，智能混合搜索仅在语义搜索启用时显示 */}
+      <div className="mt-4 flex flex-col gap-3 border-t border-[var(--book-ink-line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <Switch
+            onCheckedChange={onToggleDetail}
+            checked={includeDetail}
+            id="detail-search-toggle"
+            label={<span className="font-medium text-text-secondary">搜索详情</span>}
+          />
+          {semanticSearchEnabled && (
             <Switch
               onCheckedChange={onToggleSemanticSearch}
               checked={semanticImageSearch}
               id="hybrid-search-toggle"
               label={<span className="font-medium text-text-secondary">智能混合搜索</span>}
             />
-          </div>
-          <div className="text-xs text-text-muted">
-            {semanticImageSearch ? (
-              <span className="text-brand-gold font-medium">● 混合模式已开启</span>
-            ) : (
-              <span>关键词模式</span>
-            )}
-          </div>
+          )}
         </div>
-      )}
+        <div className="text-xs text-text-muted">
+          {semanticImageSearch && includeDetail ? (
+            <span className="text-brand-gold font-medium">● 混合模式已开启</span>
+          ) : (
+            <span>关键词模式</span>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

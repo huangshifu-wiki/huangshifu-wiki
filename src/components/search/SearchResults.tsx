@@ -173,8 +173,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   const hasFilters =
     filters.selectedTags.length > 0 || filters.dateRange.start || filters.dateRange.end
+  // 当前 tab 不在 tabItems 中（如关闭搜索详情后歌词结果清空）时回落全部
+  const effectiveTab = tabItems.some((tab) => tab.id === activeTab) ? activeTab : 'all'
   const filteredMixedResults = isMixedSearch
-    ? mixedResults.filter((result) => activeTab === 'semantic' || result.sourceType === activeTab)
+    ? mixedResults.filter(
+        (result) => effectiveTab === 'semantic' || result.sourceType === effectiveTab
+      )
     : []
   const resultGridClassName = clsx(
     viewMode === 'list'
@@ -253,14 +257,14 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               onClick={() => onTabChange(tab.id)}
               className={clsx(
                 'relative min-h-0 cursor-pointer rounded-none border-0 px-0 pb-2 text-[1.0625rem] tracking-[0.06em]',
-                activeTab === tab.id
+                effectiveTab === tab.id
                   ? 'font-semibold text-text-primary'
                   : 'text-text-muted hover:text-text-secondary'
               )}
             >
               {tab.label}
               <span className="ml-1.5 text-[0.8125rem] text-text-muted">{tab.count}</span>
-              {activeTab === tab.id && (
+              {effectiveTab === tab.id && (
                 <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand-gold" />
               )}
             </Button>
@@ -301,7 +305,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
           {!isMixedSearch && (
             <>
               {/* Text Semantic Results */}
-              {(activeTab === 'all' || activeTab === 'textSemantic') &&
+              {(effectiveTab === 'all' || effectiveTab === 'textSemantic') &&
                 textSemanticResults.length > 0 && (
                   <motion.section
                     initial={{ opacity: 0, y: 12 }}
@@ -325,7 +329,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 )}
 
               {/* Wiki Results */}
-              {(activeTab === 'all' || activeTab === 'wiki') && results.wiki.length > 0 && (
+              {(effectiveTab === 'all' || effectiveTab === 'wiki') && results.wiki.length > 0 && (
                 <motion.section
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -348,7 +352,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               )}
 
               {/* Posts Results */}
-              {(activeTab === 'all' || activeTab === 'posts') && results.posts.length > 0 && (
+              {(effectiveTab === 'all' || effectiveTab === 'posts') && results.posts.length > 0 && (
                 <motion.section
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -371,7 +375,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               )}
 
               {/* Galleries Results */}
-              {(activeTab === 'all' || activeTab === 'galleries') &&
+              {(effectiveTab === 'all' || effectiveTab === 'galleries') &&
                 results.galleries.length > 0 && (
                   <motion.section
                     initial={{ opacity: 0, y: 12 }}
@@ -395,7 +399,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 )}
 
               {/* Music Results */}
-              {(activeTab === 'all' || activeTab === 'music') && results.music.length > 0 && (
+              {(effectiveTab === 'all' || effectiveTab === 'music') && results.music.length > 0 && (
                 <motion.section
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -418,51 +422,53 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               )}
 
               {/* Lyrics Results */}
-              {(activeTab === 'all' || activeTab === 'lyrics') && results.lyrics.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  className="space-y-4"
-                >
-                  <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
-                    <FileText size={14} className="text-brand-gold" /> 歌词匹配
-                  </h2>
-                  <div className={resultGridClassName}>
-                    {results.lyrics.map((item) => (
-                      <LyricSearchResultCard
-                        key={item.docId}
-                        item={item}
-                        query={state.searchMeta?.query ?? state.query}
-                        viewMode={viewMode}
-                      />
-                    ))}
-                  </div>
-                </motion.section>
-              )}
+              {(effectiveTab === 'all' || effectiveTab === 'lyrics') &&
+                results.lyrics.length > 0 && (
+                  <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -12 }}
+                    className="space-y-4"
+                  >
+                    <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
+                      <FileText size={14} className="text-brand-gold" /> 歌词匹配
+                    </h2>
+                    <div className={resultGridClassName}>
+                      {results.lyrics.map((item) => (
+                        <LyricSearchResultCard
+                          key={item.docId}
+                          item={item}
+                          query={state.searchMeta?.query ?? state.query}
+                          viewMode={viewMode}
+                        />
+                      ))}
+                    </div>
+                  </motion.section>
+                )}
 
               {/* Albums Results */}
-              {(activeTab === 'all' || activeTab === 'albums') && results.albums.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  className="space-y-4"
-                >
-                  <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
-                    <Music size={14} className="text-brand-gold" /> 音乐专辑
-                  </h2>
-                  <div className={resultGridClassName}>
-                    {results.albums.map((album) => (
-                      <SearchResultCard
-                        key={album.docId}
-                        config={albumToConfig(album)}
-                        viewMode={viewMode}
-                      />
-                    ))}
-                  </div>
-                </motion.section>
-              )}
+              {(effectiveTab === 'all' || effectiveTab === 'albums') &&
+                results.albums.length > 0 && (
+                  <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -12 }}
+                    className="space-y-4"
+                  >
+                    <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
+                      <Music size={14} className="text-brand-gold" /> 音乐专辑
+                    </h2>
+                    <div className={resultGridClassName}>
+                      {results.albums.map((album) => (
+                        <SearchResultCard
+                          key={album.docId}
+                          config={albumToConfig(album)}
+                          viewMode={viewMode}
+                        />
+                      ))}
+                    </div>
+                  </motion.section>
+                )}
             </>
           )}
         </AnimatePresence>

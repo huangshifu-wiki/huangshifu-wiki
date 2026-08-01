@@ -34,6 +34,7 @@ export interface SearchResults {
 
 export interface SearchState {
   query: string
+  includeDetail: boolean
   results: SearchResults
   loading: boolean
   hasSearched: boolean
@@ -81,6 +82,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
 
   const [state, setState] = useState<SearchState>({
     query: initialQuery,
+    includeDetail: searchParams.get('detail') === '1',
     results: { wiki: [], posts: [], galleries: [], music: [], albums: [], lyrics: [] },
     loading: false,
     hasSearched: Boolean(initialQuery),
@@ -103,6 +105,9 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
 
   const stateRef = useRef(state)
   stateRef.current = state
+
+  // 搜索请求序号：丢弃过期响应，避免快速切换开关/换词时后返回者覆盖新结果
+  const searchRequestRef = useRef(0)
 
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -226,9 +231,12 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   // 传统搜索 -- 委托给 traditionalSearch.search()
   // 保留编排逻辑：历史记录、URL 同步、标签过滤、searchMeta
   const performSearch = useCallback(
-    async (q: string, filtersOverride?: Partial<SearchFilters>) => {
+    async (q: string, filtersOverride?: Partial<SearchFilters>, detailOverride?: boolean) => {
       const currentQuery = (q || stateRef.current.query).trim()
       if (!currentQuery) return
+
+      const requestId = ++searchRequestRef.current
+      const includeDetail = detailOverride ?? stateRef.current.includeDetail
 
       addToHistory(currentQuery)
 
@@ -247,13 +255,22 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
 
       const sp = new URLSearchParams(searchParams)
       sp.set('q', currentQuery)
+      if (includeDetail) {
+        sp.set('detail', '1')
+      } else {
+        sp.delete('detail')
+      }
       setSearchParams(sp)
 
       const filters = { ...stateRef.current.filters, ...filtersOverride }
       const searchMode = filters.semanticImageSearch ? 'hybrid' : 'keyword'
 
       try {
-        const data = await traditionalSearch.search(currentQuery, filters, { mode: searchMode })
+        const data = await traditionalSearch.search(currentQuery, filters, {
+          mode: searchMode,
+          includeDetail,
+        })
+        if (requestId !== searchRequestRef.current) return
 
         const filterFn = (item: WikiItem | PostItem | GalleryItem) => {
           const matchesTags =
@@ -279,6 +296,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
           textSemanticResults: [],
         }))
       } catch (e) {
+        if (requestId !== searchRequestRef.current) return
         console.error('Search error:', e)
         setState((prev) => ({ ...prev, loading: false }))
       }
@@ -317,6 +335,19 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     },
     [mixedSearch]
   )
+
+  // 搜索详情开关：翻转状态并同步 URL；已有查询时立即按新开关重搜（空查询由 performSearch 内部早退处理）
+  const toggleDetail = (checked: boolean) => {
+    setState((prev) => ({ ...prev, includeDetail: checked }))
+    const sp = new URLSearchParams(searchParams)
+    if (checked) {
+      sp.set('detail', '1')
+    } else {
+      sp.delete('detail')
+    }
+    setSearchParams(sp)
+    performSearch(stateRef.current.query, undefined, checked)
+  }
 
   const toggleTag = (tag: string) => {
     setState((prev) => ({
@@ -411,6 +442,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     performSearch,
     handleQueryChange,
     handleImageSearch,
+    toggleDetail,
     toggleTag,
     updateFilters,
     resetFilters,
