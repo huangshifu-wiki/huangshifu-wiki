@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
-import { Play, Pause, SkipBack, SkipForward, Volume2, X } from '@/src/components/icons'
+import { Music, Pause, Play, SkipBack, SkipForward, Volume2, X } from '@/src/components/icons'
+import { SmartImage } from './SmartImage'
 import { useMusic } from '../context/MusicContext'
 import { formatTime } from '../lib/formatUtils'
 import { formatMusicCredits } from '../lib/musicCredits'
@@ -335,11 +336,17 @@ export const GlobalMusicPlayer = () => {
 
       <div className="mx-auto flex max-w-[1100px] items-center gap-2 px-3 py-[8px] sm:gap-4 sm:px-6 sm:py-[10px] md:px-[24px]">
         {/* Cover */}
-        <img
+        <SmartImage
           src={currentSong.coverThumbnail || currentSong.cover}
-          alt={currentSong?.title + ' 封面' || ''}
-          className="h-10 w-10 flex-shrink-0 rounded object-cover bg-surface-alt shadow-[0_6px_18px_rgba(72,53,25,0.12)] sm:h-11 sm:w-11"
-          referrerPolicy="no-referrer"
+          alt={`${currentSong.title} 封面`}
+          className="h-10 w-10 flex-shrink-0 rounded shadow-[0_6px_18px_rgba(72,53,25,0.12)] sm:h-11 sm:w-11"
+          lazy={false}
+          fallback={
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-surface-alt text-text-muted">
+              <Music size={16} />
+              <span className="text-[0.65rem] leading-none">无封面</span>
+            </div>
+          }
         />
 
         {/* Info */}
