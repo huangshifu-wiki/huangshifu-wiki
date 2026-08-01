@@ -166,4 +166,28 @@ describe('AdminMusicPage list covers', () => {
     expect(await screen.findByText('歌曲 (12)')).toBeInTheDocument()
     expect(await screen.findByText('专辑 (7)')).toBeInTheDocument()
   })
+
+  it('keeps songPage from the URL after data loads', async () => {
+    mockedApiGet.mockResolvedValue({
+      data: [
+        {
+          docId: 's1',
+          title: '歌曲一',
+          artists: ['歌手'],
+          album: '',
+          cover: '',
+          coverThumbnail: '',
+        },
+      ],
+      total: 250,
+    } as never)
+    renderPage('/admin/music?songPage=2')
+
+    await waitFor(() => {
+      const musicCalls = mockedApiGet.mock.calls.filter(([path]) => path === '/api/admin/music')
+      expect(musicCalls.length).toBeGreaterThan(0)
+      expect(musicCalls[musicCalls.length - 1][1]).toMatchObject({ page: 2 })
+    })
+    expect(await screen.findByText('第 2 / 5 页')).toBeInTheDocument()
+  })
 })

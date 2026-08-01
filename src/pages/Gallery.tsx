@@ -31,7 +31,7 @@ const GalleryList = () => {
   const { user, isAdmin, isBanned } = useAuth()
   const [isGalleryAdminOnly, setIsGalleryAdminOnly] = useState(false)
   const [galleryAccessLoaded, setGalleryAccessLoaded] = useState(false)
-  const [totalGalleries, setTotalGalleries] = useState(0)
+  const [totalGalleries, setTotalGalleries] = useState<number>()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
   const navigate = useNavigate()
   const viewMode = getScopedViewMode('gallery')

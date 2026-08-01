@@ -21,7 +21,7 @@ const Events = () => {
   const [sortOrder, setSortOrder] = useState<EventSortOrder>('desc')
   const [events, setEvents] = useState<EventItem[]>([])
   const [tags, setTags] = useState<string[]>([])
-  const [totalPages, setTotalPages] = useState(1)
+  const [totalPages, setTotalPages] = useState<number>()
   const [loading, setLoading] = useState(true)
   const { getScopedViewMode, setScopedViewMode } = useUserPreferences()
   const storedViewMode = getScopedViewMode('events')

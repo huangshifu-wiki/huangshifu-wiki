@@ -74,8 +74,8 @@ export const AdminMusicPage = () => {
   const [appliedFilters, setAppliedFilters] = useState<MusicAdminFilterState>(DEFAULT_FILTERS)
   const [songs, setSongs] = useState<AdminDataItem[]>([])
   const [albums, setAlbums] = useState<AdminDataItem[]>([])
-  const [songTotal, setSongTotal] = useState(0)
-  const [albumTotal, setAlbumTotal] = useState(0)
+  const [songTotal, setSongTotal] = useState<number>()
+  const [albumTotal, setAlbumTotal] = useState<number>()
   const [loading, setLoading] = useState(false)
   const [pendingActions, setPendingActions] = useState<Record<string, AdminResourcePendingAction>>(
     {}
@@ -391,7 +391,7 @@ export const AdminMusicPage = () => {
           className={`rounded-none border-b-2 px-4 py-2 text-sm ${tab === 'songs' ? 'border-brand-gold text-brand-gold' : 'border-transparent text-text-muted'}`}
           onClick={() => handleTabChange('songs')}
         >
-          歌曲 ({songTotal})
+          歌曲 ({songTotal ?? 0})
         </Button>
         <Button
           type="button"
@@ -399,7 +399,7 @@ export const AdminMusicPage = () => {
           className={`rounded-none border-b-2 px-4 py-2 text-sm ${tab === 'albums' ? 'border-brand-gold text-brand-gold' : 'border-transparent text-text-muted'}`}
           onClick={() => handleTabChange('albums')}
         >
-          专辑 ({albumTotal})
+          专辑 ({albumTotal ?? 0})
         </Button>
       </div>
 
