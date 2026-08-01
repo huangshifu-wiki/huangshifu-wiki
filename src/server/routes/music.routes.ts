@@ -41,6 +41,7 @@ import {
   isNumericSlug,
   withNumericSlugTransaction,
   normalizeLyricStorage,
+  logger,
 } from '../utils'
 import { parseMusicUrl } from '../music/musicUrlParser'
 import {
@@ -786,6 +787,13 @@ router.get(
       }
 
       const resolved = await resolveMusicPlayUrl(song)
+
+      if (!resolved.playable) {
+        const errors = 'errors' in resolved ? resolved.errors : []
+        if (errors.length) {
+          logger.warn({ docId, songTitle: song.title, errors }, 'Music play URL resolution failed')
+        }
+      }
 
       res.json({
         playUrl: resolved.playUrl,
