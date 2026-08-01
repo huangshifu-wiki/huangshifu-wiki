@@ -516,7 +516,7 @@ export async function resolveAudioUrl(platform: MusicPlatform, urlId: string) {
     const client = createClient(platform, true)
     const raw = ensureString(await withTimeout(client.url(urlId, 320), METING_API_TIMEOUT_MS))
     const parsed = parseJsonSafe<unknown>(raw, {})
-    return extractSingleFieldAsString(parsed, 'url')
+    return upgradeToHttps(extractSingleFieldAsString(parsed, 'url'))
   } catch {
     return ''
   }
