@@ -215,10 +215,9 @@ async function queueImageMapRebuild(
 }> {
   const totalCount = await prisma.imageMap.count({ where: whereClause })
 
-  let processedCount = 0
-  let skippedCount = 0
-  let errorCount = 0
-
+  // 第一遍：纯读取快照。入队后消费者会立刻把记录改为 processing，
+  // 若在分页期间边查边入队，offset 分页会因结果集变化漏掉记录。
+  const records: Array<{ id: string; localUrl: string | null }> = []
   for (let offset = 0; offset < totalCount; offset += batchSize) {
     const batch = await prisma.imageMap.findMany({
       where: whereClause,
@@ -226,42 +225,48 @@ async function queueImageMapRebuild(
       skip: offset,
       select: { id: true, localUrl: true },
     })
+    records.push(...batch)
+  }
 
-    for (const record of batch) {
-      try {
-        if (dryRun) {
-          processedCount++
-          continue
-        }
+  let processedCount = 0
+  let skippedCount = 0
+  let errorCount = 0
 
-        const localFilePath = resolveUploadPathByUrl(record.localUrl)
-
-        if (!localFilePath) {
-          console.warn(`[Admin] Skipping imageMap:${record.id}: source file path is invalid`)
-          skippedCount++
-          continue
-        }
-
-        try {
-          await fs.promises.access(localFilePath, fs.constants.R_OK)
-        } catch {
-          console.warn(`[Admin] Skipping imageMap:${record.id}: source file not found`)
-          skippedCount++
-          continue
-        }
-
-        await variantGenerator.enqueue({
-          targetType: 'imageMap',
-          targetId: record.id,
-          localFilePath,
-          priority: 'low',
-        })
-
+  // 第二遍：基于快照入队（重复任务由 taskKey 去重兜底）
+  for (const record of records) {
+    try {
+      if (dryRun) {
         processedCount++
-      } catch (error) {
-        console.error(`[Admin] Error queuing imageMap:${record.id}:`, error)
-        errorCount++
+        continue
       }
+
+      const localFilePath = resolveUploadPathByUrl(record.localUrl)
+
+      if (!localFilePath) {
+        console.warn(`[Admin] Skipping imageMap:${record.id}: source file path is invalid`)
+        skippedCount++
+        continue
+      }
+
+      try {
+        await fs.promises.access(localFilePath, fs.constants.R_OK)
+      } catch {
+        console.warn(`[Admin] Skipping imageMap:${record.id}: source file not found`)
+        skippedCount++
+        continue
+      }
+
+      await variantGenerator.enqueue({
+        targetType: 'imageMap',
+        targetId: record.id,
+        localFilePath,
+        priority: 'low',
+      })
+
+      processedCount++
+    } catch (error) {
+      console.error(`[Admin] Error queuing imageMap:${record.id}:`, error)
+      errorCount++
     }
   }
 
@@ -289,10 +294,8 @@ async function queueCoverRebuild(
       ? await prisma.songCover.count({ where: whereClause })
       : await prisma.albumCover.count({ where: whereClause })
 
-  let processedCount = 0
-  let skippedCount = 0
-  let errorCount = 0
-
+  // 第一遍：纯读取快照（同 queueImageMapRebuild，避免 offset 分页漏记录）
+  const records: Array<{ id: string; storageKey: string | null }> = []
   for (let offset = 0; offset < totalCount; offset += batchSize) {
     const batch =
       type === 'songCover'
@@ -308,42 +311,48 @@ async function queueCoverRebuild(
             skip: offset,
             select: { id: true, storageKey: true },
           })
+    records.push(...batch)
+  }
 
-    for (const record of batch) {
-      try {
-        if (dryRun) {
-          processedCount++
-          continue
-        }
+  let processedCount = 0
+  let skippedCount = 0
+  let errorCount = 0
 
-        const localFilePath = resolveUploadPathByStorageKey(record.storageKey, uploadsDir)
-
-        if (!localFilePath) {
-          console.warn(`[Admin] Skipping ${type}:${record.id}: source file path is invalid`)
-          skippedCount++
-          continue
-        }
-
-        try {
-          await fs.promises.access(localFilePath, fs.constants.R_OK)
-        } catch {
-          console.warn(`[Admin] Skipping ${type}:${record.id}: source file not found`)
-          skippedCount++
-          continue
-        }
-
-        await variantGenerator.enqueue({
-          targetType: type,
-          targetId: record.id,
-          localFilePath,
-          priority: 'low',
-        })
-
+  // 第二遍：基于快照入队
+  for (const record of records) {
+    try {
+      if (dryRun) {
         processedCount++
-      } catch (error) {
-        console.error(`[Admin] Error queuing ${type}:${record.id}:`, error)
-        errorCount++
+        continue
       }
+
+      const localFilePath = resolveUploadPathByStorageKey(record.storageKey, uploadsDir)
+
+      if (!localFilePath) {
+        console.warn(`[Admin] Skipping ${type}:${record.id}: source file path is invalid`)
+        skippedCount++
+        continue
+      }
+
+      try {
+        await fs.promises.access(localFilePath, fs.constants.R_OK)
+      } catch {
+        console.warn(`[Admin] Skipping ${type}:${record.id}: source file not found`)
+        skippedCount++
+        continue
+      }
+
+      await variantGenerator.enqueue({
+        targetType: type,
+        targetId: record.id,
+        localFilePath,
+        priority: 'low',
+      })
+
+      processedCount++
+    } catch (error) {
+      console.error(`[Admin] Error queuing ${type}:${record.id}:`, error)
+      errorCount++
     }
   }
 

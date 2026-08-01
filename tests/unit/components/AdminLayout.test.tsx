@@ -6,11 +6,10 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AdminLayout from '../../../src/components/admin/AdminLayout'
 
+const mockUseAuth = vi.hoisted(() => vi.fn())
+
 vi.mock('../../../src/context/AuthContext', () => ({
-  useAuth: () => ({
-    user: { role: 'admin', username: 'admin' },
-    isAdmin: true,
-  }),
+  useAuth: mockUseAuth,
 }))
 
 vi.mock('../../../src/components/Toast', () => ({
@@ -46,21 +45,36 @@ const renderLayout = () =>
 
 describe('AdminLayout 导航分组', () => {
   beforeEach(() => {
+    mockUseAuth.mockReturnValue({
+      user: { role: 'admin', username: 'admin' },
+      isAdmin: true,
+    })
     localStorage.clear()
   })
 
-  it('渲染四个分组标题与全部条目', () => {
+  it('渲染三个分组标题与全部条目（普通管理员无空设置分组）', () => {
     renderLayout()
 
     expect(screen.getByRole('button', { name: /内容管理/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /运营管理/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /系统工具/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /设置/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /设置/ })).not.toBeInTheDocument()
 
     expect(screen.getByRole('link', { name: /审核队列/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /向量管理/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /变体管理/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /站点设置/ })).not.toBeInTheDocument()
+  })
+
+  it('超级管理员显示设置分组', () => {
+    mockUseAuth.mockReturnValue({
+      user: { role: 'super_admin', username: 'root' },
+      isAdmin: true,
+    })
+    renderLayout()
+
+    expect(screen.getByRole('button', { name: /设置/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /站点设置/ })).toBeInTheDocument()
   })
 
   it('点击分组标题折叠该组条目，其他组不受影响', async () => {

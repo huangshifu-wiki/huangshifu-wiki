@@ -149,6 +149,23 @@ describe('music cover localization', () => {
   })
 
   it('localizes remote album covers and enqueues albumCover thumbnail generation', async () => {
+    mockPrisma.mediaAsset.findUnique.mockResolvedValue({
+      id: 'asset-1',
+      storageKey: 'music-covers/albums/album.jpg',
+      publicUrl: '/uploads/music-covers/albums/album.jpg',
+      status: 'ready',
+    })
+    const tx = {
+      albumCover: {
+        create: vi.fn().mockResolvedValue({ id: 'album-cover-1' }),
+        updateMany: vi.fn(),
+      },
+      album: {
+        update: vi.fn(),
+      },
+    }
+    mockPrisma.$transaction.mockImplementationOnce(async (callback) => callback(tx))
+
     const { addAlbumCoverFromUrl } = await import('../../src/server/utils/music')
 
     await addAlbumCoverFromUrl('album-1', 'https://example.com/album.jpg', true)
@@ -157,10 +174,18 @@ describe('music cover localization', () => {
       namespace: 'music-covers/albums',
       fallbackName: 'album-1.jpg',
     })
+
+    const createCall = tx.albumCover.create.mock.calls[0][0]
+    expect(createCall.data).toMatchObject({
+      albumDocId: 'album-1',
+      storageKey: 'music-covers/albums/album.jpg',
+    })
+    expect(createCall.data).not.toHaveProperty('thumbnailUrl')
+
     expect(mockEnqueue).toHaveBeenCalledWith({
       targetType: 'albumCover',
       targetId: 'album-cover-1',
-      localFilePath: expect.stringContaining('music-covers/songs/cover.jpg'),
+      localFilePath: expect.stringContaining('music-covers/albums/album.jpg'),
       priority: 'normal',
     })
   })

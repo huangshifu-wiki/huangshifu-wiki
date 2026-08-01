@@ -52,6 +52,9 @@ describe('Admin variant engine API', () => {
     await prisma.album.deleteMany({
       where: { title: { startsWith: 'Variant Engine' } },
     })
+    await prisma.imageMap.deleteMany({
+      where: { md5: { startsWith: 'test-variants-' } },
+    })
     await prisma.user.deleteMany({
       where: { email: { startsWith: 'test_variant_admin_' } },
     })
@@ -82,6 +85,8 @@ describe('Admin variant engine API', () => {
       adminUser.plainPassword
     )
 
+    const beforeQueueLength = (await agent.get('/api/admin/variants/stats')).body.data.queueLength
+
     const rebuildResponse = await agent
       .post('/api/admin/rebuild-all-variants')
       .set('X-XSRF-TOKEN', xsrfToken)
@@ -93,6 +98,10 @@ describe('Admin variant engine API', () => {
     expect(rebuildResponse.body.summary.queuedForRebuild).toBe(
       rebuildResponse.body.summary.totalScanned
     )
+
+    // dryRun 不得把任务放进变体队列
+    const queueLength = (await agent.get('/api/admin/variants/stats')).body.data.queueLength
+    expect(queueLength).toBe(beforeQueueLength)
 
     const statsResponse = await agent.get('/api/admin/variants/stats')
 
@@ -135,6 +144,15 @@ describe('Admin variant engine API', () => {
   })
 
   it('defaults rebuild type to imageMap for backward compatibility', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    await prisma.imageMap.create({
+      data: {
+        id: `test-variants-image-${suffix}`,
+        md5: `test-variants-${suffix}`,
+        localUrl: `/uploads/test-variants/default-${suffix}.png`,
+      },
+    })
+
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       adminUser.user.email,
       adminUser.plainPassword
@@ -146,6 +164,11 @@ describe('Admin variant engine API', () => {
       .send({ scope: 'missing', dryRun: true })
 
     expect(response.status).toBe(200)
-    expect(response.body.summary.totalScanned).toBeGreaterThanOrEqual(0)
+    // 省略 type 时应只扫描 imageMap（不含歌曲/专辑封面），且包含本次创建的行
+    const imageMapMissingCount = await prisma.imageMap.count({
+      where: { deletedAt: null, OR: [{ thumbnailUrl: null }, { variantStatus: 'pending' }] },
+    })
+    expect(imageMapMissingCount).toBeGreaterThanOrEqual(1)
+    expect(response.body.summary.totalScanned).toBe(imageMapMissingCount)
   })
 })

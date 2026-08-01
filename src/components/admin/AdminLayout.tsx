@@ -400,17 +400,19 @@ export const AdminLayout = () => {
               onToggleCollapsed={() => toggleGroup('tools')}
             />
 
-            <NavGroup
-              groupId="settings"
-              title="设置"
-              items={visibleSettingsNav}
-              currentPath={currentPath}
-              sidebarCollapsed={sidebarCollapsed}
-              mobileOpen={mobileOpen}
-              onClick={closeMobileMenu}
-              collapsed={collapsedGroups.has('settings')}
-              onToggleCollapsed={() => toggleGroup('settings')}
-            />
+            {visibleSettingsNav.length > 0 && (
+              <NavGroup
+                groupId="settings"
+                title="设置"
+                items={visibleSettingsNav}
+                currentPath={currentPath}
+                sidebarCollapsed={sidebarCollapsed}
+                mobileOpen={mobileOpen}
+                onClick={closeMobileMenu}
+                collapsed={collapsedGroups.has('settings')}
+                onToggleCollapsed={() => toggleGroup('settings')}
+              />
+            )}
           </nav>
 
           <div className="hidden md:block p-2 border-t border-[var(--book-ink-line)]">

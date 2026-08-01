@@ -5,15 +5,18 @@
  * 改用真实临时文件 + sharp mock 真实写出输出文件的方式验证生成流程。
  */
 
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import path from 'path'
 import os from 'os'
 import fs from 'fs'
 import sharp from 'sharp'
 import { prisma } from '../../../src/server/prisma'
 
-// sharp 行为开关：hangMetadata = true 时 metadata 永不 resolve（模拟卡死任务）
-const sharpState = vi.hoisted(() => ({ hangMetadata: false }))
+// sharp 行为开关：hangMetadata = true 时 metadata 挂起，直到 releaseHang 被调用（模拟卡死任务）
+const sharpState = vi.hoisted(() => ({
+  hangMetadata: false,
+  releaseHang: null as (() => void) | null,
+}))
 
 // Mock prisma 模块
 vi.mock('../../../src/server/prisma', () => ({
@@ -26,11 +29,13 @@ vi.mock('../../../src/server/prisma', () => ({
     songCover: {
       update: vi.fn().mockResolvedValue({}),
       findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn().mockResolvedValue({ thumbnailUrl: null }),
       count: vi.fn().mockResolvedValue(0),
     },
     albumCover: {
       update: vi.fn().mockResolvedValue({}),
       findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn().mockResolvedValue({ thumbnailUrl: null }),
       count: vi.fn().mockResolvedValue(0),
     },
   },
@@ -49,13 +54,15 @@ vi.mock('sharp', async () => {
       await realFs.promises.writeFile(outputPath, 'fake-image-bytes')
       return { width: 400, height: 300 }
     }),
-    metadata: vi
-      .fn()
-      .mockImplementation(() =>
-        sharpState.hangMetadata
-          ? new Promise(() => {})
-          : Promise.resolve({ width: 1920, height: 1080, format: 'jpeg' })
-      ),
+    metadata: vi.fn().mockImplementation(() => {
+      if (sharpState.hangMetadata) {
+        // 项目 tsconfig lib 为 ES2022，无 Promise.withResolvers，用 executor 形式存 resolver
+        return new Promise<void>((resolve) => {
+          sharpState.releaseHang = resolve
+        })
+      }
+      return Promise.resolve({ width: 1920, height: 1080, format: 'jpeg' })
+    }),
   }
 
   return {
@@ -125,9 +132,14 @@ describe('VariantGenerator - 队列管理', () => {
     process.env.UPLOADS_PATH = TEST_UPLOADS_DIR
     const module = await import('../../../src/server/services/variantGenerator')
     const VariantGenerator = module.VariantGenerator
-    generator = new VariantGenerator()
+    // autoStart: false —— 不启动真实 interval、不触发 recover，避免悬挂任务泄漏到后续用例
+    generator = new VariantGenerator({ autoStart: false })
 
     vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    generator?.stop()
   })
 
   it('应该能够入队变体生成任务', async () => {
@@ -138,14 +150,15 @@ describe('VariantGenerator - 队列管理', () => {
       priority: 'normal' as const,
     }
 
-    // enqueue 会立即触发 processNext()，需要等待异步处理完成
     await generator.enqueue(task)
-    await new Promise((resolve) => setTimeout(resolve, 50))
 
-    // 验证 enqueue 调用成功（任务可能已被处理）
-    const stats = generator.getQueueStats()
-    expect(stats).toBeDefined()
-    expect(typeof stats.queueLength).toBe('number')
+    // 源文件不存在 → 任务应被标记 failed（等待确定性的完成信号，不用固定睡眠）
+    await vi.waitFor(() => {
+      expect(prisma.imageMap.update).toHaveBeenCalledWith({
+        where: { id: 'test-1' },
+        data: { variantStatus: 'failed' },
+      })
+    })
   })
 
   it('高优先级任务应该插入队首', async () => {
@@ -196,7 +209,13 @@ describe('VariantGenerator - 队列管理', () => {
       })
       expect(generator.getProcessingIds().has('imageMap:duplicate-1')).toBe(true)
     } finally {
+      // 释放挂起的 metadata 让任务正常收尾，避免超时重试定时器泄漏到后续用例
+      sharpState.releaseHang?.()
       sharpState.hangMetadata = false
+      sharpState.releaseHang = null
+      await vi.waitFor(() => {
+        expect(generator.getProcessingIds().size).toBe(0)
+      })
       generator.stop()
     }
   })
@@ -276,17 +295,18 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
       localFilePath: path.join(TEST_UPLOADS_DIR, 'original.png'),
       priority: 'normal',
     })
-    await new Promise((resolve) => setTimeout(resolve, 50))
 
-    expect(prisma.imageMap.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'im-1' },
-        data: expect.objectContaining({
-          thumbnailUrl: '/uploads/variants/im-1/1080h.webp',
-          variantStatus: 'completed',
-        }),
-      })
-    )
+    await vi.waitFor(() => {
+      expect(prisma.imageMap.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'im-1' },
+          data: expect.objectContaining({
+            thumbnailUrl: '/uploads/variants/im-1/1080h.webp',
+            variantStatus: 'completed',
+          }),
+        })
+      )
+    })
   })
 
   it('songCover 任务完成后应写入缩略图、completed 状态和时间戳', async () => {
@@ -296,19 +316,20 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
       localFilePath: path.join(TEST_UPLOADS_DIR, 'music-covers/songs/cover.jpg'),
       priority: 'normal',
     })
-    await new Promise((resolve) => setTimeout(resolve, 50))
 
-    expect(prisma.songCover.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'song-cover-1' },
-        data: expect.objectContaining({
-          thumbnailUrl: expect.stringContaining('/uploads/music-covers/thumbnails/'),
-          variantStatus: 'completed',
-          variantGeneratedAt: expect.any(Date),
-          lastError: null,
-        }),
-      })
-    )
+    await vi.waitFor(() => {
+      expect(prisma.songCover.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'song-cover-1' },
+          data: expect.objectContaining({
+            thumbnailUrl: expect.stringContaining('/uploads/music-covers/thumbnails/'),
+            variantStatus: 'completed',
+            variantGeneratedAt: expect.any(Date),
+            lastError: null,
+          }),
+        })
+      )
+    })
   })
 
   it('albumCover 任务完成后应写入缩略图、completed 状态和时间戳', async () => {
@@ -318,19 +339,20 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
       localFilePath: path.join(TEST_UPLOADS_DIR, 'music-covers/albums/cover.jpg'),
       priority: 'normal',
     })
-    await new Promise((resolve) => setTimeout(resolve, 50))
 
-    expect(prisma.albumCover.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'album-cover-1' },
-        data: expect.objectContaining({
-          thumbnailUrl: expect.stringContaining('/uploads/music-covers/thumbnails/'),
-          variantStatus: 'completed',
-          variantGeneratedAt: expect.any(Date),
-          lastError: null,
-        }),
-      })
-    )
+    await vi.waitFor(() => {
+      expect(prisma.albumCover.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'album-cover-1' },
+          data: expect.objectContaining({
+            thumbnailUrl: expect.stringContaining('/uploads/music-covers/thumbnails/'),
+            variantStatus: 'completed',
+            variantGeneratedAt: expect.any(Date),
+            lastError: null,
+          }),
+        })
+      )
+    })
   })
 
   it('封面任务源文件缺失时应标记 failed 并记录 lastError', async () => {
@@ -340,11 +362,12 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
       localFilePath: path.join(TEST_UPLOADS_DIR, 'missing/cover.jpg'),
       priority: 'normal',
     })
-    await new Promise((resolve) => setTimeout(resolve, 50))
 
-    expect(prisma.songCover.update).toHaveBeenCalledWith({
-      where: { id: 'song-cover-missing' },
-      data: { variantStatus: 'failed', lastError: 'Source file missing' },
+    await vi.waitFor(() => {
+      expect(prisma.songCover.update).toHaveBeenCalledWith({
+        where: { id: 'song-cover-missing' },
+        data: { variantStatus: 'failed', lastError: 'Source file missing' },
+      })
     })
   })
 })
@@ -358,8 +381,8 @@ describe('VariantGenerator - 恢复未完成任务', () => {
     fs.mkdirSync(path.join(TEST_UPLOADS_DIR, 'music-covers/songs'), { recursive: true })
     fs.mkdirSync(path.join(TEST_UPLOADS_DIR, 'music-covers/albums'), { recursive: true })
     fs.writeFileSync(path.join(TEST_UPLOADS_DIR, 'original/im1.jpg'), 'src')
-    fs.writeFileSync(path.join(TEST_UPLOADS_DIR, 'music-covers/songs/c1.jpg'), 'src')
-    fs.writeFileSync(path.join(TEST_UPLOADS_DIR, 'music-covers/albums/c1.jpg'), 'src')
+    fs.writeFileSync(path.join(TEST_UPLOADS_DIR, 'music-covers/songs/sc1.jpg'), 'src')
+    fs.writeFileSync(path.join(TEST_UPLOADS_DIR, 'music-covers/albums/ac1.jpg'), 'src')
 
     const module = await import('../../../src/server/services/variantGenerator')
     const VariantGenerator = module.VariantGenerator
@@ -373,10 +396,10 @@ describe('VariantGenerator - 恢复未完成任务', () => {
       { id: 'im-1', localUrl: '/uploads/original/im1.jpg' },
     ])
     ;(prisma.songCover.findMany as any).mockResolvedValueOnce([
-      { id: 'sc-1', storageKey: 'music-covers/songs/c1.jpg' },
+      { id: 'sc-1', storageKey: 'music-covers/songs/sc1.jpg' },
     ])
     ;(prisma.albumCover.findMany as any).mockResolvedValueOnce([
-      { id: 'ac-1', storageKey: 'music-covers/albums/c1.jpg' },
+      { id: 'ac-1', storageKey: 'music-covers/albums/ac1.jpg' },
     ])
 
     const enqueueSpy = vi.spyOn(generator, 'enqueue').mockResolvedValue(undefined)
@@ -386,19 +409,19 @@ describe('VariantGenerator - 恢复未完成任务', () => {
     expect(enqueueSpy).toHaveBeenCalledWith({
       targetType: 'imageMap',
       targetId: 'im-1',
-      localFilePath: expect.stringContaining('im1.jpg'),
+      localFilePath: path.join(TEST_UPLOADS_DIR, 'original/im1.jpg'),
       priority: 'low',
     })
     expect(enqueueSpy).toHaveBeenCalledWith({
       targetType: 'songCover',
       targetId: 'sc-1',
-      localFilePath: expect.stringContaining('c1.jpg'),
+      localFilePath: path.join(TEST_UPLOADS_DIR, 'music-covers/songs/sc1.jpg'),
       priority: 'low',
     })
     expect(enqueueSpy).toHaveBeenCalledWith({
       targetType: 'albumCover',
       targetId: 'ac-1',
-      localFilePath: expect.stringContaining('c1.jpg'),
+      localFilePath: path.join(TEST_UPLOADS_DIR, 'music-covers/albums/ac1.jpg'),
       priority: 'low',
     })
   })

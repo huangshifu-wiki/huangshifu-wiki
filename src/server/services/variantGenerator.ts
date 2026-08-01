@@ -23,6 +23,7 @@ import {
 import {
   MUSIC_COVER_THUMBNAIL_SIZE,
   MUSIC_COVER_THUMBNAIL_QUALITY,
+  deleteMusicCoverThumbnail,
 } from './musicCoverThumbnail.service'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -499,12 +500,48 @@ export class VariantGenerator {
 
     const thumbnailUrl = variants.get('thumb')?.path || null
 
-    await this.updateCover(task.targetType, task.targetId, {
-      thumbnailUrl,
-      variantStatus: 'completed',
-      variantGeneratedAt: new Date(),
-      lastError: null,
+    // 先读旧 URL：成功后删除被替换的旧缩略图，避免 force 重建产生孤儿文件
+    const previousThumbnailUrl = await this.readCoverThumbnailUrl(task.targetType, task.targetId)
+
+    try {
+      await this.updateCover(task.targetType, task.targetId, {
+        thumbnailUrl,
+        variantStatus: 'completed',
+        variantGeneratedAt: new Date(),
+        lastError: null,
+      })
+    } catch (error) {
+      // 写库失败：清理本次生成的未引用文件后重抛，交给重试逻辑
+      if (thumbnailUrl) {
+        await deleteMusicCoverThumbnail(thumbnailUrl)
+      }
+      throw error
+    }
+
+    if (previousThumbnailUrl && previousThumbnailUrl !== thumbnailUrl) {
+      await deleteMusicCoverThumbnail(previousThumbnailUrl)
+    }
+  }
+
+  /**
+   * 读取封面当前缩略图 URL（songCover / albumCover）
+   */
+  private async readCoverThumbnailUrl(
+    targetType: 'songCover' | 'albumCover',
+    targetId: string
+  ): Promise<string | null> {
+    if (targetType === 'songCover') {
+      const cover = await prisma.songCover.findUnique({
+        where: { id: targetId },
+        select: { thumbnailUrl: true },
+      })
+      return cover?.thumbnailUrl ?? null
+    }
+    const cover = await prisma.albumCover.findUnique({
+      where: { id: targetId },
+      select: { thumbnailUrl: true },
     })
+    return cover?.thumbnailUrl ?? null
   }
 
   /**
