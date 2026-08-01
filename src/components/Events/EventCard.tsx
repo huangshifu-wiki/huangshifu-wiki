@@ -23,19 +23,17 @@ const EventDateOffset = ({
   dayOffset: number | null
   compact?: boolean
 }) => {
-  if (dayOffset === null) return null
-
-  const isFutureOrToday = dayOffset >= 0
+  if (dayOffset === null || dayOffset < 0) return null
 
   return (
     <span
       className={clsx(
         'shrink-0 font-semibold tabular-nums',
         compact ? 'text-[0.6875rem]' : 'text-xs',
-        isFutureOrToday ? 'theme-text-success' : 'theme-text-error'
+        'theme-text-success'
       )}
     >
-      {isFutureOrToday ? `+${dayOffset}` : dayOffset}
+      +{dayOffset}
     </span>
   )
 }
