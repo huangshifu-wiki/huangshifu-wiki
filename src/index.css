@@ -275,7 +275,7 @@ a.mention-highlight:hover {
   --color-theme-text-inverse: #fff;
   --color-theme-selection-text: #e8d4a8;
   --shadow-theme-card: 0 16px 40px rgba(0, 0, 0, 0.28);
-  --theme-header-image: linear-gradient(135deg, rgba(176, 123, 23, 0.18), rgba(52, 44, 37, 0.7));
+  --theme-header-image: #1f1a16;
   --color-bg-primary: #1f1a16;
   --color-bg-secondary: #2a231e;
   --color-bg-tertiary: #342c25;
@@ -309,24 +309,18 @@ a.mention-highlight:hover {
   --color-range-thumb: #d4a843;
   --color-range-thumb-border: #d4a843;
   --shadow-range-thumb: 0 2px 4px rgba(0, 0, 0, 0.1);
-  --home-bg-deep: #0c0c12;
-  --home-bg-surface: #1a1a24;
-  --home-bg-elevated: #24242f;
+  --home-bg-deep: #1f1a16;
+  --home-bg-surface: #231c16;
+  --home-bg-elevated: #2a231e;
   --home-gold: #c9a96e;
   --home-gold-dim: rgba(201, 169, 110, 0.12);
   --home-text-1: #ede5d8;
   --home-text-2: #9e9488;
   --home-text-3: #5e564c;
   --home-border: rgba(201, 169, 110, 0.1);
-  --home-nav-bg: rgba(12, 12, 18, 0.88);
-  --home-mobile-menu-bg: rgba(12, 12, 18, 0.95);
-  --home-hero-bg-image:
-    radial-gradient(ellipse at 20% 85%, rgba(30, 18, 32, 0.7) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 25%, rgba(28, 20, 14, 0.5) 0%, transparent 45%),
-    radial-gradient(ellipse at 50% 100%, rgba(22, 14, 18, 0.8) 0%, transparent 50%),
-    radial-gradient(ellipse at 10% 15%, rgba(35, 25, 16, 0.35) 0%, transparent 50%),
-    radial-gradient(ellipse at 90% 75%, rgba(16, 10, 20, 0.5) 0%, transparent 40%),
-    linear-gradient(175deg, #0c0c12 0%, #15101a 35%, #121016 65%, #0c0c12 100%);
+  --home-nav-bg: rgba(31, 26, 22, 0.88);
+  --home-mobile-menu-bg: rgba(31, 26, 22, 0.95);
+  --home-hero-bg-image: #1f1a16;
   --home-hero-pattern-image: url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 0L40 20L20 40L0 20Z' fill='none' stroke='%23c9a96e' stroke-width='0.5'/%3E%3C/svg%3E");
   --home-title-shadow: 0 0 80px rgba(201, 169, 110, 0.12);
   --home-button-shadow: 0 0 32px rgba(201, 169, 110, 0.12);
@@ -337,15 +331,11 @@ a.mention-highlight:hover {
   --home-list-image-filter: sepia(0.15) brightness(0.88);
   --home-gallery-image-filter: sepia(0.2) brightness(0.82) contrast(1.05);
   --home-gallery-image-filter-hover: sepia(0.08) brightness(0.92) contrast(1.1);
-  --home-gallery-overlay: linear-gradient(transparent, rgba(12, 12, 18, 0.88));
+  --home-gallery-overlay: linear-gradient(transparent, rgba(31, 26, 22, 0.88));
   --home-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
   --home-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.24);
   --home-shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.34);
-  --book-bg-image:
-    radial-gradient(ellipse at 12% 4%, rgba(120, 36, 42, 0.18), transparent 34%),
-    radial-gradient(ellipse at 88% 10%, rgba(201, 169, 110, 0.11), transparent 38%),
-    radial-gradient(ellipse at 48% 100%, rgba(201, 169, 110, 0.08), transparent 42%),
-    linear-gradient(180deg, #1f1a16 0%, #191511 48%, #1f1a16 100%);
+  --book-bg-image: #1f1a16;
   --book-paper-image:
     linear-gradient(rgba(201, 169, 110, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(201, 169, 110, 0.025) 1px, transparent 1px);
