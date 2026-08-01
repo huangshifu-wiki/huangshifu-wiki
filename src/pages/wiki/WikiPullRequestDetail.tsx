@@ -11,6 +11,7 @@ import { submitFormOnModifierEnter } from '../../lib/formShortcuts'
 import type { WikiPullRequestItem, WikiPrDiffResponse } from './types'
 import { getPrStatusText } from './types'
 import { Button, Textarea } from '@/src/components/ui'
+import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiPullRequestDetail = () => {
   const { slug, prId } = useParams()
@@ -137,12 +138,12 @@ const WikiPullRequestDetail = () => {
     <div className="mobile-page-shell">
       <div className="mobile-page-container space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link
-            to={`/wiki/${pullRequest.pageSlug}/prs`}
+          <SmartBackLink
+            fallbackTo={`/wiki/${pullRequest.pageSlug}/prs`}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
           >
             <ArrowLeft size={18} /> 返回 PR 列表
-          </Link>
+          </SmartBackLink>
           <Link
             to={`/wiki/${pullRequest.pageSlug}`}
             className="text-xs text-brand-gold hover:underline"

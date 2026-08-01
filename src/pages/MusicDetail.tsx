@@ -20,6 +20,7 @@ import { useMusic } from '../context/MusicContext'
 import { useToast } from '../components/Toast'
 import { useToggleInteraction } from '../hooks/useToggleInteraction'
 import { useI18n } from '../lib/i18n'
+import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
 import { Lightbox } from '../components/Lightbox'
 import { LyricsDisplay } from '../components/LyricsDisplay'
@@ -219,12 +220,12 @@ const MusicDetail = () => {
     return (
       <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
-          <Link
-            to="/music"
+          <SmartBackLink
+            fallbackTo="/music"
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
           >
             <ArrowLeft size={16} /> 返回音乐馆
-          </Link>
+          </SmartBackLink>
           <div className="mt-8 py-16 text-center">
             <p className="text-text-muted text-[0.9rem] tracking-[0.08em]">歌曲不存在或已被删除</p>
           </div>
@@ -247,12 +248,12 @@ const MusicDetail = () => {
   return (
     <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
       <div className="mobile-page-container">
-        <Link
-          to="/music"
+        <SmartBackLink
+          fallbackTo="/music"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
         >
           <ArrowLeft size={16} /> 返回音乐馆
-        </Link>
+        </SmartBackLink>
 
         <div className="mobile-detail-grid">
           {/* Main Content */}

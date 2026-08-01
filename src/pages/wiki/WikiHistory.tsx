@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, History, X } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { useDialog } from '../../components/Dialog'
@@ -8,6 +8,7 @@ import { apiGet, apiPost } from '../../lib/apiClient'
 import { formatDate } from '../../lib/dateUtils'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import WikiMarkdown from './WikiMarkdown'
+import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiHistory = () => {
   const { isBanned } = useAuth()
@@ -78,12 +79,12 @@ const WikiHistory = () => {
   return (
     <div className="mobile-page-shell">
       <div className="mobile-page-container">
-        <Link
-          to={`/wiki/${slug}`}
+        <SmartBackLink
+          fallbackTo={`/wiki/${slug}`}
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
         >
           <ArrowLeft size={18} /> 返回页面
-        </Link>
+        </SmartBackLink>
 
         <div className="bg-surface rounded border border-border p-8 sm:p-10">
           <h2 className="text-3xl font-serif font-bold text-brand-gold mb-8 flex items-center gap-3">

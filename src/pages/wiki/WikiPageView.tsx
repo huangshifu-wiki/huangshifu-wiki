@@ -30,6 +30,7 @@ import { buildMiniRelationGraphData } from '../../lib/wikiRelationGraph'
 import { getWikiRelationDisplayTitle } from '../../lib/wikiRelationDisplay'
 import { getWikiSubmitButtonText } from '../../lib/wikiWriteText'
 import WikiMarkdown from './WikiMarkdown'
+import { SmartBackLink } from '../../components/SmartBackLink'
 import RelationGraph from '../../components/wiki/RelationGraph'
 import type { RelationGraphData } from '../../components/wiki/RelationGraph'
 import { RELATION_TYPE_LABELS } from '../../components/wiki/types'
@@ -174,12 +175,12 @@ const WikiPageView = () => {
     return (
       <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
-          <Link
-            to="/wiki"
+          <SmartBackLink
+            fallbackTo="/wiki"
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
           >
             <ArrowLeft size={16} /> {t('wiki.backToList')}
-          </Link>
+          </SmartBackLink>
           <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
             {t('wiki.notFound')}
           </div>
@@ -243,12 +244,12 @@ const WikiPageView = () => {
   return (
     <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
       <div className="mobile-page-container wiki-detail-page">
-        <Link
-          to={'/wiki'}
+        <SmartBackLink
+          fallbackTo="/wiki"
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
         >
           <ArrowLeft size={18} /> {t('wiki.backToList')}
-        </Link>
+        </SmartBackLink>
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">

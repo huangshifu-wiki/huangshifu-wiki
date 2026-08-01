@@ -10,6 +10,7 @@ import { formatDate } from '../../lib/dateUtils'
 import type { WikiItem, WikiBranchItem, WikiRevisionItem, WikiPullRequestItem } from './types'
 import { getBranchStatusText } from './types'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
+import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiBranchWorkspace = () => {
   const { slug } = useParams()
@@ -241,12 +242,12 @@ const WikiBranchWorkspace = () => {
     <div className="mobile-page-shell">
       <div className="mobile-page-container space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link
-            to={`/wiki/${slug}`}
+          <SmartBackLink
+            fallbackTo={`/wiki/${slug}`}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
           >
             <ArrowLeft size={18} /> 返回百科页面
-          </Link>
+          </SmartBackLink>
           <div className="flex gap-2">
             <Link
               to={`/wiki/${slug}/prs`}

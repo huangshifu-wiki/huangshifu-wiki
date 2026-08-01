@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Calendar, ExternalLink, MapPin, Tag } from '@/src/components/icons'
+import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
 import { Lightbox } from '../components/Lightbox'
 import MarkdownRenderer from '../components/MarkdownRenderer'
@@ -150,12 +151,12 @@ const EventDetail = () => {
     return (
       <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
-          <Link
-            to="/events"
+          <SmartBackLink
+            fallbackTo="/events"
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
           >
             <ArrowLeft size={16} /> 返回活动
-          </Link>
+          </SmartBackLink>
           <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
             活动不存在或已删除
           </div>
@@ -170,13 +171,13 @@ const EventDetail = () => {
   return (
     <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
       <div className="mobile-page-container max-w-[1000px]">
-        <Link
-          to="/events"
+        <SmartBackLink
+          fallbackTo="/events"
           className="mb-6 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
         >
           <ArrowLeft size={16} />
           返回活动
-        </Link>
+        </SmartBackLink>
 
         <article className="space-y-10">
           <header className="flex flex-col gap-6 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row sm:items-start">

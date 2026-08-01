@@ -8,6 +8,7 @@ import { formatDate } from '../../lib/dateUtils'
 import type { WikiPullRequestItem, WikiPullRequestStatus } from './types'
 import { getPrStatusText } from './types'
 import { Button } from '@/src/components/ui'
+import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiPullRequestList = () => {
   const { slug } = useParams()
@@ -51,12 +52,12 @@ const WikiPullRequestList = () => {
     <div className="mobile-page-shell">
       <div className="mobile-page-container space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link
-            to={slug ? `/wiki/${slug}/branches` : '/wiki'}
+          <SmartBackLink
+            fallbackTo={slug ? `/wiki/${slug}/branches` : '/wiki'}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
           >
             <ArrowLeft size={18} /> 返回
-          </Link>
+          </SmartBackLink>
           <div className="flex gap-2">
             {(['open', 'merged', 'rejected'] as const).map((item) => (
               <Button

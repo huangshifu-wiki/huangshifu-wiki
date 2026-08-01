@@ -34,6 +34,7 @@ import {
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import MarkdownEditor from '../components/MarkdownEditor'
+import { SmartBackLink } from '../components/SmartBackLink'
 import { CharacterCount } from '../components/CharacterCount'
 import { apiDelete, apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../lib/apiClient'
 import { useDialog } from '../components/Dialog'
@@ -615,12 +616,12 @@ const PostDetail = () => {
     return (
       <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
-          <Link
-            to="/forum"
+          <SmartBackLink
+            fallbackTo="/forum"
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
           >
             <ArrowLeft size={16} /> {t('forum.backToList')}
-          </Link>
+          </SmartBackLink>
           <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
             {t('forum.postNotFound')}
           </div>
@@ -779,12 +780,12 @@ const PostDetail = () => {
   return (
     <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
       <div className="mobile-page-container wiki-detail-page">
-        <Link
-          to="/forum"
+        <SmartBackLink
+          fallbackTo="/forum"
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
         >
           <ArrowLeft size={16} /> {t('forum.backToList')}
-        </Link>
+        </SmartBackLink>
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">
