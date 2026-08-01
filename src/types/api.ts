@@ -441,8 +441,11 @@ export interface MusicDetailResponse {
   }
 }
 
+export type MusicPlayUrlMode = 'manual' | 'cache' | 'resolved' | 'outer' | 'none'
+
 export interface MusicPlayUrlResponse {
   playUrl: string
+  mode?: MusicPlayUrlMode
   playable?: boolean
   platform?: string | null
   sourceId?: string | null

@@ -396,6 +396,7 @@ export async function resolveMusicPlayUrl(song: {
   const fallbackUrl = song.audioUrl?.trim() || ''
   if (fallbackUrl) {
     return {
+      mode: 'manual' as const,
       platform: null,
       sourceId: null,
       playUrl: fallbackUrl,
@@ -427,6 +428,7 @@ export async function resolveMusicPlayUrl(song: {
     const cached = getCachedPlayUrl(cacheKey)
     if (cached?.url && isValidPlayUrl(cached.url)) {
       return {
+        mode: 'cache' as const,
         platform: cached.platform,
         sourceId: cached.sourceId,
         playUrl: cached.url,
@@ -450,6 +452,7 @@ export async function resolveMusicPlayUrl(song: {
       })
 
       return {
+        mode: 'resolved' as const,
         platform,
         sourceId,
         playUrl: resolvedUrl,
@@ -466,6 +469,7 @@ export async function resolveMusicPlayUrl(song: {
   // 用用户 IP 获取播放权；不缓存，避免阻止 eapi 恢复后重新解析
   if (neteaseFallbackSourceId) {
     return {
+      mode: 'outer' as const,
       platform: 'netease',
       sourceId: neteaseFallbackSourceId,
       playUrl: `https://music.163.com/song/media/outer/url?id=${neteaseFallbackSourceId}.mp3`,
@@ -478,6 +482,7 @@ export async function resolveMusicPlayUrl(song: {
   }
 
   return {
+    mode: 'none' as const,
     platform: null,
     sourceId: null,
     playUrl: '',

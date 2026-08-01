@@ -789,6 +789,7 @@ router.get(
 
       res.json({
         playUrl: resolved.playUrl,
+        mode: resolved.mode,
         platform: resolved.platform,
         sourceId: resolved.sourceId,
         playable: resolved.playable,

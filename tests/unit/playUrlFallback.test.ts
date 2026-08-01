@@ -53,6 +53,7 @@ describe('resolveMusicPlayUrl 网易云外链回退', () => {
     expect(result.cached).toBe(false)
     expect(result).toHaveProperty('fallback', true)
     expect(result.platform).toBe('netease')
+    expect(result.mode).toBe('outer')
   })
 
   it('网易云解析成功时返回 CDN 直链', async () => {
@@ -63,6 +64,7 @@ describe('resolveMusicPlayUrl 网易云外链回退', () => {
     expect(result.playUrl).toBe('https://m801.music.126.net/example.mp3')
     expect(result.playable).toBe(true)
     expect(result).not.toHaveProperty('fallback')
+    expect(result.mode).toBe('resolved')
   })
 
   it('没有可用平台时返回不可播放', async () => {
@@ -74,5 +76,6 @@ describe('resolveMusicPlayUrl 网易云外链回退', () => {
 
     expect(result.playable).toBe(false)
     expect(result.playUrl).toBe('')
+    expect(result.mode).toBe('none')
   })
 })
