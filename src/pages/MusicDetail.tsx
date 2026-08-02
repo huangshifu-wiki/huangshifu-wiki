@@ -36,7 +36,8 @@ import type { MusicExternalSource } from '../types/entities'
 
 const SourceLink = ({ source }: { source: MusicExternalSource }) => {
   const label = `${source.platform} / ${source.sourceId}`
-  const url = source.sourceUrl || getPlatformExternalUrl(source.platform, source.sourceId)
+  // 优先由平台 ID 实时构建官方跳转地址；sourceUrl 仅作冗合层数，避免存量脏链接生效
+  const url = getPlatformExternalUrl(source.platform, source.sourceId) || source.sourceUrl || null
   if (!url) {
     return <span className="text-text-primary">{label}</span>
   }

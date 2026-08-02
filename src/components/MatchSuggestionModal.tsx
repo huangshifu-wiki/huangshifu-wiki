@@ -39,8 +39,8 @@ function buildPlatformSongUrl(platform: Platform, id: string): string {
   if (platform === 'netease') return `https://music.163.com/song?id=${id}`
   if (platform === 'tencent') return `https://y.qq.com/n/ryqq/songDetail/${id}`
   if (platform === 'kugou') return `https://www.kugou.com/song/#hash=${id}`
-  if (platform === 'baidu') return `https://music.baidu.com/song/${id}`
-  return `https://www.kuwo.cn/song_detail/${id}`
+  if (platform === 'baidu') return `https://music.91q.com/#/song/${id}`
+  return `https://www.kuwo.cn/play_detail/${id}`
 }
 
 export const MatchSuggestionModal = ({

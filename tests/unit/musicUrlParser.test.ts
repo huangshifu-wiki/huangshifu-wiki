@@ -30,12 +30,51 @@ describe('parseMusicUrl', () => {
   it('returns null for empty input', () => {
     expect(parseMusicUrl('   ')).toBeNull()
   })
+
+  it('parses kuwo play_detail url as song', () => {
+    expect(parseMusicUrl('https://www.kuwo.cn/play_detail/520126')).toEqual({
+      platform: 'kuwo',
+      type: 'song',
+      id: '520126',
+      normalizedUrl: 'https://www.kuwo.cn/play_detail/520126',
+    })
+  })
+
+  it('keeps kuwo song_detail url normalized to song', () => {
+    expect(parseMusicUrl('https://www.kuwo.cn/song_detail/520126')).toEqual({
+      platform: 'kuwo',
+      type: 'song',
+      id: '520126',
+      normalizedUrl: 'https://www.kuwo.cn/play_detail/520126',
+    })
+  })
+
+  it('parses kuwo playlist_detail url as playlist', () => {
+    expect(parseMusicUrl('https://www.kuwo.cn/playlist_detail/1045573069')).toEqual({
+      platform: 'kuwo',
+      type: 'playlist',
+      id: '1045573069',
+      normalizedUrl: 'https://www.kuwo.cn/playlist_detail/1045573069',
+    })
+  })
 })
 
 describe('buildPlatformResourceUrl', () => {
   it('builds kuwo playlist url', () => {
     expect(buildPlatformResourceUrl('kuwo', 'playlist', 'xYz_123')).toBe(
       'https://www.kuwo.cn/playlist_detail/xYz_123'
+    )
+  })
+
+  it('builds kuwo song url with current play_detail path', () => {
+    expect(buildPlatformResourceUrl('kuwo', 'song', '520126')).toBe(
+      'https://www.kuwo.cn/play_detail/520126'
+    )
+  })
+
+  it('builds baidu song url with 91q domain', () => {
+    expect(buildPlatformResourceUrl('baidu', 'song', '133277411')).toBe(
+      'https://music.91q.com/#/song/133277411'
     )
   })
 
