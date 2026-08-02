@@ -39,14 +39,14 @@ const SourceLink = ({ source }: { source: MusicExternalSource }) => {
   // 优先由平台 ID 实时构建官方跳转地址；sourceUrl 仅作冗合层数，避免存量脏链接生效
   const url = getPlatformExternalUrl(source.platform, source.sourceId) || source.sourceUrl || null
   if (!url) {
-    return <span className="text-text-primary">{label}</span>
+    return <span className="min-w-0 break-words text-right text-text-primary">{label}</span>
   }
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-text-primary hover:text-brand-gold transition-colors"
+      className="min-w-0 break-words text-right text-text-primary hover:text-brand-gold transition-colors"
     >
       {label}
     </a>
@@ -531,7 +531,7 @@ const MusicDetail = () => {
                 {otherSources.length > 0 && (
                   <div className="flex items-start justify-between gap-3">
                     <span className="text-text-muted flex-shrink-0">其他来源</span>
-                    <span className="flex flex-col items-end gap-1">
+                    <span className="flex min-w-0 flex-col items-end gap-1">
                       {otherSources.map((source) => (
                         <SourceLink key={source.id} source={source} />
                       ))}
