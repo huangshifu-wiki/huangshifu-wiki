@@ -16,11 +16,12 @@ import { formatMusicCredits } from '../../lib/musicCredits'
 import type { ViewMode } from '../../types/userPreferences'
 import { formatDate } from '../../lib/dateUtils'
 import type { SearchState } from '../../hooks/useSearchPage'
-import type { WikiItem, PostItem, GalleryItem, SongItem, AlbumItem } from '../../types/entities'
+import type { WikiItem, PostItem, GalleryItem, AlbumItem } from '../../types/entities'
 import type { TextSearchResult } from '../../types/api'
 import { MixedSearchResultCard } from '../MixedSearchResultCard'
 import { SearchResultCard } from './SearchResultCard'
 import { LyricSearchResultCard } from './LyricSearchResultCard'
+import { MusicSearchResults } from './MusicSearchResults'
 import { getFirstGalleryImage, shouldWaitForGalleryThumbnail } from '../../lib/galleryThumbnails'
 import { Button } from '@/src/components/ui'
 
@@ -57,17 +58,6 @@ function galleryToConfig(
     imagePlaceholder: shouldWaitForGalleryThumbnail(gallery) ? '生成中...' : undefined,
     meta: `${Array.isArray(gallery.images) ? gallery.images.length : 0} 张图片`,
     type: 'gallery',
-  }
-}
-
-function musicToConfig(track: SongItem): import('./SearchResultCard').SearchResultCardConfig {
-  return {
-    id: track.docId,
-    title: track.title,
-    subtitle: `${formatMusicCredits(track.artists, '未知歌手')} — ${track.album}`,
-    link: `/music/${track.slug || track.docId}`,
-    image: track.coverThumbnail || track.cover || undefined,
-    type: 'music',
   }
 }
 
@@ -409,15 +399,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                   <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
                     <Music size={14} className="text-brand-gold" /> 音乐曲目
                   </h2>
-                  <div className={resultGridClassName}>
-                    {results.music.map((track) => (
-                      <SearchResultCard
-                        key={track.docId}
-                        config={musicToConfig(track)}
-                        viewMode={viewMode}
-                      />
-                    ))}
-                  </div>
+                  <MusicSearchResults songs={results.music} viewMode={viewMode} />
                 </motion.section>
               )}
 

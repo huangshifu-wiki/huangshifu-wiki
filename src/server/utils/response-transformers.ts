@@ -873,51 +873,54 @@ export async function toEventListResponse(events: EventInput[]) {
   return events.map((event) => toEventResponseWithImageMaps(event, imageMapByLocalUrl))
 }
 
-export function toMusicResponse(track: {
-  docId: string
-  slug?: string
-  title: string
-  artists: string[]
-  lyricists?: string[]
-  composers?: string[]
-  arrangers?: string[]
-  vocals?: string[]
-  album: string
-  audioUrl: string
-  description?: string | null
-  customPlatformLinks?: unknown
-  playableOverride?: MusicPlayableOverride
-  lyric?: string | null
-  releaseDate?: Date | null
-  durationMs?: number | null
-  coverId?: string | null
-  coverAlbumDocId?: string | null
-  covers?: Array<{
-    id: string
-    publicUrl: string
-    thumbnailUrl?: string | null
-    isDefault?: boolean
-  }>
-  albumRelations?: Array<{
-    album: {
-      docId: string
-      coverId: string | null
-      covers: Array<{
-        id: string
-        publicUrl: string
-        thumbnailUrl?: string | null
-        isDefault?: boolean
-      }>
-    }
-  }>
-  externalSources?: MusicExternalSourceRecord[]
-  displayAlbumMode: string
-  manualAlbumName?: string | null
-  deletedAt?: Date | null
-  deletedBy?: string | null
-  createdAt: Date
-  updatedAt: Date
-}) {
+export function toMusicResponse(
+  track: {
+    docId: string
+    slug?: string
+    title: string
+    artists: string[]
+    lyricists?: string[]
+    composers?: string[]
+    arrangers?: string[]
+    vocals?: string[]
+    album: string
+    audioUrl: string
+    description?: string | null
+    customPlatformLinks?: unknown
+    playableOverride?: MusicPlayableOverride
+    lyric?: string | null
+    releaseDate?: Date | null
+    durationMs?: number | null
+    coverId?: string | null
+    coverAlbumDocId?: string | null
+    covers?: Array<{
+      id: string
+      publicUrl: string
+      thumbnailUrl?: string | null
+      isDefault?: boolean
+    }>
+    albumRelations?: Array<{
+      album: {
+        docId: string
+        coverId: string | null
+        covers: Array<{
+          id: string
+          publicUrl: string
+          thumbnailUrl?: string | null
+          isDefault?: boolean
+        }>
+      }
+    }>
+    externalSources?: MusicExternalSourceRecord[]
+    displayAlbumMode: string
+    manualAlbumName?: string | null
+    deletedAt?: Date | null
+    deletedBy?: string | null
+    createdAt: Date
+    updatedAt: Date
+  },
+  options?: { favoritedByMe?: boolean }
+) {
   const cover = resolveSongCoverUrl({
     coverId: track.coverId ?? null,
     coverAlbumDocId: track.coverAlbumDocId ?? null,
@@ -950,6 +953,7 @@ export function toMusicResponse(track: {
     sources: serializeMusicExternalSources(track.externalSources || []),
     playable: isPlayableSong(track),
     playableOverride: track.playableOverride ?? 'auto',
+    favoritedByMe: Boolean(options?.favoritedByMe),
     displayAlbumMode: track.displayAlbumMode,
     manualAlbumName: track.manualAlbumName || null,
     isDeleted: Boolean(track.deletedAt),

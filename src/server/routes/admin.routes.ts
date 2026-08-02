@@ -2773,7 +2773,7 @@ router.get(
         ])
         const totalPages = Math.max(1, Math.ceil(total / limit))
         res.json({
-          data: orderedRows.map(toMusicResponse),
+          data: orderedRows.map((track) => toMusicResponse(track)),
           total,
           page,
           limit,

@@ -260,6 +260,30 @@ async function fetchGalleryData(
 }
 
 /**
+ * 查询一批歌曲 ID 中当前用户已收藏的集合
+ */
+async function fetchFavoritedMusicDocIds(
+  docIds: string[],
+  authUser?: ApiUser
+): Promise<Set<string>> {
+  const favorited = new Set<string>()
+  if (!authUser || !docIds.length) {
+    return favorited
+  }
+
+  const favorites = await prisma.favorite.findMany({
+    where: {
+      userUid: authUser.uid,
+      targetType: 'music',
+      targetId: { in: docIds },
+    },
+    select: { targetId: true },
+  })
+  favorites.forEach((item) => favorited.add(item.targetId))
+  return favorited
+}
+
+/**
  * 获取 WikiPage 数据
  */
 async function fetchWikiData(
@@ -637,7 +661,8 @@ export function buildHybridResponse(
   query: string,
   degraded: boolean,
   degradationReason?: string,
-  textResults?: TextSearchResult[]
+  textResults?: TextSearchResult[],
+  favoritedMusicIds?: Set<string>
 ): HybridSearchResponse {
   const keywordFlat: HybridSearchItem[] = [
     ...keywordResults.wiki.map((d, i) => ({
@@ -779,7 +804,10 @@ export function buildHybridResponse(
       .filter(
         (v) => v.type === 'music' && v.data && typeof v.data === 'object' && 'createdAt' in v.data
       )
-      .map((v) => toMusicResponse(v.data as Parameters<typeof toMusicResponse>[0])),
+      .map((v) => {
+        const track = v.data as Parameters<typeof toMusicResponse>[0]
+        return toMusicResponse(track, { favoritedByMe: favoritedMusicIds?.has(track.docId) })
+      }),
     albums: keywordFlat
       .filter(
         (v) => v.type === 'album' && v.data && typeof v.data === 'object' && 'createdAt' in v.data
@@ -1112,6 +1140,11 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
       lyricsPromise,
     ])
 
+    const favoritedMusicSet = await fetchFavoritedMusicDocIds(
+      music.map((song) => song.docId),
+      req.authUser
+    )
+
     if ((mode === 'hybrid' || mode === 'vector') && q && type !== 'lyrics' && includeDetail) {
       const keywordRaw = {
         wiki: wiki.map(toWikiResponse),
@@ -1136,7 +1169,8 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
           q,
           true,
           SEMANTIC_SEARCH_DISABLED_MESSAGE,
-          []
+          [],
+          favoritedMusicSet
         )
       } else {
         let vectorResults: SemanticSearchResult[] = []
@@ -1186,7 +1220,8 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
           q,
           degraded,
           degradationReason,
-          textResults
+          textResults,
+          favoritedMusicSet
         )
       }
 
@@ -1207,7 +1242,9 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
       wiki: wiki.map(toWikiResponse),
       posts: posts.map(toPostResponse),
       galleries: await toGalleryListResponse(galleries),
-      music: music.map(toMusicResponse),
+      music: music.map((track) =>
+        toMusicResponse(track, { favoritedByMe: favoritedMusicSet.has(track.docId) })
+      ),
       albums: albums.map(toAlbumResponse),
       lyrics: builtLyrics,
       searchMeta: {
