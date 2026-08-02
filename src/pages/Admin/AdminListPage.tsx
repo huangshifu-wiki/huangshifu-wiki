@@ -28,6 +28,7 @@ import { formatDateTime } from '../../lib/dateUtils'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
+import { useScrollRestore } from '../../hooks/useScrollRestore'
 import { SmartImage } from '../../components/SmartImage'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
@@ -494,6 +495,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const showDeleted = searchParams.get('includeDeleted') === 'true'
   const dialog = useDialog()
   const { show } = useToast()
+  const saveScroll = useScrollRestore()
   const [newItem, setNewItem] = useState<any>({})
 
   const invalidateCurrentDataCaches = () => {
@@ -505,8 +507,10 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     invalidateApiCacheByPrefix(`/api/admin/${cfg.apiPath}`)
   }
 
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true
+    if (silent) saveScroll()
+    else setLoading(true)
     try {
       const result = await apiGet<AdminListResponse>(`/api/admin/${cfg.apiPath}`, {
         includeDeleted: showDeleted ? 'true' : undefined,
@@ -514,9 +518,9 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       setData(result.data || [])
     } catch (e) {
       console.error(e)
-      setData([])
+      if (!silent) setData([])
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -668,11 +672,9 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         })
       }
       setNewItem({})
-      if (type === 'wiki-categories') {
-        invalidateCurrentDataCaches()
-      }
-      await fetchData()
+      invalidateCurrentDataCaches()
       show('创建成功', { variant: 'success' })
+      await fetchData({ silent: true })
     } catch (e) {
       show('创建失败', { variant: 'error' })
     }
@@ -686,8 +688,8 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       })
       setEditingCategory(null)
       invalidateCurrentDataCaches()
-      await fetchData()
       show('更新成功', { variant: 'success' })
+      await fetchData({ silent: true })
     } catch (e) {
       show(e instanceof Error ? e.message : '更新失败', { variant: 'error' })
     }
@@ -831,7 +833,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               <Ban size={14} className="mr-1 inline" /> 显示已删除
             </button>
             <button
-              onClick={fetchData}
+              onClick={() => void fetchData()}
               className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
             >
               <RefreshCw size={14} className="mr-1 inline" /> 刷新

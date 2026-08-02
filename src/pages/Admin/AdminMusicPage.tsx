@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { Music, Plus, RefreshCw } from '@/src/components/icons'
@@ -20,6 +20,7 @@ import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import Pagination from '../../components/Pagination'
 import { useRoutedPagination } from '../../hooks/useRoutedPagination'
+import { useScrollRestore } from '../../hooks/useScrollRestore'
 import { apiDelete, apiGet, apiPatch, apiPost, invalidateMusicApiCaches } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'
 import { formatMusicCredits } from '../../lib/musicCredits'
@@ -95,6 +96,7 @@ export const AdminMusicPage = () => {
   const [coverTarget, setCoverTarget] = useState<CoverTarget>(null)
   const dialog = useDialog()
   const { show } = useToast()
+  const saveScroll = useScrollRestore()
   const tab = searchParams.get('musicTab') === 'albums' ? 'albums' : 'songs'
 
   const songPagination = useRoutedPagination({
@@ -129,8 +131,10 @@ export const AdminMusicPage = () => {
   })
 
   const fetchSongs = useCallback(
-    async (signal?: AbortSignal) => {
-      setLoading(true)
+    async (signal?: AbortSignal, options?: { silent?: boolean }) => {
+      const silent = options?.silent === true
+      if (silent) saveScroll()
+      else setLoading(true)
       try {
         const response = await apiGet<AdminMusicListResponse>(
           '/api/admin/music',
@@ -152,19 +156,23 @@ export const AdminMusicPage = () => {
         })
       } catch (error) {
         if (signal?.aborted) return
-        setSongs([])
-        setSongTotal(0)
+        if (!silent) {
+          setSongs([])
+          setSongTotal(0)
+        }
         show(error instanceof Error ? error.message : '获取歌曲列表失败', { variant: 'error' })
       } finally {
-        if (!signal?.aborted) setLoading(false)
+        if (!signal?.aborted && !silent) setLoading(false)
       }
     },
-    [appliedFilters, show, songPagination.page, songPagination.pageSize]
+    [appliedFilters, saveScroll, show, songPagination.page, songPagination.pageSize]
   )
 
   const fetchAlbums = useCallback(
-    async (signal?: AbortSignal) => {
-      setLoading(true)
+    async (signal?: AbortSignal, options?: { silent?: boolean }) => {
+      const silent = options?.silent === true
+      if (silent) saveScroll()
+      else setLoading(true)
       try {
         const response = await apiGet<AdminAlbumListResponse>(
           '/api/admin/albums',
@@ -177,14 +185,16 @@ export const AdminMusicPage = () => {
         setAlbumTotal(response.total || 0)
       } catch (error) {
         if (signal?.aborted) return
-        setAlbums([])
-        setAlbumTotal(0)
+        if (!silent) {
+          setAlbums([])
+          setAlbumTotal(0)
+        }
         show(error instanceof Error ? error.message : '获取专辑列表失败', { variant: 'error' })
       } finally {
-        if (!signal?.aborted) setLoading(false)
+        if (!signal?.aborted && !silent) setLoading(false)
       }
     },
-    [albumPagination.page, appliedFilters, show]
+    [albumPagination.page, appliedFilters, saveScroll, show]
   )
 
   const fetchInactiveCount = useCallback(
@@ -215,10 +225,10 @@ export const AdminMusicPage = () => {
     return () => controller.abort()
   }, [fetchAlbums, fetchInactiveCount, fetchSongs, tab])
 
-  const refreshCurrent = async () => {
+  const refreshCurrent = async ({ silent = true }: { silent?: boolean } = {}) => {
     invalidateMusicApiCaches()
-    if (tab === 'songs') await fetchSongs()
-    else await fetchAlbums()
+    if (tab === 'songs') await fetchSongs(undefined, { silent })
+    else await fetchAlbums(undefined, { silent })
   }
 
   const handleFilterChange = (next: MusicAdminFilterState) => {
@@ -373,7 +383,7 @@ export const AdminMusicPage = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => void refreshCurrent()}
+            onClick={() => void refreshCurrent({ silent: false })}
             leftIcon={<RefreshCw size={15} />}
           >
             刷新

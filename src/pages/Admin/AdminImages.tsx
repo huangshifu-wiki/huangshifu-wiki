@@ -12,9 +12,17 @@ import {
   Sparkles,
   Search,
 } from '@/src/components/icons'
-import { apiGet, apiPatch, apiDelete, apiPost, apiDownload } from '../../lib/apiClient'
+import {
+  apiGet,
+  apiPatch,
+  apiDelete,
+  apiPost,
+  apiDownload,
+  invalidateApiCacheByPrefix,
+} from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
+import { useScrollRestore } from '../../hooks/useScrollRestore'
 import { formatDateTime } from '../../lib/dateUtils'
 import { clsx } from 'clsx'
 import { SmartImage } from '../../components/SmartImage'
@@ -183,8 +191,12 @@ const AdminImages: React.FC = () => {
   const dialog = useDialog()
   const { show } = useToast()
 
-  const fetchImages = async () => {
-    setLoading(true)
+  const saveScroll = useScrollRestore()
+
+  const fetchImages = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true
+    if (silent) saveScroll()
+    else setLoading(true)
     try {
       const response = await apiGet<{ items: ImageMap[] }>('/api/image-maps')
       setImages(response.items || [])
@@ -192,8 +204,13 @@ const AdminImages: React.FC = () => {
       console.error(error)
       show('获取图片列表失败', { variant: 'error' })
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
+  }
+
+  const refreshImages = async () => {
+    invalidateApiCacheByPrefix('/api/image-maps')
+    await fetchImages({ silent: true })
   }
 
   const fetchStats = async () => {
@@ -359,7 +376,7 @@ const AdminImages: React.FC = () => {
       show(`已清理 ${response.data.cleaned} 条，跳过 ${response.data.skipped} 条`, {
         variant: response.data.skipped > 0 ? 'error' : 'success',
       })
-      await Promise.all([handleScanMediaHealth(mediaHealthMode), fetchImages(), fetchStats()])
+      await Promise.all([handleScanMediaHealth(mediaHealthMode), refreshImages(), fetchStats()])
     } catch (error) {
       show(error instanceof Error ? error.message : '媒体记录清理失败', { variant: 'error' })
     } finally {
@@ -801,7 +818,7 @@ const AdminImages: React.FC = () => {
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
         onSuccess={() => {
-          fetchImages()
+          void refreshImages()
           fetchStats()
           setShowImportModal(false)
         }}

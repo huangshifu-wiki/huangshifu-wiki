@@ -29,6 +29,7 @@ import { formatAdminRole } from '../../lib/formatUtils'
 import { FormModal } from '../../components/Modal'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/passwordRules'
 import { useDismissableLayer } from '../../hooks/useClickOutside'
+import { useScrollRestore } from '../../hooks/useScrollRestore'
 import {
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   PROFILE_SIGNATURE_MAX_LENGTH,
@@ -81,14 +82,11 @@ export const AdminUsers = () => {
   const actionsMenuRef = useRef<HTMLDivElement | null>(null)
   const dialog = useDialog()
   const { show } = useToast()
+  const saveScroll = useScrollRestore()
 
   const closeActionsMenu = useCallback(() => setOpenMenuUid(null), [])
   const invalidateAdminUsersCache = () => invalidateApiCacheByPrefix(ADMIN_USERS_API_PREFIX)
   const isCurrentUser = (uid?: string) => Boolean(uid && uid === currentUser?.uid)
-  const applyUserUpdate = (user: AdminDataItem) => {
-    invalidateAdminUsersCache()
-    setData((prev) => prev.map((item) => (item.uid === user.uid ? { ...item, ...user } : item)))
-  }
 
   useDismissableLayer(actionsMenuRef, closeActionsMenu, Boolean(openMenuUid))
 
@@ -121,9 +119,11 @@ export const AdminUsers = () => {
     return target.role === 'user'
   }
 
-  const fetchData = async () => {
+  const fetchData = async (options?: { silent?: boolean }) => {
     closeActionsMenu()
-    setLoading(true)
+    const silent = options?.silent === true
+    if (silent) saveScroll()
+    else setLoading(true)
     try {
       const permissionsRequest = isSuperAdmin
         ? apiGet<AdminPermissionConfig>(ADMIN_PERMISSIONS_API_PATH).catch(
@@ -138,11 +138,18 @@ export const AdminUsers = () => {
       setAdminPermissions(permissions)
     } catch (e) {
       console.error(e)
-      setData([])
-      setAdminPermissions(DEFAULT_ADMIN_PERMISSIONS)
+      if (!silent) {
+        setData([])
+        setAdminPermissions(DEFAULT_ADMIN_PERMISSIONS)
+      }
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
+  }
+
+  const refreshUsers = async () => {
+    invalidateAdminUsersCache()
+    await fetchData({ silent: true })
   }
 
   useEffect(() => {
@@ -172,11 +179,8 @@ export const AdminUsers = () => {
           return false
         }
         try {
-          const result = await apiPut<{ user: AdminDataItem }>(
-            endpoint,
-            shouldUnban ? { note: value } : { reason: value }
-          )
-          applyUserUpdate(result.user)
+          await apiPut(endpoint, shouldUnban ? { note: value } : { reason: value })
+          await refreshUsers()
           show(shouldUnban ? '已解封' : '已封禁', { variant: 'success' })
           return true
         } catch {
@@ -202,10 +206,10 @@ export const AdminUsers = () => {
     })
     if (!confirmed) return
     try {
-      const result = await apiPut<{ user: AdminDataItem }>(`/api/users/${target.uid}/role`, {
+      await apiPut(`/api/users/${target.uid}/role`, {
         role: newRole,
       })
-      applyUserUpdate(result.user)
+      await refreshUsers()
       show('角色已更新', { variant: 'success' })
     } catch (e) {
       show('更新角色失败', { variant: 'error' })
@@ -234,11 +238,11 @@ export const AdminUsers = () => {
         }
 
         try {
-          const result = await apiPut<{ user: AdminDataItem }>(`/api/users/${target.uid}/role`, {
+          await apiPut(`/api/users/${target.uid}/role`, {
             role,
             currentPassword: value,
           })
-          applyUserUpdate(result.user)
+          await refreshUsers()
           show('角色已更新', { variant: 'success' })
           return true
         } catch (error) {
@@ -268,8 +272,7 @@ export const AdminUsers = () => {
 
     try {
       await apiDelete(`/api/admin/users/${target.uid}`)
-      invalidateAdminUsersCache()
-      setData((prev) => prev.filter((item) => item.uid !== target.uid))
+      await refreshUsers()
       show('已删除', { variant: 'success' })
     } catch (error) {
       show(error instanceof Error ? error.message : '删除失败', { variant: 'error' })
@@ -386,10 +389,7 @@ export const AdminUsers = () => {
         `/api/users/${editTarget.uid}`,
         payload
       )
-      invalidateAdminUsersCache()
-      setData((prev) =>
-        prev.map((item) => (item.uid === editTarget.uid ? { ...item, ...result.user } : item))
-      )
+      await refreshUsers()
       setEditTarget(null)
       setEditForm(EMPTY_EDIT_FORM)
       show(`已更新 ${result.user.displayName || editTarget.displayName || editTarget.uid} 的资料`, {
@@ -407,7 +407,7 @@ export const AdminUsers = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">用户管理</h1>
         <button
-          onClick={fetchData}
+          onClick={() => void fetchData()}
           className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
         >
           <RefreshCw size={14} className="inline mr-1" /> 刷新

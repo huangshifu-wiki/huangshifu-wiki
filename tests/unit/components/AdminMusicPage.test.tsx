@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DialogProvider } from '../../../src/components/Dialog'
 import { ToastProvider } from '../../../src/components/Toast'
 import { AdminMusicPage } from '../../../src/pages/Admin/AdminMusicPage'
-import { apiGet } from '../../../src/lib/apiClient'
+import { apiGet, apiPatch } from '../../../src/lib/apiClient'
 
 vi.mock('../../../src/lib/apiClient', () => ({
   apiDelete: vi.fn(),
@@ -189,5 +189,85 @@ describe('AdminMusicPage list covers', () => {
       expect(musicCalls[musicCalls.length - 1][1]).toMatchObject({ page: 2 })
     })
     expect(await screen.findByText('第 2 / 5 页')).toBeInTheDocument()
+  })
+
+  it('编辑保存后静默刷新：旧行在途可见、数据原地更新', async () => {
+    let musicCallCount = 0
+    let releaseRefresh: (value: unknown) => void
+    const refreshGate = new Promise((resolve) => {
+      releaseRefresh = resolve
+    })
+    mockedApiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/admin/music') {
+        musicCallCount += 1
+        if (musicCallCount === 1) {
+          return {
+            data: [{ docId: 's1', title: '歌曲一', artists: ['歌手'] }],
+            total: 1,
+          } as never
+        }
+        return refreshGate as never
+      }
+      if (path === '/api/admin/albums') {
+        return { data: [], total: 0 } as never
+      }
+      throw new Error(`unexpected apiGet path: ${path}`)
+    })
+    vi.mocked(apiPatch).mockResolvedValue({} as never)
+    renderPage()
+
+    expect(await screen.findByText('歌曲一')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    const titleInput = await screen.findByPlaceholderText('歌曲名称')
+    fireEvent.change(titleInput, { target: { value: '歌曲一（已更新）' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    // 静默刷新在途：旧行仍在文档中（未被骨架屏替换），新数据未出现
+    await waitFor(() => expect(musicCallCount).toBe(2))
+    expect(screen.getByText('歌曲一')).toBeInTheDocument()
+    expect(screen.queryByText('歌曲一（已更新）')).not.toBeInTheDocument()
+
+    act(() => {
+      releaseRefresh!({
+        data: [{ docId: 's1', title: '歌曲一（已更新）', artists: ['歌手'] }],
+        total: 1,
+      })
+    })
+    expect(await screen.findByText('歌曲一（已更新）')).toBeInTheDocument()
+  })
+
+  it('静默刷新失败时保留现有列表并提示', async () => {
+    let musicCallCount = 0
+    mockedApiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/admin/music') {
+        musicCallCount += 1
+        if (musicCallCount === 1) {
+          return {
+            data: [{ docId: 's1', title: '歌曲一', artists: ['歌手'] }],
+            total: 1,
+          } as never
+        }
+        throw new Error('获取歌曲列表失败')
+      }
+      if (path === '/api/admin/albums') {
+        return { data: [], total: 0 } as never
+      }
+      throw new Error(`unexpected apiGet path: ${path}`)
+    })
+    vi.mocked(apiPatch).mockResolvedValue({} as never)
+    renderPage()
+
+    expect(await screen.findByText('歌曲一')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    const titleInput = await screen.findByPlaceholderText('歌曲名称')
+    fireEvent.change(titleInput, { target: { value: '歌曲一（已更新）' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(musicCallCount).toBe(2))
+    expect(await screen.findByText('获取歌曲列表失败')).toBeInTheDocument()
+    expect(screen.getByText('歌曲一')).toBeInTheDocument()
+    expect(screen.queryByText('歌曲一（已更新）')).not.toBeInTheDocument()
   })
 })

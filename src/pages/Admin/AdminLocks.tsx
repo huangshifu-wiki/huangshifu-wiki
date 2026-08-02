@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Lock, RefreshCw, Trash2 } from '@/src/components/icons'
-import { apiDelete, apiGet } from '../../lib/apiClient'
+import { apiDelete, apiGet, invalidateApiCacheByPrefix } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
+import { useScrollRestore } from '../../hooks/useScrollRestore'
 import type { EditLockItem } from '../../types/entities'
 import {
   Button,
@@ -23,9 +24,12 @@ export const AdminLocks = () => {
   const [batchReleasing, setBatchReleasing] = useState(false)
   const dialog = useDialog()
   const { show } = useToast()
+  const saveScroll = useScrollRestore()
 
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true
+    if (silent) saveScroll()
+    else setLoading(true)
     try {
       const result = await apiGet<{ locks: EditLockItem[] }>('/api/admin/locks')
       const locks = result.locks || []
@@ -36,10 +40,15 @@ export const AdminLocks = () => {
       })
     } catch (e) {
       console.error(e)
-      setData([])
+      if (!silent) setData([])
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
+  }
+
+  const refreshLocks = async () => {
+    invalidateApiCacheByPrefix('/api/admin/locks')
+    await fetchData({ silent: true })
   }
 
   useEffect(() => {
@@ -62,6 +71,7 @@ export const AdminLocks = () => {
         next.delete(lock.id)
         return next
       })
+      await refreshLocks()
       show('已释放', { variant: 'success' })
     } catch (e) {
       show('释放失败', { variant: 'error' })
@@ -102,6 +112,7 @@ export const AdminLocks = () => {
       await apiDelete('/api/admin/locks', { lockIds })
       setData((prev) => prev.filter((item) => !lockIds.includes(item.id)))
       setSelectedIds(new Set())
+      await refreshLocks()
       show('已批量释放', { variant: 'success' })
     } catch (e) {
       show('批量释放失败', { variant: 'error' })
@@ -129,7 +140,7 @@ export const AdminLocks = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={fetchData}
+            onClick={() => void fetchData()}
             leftIcon={<RefreshCw size={14} />}
           >
             刷新
