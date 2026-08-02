@@ -7,6 +7,7 @@ import { useToast } from './Toast'
 import { AuthModal } from './Navbar/AuthModal'
 import type { AuthMode } from './Navbar/types'
 import { MobileMenu } from './Navbar/MobileMenu'
+import { NavbarSearchBox } from './Navbar/NavbarSearchBox'
 import styles from './Navbar.module.css'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
 import { IconButton } from '@/src/components/ui'
@@ -77,14 +78,12 @@ export const Navbar = () => {
             <NavLink to="/forum" className={styles.navLink}>
               论坛
             </NavLink>
-            <NavLink to="/search" className={styles.navLink}>
-              搜索
-            </NavLink>
           </div>
         </div>
 
         <div className={styles.siteNavRight}>
           <div className={styles.siteDesktopControls}>
+            <NavbarSearchBox />
             <HeaderUserControls
               onLogout={handleLogout}
               onOpenAuth={openAuthModal}
