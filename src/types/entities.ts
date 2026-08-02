@@ -56,6 +56,7 @@ export interface SongItem {
   description?: string | null
   favoritedByMe?: boolean
   sources?: MusicExternalSource[]
+  tags?: string[]
   playable?: boolean
   playableOverride?: MusicPlayableOverride
   createdAt?: string

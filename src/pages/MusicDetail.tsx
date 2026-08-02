@@ -58,6 +58,7 @@ type SongItem = {
   releaseDate?: string | null
   durationMs?: number | null
   favoritedByMe?: boolean
+  tags?: string[]
   customPlatformLinks?: CustomPlatformLink[]
   sources?: MusicExternalSource[]
   playable?: boolean
@@ -479,6 +480,22 @@ const MusicDetail = () => {
                   <span className="text-text-muted">歌手</span>
                   <span className="text-text-primary">{artistsText}</span>
                 </div>
+                {(song.tags?.length ?? 0) > 0 && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-text-muted flex-shrink-0">标签</span>
+                    <span className="flex flex-wrap justify-end gap-1">
+                      {song.tags!.map((tag) => (
+                        <Link
+                          key={tag}
+                          to={`/music?tag=${encodeURIComponent(tag)}`}
+                          className="rounded-sm border border-[var(--book-ink-line)] px-1.5 py-0.5 text-xs text-text-secondary transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
+                        >
+                          {tag}
+                        </Link>
+                      ))}
+                    </span>
+                  </div>
+                )}
                 {creditRows.map((row) => (
                   <div className="flex items-center justify-between" key={row.label}>
                     <span className="text-text-muted">{row.label}</span>

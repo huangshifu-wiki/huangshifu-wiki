@@ -5,32 +5,32 @@ import { app } from '../../server'
 import { prisma, createTestUser, nextTestNumericSlug } from './setup'
 import { applyAlbumTracksToRelations } from '../../src/server/utils/music'
 
+function findCookieValue(setCookieHeader: string | string[] | undefined, cookieName: string) {
+  const cookies = Array.isArray(setCookieHeader)
+    ? setCookieHeader
+    : setCookieHeader
+      ? [setCookieHeader]
+      : []
+  const targetCookie = cookies.find((cookie) => cookie?.startsWith(`${cookieName}=`))
+  return targetCookie?.split(';')[0].split('=')[1]
+}
+
+async function createAuthenticatedAgent(email: string, password: string) {
+  const agent = request.agent(app)
+  const loginResponse = await agent.post('/api/auth/login').send({ email, password })
+
+  expect(loginResponse.status).toBe(200)
+  const xsrfToken = findCookieValue(loginResponse.headers['set-cookie'], 'XSRF-TOKEN')
+  expect(xsrfToken).toBeTruthy()
+
+  return {
+    agent,
+    xsrfToken: xsrfToken!,
+  }
+}
+
 describe('Music API - 音乐接口测试', () => {
   let adminUser: Awaited<ReturnType<typeof createTestUser>>
-
-  function findCookieValue(setCookieHeader: string | string[] | undefined, cookieName: string) {
-    const cookies = Array.isArray(setCookieHeader)
-      ? setCookieHeader
-      : setCookieHeader
-        ? [setCookieHeader]
-        : []
-    const targetCookie = cookies.find((cookie) => cookie?.startsWith(`${cookieName}=`))
-    return targetCookie?.split(';')[0].split('=')[1]
-  }
-
-  async function createAuthenticatedAgent(email: string, password: string) {
-    const agent = request.agent(app)
-    const loginResponse = await agent.post('/api/auth/login').send({ email, password })
-
-    expect(loginResponse.status).toBe(200)
-    const xsrfToken = findCookieValue(loginResponse.headers['set-cookie'], 'XSRF-TOKEN')
-    expect(xsrfToken).toBeTruthy()
-
-    return {
-      agent,
-      xsrfToken: xsrfToken!,
-    }
-  }
 
   beforeEach(async () => {
     await prisma.musicTrack.deleteMany({
@@ -866,5 +866,165 @@ describe('Music API - 音乐接口测试', () => {
       `Release Date Sort Test Song New ${suffix}`,
       `Release Date Sort Test Song Unknown ${suffix}`,
     ])
+  })
+})
+
+describe('Music API - 歌曲标签', () => {
+  let adminUser: Awaited<ReturnType<typeof createTestUser>>
+
+  async function cleanupTaggedSongs() {
+    await prisma.musicTrack.deleteMany({
+      where: { title: { startsWith: 'Tagged Music Test Song' } },
+    })
+  }
+
+  beforeEach(async () => {
+    await cleanupTaggedSongs()
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    adminUser = await createTestUser({
+      role: 'admin',
+      email: `test_music_tags_admin_${suffix}@example.com`,
+      displayName: `TestMusicTagsAdmin_${suffix}`,
+    })
+  })
+
+  afterEach(async () => {
+    await cleanupTaggedSongs()
+    await prisma.user.deleteMany({
+      where: { email: { startsWith: 'test_music_tags_admin_' } },
+    })
+  })
+
+  it('创建歌曲时标签应 trim、去重、去空后落库', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const response = await agent
+      .post('/api/music')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: 'Tagged Music Test Song Normalize',
+        artists: ['Tagged Test Artist'],
+        tags: [' 古风  ', '古风 ', '', '仙侠'],
+      })
+
+    expect(response.status).toBe(201)
+    const stored = await prisma.musicTrack.findUnique({
+      where: { docId: response.body.song.docId },
+      select: { tags: true },
+    })
+    expect(stored?.tags).toEqual(['古风', '仙侠'])
+  })
+
+  it('更新歌曲标签覆盖旧值', async () => {
+    const song = await prisma.musicTrack.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: 'Tagged Music Test Song Update',
+        artists: ['Tagged Test Artist'],
+        tags: ['旧标签'],
+      },
+    })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const response = await agent
+      .patch(`/api/music/${song.docId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ tags: ['剑', '剑'] })
+
+    expect(response.status).toBe(200)
+    const stored = await prisma.musicTrack.findUnique({
+      where: { docId: song.docId },
+      select: { tags: true },
+    })
+    expect(stored?.tags).toEqual(['剑'])
+  })
+
+  it('标签数量与单项长度超限时返回 400', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const tooMany = await agent
+      .post('/api/music')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: 'Tagged Music Test Song Too Many',
+        artists: ['Tagged Test Artist'],
+        tags: Array.from({ length: 31 }, (_, index) => `t${index}`),
+      })
+    expect(tooMany.status).toBe(400)
+    expect(JSON.stringify(tooMany.body)).toContain('标签最多')
+
+    const tooLong = await agent
+      .post('/api/music')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: 'Tagged Music Test Song Too Long',
+        artists: ['Tagged Test Artist'],
+        tags: ['x'.repeat(51)],
+      })
+    expect(tooLong.status).toBe(400)
+    expect(JSON.stringify(tooLong.body)).toContain('标签单项长度')
+  })
+
+  it('公开列表支持按 tag 筛选，且返回歌曲带 tags', async () => {
+    await prisma.musicTrack.createMany({
+      data: [
+        {
+          slug: nextTestNumericSlug(),
+          title: 'Tagged Music Test Song Filtered',
+          artists: ['Tagged Test Artist'],
+          tags: ['筛选甲'],
+        },
+        {
+          slug: nextTestNumericSlug(),
+          title: 'Tagged Music Test Song Untagged',
+          artists: ['Tagged Test Artist'],
+          tags: ['筛选乙'],
+        },
+      ],
+    })
+    const response = await request(app).get('/api/music').query({
+      tag: '筛选甲',
+      limit: 100,
+      sortBy: 'releaseDate',
+    })
+
+    expect(response.status).toBe(200)
+    const titles = response.body.songs.map((song: { title: string }) => song.title)
+    expect(titles).toContain('Tagged Music Test Song Filtered')
+    expect(titles).not.toContain('Tagged Music Test Song Untagged')
+    const filtered = response.body.songs.find(
+      (song: { title: string }) => song.title === 'Tagged Music Test Song Filtered'
+    )
+    expect(filtered.tags).toEqual(['筛选甲'])
+  })
+
+  it('标签汇总端点返回去重后的全部标签', async () => {
+    await prisma.musicTrack.createMany({
+      data: [
+        {
+          slug: nextTestNumericSlug(),
+          title: 'Tagged Music Test Song Summary A',
+          artists: ['Tagged Test Artist'],
+          tags: ['汇总甲', '汇总乙'],
+        },
+        {
+          slug: nextTestNumericSlug(),
+          title: 'Tagged Music Test Song Summary B',
+          artists: ['Tagged Test Artist'],
+          tags: ['汇总甲'],
+        },
+      ],
+    })
+    const response = await request(app).get('/api/music/tags')
+
+    expect(response.status).toBe(200)
+    expect(response.body.tags).toContain('汇总甲')
+    expect(response.body.tags).toContain('汇总乙')
   })
 })

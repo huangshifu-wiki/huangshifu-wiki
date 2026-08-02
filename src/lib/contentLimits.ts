@@ -82,6 +82,8 @@ export const CONTENT_LIMITS = {
     artist: 200,
     album: 200,
     description: 5000,
+    tag: 50,
+    tags: 30,
     audioUrl: 2048,
     lyric: 500 * 1024,
     platformId: 100,

@@ -1,3 +1,5 @@
+import { normalizeStringListInput } from './musicCredits'
+
 export type ContentStatus = 'draft' | 'pending' | 'published' | 'rejected'
 
 export const getStatusClassName = (status?: ContentStatus): string => {
@@ -7,11 +9,8 @@ export const getStatusClassName = (status?: ContentStatus): string => {
   return 'bg-surface-alt text-text-muted'
 }
 
-export const splitTagsInput = (value: string): string[] =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
+// 与后端 normalizeStringListInput 同源：同一分隔符集合（含中文标点）拆分，trim + 去空 + 去重
+export const splitTagsInput = (value: string): string[] => normalizeStringListInput(value)
 
 export const getStatusText = (status?: ContentStatus): string => {
   if (status === 'pending') return '待审核'

@@ -33,6 +33,7 @@ const Music = () => {
   const [loadingAlbums, setLoadingAlbums] = useState(false)
   const tabParam = searchParams.get('tab')
   const activeTab: 'music' | 'albums' = tabParam === 'albums' ? 'albums' : 'music'
+  const tag = searchParams.get('tag') || ''
   const { user } = useAuth()
   const { currentSong, setCurrentSong, setIsPlaying, setPlaylist, playSongAtIndex } = useMusic()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
@@ -61,6 +62,22 @@ const Music = () => {
     enabled: !isIncrementalMode,
   })
   const [showAccompaniments, setShowAccompaniments] = useState(false)
+  const [musicTags, setMusicTags] = useState<string[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    apiGet<{ tags: string[] }>('/api/music/tags')
+      .then((data) => {
+        if (!cancelled) setMusicTags(data.tags || [])
+      })
+      .catch(() => {
+        if (!cancelled) setMusicTags([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const fetchSongPage = useCallback(
     async (page: number) => {
       const data = await apiGet<MusicListResponse>('/api/music', {
@@ -69,6 +86,7 @@ const Music = () => {
         includeInstrumentals: showAccompaniments,
         sortBy,
         sortOrder,
+        ...(tag ? { tag } : {}),
       })
 
       return {
@@ -76,7 +94,7 @@ const Music = () => {
         total: data.total || 0,
       }
     },
-    [musicPagination.pageSize, showAccompaniments, sortBy, sortOrder]
+    [musicPagination.pageSize, showAccompaniments, sortBy, sortOrder, tag]
   )
   const fetchAlbumPage = useCallback(
     async (page: number) => {
@@ -95,7 +113,7 @@ const Music = () => {
   const incrementalSongs = useIncrementalListLoader({
     enabled: isIncrementalMode,
     pageSize: musicPagination.pageSize,
-    resetKey: `songs:${showAccompaniments}:${sortBy}:${sortOrder}`,
+    resetKey: `songs:${showAccompaniments}:${sortBy}:${sortOrder}:${tag}`,
     fetchPage: fetchSongPage,
     getItemKey: (song) => song.docId,
   })
@@ -149,6 +167,21 @@ const Music = () => {
       }
       return next
     })
+  }
+
+  const handleTagChange = (nextTag: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (nextTag) {
+        next.set('tag', nextTag)
+      } else {
+        next.delete('tag')
+      }
+      next.delete('musicPage')
+      next.delete('musicPageSize')
+      return next
+    })
+    musicPagination.setPage(1)
   }
 
   useEffect(() => {
@@ -307,6 +340,34 @@ const Music = () => {
               viewMode={viewMode}
               onViewModeChange={(mode) => void setScopedViewMode('music', mode)}
             />
+
+            {activeTab === 'music' && musicTags.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleTagChange('')}
+                  className={clsx(
+                    'cursor-pointer rounded-sm px-2 py-0.5 text-xs theme-tag',
+                    !tag && 'font-semibold text-brand-gold'
+                  )}
+                >
+                  全部
+                </button>
+                {musicTags.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => handleTagChange(item)}
+                    className={clsx(
+                      'cursor-pointer rounded-sm px-2 py-0.5 text-xs theme-tag',
+                      tag === item && 'font-semibold text-brand-gold'
+                    )}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Content */}
             {activeTab === 'music' ? (

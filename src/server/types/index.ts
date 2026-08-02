@@ -84,6 +84,7 @@ type MusicTrackWithRelations = {
   lyricPlain: string | null
   lyricSource: MusicPlatform | null
   description: string | null
+  tags: Prisma.JsonValue
   releaseDate: Date | null
   durationMs: number | null
   coverId: string | null

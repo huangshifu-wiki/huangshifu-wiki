@@ -432,6 +432,7 @@ export interface MusicDetailResponse {
     vocals?: string[]
     album?: string
     description?: string | null
+    tags?: string[]
     coverUrl?: string
     coverThumbnail?: string
     playUrl?: string

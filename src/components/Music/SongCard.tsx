@@ -95,13 +95,27 @@ const SongCard = React.memo(function SongCard({
         </div>
 
         <div className="pointer-events-none min-w-0 flex-1">
-          <p
-            className={clsx(
-              'truncate text-[0.9375rem] font-semibold tracking-[0.03em] transition-colors sm:text-[0.975rem]',
-              isCurrentSong ? 'text-brand-gold' : 'text-text-primary group-hover:text-brand-gold'
+          <p className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={clsx(
+                'min-w-0 truncate text-[0.9375rem] font-semibold tracking-[0.03em] transition-colors sm:text-[0.975rem]',
+                isCurrentSong ? 'text-brand-gold' : 'text-text-primary group-hover:text-brand-gold'
+              )}
+            >
+              {song.title}
+            </span>
+            {(song.tags?.length ?? 0) > 0 && (
+              <span className="flex flex-shrink-0 items-center gap-1">
+                {song.tags!.map((tag) => (
+                  <span
+                    key={tag}
+                    className="whitespace-nowrap rounded-[3px] border border-border/60 px-1 py-px text-[0.625rem] font-normal leading-tight text-text-muted/80"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </span>
             )}
-          >
-            {song.title}
           </p>
           <p className="mt-0.5 flex flex-wrap items-center gap-1.5 truncate text-[0.78rem] text-text-muted">
             {metaItems.map((item, index) => (
@@ -200,14 +214,28 @@ const SongCard = React.memo(function SongCard({
       </div>
 
       <div className={clsx(isSmallGrid ? 'p-2.5' : 'p-3')}>
-        <p
-          className={clsx(
-            'truncate font-semibold tracking-[0.02em] transition-colors',
-            isSmallGrid ? 'text-[0.8125rem]' : 'text-[0.9rem]',
-            isCurrentSong ? 'text-brand-gold' : 'text-text-primary group-hover:text-brand-gold'
+        <p className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={clsx(
+              'min-w-0 truncate font-semibold tracking-[0.02em] transition-colors',
+              isSmallGrid ? 'text-[0.8125rem]' : 'text-[0.9rem]',
+              isCurrentSong ? 'text-brand-gold' : 'text-text-primary group-hover:text-brand-gold'
+            )}
+          >
+            {song.title}
+          </span>
+          {!isSmallGrid && (song.tags?.length ?? 0) > 0 && (
+            <span className="flex flex-shrink-0 items-center gap-1">
+              {song.tags!.map((tag) => (
+                <span
+                  key={tag}
+                  className="whitespace-nowrap rounded-[3px] border border-border/60 px-1 py-px text-[0.625rem] font-normal leading-tight text-text-muted/80"
+                >
+                  {tag}
+                </span>
+              ))}
+            </span>
           )}
-        >
-          {song.title}
         </p>
         <p
           className={clsx(

@@ -58,6 +58,7 @@ const MUSIC_SEARCH_SELECT = {
   arrangers: true,
   vocals: true,
   album: true,
+  tags: true,
   audioUrl: true,
   playableOverride: true,
   releaseDate: true,

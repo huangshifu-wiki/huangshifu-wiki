@@ -111,8 +111,14 @@ function compareMusicListRows(
   return a.docId.localeCompare(b.docId)
 }
 
-async function fetchAlbumTrackPage(albumDocId: string, skip: number, limit: number) {
-  const where = { albumDocId, song: { deletedAt: null } }
+async function fetchAlbumTrackPage(albumDocId: string, skip: number, limit: number, tag = '') {
+  const where = {
+    albumDocId,
+    song: {
+      deletedAt: null,
+      ...(tag ? { tags: { array_contains: [tag] } } : {}),
+    },
+  }
   const [relations, total] = await Promise.all([
     prisma.songAlbumRelation.findMany({
       where,
@@ -140,6 +146,16 @@ function ensureMusicTextLimits(
         .json({ error: `${field} 单项长度不能超过 ${CONTENT_LIMITS.music.artist} 个字符` })
       return false
     }
+  }
+
+  const tags = normalizeStringListInput(input.tags)
+  if (tags.some((item) => item.length > CONTENT_LIMITS.music.tag)) {
+    res.status(400).json({ error: `标签单项长度不能超过 ${CONTENT_LIMITS.music.tag} 个字符` })
+    return false
+  }
+  if (tags.length > CONTENT_LIMITS.music.tags) {
+    res.status(400).json({ error: `标签最多 ${CONTENT_LIMITS.music.tags} 个` })
+    return false
   }
 
   return (
@@ -226,6 +242,7 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
       const albumDocId = typeof req.query.albumDocId === 'string' ? req.query.albumDocId.trim() : ''
+      const tag = typeof req.query.tag === 'string' ? req.query.tag.trim() : ''
       const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 })
       const page = parseInteger(req.query.page, 1, { min: 1 })
       const skip = (page - 1) * limit
@@ -234,7 +251,7 @@ router.get(
       const sortOrder = parseMusicListSortOrder(req.query.sortOrder)
 
       if (!req.authUser && !albumDocId) {
-        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortBy}:${sortOrder}`
+        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortBy}:${sortOrder}:${tag || ''}`
         const cached = enhancedCache.get(cacheKey)
         if (cached) {
           res.json(cached)
@@ -251,21 +268,15 @@ router.get(
         instrumentalDocIds = relations.map((r) => r.songDocId)
       }
 
-      const where = albumDocId
-        ? {
-            deletedAt: null,
-            albumRelations: {
-              some: {
-                albumDocId,
-              },
-            },
-          }
-        : instrumentalDocIds.length > 0
-          ? { deletedAt: null, docId: { notIn: instrumentalDocIds } }
-          : { deletedAt: null }
+      const where = {
+        deletedAt: null,
+        ...(tag ? { tags: { array_contains: [tag] } } : {}),
+        ...(albumDocId ? { albumRelations: { some: { albumDocId } } } : {}),
+        ...(instrumentalDocIds.length > 0 ? { docId: { notIn: instrumentalDocIds } } : {}),
+      }
 
       const [songs, total] = albumDocId
-        ? await fetchAlbumTrackPage(albumDocId, skip, limit)
+        ? await fetchAlbumTrackPage(albumDocId, skip, limit, tag)
         : sortBy === 'artist' || sortBy === 'title'
           ? await (async () => {
               const rows = await prisma.musicTrack.findMany({
@@ -320,7 +331,7 @@ router.get(
       }
 
       if (!req.authUser && !albumDocId) {
-        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortBy}:${sortOrder}`
+        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortBy}:${sortOrder}:${tag || ''}`
         enhancedCache.set(cacheKey, result, 120)
       }
 
@@ -329,6 +340,21 @@ router.get(
       console.error('Fetch music error:', error)
       res.status(500).json({ error: '获取音乐失败' })
     }
+  })
+)
+
+// Music tags summary
+router.get(
+  '/tags',
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.$queryRaw<Array<{ tag: string }>>`
+      SELECT DISTINCT music_tag.tag AS tag
+      FROM "MusicTrack"
+      CROSS JOIN LATERAL jsonb_array_elements_text("MusicTrack"."tags") AS music_tag(tag)
+      WHERE "MusicTrack"."deletedAt" IS NULL AND btrim(music_tag.tag) <> ''
+    `
+    const tags = rows.map((row) => row.tag).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    res.json({ tags })
   })
 )
 
@@ -360,6 +386,7 @@ router.post(
       const durationMs = hasDurationMs ? normalizeOptionalDurationMs(body.durationMs) : null
       const sources = normalizeMusicExternalSourceInputs(body.sources)
       const customPlatformLinks = normalizeSongCustomPlatformLinks(body.customPlatformLinks)
+      const tags = normalizeStringListInput(body.tags)
       const rawPlayableOverride = body.playableOverride
       const playableOverride: 'auto' | 'enabled' | 'disabled' | undefined =
         rawPlayableOverride === 'auto' ||
@@ -406,6 +433,7 @@ router.post(
             lyricPlain: lyricStorage.data.lyricPlain,
             lyricSource: null,
             description: description ?? null,
+            tags,
             releaseDate,
             durationMs,
             customPlatformLinks: customPlatformLinks.length
@@ -1105,6 +1133,9 @@ router.patch(
         updateData.customPlatformLinks = normalizeSongCustomPlatformLinks(
           body.customPlatformLinks
         ) as unknown as Prisma.InputJsonValue
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'tags')) {
+        updateData.tags = normalizeStringListInput(body.tags)
       }
 
       const shouldReplaceSources = Object.prototype.hasOwnProperty.call(body, 'sources')

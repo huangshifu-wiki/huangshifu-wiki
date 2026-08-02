@@ -130,6 +130,10 @@ export function prepareEntityText(
       if (description) {
         parts.push(description)
       }
+      const tags = entity.tags as string[] | undefined
+      if (tags?.length) {
+        parts.push(tags.join('、'))
+      }
       return parts.join('\n\n')
     }
     case 'album': {
@@ -276,7 +280,7 @@ export async function enqueueMusicTextEmbeddings(
 
   const tracks = await prisma.musicTrack.findMany({
     where: { docId: { in: uniqueIds } },
-    select: { docId: true, title: true, artists: true, album: true, description: true },
+    select: { docId: true, title: true, artists: true, album: true, description: true, tags: true },
   })
 
   let queued = 0

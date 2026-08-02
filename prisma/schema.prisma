@@ -900,6 +900,7 @@ model MusicTrack {
   lyricPlain String?
   lyricSource MusicPlatform?
   description String?
+  tags       Json     @default("[]")
   releaseDate DateTime? @db.Date
   durationMs  Int?
   customPlatformLinks Json?
@@ -924,6 +925,7 @@ model MusicTrack {
   @@index([coverAlbumDocId])
   @@index([createdAt])
   @@index([deletedAt])
+  @@index([tags], map: "music_tags_gin", type: Gin)
 }
 
 enum MusicPlayableOverride {

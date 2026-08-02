@@ -19,6 +19,7 @@ import {
   MUSIC_PLATFORM_OPTIONS,
 } from '../lib/musicPlatformUrls'
 import { formatMusicCredits, normalizeStringListInput } from '../lib/musicCredits'
+import { splitTagsInput } from '../lib/contentUtils'
 import type { Platform } from '../types/common'
 import type { MusicExternalSource, MusicPlayableOverride } from '../types/entities'
 import type { DuplicateSongSourceWarning } from '../types/api'
@@ -46,6 +47,7 @@ type SongFormData = {
   vocals: string
   album: string
   audioUrl: string
+  tagsText: string
   playableOverride: MusicPlayableOverride
   releaseDate: string
   durationMs: string
@@ -89,6 +91,7 @@ type SongItem = {
   durationMs?: number | null
   favoritedByMe?: boolean
   sources?: MusicExternalSource[]
+  tags?: string[]
   playableOverride?: MusicPlayableOverride
   customPlatformLinks?: CustomPlatformLink[]
 }
@@ -186,6 +189,7 @@ const emptyFormData: SongFormData = {
   vocals: '',
   album: '',
   audioUrl: '',
+  tagsText: '',
   playableOverride: 'auto',
   releaseDate: '',
   durationMs: '',
@@ -221,6 +225,7 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         vocals: formatMusicCredits(song.vocals),
         album: song.album || '',
         audioUrl: song.audioUrl || '',
+        tagsText: (song.tags || []).join(', '),
         playableOverride: song.playableOverride || 'auto',
         releaseDate: song.releaseDate || '',
         durationMs: typeof song.durationMs === 'number' ? String(song.durationMs) : '',
@@ -274,6 +279,16 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
       return
     }
 
+    const tags = splitTagsInput(formData.tagsText)
+    if (tags.length > CONTENT_LIMITS.music.tags) {
+      show(`标签最多 ${CONTENT_LIMITS.music.tags} 个`, { variant: 'error' })
+      return
+    }
+    if (tags.some((item) => item.length > CONTENT_LIMITS.music.tag)) {
+      show(`标签单项长度不能超过 ${CONTENT_LIMITS.music.tag} 个字符`, { variant: 'error' })
+      return
+    }
+
     setSaving(true)
     const description =
       typeof formData.description === 'string' && formData.description.trim()
@@ -289,6 +304,7 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         vocals: normalizeStringListInput(formData.vocals),
         album: formData.album.trim(),
         audioUrl: formData.audioUrl.trim(),
+        tags,
         playableOverride: formData.playableOverride,
         releaseDate: formData.releaseDate || null,
         durationMs: formData.durationMs ? Number(formData.durationMs) : null,
@@ -503,6 +519,25 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
                 />
               </BookFormField>
             </div>
+
+            <BookFormField
+              label="标签（可选，逗号分隔）"
+              counter={
+                <CharacterCount
+                  current={formData.tagsText.length}
+                  max={CONTENT_LIMITS.music.tags * CONTENT_LIMITS.music.tag}
+                />
+              }
+            >
+              <input
+                type="text"
+                value={formData.tagsText}
+                onChange={(e) => setFormData((prev) => ({ ...prev, tagsText: e.target.value }))}
+                maxLength={CONTENT_LIMITS.music.tags * CONTENT_LIMITS.music.tag}
+                placeholder="标签，逗号分隔（可选）"
+                className={bookCompactInputClass}
+              />
+            </BookFormField>
 
             <BookFormField label="播放状态">
               <select

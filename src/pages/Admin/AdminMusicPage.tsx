@@ -656,6 +656,7 @@ const SongTable = ({
       '',
       '封面 / 标题 / 艺术家',
       '平台来源',
+      '标签',
       '结构化专辑 / 展示模式',
       '发行日期 / 更新时间',
       '操作',
@@ -664,6 +665,7 @@ const SongTable = ({
     {songs.map((song, index) => {
       const id = itemId(song)
       const sources = sourceList(song)
+      const tags = song.tags as string[] | undefined
       return (
         <tr key={id} className="border-b border-border align-top hover:bg-surface-alt">
           <td className="px-3 py-4 text-xs tabular-nums text-text-muted">
@@ -718,6 +720,19 @@ const SongTable = ({
                 ))
               ) : (
                 <span className="text-xs text-text-muted">无来源</span>
+              )}
+            </div>
+          </td>
+          <td className="px-3 py-4">
+            <div className="flex max-w-[10rem] flex-wrap gap-1">
+              {tags?.length ? (
+                tags.map((tag) => (
+                  <span key={tag} className="rounded-sm px-1.5 py-0.5 text-[11px] theme-tag">
+                    {tag}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-text-muted">—</span>
               )}
             </div>
           </td>

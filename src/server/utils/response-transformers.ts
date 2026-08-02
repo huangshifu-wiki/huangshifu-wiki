@@ -886,6 +886,7 @@ export function toMusicResponse(
     album: string
     audioUrl: string
     description?: string | null
+    tags?: unknown
     customPlatformLinks?: unknown
     playableOverride?: MusicPlayableOverride
     lyric?: string | null
@@ -944,6 +945,7 @@ export function toMusicResponse(
     arrangers: normalizeStringListInput(track.arrangers),
     vocals: normalizeStringListInput(track.vocals),
     album: track.album,
+    tags: serializeTags(track.tags),
     cover,
     coverThumbnail,
     audioUrl: track.audioUrl,
@@ -1085,6 +1087,7 @@ export function toSongResponse(
     arrangers: normalizeStringListInput(song.arrangers),
     vocals: normalizeStringListInput(song.vocals),
     album: song.album,
+    tags: serializeTags(song.tags),
     cover: coverUrl,
     coverThumbnail,
     audioUrl: song.audioUrl,

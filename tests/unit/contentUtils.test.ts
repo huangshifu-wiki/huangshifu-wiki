@@ -23,6 +23,17 @@ describe('contentUtils', () => {
     it('trims extra whitespace', () => {
       expect(splitTagsInput('  tag1  ,  tag2  ')).toEqual(['tag1', 'tag2'])
     })
+
+    it('splits on Chinese and full-width separators like the backend', () => {
+      expect(splitTagsInput('古风，仙侠')).toEqual(['古风', '仙侠'])
+      expect(splitTagsInput('古风、仙侠')).toEqual(['古风', '仙侠'])
+      expect(splitTagsInput('古风；仙侠')).toEqual(['古风', '仙侠'])
+      expect(splitTagsInput('古风/仙侠')).toEqual(['古风', '仙侠'])
+    })
+
+    it('deduplicates repeated values', () => {
+      expect(splitTagsInput('古风，古风')).toEqual(['古风'])
+    })
   })
 
   describe('getStatusText', () => {
