@@ -104,7 +104,7 @@ const Events = () => {
     return query ? `/events?${query}` : '/events'
   }
 
-  if (loading) return <PageSkeleton />
+  if (loading && events.length === 0) return <PageSkeleton />
 
   return (
     <div className="gufeng-events-page mobile-page-shell">

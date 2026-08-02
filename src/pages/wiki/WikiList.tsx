@@ -65,6 +65,7 @@ const WikiList = () => {
     resetKey: `${category}:${tag || ''}`,
     fetchPage: fetchWikiPage,
     getItemKey: (page) => page.id,
+    preserveItemsOnReset: true,
   })
   const visiblePages = isIncrementalMode ? incrementalList.items : pages
   const visibleTotal = isIncrementalMode ? incrementalList.total : total || 0
@@ -153,7 +154,7 @@ const WikiList = () => {
           onViewModeChange={(mode) => void setScopedViewMode('wiki', mode)}
         />
 
-        {isInitialLoading ? (
+        {isInitialLoading && visiblePages.length === 0 ? (
           <div
             className={clsx(
               viewMode === 'list'

@@ -12,6 +12,8 @@ interface UseIncrementalListLoaderOptions<T> {
   resetKey: string
   fetchPage: (page: number, signal: AbortSignal) => Promise<IncrementalPageResult<T>>
   getItemKey: (item: T) => string
+  /** 筛选/标签/排序切换（resetKey 变化）时保留旧列表直到新数据落地，避免整块闪烁；默认 false 保持原行为 */
+  preserveItemsOnReset?: boolean
 }
 
 export function useIncrementalListLoader<T>({
@@ -20,6 +22,7 @@ export function useIncrementalListLoader<T>({
   resetKey,
   fetchPage,
   getItemKey,
+  preserveItemsOnReset = false,
 }: UseIncrementalListLoaderOptions<T>) {
   const [items, setItems] = useState<T[]>([])
   const [total, setTotal] = useState(0)
@@ -103,8 +106,10 @@ export function useIncrementalListLoader<T>({
   useEffect(() => {
     if (!enabled) return
 
-    setItems([])
-    setTotal(0)
+    if (!preserveItemsOnReset) {
+      setItems([])
+      setTotal(0)
+    }
     setPage(0)
     setHasMore(false)
     setAutoLoadEnabled(true)
@@ -114,7 +119,7 @@ export function useIncrementalListLoader<T>({
       requestIdRef.current += 1
       abortControllerRef.current?.abort()
     }
-  }, [enabled, pageSize, loadPage, resetKey])
+  }, [enabled, pageSize, loadPage, preserveItemsOnReset, resetKey])
 
   const loadMore = useCallback(() => {
     if (loadingInitial || loadingMore || !hasMore) return

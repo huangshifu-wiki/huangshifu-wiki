@@ -153,6 +153,7 @@ const Notifications = () => {
       return result
     },
     getItemKey: (notification) => notification.id,
+    preserveItemsOnReset: true,
   })
   const visibleNotifications = isIncrementalMode ? incrementalList.items : data.notifications
 
@@ -336,7 +337,8 @@ const Notifications = () => {
 
         {/* List */}
         <div className="bg-surface border border-border rounded overflow-hidden min-h-[360px]">
-          {(isIncrementalMode ? incrementalList.loadingInitial : loading) ? (
+          {(isIncrementalMode ? incrementalList.loadingInitial : loading) &&
+          visibleNotifications.length === 0 ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 size={24} className="animate-spin text-brand-gold" />
             </div>

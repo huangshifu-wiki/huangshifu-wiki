@@ -190,6 +190,7 @@ const PostList = () => {
     resetKey: `${section}:${sort}`,
     fetchPage: fetchPostPage,
     getItemKey: (post) => post.id,
+    preserveItemsOnReset: true,
   })
   const visiblePosts = isIncrementalMode ? incrementalList.items : posts
 
@@ -292,7 +293,8 @@ const PostList = () => {
           onViewModeChange={(mode) => void setScopedViewMode('forum', mode)}
         />
 
-        {(isIncrementalMode ? incrementalList.loadingInitial : loading) ? (
+        {(isIncrementalMode ? incrementalList.loadingInitial : loading) &&
+        visiblePosts.length === 0 ? (
           <PageSkeleton variant="forum" />
         ) : visiblePosts.length > 0 ? (
           <>

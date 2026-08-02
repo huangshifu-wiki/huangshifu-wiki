@@ -116,6 +116,7 @@ const Music = () => {
     resetKey: `songs:${showAccompaniments}:${sortBy}:${sortOrder}:${tag}`,
     fetchPage: fetchSongPage,
     getItemKey: (song) => song.docId,
+    preserveItemsOnReset: true,
   })
   const incrementalAlbums = useIncrementalListLoader({
     enabled: isIncrementalMode,
@@ -295,7 +296,10 @@ const Music = () => {
     }
   }
 
-  if (isIncrementalMode ? incrementalSongs.loadingInitial : loading) {
+  if (
+    (isIncrementalMode ? incrementalSongs.loadingInitial : loading) &&
+    visibleSongs.length === 0
+  ) {
     return <PageSkeleton variant="music" />
   }
 
