@@ -181,7 +181,6 @@ const Music = () => {
       next.delete('musicPageSize')
       return next
     })
-    musicPagination.setPage(1)
   }
 
   useEffect(() => {
