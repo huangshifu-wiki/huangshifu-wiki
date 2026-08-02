@@ -86,6 +86,7 @@ describe('ScrollPositionSync', () => {
         cb(0)
         return 1
       })
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
 
     renderSync('/music')
 
@@ -96,7 +97,29 @@ describe('ScrollPositionSync', () => {
     expect(sessionStorage.getItem('scrollPos:/music')).toBe('123')
   })
 
-  it('pathname 变化时恢复新页位置', () => {
+  it('PUSH 进入新页面时回到顶部', () => {
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+
+    renderSyncWithNav()
+
+    fireEvent.click(screen.getByRole('button', { name: '跳转' }))
+
+    expect(scrollToSpy).toHaveBeenLastCalledWith(0, 0)
+  })
+
+  it('PUSH 进入有保存值的页面也回到顶部，不恢复旧值', () => {
+    sessionStorage.setItem('scrollPos:/wiki', '800')
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+
+    renderSyncWithNav()
+
+    fireEvent.click(screen.getByRole('button', { name: '跳转' }))
+
+    expect(scrollToSpy).toHaveBeenLastCalledWith(0, 0)
+    expect(scrollToSpy).not.toHaveBeenCalledWith(0, 800)
+  })
+
+  it('POP 返回时恢复该页保存的位置', () => {
     sessionStorage.setItem('scrollPos:/wiki', '800')
     Object.defineProperty(document.documentElement, 'scrollHeight', {
       value: 2000,
@@ -104,9 +127,13 @@ describe('ScrollPositionSync', () => {
     })
     const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
 
-    renderSyncWithNav()
+    // MemoryRouter 默认 initialIndex 为末位：初始即 /wiki 且导航类型为 POP
+    render(
+      <MemoryRouter initialEntries={['/music', '/wiki']}>
+        <ScrollPositionSync />
+      </MemoryRouter>
+    )
 
-    fireEvent.click(screen.getByRole('button', { name: '跳转' }))
     vi.advanceTimersByTime(100)
 
     expect(scrollToSpy).toHaveBeenCalledWith(0, 800)
