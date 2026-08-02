@@ -1160,9 +1160,10 @@ img {
   min-height: 0;
 }
 
-/* 平滑滚动 */
+/* 平滑滚动 + 预留滚动条轨道 */
 html {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 /* 滚动条样式 */
