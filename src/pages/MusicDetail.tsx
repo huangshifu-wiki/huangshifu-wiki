@@ -34,6 +34,24 @@ import { isPlayableSong } from '../lib/musicPlayback'
 import { parseLyrics } from '../lib/lrcParser'
 import type { MusicExternalSource } from '../types/entities'
 
+const SourceLink = ({ source }: { source: MusicExternalSource }) => {
+  const label = `${source.platform} / ${source.sourceId}`
+  const url = source.sourceUrl || getPlatformExternalUrl(source.platform, source.sourceId)
+  if (!url) {
+    return <span className="text-text-primary">{label}</span>
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-text-primary hover:text-brand-gold transition-colors"
+    >
+      {label}
+    </a>
+  )
+}
+
 type CustomPlatformLink = {
   label: string
   url: string
@@ -78,12 +96,6 @@ type PostItem = {
 }
 
 const COVER_FILTER = 'brightness(0.96) saturate(0.92)'
-
-const getSongExternalUrl = (song: SongItem) => {
-  const source = song.sources?.find((item) => item.isPrimary) || song.sources?.[0]
-  if (!source) return null
-  return source.sourceUrl || getPlatformExternalUrl(source.platform, source.sourceId)
-}
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return '刚刚'
@@ -236,8 +248,9 @@ const MusicDetail = () => {
   }
 
   const artistsText = formatMusicCredits(song.artists, '未知歌手')
-  const externalUrl = getSongExternalUrl(song)
   const canPlay = isPlayableSong(song)
+  const primarySource = song.sources?.find((item) => item.isPrimary) || song.sources?.[0]
+  const otherSources = (song.sources || []).filter((item) => item.id !== primarySource?.id)
   const coverPreviewSrc = song.coverThumbnail || song.cover
   const creditRows = [
     { label: '作词', value: formatMusicCredits(song.lyricists) },
@@ -322,16 +335,6 @@ const MusicDetail = () => {
                   >
                     <Link2 size={14} /> 复制内链
                   </button>
-                  {externalUrl && (
-                    <a
-                      href={externalUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded border border-[var(--book-ink-line)] text-[0.875rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
-                    >
-                      <ExternalLink size={14} /> 原始链接
-                    </a>
-                  )}
                 </div>
               </div>
             </div>
@@ -518,11 +521,19 @@ const MusicDetail = () => {
                   <span className="text-text-muted">专辑</span>
                   <span className="text-text-primary">{song.album}</span>
                 </div>
-                {song.sources?.[0] && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-text-muted">主来源</span>
-                    <span className="text-text-primary">
-                      {song.sources[0].platform} / {song.sources[0].sourceId}
+                {primarySource && (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-text-muted flex-shrink-0">主来源</span>
+                    <SourceLink source={primarySource} />
+                  </div>
+                )}
+                {otherSources.length > 0 && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-text-muted flex-shrink-0">其他来源</span>
+                    <span className="flex flex-col items-end gap-1">
+                      {otherSources.map((source) => (
+                        <SourceLink key={source.id} source={source} />
+                      ))}
                     </span>
                   </div>
                 )}
