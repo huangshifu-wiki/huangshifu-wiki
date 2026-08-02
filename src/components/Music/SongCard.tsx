@@ -41,7 +41,7 @@ const SongCard = React.memo(function SongCard({
   const albumText = (song.displayAlbum ? song.displayAlbum.title : song.album).trim()
   const releaseDateText = song.releaseDate || null
   const coverSrc = song.coverThumbnail || song.cover
-  const metaItems = [artistsText, albumText, releaseDateText].filter(Boolean)
+  const bodyMeta = [artistsText, albumText].filter(Boolean)
 
   const handlePlayClick = (e: React.MouseEvent) => {
     // 必须 preventDefault：Link 的 preventDefault 在自身 onClick 里，仅
@@ -117,13 +117,16 @@ const SongCard = React.memo(function SongCard({
               </span>
             )}
           </p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 truncate text-[0.78rem] text-text-muted">
-            {metaItems.map((item, index) => (
-              <React.Fragment key={`${index}-${item}`}>
-                {index > 0 && <span className="text-text-muted/40">·</span>}
-                <span>{item}</span>
-              </React.Fragment>
-            ))}
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.78rem] text-text-muted">
+            {bodyMeta.length > 0 && (
+              <span className="min-w-0 truncate">{bodyMeta.join(' · ')}</span>
+            )}
+            {releaseDateText && (
+              <>
+                <span className="flex-shrink-0 text-text-muted/40">·</span>
+                <span className="flex-shrink-0 whitespace-nowrap">{releaseDateText}</span>
+              </>
+            )}
           </p>
         </div>
 

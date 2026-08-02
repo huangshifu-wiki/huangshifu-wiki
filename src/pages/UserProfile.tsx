@@ -114,8 +114,11 @@ function ProfileActivityList({
                 <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
                   {getFavoriteTitle(item)}
                 </p>
-                <p className="mt-1 text-xs text-text-muted">
-                  {getFavoriteMeta(item)} · {verb} {formatTime(item.createdAt)}
+                <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-text-muted">
+                  <span className="min-w-0 truncate">{getFavoriteMeta(item)}</span>
+                  <span className="flex-shrink-0 whitespace-nowrap">
+                    · {verb} {formatTime(item.createdAt)}
+                  </span>
                 </p>
               </Link>
             </li>
