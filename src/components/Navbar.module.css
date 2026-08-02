@@ -23,8 +23,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
+  gap: clamp(1rem, 3vw, 1.5rem);
   padding: 0 clamp(1.5rem, 5vw, 4rem);
+  container-type: inline-size;
+  container-name: navbar;
 }
 
 .siteNavLeft,
@@ -34,17 +36,16 @@
   min-width: 0;
 }
 
-.siteNavLeft {
-  gap: clamp(1.6rem, 4vw, 3rem);
-}
-
 .siteNavRight {
+  flex-shrink: 0;
   gap: 1rem;
 }
 
 .siteBrand {
   display: flex;
   align-items: baseline;
+  flex-shrink: 0; /* logo 不参与压缩，避免 CJK 逐字折行 */
+  white-space: nowrap;
   gap: 0.4em;
   color: var(--home-gold);
   text-decoration: none;
@@ -67,13 +68,15 @@
 }
 
 .siteNavLinks {
-  position: absolute;
+  position: absolute; /* 独立于流式布局，以整条导航居中于页面 */
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 2rem;
+  white-space: nowrap; /* 链接绝不换行 */
 }
 
 .navLink {
@@ -160,9 +163,17 @@
   border-bottom: 1px solid var(--home-border);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  /* 收起时禁止透明层拦截页面点击 */
+  pointer-events: none;
+}
+
+.siteMobileMenu[data-state='open'] {
+  pointer-events: auto;
 }
 
 .siteMobileMenuInner {
+  max-width: 720px;
+  margin: 0 auto;
   padding: 1rem clamp(1.5rem, 5vw, 4rem) 1.5rem;
 }
 
@@ -198,14 +209,38 @@
   border-top: 1px solid var(--home-border);
 }
 
-@media (max-width: 768px) {
-  .siteNavLinks,
-  .siteDesktopControls {
+/* 链接三层渐进。阈值基于导航容器自身宽度（@container），不依赖视口，按实际内容宽度推导：
+   - ≥66.98rem：居中有余量。碰撞点约 71rem（链接区≈27rem + 2×右侧控件≈44rem），取 66.98 早些切换
+   - 55.98–66.98rem：链接左对齐，占满品牌与搜索控件之间的空间
+   - <55.98rem：链接收进汉堡菜单，汉堡按钮+菜单展开；logo 与搜索/账户仍保留在栏内
+*/
+@container navbar (max-width: 66.98rem) {
+  .siteNavLinks {
+    position: static;
+    top: auto;
+    left: auto;
+    transform: none;
+    flex: 1 1 0; /* 占满品牌与右侧控件之间的空间 */
+    justify-content: flex-start;
+    gap: 1.5rem;
+  }
+}
+
+@container navbar (max-width: 55.98rem) {
+  .siteNavLinks {
     display: none;
   }
 
   .siteNavToggle,
   .siteMobileMenu {
     display: block;
+  }
+}
+
+/* 视口 ≤768px（md）：导航栏放不下 logo+搜索+账户+汉堡按钮，
+   搜索与账户一并收进汉堡菜单（移动菜单内含“搜索”入口与账户区） */
+@media (max-width: 47.98rem) {
+  .siteDesktopControls {
+    display: none;
   }
 }

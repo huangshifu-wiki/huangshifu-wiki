@@ -62,15 +62,15 @@ export const Navbar = () => {
             <span className={styles.siteBrandName}>黄诗扶</span>
             <small>Wiki</small>
           </Link>
+        </div>
 
-          <div className={styles.siteNavLinks}>
-            {NAV_LINK_ITEMS.map(({ to, label, Icon }) => (
-              <NavLink key={to} to={to} className={styles.navLink}>
-                <Icon size={16} />
-                <span>{label}</span>
-              </NavLink>
-            ))}
-          </div>
+        <div className={styles.siteNavLinks}>
+          {NAV_LINK_ITEMS.map(({ to, label, Icon }) => (
+            <NavLink key={to} to={to} className={styles.navLink}>
+              <Icon size={16} />
+              <span>{label}</span>
+            </NavLink>
+          ))}
         </div>
 
         <div className={styles.siteNavRight}>
