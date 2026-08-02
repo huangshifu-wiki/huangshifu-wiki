@@ -656,7 +656,6 @@ const SongTable = ({
       '',
       '封面 / 标题 / 艺术家',
       '平台来源',
-      '标签',
       '结构化专辑 / 展示模式',
       '发行日期 / 更新时间',
       '操作',
@@ -685,20 +684,34 @@ const SongTable = ({
                 alt={`${text(song.title)} 封面`}
               />
               <div>
-                <p className="font-medium text-text-primary">
-                  {song.slug && !song.isDeleted ? (
-                    <Link
-                      to={`/music/${song.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:text-brand-gold hover:underline"
-                    >
-                      {text(song.title)}
-                    </Link>
-                  ) : (
-                    text(song.title)
-                  )}{' '}
-                  {song.isDeleted && <span className="theme-text-error">（已删除）</span>}
+                <p className="flex min-w-0 items-center gap-1.5 font-medium text-text-primary">
+                  <span className="truncate">
+                    {song.slug && !song.isDeleted ? (
+                      <Link
+                        to={`/music/${song.slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-brand-gold hover:underline"
+                      >
+                        {text(song.title)}
+                      </Link>
+                    ) : (
+                      text(song.title)
+                    )}{' '}
+                    {song.isDeleted && <span className="theme-text-error">（已删除）</span>}
+                  </span>
+                  {tags?.length ? (
+                    <span className="flex flex-shrink-0 items-center gap-1">
+                      {tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="whitespace-nowrap rounded-[3px] border border-border/60 px-1 py-px text-[0.625rem] font-normal leading-tight text-text-muted/80"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
                 </p>
                 <p className="text-xs text-text-muted">
                   {formatMusicCredits(song.artists, '未知艺术家')}
@@ -720,19 +733,6 @@ const SongTable = ({
                 ))
               ) : (
                 <span className="text-xs text-text-muted">无来源</span>
-              )}
-            </div>
-          </td>
-          <td className="px-3 py-4">
-            <div className="flex max-w-[10rem] flex-wrap gap-1">
-              {tags?.length ? (
-                tags.map((tag) => (
-                  <span key={tag} className="rounded-sm px-1.5 py-0.5 text-[11px] theme-tag">
-                    {tag}
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-text-muted">—</span>
               )}
             </div>
           </td>
