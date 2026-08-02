@@ -6,6 +6,7 @@ import { HeaderUserControls } from './HeaderUserControls'
 import { useToast } from './Toast'
 import { AuthModal } from './Navbar/AuthModal'
 import type { AuthMode } from './Navbar/types'
+import { NAV_LINK_ITEMS } from './Navbar/NavLinks'
 import { MobileMenu } from './Navbar/MobileMenu'
 import { NavbarSearchBox } from './Navbar/NavbarSearchBox'
 import styles from './Navbar.module.css'
@@ -63,21 +64,12 @@ export const Navbar = () => {
           </Link>
 
           <div className={styles.siteNavLinks}>
-            <NavLink to="/music" className={styles.navLink}>
-              音乐
-            </NavLink>
-            <NavLink to="/gallery" className={styles.navLink}>
-              画廊
-            </NavLink>
-            <NavLink to="/events" className={styles.navLink}>
-              游记
-            </NavLink>
-            <NavLink to="/wiki" className={styles.navLink}>
-              百科
-            </NavLink>
-            <NavLink to="/forum" className={styles.navLink}>
-              论坛
-            </NavLink>
+            {NAV_LINK_ITEMS.map(({ to, label, Icon }) => (
+              <NavLink key={to} to={to} className={styles.navLink}>
+                <Icon size={16} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
           </div>
         </div>
 

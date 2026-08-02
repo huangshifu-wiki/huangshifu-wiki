@@ -78,6 +78,9 @@
 
 .navLink {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
   color: var(--home-text-2);
   font-family: var(--home-font-body);
   font-size: 0.88rem;
@@ -170,6 +173,9 @@
 }
 
 .siteMobileLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65em;
   color: var(--home-text-2);
   font-family: var(--home-font-body);
   font-size: 0.9rem;

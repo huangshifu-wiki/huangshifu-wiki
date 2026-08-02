@@ -17,6 +17,7 @@ import accountMenuStyles from '../AccountMenu.module.css'
 import { usePendingReviewCount } from '../../hooks/usePendingReviewCount'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import type { AuthMode } from './types'
+import { NAV_LINK_ITEMS } from './NavLinks'
 import styles from '../Navbar.module.css'
 import { Button } from '@/src/components/ui'
 
@@ -51,31 +52,18 @@ export const MobileMenu = ({
       <div>
         <div className={styles.siteMobileMenuInner}>
           <div className={styles.siteMobileLinks}>
-            <NavLink to="/music" onClick={onClose} className={styles.siteMobileLink} data-pressable>
-              音乐
-            </NavLink>
-            <NavLink
-              to="/gallery"
-              onClick={onClose}
-              className={styles.siteMobileLink}
-              data-pressable
-            >
-              画廊
-            </NavLink>
-            <NavLink
-              to="/events"
-              onClick={onClose}
-              className={styles.siteMobileLink}
-              data-pressable
-            >
-              游记
-            </NavLink>
-            <NavLink to="/wiki" onClick={onClose} className={styles.siteMobileLink} data-pressable>
-              百科
-            </NavLink>
-            <NavLink to="/forum" onClick={onClose} className={styles.siteMobileLink} data-pressable>
-              论坛
-            </NavLink>
+            {NAV_LINK_ITEMS.map(({ to, label, Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={onClose}
+                className={styles.siteMobileLink}
+                data-pressable
+              >
+                <Icon size={16} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
             <NavLink
               to="/search"
               onClick={onClose}
