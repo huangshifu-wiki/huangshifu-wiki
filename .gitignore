@@ -29,3 +29,7 @@ remote-snapshot/
 models/
 backups/
 dependency-audit-report/
+
+# Python
+__pycache__/
+*.pyc
