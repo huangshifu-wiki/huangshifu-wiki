@@ -52,6 +52,7 @@ export class CloudSyncService {
   private processing = new Set<string>()
   private syncInterval: NodeJS.Timeout | null = null
   private lskyConfig: LskyProConfig | null = null
+  private lskyValidationState: 'unknown' | 'valid' | 'invalid' = 'unknown'
   private isProcessing = false
 
   constructor(options: CloudSyncServiceOptions = {}) {
@@ -59,54 +60,62 @@ export class CloudSyncService {
       return
     }
 
-    this.validateLskyConfig()
     this.startQueueProcessor()
     logger.info('[CloudSync] Service initialized')
   }
 
   /**
-   * 验证 Lsky Pro+ 配置
+   * 验证 Lsky Pro+ 配置（惰性：每次可用性判断时重读配置，
+   * 面板修改后无需重启即生效；配置来自 DB，晚于本服务构造）
    */
   private validateLskyConfig(): void {
     const baseUrl = runtimeConfigService.getConfig().lskyBaseUrl
     const token = secretsConfigService.getSecrets().lskyToken
 
-    if (!baseUrl || !token) {
+    let valid = false
+    if (baseUrl && token) {
+      try {
+        new URL(baseUrl)
+        valid = true
+      } catch {
+        // URL 非法，按无效处理
+      }
+    }
+
+    if (valid) {
+      this.lskyConfig = {
+        baseUrl,
+        token,
+        timeout: runtimeConfigService.getConfig().lskyTimeout,
+        strategyId: runtimeConfigService.getConfig().lskyStrategyId || undefined,
+      }
+      if (this.lskyValidationState !== 'valid') {
+        console.log('[CloudSync] ✅ Lsky Pro+ 配置验证通过')
+        console.log(`  - Base URL: ${baseUrl}`)
+        console.log(`  - Strategy ID: ${this.lskyConfig.strategyId || '(使用默认策略)'}`)
+      }
+      this.lskyValidationState = 'valid'
+      return
+    }
+
+    if (this.lskyValidationState !== 'invalid') {
       logger.warn(
         '[CloudSync] Lsky Pro+ not configured\n' +
           `  - LSKY_BASE_URL: ${baseUrl ? 'configured' : 'missing'}\n` +
-          `  - LSKY_TOKEN: ${token ? 'configured (' + token.substring(0, 8) + '...)' : 'missing'}\n` +
+          `  - LSKY_TOKEN: ${token ? 'configured' : 'missing'}\n` +
           '  Impact: External storage strategy unavailable\n' +
-          '  Fix: Configure above variables in .env'
+          '  Fix: Configure Lsky settings in the admin panel (站点设置 → 外部图床 / 服务凭证)'
       )
-      this.lskyConfig = null
-      return
     }
-
-    try {
-      new URL(baseUrl)
-    } catch {
-      logger.error({ baseUrl }, '[CloudSync] Invalid LSKY_BASE_URL format')
-      this.lskyConfig = null
-      return
-    }
-
-    this.lskyConfig = {
-      baseUrl,
-      token,
-      timeout: runtimeConfigService.getConfig().lskyTimeout,
-      strategyId: runtimeConfigService.getConfig().lskyStrategyId || undefined,
-    }
-
-    console.log('[CloudSync] ✅ Lsky Pro+ 配置验证通过')
-    console.log(`  - Base URL: ${baseUrl}`)
-    console.log(`  - Strategy ID: ${this.lskyConfig.strategyId || '(使用默认策略)'}`)
+    this.lskyConfig = null
+    this.lskyValidationState = 'invalid'
   }
 
   /**
    * 检查 Lsky Pro+ 是否可用
    */
   public isLskyProAvailable(): boolean {
+    this.validateLskyConfig()
     return this.lskyConfig !== null
   }
 
@@ -114,6 +123,7 @@ export class CloudSyncService {
    * 获取 Lsky Pro+ 配置
    */
   public getLskyConfig(): LskyProConfig {
+    this.validateLskyConfig()
     if (!this.lskyConfig) {
       throw new Error('Lsky Pro+ 未配置或配置无效')
     }

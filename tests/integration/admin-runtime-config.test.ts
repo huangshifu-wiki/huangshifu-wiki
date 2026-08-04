@@ -1,7 +1,7 @@
 import { describe, beforeEach, afterEach, it, expect } from 'vitest'
 import request from 'supertest'
 import { app } from '../../server'
-import { prisma, createTestUser } from './setup'
+import { createTestUser } from './setup'
 
 function findCookieValue(setCookieHeader: string | string[] | undefined, cookieName: string) {
   const cookies = Array.isArray(setCookieHeader)
@@ -32,12 +32,25 @@ async function createSuperAdminAgent() {
 }
 
 describe('Admin runtime config API（env→DB 迁移字段）', () => {
+  const TEST_BASELINE = {
+    qdrantUrl: 'http://127.0.0.1:6333',
+    qdrantCollection: 'hsf_image_embeddings_test',
+    qdrantTextCollection: 'hsf_text_embeddings_test',
+    s3Enabled: false,
+    s3EndpointUrl: '',
+    lskyBaseUrl: '',
+    lskyTimeout: 30000,
+  }
+
   beforeEach(async () => {
-    await prisma.siteConfig.deleteMany({ where: { key: 'runtime_config' } })
+    // 恢复测试基线（setup.ts 写入），隔离本文件 PATCH 的残留
+    const { runtimeConfigService } = await import('../../src/server/services/runtimeConfig.service')
+    await runtimeConfigService.updateConfig(TEST_BASELINE)
   })
 
   afterEach(async () => {
-    await prisma.siteConfig.deleteMany({ where: { key: 'runtime_config' } })
+    const { runtimeConfigService } = await import('../../src/server/services/runtimeConfig.service')
+    await runtimeConfigService.updateConfig(TEST_BASELINE)
   })
 
   it('PATCH logLevel 即时生效并持久化', async () => {
@@ -75,7 +88,7 @@ describe('Admin runtime config API（env→DB 迁移字段）', () => {
       .send({
         s3Enabled: true,
         s3EndpointUrl: 'https://s3.example.com',
-        qdrantUrl: 'http://qdrant:6333',
+        qdrantUrl: 'http://127.0.0.1:6333',
         qdrantCollection: 'img_collection',
         lskyBaseUrl: 'https://lsky.example.com',
         lskyTimeout: 15000,

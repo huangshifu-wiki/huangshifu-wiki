@@ -9,6 +9,8 @@ let qdrantClient: QdrantClient | null = null
 let ensureCollectionPromise: Promise<void> | null = null
 let ensureTextCollectionPromise: Promise<void> | null = null
 let lastQdrantFingerprint = ''
+// 客户端代际：指纹重建时递增，防止旧 ensure 闭包完成后清空新 promise 引用
+let clientGeneration = 0
 
 function parseInteger(value: string | undefined, fallback: number) {
   const parsed = Number(value)
@@ -42,11 +44,13 @@ export function getQdrantClient() {
     lastQdrantFingerprint = fingerprint
     ensureCollectionPromise = null
     ensureTextCollectionPromise = null
+    clientGeneration += 1
   }
   return qdrantClient
 }
 
 export async function ensureQdrantCollection() {
+  const generation = clientGeneration
   if (!ensureCollectionPromise) {
     ensureCollectionPromise = (async () => {
       const client = getQdrantClient()
@@ -105,7 +109,9 @@ export async function ensureQdrantCollection() {
         })
       } catch {}
     })().catch((error) => {
-      ensureCollectionPromise = null
+      if (generation === clientGeneration) {
+        ensureCollectionPromise = null
+      }
       throw error
     })
   }
@@ -114,6 +120,7 @@ export async function ensureQdrantCollection() {
 }
 
 export async function ensureTextQdrantCollection() {
+  const generation = clientGeneration
   if (!ensureTextCollectionPromise) {
     ensureTextCollectionPromise = (async () => {
       const client = getQdrantClient()
@@ -180,7 +187,9 @@ export async function ensureTextQdrantCollection() {
         })
       } catch {}
     })().catch((error) => {
-      ensureTextCollectionPromise = null
+      if (generation === clientGeneration) {
+        ensureTextCollectionPromise = null
+      }
       throw error
     })
   }

@@ -134,9 +134,9 @@ describe('CloudSyncService - 队列管理', () => {
   }, 30000)
 
   beforeEach(() => {
+    vi.clearAllMocks()
     mockLskyConfig()
     service = new CloudSyncService()
-    vi.clearAllMocks()
   })
 
   it('应该能够入队同步任务', async () => {

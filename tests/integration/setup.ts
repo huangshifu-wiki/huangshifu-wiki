@@ -94,6 +94,15 @@ beforeAll(async () => {
     await prisma.$connect()
     console.log('[Integration Test] Database connected successfully')
 
+    // Qdrant 配置从管理后台 runtime_config 读取（第二轮 env 迁移后无环境变量）。
+    // 覆写为测试专属集合名，避免触碰生产集合；URL 固定本机，与旧 .env.test 一致。
+    const { runtimeConfigService } = await import('../../src/server/services/runtimeConfig.service')
+    await runtimeConfigService.updateConfig({
+      qdrantUrl: 'http://127.0.0.1:6333',
+      qdrantCollection: 'hsf_image_embeddings_test',
+      qdrantTextCollection: 'hsf_text_embeddings_test',
+    })
+
     // 可选：清理测试数据库（根据需要启用）
     // await cleanupDatabase();
   } catch (error) {

@@ -341,8 +341,9 @@ const CONFIG_GROUPS: ConfigGroup[] = [
       {
         key: 's3SignatureVersion',
         label: '签名版本',
+        description: 'AWS SDK v3 仅支持 SigV4',
         type: 'select',
-        options: ['v2', 'v4'],
+        options: ['v4'],
       },
       {
         key: 's3PublicDomain',
@@ -974,11 +975,11 @@ const AdminSettings = () => {
 
   const saveSecretsConfig = async () => {
     if (!secretsConfig) return
+    if (!secretsDirty) return
     if (secretsConfig.disabled) {
       show('未配置 SECRETS_ENCRYPTION_KEY，无法管理凭证', { variant: 'error' })
       return
     }
-    if (!secretsDirty) return
     const payload: Record<string, string | null> = {}
     for (const [key, value] of Object.entries(secretsForm)) {
       payload[key] = value === '' ? null : value

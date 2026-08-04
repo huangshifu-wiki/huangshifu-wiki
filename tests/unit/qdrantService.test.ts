@@ -54,6 +54,7 @@ describe('qdrantService', () => {
     vi.resetModules()
     runtimeConfigMock.getConfig.mockReturnValue({ ...defaultRuntimeConfig })
     secretsMock.getSecrets.mockReturnValue({ ...defaultSecrets })
+    qdrantClientConstructor.mockClear()
     Object.values(qdrantClientInstanceMock).forEach((fn) => {
       if (typeof fn === 'function' && 'mockReset' in fn) {
         ;(fn as ReturnType<typeof vi.fn>).mockReset()

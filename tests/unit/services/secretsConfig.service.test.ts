@@ -85,6 +85,51 @@ describe('secretsConfigService', () => {
       SecretsConfigValidationError
     )
   })
+
+  it('加密往返：init 从 DB 密文解密恢复内存凭证', async () => {
+    vi.resetModules()
+    process.env.SECRETS_ENCRYPTION_KEY = TEST_KEY
+    const fresh1 = (await import('../../../src/server/services/secretsConfig.service'))
+      .secretsConfigService
+    await fresh1.updateSecrets({ amapApiKey: 'roundtrip-key-99', qdrantApiKey: 'q' })
+    const upsertArg = mockUpsert.mock.calls[0][0]
+    const storedValue = upsertArg.create.value
+
+    // 模拟重启：全新实例从 DB 密文重新加载
+    vi.resetModules()
+    mockFindUnique.mockResolvedValue({ value: storedValue })
+    mockUpsert.mockClear()
+    const fresh2 = (await import('../../../src/server/services/secretsConfig.service'))
+      .secretsConfigService
+    await fresh2.init()
+
+    expect(fresh2.getSecrets().amapApiKey).toBe('roundtrip-key-99')
+    expect(fresh2.getSecrets().qdrantApiKey).toBe('q')
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it('密文被篡改时解密失败且不覆盖 DB', async () => {
+    vi.resetModules()
+    mockFindUnique.mockResolvedValue({ value: { encrypted: 'not-valid-ciphertext!!' } })
+
+    const fresh = (await import('../../../src/server/services/secretsConfig.service'))
+      .secretsConfigService
+    await fresh.init()
+
+    expect(fresh.getSecrets().amapApiKey).toBe('')
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it('并发更新串行执行不丢更新', async () => {
+    await Promise.all([
+      secretsConfigService.updateSecrets({ amapApiKey: 'first-key' }),
+      secretsConfigService.updateSecrets({ lskyToken: 'second-token' }),
+    ])
+
+    const secrets = secretsConfigService.getSecrets()
+    expect(secrets.amapApiKey).toBe('first-key')
+    expect(secrets.lskyToken).toBe('second-token')
+  })
 })
 
 describe('maskSecrets', () => {

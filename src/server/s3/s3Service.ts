@@ -25,10 +25,11 @@ export interface S3PublicConfig {
 
 let s3ClientWrite: S3Client | null = null
 let s3ClientRead: S3Client | null = null
-let lastS3Fingerprint = ''
+let lastS3WriteFingerprint = ''
+let lastS3ReadFingerprint = ''
 
-/** 影响 client 构造的配置指纹；面板修改配置后自动触发 client 重建 */
-function s3Fingerprint(): string {
+/** 影响写 client 构造的配置指纹；面板修改配置后自动触发写 client 重建 */
+function s3WriteFingerprint(): string {
   const config = runtimeConfigService.getConfig()
   const secrets = secretsConfigService.getSecrets()
   return JSON.stringify([
@@ -39,6 +40,19 @@ function s3Fingerprint(): string {
     config.s3PublicBucketRegion,
     secrets.s3WriteAccessKeyId,
     secrets.s3WriteSecretAccessKey,
+  ])
+}
+
+/** 影响读 client 构造的配置指纹；面板修改配置后自动触发读 client 重建 */
+function s3ReadFingerprint(): string {
+  const config = runtimeConfigService.getConfig()
+  const secrets = secretsConfigService.getSecrets()
+  return JSON.stringify([
+    config.s3Enabled,
+    config.s3EndpointUrl,
+    config.s3ForcePathStyle,
+    config.s3SslEnabled,
+    config.s3PublicBucketRegion,
     secrets.s3ReadAccessKeyId,
     secrets.s3ReadSecretAccessKey,
   ])
@@ -79,7 +93,7 @@ function getEndpointConfig() {
     url: config.s3EndpointUrl || 'https://s3.bitiful.net',
     forcePathStyle: config.s3ForcePathStyle,
     sslEnabled: config.s3SslEnabled,
-    signatureVersion: config.s3SignatureVersion as 'v2' | 'v4',
+    signatureVersion: config.s3SignatureVersion,
   }
 }
 
@@ -108,8 +122,8 @@ export function getS3ClientWrite(): S3Client {
     throw new Error('S3 存储未启用，请在管理后台启用 S3 存储')
   }
 
-  const fingerprint = s3Fingerprint()
-  if (!s3ClientWrite || fingerprint !== lastS3Fingerprint) {
+  const fingerprint = s3WriteFingerprint()
+  if (!s3ClientWrite || fingerprint !== lastS3WriteFingerprint) {
     const credentials = getWriteCredentials()
     if (!credentials.accessKeyId || !credentials.secretAccessKey) {
       throw new Error('S3 写入凭证未配置，请在管理后台配置 S3 凭证')
@@ -124,8 +138,7 @@ export function getS3ClientWrite(): S3Client {
       forcePathStyle: endpointConfig.forcePathStyle,
       tls: endpointConfig.sslEnabled,
     })
-    lastS3Fingerprint = fingerprint
-    s3ClientRead = null
+    lastS3WriteFingerprint = fingerprint
   }
 
   return s3ClientWrite
@@ -136,8 +149,8 @@ export function getS3ClientRead(): S3Client {
     throw new Error('S3 存储未启用，请在管理后台启用 S3 存储')
   }
 
-  const fingerprint = s3Fingerprint()
-  if (!s3ClientRead || fingerprint !== lastS3Fingerprint) {
+  const fingerprint = s3ReadFingerprint()
+  if (!s3ClientRead || fingerprint !== lastS3ReadFingerprint) {
     const credentials = getReadCredentials()
     if (!credentials.accessKeyId || !credentials.secretAccessKey) {
       throw new Error('S3 读取凭证未配置，请在管理后台配置 S3 凭证')
@@ -152,8 +165,7 @@ export function getS3ClientRead(): S3Client {
       forcePathStyle: endpointConfig.forcePathStyle,
       tls: endpointConfig.sslEnabled,
     })
-    lastS3Fingerprint = fingerprint
-    s3ClientWrite = null
+    lastS3ReadFingerprint = fingerprint
   }
 
   return s3ClientRead
@@ -450,7 +462,7 @@ export function getPublicConfig(): S3PublicConfig {
     endpoint: enabled ? endpointConfig.url : '',
     bucket: enabled ? bucketConfig.name : '',
     prefix: enabled ? bucketConfig.prefix : '',
-    publicDomain: publicDomain || undefined,
+    publicDomain: enabled && publicDomain ? publicDomain : undefined,
     maxFileSize: enabled ? getMaxFileSize() : undefined,
     allowedContentTypes: enabled ? getAllowedContentTypes() : undefined,
     md5Required: enabled ? isMd5VerificationEnabled() : false,

@@ -11,6 +11,7 @@
 
 import { prisma } from '../prisma'
 import { logger, setLogLevel } from '../utils/logger'
+import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
 
 export interface RuntimeConfig {
   // 功能开关
@@ -107,7 +108,7 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   s3PublicDomain: '',
   s3DefaultAcl: 'public-read',
   s3ExpiresIn: 3600,
-  s3MaxFileSize: 104857600,
+  s3MaxFileSize: UPLOAD_MAX_FILE_SIZE_BYTES,
   s3AllowedContentTypes: 'image/jpeg,image/png,image/gif,image/webp,image/bmp',
   s3EnableMd5Verification: false,
   qdrantUrl: 'http://127.0.0.1:6333',
@@ -176,10 +177,10 @@ const STRING_KEYS = new Set([
   'lskyStrategyId',
 ])
 
-// 枚举字段的合法值
+// 枚举字段的合法值（AWS SDK v3 仅支持 SigV4 签名，v2 已移除）
 const ENUM_KEYS: Record<string, readonly string[]> = {
   logLevel: ['debug', 'info', 'warn', 'error'],
-  s3SignatureVersion: ['v2', 'v4'],
+  s3SignatureVersion: ['v4'],
 }
 
 export class RuntimeConfigValidationError extends Error {

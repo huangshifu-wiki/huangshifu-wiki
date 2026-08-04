@@ -155,12 +155,6 @@ IMAGE_EMBEDDING_DTYPE="q8"
 # 运行时行为参数（上传会话时长、备份保留数、Blurhash、搜索/缓存调优、
 # 变体生成、云同步、磁盘监控等）已移至管理后台「系统参数」，无需环境变量。
 
-# 文本嵌入配置 (Text Embedding - 复用 ChineseCLIP 文本编码器)
-TEXT_EMBEDDING_ENABLED="true"
-# TEXT_EMBEDDING_MAX_CHUNK_TOKENS="512"
-# TEXT_EMBEDDING_CHUNK_OVERLAP_TOKENS="50"
-# TEXT_SEARCH_MIN_SCORE="0.3"
-
 # Transformers 模型配置
 TRANSFORMERS_CACHE=""
 TRANSFORMERS_OFFLINE="false"
@@ -219,13 +213,6 @@ EOF
 
 #### 文本嵌入（Text Embedding）
 
-| 变量                                  | 说明                                           |
-| ------------------------------------- | ---------------------------------------------- |
-| `TEXT_EMBEDDING_ENABLED`              | 是否启用文本向量搜索（默认 `true`）            |
-| `TEXT_EMBEDDING_MAX_CHUNK_TOKENS`     | 文本分块最大 token 数（默认 512）              |
-| `TEXT_EMBEDDING_CHUNK_OVERLAP_TOKENS` | 文本分块重叠 token 数（默认 50）               |
-| `TEXT_SEARCH_MIN_SCORE`               | 文本搜索最低相似度阈值（默认 0.3）             |
-
 #### Transformers 模型配置
 
 | 变量                   | 说明                                              |
@@ -264,9 +251,9 @@ EOF
 
 #### 前端变量
 
-| 变量                 | 说明                                                        |
-| -------------------- | ----------------------------------------------------------- |
-| `VITE_LSKY_BASE_URL` | Lsky 前端地址（**前端变量**，会被打包到代码中）             |
+| 变量                 | 说明                                            |
+| -------------------- | ----------------------------------------------- |
+| `VITE_LSKY_BASE_URL` | Lsky 前端地址（**前端变量**，会被打包到代码中） |
 
 #### 图片变体生成器 / 云端同步 / 磁盘空间监控（v2.1，可选）
 
@@ -544,7 +531,7 @@ USE_PM2=0 ./scripts/deploy.sh         # 不使用 PM2
 - [ ] Music 列表与删除通过 REST API 正常工作（`/api/music*`）
 - [ ] 图片映射查询与写入通过 REST API 正常工作（`/api/image-maps*`）
 - [ ] 图片语义搜索可用（`/api/search` + `mode=vector`）
-- [ ] 文本语义搜索可用（`/api/search` + `mode=hybrid`，需 `TEXT_EMBEDDING_ENABLED=true`）
+- [ ] 文本语义搜索可用（`/api/search` + `mode=hybrid`，需管理后台开启文本向量索引）
 - [ ] 管理后台向量管理页面可查看图片/文本嵌入状态
 - [ ] 小程序 WebView 可打开首页（`miniprogram-webview`）
 - [ ] 小程序 WebView 可打开首页（`miniprogram-webview`）

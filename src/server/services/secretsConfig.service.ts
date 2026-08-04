@@ -114,9 +114,9 @@ export function maskSecrets(
   for (const field of SECRET_FIELDS) {
     const value = config[field]
     result[field] =
-      value.length > 0
+      value.length > 4
         ? { configured: true, last4: value.slice(-4) }
-        : { configured: false, last4: '' }
+        : { configured: value.length > 0, last4: '' }
   }
   return result
 }
@@ -165,10 +165,8 @@ export class SecretsConfigService {
     return { ...this.current }
   }
 
-  /** 当前凭证（可写引用，供消费点避免重复拷贝） */
-  getRawSecrets(): SecretsConfig {
-    return this.current
-  }
+  // 写串行化：并发 PATCH 基于同一快照会互相覆盖，改为逐个执行
+  private writeQueue: Promise<unknown> = Promise.resolve()
 
   /**
    * 更新凭证：null = 清除该字段，string = 设置（trim 后，空字符串按清除处理）
@@ -177,28 +175,33 @@ export class SecretsConfigService {
     if (!isSecretsEnabled()) {
       throw new SecretsConfigValidationError('未配置 SECRETS_ENCRYPTION_KEY，无法管理凭证')
     }
-    const next: SecretsConfig = { ...this.current }
-    for (const field of SECRET_FIELDS) {
-      const value = update[field]
-      if (value === undefined) continue
-      if (value === null) {
-        next[field] = ''
-        continue
-      }
-      if (typeof value !== 'string') {
-        throw new SecretsConfigValidationError(`${field} 必须是字符串或 null`)
-      }
-      next[field] = value.trim()
-    }
 
-    const encrypted = encryptSecrets(next)
-    await prisma.siteConfig.upsert({
-      where: { key: CONFIG_KEY },
-      update: { value: { encrypted }, updatedAt: new Date() },
-      create: { key: CONFIG_KEY, value: { encrypted } },
+    const task = this.writeQueue.then(async () => {
+      const next: SecretsConfig = { ...this.current }
+      for (const field of SECRET_FIELDS) {
+        const value = update[field]
+        if (value === undefined) continue
+        if (value === null) {
+          next[field] = ''
+          continue
+        }
+        if (typeof value !== 'string') {
+          throw new SecretsConfigValidationError(`${field} 必须是字符串或 null`)
+        }
+        next[field] = value.trim()
+      }
+
+      const encrypted = encryptSecrets(next)
+      await prisma.siteConfig.upsert({
+        where: { key: CONFIG_KEY },
+        update: { value: { encrypted }, updatedAt: new Date() },
+        create: { key: CONFIG_KEY, value: { encrypted } },
+      })
+      this.current = next
+      return { ...next }
     })
-    this.current = next
-    return { ...next }
+    this.writeQueue = task.catch(() => undefined)
+    return task
   }
 }
 

@@ -412,7 +412,7 @@ CI 使用 Node 22。
 - CORS：`CORS_ORIGIN`、`DEV_CORS_ORIGINS`
 - 备份：`BACKUP_PASSWORD`、`PG_DUMP_PATH`、`PSQL_PATH`
 - 凭证加密主密钥：`SECRETS_ENCRYPTION_KEY`（base64 编码 32 字节，缺失时管理后台凭证管理禁用）
-- 向量模型：`IMAGE_EMBEDDING_*`、`TEXT_EMBEDDING_*`、`TRANSFORMERS_*`（Qdrant 端点/集合/密钥已移至管理后台）
+- 向量模型：`IMAGE_EMBEDDING_*`、`TRANSFORMERS_*`（Qdrant 端点/集合/密钥已移至管理后台）
 - 上传与存储：`UPLOADS_PATH`
 - 地图（前端）：`VITE_AMAP_*`
 - 部署信号（Docker）：`ENABLE_SEMANTIC_SEARCH`（是否启动 Qdrant 容器）

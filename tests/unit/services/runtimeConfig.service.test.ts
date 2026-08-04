@@ -79,13 +79,24 @@ describe('normalizeRuntimeConfigUpdate', () => {
 
   it('枚举字段接受合法值并拒绝越界值', () => {
     expect(normalizeRuntimeConfigUpdate({ logLevel: 'debug' }).logLevel).toBe('debug')
-    expect(normalizeRuntimeConfigUpdate({ s3SignatureVersion: 'v2' }).s3SignatureVersion).toBe('v2')
+    expect(normalizeRuntimeConfigUpdate({ s3SignatureVersion: 'v4' }).s3SignatureVersion).toBe('v4')
     expect(() => normalizeRuntimeConfigUpdate({ logLevel: 'verbose' })).toThrow(
       RuntimeConfigValidationError
     )
-    expect(() => normalizeRuntimeConfigUpdate({ s3SignatureVersion: 'v3' })).toThrow(
+    expect(() => normalizeRuntimeConfigUpdate({ s3SignatureVersion: 'v2' })).toThrow(
       RuntimeConfigValidationError
     )
+  })
+
+  it('白名单覆盖 DEFAULT_RUNTIME_CONFIG 全部键（防静默丢弃）', () => {
+    const result = normalizeRuntimeConfigUpdate({ ...DEFAULT_RUNTIME_CONFIG })
+
+    expect(Object.keys(result).sort()).toEqual(Object.keys(DEFAULT_RUNTIME_CONFIG).sort())
+    for (const [key, value] of Object.entries(result)) {
+      expect(value).toEqual(
+        (DEFAULT_RUNTIME_CONFIG as unknown as Record<string, unknown>)[key]
+      )
+    }
   })
 })
 

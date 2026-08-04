@@ -113,6 +113,25 @@ docker compose logs -f postgres
 docker compose ps
 ```
 
+### 3.1 从旧版本升级（凭证迁移）
+
+部署脚本只在 `.env` 不存在时从模板创建；已存在的 `.env` 不会自动补写新变量。
+迁移到管理后台管理凭证后，需手动为已有 `.env` 补上加密主密钥，否则管理后台「服务凭证」不可用：
+
+```bash
+# 生成 base64 编码的 32 字节随机密钥
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+将输出填入 `.env`：
+
+```env
+SECRETS_ENCRYPTION_KEY="<上一步的输出>"
+```
+
+**注意**：该密钥用于加密存储的服务凭证，更换会导致已保存的凭证无法解密（需在面板重新配置）。
+升级前若 S3 / 微信等凭证仅在旧 `.env` 中，迁移到面板后请删除旧变量以免混淆。
+
 ## 4. 启用图片语义搜索
 
 如需定制模型缓存路径，编辑 `.env`：
