@@ -283,7 +283,7 @@ export const AdminLayout = () => {
 
   return (
     <div
-      className="h-screen flex flex-col overflow-hidden bg-[var(--color-bg-antique)]"
+      className="admin-shell h-screen flex flex-col overflow-hidden bg-[var(--color-bg-antique)]"
       style={{
         fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
       }}

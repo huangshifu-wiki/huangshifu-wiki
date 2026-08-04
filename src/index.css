@@ -1166,6 +1166,11 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* 管理后台为整屏内部滚动布局，视口不滚动，关闭预留轨道避免双重滚动条 */
+html:has(.admin-shell) {
+  scrollbar-gutter: auto;
+}
+
 /* 滚动条样式 */
 ::-webkit-scrollbar {
   width: 8px;
