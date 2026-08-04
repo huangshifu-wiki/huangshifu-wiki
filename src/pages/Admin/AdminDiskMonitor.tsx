@@ -12,6 +12,7 @@ import {
 } from '@/src/components/icons'
 import { apiGet, apiPut, apiPost } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
+import { SectionHeading } from '../../components/admin/AdminSection'
 
 interface DiskStatus {
   totalSpaceGB: number
@@ -257,9 +258,9 @@ export const AdminDiskMonitor: React.FC = () => {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">磁盘监控</h1>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="bg-surface border border-border rounded p-5 animate-pulse">
+            <div key={i} className="animate-pulse">
               <div className="h-4 bg-bg-tertiary rounded w-16 mb-3" />
               <div className="h-8 bg-bg-tertiary rounded w-20" />
             </div>
@@ -330,8 +331,8 @@ export const AdminDiskMonitor: React.FC = () => {
 
       {diskStatus && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-surface border border-border rounded p-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
               <div className="flex items-center gap-2 mb-2">
                 <HardDrive size={14} className="text-text-muted" />
                 <span className="text-xs text-text-muted">总容量</span>
@@ -342,7 +343,7 @@ export const AdminDiskMonitor: React.FC = () => {
               </p>
             </div>
 
-            <div className="bg-surface border border-border rounded p-5">
+            <div>
               <div className="flex items-center gap-2 mb-2">
                 {statusIcon(diskStatus.status)}
                 <span className="text-xs text-text-muted">剩余空间</span>
@@ -355,7 +356,7 @@ export const AdminDiskMonitor: React.FC = () => {
               </p>
             </div>
 
-            <div className="bg-surface border border-border rounded p-5">
+            <div>
               <div className="flex items-center gap-2 mb-2">
                 <HardDrive size={14} className="text-text-muted" />
                 <span className="text-xs text-text-muted">已使用</span>
@@ -366,7 +367,7 @@ export const AdminDiskMonitor: React.FC = () => {
               </p>
             </div>
 
-            <div className="bg-surface border border-border rounded p-5">
+            <div>
               <div className="flex items-center gap-2 mb-2">
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${statusColor(diskStatus.status)}`}
@@ -395,13 +396,15 @@ export const AdminDiskMonitor: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-surface border border-border rounded p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-text-secondary">目录统计</h3>
-              <span className="text-xs text-text-muted">
-                最后检查: {new Date(diskStatus.lastChecked).toLocaleString()}
-              </span>
-            </div>
+          <div className="space-y-4">
+            <SectionHeading
+              title="目录统计"
+              right={
+                <span className="text-xs text-text-muted">
+                  最后检查: {new Date(diskStatus.lastChecked).toLocaleString()}
+                </span>
+              }
+            />
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -453,25 +456,29 @@ export const AdminDiskMonitor: React.FC = () => {
       )}
 
       {isEditing && config && (
-        <div className="bg-surface border border-border rounded p-5">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2">
-              <Settings size={18} className="text-brand-gold" />
-              <h3 className="text-sm font-semibold text-text-secondary">告警阈值配置</h3>
-              <span className="px-2 py-0.5 theme-tag text-[10px] font-medium rounded">
-                实时生效
-              </span>
-            </div>
-            <button
-              onClick={handleCancelEdit}
-              className="p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-alt rounded transition-all"
-            >
-              <X size={18} />
-            </button>
-          </div>
+        <div className="space-y-4">
+          <SectionHeading
+            title={
+              <>
+                <Settings size={18} className="text-brand-gold" />
+                告警阈值配置
+                <span className="px-2 py-0.5 theme-tag text-[10px] font-medium rounded">
+                  实时生效
+                </span>
+              </>
+            }
+            right={
+              <button
+                onClick={handleCancelEdit}
+                className="p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-alt rounded transition-all"
+              >
+                <X size={18} />
+              </button>
+            }
+          />
 
           {validationErrors.length > 0 && (
-            <div className="flex items-start gap-3 p-3 rounded theme-status-error mb-4">
+            <div className="flex items-start gap-3 p-3 rounded theme-status-error">
               <AlertTriangle size={18} className="theme-text-error shrink-0 mt-0.5" />
               <ul className="text-sm theme-text-error list-disc list-inside">
                 {validationErrors.map((err, i) => (
@@ -560,7 +567,7 @@ export const AdminDiskMonitor: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-5 border-t border-border mt-5">
+          <div className="flex items-center justify-end gap-3 pt-5 border-t border-border">
             <button
               onClick={handleResetToDefaults}
               disabled={saving}
@@ -587,17 +594,19 @@ export const AdminDiskMonitor: React.FC = () => {
       )}
 
       {config && !isEditing && (
-        <div className="bg-surface border border-border rounded p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-secondary">当前配置</h3>
-            <button
-              onClick={handleStartEdit}
-              className="p-1.5 text-brand-gold hover:bg-surface-alt rounded transition-all"
-              title="编辑配置"
-            >
-              <Settings size={16} />
-            </button>
-          </div>
+        <div className="space-y-4">
+          <SectionHeading
+            title="当前配置"
+            right={
+              <button
+                onClick={handleStartEdit}
+                className="p-1.5 text-brand-gold hover:bg-surface-alt rounded transition-all"
+                title="编辑配置"
+              >
+                <Settings size={16} />
+              </button>
+            }
+          />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <p className="text-xs text-text-muted mb-1">警告阈值</p>

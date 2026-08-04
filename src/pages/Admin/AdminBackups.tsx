@@ -318,8 +318,8 @@ const AdminBackups = () => {
       </div>
 
       {(lastMediaReport || lastMediaReportError) && (
-        <div className="bg-surface border border-border rounded p-4 space-y-4">
-          <div className="flex items-start justify-between gap-4">
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-4 border-b border-border pb-3">
             <div>
               <p className="text-sm font-medium text-text-primary">最近恢复图片清单</p>
               {lastMediaReport ? (
@@ -354,9 +354,9 @@ const AdminBackups = () => {
                   </p>
                 )}
               </div>
-              <div className="mt-2 max-h-80 overflow-y-auto border border-border rounded divide-y divide-border">
+              <div className="mt-2 max-h-80 overflow-y-auto divide-y divide-border">
                 {lastMediaReport.missingFilePreview.map((file) => (
-                  <div key={file.storageKey} className="p-3 bg-surface-alt/40">
+                  <div key={file.storageKey} className="p-3">
                     <p className="text-sm font-medium text-text-primary break-all">
                       {file.storageKey}
                     </p>
@@ -388,10 +388,7 @@ const AdminBackups = () => {
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {lastMediaReport.orphanFilePreview.slice(0, 6).map((file) => (
-                  <div
-                    key={file.storageKey}
-                    className="border border-border rounded bg-surface-alt/40 p-2"
-                  >
+                  <div key={file.storageKey} className="p-2">
                     <p className="text-xs text-text-primary break-all">{file.storageKey}</p>
                     <p className="text-[11px] text-text-muted mt-1">
                       {formatBytes(file.sizeBytes)}
@@ -404,104 +401,100 @@ const AdminBackups = () => {
         </div>
       )}
 
-      <div className="bg-surface border border-border rounded overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-surface-alt border-b border-border">
-              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                文件名
-              </th>
-              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                备注
-              </th>
-              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                创建时间
-              </th>
-              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                大小
-              </th>
-              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                操作
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {backups.length > 0 ? (
-              backups.map((backup) => (
-                <tr key={backup.filename} className="hover:bg-surface-alt transition-colors">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <Database size={16} className="text-text-muted shrink-0" />
-                      <span className="text-sm font-medium text-text-primary">
-                        {backup.filename}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-sm text-text-secondary max-w-[280px]">
-                    {backup.note ? (
-                      <span className="line-clamp-2 whitespace-pre-wrap break-words">
-                        {backup.note}
-                      </span>
-                    ) : (
-                      <span className="text-text-muted italic">无备注</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-sm text-text-secondary">
-                    {format(new Date(backup.createdAt), 'yyyy-MM-dd HH:mm:ss')}
-                  </td>
-                  <td className="px-5 py-4 text-sm text-text-secondary">{backup.sizeFormatted}</td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center justify-start gap-2">
-                      <Button
-                        onClick={() => openNoteDialog(backup)}
-                        variant="info"
-                        soft
-                        size="sm"
-                        leftIcon={<Pencil size={14} />}
-                      >
-                        备注
-                      </Button>
-                      <Button
-                        onClick={() => handleDownload(backup.filename)}
-                        variant="secondary"
-                        soft
-                        size="sm"
-                        leftIcon={<Download size={14} />}
-                      >
-                        下载
-                      </Button>
-                      <Button
-                        onClick={() => openRestoreExistingDialog(backup.filename)}
-                        variant="success"
-                        soft
-                        size="sm"
-                        leftIcon={<RotateCcw size={14} />}
-                      >
-                        恢复
-                      </Button>
-                      <Button
-                        onClick={() => openDeleteDialog(backup.filename)}
-                        variant="danger"
-                        soft
-                        size="sm"
-                        leftIcon={<Trash2 size={14} />}
-                      >
-                        删除
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
-                  暂无备份记录
+      <table className="w-full">
+        <thead>
+          <tr className="bg-surface-alt border-b border-border">
+            <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              文件名
+            </th>
+            <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              备注
+            </th>
+            <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              创建时间
+            </th>
+            <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              大小
+            </th>
+            <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              操作
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {backups.length > 0 ? (
+            backups.map((backup) => (
+              <tr key={backup.filename} className="hover:bg-surface-alt transition-colors">
+                <td className="px-5 py-4">
+                  <div className="flex items-center gap-2">
+                    <Database size={16} className="text-text-muted shrink-0" />
+                    <span className="text-sm font-medium text-text-primary">{backup.filename}</span>
+                  </div>
+                </td>
+                <td className="px-5 py-4 text-sm text-text-secondary max-w-[280px]">
+                  {backup.note ? (
+                    <span className="line-clamp-2 whitespace-pre-wrap break-words">
+                      {backup.note}
+                    </span>
+                  ) : (
+                    <span className="text-text-muted italic">无备注</span>
+                  )}
+                </td>
+                <td className="px-5 py-4 text-sm text-text-secondary">
+                  {format(new Date(backup.createdAt), 'yyyy-MM-dd HH:mm:ss')}
+                </td>
+                <td className="px-5 py-4 text-sm text-text-secondary">{backup.sizeFormatted}</td>
+                <td className="px-5 py-4">
+                  <div className="flex items-center justify-start gap-2">
+                    <Button
+                      onClick={() => openNoteDialog(backup)}
+                      variant="info"
+                      soft
+                      size="sm"
+                      leftIcon={<Pencil size={14} />}
+                    >
+                      备注
+                    </Button>
+                    <Button
+                      onClick={() => handleDownload(backup.filename)}
+                      variant="secondary"
+                      soft
+                      size="sm"
+                      leftIcon={<Download size={14} />}
+                    >
+                      下载
+                    </Button>
+                    <Button
+                      onClick={() => openRestoreExistingDialog(backup.filename)}
+                      variant="success"
+                      soft
+                      size="sm"
+                      leftIcon={<RotateCcw size={14} />}
+                    >
+                      恢复
+                    </Button>
+                    <Button
+                      onClick={() => openDeleteDialog(backup.filename)}
+                      variant="danger"
+                      soft
+                      size="sm"
+                      leftIcon={<Trash2 size={14} />}
+                    >
+                      删除
+                    </Button>
+                  </div>
                 </td>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
+                暂无备份记录
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
 
       {dialogPresence.mounted && visibleDialog && (
         <div

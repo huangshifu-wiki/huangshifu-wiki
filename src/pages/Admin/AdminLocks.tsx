@@ -148,79 +148,77 @@ export const AdminLocks = () => {
         </div>
       </div>
 
-      <div className="bg-surface border border-border rounded overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-surface-alt">
-                <TableHead className="px-5 py-3 text-[11px] uppercase tracking-wider">
-                  <Checkbox
-                    checked={data.length > 0 && selectedIds.size === data.length}
-                    onCheckedChange={toggleAll}
-                    aria-label="选择全部编辑锁"
-                  />
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-surface-alt">
+              <TableHead className="px-5 py-3 text-[11px] uppercase tracking-wider">
+                <Checkbox
+                  checked={data.length > 0 && selectedIds.size === data.length}
+                  onCheckedChange={toggleAll}
+                  aria-label="选择全部编辑锁"
+                />
+              </TableHead>
+              {['资源', '锁定者', '到期时间', '操作'].map((col) => (
+                <TableHead key={col} className="px-5 py-3 text-[11px] uppercase tracking-wider">
+                  {col}
                 </TableHead>
-                {['资源', '锁定者', '到期时间', '操作'].map((col) => (
-                  <TableHead key={col} className="px-5 py-3 text-[11px] uppercase tracking-wider">
-                    {col}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                [1, 2, 3].map((i) => (
-                  <TableRow key={i} className="animate-pulse">
-                    <TableCell colSpan={5} className="px-5 py-4">
-                      <div className="h-6 bg-surface-alt rounded" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : data.length > 0 ? (
-                data.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="px-5 py-4">
-                      <Checkbox
-                        checked={selectedIds.has(item.id)}
-                        onCheckedChange={() => toggleSelected(item.id)}
-                        aria-label={`选择 ${item.collection} / ${item.recordId}`}
-                      />
-                    </TableCell>
-                    <TableCell className="px-5 py-4">
-                      <p className="text-sm font-medium text-text-primary">
-                        {item.collection} / {item.recordId}
-                      </p>
-                    </TableCell>
-                    <TableCell className="px-5 py-4 text-text-secondary">
-                      {item.username} ({item.userId?.slice(0, 8) ?? '未知'})
-                    </TableCell>
-                    <TableCell className="px-5 py-4 text-xs text-text-muted">
-                      {formatDateTime(item.expiresAt, 'N/A')}
-                    </TableCell>
-                    <TableCell className="px-5 py-4 text-left">
-                      <Button
-                        type="button"
-                        variant="warning"
-                        soft
-                        size="sm"
-                        onClick={() => releaseLock(item)}
-                        leftIcon={<Lock size={14} />}
-                      >
-                        强制释放
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
-                    暂无编辑锁
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              [1, 2, 3].map((i) => (
+                <TableRow key={i} className="animate-pulse">
+                  <TableCell colSpan={5} className="px-5 py-4">
+                    <div className="h-6 bg-surface-alt rounded" />
                   </TableCell>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              ))
+            ) : data.length > 0 ? (
+              data.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="px-5 py-4">
+                    <Checkbox
+                      checked={selectedIds.has(item.id)}
+                      onCheckedChange={() => toggleSelected(item.id)}
+                      aria-label={`选择 ${item.collection} / ${item.recordId}`}
+                    />
+                  </TableCell>
+                  <TableCell className="px-5 py-4">
+                    <p className="text-sm font-medium text-text-primary">
+                      {item.collection} / {item.recordId}
+                    </p>
+                  </TableCell>
+                  <TableCell className="px-5 py-4 text-text-secondary">
+                    {item.username} ({item.userId?.slice(0, 8) ?? '未知'})
+                  </TableCell>
+                  <TableCell className="px-5 py-4 text-xs text-text-muted">
+                    {formatDateTime(item.expiresAt, 'N/A')}
+                  </TableCell>
+                  <TableCell className="px-5 py-4 text-left">
+                    <Button
+                      type="button"
+                      variant="warning"
+                      soft
+                      size="sm"
+                      onClick={() => releaseLock(item)}
+                      leftIcon={<Lock size={14} />}
+                    >
+                      强制释放
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
+                  暂无编辑锁
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
     </div>
   )

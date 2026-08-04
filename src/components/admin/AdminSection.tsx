@@ -33,6 +33,29 @@ export function AdminSection({
 }
 
 /**
+ * 无框区块标题行：标题 + 可选右侧操作，底部 border-b 分隔。
+ * 供管理后台各页面区块统一标题样式，避免手写样式漂移。
+ */
+export function SectionHeading({
+  title,
+  right,
+  className,
+}: {
+  title: ReactNode
+  right?: ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={clsx('flex items-center justify-between border-b border-border pb-3', className)}
+    >
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">{title}</h3>
+      {right}
+    </div>
+  )
+}
+
+/**
  * 区块加载/错误状态：loading 时显示加载文案，loadError 时显示错误与重试按钮。
  * 供各区块在内容加载前统一渲染，与 AdminSection 配套使用。
  */

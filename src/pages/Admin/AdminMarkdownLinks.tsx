@@ -4,6 +4,7 @@ import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { clsx } from 'clsx'
 import { Checkbox } from '@/src/components/ui'
+import { SectionHeading } from '../../components/admin/AdminSection'
 
 interface LinkMapping {
   oldUrl: string
@@ -206,8 +207,8 @@ export default function AdminMarkdownLinks() {
       </div>
 
       {/* 链接分布扫描 */}
-      <div className="bg-surface border border-border rounded p-5">
-        <h3 className="text-sm font-semibold text-text-primary mb-4">链接分布扫描</h3>
+      <div className="space-y-4">
+        <SectionHeading title="链接分布扫描" />
         <button
           onClick={handleScan}
           disabled={scanning}
@@ -216,20 +217,20 @@ export default function AdminMarkdownLinks() {
           {scanning ? '扫描中...' : '开始扫描'}
         </button>
         {scanResult && (
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-surface border border-border rounded p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
               <div className="text-2xl font-bold text-text-primary">{scanResult.totalPages}</div>
               <div className="text-xs text-text-muted">Wiki 页面</div>
             </div>
-            <div className="bg-surface border border-border rounded p-4">
+            <div>
               <div className="text-2xl font-bold text-brand-gold">{scanResult.localLinkCount}</div>
               <div className="text-xs text-text-muted">本地链接</div>
             </div>
-            <div className="bg-surface border border-border rounded p-4">
+            <div>
               <div className="text-2xl font-bold text-brand-gold">{scanResult.s3LinkCount}</div>
               <div className="text-xs text-text-muted">S3 链接</div>
             </div>
-            <div className="bg-surface border border-border rounded p-4">
+            <div>
               <div className="text-2xl font-bold text-brand-gold">
                 {scanResult.externalLinkCount}
               </div>
@@ -240,9 +241,9 @@ export default function AdminMarkdownLinks() {
       </div>
 
       {/* 存储策略切换 */}
-      <div className="bg-surface border border-border rounded p-5">
-        <h3 className="text-sm font-semibold text-text-primary mb-4">存储策略切换</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+      <div className="space-y-4">
+        <SectionHeading title="存储策略切换" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1">源存储</label>
             <select
@@ -275,7 +276,7 @@ export default function AdminMarkdownLinks() {
             />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1">
               本地基础 URL
@@ -334,8 +335,8 @@ export default function AdminMarkdownLinks() {
       </div>
 
       {/* 自定义链接映射 */}
-      <div className="bg-surface border border-border rounded p-5">
-        <h3 className="text-sm font-semibold text-text-primary mb-4">自定义链接映射</h3>
+      <div className="space-y-4">
+        <SectionHeading title="自定义链接映射" />
         {mappings.map((mapping, index) => (
           <div key={index} className="flex gap-2 mb-2 items-start">
             <input
@@ -370,11 +371,11 @@ export default function AdminMarkdownLinks() {
         ))}
         <button
           onClick={addMapping}
-          className="mt-2 px-4 py-2 text-sm text-brand-gold border border-brand-gold/30 rounded hover:bg-brand-gold/10 transition-all"
+          className="px-4 py-2 text-sm text-brand-gold border border-brand-gold/30 rounded hover:bg-brand-gold/10 transition-all"
         >
           + 添加映射
         </button>
-        <div className="flex gap-2 mt-4">
+        <div className="flex gap-2">
           <button
             onClick={handlePreview}
             disabled={previewing}
@@ -394,11 +395,11 @@ export default function AdminMarkdownLinks() {
 
       {/* 预览结果 */}
       {previewResult && previewResult.length > 0 && (
-        <div className="bg-surface border border-border rounded p-5">
-          <h3 className="text-sm font-semibold text-text-primary mb-4">预览结果</h3>
+        <div className="space-y-4">
+          <SectionHeading title="预览结果" />
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {previewResult.map((item) => (
-              <div key={item.slug} className="p-3 bg-surface-alt rounded">
+              <div key={item.slug} className="border-b border-border pb-2 last:border-0">
                 <div className="font-medium text-sm text-text-primary">{item.title}</div>
                 <div className="text-xs text-text-muted">{item.slug}</div>
                 {item.preview.replaced ? (
@@ -425,33 +426,31 @@ export default function AdminMarkdownLinks() {
 
       {/* 更新结果 */}
       {updateResult && (
-        <div className="bg-surface border border-border rounded p-5">
-          <h3 className="text-sm font-semibold text-text-primary mb-4">
-            {dryRun ? '预览更新结果' : '更新结果'}
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <div className="bg-surface border border-border rounded p-4">
+        <div className="space-y-4">
+          <SectionHeading title={dryRun ? '预览更新结果' : '更新结果'} />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
               <div className="text-2xl font-bold text-text-primary">{updateResult.totalPages}</div>
               <div className="text-xs text-text-muted">处理页面</div>
             </div>
-            <div className="bg-surface border border-border rounded p-4">
+            <div>
               <div className="text-2xl font-bold theme-text-success">
                 {updateResult.successCount}
               </div>
               <div className="text-xs text-text-muted">成功</div>
             </div>
-            <div className="bg-surface border border-border rounded p-4">
+            <div>
               <div className="text-2xl font-bold text-brand-gold">{updateResult.skipCount}</div>
               <div className="text-xs text-text-muted">跳过</div>
             </div>
-            <div className="bg-surface border border-border rounded p-4">
+            <div>
               <div className="text-2xl font-bold theme-text-error">{updateResult.failCount}</div>
               <div className="text-xs text-text-muted">失败</div>
             </div>
           </div>
           <div className="text-sm text-text-muted">执行时间: {updateResult.executionTime}ms</div>
           {updateResult.results.some((r) => !r.success) && (
-            <div className="mt-4">
+            <div>
               <h4 className="font-medium theme-text-error text-sm mb-2">失败详情</h4>
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {updateResult.results
