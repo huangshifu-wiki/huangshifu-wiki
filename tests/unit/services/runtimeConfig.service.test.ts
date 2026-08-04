@@ -93,9 +93,7 @@ describe('normalizeRuntimeConfigUpdate', () => {
 
     expect(Object.keys(result).sort()).toEqual(Object.keys(DEFAULT_RUNTIME_CONFIG).sort())
     for (const [key, value] of Object.entries(result)) {
-      expect(value).toEqual(
-        (DEFAULT_RUNTIME_CONFIG as unknown as Record<string, unknown>)[key]
-      )
+      expect(value).toEqual((DEFAULT_RUNTIME_CONFIG as unknown as Record<string, unknown>)[key])
     }
   })
 })
