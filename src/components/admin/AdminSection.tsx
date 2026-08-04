@@ -6,6 +6,8 @@ import { clsx } from 'clsx'
 /**
  * 管理后台通用区块容器：无框标题行（图标 + 标题 + 分隔线）+ 内容。
  * 复用设计系统 SettingsSection，统一管理后台的锚点偏移与区块间距，避免样式漂移。
+ * scroll-mt-20（80px）为 sticky 导航（约 58px）+ 导航横向滚动条（经典平台约 15-17px）
+ * 的最大高度预留，保证点击跳转后区块标题不被遮挡。
  */
 export function AdminSection({
   id,
@@ -25,7 +27,7 @@ export function AdminSection({
       id={id}
       icon={icon}
       title={title}
-      className={clsx('scroll-mt-16 space-y-4', className)}
+      className={clsx('scroll-mt-20 space-y-4', className)}
     >
       {children}
     </SettingsSection>

@@ -454,13 +454,13 @@ function SectionNav() {
   return (
     <nav
       aria-label="设置分类导航"
-      className="sticky top-0 z-30 flex flex-wrap gap-2 rounded border border-border bg-surface p-3 shadow-sm"
+      className="sticky top-0 z-30 flex flex-nowrap gap-2 overflow-x-auto rounded border border-border bg-surface p-3 shadow-sm"
     >
       {SETTINGS_SECTIONS.map(({ id, label }) => (
         <Button
           key={id}
           variant="ghost"
-          className="h-auto px-3 py-1.5 text-sm"
+          className="h-auto shrink-0 whitespace-nowrap px-3 py-1.5 text-sm"
           onClick={() => scrollToSection(id)}
         >
           {label}
