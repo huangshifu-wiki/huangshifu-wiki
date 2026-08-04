@@ -45,9 +45,9 @@ import {
   getPasswordSaltRounds,
   ensureTextLimit,
   validateUserDisplayName,
-  ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS,
   isUserPublicId,
 } from '../utils'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 import type { AuthenticatedRequest, UserStatus } from '../types'
 
 const router = createRouter()
@@ -1035,7 +1035,7 @@ const updateUserRoleHandler = asyncHandler(async (req: AuthenticatedRequest, res
 
     const demotesSuperAdmin = targetUser.role === 'super_admin' && role !== 'super_admin'
     const touchesSuperAdmin = role === 'super_admin' || demotesSuperAdmin
-    if (touchesSuperAdmin && !ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS) {
+    if (touchesSuperAdmin && !runtimeConfigService.getConfig().allowSuperAdminManageSuperAdmins) {
       res.status(403).json({ error: '当前配置不允许变更超级管理员身份' })
       return
     }

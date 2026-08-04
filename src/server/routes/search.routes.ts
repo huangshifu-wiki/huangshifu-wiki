@@ -31,6 +31,7 @@ import {
   isSearchHotKeywordsEnabled,
 } from '../utils'
 import { prisma } from '../prisma'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
 import { formatMusicCredits } from '../../lib/musicCredits'
 import { parseLyrics } from '../../lib/lrcParser'
@@ -40,12 +41,18 @@ import { createUploadStorageInfo } from '../uploadPath'
 
 const router = Router()
 
-const IMAGE_SEARCH_RESULT_LIMIT = Math.max(1, Number(process.env.IMAGE_SEARCH_RESULT_LIMIT || 24))
 const VECTOR_SEARCH_CANDIDATE_LIMIT = 200
-const QDRANT_TIMEOUT_MS = Number(process.env.QDRANT_TIMEOUT_MS || 2000)
 export const RRF_K = 60
 const LYRICS_SEARCH_TAKE = 100
 const MAX_MATCHED_LINES_PER_SONG = 30
+
+function getImageSearchResultLimit(): number {
+  return runtimeConfigService.getConfig().imageSearchResultLimit
+}
+
+function getQdrantTimeoutMs(): number {
+  return runtimeConfigService.getConfig().qdrantTimeoutMs
+}
 // 音乐搜索与歌词搜索共用的歌曲字段，覆盖 toMusicResponse 必填入参
 // （description/customPlatformLinks 为可选字段，搜索结果有意不取）
 const MUSIC_SEARCH_SELECT = {
@@ -1184,7 +1191,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
             q,
             VECTOR_SEARCH_CANDIDATE_LIMIT,
             0.25,
-            QDRANT_TIMEOUT_MS,
+            getQdrantTimeoutMs(),
             req.authUser
           ).catch((error) => {
             degraded = true
@@ -1197,7 +1204,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
             q,
             VECTOR_SEARCH_CANDIDATE_LIMIT,
             0.25,
-            QDRANT_TIMEOUT_MS,
+            getQdrantTimeoutMs(),
             req.authUser
           ).catch((error) => {
             logger.warn({ err: error }, 'Text vector search failed')
@@ -1211,7 +1218,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
         if (vectorResponse.timedOut || textResponse.timedOut) {
           degraded = true
           degradationReason =
-            '向量搜索超时（>' + QDRANT_TIMEOUT_MS / 1000 + 's），已自动降级为关键词搜索模式'
+            '向量搜索超时（>' + getQdrantTimeoutMs() / 1000 + 's），已自动降级为关键词搜索模式'
         }
 
         hybridResponse = buildHybridResponse(
@@ -1278,7 +1285,7 @@ router.get(
   async (req: AuthenticatedRequest, res) => {
     try {
       const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-      const requestedLimit = parseInteger(req.query.limit as string, IMAGE_SEARCH_RESULT_LIMIT, {
+      const requestedLimit = parseInteger(req.query.limit as string, getImageSearchResultLimit(), {
         min: 1,
         max: 60,
       })
@@ -1299,7 +1306,7 @@ router.get(
         q,
         requestedLimit,
         minScore,
-        QDRANT_TIMEOUT_MS,
+        getQdrantTimeoutMs(),
         req.authUser
       )
 
@@ -1348,7 +1355,7 @@ router.post(
   async (req: AuthenticatedRequest, res) => {
     const tempFile = req.file
     try {
-      const requestedLimit = parseInteger(req.body?.limit, IMAGE_SEARCH_RESULT_LIMIT, {
+      const requestedLimit = parseInteger(req.body?.limit, getImageSearchResultLimit(), {
         min: 1,
         max: 60,
       })
@@ -1421,7 +1428,7 @@ router.get(
   async (req: AuthenticatedRequest, res) => {
     try {
       const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-      const requestedLimit = parseInteger(req.query.limit as string, IMAGE_SEARCH_RESULT_LIMIT, {
+      const requestedLimit = parseInteger(req.query.limit as string, getImageSearchResultLimit(), {
         min: 1,
         max: 60,
       })

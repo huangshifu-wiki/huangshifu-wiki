@@ -1,7 +1,18 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import fs from 'fs'
 import path from 'path'
+
+vi.mock('../../src/server/prisma', () => ({
+  prisma: {
+    siteConfig: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
+  },
+}))
+
 import {
+  cleanupOldBackups,
   deleteBackupNote,
   parseBackupMetadata,
   readBackupNote,
@@ -15,10 +26,10 @@ import {
   validateSqlContent,
 } from '../../src/server/utils/backup'
 import { backupsDir } from '../../src/server/utils/config'
+import { runtimeConfigService } from '../../src/server/services/runtimeConfig.service'
 
 const originalPgDumpPath = process.env.PG_DUMP_PATH
 const originalPsqlPath = process.env.PSQL_PATH
-const originalBackupRetainCount = process.env.BACKUP_RETAIN_COUNT
 const noteTestFilename = 'backup_2026-06-28_10-20-00-000.zip'
 const cleanupKeepFilename = 'backup_2026-06-28_10-30-00-000.zip'
 const cleanupDeleteFilename = 'backup_2026-06-28_10-29-00-000.zip'
@@ -35,13 +46,11 @@ function restoreEnvValue(name: string, value: string | undefined) {
 afterEach(() => {
   restoreEnvValue('PG_DUMP_PATH', originalPgDumpPath)
   restoreEnvValue('PSQL_PATH', originalPsqlPath)
-  restoreEnvValue('BACKUP_RETAIN_COUNT', originalBackupRetainCount)
   fs.rmSync(path.join(backupsDir, `${noteTestFilename}.meta.json`), { force: true })
   fs.rmSync(path.join(backupsDir, cleanupKeepFilename), { force: true })
   fs.rmSync(path.join(backupsDir, `${cleanupKeepFilename}.meta.json`), { force: true })
   fs.rmSync(path.join(backupsDir, cleanupDeleteFilename), { force: true })
   fs.rmSync(path.join(backupsDir, `${cleanupDeleteFilename}.meta.json`), { force: true })
-  vi.resetModules()
 })
 
 describe('validateSqlContent', () => {
@@ -322,23 +331,19 @@ DROP SEQUENCE IF EXISTS public."User_id_seq";
   })
 
   it('should remove old backup sidecars during retention cleanup', async () => {
-    process.env.BACKUP_RETAIN_COUNT = '1'
-    vi.resetModules()
-    const {
-      cleanupOldBackups: cleanupWithSingleRetention,
-      writeBackupNote: writeNoteWithSingleRetention,
-    } = await import('../../src/server/utils/backup')
+    await runtimeConfigService.init()
+    await runtimeConfigService.updateConfig({ backupRetainCount: 1 })
 
     fs.writeFileSync(path.join(backupsDir, cleanupDeleteFilename), 'old')
     fs.writeFileSync(path.join(backupsDir, cleanupKeepFilename), 'new')
-    await writeNoteWithSingleRetention(cleanupDeleteFilename, '旧备份备注')
+    await writeBackupNote(cleanupDeleteFilename, '旧备份备注')
 
     const oldDate = new Date('2026-06-28T10:29:00.000Z')
     const newDate = new Date('2026-06-28T10:30:00.000Z')
     fs.utimesSync(path.join(backupsDir, cleanupDeleteFilename), oldDate, oldDate)
     fs.utimesSync(path.join(backupsDir, cleanupKeepFilename), newDate, newDate)
 
-    await cleanupWithSingleRetention()
+    await cleanupOldBackups()
 
     expect(fs.existsSync(path.join(backupsDir, cleanupKeepFilename))).toBe(true)
     expect(fs.existsSync(path.join(backupsDir, cleanupDeleteFilename))).toBe(false)

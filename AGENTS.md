@@ -414,9 +414,9 @@ CI 使用 Node 22。
 - 上传与存储：`UPLOADS_PATH`、`S3_*`、`SUPERBED_*`、`LSKY_*`
 - 微信：`WECHAT_MP_*`
 - 地图：`AMAP_*`、`VITE_AMAP_*`
-- 变体：`VARIANT_*`
-- 云同步：`CLOUD_SYNC_*`
-- 磁盘监控：`DISK_*`、`UPLOAD_MIN_FREE_SPACE_MB`
+- 部署信号（Docker）：`ENABLE_SEMANTIC_SEARCH`（是否启动 Qdrant 容器）
+
+运行时行为参数（功能开关、上传会话、备份保留、Blurhash、缓存/搜索调优、变体、云同步、磁盘监控）不在此列，已移至管理后台「系统参数」，存储于 `SiteConfig` 键 `runtime_config`（见 `src/server/services/runtimeConfig.service.ts`）。
 
 任何以 `VITE_` 开头的变量都会进入前端包，不能放密钥。
 

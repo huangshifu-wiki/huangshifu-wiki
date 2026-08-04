@@ -3,7 +3,8 @@
 import crypto, { timingSafeEqual } from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import { backupsDir, BACKUP_PASSWORD, BACKUP_RETAIN_COUNT } from './config'
+import { backupsDir, BACKUP_PASSWORD } from './config'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 
 export const BACKUP_METADATA_ENTRY = 'backup-meta.json'
 
@@ -447,8 +448,9 @@ export async function cleanupOldBackups(skipFiles?: string[]): Promise<void> {
       )
     ).sort((a, b) => b.mtime - a.mtime)
 
-    if (files.length > BACKUP_RETAIN_COUNT) {
-      const toDelete = files.slice(BACKUP_RETAIN_COUNT).filter((f) => !skipFiles?.includes(f.name))
+    const retainCount = runtimeConfigService.getConfig().backupRetainCount
+    if (files.length > retainCount) {
+      const toDelete = files.slice(retainCount).filter((f) => !skipFiles?.includes(f.name))
       for (const file of toDelete) {
         await fs.promises.unlink(path.join(backupsDir, file.name))
         if (sanitizeFilename(file.name)) {

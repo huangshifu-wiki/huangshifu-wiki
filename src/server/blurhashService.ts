@@ -1,6 +1,7 @@
 import fs from 'fs'
 import { encode } from 'blurhash'
 import sharp from 'sharp'
+import { runtimeConfigService } from './services/runtimeConfig.service'
 
 export interface BlurhashConfig {
   enabled: boolean
@@ -14,33 +15,14 @@ export interface BlurhashResult {
   thumbhash?: string
 }
 
-const DEFAULT_BLURHASH_CONFIG: BlurhashConfig = {
-  enabled: true,
-  autoGenerate: true,
-  componentsX: 4,
-  componentsY: 3,
-}
-
-let cachedConfig: BlurhashConfig | null = null
-
 function getBlurhashConfig(): BlurhashConfig {
-  if (cachedConfig) {
-    return cachedConfig
+  const config = runtimeConfigService.getConfig()
+  return {
+    enabled: config.blurhashEnabled,
+    autoGenerate: config.blurhashAutoGenerate,
+    componentsX: config.blurhashComponentsX,
+    componentsY: config.blurhashComponentsY,
   }
-
-  const enabled = process.env.BLURHASH_ENABLED !== 'false'
-  const autoGenerate = process.env.BLURHASH_AUTO_GENERATE !== 'false'
-  const componentsX = parseInt(process.env.BLURHASH_COMPONENTS_X || '4', 10)
-  const componentsY = parseInt(process.env.BLURHASH_COMPONENTS_Y || '3', 10)
-
-  cachedConfig = {
-    enabled,
-    autoGenerate,
-    componentsX: isNaN(componentsX) ? 4 : componentsX,
-    componentsY: isNaN(componentsY) ? 3 : componentsY,
-  }
-
-  return cachedConfig
 }
 
 export function isBlurhashEnabled(): boolean {
@@ -111,7 +93,8 @@ async function extractPixels(
 }
 
 export async function generateBlurhashFromBuffer(buffer: Buffer): Promise<string | null> {
-  if (!isBlurhashEnabled()) {
+  const config = getBlurhashConfig()
+  if (!config.enabled) {
     console.log('[Blurhash] Blurhash is disabled')
     return null
   }
@@ -120,8 +103,6 @@ export async function generateBlurhashFromBuffer(buffer: Buffer): Promise<string
     console.warn('[Blurhash] Empty buffer provided')
     return null
   }
-
-  const config = getBlurhashConfig()
 
   try {
     const pixels = await extractPixels(buffer)
@@ -193,7 +174,8 @@ export async function generateThumbhashFromFile(_filePath: string): Promise<stri
 }
 
 export async function generateImageHashesFromFile(filePath: string): Promise<BlurhashResult> {
-  if (!isBlurhashEnabled()) {
+  const config = getBlurhashConfig()
+  if (!config.enabled) {
     console.log('[Blurhash] Blurhash is disabled')
     return {}
   }
@@ -205,7 +187,6 @@ export async function generateImageHashesFromFile(filePath: string): Promise<Blu
     return cached
   }
 
-  const config = getBlurhashConfig()
   const result: BlurhashResult = {}
 
   if (config.autoGenerate) {

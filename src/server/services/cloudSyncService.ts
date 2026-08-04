@@ -9,6 +9,7 @@
  */
 
 import { prisma } from '../prisma'
+import { runtimeConfigService } from './runtimeConfig.service'
 import { uploadFileToS3, uploadsDir } from '../utils'
 import { logger } from '../utils/logger'
 import fs from 'fs'
@@ -48,7 +49,6 @@ interface CloudSyncServiceOptions {
 export class CloudSyncService {
   private queue: CloudSyncTask[] = []
   private processing = new Set<string>()
-  private maxConcurrent = parseInt(process.env.CLOUD_SYNC_MAX_CONCURRENT || '2', 10)
   private syncInterval: NodeJS.Timeout | null = null
   private lskyConfig: LskyProConfig | null = null
   private isProcessing = false
@@ -60,7 +60,7 @@ export class CloudSyncService {
 
     this.validateLskyConfig()
     this.startQueueProcessor()
-    logger.info({ maxConcurrent: this.maxConcurrent }, '[CloudSync] Service initialized')
+    logger.info('[CloudSync] Service initialized')
   }
 
   /**
@@ -128,7 +128,7 @@ export class CloudSyncService {
     const fullTask: CloudSyncTask = {
       ...task,
       retryCount: 0,
-      maxRetries: parseInt(process.env.CLOUD_SYNC_MAX_RETRIES || '3', 10),
+      maxRetries: runtimeConfigService.getConfig().cloudSyncMaxRetries,
       createdAt: new Date(),
     }
 
@@ -167,7 +167,7 @@ export class CloudSyncService {
    * 处理下一个任务
    */
   private async processNext(): Promise<void> {
-    if (this.processing.size >= this.maxConcurrent) return
+    if (this.processing.size >= runtimeConfigService.getConfig().cloudSyncMaxConcurrent) return
     if (this.queue.length === 0) return
 
     const task = this.queue.shift()!
@@ -182,7 +182,10 @@ export class CloudSyncService {
       this.processing.delete(task.imageMapId)
       this.isProcessing = false
 
-      if (this.queue.length > 0 || this.processing.size < this.maxConcurrent) {
+      if (
+        this.queue.length > 0 ||
+        this.processing.size < runtimeConfigService.getConfig().cloudSyncMaxConcurrent
+      ) {
         setTimeout(() => this.processNext(), 100)
       }
     }

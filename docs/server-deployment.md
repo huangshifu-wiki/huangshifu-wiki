@@ -143,14 +143,12 @@ JWT_SECRET="请替换为至少32位随机字符串"
 
 # Optional
 CORS_ORIGIN="https://你的域名"
-UPLOAD_SESSION_TTL_MINUTES="45"
 
 # Custom uploads storage path (absolute path)
 UPLOADS_PATH=""
 
 # Database backup; optional server-side encryption key
 BACKUP_PASSWORD=""
-BACKUP_RETAIN_COUNT="20"
 
 # Vector search (Qdrant + CLIP)
 QDRANT_URL="http://127.0.0.1:6333"
@@ -158,9 +156,10 @@ QDRANT_API_KEY=""
 QDRANT_COLLECTION="hsf_image_embeddings"
 IMAGE_EMBEDDING_MODEL="OFA-Sys/chinese-clip-vit-base-patch16"
 IMAGE_EMBEDDING_VECTOR_SIZE="512"
-IMAGE_EMBEDDING_BATCH_SIZE="100"
 IMAGE_EMBEDDING_DTYPE="q8"
-IMAGE_SEARCH_RESULT_LIMIT="24"
+
+# 运行时行为参数（上传会话时长、备份保留数、Blurhash、搜索/缓存调优、
+# 变体生成、云同步、磁盘监控等）已移至管理后台「系统参数」，无需环境变量。
 
 # 文本嵌入配置 (Text Embedding - 复用 ChineseCLIP 文本编码器)
 TEXT_EMBEDDING_ENABLED="true"
@@ -206,25 +205,6 @@ LSKY_STRATEGY_ID=""
 
 # 前端环境变量（会被打包到前端代码，不要放敏感信息！）
 VITE_LSKY_BASE_URL="https://your-lsky-pro-domain.com"
-
-# 图片变体生成器配置 (v2.1)
-VARIANT_MAX_CONCURRENT="3"
-VARIANT_TASK_TIMEOUT_MS="30000"
-VARIANT_QUEUE_MAX_WAIT_MS="300000"
-VARIANT_SHARP_MEMORY_LIMIT_MB="512"
-VARIANT_MAX_RETRIES="3"
-
-# 云端同步服务配置 (v2.1)
-CLOUD_SYNC_MAX_CONCURRENT="2"
-CLOUD_SYNC_MAX_RETRIES="3"
-
-# 磁盘空间监控配置 (v2.1)
-DISK_WARNING_THRESHOLD_GB="50"
-DISK_CRITICAL_THRESHOLD_GB="20"
-DISK_CHECK_INTERVAL_MS="300000"
-UPLOAD_MIN_FREE_SPACE_MB="500"
-
-MUSIC_PLAY_URL_CACHE_TTL_SECONDS="600"
 EOF
 ```
 
@@ -258,10 +238,9 @@ EOF
 | `QDRANT_COLLECTION`           | 图片向量集合名称（默认 `hsf_image_embeddings`）                  |
 | `IMAGE_EMBEDDING_MODEL`       | 图片向量模型名称（默认 `OFA-Sys/chinese-clip-vit-base-patch16`） |
 | `IMAGE_EMBEDDING_VECTOR_SIZE` | 向量维度（默认 512）                                             |
-| `IMAGE_EMBEDDING_BATCH_SIZE`  | 批量处理大小（默认 100）                                         |
 | `IMAGE_EMBEDDING_DTYPE`       | 模型量化类型：`q8`（int8，省内存）或 `fp32`（全精度）            |
-| `IMAGE_SEARCH_RESULT_LIMIT`   | 图片搜索结果上限（默认 24）                                      |
-| `QDRANT_TIMEOUT_MS`           | Qdrant 请求超时（毫秒，默认 2000）                               |
+
+> 语义搜索开关、批量大小、搜索结果上限、Qdrant 超时等参数已移至管理后台「系统参数」，无需环境变量。
 
 #### 文本嵌入（Text Embedding）
 
@@ -292,15 +271,11 @@ EOF
 
 #### 存储与上传
 
-| 变量                         | 说明                                                  |
-| ---------------------------- | ----------------------------------------------------- |
-| `UPLOADS_PATH`               | 自定义上传文件绝对路径（留空使用项目根目录 uploads/） |
-| `UPLOAD_SESSION_TTL_MINUTES` | 上传会话过期时间（分钟，默认 45）                     |
-| `UPLOAD_MIN_FREE_SPACE_MB`   | 最小剩余磁盘空间（MB，默认 500）                      |
-| `BLURHASH_ENABLED`           | 是否启用 Blurhash（默认 true）                        |
-| `BLURHASH_AUTO_GENERATE`     | 上传时自动生成 Blurhash（默认 true）                  |
-| `BLURHASH_COMPONENTS_X`      | Blurhash X 分量（默认 4）                             |
-| `BLURHASH_COMPONENTS_Y`      | Blurhash Y 分量（默认 3）                             |
+| 变量           | 说明                                                  |
+| -------------- | ----------------------------------------------------- |
+| `UPLOADS_PATH` | 自定义上传文件绝对路径（留空使用项目根目录 uploads/） |
+
+> 上传会话时长、最小剩余空间、Blurhash 等参数已移至管理后台「系统参数」，无需环境变量。
 
 #### S3 对象存储
 
@@ -335,44 +310,21 @@ EOF
 | `LSKY_STRATEGY_ID`   | Lsky 上传策略 ID（可选）                                    |
 | `VITE_LSKY_BASE_URL` | Lsky 前端地址（**前端变量**，会被打包到代码中）             |
 
-#### 图片变体生成器（v2.1，可选）
+#### 图片变体生成器 / 云端同步 / 磁盘空间监控（v2.1，可选）
 
-| 变量                            | 说明                                  |
-| ------------------------------- | ------------------------------------- |
-| `VARIANT_MAX_CONCURRENT`        | 最大并发数（默认 3）                  |
-| `VARIANT_TASK_TIMEOUT_MS`       | 单任务超时（毫秒，默认 30000）        |
-| `VARIANT_QUEUE_MAX_WAIT_MS`     | 队列最大等待时间（毫秒，默认 300000） |
-| `VARIANT_SHARP_MEMORY_LIMIT_MB` | Sharp 内存限制（MB，默认 512）        |
-| `VARIANT_MAX_RETRIES`           | 最大重试次数（默认 3）                |
-
-#### 云端同步服务（v2.1，可选）
-
-| 变量                        | 说明                   |
-| --------------------------- | ---------------------- |
-| `CLOUD_SYNC_MAX_CONCURRENT` | 最大并发数（默认 2）   |
-| `CLOUD_SYNC_MAX_RETRIES`    | 最大重试次数（默认 3） |
-
-#### 磁盘空间监控（v2.1，可选）
-
-| 变量                         | 说明                             |
-| ---------------------------- | -------------------------------- |
-| `DISK_WARNING_THRESHOLD_GB`  | 磁盘警告阈值（GB，默认 50）      |
-| `DISK_CRITICAL_THRESHOLD_GB` | 磁盘严重阈值（GB，默认 20）      |
-| `DISK_CHECK_INTERVAL_MS`     | 检查间隔（毫秒，默认 300000）    |
-| `UPLOAD_MIN_FREE_SPACE_MB`   | 上传最小可用空间（MB，默认 500） |
+> 以上三类参数（`VARIANT_*`、`CLOUD_SYNC_*`、`DISK_*`）已移至管理后台「系统参数」，无需环境变量。
 
 #### 数据库备份
 
-| 变量                  | 说明                                                       |
-| --------------------- | ---------------------------------------------------------- |
-| `BACKUP_PASSWORD`     | 备份文件服务端加密密钥（可选；留空时新备份为明文 SQL zip） |
-| `BACKUP_RETAIN_COUNT` | 备份保留数量（默认 20），超过后自动删除最旧备份            |
+| 变量              | 说明                                                       |
+| ----------------- | ---------------------------------------------------------- |
+| `BACKUP_PASSWORD` | 备份文件服务端加密密钥（可选；留空时新备份为明文 SQL zip） |
+
+> 备份保留数量（`BACKUP_RETAIN_COUNT`）已移至管理后台「系统参数」，无需环境变量。
 
 #### 音乐缓存
 
-| 变量                               | 默认值 | 说明                   |
-| ---------------------------------- | ------ | ---------------------- |
-| `MUSIC_PLAY_URL_CACHE_TTL_SECONDS` | `600`  | 播放地址缓存 TTL（秒） |
+> 播放地址缓存 TTL（`MUSIC_PLAY_URL_CACHE_TTL_SECONDS`）已移至管理后台「系统参数」，无需环境变量。
 
 ### 3.1 微信小程序 WebView 登录相关
 
@@ -415,37 +367,17 @@ Lsky Pro+ 是一款开源的图床程序。配置方式：
 
 ### 3.4 图片变体生成器配置（可选，v2.1）
 
-图片变体生成器用于自动生成不同尺寸的图片变体（缩略图、中等尺寸等）。配置项：
-
-| 变量                            | 说明               | 默认值          |
-| ------------------------------- | ------------------ | --------------- |
-| `VARIANT_MAX_CONCURRENT`        | 同时处理的图片数量 | 3               |
-| `VARIANT_TASK_TIMEOUT_MS`       | 单张图片处理超时   | 30000ms (30s)   |
-| `VARIANT_QUEUE_MAX_WAIT_MS`     | 队列最大等待时间   | 300000ms (5min) |
-| `VARIANT_SHARP_MEMORY_LIMIT_MB` | Sharp 库内存限制   | 512MB           |
-| `VARIANT_MAX_RETRIES`           | 失败重试次数       | 3               |
+图片变体生成器用于自动生成不同尺寸的图片变体（缩略图、中等尺寸等）。并发数、任务超时、队列等待、内存限制、重试次数等参数已移至管理后台「系统参数」，无需环境变量。
 
 ### 3.5 云端同步服务配置（可选，v2.1）
 
-云端同步服务用于将本地存储的图片同步到 S3 兼容对象存储。配置项：
-
-| 变量                        | 说明             | 默认值 |
-| --------------------------- | ---------------- | ------ |
-| `CLOUD_SYNC_MAX_CONCURRENT` | 同步任务并发数   | 2      |
-| `CLOUD_SYNC_MAX_RETRIES`    | 同步失败重试次数 | 3      |
+云端同步服务用于将本地存储的图片同步到 S3 兼容对象存储。并发数与重试次数已移至管理后台「系统参数」，无需环境变量。
 
 需配合 S3 配置（`S3_ENABLED=true` 及相关凭证）使用。
 
 ### 3.6 磁盘空间监控配置（可选，v2.1）
 
-磁盘空间监控服务定期检查服务器磁盘剩余空间，并在达到阈值时发出告警。配置项：
-
-| 变量                         | 说明                       | 默认值        |
-| ---------------------------- | -------------------------- | ------------- |
-| `DISK_WARNING_THRESHOLD_GB`  | 警告阈值（GB）             | 50            |
-| `DISK_CRITICAL_THRESHOLD_GB` | 严重阈值（GB）             | 20            |
-| `DISK_CHECK_INTERVAL_MS`     | 检查间隔（毫秒）           | 300000 (5min) |
-| `UPLOAD_MIN_FREE_SPACE_MB`   | 上传操作最小可用空间（MB） | 500           |
+磁盘空间监控服务定期检查服务器磁盘剩余空间，并在达到阈值时发出告警。警告阈值、严重阈值、检查间隔等参数已移至管理后台「系统参数」，无需环境变量。
 
 当磁盘空间低于阈值时：
 
@@ -894,7 +826,7 @@ npm run verify
 - 下载备份文件到本地
 - 上传备份文件恢复数据库
 - 删除旧备份
-- 自动保留最近 N 个备份（默认 20 个，可通过 `BACKUP_RETAIN_COUNT` 配置）
+- 自动保留最近 N 个备份（默认 20 个，可在管理后台「系统参数」调整）
 
 **备份范围**：
 
@@ -1007,9 +939,7 @@ Service，浏览器不会直接请求 `restapi.amap.com`。
 
 **环境变量**：
 
-| 变量                               | 默认值 | 说明                   |
-| ---------------------------------- | ------ | ---------------------- |
-| `MUSIC_PLAY_URL_CACHE_TTL_SECONDS` | `600`  | 播放地址缓存 TTL（秒） |
+> 播放地址缓存 TTL（`MUSIC_PLAY_URL_CACHE_TTL_SECONDS`）已移至管理后台「系统参数」，无需环境变量。
 
 ### 15.6 敏感词过滤
 
@@ -1062,9 +992,7 @@ npm run download:sensitive-words
 
 **环境变量**：
 
-| 变量                               | 默认值 | 说明                   |
-| ---------------------------------- | ------ | ---------------------- |
-| `MUSIC_PLAY_URL_CACHE_TTL_SECONDS` | `600`  | 播放地址缓存 TTL（秒） |
+> 播放地址缓存 TTL（`MUSIC_PLAY_URL_CACHE_TTL_SECONDS`）已移至管理后台「系统参数」，无需环境变量。
 
 ---
 
@@ -1148,13 +1076,11 @@ npm run download:sensitive-words
 
 ### 环境变量
 
-| 变量                     | 默认值             | 说明              |
-| ------------------------ | ------------------ | ----------------- |
-| `UPLOADS_PATH`           | 项目根目录/uploads | 自定义上传路径    |
-| `BLURHASH_ENABLED`       | true               | 是否启用 blurhash |
-| `BLURHASH_AUTO_GENERATE` | true               | 上传时自动生成    |
-| `BLURHASH_COMPONENTS_X`  | 4                  | blurhash X 分量   |
-| `BLURHASH_COMPONENTS_Y`  | 3                  | blurhash Y 分量   |
+| 变量           | 默认值             | 说明           |
+| -------------- | ------------------ | -------------- |
+| `UPLOADS_PATH` | 项目根目录/uploads | 自定义上传路径 |
+
+> Blurhash 开关与分量参数已移至管理后台「系统参数」，无需环境变量。
 
 ### 自定义上传路径配置
 

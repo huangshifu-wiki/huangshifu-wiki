@@ -25,6 +25,11 @@ import {
   RateLimitConfigValidationError,
   rateLimitConfigService,
 } from '../services/rateLimitConfig.service'
+import {
+  RuntimeConfigValidationError,
+  normalizeRuntimeConfigUpdate,
+  runtimeConfigService,
+} from '../services/runtimeConfig.service'
 
 const router = Router()
 
@@ -86,6 +91,75 @@ router.post('/rate-limits/config/reset', requireAuth, requireSuperAdmin, async (
   } catch (error) {
     console.error('[Admin/RateLimit] Error resetting config:', error)
     res.status(500).json({ success: false, error: '重置请求限流配置失败' })
+  }
+})
+
+// ============================================================================
+// ⚙️ 运行时行为配置 API（支持动态配置）
+// ============================================================================
+
+/**
+ * GET /api/admin/runtime-config - 获取运行时行为配置
+ */
+router.get('/runtime-config', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: runtimeConfigService.getConfig(),
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('[Admin/RuntimeConfig] Error getting config:', error)
+    res.status(500).json({ success: false, error: '获取运行时配置失败' })
+  }
+})
+
+/**
+ * PATCH /api/admin/runtime-config - 更新运行时行为配置
+ */
+router.patch(
+  '/runtime-config',
+  requireAuth,
+  requireSuperAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const partial = normalizeRuntimeConfigUpdate(req.body)
+      const config = await runtimeConfigService.updateConfig(partial)
+
+      console.log(`[Admin/RuntimeConfig] Config updated by super admin: ${req.authUser?.uid}`)
+
+      res.json({
+        success: true,
+        data: config,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      if (error instanceof RuntimeConfigValidationError) {
+        res.status(400).json({ success: false, error: error.message })
+        return
+      }
+
+      console.error('[Admin/RuntimeConfig] Error updating config:', error)
+      res.status(500).json({ success: false, error: '更新运行时配置失败' })
+    }
+  }
+)
+
+/**
+ * POST /api/admin/runtime-config/reset - 重置为默认配置
+ */
+router.post('/runtime-config/reset', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    const config = await runtimeConfigService.resetConfig()
+
+    res.json({
+      success: true,
+      data: config,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('[Admin/RuntimeConfig] Error resetting config:', error)
+    res.status(500).json({ success: false, error: '重置运行时配置失败' })
   }
 })
 

@@ -8,7 +8,9 @@
 - `postgres`：PostgreSQL 16，数据保存在 Docker volume，仅在 Compose 内部网络暴露
 - `qdrant`：仅在 `ENABLE_SEMANTIC_SEARCH=true` 时通过 `semantic` profile 启动
 
-默认关闭图片语义搜索，避免首次上线时被 Qdrant 和 CLIP 模型下载阻塞。
+默认不启动 Qdrant，避免首次上线时被 Qdrant 镜像和 CLIP 模型下载阻塞。
+服务端语义搜索功能开关位于管理后台「系统参数」，部署后请按需调整；
+若未启动 Qdrant 而功能开关为开启，语义搜索接口会返回错误。
 
 ## 1. 服务器准备
 
@@ -115,10 +117,12 @@ docker compose ps
 编辑 `.env`：
 
 ```env
-ENABLE_SEMANTIC_SEARCH="true"
 QDRANT_URL="http://qdrant:6333"
 TRANSFORMERS_CACHE="/app/models/transformers"
 ```
+
+语义搜索默认关闭（服务端开关默认关闭，避免未部署 Qdrant 时搜索报错）；
+启用时需在管理后台「系统参数」中打开「语义搜索」开关，并确认 Qdrant 已启动。
 
 重新部署：
 

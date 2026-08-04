@@ -354,7 +354,6 @@ async function handleBackupDelete(req: AuthenticatedRequest, res: Response) {
     res.status(500).json({ error: '删除备份失败' })
   }
 }
-const BACKUP_RETAIN_COUNT = Math.max(1, Number(process.env.BACKUP_RETAIN_COUNT || 20))
 
 async function permanentlyDeleteWikiById(id: string) {
   const page = await prisma.wikiPage.findUnique({

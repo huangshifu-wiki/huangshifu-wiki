@@ -10,6 +10,7 @@
  */
 
 import { prisma } from '../prisma'
+import { runtimeConfigService } from './runtimeConfig.service'
 import sharp from 'sharp'
 import fs from 'fs'
 import path from 'path'
@@ -72,17 +73,14 @@ interface VariantGeneratorOptions {
   processOnEnqueue?: boolean
 }
 
+function getVariantConfig() {
+  return runtimeConfigService.getConfig()
+}
+
 export class VariantGenerator {
   private queue: VariantTask[] = []
   private processing = new Set<string>()
   private processOnEnqueue: boolean
-
-  private config = {
-    maxConcurrent: parseInt(process.env.VARIANT_MAX_CONCURRENT || '3', 10),
-    taskTimeoutMs: parseInt(process.env.VARIANT_TASK_TIMEOUT_MS || '30000', 10),
-    queueMaxWaitMs: parseInt(process.env.VARIANT_QUEUE_MAX_WAIT_MS || '300000', 10),
-    sharpMemoryLimitMb: parseInt(process.env.VARIANT_SHARP_MEMORY_LIMIT_MB || '512', 10),
-  }
 
   private imageMapVariantSpecs: VariantSpec[] = [
     { name: '1080h', maxWidth: null, maxHeight: 1080, quality: 85 },
@@ -110,10 +108,6 @@ export class VariantGenerator {
     this.recoverPendingTasks()
 
     console.log(`[Variant] ✅ Generator initialized`)
-    console.log(`  - Max concurrent: ${this.config.maxConcurrent}`)
-    console.log(`  - Task timeout: ${this.config.taskTimeoutMs}ms`)
-    console.log(`  - Queue max wait: ${this.config.queueMaxWaitMs}ms`)
-    console.log(`  - Sharp memory limit: ${this.config.sharpMemoryLimitMb}MB`)
   }
 
   /**
@@ -218,7 +212,7 @@ export class VariantGenerator {
     const fullTask: VariantTask = {
       ...task,
       retryCount: 0,
-      maxRetries: parseInt(process.env.VARIANT_MAX_RETRIES || '3', 10),
+      maxRetries: getVariantConfig().variantMaxRetries,
       createdAt: new Date(),
     }
 
@@ -256,7 +250,7 @@ export class VariantGenerator {
    * 处理下一个任务
    */
   private async processNext(): Promise<void> {
-    if (this.processing.size >= this.config.maxConcurrent) return
+    if (this.processing.size >= getVariantConfig().variantMaxConcurrent) return
     if (this.queue.length === 0) return
 
     const task = this.queue.shift()!
@@ -272,7 +266,7 @@ export class VariantGenerator {
       this.processing.delete(taskKey)
       this.isProcessing = false
 
-      if (this.queue.length > 0 || this.processing.size < this.config.maxConcurrent) {
+      if (this.queue.length > 0 || this.processing.size < getVariantConfig().variantMaxConcurrent) {
         setTimeout(() => this.processNext(), 100)
       }
     }
@@ -293,7 +287,7 @@ export class VariantGenerator {
     try {
       // ===== 检查 1: 队列等待时间超限 =====
       const waitTime = Date.now() - task.createdAt.getTime()
-      if (waitTime > this.config.queueMaxWaitMs) {
+      if (waitTime > getVariantConfig().variantQueueMaxWaitMs) {
         console.warn(
           `[Variant] ⏰ Task ${taskKey} exceeded max wait time (${waitTime}ms), skipping`
         )
@@ -318,8 +312,10 @@ export class VariantGenerator {
 
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
-          reject(new Error(`Variant generation timeout (${this.config.taskTimeoutMs}ms)`))
-        }, this.config.taskTimeoutMs)
+          reject(
+            new Error(`Variant generation timeout (${getVariantConfig().variantTaskTimeoutMs}ms)`)
+          )
+        }, getVariantConfig().variantTaskTimeoutMs)
       })
 
       try {
@@ -384,7 +380,7 @@ export class VariantGenerator {
     const variants = new Map<string, VariantMetadata>()
 
     // 设置 Sharp 内存限制
-    const maxPixels = (this.config.sharpMemoryLimitMb * 1024 * 1024) / 4
+    const maxPixels = (getVariantConfig().variantSharpMemoryLimitMb * 1024 * 1024) / 4
 
     try {
       const metadata = await sharp(task.localFilePath, {
@@ -472,7 +468,9 @@ export class VariantGenerator {
       return variants
     } catch (error) {
       if (error.message?.includes('Input image exceeds pixel limit')) {
-        throw new Error(`Image too large (max ${this.config.sharpMemoryLimitMb}MB memory limit)`)
+        throw new Error(
+          `Image too large (max ${getVariantConfig().variantSharpMemoryLimitMb}MB memory limit)`
+        )
       }
       throw error
     }
@@ -647,7 +645,7 @@ export class VariantGenerator {
    * 获取最大并发数
    */
   getMaxConcurrent(): number {
-    return this.config.maxConcurrent
+    return getVariantConfig().variantMaxConcurrent
   }
 }
 

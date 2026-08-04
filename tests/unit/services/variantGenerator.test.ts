@@ -11,6 +11,7 @@ import os from 'os'
 import fs from 'fs'
 import sharp from 'sharp'
 import { prisma } from '../../../src/server/prisma'
+import { runtimeConfigService } from '../../../src/server/services/runtimeConfig.service'
 
 // sharp 行为开关：hangMetadata = true 时 metadata 挂起，直到 releaseHang 被调用（模拟卡死任务）
 const sharpState = vi.hoisted(() => ({
@@ -21,6 +22,10 @@ const sharpState = vi.hoisted(() => ({
 // Mock prisma 模块
 vi.mock('../../../src/server/prisma', () => ({
   prisma: {
+    siteConfig: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
     imageMap: {
       update: vi.fn().mockResolvedValue({}),
       findMany: vi.fn().mockResolvedValue([]),
@@ -76,11 +81,14 @@ describe('VariantGenerator - 初始化与配置', () => {
   let VariantGenerator: any
 
   beforeEach(async () => {
-    process.env.VARIANT_MAX_CONCURRENT = '3'
-    process.env.VARIANT_TASK_TIMEOUT_MS = '30000'
-    process.env.VARIANT_QUEUE_MAX_WAIT_MS = '300000'
-    process.env.VARIANT_SHARP_MEMORY_LIMIT_MB = '512'
-    process.env.VARIANT_MAX_RETRIES = '3'
+    await runtimeConfigService.init()
+    await runtimeConfigService.updateConfig({
+      variantMaxConcurrent: 3,
+      variantTaskTimeoutMs: 30000,
+      variantQueueMaxWaitMs: 300000,
+      variantSharpMemoryLimitMb: 512,
+      variantMaxRetries: 3,
+    })
     process.env.UPLOADS_PATH = TEST_UPLOADS_DIR
 
     const module = await import('../../../src/server/services/variantGenerator')
@@ -89,7 +97,7 @@ describe('VariantGenerator - 初始化与配置', () => {
     vi.clearAllMocks()
   })
 
-  it('应该使用环境变量正确初始化配置', async () => {
+  it('应该使用默认配置正确初始化', async () => {
     const generator = new VariantGenerator()
 
     const stats = generator.getQueueStats()
@@ -127,8 +135,11 @@ describe('VariantGenerator - 队列管理', () => {
   let generator: any
 
   beforeEach(async () => {
-    process.env.VARIANT_MAX_CONCURRENT = '2'
-    process.env.VARIANT_TASK_TIMEOUT_MS = '1000'
+    await runtimeConfigService.init()
+    await runtimeConfigService.updateConfig({
+      variantMaxConcurrent: 2,
+      variantTaskTimeoutMs: 1000,
+    })
     process.env.UPLOADS_PATH = TEST_UPLOADS_DIR
     const module = await import('../../../src/server/services/variantGenerator')
     const VariantGenerator = module.VariantGenerator

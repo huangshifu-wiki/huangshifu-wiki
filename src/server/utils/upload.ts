@@ -2,7 +2,8 @@
 
 import fs from 'fs'
 import path from 'path'
-import { uploadsDir, UPLOAD_SESSION_TTL_MINUTES } from './config'
+import { uploadsDir } from './config'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 import { parseInteger } from './parsers'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import type {
@@ -103,7 +104,7 @@ export function normalizeEditLockRecordId(value: unknown): string {
 }
 
 export function createUploadSessionExpiresAt(): Date {
-  return new Date(Date.now() + UPLOAD_SESSION_TTL_MINUTES * 60 * 1000)
+  return new Date(Date.now() + runtimeConfigService.getConfig().uploadSessionTtlMinutes * 60 * 1000)
 }
 
 export function isUploadSessionExpired(expiresAt: Date): boolean {

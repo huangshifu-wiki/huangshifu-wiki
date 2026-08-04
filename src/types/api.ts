@@ -236,6 +236,32 @@ export interface SearchHotKeywordsConfig {
   enabled: boolean
 }
 
+// 管理面板可调的运行时行为配置（GET/PATCH /api/admin/runtime-config）
+export interface RuntimeAdminConfig {
+  semanticSearchEnabled: boolean
+  galleryAdminOnly: boolean
+  allowSuperAdminManageSuperAdmins: boolean
+  blurhashEnabled: boolean
+  blurhashAutoGenerate: boolean
+  blurhashComponentsX: number
+  blurhashComponentsY: number
+  uploadSessionTtlMinutes: number
+  backupRetainCount: number
+  playUrlCacheTtlSeconds: number
+  cacheMaxKeys: number
+  qdrantTimeoutMs: number
+  imageSearchResultLimit: number
+  imageEmbeddingBatchSize: number
+  editLockCleanupIntervalMs: number
+  variantMaxConcurrent: number
+  variantTaskTimeoutMs: number
+  variantQueueMaxWaitMs: number
+  variantSharpMemoryLimitMb: number
+  variantMaxRetries: number
+  cloudSyncMaxConcurrent: number
+  cloudSyncMaxRetries: number
+}
+
 export type {
   RateLimitAdminConfig,
   RateLimitBucketConfig,

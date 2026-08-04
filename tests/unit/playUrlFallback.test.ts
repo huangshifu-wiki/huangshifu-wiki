@@ -6,7 +6,6 @@ const mockResolveAudioUrl = vi.hoisted(() => vi.fn())
 
 vi.mock('../../src/server/utils/config', () => ({
   prisma: {},
-  PLAY_URL_CACHE_TTL_MS: 600000,
   DEFAULT_MUSIC_PLATFORMS: ['netease', 'tencent', 'kugou', 'baidu', 'kuwo'],
   uploadsDir: path.join(os.tmpdir(), 'huangshifu-play-url-fallback-test-uploads'),
 }))

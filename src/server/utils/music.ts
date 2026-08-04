@@ -2,7 +2,8 @@
 
 import { Prisma } from '@prisma/client'
 import type { MusicPlayableOverride } from '@prisma/client'
-import { prisma, PLAY_URL_CACHE_TTL_MS, DEFAULT_MUSIC_PLATFORMS, uploadsDir } from './config'
+import { prisma, DEFAULT_MUSIC_PLATFORMS, uploadsDir } from './config'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 import { enhancedCache, CACHE_KEYS } from './cache'
 import { parseInteger } from './parsers'
 import { withNumericSlugTransaction } from './numericSlug'
@@ -467,15 +468,16 @@ export function setCachedPlayUrl(
   value: Omit<PlayUrlCacheValue, 'fetchedAt' | 'expiresAt'>
 ) {
   const now = Date.now()
+  const playUrlCacheTtlMs = runtimeConfigService.getConfig().playUrlCacheTtlSeconds * 1000
   const record: PlayUrlCacheValue = {
     ...value,
     fetchedAt: now,
-    expiresAt: now + PLAY_URL_CACHE_TTL_MS,
+    expiresAt: now + playUrlCacheTtlMs,
   }
 
   // 写入增强缓存（限制大小）
   const enhancedKey = `${CACHE_KEYS.MUSIC_PLAY_URL}:${cacheKey}`
-  enhancedCache.set(enhancedKey, record, Math.ceil(PLAY_URL_CACHE_TTL_MS / 1000))
+  enhancedCache.set(enhancedKey, record, Math.ceil(playUrlCacheTtlMs / 1000))
   return record
 }
 

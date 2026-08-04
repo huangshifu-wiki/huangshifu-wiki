@@ -54,6 +54,7 @@ import { registerAdminMediaHealthRoutes } from './src/server/routes/admin.media-
 import { cloudSyncService } from './src/server/services/cloudSyncService'
 import { variantGenerator } from './src/server/services/variantGenerator'
 import { rateLimitConfigService } from './src/server/services/rateLimitConfig.service'
+import { runtimeConfigService } from './src/server/services/runtimeConfig.service'
 import { isSemanticSearchEnabled } from './src/server/utils'
 import {
   injectHtmlBootstrapState,
@@ -327,6 +328,9 @@ registerEventsRoutes(app)
 registerMusicRoutes(app)
 registerAlbumsRoutes(app)
 registerSearchRoutes(app)
+// 运行时配置需在 embeddings 路由注册决策（依赖语义搜索开关）前加载完成；
+// 失败时回退默认值，不阻塞启动。search 路由在请求时惰性读取配置，不受此影响。
+await runtimeConfigService.init()
 if (isSemanticSearchEnabled()) {
   const { registerEmbeddingsRoutes } = await import('./src/server/routes/embeddings.routes')
   registerEmbeddingsRoutes(app)
@@ -472,8 +476,10 @@ async function startServer() {
       import('./src/server/vector/clipEmbedding').then(({ warmup }) => warmup()).catch(() => {})
     }
 
-    const editLockCleanupInterval = setInterval(
-      async () => {
+    // 编辑锁清理：递归 setTimeout，间隔随运行时配置即时生效
+    let editLockCleanupTimer: NodeJS.Timeout | null = null
+    const scheduleEditLockCleanup = () => {
+      editLockCleanupTimer = setTimeout(async () => {
         try {
           await prisma.editLock.deleteMany({
             where: { expiresAt: { lt: new Date() } },
@@ -481,9 +487,10 @@ async function startServer() {
         } catch (error) {
           logger.error({ err: error }, 'Clean up expired edit locks failed')
         }
-      },
-      parseInt(process.env.EDIT_LOCK_CLEANUP_INTERVAL_MS || '90000', 10)
-    )
+        scheduleEditLockCleanup()
+      }, runtimeConfigService.getConfig().editLockCleanupIntervalMs)
+    }
+    scheduleEditLockCleanup()
 
     function shutdown(signal: string): void {
       logger.info({ signal }, 'Starting graceful shutdown')
@@ -495,7 +502,9 @@ async function startServer() {
         logger.info('HTTP server closed')
 
         Promise.allSettled([prisma.$disconnect()]).then(() => {
-          clearInterval(editLockCleanupInterval)
+          if (editLockCleanupTimer) {
+            clearTimeout(editLockCleanupTimer)
+          }
           logger.info('Graceful shutdown complete')
           process.exit(0)
         })

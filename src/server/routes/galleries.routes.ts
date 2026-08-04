@@ -26,7 +26,6 @@ import {
   fetchGalleryCommentsForResponse,
   resolveCommentReplyTarget,
   notifyCommentReply,
-  GALLERY_ADMIN_ONLY,
   ensureTextLimit,
   softDeleteData,
   resolveDeleteReason,
@@ -40,10 +39,15 @@ import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
 import { prisma } from '../prisma'
 import { syncGalleryImageToImageMapWithVariant } from '../services/galleryImageSyncService'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 import {
   cleanupUnusedMediaAssetById,
   cleanupUntrackedUploadImageByUrl,
 } from '../services/mediaAssetCleanupService'
+
+function isGalleryAdminOnly(): boolean {
+  return runtimeConfigService.getConfig().galleryAdminOnly
+}
 
 function ensureGalleryTextLimits(
   res: Parameters<typeof ensureTextLimit>[0],
@@ -67,14 +71,14 @@ function ensureGalleryTextLimits(
 function canManageGallery(gallery: { authorUid: string }, authUser?: ApiUser) {
   if (!authUser) return false
   if (isAdminRole(authUser.role)) return true
-  if (GALLERY_ADMIN_ONLY) return false
+  if (isGalleryAdminOnly()) return false
   return gallery.authorUid === authUser.uid
 }
 
 function canCreateGallery(authUser?: ApiUser) {
   if (!authUser) return false
   if (isAdminRole(authUser.role)) return true
-  return !GALLERY_ADMIN_ONLY
+  return !isGalleryAdminOnly()
 }
 
 const router = createRouter()
@@ -984,7 +988,7 @@ router.patch(
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
         res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
         return
       }
@@ -1372,7 +1376,7 @@ router.patch(
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
         res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
         return
       }
@@ -1423,7 +1427,7 @@ router.post(
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
         res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
         return
       }
@@ -1544,7 +1548,7 @@ router.post(
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
         res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
         return
       }
@@ -1685,7 +1689,7 @@ router.delete(
   validateBody(adminBatchGalleryImagesSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
         res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
         return
       }
@@ -1776,7 +1780,7 @@ router.delete(
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
         res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
         return
       }
@@ -1861,7 +1865,7 @@ router.patch(
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
         res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
         return
       }

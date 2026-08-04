@@ -4,8 +4,6 @@ import { requireAuth, requireAdmin, requireActiveUser, requireSuperAdmin } from 
 import type { AuthenticatedRequest } from '../types'
 import {
   prisma,
-  GALLERY_ADMIN_ONLY,
-  ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS,
   getEmailVerificationConfig,
   setEmailVerificationConfig,
   toEmailVerificationPublicConfig,
@@ -20,6 +18,7 @@ import {
   parseQueryString,
   parseRouteParam,
 } from '../utils'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 import { enhancedCache, CACHE_KEYS } from '../utils/cache'
 import {
   getUserPresignedUploadUrl,
@@ -39,7 +38,7 @@ const router = createRouter()
 // GET /api/config/gallery-access - Get gallery write access mode
 router.get('/gallery-access', async (_req, res) => {
   try {
-    res.json({ adminOnly: GALLERY_ADMIN_ONLY })
+    res.json({ adminOnly: runtimeConfigService.getConfig().galleryAdminOnly })
   } catch (error) {
     console.error('Get gallery access mode error:', error)
     res.status(500).json({ error: '获取图集权限配置失败' })
@@ -64,7 +63,7 @@ router.get('/features', async (_req, res) => {
 router.get('/admin-permissions', requireAuth, requireSuperAdmin, async (_req, res) => {
   try {
     res.json({
-      allowSuperAdminRoleChanges: ALLOW_SUPER_ADMIN_MANAGE_SUPER_ADMINS,
+      allowSuperAdminRoleChanges: runtimeConfigService.getConfig().allowSuperAdminManageSuperAdmins,
     })
   } catch (error) {
     console.error('Get admin permissions error:', error)

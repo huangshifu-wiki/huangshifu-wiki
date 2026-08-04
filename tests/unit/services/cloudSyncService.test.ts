@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest'
+import { runtimeConfigService } from '../../../src/server/services/runtimeConfig.service'
 
 // Mock prisma 模块
 vi.mock('../../../src/server/prisma', () => ({
@@ -106,7 +107,8 @@ describe('CloudSyncService - 队列管理', () => {
   beforeAll(async () => {
     process.env.LSKY_BASE_URL = 'https://img.lhl.one'
     process.env.LSKY_TOKEN = 'test_token'
-    process.env.CLOUD_SYNC_MAX_CONCURRENT = '2'
+    await runtimeConfigService.init()
+    await runtimeConfigService.updateConfig({ cloudSyncMaxConcurrent: 2 })
 
     const module = await import('../../../src/server/services/cloudSyncService')
     CloudSyncService = module.CloudSyncService

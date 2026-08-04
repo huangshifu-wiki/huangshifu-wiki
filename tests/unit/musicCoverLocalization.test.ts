@@ -44,7 +44,6 @@ const TEST_UPLOADS_DIR = vi.hoisted(() => {
 
 vi.mock('../../src/server/utils/config', () => ({
   prisma: mockPrisma,
-  PLAY_URL_CACHE_TTL_MS: 600000,
   DEFAULT_MUSIC_PLATFORMS: ['netease', 'tencent', 'kugou', 'baidu', 'kuwo'],
   uploadsDir: TEST_UPLOADS_DIR,
 }))

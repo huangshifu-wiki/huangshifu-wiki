@@ -4,6 +4,7 @@
  */
 
 import NodeCache from 'node-cache'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 
 export interface CacheEntry<T> {
   value: T
@@ -24,24 +25,32 @@ class EnhancedCache {
   private cache: NodeCache
   private hits = 0
   private misses = 0
-  private readonly maxKeys: number
+  private readonly explicitMaxKeys?: number
 
   constructor(options?: { stdTTL?: number; maxKeys?: number; checkperiod?: number }) {
     const stdTTL = typeof options === 'object' ? (options.stdTTL ?? 300) : 300
-    this.maxKeys =
-      typeof options === 'object' && options.maxKeys !== undefined
-        ? options.maxKeys
-        : Number(process.env.CACHE_MAX_KEYS) || 5000
+    this.explicitMaxKeys = typeof options === 'object' ? options.maxKeys : undefined
     const checkperiod = typeof options === 'object' ? (options.checkperiod ?? 60) : 60
 
+    // 上限不传给 NodeCache，由本类在 set 时按运行时配置动态控制（可即时生效）
     this.cache = new NodeCache({
       stdTTL,
       checkperiod,
-      maxKeys: this.maxKeys,
       useClones: false,
     })
+  }
 
-    this.cache.on('evict', (_key, _value) => {})
+  private get maxKeys(): number {
+    return this.explicitMaxKeys ?? runtimeConfigService.getConfig().cacheMaxKeys
+  }
+
+  private evictToMaxKeys(): void {
+    const maxKeys = this.maxKeys
+    while (this.cache.getStats().keys >= maxKeys) {
+      const oldest = this.cache.keys()[0]
+      if (oldest === undefined) break
+      this.cache.del(oldest)
+    }
   }
 
   get<T>(key: string): T | undefined {
@@ -55,6 +64,7 @@ class EnhancedCache {
   }
 
   set<T>(key: string, value: T, ttl?: number): boolean {
+    this.evictToMaxKeys()
     if (this.isNamespaceOverQuota(key)) {
       this.evictOldestInNamespace(key)
     }
@@ -137,7 +147,6 @@ class EnhancedCache {
 
 export const enhancedCache = new EnhancedCache({
   stdTTL: 300,
-  maxKeys: Number(process.env.CACHE_MAX_KEYS) || 5000,
   checkperiod: 60,
 })
 
