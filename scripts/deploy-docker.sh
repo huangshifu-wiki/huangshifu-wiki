@@ -101,6 +101,16 @@ fill_env_placeholders() {
   replace_literal 'replace_with_secrets_encryption_key' "$secrets_encryption_key"
 }
 
+# 旧版 .env 缺少 SECRETS_ENCRYPTION_KEY 时（升级部署场景）自动补写，
+# 避免凭证管理因密钥缺失而静默禁用；已有行不会被覆盖。
+ensure_secrets_encryption_key() {
+  if grep -q '^SECRETS_ENCRYPTION_KEY=' "$ENV_FILE"; then
+    return
+  fi
+  echo "SECRETS_ENCRYPTION_KEY=\"$(random_base64 32)\"" >> "$ENV_FILE"
+  log "SECRETS_ENCRYPTION_KEY 缺失，已自动补写随机密钥到 $ENV_FILE"
+}
+
 # 将 .env 导入当前 shell，供 compose 和后续校验读取。
 load_env() {
   set -a
@@ -117,6 +127,7 @@ validate_env() {
   [[ -n "${DATABASE_URL:-}" ]] || missing+=('DATABASE_URL')
   [[ -n "${JWT_SECRET:-}" ]] || missing+=('JWT_SECRET')
   [[ -n "${BACKUP_PASSWORD:-}" ]] || missing+=('BACKUP_PASSWORD')
+  [[ -n "${SECRETS_ENCRYPTION_KEY:-}" ]] || missing+=('SECRETS_ENCRYPTION_KEY')
 
   if (( ${#missing[@]} > 0 )); then
     error "missing required environment variables: ${missing[*]}"
@@ -281,6 +292,7 @@ main() {
   # 准备并校验环境变量。
   bootstrap_env
   fill_env_placeholders
+  ensure_secrets_encryption_key
   load_env
   validate_env
 
