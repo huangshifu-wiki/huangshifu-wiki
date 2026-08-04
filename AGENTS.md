@@ -410,13 +410,16 @@ CI 使用 Node 22。
 - 数据库：`DATABASE_URL`
 - 认证：`JWT_SECRET`、`SEED_*`
 - CORS：`CORS_ORIGIN`、`DEV_CORS_ORIGINS`
-- 向量：`QDRANT_*`、`IMAGE_EMBEDDING_*`、`TEXT_EMBEDDING_*`
-- 上传与存储：`UPLOADS_PATH`、`S3_*`、`SUPERBED_*`、`LSKY_*`
-- 微信：`WECHAT_MP_*`
-- 地图：`AMAP_*`、`VITE_AMAP_*`
+- 备份：`BACKUP_PASSWORD`、`PG_DUMP_PATH`、`PSQL_PATH`
+- 凭证加密主密钥：`SECRETS_ENCRYPTION_KEY`（base64 编码 32 字节，缺失时管理后台凭证管理禁用）
+- 向量模型：`IMAGE_EMBEDDING_*`、`TEXT_EMBEDDING_*`、`TRANSFORMERS_*`（Qdrant 端点/集合/密钥已移至管理后台）
+- 上传与存储：`UPLOADS_PATH`
+- 地图（前端）：`VITE_AMAP_*`
 - 部署信号（Docker）：`ENABLE_SEMANTIC_SEARCH`（是否启动 Qdrant 容器）
 
-运行时行为参数（功能开关、上传会话、备份保留、Blurhash、缓存/搜索调优、变体、云同步、磁盘监控）不在此列，已移至管理后台「系统参数」，存储于 `SiteConfig` 键 `runtime_config`（见 `src/server/services/runtimeConfig.service.ts`）。
+运行时行为参数（功能开关、上传会话、备份保留、Blurhash、缓存/搜索调优、变体、云同步、日志级别、S3 存储、向量检索、外部图床、磁盘监控）不在此列，已移至管理后台「系统参数」，存储于 `SiteConfig` 键 `runtime_config`（见 `src/server/services/runtimeConfig.service.ts`）。
+
+外部服务凭证（S3 读写 AccessKey/SecretKey、Qdrant API Key、Superbed Token、Lsky Token、高德 Web Service Key、微信小程序 AppId/AppSecret）不再使用环境变量，通过管理后台「服务凭证」维护，以 AES-256-GCM 加密存储于 `SiteConfig` 键 `secrets_config`（见 `src/server/services/secretsConfig.service.ts`），管理端点仅返回掩码视图。
 
 任何以 `VITE_` 开头的变量都会进入前端包，不能放密钥。
 

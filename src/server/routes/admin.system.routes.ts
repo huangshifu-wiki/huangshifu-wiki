@@ -18,6 +18,12 @@ import {
   AuthenticatedRequest,
 } from '../middleware/auth'
 import { applyRateLimitConfig } from '../middleware/rateLimiter'
+import {
+  isSecretsEnabled,
+  maskSecrets,
+  secretsConfigService,
+  SecretsConfigValidationError,
+} from '../services/secretsConfig.service'
 import { diskMonitor } from '../services/diskMonitor.service'
 import { variantGenerator } from '../services/variantGenerator'
 import { cloudSyncService } from '../services/cloudSyncService'
@@ -162,6 +168,74 @@ router.post('/runtime-config/reset', requireAuth, requireSuperAdmin, async (_req
     res.status(500).json({ success: false, error: '重置运行时配置失败' })
   }
 })
+
+// ============================================================================
+// 🔐 服务凭证管理 API
+// ============================================================================
+
+/**
+ * GET /api/admin/secrets-config - 获取服务凭证掩码状态（绝不返回明文）
+ */
+router.get('/secrets-config', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        disabled: !isSecretsEnabled(),
+        secrets: maskSecrets(secretsConfigService.getSecrets()),
+      },
+    })
+  } catch (error) {
+    console.error('[Admin/SecretsConfig] Error getting secrets:', error)
+    res.status(500).json({ success: false, error: '获取服务凭证配置失败' })
+  }
+})
+
+/**
+ * PATCH /api/admin/secrets-config - 更新服务凭证
+ * body: { [key]: string | null }，null/空字符串 = 清除，undefined = 不变
+ */
+router.patch(
+  '/secrets-config',
+  requireAuth,
+  requireSuperAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!isSecretsEnabled()) {
+        res.status(400).json({
+          success: false,
+          error: '未配置 SECRETS_ENCRYPTION_KEY，无法管理凭证',
+        })
+        return
+      }
+
+      const body = req.body
+      if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+        res.status(400).json({ success: false, error: '请求体必须是对象' })
+        return
+      }
+
+      const config = await secretsConfigService.updateSecrets(body)
+
+      res.json({
+        success: true,
+        data: {
+          disabled: false,
+          secrets: maskSecrets(config),
+        },
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      if (error instanceof SecretsConfigValidationError) {
+        res.status(400).json({ success: false, error: error.message })
+        return
+      }
+
+      console.error('[Admin/SecretsConfig] Error updating secrets:', error)
+      res.status(500).json({ success: false, error: '更新服务凭证失败' })
+    }
+  }
+)
 
 // ============================================================================
 // 📊 磁盘监控 API（支持动态配置）

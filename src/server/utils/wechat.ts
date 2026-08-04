@@ -1,7 +1,8 @@
 // 微信小程序登录
 
 import axios from 'axios'
-import { prisma, WECHAT_MP_APPID, WECHAT_MP_APP_SECRET, WECHAT_LOGIN_MOCK } from './config'
+import { prisma, WECHAT_LOGIN_MOCK } from './config'
+import { secretsConfigService } from '../services/secretsConfig.service'
 import { enhancedCache, CACHE_KEYS } from './cache'
 import type { WechatCodeSessionResponse } from '../types'
 
@@ -38,7 +39,9 @@ export async function exchangeWechatLoginCode(
     throw new Error('该登录凭证已使用，请重新获取')
   }
 
-  if (!WECHAT_MP_APPID || !WECHAT_MP_APP_SECRET) {
+  const { wechatMpAppId, wechatMpAppSecret } = secretsConfigService.getSecrets()
+
+  if (!wechatMpAppId || !wechatMpAppSecret) {
     throw new Error('服务器未配置微信登录参数')
   }
 
@@ -46,8 +49,8 @@ export async function exchangeWechatLoginCode(
     'https://api.weixin.qq.com/sns/jscode2session',
     {
       params: {
-        appid: WECHAT_MP_APPID,
-        secret: WECHAT_MP_APP_SECRET,
+        appid: wechatMpAppId,
+        secret: wechatMpAppSecret,
         js_code: code,
         grant_type: 'authorization_code',
       },

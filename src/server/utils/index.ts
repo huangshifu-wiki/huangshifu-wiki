@@ -8,8 +8,6 @@ export {
   backupsDir,
   DEFAULT_MUSIC_PLATFORMS,
   BACKUP_PASSWORD,
-  WECHAT_MP_APPID,
-  WECHAT_MP_APP_SECRET,
   WECHAT_LOGIN_MOCK,
   playUrlCache,
   defaultUploadsDir,

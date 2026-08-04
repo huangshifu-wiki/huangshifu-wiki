@@ -37,8 +37,9 @@ cp .env.docker.example .env
 编辑 `.env`：
 
 - `CORS_ORIGIN`：生产域名，例如 `https://wiki.example.com`
-- `JWT_SECRET`、`POSTGRES_PASSWORD`、`BACKUP_PASSWORD`：部署脚本会自动替换模板占位值，也可以手动改为自己的强密钥
-- `S3_*`、`WECHAT_MP_*`、`AMAP_*`：按实际功能启用
+- `JWT_SECRET`、`POSTGRES_PASSWORD`、`BACKUP_PASSWORD`、`SECRETS_ENCRYPTION_KEY`：部署脚本会自动替换模板占位值，也可以手动改为自己的强密钥
+- `SECRETS_ENCRYPTION_KEY` 为服务凭证加密主密钥（base64 编码 32 字节），缺失时管理后台凭证管理禁用
+- S3 / Qdrant / 图床与微信等参数与凭证无需环境变量，部署后通过管理后台「站点设置」配置
 
 执行部署：
 
@@ -114,12 +115,13 @@ docker compose ps
 
 ## 4. 启用图片语义搜索
 
-编辑 `.env`：
+如需定制模型缓存路径，编辑 `.env`：
 
 ```env
-QDRANT_URL="http://qdrant:6333"
 TRANSFORMERS_CACHE="/app/models/transformers"
 ```
+
+Qdrant 地址、API Key 与集合名已移至管理后台「站点设置 → 向量检索」，不再使用环境变量（服务端「服务凭证」中可配置 Qdrant API Key）。
 
 语义搜索默认关闭（服务端开关默认关闭，避免未部署 Qdrant 时搜索报错）；
 启用时需在管理后台「系统参数」中打开「语义搜索」开关，并确认 Qdrant 已启动。

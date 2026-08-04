@@ -1,12 +1,14 @@
 import { QdrantClient } from '@qdrant/js-client-rest'
 
-const DEFAULT_COLLECTION = 'hsf_image_embeddings'
-const DEFAULT_TEXT_COLLECTION = 'hsf_text_embeddings'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
+import { secretsConfigService } from '../services/secretsConfig.service'
+
 const DEFAULT_DISTANCE: 'Cosine' | 'Dot' | 'Euclid' | 'Manhattan' = 'Cosine'
 
 let qdrantClient: QdrantClient | null = null
 let ensureCollectionPromise: Promise<void> | null = null
 let ensureTextCollectionPromise: Promise<void> | null = null
+let lastQdrantFingerprint = ''
 
 function parseInteger(value: string | undefined, fallback: number) {
   const parsed = Number(value)
@@ -17,19 +19,11 @@ function parseInteger(value: string | undefined, fallback: number) {
 }
 
 export function getQdrantCollectionName() {
-  return process.env.QDRANT_COLLECTION || DEFAULT_COLLECTION
+  return runtimeConfigService.getConfig().qdrantCollection
 }
 
 export function getTextCollectionName(): string {
-  return process.env.QDRANT_TEXT_COLLECTION || DEFAULT_TEXT_COLLECTION
-}
-
-function getQdrantUrl() {
-  return process.env.QDRANT_URL || 'http://127.0.0.1:6333'
-}
-
-function getQdrantApiKey() {
-  return process.env.QDRANT_API_KEY || undefined
+  return runtimeConfigService.getConfig().qdrantTextCollection
 }
 
 function getVectorSize() {
@@ -37,11 +31,17 @@ function getVectorSize() {
 }
 
 export function getQdrantClient() {
-  if (!qdrantClient) {
+  const config = runtimeConfigService.getConfig()
+  const apiKey = secretsConfigService.getSecrets().qdrantApiKey || undefined
+  const fingerprint = JSON.stringify([config.qdrantUrl, apiKey])
+  if (!qdrantClient || fingerprint !== lastQdrantFingerprint) {
     qdrantClient = new QdrantClient({
-      url: getQdrantUrl(),
-      apiKey: getQdrantApiKey(),
+      url: config.qdrantUrl,
+      apiKey,
     })
+    lastQdrantFingerprint = fingerprint
+    ensureCollectionPromise = null
+    ensureTextCollectionPromise = null
   }
   return qdrantClient
 }

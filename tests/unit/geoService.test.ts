@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { axiosGet } = vi.hoisted(() => ({ axiosGet: vi.fn() }))
+const { axiosGet, getSecretsMock } = vi.hoisted(() => ({
+  axiosGet: vi.fn(),
+  getSecretsMock: vi.fn(),
+}))
 
 vi.mock('axios', () => ({ default: { get: axiosGet } }))
+
+vi.mock('../../src/server/services/secretsConfig.service', () => ({
+  secretsConfigService: { getSecrets: getSecretsMock },
+}))
 
 import {
   addressToCoordinate,
@@ -14,11 +21,11 @@ import {
 describe('geoService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    process.env.AMAP_API_KEY = 'server-key'
+    getSecretsMock.mockReturnValue({ amapApiKey: 'server-key' })
   })
 
   it('未配置服务端 Key 时返回明确错误且不发请求', async () => {
-    delete process.env.AMAP_API_KEY
+    getSecretsMock.mockReturnValue({ amapApiKey: '' })
 
     await expect(addressToCoordinate('北京市')).rejects.toMatchObject({
       kind: 'not_configured',

@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '../prisma'
+import { secretsConfigService } from './secretsConfig.service'
 import { uploadFileToS3, uploadToSuperbed, resolveUploadPathByUrl } from '../utils'
 import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService'
 import { getPublicConfig } from '../s3/s3Service'
@@ -203,7 +204,7 @@ async function syncImageToExternal(imageMap: {
       return { success: false, error: `本地文件不存在: ${filePath}` }
     }
 
-    const superbedToken = process.env.SUPERBED_API_TOKEN || ''
+    const superbedToken = secretsConfigService.getSecrets().superbedApiToken
     if (!superbedToken) {
       return { success: false, error: 'Superbed API Token 未配置' }
     }
@@ -379,7 +380,7 @@ export function startSyncTask(strategy: 's3' | 'external'): SyncProgress {
 
   // 检查Superbed是否配置
   if (strategy === 'external') {
-    const superbedToken = process.env.SUPERBED_API_TOKEN || ''
+    const superbedToken = secretsConfigService.getSecrets().superbedApiToken
     if (!superbedToken) {
       throw new Error('Superbed API Token 未配置')
     }

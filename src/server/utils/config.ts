@@ -31,12 +31,6 @@ fs.mkdirSync(backupsDir, { recursive: true })
 
 // 环境变量常量（秘密与部署配置）
 export const BACKUP_PASSWORD = process.env.BACKUP_PASSWORD || ''
-export const WECHAT_MP_APPID = process.env.WECHAT_MP_APPID || process.env.WECHAT_APP_ID || ''
-export const WECHAT_MP_APP_SECRET =
-  process.env.WECHAT_MP_APP_SECRET ||
-  process.env.WECHAT_MP_APPSECRET ||
-  process.env.WECHAT_APP_SECRET ||
-  ''
 export const WECHAT_LOGIN_MOCK = isWechatLoginMockEnabled()
 export const playUrlCache = new Map<string, PlayUrlCacheValue>()
 

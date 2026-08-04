@@ -10,6 +10,7 @@
 
 import { prisma } from '../prisma'
 import { runtimeConfigService } from './runtimeConfig.service'
+import { secretsConfigService } from './secretsConfig.service'
 import { uploadFileToS3, uploadsDir } from '../utils'
 import { logger } from '../utils/logger'
 import fs from 'fs'
@@ -67,8 +68,8 @@ export class CloudSyncService {
    * 验证 Lsky Pro+ 配置
    */
   private validateLskyConfig(): void {
-    const baseUrl = process.env.LSKY_BASE_URL?.trim()
-    const token = process.env.LSKY_TOKEN?.trim()
+    const baseUrl = runtimeConfigService.getConfig().lskyBaseUrl
+    const token = secretsConfigService.getSecrets().lskyToken
 
     if (!baseUrl || !token) {
       logger.warn(
@@ -93,8 +94,8 @@ export class CloudSyncService {
     this.lskyConfig = {
       baseUrl,
       token,
-      timeout: parseInt(process.env.LSKY_TIMEOUT || '30000', 10),
-      strategyId: process.env.LSKY_STRATEGY_ID?.trim() || undefined,
+      timeout: runtimeConfigService.getConfig().lskyTimeout,
+      strategyId: runtimeConfigService.getConfig().lskyStrategyId || undefined,
     }
 
     console.log('[CloudSync] ✅ Lsky Pro+ 配置验证通过')

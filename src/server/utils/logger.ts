@@ -5,7 +5,7 @@ const isTest = isTestRuntime()
 const verboseIntegrationLogging = process.env.DEBUG_INTEGRATION === '1'
 
 export const logger = pino({
-  level: process.env.LOG_LEVEL || (isTest && !verboseIntegrationLogging ? 'error' : 'info'),
+  level: isTest && !verboseIntegrationLogging ? 'error' : 'info',
   transport:
     !isProductionRuntime() && !(isTest && !verboseIntegrationLogging)
       ? { target: 'pino-pretty', options: { colorize: true } }
@@ -21,3 +21,10 @@ export const logger = pino({
   },
   timestamp: pino.stdTimeFunctions.isoTime,
 })
+
+/**
+ * 运行时调整日志级别（pino 支持动态切换），由 runtimeConfigService 驱动。
+ */
+export function setLogLevel(level: 'debug' | 'info' | 'warn' | 'error'): void {
+  logger.level = level
+}

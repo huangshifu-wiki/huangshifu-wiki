@@ -3,7 +3,20 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest'
-import { runtimeConfigService } from '../../../src/server/services/runtimeConfig.service'
+
+// Mock 配置服务：LSKY 配置已从 env 迁移到运行时配置/凭证服务
+const { runtimeConfigGetMock, secretsGetMock } = vi.hoisted(() => ({
+  runtimeConfigGetMock: vi.fn(),
+  secretsGetMock: vi.fn(),
+}))
+
+vi.mock('../../../src/server/services/runtimeConfig.service', () => ({
+  runtimeConfigService: { getConfig: runtimeConfigGetMock },
+}))
+
+vi.mock('../../../src/server/services/secretsConfig.service', () => ({
+  secretsConfigService: { getSecrets: secretsGetMock },
+}))
 
 // Mock prisma 模块
 vi.mock('../../../src/server/prisma', () => ({
@@ -33,6 +46,26 @@ vi.mock('fs', async (importOriginal) => {
   }
 })
 
+const defaultRuntimeConfig = {
+  lskyBaseUrl: 'https://img.lhl.one',
+  lskyTimeout: 30000,
+  lskyStrategyId: '',
+  cloudSyncMaxConcurrent: 2,
+  cloudSyncMaxRetries: 3,
+}
+
+const defaultSecrets = {
+  lskyToken: 'test_token',
+}
+
+function mockLskyConfig(
+  runtimeOverrides: Record<string, unknown> = {},
+  secretsOverrides: Record<string, unknown> = {}
+) {
+  runtimeConfigGetMock.mockReturnValue({ ...defaultRuntimeConfig, ...runtimeOverrides })
+  secretsGetMock.mockReturnValue({ ...defaultSecrets, ...secretsOverrides })
+}
+
 describe('CloudSyncService - 配置验证', () => {
   let CloudSyncService: any
 
@@ -43,6 +76,7 @@ describe('CloudSyncService - 配置验证', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockLskyConfig()
   })
 
   afterEach(() => {
@@ -50,34 +84,23 @@ describe('CloudSyncService - 配置验证', () => {
   })
 
   it('应该在 LSKY_BASE_URL 缺失时输出警告', async () => {
-    const originalEnv = process.env.LSKY_BASE_URL
-    process.env.LSKY_BASE_URL = ''
-    process.env.LSKY_TOKEN = ''
+    mockLskyConfig({ lskyBaseUrl: '' }, { lskyToken: '' })
 
     const service = new CloudSyncService()
 
     expect(service.isLskyProAvailable()).toBe(false)
-
-    process.env.LSKY_BASE_URL = originalEnv
   })
 
   it('应该在 LSKY_TOKEN 缺失时输出警告', async () => {
-    const originalToken = process.env.LSKY_TOKEN
-    process.env.LSKY_BASE_URL = 'https://img.lhl.one'
-    process.env.LSKY_TOKEN = ''
+    mockLskyConfig({}, { lskyToken: '' })
 
     const service = new CloudSyncService()
 
     expect(service.isLskyProAvailable()).toBe(false)
-
-    process.env.LSKY_TOKEN = originalToken
   })
 
   it('应该在配置有效时返回正确的配置', async () => {
-    process.env.LSKY_BASE_URL = 'https://img.lhl.one'
-    process.env.LSKY_TOKEN = 'valid_token_12345678'
-    process.env.LSKY_TIMEOUT = '30000'
-    process.env.LSKY_STRATEGY_ID = '4'
+    mockLskyConfig({ lskyStrategyId: '4' })
 
     const service = new CloudSyncService()
 
@@ -85,14 +108,13 @@ describe('CloudSyncService - 配置验证', () => {
 
     const config = service.getLskyConfig()
     expect(config.baseUrl).toBe('https://img.lhl.one')
-    expect(config.token).toBe('valid_token_12345678')
+    expect(config.token).toBe('test_token')
     expect(config.timeout).toBe(30000)
     expect(config.strategyId).toBe('4')
   })
 
   it('应该拒绝无效的 URL 格式', async () => {
-    process.env.LSKY_BASE_URL = 'not-a-valid-url'
-    process.env.LSKY_TOKEN = 'token'
+    mockLskyConfig({ lskyBaseUrl: 'not-a-valid-url' })
 
     const service = new CloudSyncService()
 
@@ -105,16 +127,14 @@ describe('CloudSyncService - 队列管理', () => {
   let CloudSyncService: any
 
   beforeAll(async () => {
-    process.env.LSKY_BASE_URL = 'https://img.lhl.one'
-    process.env.LSKY_TOKEN = 'test_token'
-    await runtimeConfigService.init()
-    await runtimeConfigService.updateConfig({ cloudSyncMaxConcurrent: 2 })
+    mockLskyConfig()
 
     const module = await import('../../../src/server/services/cloudSyncService')
     CloudSyncService = module.CloudSyncService
   }, 30000)
 
   beforeEach(() => {
+    mockLskyConfig()
     service = new CloudSyncService()
     vi.clearAllMocks()
   })
@@ -188,8 +208,7 @@ describe('CloudSyncService - 统计信息', () => {
   let CloudSyncService: any
 
   beforeAll(async () => {
-    process.env.LSKY_BASE_URL = 'https://img.lhl.one'
-    process.env.LSKY_TOKEN = 'test_token'
+    mockLskyConfig()
 
     const module = await import('../../../src/server/services/cloudSyncService')
     CloudSyncService = module.CloudSyncService

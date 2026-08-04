@@ -260,6 +260,37 @@ export interface RuntimeAdminConfig {
   variantMaxRetries: number
   cloudSyncMaxConcurrent: number
   cloudSyncMaxRetries: number
+  logLevel: string
+  s3Enabled: boolean
+  s3PublicBucketName: string
+  s3PublicBucketRegion: string
+  s3PublicBucketPrefix: string
+  s3PrivateBucketName: string
+  s3PrivateBucketRegion: string
+  s3EndpointUrl: string
+  s3ForcePathStyle: boolean
+  s3SslEnabled: boolean
+  s3SignatureVersion: string
+  s3PublicDomain: string
+  s3DefaultAcl: string
+  s3ExpiresIn: number
+  s3MaxFileSize: number
+  s3AllowedContentTypes: string
+  s3EnableMd5Verification: boolean
+  qdrantUrl: string
+  qdrantCollection: string
+  qdrantTextCollection: string
+  lskyBaseUrl: string
+  lskyStrategyId: string
+  lskyTimeout: number
+}
+
+// 服务凭证掩码状态（GET/PATCH /api/admin/secrets-config，绝不包含明文）
+export type SecretsFieldStatus = { configured: boolean; last4: string }
+
+export interface SecretsAdminConfig {
+  disabled: boolean
+  secrets: Record<string, SecretsFieldStatus>
 }
 
 export type {

@@ -49,6 +49,15 @@ random_hex() {
   fi
 }
 
+random_base64() {
+  local bytes="${1:-32}"
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -base64 "$bytes" | tr -d '\n'
+  else
+    head -c "$bytes" /dev/urandom | base64 | tr -d '\n'
+  fi
+}
+
 # 将 .env 模板中的占位符替换为真实随机值。
 replace_literal() {
   local search="$1"
@@ -79,14 +88,17 @@ fill_env_placeholders() {
   local postgres_password
   local jwt_secret
   local backup_password
+  local secrets_encryption_key
 
   postgres_password="$(random_hex 24)"
   jwt_secret="$(random_hex 32)"
   backup_password="$(random_hex 24)"
+  secrets_encryption_key="$(random_base64 32)"
 
   replace_literal 'replace_with_random_postgres_password' "$postgres_password"
   replace_literal 'replace_with_random_long_secret_at_least_32_chars' "$jwt_secret"
   replace_literal 'replace_with_backup_password' "$backup_password"
+  replace_literal 'replace_with_secrets_encryption_key' "$secrets_encryption_key"
 }
 
 # 将 .env 导入当前 shell，供 compose 和后续校验读取。

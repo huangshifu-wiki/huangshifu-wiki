@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
+  Cpu,
+  Database,
+  FileText,
+  HardDrive,
   Images,
   Lock,
   MailCheck,
@@ -32,21 +36,38 @@ import type {
   EmailVerificationAdminConfig,
   RegistrationConfig,
   RuntimeAdminConfig,
+  SecretsAdminConfig,
   SearchHotKeywordsConfig,
 } from '../../types/api'
-import { Button, Checkbox, Field, Input, Switch, Textarea } from '@/src/components/ui'
+import { Button, Checkbox, Field, Input, Select, Switch, Textarea } from '@/src/components/ui'
 import { AdminSection, SectionStatus } from '../../components/admin/AdminSection'
 
 const RUNTIME_CONFIG_PATH = '/api/admin/runtime-config'
+const SECRETS_CONFIG_PATH = '/api/admin/secrets-config'
 const NO_CACHE_OPTIONS = { staleTime: 0, swr: false }
+
+// 服务凭证字段清单（面板展示顺序），值与 secrets_config 键一一对应
+const SECRET_FIELD_LABELS: Array<{ key: string; label: string }> = [
+  { key: 's3ReadAccessKeyId', label: 'S3 读取 AccessKeyId' },
+  { key: 's3ReadSecretAccessKey', label: 'S3 读取 SecretAccessKey' },
+  { key: 's3WriteAccessKeyId', label: 'S3 写入 AccessKeyId' },
+  { key: 's3WriteSecretAccessKey', label: 'S3 写入 SecretAccessKey' },
+  { key: 'qdrantApiKey', label: 'Qdrant API Key' },
+  { key: 'superbedApiToken', label: 'Superbed 图床 Token' },
+  { key: 'lskyToken', label: 'Lsky 图床 Token' },
+  { key: 'amapApiKey', label: '高德地图 Key' },
+  { key: 'wechatMpAppId', label: '微信小程序 AppId' },
+  { key: 'wechatMpAppSecret', label: '微信小程序 AppSecret' },
+]
 
 type RuntimeApiResponse<T> = { success: boolean; data: T; error?: string }
 
 interface ConfigField<T extends keyof RuntimeAdminConfig> {
   key: T
   label: string
-  description: string
-  type: 'boolean' | 'number'
+  description?: string
+  type: 'boolean' | 'number' | 'string' | 'select'
+  options?: string[]
   hint?: string
 }
 
@@ -70,6 +91,11 @@ const SETTINGS_SECTIONS = [
   { id: 'edit-lock', label: '编辑锁' },
   { id: 'variants', label: '变体生成' },
   { id: 'cloud-sync', label: '云同步' },
+  { id: 'log', label: '日志' },
+  { id: 's3', label: 'S3 存储' },
+  { id: 'vector', label: '向量检索' },
+  { id: 'image-hosting', label: '外部图床' },
+  { id: 'secrets', label: '服务凭证' },
 ]
 
 const CONFIG_GROUPS: ConfigGroup[] = [
@@ -254,6 +280,164 @@ const CONFIG_GROUPS: ConfigGroup[] = [
       },
     ],
   },
+  {
+    id: 'log',
+    title: '日志',
+    icon: <FileText size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'logLevel',
+        label: '日志级别',
+        description: '修改后即时生效，排查问题时切到 debug',
+        type: 'select',
+        options: ['debug', 'info', 'warn', 'error'],
+      },
+    ],
+  },
+  {
+    id: 's3',
+    title: 'S3 存储',
+    icon: <Database size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 's3Enabled',
+        label: '启用 S3 存储',
+        description: '开启后上传走 S3 兼容对象存储，需先配置下方凭证',
+        type: 'boolean',
+      },
+      {
+        key: 's3EndpointUrl',
+        label: '端点 URL',
+        description: 'S3 兼容服务端点',
+        type: 'string',
+      },
+      {
+        key: 's3PublicBucketName',
+        label: '公有桶名称',
+        type: 'string',
+      },
+      {
+        key: 's3PublicBucketRegion',
+        label: '公有桶 Region',
+        type: 'string',
+      },
+      {
+        key: 's3PublicBucketPrefix',
+        label: '公有桶前缀',
+        description: '对象键前缀，留空为桶根',
+        type: 'string',
+      },
+      {
+        key: 's3PrivateBucketName',
+        label: '私有桶名称',
+        description: '预留，当前服务端未直接使用',
+        type: 'string',
+      },
+      {
+        key: 's3PrivateBucketRegion',
+        label: '私有桶 Region',
+        type: 'string',
+      },
+      {
+        key: 's3SignatureVersion',
+        label: '签名版本',
+        type: 'select',
+        options: ['v2', 'v4'],
+      },
+      {
+        key: 's3PublicDomain',
+        label: '公网访问域名',
+        description: '自定义 CDN/域名，留空自动由端点与桶拼接',
+        type: 'string',
+      },
+      {
+        key: 's3DefaultAcl',
+        label: '默认 ACL',
+        type: 'string',
+      },
+      {
+        key: 's3ForcePathStyle',
+        label: 'Force Path Style',
+        description: '兼容多数 S3 服务，开启后使用路径式寻址',
+        type: 'boolean',
+      },
+      {
+        key: 's3SslEnabled',
+        label: '启用 TLS',
+        type: 'boolean',
+      },
+      {
+        key: 's3EnableMd5Verification',
+        label: 'MD5 校验',
+        description: '上传时校验 Content-MD5',
+        type: 'boolean',
+      },
+      {
+        key: 's3ExpiresIn',
+        label: '预签名 URL 过期时间（秒）',
+        description: '取值范围 60–86400',
+        type: 'number',
+      },
+      {
+        key: 's3MaxFileSize',
+        label: '上传单文件上限（字节）',
+        description: '取值范围 1–1073741824',
+        type: 'number',
+      },
+      {
+        key: 's3AllowedContentTypes',
+        label: '允许的内容类型',
+        description: '逗号分隔的 MIME 列表',
+        type: 'string',
+      },
+    ],
+  },
+  {
+    id: 'vector',
+    title: '向量检索',
+    icon: <Cpu size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'qdrantUrl',
+        label: 'Qdrant 端点',
+        description: '修改后下次向量操作时自动重连',
+        type: 'string',
+      },
+      {
+        key: 'qdrantCollection',
+        label: '图片向量集合名',
+        type: 'string',
+      },
+      {
+        key: 'qdrantTextCollection',
+        label: '文本向量集合名',
+        type: 'string',
+      },
+    ],
+  },
+  {
+    id: 'image-hosting',
+    title: '外部图床',
+    icon: <HardDrive size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'lskyBaseUrl',
+        label: 'Lsky 图床地址',
+        type: 'string',
+      },
+      {
+        key: 'lskyStrategyId',
+        label: 'Lsky 存储策略 ID',
+        type: 'string',
+      },
+      {
+        key: 'lskyTimeout',
+        label: 'Lsky 请求超时（毫秒）',
+        description: '取值范围 1000–300000',
+        type: 'number',
+      },
+    ],
+  },
 ]
 
 // 数字字段列表（保存前校验用），从分组定义派生，避免与分组重复维护
@@ -431,6 +615,11 @@ const AdminSettings = () => {
   const [runtimeLoadError, setRuntimeLoadError] = useState(false)
   const [runtimeSaveSuccess, setRuntimeSaveSuccess] = useState(false)
   const [runtimeValidationErrors, setRuntimeValidationErrors] = useState<string[]>([])
+  const [secretsConfig, setSecretsConfig] = useState<SecretsAdminConfig | null>(null)
+  const [secretsLoading, setSecretsLoading] = useState(true)
+  const [secretsLoadError, setSecretsLoadError] = useState(false)
+  const [secretsDirty, setSecretsDirty] = useState(false)
+  const [secretsForm, setSecretsForm] = useState<Record<string, string | null>>({})
 
   const loadConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
@@ -746,6 +935,73 @@ const AdminSettings = () => {
     }
   }
 
+  const loadSecretsConfig = useCallback(async () => {
+    setSecretsLoading(true)
+    setSecretsLoadError(false)
+    try {
+      const result = await apiGet<RuntimeApiResponse<SecretsAdminConfig>>(
+        SECRETS_CONFIG_PATH,
+        undefined,
+        NO_CACHE_OPTIONS
+      )
+      if (result.success) {
+        setSecretsConfig(result.data)
+        setSecretsForm({})
+        setSecretsDirty(false)
+      } else {
+        setSecretsLoadError(true)
+      }
+    } catch {
+      setSecretsLoadError(true)
+    } finally {
+      setSecretsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadSecretsConfig()
+  }, [loadSecretsConfig])
+
+  const setSecretsField = (key: string, value: string) => {
+    setSecretsForm((prev) => ({ ...prev, [key]: value }))
+    setSecretsDirty(true)
+  }
+
+  const clearSecretsField = (key: string) => {
+    setSecretsForm((prev) => ({ ...prev, [key]: null }))
+    setSecretsDirty(true)
+  }
+
+  const saveSecretsConfig = async () => {
+    if (!secretsConfig) return
+    if (secretsConfig.disabled) {
+      show('未配置 SECRETS_ENCRYPTION_KEY，无法管理凭证', { variant: 'error' })
+      return
+    }
+    if (!secretsDirty) return
+    const payload: Record<string, string | null> = {}
+    for (const [key, value] of Object.entries(secretsForm)) {
+      payload[key] = value === '' ? null : value
+    }
+    if (Object.keys(payload).length === 0) return
+    try {
+      const result = await apiPatch<RuntimeApiResponse<SecretsAdminConfig>>(
+        SECRETS_CONFIG_PATH,
+        payload
+      )
+      if (result.success) {
+        setSecretsConfig(result.data)
+        setSecretsForm({})
+        setSecretsDirty(false)
+        show('服务凭证已保存')
+      } else {
+        throw new Error(result.error || '保存失败')
+      }
+    } catch (err) {
+      show(err instanceof Error ? err.message : '服务凭证保存失败', { variant: 'error' })
+    }
+  }
+
   const handleSaveAll = async () => {
     setSavingAll(true)
     try {
@@ -755,6 +1011,7 @@ const AdminSettings = () => {
         saveSearchHotKeywordsConfig(),
         saveRateLimitConfig(),
         saveRuntimeConfig(),
+        saveSecretsConfig(),
       ])
     } finally {
       setSavingAll(false)
@@ -1196,7 +1453,10 @@ const AdminSettings = () => {
           {runtimeForm &&
             CONFIG_GROUPS.map((group) => {
               const booleanFields = group.fields.filter((field) => field.type === 'boolean')
-              const numberFields = group.fields.filter((field) => field.type === 'number')
+              const textFields = group.fields.filter(
+                (field) =>
+                  field.type === 'number' || field.type === 'string' || field.type === 'select'
+              )
               return (
                 <AdminSection key={group.id} id={group.id} icon={group.icon} title={group.title}>
                   <div className="space-y-4">
@@ -1218,9 +1478,9 @@ const AdminSettings = () => {
                         />
                       </div>
                     ))}
-                    {numberFields.length > 0 && (
+                    {textFields.length > 0 && (
                       <div className="grid gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                        {numberFields.map((field) => (
+                        {textFields.map((field) => (
                           <Field
                             key={field.key}
                             label={field.label}
@@ -1230,21 +1490,52 @@ const AdminSettings = () => {
                                 : field.description
                             }
                           >
-                            <Input
-                              type="number"
-                              inputMode="numeric"
-                              value={runtimeForm[field.key] as number}
-                              onChange={(event) => {
-                                const parsed = parseRuntimeNumberField(event.target.value)
-                                if (parsed !== null) {
+                            {field.type === 'select' ? (
+                              <Select
+                                value={runtimeForm[field.key] as string}
+                                onChange={(event) =>
                                   setRuntimeField(
                                     field.key,
-                                    parsed as RuntimeAdminConfig[typeof field.key]
+                                    event.target.value as RuntimeAdminConfig[typeof field.key]
                                   )
                                 }
-                              }}
-                              className="py-2"
-                            />
+                                className="py-2"
+                              >
+                                {field.options?.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </Select>
+                            ) : field.type === 'number' ? (
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                value={runtimeForm[field.key] as number}
+                                onChange={(event) => {
+                                  const parsed = parseRuntimeNumberField(event.target.value)
+                                  if (parsed !== null) {
+                                    setRuntimeField(
+                                      field.key,
+                                      parsed as RuntimeAdminConfig[typeof field.key]
+                                    )
+                                  }
+                                }}
+                                className="py-2"
+                              />
+                            ) : (
+                              <Input
+                                type="text"
+                                value={runtimeForm[field.key] as string}
+                                onChange={(event) =>
+                                  setRuntimeField(
+                                    field.key,
+                                    event.target.value as RuntimeAdminConfig[typeof field.key]
+                                  )
+                                }
+                                className="py-2"
+                              />
+                            )}
                           </Field>
                         ))}
                       </div>
@@ -1253,6 +1544,74 @@ const AdminSettings = () => {
                 </AdminSection>
               )
             })}
+        </SectionStatus>
+
+        <SectionStatus
+          loading={secretsLoading}
+          loadingText="正在加载服务凭证状态..."
+          loadError={secretsLoadError}
+          errorText="服务凭证加载失败，未加载成功前无法保存。"
+          onRetry={() => void loadSecretsConfig()}
+        >
+          <AdminSection
+            id="secrets"
+            icon={<Shield size={18} className="text-brand-gold" />}
+            title="服务凭证"
+          >
+            <div className="space-y-5">
+              <p className="text-xs text-text-secondary">
+                凭证以 AES-256-GCM 加密存储，只会显示是否已配置及末 4 位，不会回显明文。
+                输入新值保存即覆盖，输入框留空并保存即清除对应凭证。
+              </p>
+              {secretsConfig?.disabled ? (
+                <div className="p-3 rounded theme-status-error">
+                  <p className="text-sm theme-text-error">
+                    未配置 SECRETS_ENCRYPTION_KEY 环境变量，凭证管理已禁用。
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {SECRET_FIELD_LABELS.map((field) => {
+                    const status = secretsConfig?.secrets[field.key]
+                    const dirtyValue = secretsForm[field.key]
+                    return (
+                      <Field
+                        key={field.key}
+                        label={field.label}
+                        description={
+                          status?.configured ? `已配置（末 4 位 ${status.last4}）` : '未配置'
+                        }
+                      >
+                        <Input
+                          type="password"
+                          placeholder={status?.configured ? '输入新值以覆盖' : '输入凭证'}
+                          value={dirtyValue ?? ''}
+                          onChange={(event) => setSecretsField(field.key, event.target.value)}
+                          autoComplete="new-password"
+                          className="py-2"
+                        />
+                      </Field>
+                    )
+                  })}
+                </div>
+              )}
+              {secretsConfig && !secretsConfig.disabled && (
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!secretsDirty}
+                    onClick={() => {
+                      setSecretsForm({})
+                      setSecretsDirty(false)
+                    }}
+                  >
+                    撤销未保存修改
+                  </Button>
+                </div>
+              )}
+            </div>
+          </AdminSection>
         </SectionStatus>
       </section>
     </div>

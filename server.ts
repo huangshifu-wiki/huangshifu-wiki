@@ -55,6 +55,7 @@ import { cloudSyncService } from './src/server/services/cloudSyncService'
 import { variantGenerator } from './src/server/services/variantGenerator'
 import { rateLimitConfigService } from './src/server/services/rateLimitConfig.service'
 import { runtimeConfigService } from './src/server/services/runtimeConfig.service'
+import { secretsConfigService } from './src/server/services/secretsConfig.service'
 import { isSemanticSearchEnabled } from './src/server/utils'
 import {
   injectHtmlBootstrapState,
@@ -331,6 +332,7 @@ registerSearchRoutes(app)
 // 运行时配置需在 embeddings 路由注册决策（依赖语义搜索开关）前加载完成；
 // 失败时回退默认值，不阻塞启动。search 路由在请求时惰性读取配置，不受此影响。
 await runtimeConfigService.init()
+await secretsConfigService.init()
 if (isSemanticSearchEnabled()) {
   const { registerEmbeddingsRoutes } = await import('./src/server/routes/embeddings.routes')
   registerEmbeddingsRoutes(app)

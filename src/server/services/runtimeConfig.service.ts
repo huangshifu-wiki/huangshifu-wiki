@@ -10,7 +10,7 @@
  */
 
 import { prisma } from '../prisma'
-import { logger } from '../utils/logger'
+import { logger, setLogLevel } from '../utils/logger'
 
 export interface RuntimeConfig {
   // 功能开关
@@ -41,6 +41,33 @@ export interface RuntimeConfig {
   // 云同步
   cloudSyncMaxConcurrent: number
   cloudSyncMaxRetries: number
+  // 日志
+  logLevel: string
+  // S3 兼容对象存储
+  s3Enabled: boolean
+  s3PublicBucketName: string
+  s3PublicBucketRegion: string
+  s3PublicBucketPrefix: string
+  s3PrivateBucketName: string
+  s3PrivateBucketRegion: string
+  s3EndpointUrl: string
+  s3ForcePathStyle: boolean
+  s3SslEnabled: boolean
+  s3SignatureVersion: string
+  s3PublicDomain: string
+  s3DefaultAcl: string
+  s3ExpiresIn: number
+  s3MaxFileSize: number
+  s3AllowedContentTypes: string
+  s3EnableMd5Verification: boolean
+  // 向量检索
+  qdrantUrl: string
+  qdrantCollection: string
+  qdrantTextCollection: string
+  // 外部图床
+  lskyBaseUrl: string
+  lskyStrategyId: string
+  lskyTimeout: number
 }
 
 export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
@@ -66,6 +93,29 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   variantMaxRetries: 3,
   cloudSyncMaxConcurrent: 2,
   cloudSyncMaxRetries: 3,
+  logLevel: 'info',
+  s3Enabled: false,
+  s3PublicBucketName: '',
+  s3PublicBucketRegion: 'auto',
+  s3PublicBucketPrefix: '',
+  s3PrivateBucketName: '',
+  s3PrivateBucketRegion: 'auto',
+  s3EndpointUrl: 'https://s3.bitiful.net',
+  s3ForcePathStyle: true,
+  s3SslEnabled: true,
+  s3SignatureVersion: 'v4',
+  s3PublicDomain: '',
+  s3DefaultAcl: 'public-read',
+  s3ExpiresIn: 3600,
+  s3MaxFileSize: 104857600,
+  s3AllowedContentTypes: 'image/jpeg,image/png,image/gif,image/webp,image/bmp',
+  s3EnableMd5Verification: false,
+  qdrantUrl: 'http://127.0.0.1:6333',
+  qdrantCollection: 'hsf_image_embeddings',
+  qdrantTextCollection: 'hsf_text_embeddings',
+  lskyBaseUrl: '',
+  lskyStrategyId: '',
+  lskyTimeout: 30000,
 }
 
 const CONFIG_KEY = 'runtime_config'
@@ -89,6 +139,9 @@ const NUMBER_LIMITS: Record<string, [number, number]> = {
   variantMaxRetries: [0, 20],
   cloudSyncMaxConcurrent: [1, 16],
   cloudSyncMaxRetries: [0, 20],
+  s3ExpiresIn: [60, 86400],
+  s3MaxFileSize: [1, 1_073_741_824],
+  lskyTimeout: [1000, 300_000],
 }
 
 const BOOLEAN_KEYS = new Set([
@@ -97,7 +150,37 @@ const BOOLEAN_KEYS = new Set([
   'allowSuperAdminManageSuperAdmins',
   'blurhashEnabled',
   'blurhashAutoGenerate',
+  's3Enabled',
+  's3ForcePathStyle',
+  's3SslEnabled',
+  's3EnableMd5Verification',
 ])
+
+// 字符串字段白名单（trim 后存储）
+const STRING_KEYS = new Set([
+  'logLevel',
+  's3PublicBucketName',
+  's3PublicBucketRegion',
+  's3PublicBucketPrefix',
+  's3PrivateBucketName',
+  's3PrivateBucketRegion',
+  's3EndpointUrl',
+  's3SignatureVersion',
+  's3PublicDomain',
+  's3DefaultAcl',
+  's3AllowedContentTypes',
+  'qdrantUrl',
+  'qdrantCollection',
+  'qdrantTextCollection',
+  'lskyBaseUrl',
+  'lskyStrategyId',
+])
+
+// 枚举字段的合法值
+const ENUM_KEYS: Record<string, readonly string[]> = {
+  logLevel: ['debug', 'info', 'warn', 'error'],
+  s3SignatureVersion: ['v2', 'v4'],
+}
 
 export class RuntimeConfigValidationError extends Error {
   constructor(message: string) {
@@ -138,6 +221,19 @@ function normalizeUpdate(update: unknown): Partial<RuntimeConfig> {
       }
       const [min, max] = NUMBER_LIMITS[key]
       ;(result as Record<string, unknown>)[key] = Math.min(max, Math.max(min, value))
+      continue
+    }
+
+    if (STRING_KEYS.has(key)) {
+      if (typeof value !== 'string') {
+        throw new RuntimeConfigValidationError(`${key} 必须是字符串`)
+      }
+      const trimmed = value.trim()
+      const allowed = ENUM_KEYS[key]
+      if (allowed && !allowed.includes(trimmed)) {
+        throw new RuntimeConfigValidationError(`${key} 必须是 ${allowed.join(' / ')} 之一`)
+      }
+      ;(result as Record<string, unknown>)[key] = trimmed
     }
     // 其余字段名直接忽略
   }
@@ -184,6 +280,7 @@ export class RuntimeConfigService {
           ...DEFAULT_RUNTIME_CONFIG,
           ...normalizeUpdate(configRecord.value),
         }
+        setLogLevel(this.currentConfig.logLevel as 'debug' | 'info' | 'warn' | 'error')
         logger.debug({ config: this.currentConfig }, '[RuntimeConfig] Configuration loaded from DB')
       } else {
         logger.debug('[RuntimeConfig] No database config found, using defaults')
@@ -228,6 +325,9 @@ export class RuntimeConfigService {
       ...this.currentConfig,
       ...partial,
     }
+    if (typeof partial.logLevel === 'string') {
+      setLogLevel(partial.logLevel as 'debug' | 'info' | 'warn' | 'error')
+    }
     await this.saveConfigToDB()
     return cloneConfig(this.currentConfig)
   }
@@ -237,6 +337,7 @@ export class RuntimeConfigService {
    */
   async resetConfig(): Promise<RuntimeConfig> {
     this.currentConfig = { ...DEFAULT_RUNTIME_CONFIG }
+    setLogLevel(DEFAULT_RUNTIME_CONFIG.logLevel as 'debug' | 'info' | 'warn' | 'error')
     await this.saveConfigToDB()
     return cloneConfig(this.currentConfig)
   }

@@ -8,8 +8,8 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import crypto from 'crypto'
 import path from 'path'
 
-import { S3_ENV_VAR_NAMES } from '@/config/s3.config.example'
-import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
+import { secretsConfigService } from '../services/secretsConfig.service'
 
 export interface S3PublicConfig {
   enabled: boolean
@@ -23,122 +23,96 @@ export interface S3PublicConfig {
   s3BaseUrl: string
 }
 
-const DEFAULT_EXPIRES_IN = 3600
-const DEFAULT_PUBLIC_DOMAIN = ''
-const DEFAULT_MAX_FILE_SIZE = UPLOAD_MAX_FILE_SIZE_BYTES
-const DEFAULT_ALLOWED_CONTENT_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'image/bmp',
-]
-
 let s3ClientWrite: S3Client | null = null
 let s3ClientRead: S3Client | null = null
+let lastS3Fingerprint = ''
 
-function parseInteger(value: string | undefined, fallback: number) {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback
-  }
-  return Math.floor(parsed)
-}
-
-function getEnv(key: string): string {
-  return process.env[key] || ''
-}
-
-function getEnvBoolean(key: string, fallback = false): boolean {
-  const value = getEnv(key)
-  if (!value) {
-    return fallback
-  }
-  return value === 'true' || value === '1'
-}
-
-function getEnvNumber(key: string, fallback: number): number {
-  return parseInteger(getEnv(key), fallback)
-}
-
-function getEnvArray(key: string, fallback: string[]): string[] {
-  const value = getEnv(key)
-  if (!value) {
-    return fallback
-  }
-  return value
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
+/** 影响 client 构造的配置指纹；面板修改配置后自动触发 client 重建 */
+function s3Fingerprint(): string {
+  const config = runtimeConfigService.getConfig()
+  const secrets = secretsConfigService.getSecrets()
+  return JSON.stringify([
+    config.s3Enabled,
+    config.s3EndpointUrl,
+    config.s3ForcePathStyle,
+    config.s3SslEnabled,
+    config.s3PublicBucketRegion,
+    secrets.s3WriteAccessKeyId,
+    secrets.s3WriteSecretAccessKey,
+    secrets.s3ReadAccessKeyId,
+    secrets.s3ReadSecretAccessKey,
+  ])
 }
 
 function isS3Enabled(): boolean {
-  return getEnvBoolean(S3_ENV_VAR_NAMES.S3_ENABLED, false)
+  return runtimeConfigService.getConfig().s3Enabled
 }
 
 function getWriteCredentials() {
+  const secrets = secretsConfigService.getSecrets()
   return {
-    accessKeyId: getEnv(S3_ENV_VAR_NAMES.S3_WRITE_ACCESS_KEY_ID),
-    secretAccessKey: getEnv(S3_ENV_VAR_NAMES.S3_WRITE_SECRET_ACCESS_KEY),
+    accessKeyId: secrets.s3WriteAccessKeyId,
+    secretAccessKey: secrets.s3WriteSecretAccessKey,
   }
 }
 
 function getReadCredentials() {
+  const secrets = secretsConfigService.getSecrets()
   return {
-    accessKeyId: getEnv(S3_ENV_VAR_NAMES.S3_READ_ACCESS_KEY_ID),
-    secretAccessKey: getEnv(S3_ENV_VAR_NAMES.S3_READ_SECRET_ACCESS_KEY),
+    accessKeyId: secrets.s3ReadAccessKeyId,
+    secretAccessKey: secrets.s3ReadSecretAccessKey,
   }
 }
 
 function getPublicBucketConfig() {
+  const config = runtimeConfigService.getConfig()
   return {
-    name: getEnv(S3_ENV_VAR_NAMES.S3_PUBLIC_BUCKET_NAME),
-    region: getEnv(S3_ENV_VAR_NAMES.S3_PUBLIC_BUCKET_REGION) || 'auto',
-    prefix: getEnv(S3_ENV_VAR_NAMES.S3_PUBLIC_BUCKET_PREFIX) || '',
+    name: config.s3PublicBucketName,
+    region: config.s3PublicBucketRegion || 'auto',
+    prefix: config.s3PublicBucketPrefix || '',
   }
 }
 
 function getEndpointConfig() {
-  const url = getEnv(S3_ENV_VAR_NAMES.S3_ENDPOINT_URL) || 'https://s3.bitiful.net'
-  const forcePathStyle = getEnvBoolean(S3_ENV_VAR_NAMES.S3_FORCE_PATH_STYLE, true)
-  const sslEnabled = getEnvBoolean(S3_ENV_VAR_NAMES.S3_SSL_ENABLED, true)
-  const signatureVersion = getEnv(S3_ENV_VAR_NAMES.S3_SIGNATURE_VERSION) || 'v4'
-
+  const config = runtimeConfigService.getConfig()
   return {
-    url,
-    forcePathStyle,
-    sslEnabled,
-    signatureVersion: signatureVersion as 'v2' | 'v4',
+    url: config.s3EndpointUrl || 'https://s3.bitiful.net',
+    forcePathStyle: config.s3ForcePathStyle,
+    sslEnabled: config.s3SslEnabled,
+    signatureVersion: config.s3SignatureVersion as 'v2' | 'v4',
   }
 }
 
 function getDefaultExpiresIn(): number {
-  return getEnvNumber(S3_ENV_VAR_NAMES.S3_EXPIRES_IN, DEFAULT_EXPIRES_IN)
+  return runtimeConfigService.getConfig().s3ExpiresIn
 }
 
 function getMaxFileSize(): number {
-  return getEnvNumber(S3_ENV_VAR_NAMES.S3_MAX_FILE_SIZE, DEFAULT_MAX_FILE_SIZE)
+  return runtimeConfigService.getConfig().s3MaxFileSize
 }
 
 function getAllowedContentTypes(): string[] {
-  return getEnvArray(S3_ENV_VAR_NAMES.S3_ALLOWED_CONTENT_TYPES, DEFAULT_ALLOWED_CONTENT_TYPES)
+  return runtimeConfigService
+    .getConfig()
+    .s3AllowedContentTypes.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
 }
 
 export function isMd5VerificationEnabled(): boolean {
-  return getEnvBoolean(S3_ENV_VAR_NAMES.S3_ENABLE_MD5_VERIFICATION, false)
+  return runtimeConfigService.getConfig().s3EnableMd5Verification
 }
 
 export function getS3ClientWrite(): S3Client {
   if (!isS3Enabled()) {
-    throw new Error('S3 存储未启用，请设置 S3_ENABLED=true')
+    throw new Error('S3 存储未启用，请在管理后台启用 S3 存储')
   }
 
-  if (!s3ClientWrite) {
+  const fingerprint = s3Fingerprint()
+  if (!s3ClientWrite || fingerprint !== lastS3Fingerprint) {
     const credentials = getWriteCredentials()
     if (!credentials.accessKeyId || !credentials.secretAccessKey) {
-      throw new Error(
-        'S3 写入凭证未配置，请设置 S3_WRITE_ACCESS_KEY_ID 和 S3_WRITE_SECRET_ACCESS_KEY'
-      )
+      throw new Error('S3 写入凭证未配置，请在管理后台配置 S3 凭证')
     }
 
     const endpointConfig = getEndpointConfig()
@@ -150,6 +124,8 @@ export function getS3ClientWrite(): S3Client {
       forcePathStyle: endpointConfig.forcePathStyle,
       tls: endpointConfig.sslEnabled,
     })
+    lastS3Fingerprint = fingerprint
+    s3ClientRead = null
   }
 
   return s3ClientWrite
@@ -157,15 +133,14 @@ export function getS3ClientWrite(): S3Client {
 
 export function getS3ClientRead(): S3Client {
   if (!isS3Enabled()) {
-    throw new Error('S3 存储未启用，请设置 S3_ENABLED=true')
+    throw new Error('S3 存储未启用，请在管理后台启用 S3 存储')
   }
 
-  if (!s3ClientRead) {
+  const fingerprint = s3Fingerprint()
+  if (!s3ClientRead || fingerprint !== lastS3Fingerprint) {
     const credentials = getReadCredentials()
     if (!credentials.accessKeyId || !credentials.secretAccessKey) {
-      throw new Error(
-        'S3 读取凭证未配置，请设置 S3_READ_ACCESS_KEY_ID 和 S3_READ_SECRET_ACCESS_KEY'
-      )
+      throw new Error('S3 读取凭证未配置，请在管理后台配置 S3 凭证')
     }
 
     const endpointConfig = getEndpointConfig()
@@ -177,6 +152,8 @@ export function getS3ClientRead(): S3Client {
       forcePathStyle: endpointConfig.forcePathStyle,
       tls: endpointConfig.sslEnabled,
     })
+    lastS3Fingerprint = fingerprint
+    s3ClientWrite = null
   }
 
   return s3ClientRead
@@ -466,7 +443,7 @@ export function getPublicConfig(): S3PublicConfig {
   const endpointConfig = getEndpointConfig()
   const bucketConfig = getPublicBucketConfig()
 
-  const publicDomain = process.env.S3_PUBLIC_DOMAIN || DEFAULT_PUBLIC_DOMAIN
+  const publicDomain = runtimeConfigService.getConfig().s3PublicDomain
 
   return {
     enabled,
@@ -490,28 +467,28 @@ export function validateS3Config(): { valid: boolean; errors: string[] } {
 
   const writeCreds = getWriteCredentials()
   if (!writeCreds.accessKeyId) {
-    errors.push('S3_WRITE_ACCESS_KEY_ID 未设置')
+    errors.push('S3 写入 AccessKey 未配置')
   }
   if (!writeCreds.secretAccessKey) {
-    errors.push('S3_WRITE_SECRET_ACCESS_KEY 未设置')
+    errors.push('S3 写入 SecretKey 未配置')
   }
 
   const readCreds = getReadCredentials()
   if (!readCreds.accessKeyId) {
-    errors.push('S3_READ_ACCESS_KEY_ID 未设置')
+    errors.push('S3 读取 AccessKey 未配置')
   }
   if (!readCreds.secretAccessKey) {
-    errors.push('S3_READ_SECRET_ACCESS_KEY 未设置')
+    errors.push('S3 读取 SecretKey 未配置')
   }
 
   const bucketConfig = getPublicBucketConfig()
   if (!bucketConfig.name) {
-    errors.push('S3_PUBLIC_BUCKET_NAME 未设置')
+    errors.push('S3 公有桶名称未配置')
   }
 
   const endpointConfig = getEndpointConfig()
   if (!endpointConfig.url) {
-    errors.push('S3_ENDPOINT_URL 未设置')
+    errors.push('S3 端点 URL 未配置')
   }
 
   if (errors.length > 0) {
@@ -527,7 +504,7 @@ export function validateS3Config(): { valid: boolean; errors: string[] } {
 }
 
 export function getS3BaseUrl(): string {
-  const publicDomain = process.env.S3_PUBLIC_DOMAIN || ''
+  const publicDomain = runtimeConfigService.getConfig().s3PublicDomain
   if (publicDomain) {
     const trimmed = publicDomain.replace(/\/+$/, '')
     return trimmed

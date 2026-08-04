@@ -134,9 +134,6 @@ VITE_AMAP_JS_API_KEY=""
 # Amap JS API 安全密钥 (必须在 JS API 脚本加载之前设置)
 VITE_AMAP_SECURITY_JS_CODE=""
 
-# Amap (高德地图) - Backend Web Service API key (for server-side geocoding)
-AMAP_API_KEY=""
-
 # Local backend
 DATABASE_URL="postgresql://hsf_app:请替换为强密码@127.0.0.1:5432/huangshifu_wiki"
 JWT_SECRET="请替换为至少32位随机字符串"
@@ -150,10 +147,7 @@ UPLOADS_PATH=""
 # Database backup; optional server-side encryption key
 BACKUP_PASSWORD=""
 
-# Vector search (Qdrant + CLIP)
-QDRANT_URL="http://127.0.0.1:6333"
-QDRANT_API_KEY=""
-QDRANT_COLLECTION="hsf_image_embeddings"
+# Vector search (CLIP 模型参数；Qdrant 服务地址、集合与 API Key 在管理后台配置)
 IMAGE_EMBEDDING_MODEL="OFA-Sys/chinese-clip-vit-base-patch16"
 IMAGE_EMBEDDING_VECTOR_SIZE="512"
 IMAGE_EMBEDDING_DTYPE="q8"
@@ -166,7 +160,6 @@ TEXT_EMBEDDING_ENABLED="true"
 # TEXT_EMBEDDING_MAX_CHUNK_TOKENS="512"
 # TEXT_EMBEDDING_CHUNK_OVERLAP_TOKENS="50"
 # TEXT_SEARCH_MIN_SCORE="0.3"
-# QDRANT_TEXT_COLLECTION="hsf_text_embeddings"
 
 # Transformers 模型配置
 TRANSFORMERS_CACHE=""
@@ -174,34 +167,18 @@ TRANSFORMERS_OFFLINE="false"
 HF_PROBE_TIMEOUT_MS="5000"
 SKIP_NETWORK_PROBE="false"
 
-# WeChat mini-program auth
-WECHAT_MP_APPID=""
-WECHAT_MP_APP_SECRET=""
+# WeChat mini-program auth（AppId/AppSecret 在管理后台「服务凭证」配置）
 # 生产环境必须保持 false 或留空，否则服务会拒绝启动
 WECHAT_LOGIN_MOCK="false"
 
-# S3 对象存储配置
-S3_ENABLED="false"
-S3_READ_ACCESS_KEY_ID=""
-S3_READ_SECRET_ACCESS_KEY=""
-S3_WRITE_ACCESS_KEY_ID=""
-S3_WRITE_SECRET_ACCESS_KEY=""
-S3_PUBLIC_BUCKET_NAME="your-public-bucket"
-S3_PUBLIC_BUCKET_REGION="auto"
-S3_PUBLIC_BUCKET_PREFIX="public/"
-S3_ENDPOINT_URL="https://s3.bitiful.net"
-S3_FORCE_PATH_STYLE="true"
-S3_SSL_ENABLED="true"
-S3_SIGNATURE_VERSION="v4"
-S3_PUBLIC_DOMAIN=""
+# S3 对象存储、外部图床（Superbed / Lsky）的开关、端点、桶、行为参数与
+# 服务端凭证（含高德 Web Service Key、微信小程序凭据等）已移至管理后台
+# 「站点设置」（系统参数 / 服务凭证）配置，无需环境变量；
+# 服务端凭证以 AES-256-GCM 加密存储。
 
-# Superbed 图床配置
-SUPERBED_API_TOKEN=""
-
-# Lsky Pro+ 图床配置
-LSKY_BASE_URL="https://your-lsky-pro-domain.com"
-# LSKY_TOKEN=""
-LSKY_STRATEGY_ID=""
+# 服务凭证主密钥（base64 编码的 32 字节，可用 `openssl rand -base64 32` 生成；
+# 缺失时管理后台「服务凭证」禁用）
+SECRETS_ENCRYPTION_KEY=""
 
 # 前端环境变量（会被打包到前端代码，不要放敏感信息！）
 VITE_LSKY_BASE_URL="https://your-lsky-pro-domain.com"
@@ -223,24 +200,22 @@ EOF
 
 #### 认证与微信小程序
 
-| 变量                   | 说明                                                                        |
-| ---------------------- | --------------------------------------------------------------------------- |
-| `WECHAT_MP_APPID`      | 微信小程序 AppID                                                            |
-| `WECHAT_MP_APP_SECRET` | 微信小程序 AppSecret                                                        |
-| `WECHAT_LOGIN_MOCK`    | 仅开发/测试联调可设 `true`，正式环境必须为 `false` 或留空，否则服务拒绝启动 |
+| 变量                | 说明                                                                        |
+| ------------------- | --------------------------------------------------------------------------- |
+| `WECHAT_LOGIN_MOCK` | 仅开发/测试联调可设 `true`，正式环境必须为 `false` 或留空，否则服务拒绝启动 |
+
+> 微信小程序 AppId/AppSecret 在管理后台「站点设置 → 服务凭证」配置，无需环境变量。
 
 #### 向量检索（Qdrant + ChineseCLIP）
 
 | 变量                          | 说明                                                             |
 | ----------------------------- | ---------------------------------------------------------------- |
-| `QDRANT_URL`                  | Qdrant 服务地址（默认 `http://127.0.0.1:6333`）                  |
-| `QDRANT_API_KEY`              | Qdrant API Key（可选，未设置则无需认证）                         |
-| `QDRANT_COLLECTION`           | 图片向量集合名称（默认 `hsf_image_embeddings`）                  |
 | `IMAGE_EMBEDDING_MODEL`       | 图片向量模型名称（默认 `OFA-Sys/chinese-clip-vit-base-patch16`） |
 | `IMAGE_EMBEDDING_VECTOR_SIZE` | 向量维度（默认 512）                                             |
 | `IMAGE_EMBEDDING_DTYPE`       | 模型量化类型：`q8`（int8，省内存）或 `fp32`（全精度）            |
 
 > 语义搜索开关、批量大小、搜索结果上限、Qdrant 超时等参数已移至管理后台「系统参数」，无需环境变量。
+> Qdrant 服务地址与集合名称在管理后台「系统参数 → 向量检索」配置，API Key 在「服务凭证」配置。
 
 #### 文本嵌入（Text Embedding）
 
@@ -249,7 +224,6 @@ EOF
 | `TEXT_EMBEDDING_ENABLED`              | 是否启用文本向量搜索（默认 `true`）            |
 | `TEXT_EMBEDDING_MAX_CHUNK_TOKENS`     | 文本分块最大 token 数（默认 512）              |
 | `TEXT_EMBEDDING_CHUNK_OVERLAP_TOKENS` | 文本分块重叠 token 数（默认 50）               |
-| `QDRANT_TEXT_COLLECTION`              | 文本向量集合名称（默认 `hsf_text_embeddings`） |
 | `TEXT_SEARCH_MIN_SCORE`               | 文本搜索最低相似度阈值（默认 0.3）             |
 
 #### Transformers 模型配置
@@ -267,7 +241,8 @@ EOF
 | ---------------------------- | --------------------------------------------- |
 | `VITE_AMAP_JS_API_KEY`       | 高德地图 JS API Key（Web 平台，前端变量）     |
 | `VITE_AMAP_SECURITY_JS_CODE` | 高德地图安全密钥（JS API 2.0 必须，前端变量） |
-| `AMAP_API_KEY`               | 高德地图 Web 服务 API Key（服务端地理编码用） |
+
+> 高德 Web 服务 API Key（服务端地理编码用）在管理后台「服务凭证」配置，无需环境变量。
 
 #### 存储与上传
 
@@ -279,35 +254,18 @@ EOF
 
 #### S3 对象存储
 
-| 变量                         | 说明                                                    |
-| ---------------------------- | ------------------------------------------------------- |
-| `S3_ENABLED`                 | 是否启用 S3 存储（`false`=本地，`true`=S3）             |
-| `S3_ENDPOINT_URL`            | S3 兼容端点地址（如 Bitiful: `https://s3.bitiful.net`） |
-| `S3_READ_ACCESS_KEY_ID`      | 读取凭证 AccessKey（可用于前端签名 URL）                |
-| `S3_READ_SECRET_ACCESS_KEY`  | 读取凭证 SecretKey                                      |
-| `S3_WRITE_ACCESS_KEY_ID`     | 写入凭证 AccessKey（机密，仅后端使用）                  |
-| `S3_WRITE_SECRET_ACCESS_KEY` | 写入凭证 SecretKey（机密，仅后端使用）                  |
-| `S3_PUBLIC_BUCKET_NAME`      | 存储桶名称                                              |
-| `S3_PUBLIC_BUCKET_REGION`    | 存储桶区域（默认 `auto`）                               |
-| `S3_PUBLIC_BUCKET_PREFIX`    | 存储桶内前缀路径（默认 `public/`）                      |
-| `S3_FORCE_PATH_STYLE`        | 是否强制路径风格（默认 `true`）                         |
-| `S3_SSL_ENABLED`             | 是否启用 SSL（默认 `true`）                             |
-| `S3_SIGNATURE_VERSION`       | 签名版本（默认 `v4`）                                   |
-| `S3_PUBLIC_DOMAIN`           | S3 自定义公开访问域名（可选，用于 CDN 或自定义域名）    |
+> S3 开关、端点、桶、行为参数等已移至管理后台「系统参数 → S3 存储」，访问凭证在「服务凭证」配置，无需环境变量。
 
-#### Superbed 图床（可选）
+#### Superbed 图床 / Lsky Pro+ 图床（可选）
 
-| 变量                 | 说明               |
-| -------------------- | ------------------ |
-| `SUPERBED_API_TOKEN` | Superbed API Token |
+> 外部图床的服务地址、上传策略 ID 等参数在管理后台「系统参数 → 外部图床」配置，API Token 在「服务凭证」配置，无需环境变量。
 
-#### Lsky Pro+ 图床（可选）
+> 以上这些参数与凭证现统一通过管理后台「站点设置」（系统参数 / 服务凭证）管理；服务端凭证以 AES-256-GCM 加密存储。
+
+#### 前端变量
 
 | 变量                 | 说明                                                        |
 | -------------------- | ----------------------------------------------------------- |
-| `LSKY_BASE_URL`      | Lsky Pro+ 服务地址（如 `https://your-lsky-pro-domain.com`） |
-| `LSKY_TOKEN`         | Lsky API Token（可选，部分策略不需要）                      |
-| `LSKY_STRATEGY_ID`   | Lsky 上传策略 ID（可选）                                    |
 | `VITE_LSKY_BASE_URL` | Lsky 前端地址（**前端变量**，会被打包到代码中）             |
 
 #### 图片变体生成器 / 云端同步 / 磁盘空间监控（v2.1，可选）
@@ -332,7 +290,7 @@ EOF
 
 - 小程序端流程：`wx.login()` 获取 `code` → 打开 `<web-view>`。
 - WebView URL 会追加 `wx_code` 查询参数，Web 端自动调用 `POST /api/auth/wechat/login` 完成登录。
-- 生产环境必须配置：`WECHAT_MP_APPID`、`WECHAT_MP_APP_SECRET`，并确保 `WECHAT_LOGIN_MOCK=false` 或留空；若误设为 `true`，服务会拒绝启动。
+- 生产环境必须在管理后台「站点设置 → 服务凭证」配置微信小程序 AppId/AppSecret，并确保 `WECHAT_LOGIN_MOCK=false` 或留空；若误设为 `true`，服务会拒绝启动。
 - 小程序后台需完成：业务域名配置（HTTPS）、request 合法域名配置（后端 API 域名）。
 
 开发调试可将 `WECHAT_LOGIN_MOCK=true`，并在 Web 端直接访问：
@@ -348,7 +306,7 @@ https://你的域名/?wx_code=mock:openId
 Superbed 是一个第三方图床服务。配置方式：
 
 1. 在 [Superbed](https://superbed.cn) 注册账号并获取 API Token
-2. 在 `.env` 中填写 `SUPERBED_API_TOKEN`
+2. 在管理后台「站点设置 → 服务凭证」中填写 `superbedApiToken`
 3. 在管理后台「图片管理」中将存储策略切换为 `external` 并选择 Superbed
 
 ### 3.3 Lsky Pro+ 图床配置（可选）
@@ -356,12 +314,12 @@ Superbed 是一个第三方图床服务。配置方式：
 Lsky Pro+ 是一款开源的图床程序。配置方式：
 
 1. 部署 Lsky Pro+ 实例并获取服务地址
-2. 在 `.env` 中填写：
-   - `LSKY_BASE_URL`：Lsky 服务地址
-   - `LSKY_STRATEGY_ID`：上传策略 ID（在 Lsky 后台创建）
-   - `VITE_LSKY_BASE_URL`：前端访问地址（**必须与 LSKY_BASE_URL 一致或为可公开访问的地址**）
-3. 如需 Token 认证，填写 `LSKY_TOKEN`
-4. 在管理后台「图片管理」中将存储策略切换为 `external` 并选择 Lsky
+2. 在管理后台「系统参数 → 外部图床」填写：
+   - `lskyBaseUrl`：Lsky 服务地址
+   - `lskyStrategyId`：上传策略 ID（在 Lsky 后台创建）
+3. 如需 Token 认证，在管理后台「站点设置 → 服务凭证」中填写 Lsky Token
+4. 在 `.env` 中填写 `VITE_LSKY_BASE_URL`：前端访问地址（**必须与 Lsky 服务地址一致或为可公开访问的地址**）
+5. 在管理后台「图片管理」中将存储策略切换为 `external` 并选择 Lsky
 
 > **重要**：`VITE_LSKY_BASE_URL` 是前端变量，会被打包到前端代码中，不要放入敏感信息。
 
@@ -373,7 +331,7 @@ Lsky Pro+ 是一款开源的图床程序。配置方式：
 
 云端同步服务用于将本地存储的图片同步到 S3 兼容对象存储。并发数与重试次数已移至管理后台「系统参数」，无需环境变量。
 
-需配合 S3 配置（`S3_ENABLED=true` 及相关凭证）使用。
+需配合 S3 存储：在管理后台「系统参数 → S3 存储」启用 S3，并在「服务凭证」中配置 S3 访问凭证。
 
 ### 3.6 磁盘空间监控配置（可选，v2.1）
 
@@ -595,8 +553,8 @@ USE_PM2=0 ./scripts/deploy.sh         # 不使用 PM2
 
 ### 11.1 S3 存储验证清单（如已启用）
 
-- [ ] S3 配置已正确添加到 `.env` 文件
-- [ ] `S3_ENABLED=true` 已设置
+- [ ] 管理后台「系统参数 → S3 存储」已正确配置（端点、桶、行为参数）
+- [ ] 管理后台已启用 S3 存储
 - [ ] Bitiful 控制台已创建存储桶
 - [ ] 已创建写入凭证子用户（仅 PutObject、DeleteObject、ListBucket 权限）
 - [ ] 已创建读取凭证子用户（仅 GetObject、ListBucket 权限）
@@ -893,8 +851,7 @@ tar -czf /root/backup/uploads_$(date +%F).tar.gz /root/huangshifu-wiki/uploads
 
 前端地图通过官方 `@amap/amap-jsapi-loader` 按需加载 JS API 2.0。加载前会设置
 `VITE_AMAP_SECURITY_JS_CODE`，该变量必须与 `VITE_AMAP_JS_API_KEY` 配套。两者属于浏览器端
-配置，会进入前端产物，不能与服务端 `AMAP_API_KEY` 混用。服务端 Key 仅用于后端调用 Web
-Service，浏览器不会直接请求 `restapi.amap.com`。
+配置，会进入前端产物，不能与服务端高德 Web Service Key 混用（该 Key 在管理后台「服务凭证」配置，仅后端调用 Web 服务使用）。浏览器不会直接请求 `restapi.amap.com`。
 
 **高德地图 JS API 白名单**（必须包含以下域名才能正常使用地图功能）：
 

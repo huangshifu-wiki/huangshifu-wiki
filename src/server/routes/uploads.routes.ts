@@ -19,6 +19,7 @@ import {
   logger,
 } from '../utils'
 import { variantGenerator } from '../services/variantGenerator'
+import { secretsConfigService } from '../services/secretsConfig.service'
 import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService'
 import fs from 'fs'
 import path from 'path'
@@ -435,7 +436,7 @@ router.post(
 
         // 上传到外部图床 (Superbed)
         if (preference.strategy === 'external') {
-          const superbedToken = process.env.SUPERBED_API_TOKEN || ''
+          const superbedToken = secretsConfigService.getSecrets().superbedApiToken
 
           if (!superbedToken) {
             console.warn('[Upload] Superbed API Token not configured, skipping external upload')
@@ -637,7 +638,7 @@ router.delete(
         return
       }
 
-      const superbedToken = process.env.SUPERBED_API_TOKEN || ''
+      const superbedToken = secretsConfigService.getSecrets().superbedApiToken
       if (!superbedToken) {
         res.status(400).json({ error: 'Superbed API Token 未配置' })
         return
