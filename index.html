@@ -65,6 +65,58 @@
       })()
     </script>
 
+    <!--
+      启动占位（splash）样式：
+      JS/CSS 加载完成前 #root 为空，用品牌化加载画面避免白屏。
+      内联在 head 保证首帧前生效；React 挂载后由 hideStaticFallback 淡出移除。
+      配色与 index.css 的 --color-theme-bg / 品牌金保持一致。
+    -->
+    <style>
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #f7f5f0;
+        pointer-events: none;
+        opacity: 1;
+        transition: opacity 0.25s ease;
+      }
+      #boot-splash.boot-splash--hide {
+        opacity: 0;
+      }
+      [data-theme='dark'] #boot-splash {
+        background: #1f1a16;
+      }
+      .boot-splash__ring {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 2px solid rgba(176, 123, 23, 0.25);
+        border-top-color: #b07b17;
+        animation: boot-splash-spin 0.9s linear infinite;
+      }
+      .boot-splash__title {
+        font-family: 'STKaiti', 'KaiTi', serif;
+        font-size: 17px;
+        letter-spacing: 0.35em;
+        text-indent: 0.35em;
+        color: #8a6313;
+      }
+      [data-theme='dark'] .boot-splash__title {
+        color: #d9b268;
+      }
+      @keyframes boot-splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+
     <!-- 预连接到关键第三方域名，加速后续请求但不阻塞渲染 -->
     <link rel="dns-prefetch" href="https://gator.volces.com" />
     <link rel="dns-prefetch" href="https://analysis.chatglm.cn" />
@@ -115,6 +167,11 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- 启动占位：React 挂载前填充首帧，避免白屏；挂载后淡出移除 -->
+    <div id="boot-splash" aria-hidden="true">
+      <div class="boot-splash__ring"></div>
+      <div class="boot-splash__title">黄诗扶 Wiki</div>
+    </div>
     <footer id="static-footer" class="static-fallback-footer">
       <a
         href="https://img.lhl.one"
