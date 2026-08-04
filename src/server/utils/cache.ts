@@ -124,8 +124,11 @@ class EnhancedCache {
   private isNamespaceOverQuota(key: string): boolean {
     const prefix = this.getNamespacePrefix(key)
     if (!prefix) return false
+    const quota = Math.floor(this.maxKeys * NAMESPACE_QUOTA_RATIO)
+    // 总键数低于配额时任何命名空间都不可能超配额；getStats() 为 O(1) 计数，避免每条 set 都做 O(n) 全量扫描
+    if (this.cache.getStats().keys < quota) return false
     const keys = this.cache.keys().filter((k) => k.startsWith(prefix + ':'))
-    return keys.length >= Math.floor(this.maxKeys * NAMESPACE_QUOTA_RATIO)
+    return keys.length >= quota
   }
 
   private evictOldestInNamespace(key: string): void {

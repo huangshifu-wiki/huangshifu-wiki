@@ -308,14 +308,13 @@ export class VariantGenerator {
       await this.markAsProcessing(task)
 
       // ===== 执行变体生成（带超时保护）=====
+      const taskTimeoutMs = getVariantConfig().variantTaskTimeoutMs
       let timeoutId: NodeJS.Timeout
 
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
-          reject(
-            new Error(`Variant generation timeout (${getVariantConfig().variantTaskTimeoutMs}ms)`)
-          )
-        }, getVariantConfig().variantTaskTimeoutMs)
+          reject(new Error(`Variant generation timeout (${taskTimeoutMs}ms)`))
+        }, taskTimeoutMs)
       })
 
       try {

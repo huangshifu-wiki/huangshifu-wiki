@@ -1186,12 +1186,14 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
         let degraded = false
         let degradationReason: string | undefined
 
+        const qdrantTimeoutMs = getQdrantTimeoutMs()
+
         const [vectorResponse, textResponse] = await Promise.all([
           fetchVectorSearchWithTimeout(
             q,
             VECTOR_SEARCH_CANDIDATE_LIMIT,
             0.25,
-            getQdrantTimeoutMs(),
+            qdrantTimeoutMs,
             req.authUser
           ).catch((error) => {
             degraded = true
@@ -1204,7 +1206,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
             q,
             VECTOR_SEARCH_CANDIDATE_LIMIT,
             0.25,
-            getQdrantTimeoutMs(),
+            qdrantTimeoutMs,
             req.authUser
           ).catch((error) => {
             logger.warn({ err: error }, 'Text vector search failed')
@@ -1218,7 +1220,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
         if (vectorResponse.timedOut || textResponse.timedOut) {
           degraded = true
           degradationReason =
-            '向量搜索超时（>' + getQdrantTimeoutMs() / 1000 + 's），已自动降级为关键词搜索模式'
+            '向量搜索超时（>' + qdrantTimeoutMs / 1000 + 's），已自动降级为关键词搜索模式'
         }
 
         hybridResponse = buildHybridResponse(

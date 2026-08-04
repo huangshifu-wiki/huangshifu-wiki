@@ -608,7 +608,6 @@ const AdminSettings = () => {
     } catch (error) {
       console.error('Save email verification config failed:', error)
       show(error instanceof Error ? error.message : '站点设置保存失败', { variant: 'error' })
-    } finally {
     }
   }
 
@@ -631,7 +630,6 @@ const AdminSettings = () => {
     } catch (error) {
       console.error('Save registration config failed:', error)
       show(error instanceof Error ? error.message : '注册设置保存失败', { variant: 'error' })
-    } finally {
     }
   }
 
@@ -655,7 +653,6 @@ const AdminSettings = () => {
     } catch (error) {
       console.error('Save search hot keywords config failed:', error)
       show(error instanceof Error ? error.message : '搜索热词设置保存失败', { variant: 'error' })
-    } finally {
     }
   }
 
@@ -1197,12 +1194,13 @@ const AdminSettings = () => {
           onRetry={() => void loadRuntimeConfig()}
         >
           {runtimeForm &&
-            CONFIG_GROUPS.map((group) => (
-              <AdminSection key={group.id} id={group.id} icon={group.icon} title={group.title}>
-                <div className="space-y-4">
-                  {group.fields
-                    .filter((field) => field.type === 'boolean')
-                    .map((field) => (
+            CONFIG_GROUPS.map((group) => {
+              const booleanFields = group.fields.filter((field) => field.type === 'boolean')
+              const numberFields = group.fields.filter((field) => field.type === 'number')
+              return (
+                <AdminSection key={group.id} id={group.id} icon={group.icon} title={group.title}>
+                  <div className="space-y-4">
+                    {booleanFields.map((field) => (
                       <div key={field.key} className="flex items-center justify-between gap-4">
                         <div className="space-y-1">
                           <p className="text-sm font-medium text-text-primary">{field.label}</p>
@@ -1220,11 +1218,9 @@ const AdminSettings = () => {
                         />
                       </div>
                     ))}
-                  {group.fields.some((field) => field.type === 'number') && (
-                    <div className="grid gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                      {group.fields
-                        .filter((field) => field.type === 'number')
-                        .map((field) => (
+                    {numberFields.length > 0 && (
+                      <div className="grid gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                        {numberFields.map((field) => (
                           <Field
                             key={field.key}
                             label={field.label}
@@ -1251,11 +1247,12 @@ const AdminSettings = () => {
                             />
                           </Field>
                         ))}
-                    </div>
-                  )}
-                </div>
-              </AdminSection>
-            ))}
+                      </div>
+                    )}
+                  </div>
+                </AdminSection>
+              )
+            })}
         </SectionStatus>
       </section>
     </div>
