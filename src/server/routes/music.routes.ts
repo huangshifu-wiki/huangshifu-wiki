@@ -1016,9 +1016,20 @@ router.delete(
         return
       }
 
-      await prisma.musicTrack.update({
-        where: { docId },
-        data: softDeleteData(req.authUser!.uid),
+      await prisma.$transaction(async (tx) => {
+        await tx.musicTrack.update({
+          where: { docId },
+          data: softDeleteData(req.authUser!.uid),
+        })
+        await tx.moderationLog.create({
+          data: {
+            targetType: 'music',
+            targetId: docId,
+            action: 'delete',
+            operatorUid: req.authUser!.uid,
+            note: null,
+          },
+        })
       })
 
       res.json({ success: true })

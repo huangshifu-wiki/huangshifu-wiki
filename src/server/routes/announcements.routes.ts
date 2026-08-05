@@ -120,9 +120,29 @@ router.delete(
   '/:id',
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    await prisma.announcement.update({
+    const announcement = await prisma.announcement.findUnique({
       where: { id: req.params.id },
-      data: softDeleteData(req.authUser!.uid),
+      select: { deletedAt: true },
+    })
+    if (!announcement || announcement.deletedAt) {
+      res.status(404).json({ error: '公告不存在' })
+      return
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.announcement.update({
+        where: { id: req.params.id },
+        data: softDeleteData(req.authUser!.uid),
+      })
+      await tx.moderationLog.create({
+        data: {
+          targetType: 'announcement',
+          targetId: req.params.id,
+          action: 'delete',
+          operatorUid: req.authUser!.uid,
+          note: null,
+        },
+      })
     })
 
     clearAnnouncementCache()

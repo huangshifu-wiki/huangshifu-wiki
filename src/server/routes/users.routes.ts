@@ -1082,10 +1082,22 @@ const updateUserRoleHandler = asyncHandler(async (req: AuthenticatedRequest, res
       }
     }
 
-    const user = await prisma.user.update({
-      where: { uid: targetUid },
-      data: { role },
-      select: ADMIN_USER_SELECT,
+    const user = await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { uid: targetUid },
+        data: { role },
+        select: ADMIN_USER_SELECT,
+      })
+      await tx.moderationLog.create({
+        data: {
+          targetType: 'user',
+          targetId: targetUid,
+          action: 'update',
+          operatorUid: req.authUser!.uid,
+          note: `角色变更: ${targetUser.role} -> ${role}`,
+        },
+      })
+      return updated
     })
     clearUserCache(targetUid)
 

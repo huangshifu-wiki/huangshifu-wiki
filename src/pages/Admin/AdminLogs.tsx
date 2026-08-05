@@ -21,12 +21,17 @@ function getModerationActionLabel(action: string | undefined) {
   if (action === 'submit') return '提交'
   if (action === 'rollback') return '回滚'
   if (action === 'delete') return '删除'
+  if (action === 'permanentDelete') return '彻底删除'
+  if (action === 'restore') return '恢复'
+  if (action === 'update') return '更新'
   return action || '-'
 }
 
 function getModerationActionClassName(action: string | undefined) {
-  if (action === 'approve') return 'theme-status-success'
-  if (action === 'reject' || action === 'delete') return 'theme-status-error'
+  if (action === 'approve' || action === 'restore') return 'theme-status-success'
+  if (action === 'reject' || action === 'delete' || action === 'permanentDelete') {
+    return 'theme-status-error'
+  }
   return 'bg-surface-alt text-text-muted'
 }
 

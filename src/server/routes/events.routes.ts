@@ -441,9 +441,20 @@ router.delete(
       return
     }
 
-    await prisma.event.update({
-      where: { id: event.id },
-      data: softDeleteData(req.authUser!.uid),
+    await prisma.$transaction(async (tx) => {
+      await tx.event.update({
+        where: { id: event.id },
+        data: softDeleteData(req.authUser!.uid),
+      })
+      await tx.moderationLog.create({
+        data: {
+          targetType: 'event',
+          targetId: event.id,
+          action: 'delete',
+          operatorUid: req.authUser!.uid,
+          note: null,
+        },
+      })
     })
 
     res.json({ success: true })
@@ -456,20 +467,36 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const current = await prisma.event.findUnique({
       where: { id: req.params.id },
-      select: { id: true },
+      select: { id: true, deletedAt: true },
     })
     if (!current) {
       res.status(404).json({ error: '活动不存在' })
       return
     }
+    if (!current.deletedAt) {
+      res.status(400).json({ error: '该记录未被删除' })
+      return
+    }
 
-    const event = await prisma.event.update({
-      where: { id: req.params.id },
-      data: {
-        ...restoreDeleteData,
-        updatedByUid: req.authUser!.uid,
-      },
-      include: eventInclude,
+    const event = await prisma.$transaction(async (tx) => {
+      const restored = await tx.event.update({
+        where: { id: req.params.id },
+        data: {
+          ...restoreDeleteData,
+          updatedByUid: req.authUser!.uid,
+        },
+        include: eventInclude,
+      })
+      await tx.moderationLog.create({
+        data: {
+          targetType: 'event',
+          targetId: req.params.id,
+          action: 'restore',
+          operatorUid: req.authUser!.uid,
+          note: null,
+        },
+      })
+      return restored
     })
 
     res.json({ event: await toEventResponse(event) })
@@ -479,7 +506,7 @@ router.post(
 router.delete(
   '/:id/permanent',
   requireAdmin,
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
     const event = await prisma.event.findUnique({
       where: { id: req.params.id },
       include: { posters: true },
@@ -489,7 +516,18 @@ router.delete(
       return
     }
 
-    await prisma.event.delete({ where: { id: event.id } })
+    await prisma.$transaction(async (tx) => {
+      await tx.event.delete({ where: { id: event.id } })
+      await tx.moderationLog.create({
+        data: {
+          targetType: 'event',
+          targetId: event.id,
+          action: 'permanentDelete',
+          operatorUid: req.authUser!.uid,
+          note: null,
+        },
+      })
+    })
     await cleanupRemovedAssetReferences([
       ...event.posters.map((poster) => ({ assetId: poster.assetId, url: poster.url })),
       { assetId: event.coverAssetId, url: event.coverUrl },

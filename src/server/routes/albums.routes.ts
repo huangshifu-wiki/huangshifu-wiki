@@ -562,9 +562,20 @@ router.delete('/:docId', requireAdmin, async (req: AuthenticatedRequest, res) =>
       return
     }
 
-    await prisma.album.update({
-      where: { docId },
-      data: softDeleteData(req.authUser!.uid),
+    await prisma.$transaction(async (tx) => {
+      await tx.album.update({
+        where: { docId },
+        data: softDeleteData(req.authUser!.uid),
+      })
+      await tx.moderationLog.create({
+        data: {
+          targetType: 'album',
+          targetId: docId,
+          action: 'delete',
+          operatorUid: req.authUser!.uid,
+          note: null,
+        },
+      })
     })
 
     res.json({ success: true })

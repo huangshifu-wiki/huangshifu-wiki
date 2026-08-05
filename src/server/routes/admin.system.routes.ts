@@ -65,6 +65,8 @@ router.patch(
       const config = await rateLimitConfigService.updateConfig(req.body)
       applyRateLimitConfig(config)
 
+      await logConfigUpdate(req, 'rate-limit', configFieldNames(req.body))
+
       console.log(`[Admin/RateLimit] Config updated by super admin: ${req.authUser?.uid}`)
 
       res.json({
@@ -84,21 +86,28 @@ router.patch(
   }
 )
 
-router.post('/rate-limits/config/reset', requireAuth, requireSuperAdmin, async (_req, res) => {
-  try {
-    const config = await rateLimitConfigService.resetConfig()
-    applyRateLimitConfig(config)
+router.post(
+  '/rate-limits/config/reset',
+  requireAuth,
+  requireSuperAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const config = await rateLimitConfigService.resetConfig()
+      applyRateLimitConfig(config)
 
-    res.json({
-      success: true,
-      data: config,
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('[Admin/RateLimit] Error resetting config:', error)
-    res.status(500).json({ success: false, error: '重置请求限流配置失败' })
+      await logConfigUpdate(req, 'rate-limit', 'reset')
+
+      res.json({
+        success: true,
+        data: config,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      console.error('[Admin/RateLimit] Error resetting config:', error)
+      res.status(500).json({ success: false, error: '重置请求限流配置失败' })
+    }
   }
-})
+)
 
 // ============================================================================
 // ⚙️ 运行时行为配置 API（支持动态配置）
@@ -132,6 +141,8 @@ router.patch(
       const partial = normalizeRuntimeConfigUpdate(req.body)
       const config = await runtimeConfigService.updateConfig(partial)
 
+      await logConfigUpdate(req, 'runtime', configFieldNames(partial))
+
       console.log(`[Admin/RuntimeConfig] Config updated by super admin: ${req.authUser?.uid}`)
 
       res.json({
@@ -154,20 +165,27 @@ router.patch(
 /**
  * POST /api/admin/runtime-config/reset - 重置为默认配置
  */
-router.post('/runtime-config/reset', requireAuth, requireSuperAdmin, async (_req, res) => {
-  try {
-    const config = await runtimeConfigService.resetConfig()
+router.post(
+  '/runtime-config/reset',
+  requireAuth,
+  requireSuperAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const config = await runtimeConfigService.resetConfig()
 
-    res.json({
-      success: true,
-      data: config,
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('[Admin/RuntimeConfig] Error resetting config:', error)
-    res.status(500).json({ success: false, error: '重置运行时配置失败' })
+      await logConfigUpdate(req, 'runtime', 'reset')
+
+      res.json({
+        success: true,
+        data: config,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      console.error('[Admin/RuntimeConfig] Error resetting config:', error)
+      res.status(500).json({ success: false, error: '重置运行时配置失败' })
+    }
   }
-})
+)
 
 // ============================================================================
 // 🔐 服务凭证管理 API
@@ -216,6 +234,8 @@ router.patch(
       }
 
       const config = await secretsConfigService.updateSecrets(body)
+
+      await logConfigUpdate(req, 'secrets', configFieldNames(body))
 
       res.json({
         success: true,
@@ -356,6 +376,8 @@ router.put('/disk/config', requireAuth, requireAdmin, async (req: AuthenticatedR
     // 更新配置（会自动保存到数据库并生效）
     const updatedConfig = await diskMonitor.updateConfig(newConfig)
 
+    await logConfigUpdate(req, 'disk-monitor', configFieldNames(newConfig))
+
     console.log(`[Admin/Disk] 🔧 Config updated by admin: ${req.authUser?.uid}`, updatedConfig)
 
     res.json({
@@ -377,24 +399,31 @@ router.put('/disk/config', requireAuth, requireAdmin, async (req: AuthenticatedR
 /**
  * POST /api/admin/disk/config/reset - 重置为默认配置
  */
-router.post('/disk/config/reset', requireAuth, requireAdmin, async (_req, res) => {
-  try {
-    const defaultConfig = await diskMonitor.resetConfig()
+router.post(
+  '/disk/config/reset',
+  requireAuth,
+  requireAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const defaultConfig = await diskMonitor.resetConfig()
 
-    res.json({
-      success: true,
-      message: 'Configuration reset to defaults',
-      data: defaultConfig,
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('[Admin/Disk] Error resetting config:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Failed to reset configuration',
-    })
+      await logConfigUpdate(req, 'disk-monitor', 'reset')
+
+      res.json({
+        success: true,
+        message: 'Configuration reset to defaults',
+        data: defaultConfig,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      console.error('[Admin/Disk] Error resetting config:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to reset configuration',
+      })
+    }
   }
-})
+)
 
 /**
  * POST /api/admin/disk/check - 手动触发磁盘检查
@@ -586,4 +615,27 @@ export { registerAdminSystemRoutes }
 
 function registerAdminSystemRoutes(app: Router) {
   app.use('/api/admin', router)
+}
+
+// 记录配置类变更到操作日志（只记字段名，绝不记录凭证值）
+function configFieldNames(obj: object): string {
+  return JSON.stringify(Object.keys(obj))
+}
+
+async function logConfigUpdate(req: AuthenticatedRequest, targetId: string, note: string) {
+  // 配置服务的持久化封装在 service 内部，无法与日志同一事务；
+  // 审计写入失败降级为警告，不阻断已成功的配置变更。
+  try {
+    await prisma.moderationLog.create({
+      data: {
+        targetType: 'config',
+        targetId,
+        action: 'update',
+        operatorUid: req.authUser!.uid,
+        note,
+      },
+    })
+  } catch (error) {
+    console.warn(`[Admin/Config] Failed to write moderation log for ${targetId}:`, error)
+  }
 }

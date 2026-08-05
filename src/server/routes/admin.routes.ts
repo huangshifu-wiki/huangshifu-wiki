@@ -17,6 +17,7 @@ import {
   adminBatchMusicDisplaySchema,
 } from '../schemas'
 import type { AuthenticatedRequest } from '../types'
+import type { ModerationTargetType, Prisma } from '@prisma/client'
 import {
   prisma,
   toWikiResponse,
@@ -289,6 +290,45 @@ async function hasLatestPostSubmitLogForRepublishedEdit(targetId: string) {
   return latestSubmitLog?.note === '编辑后重新提交审核'
 }
 
+const MODERATION_TARGET_TYPES: Record<string, ModerationTargetType> = {
+  wiki: 'wiki',
+  posts: 'post',
+  galleries: 'gallery',
+  events: 'event',
+  music: 'music',
+  albums: 'album',
+  announcements: 'announcement',
+  sections: 'section',
+  'wiki-categories': 'wikiCategory',
+  'image-maps': 'imageMap',
+  users: 'user',
+}
+
+function getModerationTargetType(tab: string): ModerationTargetType {
+  const targetType = MODERATION_TARGET_TYPES[tab]
+  if (!targetType) {
+    throw new Error(`未知操作日志目标类型: ${tab}`)
+  }
+  return targetType
+}
+
+async function createModerationLog(
+  tx: Prisma.TransactionClient,
+  tab: string,
+  targetId: string,
+  operatorUid: string
+) {
+  await tx.moderationLog.create({
+    data: {
+      targetType: getModerationTargetType(tab),
+      targetId,
+      action: 'restore',
+      operatorUid,
+      note: null,
+    },
+  })
+}
+
 const backupsDir = path.join(__dirname, '..', '..', '..', 'backups')
 fs.mkdirSync(backupsDir, { recursive: true })
 
@@ -355,7 +395,7 @@ async function handleBackupDelete(req: AuthenticatedRequest, res: Response) {
   }
 }
 
-async function permanentlyDeleteWikiById(id: string) {
+async function permanentlyDeleteWikiById(id: string, operatorUid: string) {
   const page = await prisma.wikiPage.findUnique({
     where: { id },
     select: { slug: true },
@@ -370,6 +410,15 @@ async function permanentlyDeleteWikiById(id: string) {
       tx.textEmbeddingChunk.deleteMany({ where: { sourceType: 'wiki', sourceId: page.slug } }),
     ])
     await tx.wikiPage.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'wiki',
+        targetId: page.slug,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
   })
 
   void Promise.allSettled([
@@ -386,7 +435,7 @@ async function permanentlyDeleteWikiById(id: string) {
   return page.slug
 }
 
-async function permanentlyDeletePostById(id: string) {
+async function permanentlyDeletePostById(id: string, operatorUid: string) {
   const post = await prisma.post.findUnique({
     where: { id },
     select: { id: true, title: true },
@@ -401,6 +450,15 @@ async function permanentlyDeletePostById(id: string) {
       tx.textEmbeddingChunk.deleteMany({ where: { sourceType: 'post', sourceId: post.id } }),
     ])
     await tx.post.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'post',
+        targetId: post.id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
   })
 
   void Promise.allSettled([
@@ -417,7 +475,7 @@ async function permanentlyDeletePostById(id: string) {
   return true
 }
 
-async function permanentlyDeleteGalleryById(id: string) {
+async function permanentlyDeleteGalleryById(id: string, operatorUid: string) {
   const gallery = await prisma.gallery.findUnique({
     where: { id },
     include: { images: true },
@@ -427,7 +485,18 @@ async function permanentlyDeleteGalleryById(id: string) {
   const assetIds = [...new Set(gallery.images.map((image) => image.assetId).filter(isString))]
   const imagesWithoutAsset = gallery.images.filter((image) => !image.assetId)
 
-  await prisma.gallery.delete({ where: { id } })
+  await prisma.$transaction(async (tx) => {
+    await tx.gallery.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'gallery',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
   await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
   await Promise.all(imagesWithoutAsset.map((image) => cleanupUntrackedUploadImageByUrl(image.url)))
@@ -435,7 +504,7 @@ async function permanentlyDeleteGalleryById(id: string) {
   return true
 }
 
-async function permanentlyDeleteEventById(id: string) {
+async function permanentlyDeleteEventById(id: string, operatorUid: string) {
   const event = await prisma.event.findUnique({
     where: { id },
     include: { posters: true },
@@ -455,7 +524,18 @@ async function permanentlyDeleteEventById(id: string) {
     ...(event.coverAssetId ? [] : [event.coverUrl].filter(isString)),
   ]
 
-  await prisma.event.delete({ where: { id } })
+  await prisma.$transaction(async (tx) => {
+    await tx.event.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'event',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
   await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
   await Promise.all(imageUrlsWithoutAsset.map((url) => cleanupUntrackedUploadImageByUrl(url)))
@@ -573,7 +653,7 @@ async function notifyContentDeleted(options: {
   })
 }
 
-async function permanentlyDeleteMusicTrackByDocId(docId: string) {
+async function permanentlyDeleteMusicTrackByDocId(docId: string, operatorUid: string) {
   const song = await prisma.musicTrack.findUnique({
     where: { docId },
     include: { covers: true },
@@ -583,11 +663,20 @@ async function permanentlyDeleteMusicTrackByDocId(docId: string) {
   const assetIds = [...new Set(song.covers.map((cover) => cover.assetId).filter(isString))]
   const coversWithoutAsset = song.covers.filter((cover) => !cover.assetId)
 
-  await prisma.$transaction([
-    prisma.favorite.deleteMany({ where: { targetType: 'music', targetId: docId } }),
-    prisma.browsingHistory.deleteMany({ where: { targetType: 'music', targetId: docId } }),
-    prisma.musicTrack.delete({ where: { docId } }),
-  ])
+  await prisma.$transaction(async (tx) => {
+    await tx.favorite.deleteMany({ where: { targetType: 'music', targetId: docId } })
+    await tx.browsingHistory.deleteMany({ where: { targetType: 'music', targetId: docId } })
+    await tx.musicTrack.delete({ where: { docId } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'music',
+        targetId: docId,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
   await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
   await Promise.all(
@@ -597,7 +686,7 @@ async function permanentlyDeleteMusicTrackByDocId(docId: string) {
   return true
 }
 
-async function permanentlyDeleteAlbumByDocId(docId: string) {
+async function permanentlyDeleteAlbumByDocId(docId: string, operatorUid: string) {
   const album = await prisma.album.findUnique({
     where: { docId },
     include: { covers: true },
@@ -615,6 +704,15 @@ async function permanentlyDeleteAlbumByDocId(docId: string) {
 
     await tx.songAlbumRelation.deleteMany({ where: { albumDocId: docId } })
     await tx.album.delete({ where: { docId } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'album',
+        targetId: docId,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
   })
 
   await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
@@ -625,7 +723,7 @@ async function permanentlyDeleteAlbumByDocId(docId: string) {
   return true
 }
 
-async function permanentlyDeleteImageMapById(id: string) {
+async function permanentlyDeleteImageMapById(id: string, operatorUid: string) {
   const existing = await prisma.imageMap.findUnique({
     where: { id },
     select: { id: true },
@@ -633,7 +731,18 @@ async function permanentlyDeleteImageMapById(id: string) {
   if (!existing) return false
 
   await variantCleanup.cleanupByImageMapId(id, CleanupTrigger.ON_DELETE)
-  await prisma.imageMap.delete({ where: { id } })
+  await prisma.$transaction(async (tx) => {
+    await tx.imageMap.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'imageMap',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
   return true
 }
 
@@ -3294,11 +3403,18 @@ router.post(
           res.status(404).json({ error: '百科不存在' })
           return
         }
+        if (!page.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
 
-        await prisma.wikiPage.update({ where: { id }, data: restoreDeleteData })
+        await prisma.$transaction(async (tx) => {
+          await tx.wikiPage.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'wiki', page.slug, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab, { slug: page.slug })
         const recipient =
-          !page.deletedAt || page.lastEditorUid === req.authUser!.uid
+          page.lastEditorUid === req.authUser!.uid
             ? null
             : await prisma.user.findUnique({
                 where: { uid: page.lastEditorUid },
@@ -3313,7 +3429,7 @@ router.post(
           title: page.title,
           status: page.status,
           linkable: canOpenRestoredWikiNotification(page.status, recipient?.role),
-          wasDeleted: Boolean(page.deletedAt),
+          wasDeleted: true,
         })
         res.json({ success: true })
         return
@@ -3327,8 +3443,15 @@ router.post(
           res.status(404).json({ error: '帖子不存在' })
           return
         }
+        if (!post.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
 
-        await prisma.post.update({ where: { id }, data: restoreDeleteData })
+        await prisma.$transaction(async (tx) => {
+          await tx.post.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'posts', post.id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         await notifyContentRestored({
           recipientUid: post.authorUid,
@@ -3339,13 +3462,29 @@ router.post(
           title: post.title,
           status: post.status,
           linkable: true,
-          wasDeleted: Boolean(post.deletedAt),
+          wasDeleted: true,
         })
         res.json({ success: true })
         return
       }
       if (tab === 'galleries') {
-        await prisma.gallery.update({ where: { id }, data: restoreDeleteData })
+        const gallery = await prisma.gallery.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!gallery) {
+          res.status(404).json({ error: '图集不存在' })
+          return
+        }
+        if (!gallery.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.gallery.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'galleries', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
@@ -3353,53 +3492,156 @@ router.post(
       if (tab === 'events') {
         const event = await prisma.event.findUnique({
           where: { id },
-          select: { id: true },
+          select: { id: true, deletedAt: true },
         })
         if (!event) {
           res.status(404).json({ error: '活动不存在' })
           return
         }
+        if (!event.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
 
-        await prisma.event.update({
-          where: { id: event.id },
-          data: { ...restoreDeleteData, updatedByUid: req.authUser!.uid },
+        await prisma.$transaction(async (tx) => {
+          await tx.event.update({
+            where: { id: event.id },
+            data: { ...restoreDeleteData, updatedByUid: req.authUser!.uid },
+          })
+          await createModerationLog(tx, 'events', event.id, req.authUser!.uid)
         })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'music') {
-        await prisma.musicTrack.update({ where: { docId: id }, data: restoreDeleteData })
+        const song = await prisma.musicTrack.findUnique({
+          where: { docId: id },
+          select: { deletedAt: true },
+        })
+        if (!song) {
+          res.status(404).json({ error: '歌曲不存在' })
+          return
+        }
+        if (!song.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.musicTrack.update({ where: { docId: id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'music', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'albums') {
-        await prisma.album.update({ where: { docId: id }, data: restoreDeleteData })
+        const album = await prisma.album.findUnique({
+          where: { docId: id },
+          select: { deletedAt: true },
+        })
+        if (!album) {
+          res.status(404).json({ error: '专辑不存在' })
+          return
+        }
+        if (!album.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.album.update({ where: { docId: id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'albums', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'announcements') {
-        await prisma.announcement.update({ where: { id }, data: restoreDeleteData })
+        const announcement = await prisma.announcement.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!announcement) {
+          res.status(404).json({ error: '公告不存在' })
+          return
+        }
+        if (!announcement.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.announcement.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'announcements', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'sections') {
-        await prisma.section.update({ where: { id }, data: restoreDeleteData })
+        const section = await prisma.section.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!section) {
+          res.status(404).json({ error: '版块不存在' })
+          return
+        }
+        if (!section.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.section.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'sections', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'wiki-categories') {
-        await prisma.wikiCategory.update({ where: { id }, data: restoreDeleteData })
+        const category = await prisma.wikiCategory.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!category) {
+          res.status(404).json({ error: '分类不存在' })
+          return
+        }
+        if (!category.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.wikiCategory.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'wiki-categories', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'image-maps') {
-        await prisma.imageMap.update({ where: { id }, data: restoreDeleteData })
+        const imageMap = await prisma.imageMap.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!imageMap) {
+          res.status(404).json({ error: '图片映射不存在' })
+          return
+        }
+        if (!imageMap.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.imageMap.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'image-maps', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
@@ -3407,17 +3649,25 @@ router.post(
       if (tab === 'users') {
         const targetUser = await prisma.user.findUnique({
           where: { uid: id },
-          select: { uid: true, role: true },
+          select: { uid: true, role: true, deletedAt: true },
         })
         if (!targetUser) {
           res.status(404).json({ error: '用户不存在' })
+          return
+        }
+        if (!targetUser.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
           return
         }
         if (!canManageTargetUserRole(req.authUser?.role, targetUser.role)) {
           res.status(403).json({ error: '无权恢复该用户' })
           return
         }
-        await prisma.user.update({ where: { uid: id }, data: restoreDeleteData })
+
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({ where: { uid: id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'users', id, req.authUser!.uid)
+        })
         clearUserCache(id)
         res.json({ success: true })
         return
@@ -3441,7 +3691,7 @@ router.delete(
       const id = req.params.id
 
       if (tab === 'wiki') {
-        const deletedSlug = await permanentlyDeleteWikiById(id)
+        const deletedSlug = await permanentlyDeleteWikiById(id, req.authUser!.uid)
         if (!deletedSlug) {
           res.status(404).json({ error: '记录不存在' })
           return
@@ -3451,7 +3701,7 @@ router.delete(
         return
       }
       if (tab === 'posts') {
-        const deleted = await permanentlyDeletePostById(id)
+        const deleted = await permanentlyDeletePostById(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '记录不存在' })
           return
@@ -3461,7 +3711,7 @@ router.delete(
         return
       }
       if (tab === 'galleries') {
-        const deleted = await permanentlyDeleteGalleryById(id)
+        const deleted = await permanentlyDeleteGalleryById(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '图集不存在' })
           return
@@ -3471,7 +3721,7 @@ router.delete(
         return
       }
       if (tab === 'events') {
-        const deleted = await permanentlyDeleteEventById(id)
+        const deleted = await permanentlyDeleteEventById(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '活动不存在' })
           return
@@ -3481,7 +3731,7 @@ router.delete(
         return
       }
       if (tab === 'music') {
-        const deleted = await permanentlyDeleteMusicTrackByDocId(id)
+        const deleted = await permanentlyDeleteMusicTrackByDocId(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '歌曲不存在' })
           return
@@ -3491,7 +3741,7 @@ router.delete(
         return
       }
       if (tab === 'albums') {
-        const deleted = await permanentlyDeleteAlbumByDocId(id)
+        const deleted = await permanentlyDeleteAlbumByDocId(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '专辑不存在' })
           return
@@ -3501,13 +3751,35 @@ router.delete(
         return
       }
       if (tab === 'announcements') {
-        await prisma.announcement.delete({ where: { id } })
+        await prisma.$transaction(async (tx) => {
+          await tx.announcement.delete({ where: { id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'announcement',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'sections') {
-        await prisma.section.delete({ where: { id } })
+        await prisma.$transaction(async (tx) => {
+          await tx.section.delete({ where: { id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'section',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
@@ -3519,13 +3791,24 @@ router.delete(
           return
         }
 
-        await prisma.wikiCategory.delete({ where: { id } })
+        await prisma.$transaction(async (tx) => {
+          await tx.wikiCategory.delete({ where: { id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'wikiCategory',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'image-maps') {
-        const deleted = await permanentlyDeleteImageMapById(id)
+        const deleted = await permanentlyDeleteImageMapById(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '图片映射不存在' })
           return
@@ -3551,7 +3834,18 @@ router.delete(
           res.status(403).json({ error: '无权彻底删除该用户' })
           return
         }
-        await prisma.user.delete({ where: { uid: id } })
+        await prisma.$transaction(async (tx) => {
+          await tx.user.delete({ where: { uid: id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'user',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
         clearUserCache(id)
         res.json({ success: true })
         return

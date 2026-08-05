@@ -36,6 +36,15 @@ enum ModerationTargetType {
   post
   gallery
   comment
+  music
+  album
+  event
+  announcement
+  section
+  imageMap
+  wikiCategory
+  config
+  user
 }
 
 enum ModerationAction {
@@ -44,6 +53,9 @@ enum ModerationAction {
   reject
   rollback
   delete
+  restore
+  permanentDelete
+  update
 }
 
 enum FavoriteTargetType {
