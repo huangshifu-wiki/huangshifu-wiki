@@ -1,6 +1,6 @@
 .siteNav {
   position: fixed;
-  top: 0;
+  top: var(--announcement-bar-offset, 0px);
   left: 0;
   right: 0;
   z-index: 1000;
