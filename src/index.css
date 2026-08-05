@@ -708,6 +708,22 @@ a.mention-highlight:hover {
   animation: spin-slow 8s linear infinite;
 }
 
+.loading-spinner {
+  display: inline-block;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--color-theme-accent) 25%, transparent);
+  border-top-color: var(--color-theme-accent);
+  animation: loading-spinner-spin 0.9s linear infinite;
+}
+
+@keyframes loading-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 12px;

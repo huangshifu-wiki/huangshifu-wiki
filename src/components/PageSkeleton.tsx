@@ -119,10 +119,7 @@ export const PageSkeleton: React.FC<PageSkeletonProps> = ({ variant = 'default' 
       aria-label="加载中"
     >
       <div className="text-center">
-        <div
-          className="inline-block w-12 h-12 border-4 border-border border-t-[var(--color-theme-accent)] rounded-full animate-spin mb-4"
-          aria-hidden="true"
-        />
+        <div className="loading-spinner mb-4" aria-hidden="true" />
         <p className="text-sm text-text-muted">加载中...</p>
       </div>
     </div>
