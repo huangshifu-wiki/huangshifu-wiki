@@ -430,7 +430,7 @@ CI 使用 Node 22。
 - 全局请求超时：30 秒
 - Service Worker 只缓存基础壳：`/`、`/index.html`、`/manifest.json`
 - Service Worker 缓存名在 `public/sw.js`，改静态资源策略时要同步检查版本
-- 生产静态资源会设置长期缓存
+- 生产仅 `dist/assets/` 哈希产物设 1 年 immutable 缓存；HTML、`/uploads` 及 public 无哈希文件均 `no-cache` 重新验证
 - 字体与部分资源会设置跨域头
 
 ## 17. 不要提交的内容

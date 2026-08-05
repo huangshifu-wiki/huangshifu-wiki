@@ -192,6 +192,54 @@
       </p>
     </footer>
     <script type="module" src="/src/main.tsx"></script>
-    <script src="/static-fallback.js"></script>
+    <!--
+      内联而非独立文件：脚本必须与 HTML 同版本传输，否则旧缓存文件会导致
+      新版 splash 无法移除（部署后界面被永久遮挡）。
+    -->
+    <script>
+      ;(function () {
+        var shown = false
+        var staticFooter = document.getElementById('static-footer')
+        var bootSplash = document.getElementById('boot-splash')
+        var desktopMedia = window.matchMedia('(min-width: 768px)')
+
+        function removeNode(node) {
+          if (node && node.parentNode) {
+            node.parentNode.removeChild(node)
+          }
+        }
+
+        // React 挂载后淡出移除 splash；超时兜底直接移除，避免 JS 失败时动画永远转圈
+        function hideBootSplash(withFade) {
+          if (!bootSplash) return
+          if (withFade) {
+            bootSplash.classList.add('boot-splash--hide')
+            setTimeout(function () {
+              removeNode(bootSplash)
+            }, 300)
+          } else {
+            removeNode(bootSplash)
+          }
+        }
+
+        var timer = setTimeout(function () {
+          // 兜底：超时后不允许 splash 永久遮挡界面
+          hideBootSplash(false)
+          if (!window.__REACT_MOUNTED__ && staticFooter && !shown && desktopMedia.matches) {
+            shown = true
+            staticFooter.style.display = 'block'
+          }
+        }, 8000)
+
+        window.hideStaticFallback = function () {
+          clearTimeout(timer)
+          window.__REACT_MOUNTED__ = true
+          hideBootSplash(true)
+          if (staticFooter) {
+            staticFooter.style.display = 'none'
+          }
+        }
+      })()
+    </script>
   </body>
 </html>

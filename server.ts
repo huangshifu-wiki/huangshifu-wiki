@@ -95,6 +95,10 @@ const DEFAULT_PORT = Number(process.env.PORT) || 3003
 const DEFAULT_HMR_PORT = Number(process.env.VITE_HMR_PORT) || 24678
 const CORS_ORIGIN = process.env.CORS_ORIGIN || ''
 
+// 静态缓存策略：哈希产物内容不变可长期缓存；HTML、上传文件及 public 无哈希文件必须重新验证
+const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable'
+const CACHE_CONTROL_REVALIDATE = 'no-cache'
+
 function parseCorsOrigins(envValue: string): string[] {
   return envValue
     .split(',')
@@ -264,10 +268,14 @@ app.use(
 // 生产环境静态资源服务 - 必须在 compression 之后
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(process.cwd(), 'dist')
+
+  // dist/assets/ 下均为 Vite 哈希产物（见 vite.config.ts 输出配置）；public/ 原样拷贝在根目录，无 hash
+  function isHashedBuildAsset(filePath: string): boolean {
+    return filePath.includes(`${path.sep}assets${path.sep}`)
+  }
+
   const staticMiddleware = express.static(distPath, {
     index: false,
-    maxAge: '1y', // 静态资源缓存1年
-    immutable: true, // 文件名带hash，内容不变则永不失效
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.js')) {
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
@@ -280,6 +288,11 @@ if (process.env.NODE_ENV === 'production') {
         res.setHeader('Access-Control-Allow-Origin', '*')
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
       }
+      // 哈希产物可长期缓存；无哈希文件必须重新验证，否则更新后客户端长期命中旧文件
+      res.setHeader(
+        'Cache-Control',
+        isHashedBuildAsset(filePath) ? CACHE_CONTROL_IMMUTABLE : CACHE_CONTROL_REVALIDATE
+      )
     },
   })
 
@@ -312,7 +325,15 @@ app.use(csrfMiddleware)
 app.use(requestLoggerMiddleware)
 
 // 静态文件服务 - 必须在路由注册之前
-app.use('/uploads', express.static(uploadsDir))
+app.use(
+  '/uploads',
+  express.static(uploadsDir, {
+    // 上传文件可能被覆盖、删除或重建变体，必须重新验证而非长期缓存
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', CACHE_CONTROL_REVALIDATE)
+    },
+  })
+)
 app.use('/uploads', (_req, res) => {
   res.status(404).end()
 })
@@ -443,6 +464,7 @@ async function startServer() {
           authUid: req.authUser?.uid ?? null,
         })
         html = await vite.transformIndexHtml(req.originalUrl, html)
+        res.setHeader('Cache-Control', CACHE_CONTROL_REVALIDATE)
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.status(200).send(html)
       } catch (error) {
@@ -464,6 +486,8 @@ async function startServer() {
           authUid: req.authUser?.uid ?? null,
           nonce: res.locals.nonce as string | undefined,
         })
+        // HTML 必须重新验证，避免浏览器/CDN 缓存旧壳导致拿不到新资源引用
+        res.setHeader('Cache-Control', CACHE_CONTROL_REVALIDATE)
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.send(html)
       })
