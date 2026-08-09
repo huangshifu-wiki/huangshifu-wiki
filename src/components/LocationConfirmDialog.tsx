@@ -2,6 +2,7 @@ import React from 'react'
 import { createPortal } from 'react-dom'
 import { MapPin, Check, X, Loader2 } from '@/src/components/icons'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import { isBackdropClick } from '../utils/modal'
 
 interface RegionSuggestion {
   code: string
@@ -35,11 +36,13 @@ export const LocationConfirmDialog = ({
 
   return createPortal(
     <div
-      className="floating-overlay fixed inset-0 z-[1200] flex items-center justify-center"
+      className="floating-overlay fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--ui-overlay-bg)]"
       data-state={presence.state}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) onSkip()
+      }}
     >
-      <div className="absolute inset-0 bg-[var(--ui-overlay-bg)]" onClick={onSkip} />
       <div className="floating-panel relative w-[90vw] max-w-md overflow-hidden">
         <div className="p-5">
           <div className="flex items-center gap-3 mb-4">

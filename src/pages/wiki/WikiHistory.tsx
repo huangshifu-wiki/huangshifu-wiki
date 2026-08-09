@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toast'
 import { apiGet, apiPost } from '../../lib/apiClient'
 import { formatDate } from '../../lib/dateUtils'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import { isBackdropClick } from '../../utils/modal'
 import WikiMarkdown from './WikiMarkdown'
 import { SmartBackLink } from '../../components/SmartBackLink'
 
@@ -145,6 +146,9 @@ const WikiHistory = () => {
             className="floating-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--ui-overlay-bg)]"
             data-state={previewPresence.state}
             aria-hidden={!selectedRevision}
+            onClick={(event) => {
+              if (isBackdropClick(event)) setSelectedRevision(null)
+            }}
           >
             <div className="floating-panel w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
               <div className="p-8 border-b border-border flex justify-between items-center">

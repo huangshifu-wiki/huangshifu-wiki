@@ -4,6 +4,7 @@ import { X } from '@/src/components/icons'
 import { useI18n } from '../../lib/i18n'
 import { AuthForm } from '../AuthForm'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import { isBackdropClick } from '../../utils/modal'
 import type { AuthMode } from './types'
 import { IconButton } from '@/src/components/ui'
 
@@ -65,6 +66,9 @@ export const AuthModal = ({
       aria-modal="true"
       aria-label={t('auth.dialogLabel')}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) onClose()
+      }}
     >
       <div className="floating-panel w-full max-w-md p-6" ref={modalRef} onKeyDown={handleKeyDown}>
         <div className="flex items-center justify-between mb-5">

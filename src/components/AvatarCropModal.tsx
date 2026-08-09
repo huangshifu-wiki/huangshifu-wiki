@@ -4,6 +4,7 @@ import { X, Upload, Loader2 } from '@/src/components/icons'
 
 import { uploadAvatar, type UploadImageResult } from '../services/imageService'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import { isBackdropClick } from '../utils/modal'
 
 interface AvatarCropModalProps {
   open: boolean
@@ -142,6 +143,9 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
       className="floating-overlay fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] p-4 flex items-center justify-center"
       data-state={presence.state}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) handleClose()
+      }}
     >
       <div className="floating-panel w-full max-w-md flex flex-col overflow-hidden">
         <header className="px-5 py-4 border-b border-border flex items-center justify-between">

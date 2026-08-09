@@ -7,6 +7,7 @@ import { apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { getMusicPlatformLabel } from '../lib/musicPlatformUrls'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import { isBackdropClick } from '../utils/modal'
 import {
   BookEditorSection,
   BookFormField,
@@ -167,6 +168,9 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
       className="floating-overlay fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] p-4 flex items-center justify-center"
       data-state={presence.state}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) onClose()
+      }}
     >
       <div className="floating-panel flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden">
         <header className="flex items-center justify-between border-b border-[var(--book-ink-line)] px-5 py-4 md:px-6">

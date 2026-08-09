@@ -6,6 +6,7 @@ import { apiGet } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { getMusicPlatformLabel } from '../lib/musicPlatformUrls'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import { isBackdropClick } from '../utils/modal'
 import type { Platform } from '../types/common'
 
 type MatchSuggestion = {
@@ -120,6 +121,9 @@ export const MatchSuggestionModal = ({
       className="floating-overlay fixed inset-0 z-[130] bg-[var(--ui-overlay-bg)] p-4 flex items-center justify-center"
       data-state={presence.state}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) onClose()
+      }}
     >
       <div className="floating-panel w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
         <header className="px-5 py-4 border-b border-[var(--book-ink-line)] flex items-center justify-between">

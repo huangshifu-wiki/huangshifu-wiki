@@ -16,6 +16,7 @@ import { useToast } from './Toast'
 import { uploadImageWithStrategy, type UploadImageResult } from '../services/imageService'
 import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/uploadLimits'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import { isBackdropClick } from '../utils/modal'
 
 type CoverItem = {
   id: string
@@ -287,6 +288,9 @@ export const CoverManager = ({
       className="floating-overlay fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] p-4 flex items-center justify-center"
       data-state={presence.state}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) onClose?.()
+      }}
     >
       <div className="floating-panel w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <header className="px-5 py-4 border-b border-[var(--book-ink-line)] flex items-center justify-between">

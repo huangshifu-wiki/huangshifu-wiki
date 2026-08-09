@@ -28,6 +28,7 @@ import { clsx } from 'clsx'
 import { SmartImage } from '../../components/SmartImage'
 import { clearImagePreferenceCache } from '../../services/imageService'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import { isBackdropClick } from '../../utils/modal'
 import type {
   MediaHealthBlockReason,
   MediaHealthCleanupApiResponse,
@@ -707,6 +708,9 @@ const AdminImages: React.FC = () => {
           className="floating-overlay fixed inset-0 bg-[var(--ui-overlay-bg)] flex items-center justify-center z-50 p-4"
           data-state={editModalPresence.state}
           aria-hidden={!editingImage}
+          onClick={(event) => {
+            if (isBackdropClick(event)) setEditingImage(null)
+          }}
         >
           <div className="floating-panel p-6 max-w-2xl w-full">
             <div className="flex items-center justify-between mb-4">
@@ -829,6 +833,9 @@ const AdminImages: React.FC = () => {
           className="floating-overlay fixed inset-0 bg-[var(--ui-overlay-bg)] flex items-center justify-center z-50 p-4"
           data-state={preferenceModalPresence.state}
           aria-hidden={!showPreferenceModal}
+          onClick={(event) => {
+            if (isBackdropClick(event)) setShowPreferenceModal(false)
+          }}
         >
           <div className="floating-panel p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-4">
@@ -953,6 +960,9 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) =
       className="floating-overlay fixed inset-0 bg-[var(--ui-overlay-bg)] flex items-center justify-center z-50 p-4"
       data-state={presence.state}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) onClose()
+      }}
     >
       <div className="floating-panel p-6 max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between mb-4">

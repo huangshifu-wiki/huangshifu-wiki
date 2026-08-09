@@ -15,6 +15,20 @@ describe('Modal 兼容层', () => {
     expect(onConfirm).toHaveBeenCalledOnce()
     expect(onClose).not.toHaveBeenCalled()
   })
+  it('ConfirmModal 点击背景关闭', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(
+      <ConfirmModal open onClose={onClose} onConfirm={vi.fn()} title="删除" message="不可恢复" />
+    )
+
+    const overlay = Array.from(document.querySelectorAll<HTMLElement>('[data-state="open"]')).find(
+      (element) => element.getAttribute('role') !== 'alertdialog'
+    )
+    expect(overlay).toBeInTheDocument()
+    await user.click(overlay as HTMLElement)
+    expect(onClose).toHaveBeenCalledOnce()
+  })
 
   it('ConfirmModal 传 cancelText null 时只渲染确认按钮', async () => {
     const user = userEvent.setup()

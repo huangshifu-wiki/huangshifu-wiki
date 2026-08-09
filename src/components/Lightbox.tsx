@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { ZoomIn, ZoomOut, Maximize, ChevronLeft, ChevronRight, X } from '@/src/components/icons'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import { getFitScale as getFitScaleUtil, computeNextScale } from '../utils/lightbox'
+import { isBackdropClick } from '../utils/modal'
 
 interface LightboxImage {
   id: string
@@ -349,6 +350,9 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
       aria-modal="true"
       aria-label={`图片查看器 ${activeIndex + 1} / ${images.length}`}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) close()
+      }}
     >
       {/* Close button */}
       <button
@@ -389,9 +393,6 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
           </button>
         </>
       )}
-
-      {/* Backdrop click to close */}
-      <div className="absolute inset-0 z-0" onClick={close} role="presentation" />
 
       {/* Image container */}
       <div className="relative z-10 flex items-center justify-center pointer-events-none shrink-0">

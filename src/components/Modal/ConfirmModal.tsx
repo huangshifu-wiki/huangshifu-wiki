@@ -1,5 +1,5 @@
 import React, { useRef } from 'react'
-import { AlertDialog, AlertDialogCancel, AlertDialogContent, Button } from '@/src/components/ui'
+import { Button, Dialog, DialogClose, DialogContent } from '@/src/components/ui'
 
 interface ConfirmModalProps {
   open: boolean
@@ -29,20 +29,26 @@ export const ConfirmModal = ({
   children,
 }: ConfirmModalProps) => {
   const contentRef = useRef<HTMLDivElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
 
   return (
-    <AlertDialog
+    <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen && !loading) onClose()
       }}
     >
-      <AlertDialogContent
+      <DialogContent
         ref={contentRef}
+        role="alertdialog"
         title={title}
         description={message}
-        variant={variant}
+        hideClose={cancelText === null}
+        maxWidthClassName="max-w-md overflow-hidden"
+        onPointerDownOutside={(event) => {
+          if (loading) event.preventDefault()
+        }}
         onEscapeKeyDown={(event) => {
           if (loading) event.preventDefault()
         }}
@@ -57,34 +63,46 @@ export const ConfirmModal = ({
             }
             return
           }
-          // Radix AlertDialog 无条件 preventDefault 并聚焦 cancelRef；
-          // 隐藏取消按钮时 cancelRef 为空，需手动聚焦确认按钮
-          if (cancelText === null) {
+          if (cancelText !== null) {
             event.preventDefault()
-            confirmButtonRef.current?.focus({ preventScroll: true })
+            cancelButtonRef.current?.focus({ preventScroll: true })
+            return
           }
+          event.preventDefault()
+          confirmButtonRef.current?.focus({ preventScroll: true })
         }}
       >
-        {children && <div className="mt-4">{children}</div>}
-        <div className="mt-6 flex justify-end gap-3 pb-safe">
-          {cancelText !== null && (
-            <AlertDialogCancel asChild>
-              <Button variant="secondary" disabled={loading}>
-                {cancelText}
-              </Button>
-            </AlertDialogCancel>
-          )}
-          <Button
-            ref={confirmButtonRef}
-            variant={variant === 'info' ? 'primary' : variant}
-            loading={loading}
-            loadingText="处理中..."
-            onClick={onConfirm}
-          >
-            {confirmText}
-          </Button>
+        <div
+          className={
+            variant === 'danger'
+              ? 'h-1 bg-[var(--color-error)]'
+              : variant === 'warning'
+                ? 'h-1 bg-[var(--color-warning)]'
+                : 'h-1 bg-[var(--color-theme-accent)]'
+          }
+        />
+        <div className="p-6">
+          {children && <div className="mt-4">{children}</div>}
+          <div className="mt-6 flex justify-end gap-3 pb-safe">
+            {cancelText !== null && (
+              <DialogClose asChild>
+                <Button ref={cancelButtonRef} variant="secondary" disabled={loading}>
+                  {cancelText}
+                </Button>
+              </DialogClose>
+            )}
+            <Button
+              ref={confirmButtonRef}
+              variant={variant === 'info' ? 'primary' : variant}
+              loading={loading}
+              loadingText="处理中..."
+              onClick={onConfirm}
+            >
+              {confirmText}
+            </Button>
+          </div>
         </div>
-      </AlertDialogContent>
-    </AlertDialog>
+      </DialogContent>
+    </Dialog>
   )
 }

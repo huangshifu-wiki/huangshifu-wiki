@@ -4,6 +4,7 @@ import { X, MapPin, Search, Loader2 } from '@/src/components/icons'
 import { apiGet } from '../lib/apiClient'
 import { loadAmapJsApi } from '../lib/amapLoader'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import { isBackdropClick } from '../utils/modal'
 
 interface PickedLocation {
   lng: number
@@ -163,11 +164,13 @@ export const MapPickerModal = ({
 
   return createPortal(
     <div
-      className="floating-overlay fixed inset-0 z-[1200] flex items-center justify-center"
+      className="floating-overlay fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--ui-overlay-bg)]"
       data-state={presence.state}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) onClose()
+      }}
     >
-      <div className="absolute inset-0 bg-[var(--ui-overlay-bg)]" onClick={onClose} />
       <div className="floating-panel relative w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h2 className="text-base font-bold text-text-primary">选择地点</h2>

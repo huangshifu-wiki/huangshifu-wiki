@@ -11,6 +11,7 @@ import {
 import { apiGet } from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import { isBackdropClick } from '../../utils/modal'
 import type { WikiRelationType, WikiRelationRecord } from './types'
 import { RELATION_TYPE_LABELS } from './types'
 import RelationPreview from './RelationPreview'
@@ -556,9 +557,11 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
           className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay-bg)] p-4"
           data-state={editModalPresence.state}
           aria-hidden={!editingRelation}
-          onClick={handleCancelEdit}
+          onClick={(event) => {
+            if (isBackdropClick(event)) handleCancelEdit()
+          }}
         >
-          <div className="floating-panel w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="floating-panel w-full max-w-md p-6">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-text-primary">编辑关联</h3>
               <button

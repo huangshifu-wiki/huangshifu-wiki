@@ -17,6 +17,7 @@ import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'
 import { Button } from '@/src/components/ui'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import { isBackdropClick } from '../../utils/modal'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import type {
   AdminBackup,
@@ -501,12 +502,11 @@ const AdminBackups = () => {
           className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay-bg)]"
           data-state={dialogPresence.state}
           aria-hidden={!dialog}
-          onClick={closeDialog}
+          onClick={(event) => {
+            if (isBackdropClick(event)) closeDialog()
+          }}
         >
-          <div
-            className="floating-panel w-full max-w-md mx-4 p-6 space-y-5"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="floating-panel w-full max-w-md mx-4 p-6 space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-text-primary">
                 {visibleDialog === 'create' && '创建备份'}
