@@ -49,6 +49,7 @@ const hasSurfaceClass = (element: Element): boolean => {
 
 const resolveButtonSurfaceStyle = (element: Element): CSSStyleDeclaration | null | undefined => {
   if (
+    element.hasAttribute('data-press-feedback') ||
     element.hasAttribute('data-pressable') ||
     element.getAttribute('role') === 'switch' ||
     hasSurfaceClass(element)

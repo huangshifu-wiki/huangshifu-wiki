@@ -52,6 +52,7 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
       <div className="mobile-filter-tabs">
         <button
           onClick={() => onTabChange('music')}
+          data-press-feedback="inline"
           className={clsx(
             'relative cursor-pointer pb-2 text-[1.0625rem] tracking-[0.06em] transition-all',
             activeTab === 'music'
@@ -66,6 +67,7 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
         </button>
         <button
           onClick={() => onTabChange('albums')}
+          data-press-feedback="inline"
           className={clsx(
             'relative cursor-pointer pb-2 text-[1.0625rem] tracking-[0.06em] transition-all',
             activeTab === 'albums'
@@ -92,6 +94,7 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
                 <button
                   key={key}
                   onClick={() => onSortByChange(key)}
+                  data-press-feedback="inline"
                   className={clsx(
                     'cursor-pointer rounded px-1.5 py-0.5 transition-colors',
                     sortBy === key ? 'font-medium text-text-primary' : 'hover:text-text-secondary'
@@ -102,6 +105,7 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
               ))}
               <button
                 onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
+                data-press-feedback="ripple"
                 className="cursor-pointer p-0.5 transition-colors hover:text-brand-gold"
                 title={sortOrder === 'asc' ? t('music.sortOrder.asc') : t('music.sortOrder.desc')}
               >

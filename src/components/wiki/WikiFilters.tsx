@@ -38,6 +38,7 @@ const WikiFilters = ({
           <Link
             key={category}
             to={getCategoryUrl(category)}
+            data-press-feedback="inline"
             className={categoryFilterClassName(active)}
           >
             {category === 'all' ? '全部' : getCategoryLabel(category)}

@@ -62,6 +62,7 @@ const SongCard = React.memo(function SongCard({
     return (
       <Link
         to={`/music/${song.slug || song.docId}`}
+        data-press-feedback="state"
         className={clsx(
           'group flex cursor-pointer items-center gap-2 rounded px-3 py-2.5 sm:gap-3.5',
           'transition-all duration-300',
@@ -132,6 +133,8 @@ const SongCard = React.memo(function SongCard({
 
         <div className="pointer-events-auto flex flex-shrink-0 items-center gap-1.5">
           <button
+            type="button"
+            data-press-feedback="ripple"
             onClick={handleFavoriteClick}
             disabled={isFavoriting}
             className={clsx(
@@ -171,6 +174,7 @@ const SongCard = React.memo(function SongCard({
   return (
     <Link
       to={`/music/${song.slug || song.docId}`}
+      data-press-feedback="state"
       className={clsx(
         'group cursor-pointer overflow-hidden rounded-lg',
         'border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)]',
@@ -258,6 +262,8 @@ const SongCard = React.memo(function SongCard({
 
       <div className={clsx('flex items-center', isSmallGrid ? 'px-2.5 pb-2' : 'px-3 pb-2.5')}>
         <button
+          type="button"
+          data-press-feedback="ripple"
           onClick={handleFavoriteClick}
           disabled={isFavoriting}
           className={clsx(

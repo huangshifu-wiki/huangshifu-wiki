@@ -103,6 +103,116 @@ describe('pressFeedback', () => {
 
     expect(getRipple()).not.toBeNull()
   })
+  it('无背景和边框的真实大面积链接可显式使用状态层', () => {
+    const link = document.createElement('a')
+    link.href = '/gallery/1'
+    link.dataset.pressFeedback = 'state'
+    document.body.append(link)
+    vi.spyOn(link, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 240,
+      bottom: 120,
+      width: 240,
+      height: 120,
+      toJSON: () => ({}),
+    })
+
+    dispatchPointerDown(link, { clientX: 30, clientY: 30 })
+
+    expect(getSurface()?.dataset.pressVariant).toBe('state')
+    expect(getStateLayer()).not.toBeNull()
+  })
+
+  it('无表面样式的文字链接可显式使用行内反馈', () => {
+    const link = document.createElement('a')
+    link.href = '/wiki'
+    link.dataset.pressFeedback = 'inline'
+    link.style.display = 'inline'
+    document.body.append(link)
+    vi.spyOn(link, 'getBoundingClientRect').mockReturnValue({
+      x: 10,
+      y: 20,
+      left: 10,
+      top: 20,
+      right: 100,
+      bottom: 38,
+      width: 90,
+      height: 18,
+      toJSON: () => ({}),
+    })
+    vi.spyOn(link, 'getClientRects').mockReturnValue([
+      {
+        x: 10,
+        y: 20,
+        left: 10,
+        top: 20,
+        right: 100,
+        bottom: 38,
+        width: 90,
+        height: 18,
+        toJSON: () => ({}),
+      },
+    ] as unknown as DOMRectList)
+
+    dispatchPointerDown(link, { clientX: 30, clientY: 30 })
+
+    expect(getSurface()?.dataset.pressVariant).toBe('inline')
+    expect(getStateLayer()).not.toBeNull()
+    expect(getRipple()).toBeNull()
+  })
+
+  it('无背景和边框的真实大面积按钮可显式使用触点涟漪', () => {
+    const button = document.createElement('button')
+    button.dataset.pressFeedback = 'ripple'
+    document.body.append(button)
+    vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 80,
+      width: 200,
+      height: 80,
+      toJSON: () => ({}),
+    })
+
+    dispatchPointerDown(button, { clientX: 20, clientY: 20 })
+
+    const ripple = getRipple()
+    expect(getSurface()?.dataset.pressVariant).toBe('ripple')
+    expect(ripple).not.toBeNull()
+    expect(Number.parseFloat(ripple?.style.left || '')).toBeLessThan(0)
+    expect(Number.parseFloat(ripple?.style.top || '')).toBeLessThan(0)
+  })
+  it('涟漪颜色跟随真实按钮的 computed color', () => {
+    const button = document.createElement('button')
+    button.dataset.pressFeedback = 'ripple'
+    button.style.color = 'rgb(176, 123, 23)'
+    document.body.append(button)
+    vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 80,
+      width: 200,
+      height: 80,
+      toJSON: () => ({}),
+    })
+
+    dispatchPointerDown(button, { clientX: 20, clientY: 20 })
+
+    const surface = getSurface()
+    const expectedColor = window.getComputedStyle(button).color
+    expect(expectedColor).not.toBe('')
+    expect(surface?.style.color).toBe(expectedColor)
+    expect(surface?.dataset.pressVariant).toBe('ripple')
+  })
 
   it('自动覆盖带背景的紧凑链接并使用涟漪反馈', () => {
     const link = document.createElement('a')

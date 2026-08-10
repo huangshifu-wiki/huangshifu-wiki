@@ -40,6 +40,7 @@ export const LyricSearchResultCard: React.FC<LyricSearchResultCardProps> = React
     return (
       <Link
         to={`/music/${item.slug}`}
+        data-press-feedback="state"
         className={clsx(
           'group min-w-0 max-w-full transition-all duration-300',
           isList

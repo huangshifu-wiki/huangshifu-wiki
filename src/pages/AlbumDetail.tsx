@@ -247,8 +247,9 @@ const AlbumDetail = () => {
         <div className="mb-6 flex flex-col gap-5 border-b border-border pb-6 sm:flex-row">
           <button
             type="button"
+            data-press-feedback="ripple"
             onClick={() => setCoverLightboxOpen(true)}
-            className="h-40 w-40 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:h-44 sm:w-44"
+            className="h-40 w-40 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary press-feedback-cover sm:h-44 sm:w-44"
             aria-label={`查看 ${album.title} 封面原图`}
           >
             <SmartImage
@@ -265,6 +266,8 @@ const AlbumDetail = () => {
             </p>
             <div className="mobile-action-row justify-start">
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={() => handlePlay(0)}
                 disabled={playableTracks.length === 0}
                 className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all disabled:cursor-not-allowed disabled:opacity-50"
@@ -272,6 +275,8 @@ const AlbumDetail = () => {
                 <Play size={16} /> {playableTracks.length > 0 ? '播放专辑' : '暂无音源'}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={handleCopyAlbumLink}
                 className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
               >
@@ -299,6 +304,8 @@ const AlbumDetail = () => {
             </div>
             {descNeedExpand && (
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={() => setDescExpanded(!descExpanded)}
                 className="text-xs px-3 py-1.5 border border-border text-text-muted hover:text-brand-gold hover:border-brand-gold rounded transition-all duration-300 mt-3 inline-flex items-center gap-0.5"
               >
@@ -337,6 +344,8 @@ const AlbumDetail = () => {
                     {(track.trackOrder ?? index) + 1}
                   </span>
                   <button
+                    type="button"
+                    data-press-feedback="ripple"
                     onClick={(e) => {
                       e.stopPropagation()
                       handlePlay(index)
@@ -364,6 +373,8 @@ const AlbumDetail = () => {
                     ) : null}
                   </Link>
                   <button
+                    type="button"
+                    data-press-feedback="ripple"
                     onClick={(e) => {
                       e.stopPropagation()
                       toggleFavorite(track)

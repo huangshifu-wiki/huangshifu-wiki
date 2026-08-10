@@ -50,6 +50,7 @@ const EventLinkPanel = ({
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
+            data-press-feedback="inline"
             className="flex items-center gap-2.5 border-b border-[var(--book-ink-line)] py-2.5 text-sm text-text-secondary transition-all hover:pl-1 hover:text-brand-gold last:border-0"
           >
             <ExternalLink size={15} className="shrink-0 text-text-muted" />
@@ -130,6 +131,10 @@ const EventDetail = () => {
       })),
     ]
   }, [event])
+  const handleOpenLightbox = (index: number) => {
+    setLightboxIndex(index)
+    setLightboxOpen(true)
+  }
 
   if (loadError && !event) {
     return (
@@ -223,11 +228,9 @@ const EventDetail = () => {
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => {
-                    setLightboxIndex(0)
-                    setLightboxOpen(true)
-                  }}
-                  className="block h-auto max-h-56 max-w-56 overflow-hidden rounded-lg border-0 p-0 shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-300 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] sm:max-h-72 sm:max-w-72"
+                  data-press-feedback="ripple"
+                  onClick={() => handleOpenLightbox(0)}
+                  className="block h-auto max-h-56 max-w-56 overflow-hidden rounded-lg border-0 p-0 press-feedback-cover shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-300 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] sm:max-h-72 sm:max-w-72"
                   aria-label={`查看 ${event.title} 封面`}
                 >
                   <img
@@ -276,6 +279,7 @@ const EventDetail = () => {
                       <Link
                         key={tag}
                         to={`/events?tag=${encodeURIComponent(tag)}`}
+                        data-press-feedback="inline"
                         className="rounded-sm px-2 py-0.5 text-xs theme-tag"
                       >
                         {tag}
@@ -369,11 +373,9 @@ const EventDetail = () => {
                     key={poster.id}
                     type="button"
                     variant="ghost"
-                    onClick={() => {
-                      setLightboxIndex(index)
-                      setLightboxOpen(true)
-                    }}
-                    className="group aspect-[3/4] h-auto overflow-hidden rounded border border-[var(--book-ink-line)]/60 bg-[var(--book-panel-bg)] p-0 shadow-[0_10px_30px_rgba(42,37,32,0.06)]"
+                    data-press-feedback="ripple"
+                    onClick={() => handleOpenLightbox(index)}
+                    className="group aspect-[3/4] h-auto overflow-hidden rounded border border-[var(--book-ink-line)]/60 bg-[var(--book-panel-bg)] p-0 press-feedback-cover shadow-[0_10px_30px_rgba(42,37,32,0.06)]"
                   >
                     <SmartImage
                       src={poster.url}

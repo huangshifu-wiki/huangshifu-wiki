@@ -1234,6 +1234,9 @@ a[href]:not([data-press-feedback='none']),
   transform: scale(0);
   animation: material-ripple 520ms cubic-bezier(0.2, 0, 0, 1);
 }
+.press-feedback-cover {
+  color: var(--color-theme-accent);
+}
 
 .material-state-layer {
   position: absolute;

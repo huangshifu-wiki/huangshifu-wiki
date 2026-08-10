@@ -51,6 +51,7 @@ const SourceLink = ({ source }: { source: MusicExternalSource }) => {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
+      data-press-feedback="inline"
       className="flex-1 min-w-0 max-w-full text-wrap-anywhere text-right text-text-primary hover:text-brand-gold transition-colors"
     >
       {label}
@@ -292,8 +293,9 @@ const MusicDetail = () => {
             <div className="mb-8 flex flex-col gap-6 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row">
               <button
                 type="button"
+                data-press-feedback="ripple"
                 onClick={() => setCoverLightboxOpen(true)}
-                className="h-40 w-40 flex-shrink-0 overflow-hidden rounded-lg shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-400 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:h-44 sm:w-44"
+                className="h-40 w-40 flex-shrink-0 overflow-hidden rounded-lg shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-400 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary press-feedback-cover sm:h-44 sm:w-44"
                 aria-label={`查看 ${song.title} 封面原图`}
               >
                 <SmartImage
@@ -314,6 +316,8 @@ const MusicDetail = () => {
                 </div>
                 <div className="flex flex-wrap items-center gap-2.5">
                   <button
+                    type="button"
+                    data-press-feedback="ripple"
                     onClick={handlePlay}
                     disabled={!canPlay}
                     className={clsx(
@@ -331,6 +335,8 @@ const MusicDetail = () => {
                     </span>
                   </button>
                   <button
+                    type="button"
+                    data-press-feedback="ripple"
                     onClick={toggleFavorite}
                     disabled={favoriting}
                     className={clsx(
@@ -347,6 +353,8 @@ const MusicDetail = () => {
                     </span>
                   </button>
                   <button
+                    type="button"
+                    data-press-feedback="ripple"
                     onClick={handleCopyLink}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded border border-[var(--book-ink-line)] text-[0.875rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                   >
@@ -363,12 +371,16 @@ const MusicDetail = () => {
                 {song?.lyric && (
                   <div className="flex items-center gap-2">
                     <button
+                      type="button"
+                      data-press-feedback="ripple"
                       onClick={handleCopyLyrics}
                       className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
                       {lyricsCopied ? '已复制' : '复制歌词'}
                     </button>
                     <button
+                      type="button"
+                      data-press-feedback="ripple"
                       onClick={() => setLyricsExpanded(!lyricsExpanded)}
                       className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
@@ -403,6 +415,8 @@ const MusicDetail = () => {
                   <MarkdownRenderer content={song.description || ''} />
                 </div>
                 <button
+                  type="button"
+                  data-press-feedback="ripple"
                   onClick={() => setDescExpanded(!descExpanded)}
                   className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300 mt-3 inline-flex items-center gap-1"
                 >
@@ -426,6 +440,7 @@ const MusicDetail = () => {
                 <Link
                   to={`/forum/new?musicDocId=${song.docId}&musicTitle=${encodeURIComponent(song.title)}`}
                   data-pressable
+                  data-press-feedback="state"
                   className="px-4 py-2 theme-button-primary rounded text-xs font-semibold transition-all"
                 >
                   发表乐评
@@ -438,6 +453,7 @@ const MusicDetail = () => {
                     <Link
                       key={post.id}
                       to={`/forum/${post.slug || post.id}`}
+                      data-press-feedback="state"
                       className="py-3.5 border-b border-[var(--book-ink-line)] transition-colors group hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)] -mx-1 px-1 rounded"
                     >
                       <p className="text-[0.9375rem] text-text-primary mb-1 tracking-[0.04em] group-hover:text-brand-gold transition-colors">
@@ -510,6 +526,7 @@ const MusicDetail = () => {
                         <Link
                           key={tag}
                           to={`/music?tag=${encodeURIComponent(tag)}`}
+                          data-press-feedback="inline"
                           className="min-w-0 max-w-full rounded-sm border border-[var(--book-ink-line)] px-1.5 py-0.5 text-wrap-anywhere text-xs text-text-secondary transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
                         >
                           {tag}

@@ -70,24 +70,25 @@ export const MixedSearchResultCard = React.memo(
     const thumbnailPending = gallery ? shouldWaitForGalleryThumbnail(gallery) : false
     const displayImageUrl = sourceType === 'gallery' ? galleryThumb : imageUrl
     const isSmallGrid = viewMode === 'small'
-    const imageContent = displayImageUrl ? (
-      <SmartImage
-        src={displayImageUrl}
-        alt=""
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
-      />
-    ) : thumbnailPending ? (
-      <div className="flex h-full w-full items-center justify-center bg-surface-alt px-2 text-center text-xs text-text-muted">
-        生成中...
-      </div>
-    ) : (
-      <CoverPlaceholder icon={<SourceIcon size={20} />} />
-    )
 
     if (viewMode === 'list') {
+      const imageContent = displayImageUrl ? (
+        <SmartImage
+          src={displayImageUrl}
+          alt=""
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+        />
+      ) : thumbnailPending ? (
+        <div className="flex h-full w-full items-center justify-center bg-surface-alt px-2 text-center text-xs text-text-muted">
+          生成中...
+        </div>
+      ) : (
+        <CoverPlaceholder icon={<SourceIcon size={20} />} />
+      )
       return (
         <Link
           to={link}
+          data-press-feedback="state"
           className="group flex w-full gap-4 rounded px-3 py-3 transition-all duration-300 hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]"
         >
           <div className="mobile-list-thumb h-20 w-20 flex-shrink-0 overflow-hidden rounded bg-surface-alt">
@@ -125,6 +126,7 @@ export const MixedSearchResultCard = React.memo(
     return (
       <Link
         to={link}
+        data-press-feedback="state"
         className="group block min-w-0 overflow-hidden rounded-lg border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)] transition-all duration-300 hover:shadow-[0_14px_36px_rgba(72,53,25,0.1)]"
       >
         <div className="relative aspect-[4/3] flex-shrink-0 overflow-hidden bg-surface-alt">

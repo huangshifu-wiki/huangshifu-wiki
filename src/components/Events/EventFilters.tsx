@@ -37,14 +37,23 @@ const EventFilters = ({
   <div className="mobile-filterbar">
     {tags.length > 0 ? (
       <div className="mobile-filter-tabs">
-        <Link to={getTagUrl('')} className={tagFilterClassName(!selectedTag)}>
+        <Link
+          to={getTagUrl('')}
+          data-press-feedback="inline"
+          className={tagFilterClassName(!selectedTag)}
+        >
           全部标签
           {!selectedTag && (
             <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand-gold" />
           )}
         </Link>
         {tags.map((tag) => (
-          <Link key={tag} to={getTagUrl(tag)} className={tagFilterClassName(selectedTag === tag)}>
+          <Link
+            key={tag}
+            to={getTagUrl(tag)}
+            data-press-feedback="inline"
+            className={tagFilterClassName(selectedTag === tag)}
+          >
             {tag}
             {selectedTag === tag && (
               <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand-gold" />
@@ -67,6 +76,7 @@ const EventFilters = ({
       <Button
         type="button"
         variant="ghost"
+        data-press-feedback="ripple"
         size="sm"
         onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
         className="h-auto min-h-0 cursor-pointer px-1.5 py-0.5"

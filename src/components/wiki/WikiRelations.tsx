@@ -450,6 +450,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
           sortStrategy !== DEFAULT_SORT_STRATEGY) && (
           <button
             type="button"
+            data-press-feedback="inline"
             onClick={() => {
               setFilterOptions(DEFAULT_FILTER_OPTIONS)
               setSortStrategy(DEFAULT_SORT_STRATEGY)
@@ -471,6 +472,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            data-press-feedback="ripple"
             onClick={() => setShowFilters(!showFilters)}
             className={clsx(
               'flex items-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium transition-all',
@@ -486,6 +488,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
           <button
             type="button"
             onClick={handleAddRelation}
+            data-press-feedback="ripple"
             className="rounded border border-[rgba(138,109,47,0.25)] px-4 py-1.5 text-xs font-medium text-brand-gold transition-all hover:border-brand-gold hover:bg-brand-gold hover:text-white"
           >
             + 添加关联
@@ -537,6 +540,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
           <p className="text-sm">没有符合筛选条件的关联</p>
           <button
             type="button"
+            data-press-feedback="inline"
             onClick={() => {
               setFilterOptions({
                 ...DEFAULT_FILTER_OPTIONS,
@@ -566,6 +570,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
               <h3 className="text-lg font-semibold text-text-primary">编辑关联</h3>
               <button
                 type="button"
+                data-press-feedback="ripple"
                 onClick={handleCancelEdit}
                 className="rounded p-1.5 text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
               >
@@ -651,6 +656,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
             <div className="mt-6 flex gap-3">
               <button
                 type="button"
+                data-press-feedback="ripple"
                 onClick={handleCancelEdit}
                 className={`flex-1 ${bookSecondaryButtonClass}`}
               >
@@ -658,6 +664,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
               </button>
               <button
                 type="button"
+                data-press-feedback="ripple"
                 onClick={handleSaveEdit}
                 className="flex-1 rounded px-4 py-2 text-sm font-medium theme-button-primary transition-all"
               >

@@ -208,8 +208,9 @@ const renderGalleryPreview = (
                 key={image.id}
                 type="button"
                 variant="ghost"
+                data-press-feedback="ripple"
                 onClick={() => onOpenLightbox(index)}
-                className="group relative aspect-[3/4] h-auto cursor-zoom-in overflow-hidden rounded border-0 p-0"
+                className="group relative aspect-[3/4] h-auto cursor-zoom-in overflow-hidden rounded border-0 p-0 press-feedback-cover"
               >
                 {previewSrc ? (
                   <SmartImage

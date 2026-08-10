@@ -316,6 +316,7 @@ const GalleryDetail = () => {
           <span className="text-text-muted">{formatDateTime(comment.createdAt)}</span>
           <button
             type="button"
+            data-press-feedback="ripple"
             onClick={() => void handleToggleCommentLike(comment)}
             disabled={!user || isBanned || likingCommentId === comment.id || comment.isDeleted}
             className={clsx(
@@ -332,6 +333,7 @@ const GalleryDetail = () => {
           {canReplyComment(comment) && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={() => {
                 setReplyTo(comment)
                 scrollToCommentForm()
@@ -345,6 +347,7 @@ const GalleryDetail = () => {
           {canDeleteComment(comment) && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={() => void handleDeleteComment(comment)}
               disabled={deletingCommentId === comment.id}
               className="font-medium text-text-muted hover:text-red-500 disabled:opacity-50"
@@ -356,6 +359,7 @@ const GalleryDetail = () => {
           {isAdmin && showDeletedComments && comment.isDeleted && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={() => void handleRestoreComment(comment)}
               disabled={restoringCommentId === comment.id}
               className="font-medium text-brand-gold hover:underline disabled:opacity-50"
@@ -804,6 +808,8 @@ const GalleryDetail = () => {
 
             <div className="mobile-action-row mt-1 justify-start sm:justify-end">
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={toggleGalleryLike}
                 disabled={likingGallery}
                 className={clsx(
@@ -818,6 +824,8 @@ const GalleryDetail = () => {
                 {gallery.likesCount || 0}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={toggleGalleryDislike}
                 disabled={dislikingGallery}
                 className={clsx(
@@ -831,6 +839,8 @@ const GalleryDetail = () => {
                 <ThumbsDown size={14} /> {gallery.dislikesCount || 0}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={toggleGalleryFavorite}
                 disabled={favoritingGallery}
                 className={clsx(
@@ -845,6 +855,8 @@ const GalleryDetail = () => {
                 {gallery.favoritesCount || 0}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={handleCopyLink}
                 className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 title={t('gallery.copyInternalLink')}
@@ -852,6 +864,8 @@ const GalleryDetail = () => {
                 <Link2 size={14} /> 复制内链
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={handleCopyLink}
                 className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 title="分享"
@@ -896,6 +910,8 @@ const GalleryDetail = () => {
           <SectionHeading>{t('gallery.imageCount', { count: images.length })}</SectionHeading>
           {canSubmitReview && (
             <button
+              type="button"
+              data-press-feedback="ripple"
               onClick={() => void handleSubmitReview()}
               disabled={submittingReview}
               className="rounded border border-[var(--book-ink-line)] px-4 py-2 text-xs text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50"
@@ -915,8 +931,9 @@ const GalleryDetail = () => {
               >
                 <button
                   onClick={() => handleOpenLightbox(index)}
-                  className="h-full w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                  className="h-full w-full press-feedback-cover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
                   type="button"
+                  data-press-feedback="ripple"
                 >
                   {getThumbnailSrc(image) ? (
                     <SmartImage
@@ -932,7 +949,7 @@ const GalleryDetail = () => {
                   )}
                 </button>
 
-                <div className="pointer-events-none absolute inset-0 bg-transparent transition-colors duration-300 group-hover:bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)]">
+                <div className="pointer-events-none absolute inset-0">
                   <div className="absolute bottom-3 right-3 rounded bg-[var(--book-panel-bg-strong)] px-2 py-1 text-xs text-brand-gold opacity-100 shadow-[0_6px_18px_rgba(42,37,32,0.08)] transition-opacity duration-300 md:opacity-0 md:group-hover:opacity-100">
                     {t('gallery.viewFullSize')}
                   </div>
@@ -970,6 +987,7 @@ const GalleryDetail = () => {
                     <span>{t('gallery.replyTo', { name: getCommentAuthorName(replyTo) })}</span>
                     <button
                       type="button"
+                      data-press-feedback="ripple"
                       onClick={() => setReplyTo(null)}
                       className="text-brand-gold transition-colors hover:text-text-primary"
                     >
@@ -1006,6 +1024,7 @@ const GalleryDetail = () => {
                       />
                       <button
                         type="submit"
+                        data-press-feedback="ripple"
                         disabled={!newComment.trim() || submittingComment}
                         className="min-h-10 rounded px-5 py-2 text-sm theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
                       >

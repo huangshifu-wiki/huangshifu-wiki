@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { MoreVertical, Settings, Trash2 } from '@/src/components/icons'
 import {
   Badge,
@@ -78,6 +79,25 @@ const UiShowcase = () => {
                 {variant}
               </Button>
             ))}
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Link
+              to="/__ui"
+              data-press-feedback="state"
+              className="block rounded border border-border bg-surface p-4 text-sm text-text-primary transition-colors hover:bg-surface-alt"
+            >
+              整卡 state 导航
+            </Link>
+            <Link
+              to="/__ui"
+              data-press-feedback="inline"
+              className="self-center text-sm text-text-secondary transition-colors hover:text-brand-gold"
+            >
+              透明 inline 文字导航
+            </Link>
+            <Button type="button" data-press-feedback="ripple" variant="ghost">
+              ripple 操作按钮
+            </Button>
           </div>
           <div className="flex flex-wrap gap-3">
             {softVariants.map((variant) => (

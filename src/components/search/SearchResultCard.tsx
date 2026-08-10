@@ -85,6 +85,7 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = React.memo(
     return (
       <Link
         to={config.link}
+        data-press-feedback="state"
         className={clsx(
           'group min-w-0 max-w-full transition-all duration-300',
           isList

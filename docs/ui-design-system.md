@@ -51,3 +51,16 @@ Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`�
 5. 执行 `npm run check:ui` 和 `npm run verify`。
 
 `/__ui` 只在开发环境注册，生产构建不得包含展厅 chunk。
+
+## 按压反馈
+
+真实的 `a[href]`、`button` 或带交互 role 的节点复用全局 `initPressFeedback`，通过 `data-press-feedback` 选择语义：
+
+- `state`：整卡或大面积导航，反馈层覆盖真实导航节点的矩形。
+- `ripple`：直接打开大图的封面按钮和小型动作按钮，涟漪从触点展开。
+- `inline`：筛选 tab、标签和正文文字导航，只反馈当前文字行。
+
+标记必须放在实际接收点击、键盘和触摸事件的节点上，不能放在仅负责布局、hover 或拖拽的 `article`/`div` 上。图片 hover 缩放、遮罩、阴影、标题变色和业务选中态不属于按压反馈，不用 `:active` 或局部 keyframe 重建。Lightbox 手势、关系图画布、上传 dropzone、编辑器输入面和拖拽排序面不添加标记；必要时使用 `data-press-feedback="none"` 明确退出。
+直接打开 Lightbox 的封面按钮必须同时使用 `data-press-feedback="ripple"` 与 `press-feedback-cover`；后者只把 `--color-theme-accent` 作为 `currentColor` 提供给共享 ripple，不负责 hover、遮罩或布局。
+
+封面图片的 hover 缩放与提示和按压 ripple 是独立状态；按压反馈不得依赖页面专属的整面色层，也不得在 Lightbox 内容、拖拽或手势区域添加反馈标记。

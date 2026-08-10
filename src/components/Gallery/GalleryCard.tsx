@@ -63,6 +63,7 @@ export const GalleryCard = React.memo(function GalleryCard({
     return (
       <Link
         to={galleryUrl}
+        data-press-feedback="state"
         className={clsx(
           'group flex min-w-0 items-center gap-4 rounded px-2 py-3',
           'transition-all duration-300 hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]'
@@ -101,6 +102,7 @@ export const GalleryCard = React.memo(function GalleryCard({
   return (
     <Link
       to={galleryUrl}
+      data-press-feedback="state"
       className={clsx(
         'group block min-w-0 overflow-hidden rounded-lg',
         'border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)]',

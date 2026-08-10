@@ -116,7 +116,7 @@ function SectionHeader({
   return (
     <div className="home-section-hd">
       <h2>{title}</h2>
-      <Link to={to} className="home-section-link">
+      <Link to={to} className="home-section-link" data-press-feedback="inline">
         {actionLabel} <span aria-hidden="true">→</span>
       </Link>
     </div>
@@ -183,6 +183,7 @@ function GalleryTile({ gallery, index }: { gallery: GalleryItem; index: number }
   return (
     <Link
       to={`/gallery/${gallery.slug || gallery.id}`}
+      data-press-feedback="state"
       className={clsx('home-gallery-item home-reveal', `home-reveal-d${Math.min(index + 1, 4)}`)}
     >
       <GalleryImage gallery={gallery} image={image} eager={index === 0} />
@@ -208,7 +209,7 @@ function EventRow({ event }: { event: EventItem }) {
   const date = formatEventListDate(event.timeSlots)
 
   return (
-    <Link to={`/events/${event.slug}`} className="home-list-item">
+    <Link to={`/events/${event.slug}`} className="home-list-item" data-press-feedback="state">
       <div className="home-list-cover">
         <EventCover event={event} />
       </div>
@@ -257,10 +258,18 @@ function SongRow({
 }) {
   return (
     <div className={clsx('home-list-item', active && 'home-list-item-active')}>
-      <Link to={`/music/${song.slug || song.docId}`} className="home-list-cover">
+      <Link
+        to={`/music/${song.slug || song.docId}`}
+        className="home-list-cover"
+        data-press-feedback="state"
+      >
         <SongCover song={song} active={active} />
       </Link>
-      <Link to={`/music/${song.slug || song.docId}`} className="home-list-info">
+      <Link
+        to={`/music/${song.slug || song.docId}`}
+        className="home-list-info"
+        data-press-feedback="state"
+      >
         <div className="home-list-name">{song.title}</div>
         <div className="home-list-meta">
           {formatMusicCredits(song.artists, '未知歌手')}
@@ -290,7 +299,7 @@ function AlbumFeature({ album }: { album: AlbumItem }) {
   const albumSlug = album.slug || album.docId || ''
 
   return (
-    <Link to={`/album/${albumSlug}`} className="home-album-item">
+    <Link to={`/album/${albumSlug}`} className="home-album-item" data-press-feedback="state">
       <div className="home-album-cover">
         {album.cover ? (
           <SmartImage
