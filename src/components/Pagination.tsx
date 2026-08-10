@@ -36,15 +36,18 @@ interface DockedPaginationLayout {
   left: number
   width: number
 }
+const DOCK_HYSTERESIS_PX = 16
 
 function useDockedPagination(enabled: boolean) {
   const anchorRef = React.useRef<HTMLDivElement>(null)
   const navigationRef = React.useRef<HTMLElement>(null)
   const portalHostRef = React.useRef<HTMLElement | null>(null)
+  const dockedRef = React.useRef(false)
   const [dockedLayout, setDockedLayout] = React.useState<DockedPaginationLayout | null>(null)
 
   React.useLayoutEffect(() => {
     if (!enabled) {
+      dockedRef.current = false
       portalHostRef.current = null
       setDockedLayout(null)
       return
@@ -77,7 +80,13 @@ function useDockedPagination(enabled: boolean) {
       const navigationRect = navigation.getBoundingClientRect()
       const computedBottom = Number.parseFloat(window.getComputedStyle(navigation).bottom)
       const bottomOffset = Number.isFinite(computedBottom) ? computedBottom : 0
-      const shouldDock = anchorRect.top > window.innerHeight - bottomOffset - navigationRect.height
+      const viewportBottom = window.innerHeight - bottomOffset
+      const dockThreshold = viewportBottom - navigationRect.height
+      const shouldDock = dockedRef.current
+        ? anchorRect.top > dockThreshold - DOCK_HYSTERESIS_PX
+        : anchorRect.top > dockThreshold + DOCK_HYSTERESIS_PX
+
+      dockedRef.current = shouldDock
 
       setDockedLayout((current) => {
         if (!shouldDock) return current === null ? current : null
@@ -171,7 +180,9 @@ export const Pagination: React.FC<PaginationProps> = ({
       ref={navigationRef}
       className={cn(
         'pagination-panel z-30 flex flex-col gap-3 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] px-2 py-2 shadow-[var(--book-panel-shadow)] backdrop-blur-[16px] sm:flex-row sm:items-center sm:justify-between sm:px-3 sm:py-3',
-        dockedLayout ? 'fixed' : 'static w-full'
+        dockedLayout
+          ? 'fixed border-b-transparent rounded-b-none gap-2 py-1 sm:gap-3 sm:py-1.5'
+          : 'static w-full'
       )}
       data-state={dockedLayout ? 'docked' : 'inline'}
       style={dockedLayout ? { left: dockedLayout.left, width: dockedLayout.width } : undefined}

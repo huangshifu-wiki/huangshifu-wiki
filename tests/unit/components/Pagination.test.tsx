@@ -37,6 +37,9 @@ describe('Pagination', () => {
     expect(navigation).toHaveClass('pagination-panel', 'fixed')
     expect(navigation).toHaveAttribute('data-state', 'docked')
     expect(navigation).toHaveStyle({ left: '24px', width: '600px' })
+    expect(navigation).toHaveClass('border-b-transparent', 'rounded-b-none')
+    expect(navigation).not.toHaveClass('border-b-0')
+    expect(navigation).toHaveClass('gap-2', 'py-1', 'sm:gap-3', 'sm:py-1.5')
     expect(document.querySelector('[data-pagination-anchor]')).toHaveStyle({ height: '86px' })
 
     anchorTop = 600
@@ -45,7 +48,64 @@ describe('Pagination', () => {
 
     const inlineNavigation = screen.getByRole('navigation', { name: '分页导航' })
     expect(inlineNavigation).toHaveClass('pagination-panel', 'static')
+    expect(inlineNavigation).not.toHaveClass('border-b-transparent', 'rounded-b-none')
+    expect(inlineNavigation).not.toHaveClass('gap-2', 'py-1', 'sm:gap-3', 'sm:py-1.5')
     expect(inlineNavigation).toHaveAttribute('data-state', 'inline')
+  })
+  it('在悬浮与原位边界附近保持稳定，不来回闪烁', () => {
+    let anchorTop = 900
+    let scheduledFrame: FrameRequestCallback | null = null
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      scheduledFrame = callback
+      return 1
+    })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.hasAttribute('data-pagination-anchor')) return new DOMRect(24, anchorTop, 600, 86)
+      if (this.getAttribute('aria-label') === '分页导航') {
+        const height = this.getAttribute('data-state') === 'docked' ? 44 : 56
+        return new DOMRect(24, anchorTop, 600, height)
+      }
+      return new DOMRect()
+    })
+
+    render(<Pagination page={3} totalPages={10} onPageChange={vi.fn()} />)
+    expect(screen.getByRole('navigation', { name: '分页导航' })).toHaveAttribute(
+      'data-state',
+      'docked'
+    )
+
+    anchorTop = 748
+    fireEvent.scroll(window)
+    act(() => scheduledFrame?.(0))
+    expect(screen.getByRole('navigation', { name: '分页导航' })).toHaveAttribute(
+      'data-state',
+      'docked'
+    )
+
+    anchorTop = 735
+    fireEvent.scroll(window)
+    act(() => scheduledFrame?.(0))
+    expect(screen.getByRole('navigation', { name: '分页导航' })).toHaveAttribute(
+      'data-state',
+      'inline'
+    )
+
+    anchorTop = 750
+    fireEvent.scroll(window)
+    act(() => scheduledFrame?.(0))
+    expect(screen.getByRole('navigation', { name: '分页导航' })).toHaveAttribute(
+      'data-state',
+      'inline'
+    )
+
+    anchorTop = 765
+    fireEvent.scroll(window)
+    act(() => scheduledFrame?.(0))
+    expect(screen.getByRole('navigation', { name: '分页导航' })).toHaveAttribute(
+      'data-state',
+      'docked'
+    )
   })
   it('总页数暂不可用后重新显示时重建停靠状态', () => {
     let anchorTop = 900
