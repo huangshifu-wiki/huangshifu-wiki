@@ -94,15 +94,14 @@ export const Navbar = () => {
             {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </IconButton>
         </div>
+        <MobileMenu
+          open={isMenuOpen}
+          onClose={() => setIsMenuOpen(false)}
+          onOpenAuth={openAuthModal}
+          onLogout={handleLogout}
+          allowRegister={allowRegister}
+        />
       </div>
-
-      <MobileMenu
-        open={isMenuOpen}
-        onClose={() => setIsMenuOpen(false)}
-        onOpenAuth={openAuthModal}
-        onLogout={handleLogout}
-        allowRegister={allowRegister}
-      />
 
       {
         <AuthModal
