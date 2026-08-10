@@ -1123,7 +1123,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
       : Promise.resolve([])
 
     const lyricsPromise =
-      wantsLyrics && q && (type === 'lyrics' || includeDetail)
+      wantsLyrics && q
         ? prisma.musicTrack.findMany({
             where: {
               deletedAt: null,

@@ -530,11 +530,8 @@ describe('Music API - 音乐接口测试', () => {
     // 4. 歌词响应不含整段歌词字段
     expect(multiSong.lyric).toBeUndefined()
 
-    // 全部类型的详情搜索也返回歌词结果，不污染音乐结果
-    const allRes = await request(app)
-      .get('/api/search')
-      .query({ q: '独特歌词XYZ', type: 'all', detail: '1' })
-
+    // 全部类型搜索也返回歌词结果，不污染音乐结果
+    const allRes = await request(app).get('/api/search').query({ q: '独特歌词XYZ', type: 'all' })
     expect(allRes.status).toBe(200)
     expect(allRes.body.music.some((m: { docId: string }) => m.docId === song.docId)).toBe(false)
     expect(allRes.body.lyrics).toHaveLength(1)
