@@ -818,7 +818,7 @@ const AdminEventEdit = () => {
     }
   }
 
-  if (loading) return <PageSkeleton />
+  if (loading) return <PageSkeleton variant="admin" />
 
   const isCoverUploading = isBusyUploadStatus(coverUpload?.status)
   const hasPendingUploads =

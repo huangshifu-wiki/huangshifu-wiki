@@ -15,6 +15,7 @@ import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
 import { apiGet } from '../lib/apiClient'
+import { LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useMusic } from '../context/MusicContext'
 import { useToast } from '../components/Toast'
@@ -120,6 +121,7 @@ const MusicDetail = () => {
   const [song, setSong] = useState<SongItem | null>(null)
   const [posts, setPosts] = useState<PostItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [descExpanded, setDescExpanded] = useState(false)
   const [lyricsExpanded, setLyricsExpanded] = useState(false)
   const [lyricsCopied, setLyricsCopied] = useState(false)
@@ -139,32 +141,36 @@ const MusicDetail = () => {
     t,
   })
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!songId) return
-      setLoading(true)
-      try {
-        const detail = await apiGet<SongDetailResponse>(`/api/music/${songId}`)
-        const currentSong = detail.song || null
-        setSong(currentSong)
-        if (currentSong?.docId) {
+  const fetchData = async () => {
+    if (!songId) return
+    setLoading(true)
+    setLoadError(false)
+    try {
+      const detail = await apiGet<SongDetailResponse>(`/api/music/${songId}`)
+      const currentSong = detail.song || null
+      setSong(currentSong)
+      if (currentSong?.docId) {
+        try {
           const postResult = await apiGet<{ posts: PostItem[] }>(
             `/api/music/${currentSong.docId}/posts`
           )
           setPosts(postResult.posts || [])
-        } else {
-          setPosts([])
+        } catch (error) {
+          console.error('Fetch song related posts failed:', error)
         }
-      } catch (error) {
-        console.error('Fetch song detail failed:', error)
-        setSong(null)
+      } else {
         setPosts([])
-      } finally {
-        setLoading(false)
       }
+    } catch (error) {
+      console.error('Fetch song detail failed:', error)
+      setLoadError(true)
+    } finally {
+      setLoading(false)
     }
+  }
 
-    fetchData()
+  useEffect(() => {
+    void fetchData()
   }, [songId])
 
   const customPlatformLinks = song?.customPlatformLinks || []
@@ -203,31 +209,27 @@ const MusicDetail = () => {
     }
   }
 
-  if (loading) {
+  if (loading && !song) {
     return (
-      <div className="mobile-page-shell antique-detail">
+      <div className="mobile-page-shell antique-detail" role="status" aria-label="加载中">
         <div className="mobile-page-container">
-          <div className="h-4 w-24 bg-surface-alt rounded animate-pulse mb-6" />
-          <div className="flex flex-col gap-5 sm:flex-row mb-8 pb-8 border-b border-[var(--book-ink-line)]">
-            <div className="h-40 w-40 rounded-lg bg-surface-alt animate-pulse flex-shrink-0" />
+          <Skeleton className="mb-6 h-4 w-24" />
+          <div className="mb-8 flex flex-col gap-5 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row">
+            <Skeleton className="h-40 w-40 flex-shrink-0 rounded-lg" />
             <div className="flex-1 space-y-3 py-2">
-              <div className="h-8 w-48 bg-surface-alt rounded animate-pulse" />
-              <div className="h-5 w-32 bg-surface-alt rounded animate-pulse" />
-              <div className="h-4 w-40 bg-surface-alt rounded animate-pulse" />
-              <div className="flex gap-2.5 mt-4">
-                <div className="h-9 w-20 bg-surface-alt rounded animate-pulse" />
-                <div className="h-9 w-16 bg-surface-alt rounded animate-pulse" />
-                <div className="h-9 w-20 bg-surface-alt rounded animate-pulse" />
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-40" />
+              <div className="mt-4 flex gap-2.5">
+                <Skeleton className="h-9 w-20" />
+                <Skeleton className="h-9 w-16" />
+                <Skeleton className="h-9 w-20" />
               </div>
             </div>
           </div>
           <div className="space-y-3">
             {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="h-5 bg-surface-alt rounded animate-pulse"
-                style={{ width: `${90 - i * 12}%` }}
-              />
+              <Skeleton key={i} className="h-5" style={{ width: `${90 - i * 12}%` }} />
             ))}
           </div>
         </div>
@@ -242,11 +244,17 @@ const MusicDetail = () => {
           <SmartBackLink
             fallbackTo="/music"
             fallbackLabel="返回音乐馆"
-            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+            className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
           />
-          <div className="mt-8 py-16 text-center">
-            <p className="text-text-muted text-[0.9rem] tracking-[0.08em]">歌曲不存在或已被删除</p>
-          </div>
+          {loadError ? (
+            <LoadErrorState className="mt-8" onRetry={() => void fetchData()} />
+          ) : (
+            <div className="mt-8 py-16 text-center">
+              <p className="text-[0.9rem] tracking-[0.08em] text-text-muted">
+                歌曲不存在或已被删除
+              </p>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -265,13 +273,17 @@ const MusicDetail = () => {
   ].filter((item) => item.value)
 
   return (
-    <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
+    <div
+      className="mobile-page-shell antique-detail text-[var(--color-text-antique)]"
+      aria-busy={loading}
+    >
       <div className="mobile-page-container">
         <SmartBackLink
           fallbackTo="/music"
           fallbackLabel="返回音乐馆"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
         />
+        {loadError && <LoadErrorState className="mb-6" onRetry={() => void fetchData()} />}
 
         <div className="mobile-detail-grid">
           {/* Main Content */}

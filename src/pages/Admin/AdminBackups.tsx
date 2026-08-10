@@ -14,7 +14,8 @@ import {
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'
-import { Button } from '@/src/components/ui'
+import { Button, LoadErrorState } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import { isBackdropClick } from '../../utils/modal'
@@ -42,6 +43,7 @@ const formatMediaReference = (reference: { source: string; id?: string; field: s
 const AdminBackups = () => {
   const [backups, setBackups] = useState<AdminBackup[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogType>(null)
   const [createNote, setCreateNote] = useState('')
@@ -66,16 +68,21 @@ const AdminBackups = () => {
 
   const fetchBackups = useCallback(
     async (showSpinner = true) => {
-      if (showSpinner) setLoading(true)
+      if (showSpinner) {
+        setLoading(true)
+        setLoadError(null)
+      }
       try {
         const response = await apiGet<AdminBackupsResponse>('/api/admin/backup/list', undefined, {
           staleTime: 0,
           swr: false,
         })
         setBackups(response.backups || [])
+        setLoadError(null)
       } catch (error) {
         console.error('Fetch backups failed:', error)
-        show('获取备份列表失败', { variant: 'error' })
+        setLoadError(error)
+        if (showSpinner) show('获取备份列表失败', { variant: 'error' })
       } finally {
         if (showSpinner) setLoading(false)
       }
@@ -284,11 +291,15 @@ const AdminBackups = () => {
     )
   }
 
-  if (loading) {
+  if (loading && backups.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+  if (loadError && backups.length === 0) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 size={32} className="animate-spin text-text-muted" />
-      </div>
+      <LoadErrorState
+        description="备份列表加载失败，请重试。"
+        onRetry={() => void fetchBackups()}
+      />
     )
   }
 
@@ -317,6 +328,13 @@ const AdminBackups = () => {
           </button>
         </div>
       </div>
+      {loadError && backups.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          description="当前备份列表可能不是最新内容。"
+          onRetry={() => void fetchBackups()}
+        />
+      )}
 
       {(lastMediaReport || lastMediaReportError) && (
         <div className="space-y-4">

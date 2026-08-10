@@ -32,7 +32,8 @@ import { useScrollRestore } from '../../hooks/useScrollRestore'
 import { SmartImage } from '../../components/SmartImage'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
-import { Button, Checkbox, LinkButton } from '@/src/components/ui'
+import { Button, Checkbox, LinkButton, LoadErrorState } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 
 type ListType =
   | 'wiki'
@@ -488,6 +489,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const Icon = cfg.icon
   const [data, setData] = useState<AdminDataItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [pendingActions, setPendingActions] = useState<
     Record<string, 'delete' | 'restore' | 'permanentDelete'>
   >({})
@@ -510,15 +512,19 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const fetchData = async (options?: { silent?: boolean }) => {
     const silent = options?.silent === true
     if (silent) saveScroll()
-    else setLoading(true)
+    else {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
       const result = await apiGet<AdminListResponse>(`/api/admin/${cfg.apiPath}`, {
         includeDeleted: showDeleted ? 'true' : undefined,
       })
       setData(result.data || [])
-    } catch (e) {
-      console.error(e)
-      if (!silent) setData([])
+      setLoadError(null)
+    } catch (error) {
+      console.error(error)
+      setLoadError(error)
     } finally {
       if (!silent) setLoading(false)
     }
@@ -804,6 +810,10 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     )
   }
 
+  if (loading && data.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+
   return (
     <>
       <div className="space-y-5">
@@ -840,6 +850,13 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             </button>
           </div>
         </div>
+        {loadError && data.length > 0 && (
+          <LoadErrorState
+            className="py-5"
+            description="当前列表可能不是最新内容。"
+            onRetry={() => void fetchData()}
+          />
+        )}
 
         {cfg.hasCreate && (
           <div className="rounded border border-border bg-surface p-5">
@@ -1020,14 +1037,12 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {loading ? (
-                  [1, 2, 3].map((i) => (
-                    <tr key={i} className="animate-pulse">
-                      <td colSpan={cfg.columns.length} className="px-5 py-4">
-                        <div className="h-6 rounded bg-surface-alt" />
-                      </td>
-                    </tr>
-                  ))
+                {loadError && data.length === 0 ? (
+                  <tr>
+                    <td colSpan={cfg.columns.length}>
+                      <LoadErrorState onRetry={() => void fetchData()} />
+                    </td>
+                  </tr>
                 ) : data.length > 0 ? (
                   data.map((item) => {
                     const rowId = getAdminItemId(item)
@@ -1055,6 +1070,14 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                       </tr>
                     )
                   })
+                ) : loading ? (
+                  [1, 2, 3].map((i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td colSpan={cfg.columns.length} className="px-5 py-4">
+                        <div className="h-6 rounded bg-surface-alt" />
+                      </td>
+                    </tr>
+                  ))
                 ) : (
                   <tr>
                     <td

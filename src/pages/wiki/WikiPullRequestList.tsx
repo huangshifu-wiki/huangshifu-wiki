@@ -7,7 +7,7 @@ import { apiGet } from '../../lib/apiClient'
 import { formatDate } from '../../lib/dateUtils'
 import type { WikiPullRequestItem, WikiPullRequestStatus } from './types'
 import { getPrStatusText } from './types'
-import { Button } from '@/src/components/ui'
+import { Button, LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiPullRequestList = () => {
@@ -15,10 +15,12 @@ const WikiPullRequestList = () => {
   const { user, isAdmin } = useAuth()
   const [status, setStatus] = useState<WikiPullRequestStatus>('open')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [items, setItems] = useState<WikiPullRequestItem[]>([])
 
   const fetchList = async () => {
     setLoading(true)
+    setLoadError(false)
     try {
       const data = await apiGet<{ pullRequests: WikiPullRequestItem[] }>(
         '/api/wiki/pull-requests/list',
@@ -28,7 +30,7 @@ const WikiPullRequestList = () => {
       setItems(slug ? list.filter((item) => item.pageSlug === slug) : list)
     } catch (error) {
       console.error('Fetch wiki PR list error:', error)
-      setItems([])
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -79,43 +81,57 @@ const WikiPullRequestList = () => {
           <h1 className="text-[1.5rem] font-bold text-text-primary tracking-[0.12em] mb-4">
             PR 列表 {isAdmin ? '(管理员视角)' : '(我的 PR)'}
           </h1>
-          {loading ? (
-            <p className="text-text-muted italic">加载中...</p>
-          ) : items.length ? (
-            <div className="space-y-3">
-              {items.map((item) => (
-                <Link
-                  key={item.id}
-                  to={`/wiki/${item.pageSlug}/prs/${item.id}`}
-                  className="block p-4 rounded border border-border hover:border-brand-gold hover:bg-surface-alt/20 transition-all"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
-                    <p className="font-bold text-text-primary">{item.title}</p>
-                    <span
-                      className={clsx(
-                        'px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider',
-                        item.status === 'open'
-                          ? 'theme-status-warning'
-                          : item.status === 'merged'
-                            ? 'theme-status-success'
-                            : 'theme-status-error'
-                      )}
-                    >
-                      {getPrStatusText(item.status)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-text-muted">
-                    页面：{item.page?.title || item.pageSlug} · 发起人：
-                    {item.createdByName}
-                  </p>
-                  <p className="text-xs text-text-muted mt-1">
-                    {formatDate(item.createdAt, 'yyyy-MM-dd HH:mm:ss')}
-                  </p>
-                </Link>
+          {loading && items.length === 0 ? (
+            <div className="space-y-3" role="status" aria-label="加载中">
+              {[1, 2, 3].map((item) => (
+                <Skeleton key={item} className="h-24 w-full" />
               ))}
             </div>
           ) : (
-            <p className="text-text-muted italic">当前筛选下暂无 PR</p>
+            <div aria-busy={loading}>
+              {loading && (
+                <div className="mb-3 flex justify-end">
+                  <Spinner size="sm" label="PR 列表刷新中" />
+                </div>
+              )}
+              {loadError && <LoadErrorState onRetry={() => void fetchList()} />}
+              {loadError && items.length === 0 ? null : items.length ? (
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <Link
+                      key={item.id}
+                      to={`/wiki/${item.pageSlug}/prs/${item.id}`}
+                      className="block rounded border border-border p-4 transition-all hover:border-brand-gold hover:bg-surface-alt/20"
+                    >
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+                        <p className="font-bold text-text-primary">{item.title}</p>
+                        <span
+                          className={clsx(
+                            'rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wider',
+                            item.status === 'open'
+                              ? 'theme-status-warning'
+                              : item.status === 'merged'
+                                ? 'theme-status-success'
+                                : 'theme-status-error'
+                          )}
+                        >
+                          {getPrStatusText(item.status)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-text-muted">
+                        页面：{item.page?.title || item.pageSlug} · 发起人：
+                        {item.createdByName}
+                      </p>
+                      <p className="mt-1 text-xs text-text-muted">
+                        {formatDate(item.createdAt, 'yyyy-MM-dd HH:mm:ss')}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-text-muted italic">当前筛选下暂无 PR</p>
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -12,7 +12,8 @@ import {
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { CharacterCount } from '../../components/CharacterCount'
-import { Button, Switch } from '@/src/components/ui'
+import { Button, LoadErrorState, Switch } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 import {
   apiDelete,
   apiGet,
@@ -73,6 +74,7 @@ export const AdminUsers = () => {
   const isSuperAdmin = profile?.role === 'super_admin'
   const [data, setData] = useState<AdminDataItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [editTarget, setEditTarget] = useState<AdminDataItem | null>(null)
   const [editForm, setEditForm] = useState<AdminUserEditForm>(EMPTY_EDIT_FORM)
   const [editLoading, setEditLoading] = useState(false)
@@ -123,7 +125,10 @@ export const AdminUsers = () => {
     closeActionsMenu()
     const silent = options?.silent === true
     if (silent) saveScroll()
-    else setLoading(true)
+    else {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
       const permissionsRequest = isSuperAdmin
         ? apiGet<AdminPermissionConfig>(ADMIN_PERMISSIONS_API_PATH).catch(
@@ -136,12 +141,10 @@ export const AdminUsers = () => {
       ])
       setData(result.data || [])
       setAdminPermissions(permissions)
-    } catch (e) {
-      console.error(e)
-      if (!silent) {
-        setData([])
-        setAdminPermissions(DEFAULT_ADMIN_PERMISSIONS)
-      }
+      setLoadError(null)
+    } catch (error) {
+      console.error(error)
+      setLoadError(error)
     } finally {
       if (!silent) setLoading(false)
     }
@@ -402,6 +405,10 @@ export const AdminUsers = () => {
     }
   }
 
+  if (loading && data.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -413,6 +420,13 @@ export const AdminUsers = () => {
           <RefreshCw size={14} className="inline mr-1" /> 刷新
         </button>
       </div>
+      {loadError && data.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          description="当前用户列表可能不是最新内容。"
+          onRetry={() => void fetchData()}
+        />
+      )}
 
       <div className="bg-surface border border-border rounded overflow-hidden">
         <div className="overflow-x-auto">
@@ -430,14 +444,12 @@ export const AdminUsers = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {loading ? (
-                [1, 2, 3].map((i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td colSpan={4} className="px-5 py-4">
-                      <div className="h-6 bg-surface-alt rounded" />
-                    </td>
-                  </tr>
-                ))
+              {loadError && data.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    <LoadErrorState onRetry={() => void fetchData()} />
+                  </td>
+                </tr>
               ) : data.length > 0 ? (
                 data.map((item) => {
                   const superAdminRoleAction = getSuperAdminRoleAction(item)

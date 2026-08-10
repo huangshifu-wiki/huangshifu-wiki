@@ -12,8 +12,9 @@ import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { useI18n } from '../lib/i18n'
 import { PageSkeleton } from '../components/PageSkeleton'
-import { SongCard } from '../components/Music/SongCard'
+import { LoadErrorState, Spinner } from '@/src/components/ui'
 import { AlbumCard } from '../components/Music/AlbumCard'
+import { SongCard } from '../components/Music/SongCard'
 import { MusicFilters, type SortBy } from '../components/Music/MusicFilters'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import { isPlayableSong } from '../lib/musicPlayback'
@@ -27,10 +28,14 @@ const Music = () => {
   const [songs, setSongs] = useState<SongItem[]>([])
   const [songTotal, setSongTotal] = useState<number>()
   const [loading, setLoading] = useState(true)
+  const [songLoadError, setSongLoadError] = useState<unknown | null>(null)
+  const [songRetryNonce, setSongRetryNonce] = useState(0)
   const [favoriting, setFavoriting] = useState<string | null>(null)
   const [albums, setAlbums] = useState<AlbumItem[]>([])
   const [albumTotal, setAlbumTotal] = useState<number>()
-  const [loadingAlbums, setLoadingAlbums] = useState(false)
+  const [loadingAlbums, setLoadingAlbums] = useState(true)
+  const [albumLoadError, setAlbumLoadError] = useState<unknown | null>(null)
+  const [albumRetryNonce, setAlbumRetryNonce] = useState(0)
   const tabParam = searchParams.get('tab')
   const activeTab: 'music' | 'albums' = tabParam === 'albums' ? 'albums' : 'music'
   const tag = searchParams.get('tag') || ''
@@ -190,16 +195,16 @@ const Music = () => {
 
     const fetchSongs = async () => {
       setLoading(true)
+      setSongLoadError(null)
       try {
         const data = await fetchSongPage(musicPagination.page)
         if (cancelled) return
         setSongs(data.items)
         setSongTotal(data.total)
-      } catch (e) {
+      } catch (error) {
         if (cancelled) return
-        console.error('Fetch songs error:', e)
-        setSongs([])
-        setSongTotal(0)
+        console.error('Fetch songs error:', error)
+        setSongLoadError(error)
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -210,7 +215,7 @@ const Music = () => {
     return () => {
       cancelled = true
     }
-  }, [fetchSongPage, isIncrementalMode, musicPagination.page])
+  }, [fetchSongPage, isIncrementalMode, musicPagination.page, songRetryNonce])
 
   useEffect(() => {
     setPlaylist(visibleSongs)
@@ -222,6 +227,7 @@ const Music = () => {
 
     const fetchAlbums = async () => {
       setLoadingAlbums(true)
+      setAlbumLoadError(null)
       try {
         const data = await fetchAlbumPage(albumPagination.page)
         if (cancelled) return
@@ -230,8 +236,7 @@ const Music = () => {
       } catch (error) {
         if (cancelled) return
         console.error('Fetch albums error:', error)
-        setAlbums([])
-        setAlbumTotal(0)
+        setAlbumLoadError(error)
       } finally {
         if (!cancelled) setLoadingAlbums(false)
       }
@@ -242,7 +247,39 @@ const Music = () => {
     return () => {
       cancelled = true
     }
-  }, [albumPagination.page, fetchAlbumPage, isIncrementalMode])
+  }, [albumPagination.page, albumRetryNonce, fetchAlbumPage, isIncrementalMode])
+  const songInitialLoading = isIncrementalMode
+    ? incrementalSongs.isInitialLoading && visibleSongs.length === 0
+    : loading && visibleSongs.length === 0
+  const albumInitialLoading = isIncrementalMode
+    ? incrementalAlbums.isInitialLoading && visibleAlbums.length === 0
+    : loadingAlbums && visibleAlbums.length === 0
+  const songError = isIncrementalMode ? incrementalSongs.initialError : songLoadError
+  const albumError = isIncrementalMode ? incrementalAlbums.initialError : albumLoadError
+  const isRefreshing =
+    activeTab === 'music'
+      ? isIncrementalMode
+        ? incrementalSongs.isInitialLoading && visibleSongs.length > 0
+        : loading && visibleSongs.length > 0
+      : isIncrementalMode
+        ? incrementalAlbums.isInitialLoading && visibleAlbums.length > 0
+        : loadingAlbums && visibleAlbums.length > 0
+
+  const retrySongs = () => {
+    if (isIncrementalMode) {
+      incrementalSongs.retry()
+      return
+    }
+    setSongRetryNonce((value) => value + 1)
+  }
+
+  const retryAlbums = () => {
+    if (isIncrementalMode) {
+      incrementalAlbums.retry()
+      return
+    }
+    setAlbumRetryNonce((value) => value + 1)
+  }
 
   const playSong = (song: SongItem) => {
     if (!isPlayableSong(song)) {
@@ -296,20 +333,18 @@ const Music = () => {
     }
   }
 
-  if (
-    (isIncrementalMode ? incrementalSongs.loadingInitial : loading) &&
-    visibleSongs.length === 0
-  ) {
+  if (songInitialLoading && activeTab === 'music') {
     return <PageSkeleton variant="music" />
   }
 
   return (
     <div className="gufeng-music-page mobile-page-shell">
-      <div className="mobile-page-container">
+      <div className="mobile-page-container" aria-busy={isRefreshing || undefined}>
         {/* Header */}
         <header className="mobile-page-header">
           <div className="mobile-page-titlebar">
             <h1 className="mobile-page-title">{t('music.title')}</h1>
+            {isRefreshing && <Spinner size="sm" label="音乐刷新中" />}
           </div>
           <div className="mt-3 flex">
             <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
@@ -375,8 +410,17 @@ const Music = () => {
             {/* Content */}
             {activeTab === 'music' ? (
               <div className="mt-5 flex flex-col">
-                {visibleSongs.length > 0 ? (
+                {songError && visibleSongs.length === 0 ? (
+                  <LoadErrorState onRetry={retrySongs} />
+                ) : visibleSongs.length > 0 ? (
                   <>
+                    {songError && (
+                      <LoadErrorState
+                        className="py-5"
+                        description="当前曲目可能不是最新内容。"
+                        onRetry={retrySongs}
+                      />
+                    )}
                     <div
                       className={clsx(
                         viewMode === 'list'
@@ -416,6 +460,12 @@ const Music = () => {
                         loaded={visibleSongs.length}
                         onLoadMore={incrementalSongs.loadMore}
                         sentinelRef={incrementalSongs.sentinelRef}
+                        error={
+                          incrementalSongs.error && !incrementalSongs.initialError
+                            ? '加载失败'
+                            : undefined
+                        }
+                        onRetry={incrementalSongs.retry}
                       />
                     ) : musicPagination.totalPages > 1 ? (
                       <Pagination
@@ -439,7 +489,9 @@ const Music = () => {
               </div>
             ) : (
               <div className="mt-5">
-                {!isIncrementalMode && loadingAlbums ? (
+                {albumError && visibleAlbums.length === 0 ? (
+                  <LoadErrorState onRetry={retryAlbums} />
+                ) : albumInitialLoading ? (
                   <div
                     className={clsx(
                       'grid',
@@ -457,6 +509,13 @@ const Music = () => {
                   </div>
                 ) : visibleAlbums.length > 0 ? (
                   <>
+                    {albumError && (
+                      <LoadErrorState
+                        className="py-5"
+                        description="当前专辑可能不是最新内容。"
+                        onRetry={retryAlbums}
+                      />
+                    )}
                     <div
                       className={clsx(
                         viewMode === 'list'
@@ -485,6 +544,12 @@ const Music = () => {
                         loaded={visibleAlbums.length}
                         onLoadMore={incrementalAlbums.loadMore}
                         sentinelRef={incrementalAlbums.sentinelRef}
+                        error={
+                          incrementalAlbums.error && !incrementalAlbums.initialError
+                            ? '加载失败'
+                            : undefined
+                        }
+                        onRetry={incrementalAlbums.retry}
                       />
                     ) : albumPagination.totalPages > 1 ? (
                       <Pagination

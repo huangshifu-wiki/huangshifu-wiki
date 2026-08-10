@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Calendar, ExternalLink, MapPin, Tag } from '@/src/components/icons'
 import { SmartBackLink } from '../components/SmartBackLink'
@@ -11,7 +11,7 @@ import { formatDateTime } from '../lib/dateUtils'
 import { formatEventTicketPrices, formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
 import type { EventDetailResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
-import { Button } from '@/src/components/ui'
+import { Button, LoadErrorState } from '@/src/components/ui'
 
 type EventPosterImage = {
   id: string
@@ -66,21 +66,35 @@ const EventLinkPanel = ({
 const EventDetail = () => {
   const { slug } = useParams()
   const [event, setEvent] = useState<EventItem | null>(null)
+  const previousSlugRef = useRef<string | undefined>(undefined)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
 
   useEffect(() => {
-    if (!slug) return
+    if (!slug) {
+      previousSlugRef.current = undefined
+      setLoading(false)
+      setLoadError(null)
+      setEvent(null)
+      return
+    }
+
+    const preserveEvent = previousSlugRef.current === slug
+    previousSlugRef.current = slug
     let cancelled = false
     setLoading(true)
+    setLoadError(null)
+    if (!preserveEvent) setEvent(null)
     apiGet<EventDetailResponse>(`/api/events/${slug}`)
       .then((data) => {
         if (!cancelled) setEvent(data.event)
       })
       .catch((error) => {
         console.error('Fetch event detail failed:', error)
-        if (!cancelled) setEvent(null)
+        if (!cancelled) setLoadError(error)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -89,7 +103,7 @@ const EventDetail = () => {
     return () => {
       cancelled = true
     }
-  }, [slug])
+  }, [retryNonce, slug])
 
   const posterImages = useMemo<EventPosterImage[]>(() => {
     if (!event) return []
@@ -117,7 +131,22 @@ const EventDetail = () => {
     ]
   }, [event])
 
-  if (loading) {
+  if (loadError && !event) {
+    return (
+      <div className="mobile-page-shell antique-detail">
+        <div className="mobile-page-container">
+          <SmartBackLink
+            fallbackTo="/events"
+            fallbackLabel="返回游记"
+            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+          />
+          <LoadErrorState className="mt-6" onRetry={() => setRetryNonce((value) => value + 1)} />
+        </div>
+      </div>
+    )
+  }
+
+  if (loading && !event) {
     return (
       <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
@@ -169,13 +198,23 @@ const EventDetail = () => {
   const ticketPrices = formatEventTicketPrices(event.ticketPrices)
 
   return (
-    <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
+    <div
+      className="mobile-page-shell antique-detail text-[var(--color-text-antique)]"
+      aria-busy={loading || undefined}
+    >
       <div className="mobile-page-container max-w-[1000px]">
         <SmartBackLink
           fallbackTo="/events"
           fallbackLabel="返回活动"
           className="mb-6 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
         />
+        {loadError && (
+          <LoadErrorState
+            className="mb-6"
+            description="活动内容可能不是最新内容。"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
+        )}
 
         <article className="space-y-10">
           <header className="flex flex-col gap-6 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row sm:items-start">

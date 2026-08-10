@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, Disc3, Image as ImageIcon, Music, Pause, Play } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { IconButton } from '@/src/components/ui'
+import { IconButton, LoadErrorState } from '@/src/components/ui'
 import { SmartImage } from '../../components/SmartImage'
 import { CoverPlaceholder } from '../../components/CoverPlaceholder'
 import { SiteFooterContent } from '../../components/SiteFooter'
@@ -32,6 +32,15 @@ interface HomeLoadState {
   albums: LoadState
 }
 
+type HomeSection = keyof HomeLoadState
+type HomeRetryState = Record<HomeSection, number>
+
+type HomeSectionResult =
+  | { section: 'events'; items: EventItem[] }
+  | { section: 'galleries'; items: GalleryItem[] }
+  | { section: 'songs'; items: SongItem[] }
+  | { section: 'albums'; items: AlbumItem[] }
+
 interface AlbumsResponse {
   albums: AlbumItem[]
   total: number
@@ -54,6 +63,15 @@ const initialLoadState: HomeLoadState = {
   songs: 'loading',
   albums: 'loading',
 }
+
+const initialRetryState: HomeRetryState = {
+  events: 0,
+  galleries: 0,
+  songs: 0,
+  albums: 0,
+}
+
+const homeSections: HomeSection[] = ['events', 'galleries', 'songs', 'albums']
 
 function useRevealOnScroll(refreshKey: number) {
   useEffect(() => {
@@ -327,37 +345,93 @@ export const DefaultHome = () => {
   const [songs, setSongs] = useState<SongItem[]>([])
   const [albums, setAlbums] = useState<AlbumItem[]>([])
   const [loadState, setLoadState] = useState<HomeLoadState>(initialLoadState)
+  const [retryNonce, setRetryNonce] = useState<HomeRetryState>(initialRetryState)
+  const previousRetryNonceRef = useRef<HomeRetryState | null>(null)
+  const initialRequestPendingRef = useRef(false)
   const { currentSong, isPlaying, playAlbumTracks } = useMusic()
 
   useEffect(() => {
     let cancelled = false
+    const previousRetryNonce = previousRetryNonceRef.current
+    previousRetryNonceRef.current = retryNonce
+    const changedSections = previousRetryNonce
+      ? homeSections.filter((section) => retryNonce[section] !== previousRetryNonce[section])
+      : homeSections
+    const sectionsToLoad =
+      changedSections.length > 0
+        ? changedSections
+        : initialRequestPendingRef.current
+          ? homeSections
+          : []
+    if (sectionsToLoad.length === 0) return
+    initialRequestPendingRef.current = true
+    if (previousRetryNonce) {
+      setLoadState((current) => {
+        const next = { ...current }
+        sectionsToLoad.forEach((section) => {
+          next[section] = 'loading'
+        })
+        return next
+      })
+    }
+
+    const loadSection = async (section: HomeSection): Promise<HomeSectionResult> => {
+      switch (section) {
+        case 'events': {
+          const data = await apiGet<EventListResponse>('/api/events', {
+            page: 1,
+            limit: 4,
+            sortOrder: 'desc',
+          })
+          return { section, items: data.events || [] }
+        }
+        case 'galleries': {
+          const data = await apiGet<GalleryListResponse>('/api/galleries', { page: 1, limit: 5 })
+          return { section, items: data.galleries || [] }
+        }
+        case 'songs': {
+          const data = await apiGet<SongsResponse>('/api/music', {
+            page: 1,
+            limit: 3,
+            includeInstrumentals: false,
+          })
+          return { section, items: data.songs || [] }
+        }
+        case 'albums': {
+          const data = await apiGet<AlbumsResponse>('/api/albums', { page: 1, limit: 1 })
+          return { section, items: data.albums || [] }
+        }
+      }
+    }
 
     const loadHomeContent = async () => {
-      setLoadState(initialLoadState)
-
-      const [eventResult, galleryResult, songResult, albumResult] = await Promise.allSettled([
-        apiGet<EventListResponse>('/api/events', { page: 1, limit: 4, sortOrder: 'desc' }),
-        apiGet<GalleryListResponse>('/api/galleries', { page: 1, limit: 5 }),
-        apiGet<SongsResponse>('/api/music', {
-          page: 1,
-          limit: 3,
-          includeInstrumentals: false,
-        }),
-        apiGet<AlbumsResponse>('/api/albums', { page: 1, limit: 1 }),
-      ])
-
+      const results = await Promise.allSettled(sectionsToLoad.map(loadSection))
       if (cancelled) return
+      initialRequestPendingRef.current = false
+      results.forEach((result) => {
+        if (result.status !== 'fulfilled') return
+        switch (result.value.section) {
+          case 'events':
+            setEvents(result.value.items)
+            break
+          case 'galleries':
+            setGalleries(result.value.items)
+            break
+          case 'songs':
+            setSongs(result.value.items)
+            break
+          case 'albums':
+            setAlbums(result.value.items)
+            break
+        }
+      })
 
-      setEvents(eventResult.status === 'fulfilled' ? eventResult.value.events || [] : [])
-      setGalleries(galleryResult.status === 'fulfilled' ? galleryResult.value.galleries || [] : [])
-      setSongs(songResult.status === 'fulfilled' ? songResult.value.songs || [] : [])
-      setAlbums(albumResult.status === 'fulfilled' ? albumResult.value.albums || [] : [])
-
-      setLoadState({
-        events: eventResult.status === 'fulfilled' ? 'ready' : 'error',
-        galleries: galleryResult.status === 'fulfilled' ? 'ready' : 'error',
-        songs: songResult.status === 'fulfilled' ? 'ready' : 'error',
-        albums: albumResult.status === 'fulfilled' ? 'ready' : 'error',
+      setLoadState((current) => {
+        const next = { ...current }
+        results.forEach((result, index) => {
+          next[sectionsToLoad[index]] = result.status === 'fulfilled' ? 'ready' : 'error'
+        })
+        return next
       })
     }
 
@@ -366,6 +440,10 @@ export const DefaultHome = () => {
     return () => {
       cancelled = true
     }
+  }, [retryNonce])
+
+  const retrySection = useCallback((section: HomeSection) => {
+    setRetryNonce((current) => ({ ...current, [section]: current[section] + 1 }))
   }, [])
 
   const displayedGalleries = useMemo(() => galleries.slice(0, 5), [galleries])
@@ -411,7 +489,11 @@ export const DefaultHome = () => {
                 {loadState.events === 'loading' ? (
                   <ListSkeleton />
                 ) : loadState.events === 'error' ? (
-                  <EmptyState label="活动暂时无法加载" />
+                  <LoadErrorState
+                    className="py-6"
+                    description="活动暂时无法加载。"
+                    onRetry={() => retrySection('events')}
+                  />
                 ) : events.length > 0 ? (
                   <div className="home-list">
                     {events.map((event) => (
@@ -428,7 +510,11 @@ export const DefaultHome = () => {
                 {loadState.songs === 'loading' ? (
                   <ListSkeleton count={3} />
                 ) : loadState.songs === 'error' ? (
-                  <EmptyState label="曲目暂时无法加载" />
+                  <LoadErrorState
+                    className="py-6"
+                    description="曲目暂时无法加载。"
+                    onRetry={() => retrySection('songs')}
+                  />
                 ) : songs.length > 0 ? (
                   <div className="home-list">
                     {songs.map((song) => {
@@ -452,7 +538,11 @@ export const DefaultHome = () => {
                 {loadState.albums === 'loading' ? (
                   <ListSkeleton count={1} />
                 ) : loadState.albums === 'error' ? (
-                  <EmptyState label="专辑暂时无法加载" />
+                  <LoadErrorState
+                    className="py-6"
+                    description="专辑暂时无法加载。"
+                    onRetry={() => retrySection('albums')}
+                  />
                 ) : featuredAlbum ? (
                   <div className="home-albums-list">
                     <AlbumFeature album={featuredAlbum} />
@@ -475,7 +565,11 @@ export const DefaultHome = () => {
             {loadState.galleries === 'loading' ? (
               <GallerySkeleton />
             ) : loadState.galleries === 'error' ? (
-              <EmptyState label="图集暂时无法加载" />
+              <LoadErrorState
+                className="py-6"
+                description="图集暂时无法加载。"
+                onRetry={() => retrySection('galleries')}
+              />
             ) : displayedGalleries.length > 0 ? (
               <div className="home-gallery-grid">
                 {displayedGalleries.map((gallery, index) => (

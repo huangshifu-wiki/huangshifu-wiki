@@ -13,6 +13,7 @@ import {
 import { apiGet, apiPut, apiPost } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
 import { SectionHeading } from '../../components/admin/AdminSection'
+import { LoadErrorState } from '@/src/components/ui'
 
 interface DiskStatus {
   totalSpaceGB: number
@@ -274,15 +275,7 @@ export const AdminDiskMonitor: React.FC = () => {
     return (
       <div className="space-y-5">
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">磁盘监控</h1>
-        <div className="p-4 theme-status-error rounded">
-          <p className="text-sm theme-text-error font-medium">{error}</p>
-          <button
-            onClick={() => fetchDiskStatus()}
-            className="mt-2 px-4 py-2 theme-button-primary rounded text-sm font-medium transition-all"
-          >
-            重试
-          </button>
-        </div>
+        <LoadErrorState description={error} onRetry={() => void fetchDiskStatus()} />
       </div>
     )
   }

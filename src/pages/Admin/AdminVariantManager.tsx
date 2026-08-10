@@ -16,6 +16,7 @@ import {
 import { apiGet, apiPost } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
 import { clsx } from 'clsx'
+import { LoadErrorState } from '@/src/components/ui'
 
 interface TypeVariantStats {
   total: number
@@ -96,7 +97,10 @@ export const AdminVariantManager: React.FC = () => {
           data: null as any,
         })),
       ])
-      if (statsData.success) setVariantStats(statsData.data)
+      if (!statsData.success) {
+        throw new Error('获取变体统计失败')
+      }
+      setVariantStats(statsData.data)
       if (cleanupData.success) setCleanupStats(cleanupData.data)
     } catch (err) {
       console.error('Failed to fetch stats:', err)
@@ -302,6 +306,12 @@ export const AdminVariantManager: React.FC = () => {
     { value: 'all', label: '全部重建', desc: '强制重新生成所有变体（慎用）' },
   ]
 
+  if (error && !variantStats && !cleanupStats && !loading) {
+    return (
+      <LoadErrorState className="py-10" description={error} onRetry={() => void fetchStats()} />
+    )
+  }
+
   if (loading && !variantStats && !cleanupStats) {
     return (
       <div className="space-y-5">
@@ -337,13 +347,7 @@ export const AdminVariantManager: React.FC = () => {
       </div>
 
       {error && (
-        <div className="flex items-start gap-3 p-3 rounded theme-status-error">
-          <XCircle size={18} className="theme-text-error shrink-0 mt-0.5" />
-          <p className="text-sm theme-text-error flex-1">{error}</p>
-          <button onClick={() => setError(null)} className="p-1 theme-icon-button-danger">
-            <Trash2 size={14} />
-          </button>
-        </div>
+        <LoadErrorState className="py-5" description={error} onRetry={() => void fetchStats()} />
       )}
 
       {variantStats && (

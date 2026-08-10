@@ -15,6 +15,7 @@ import {
   normalizeReviewFilter,
 } from './reviewQueue'
 import type { AdminReviewQueueMergedItem } from '../../types/api'
+import { LoadErrorState } from '@/src/components/ui'
 
 const getCurrentItemIndex = (items: AdminReviewQueueMergedItem[], currentKey: string | null) => {
   if (!items.length) return -1
@@ -60,6 +61,7 @@ const AdminReviewWorkbench = () => {
   const [items, setItems] = useState<AdminReviewQueueMergedItem[]>([])
   const [currentKey, setCurrentKey] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [actionLoading, setActionLoading] = useState<'approve' | 'reject' | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const loadRequestRef = useRef(0)
@@ -73,6 +75,7 @@ const AdminReviewWorkbench = () => {
     const requestId = loadRequestRef.current + 1
     loadRequestRef.current = requestId
     setLoading(true)
+    setLoadError(null)
     try {
       const nextItems = await fetchReviewQueue(filter)
       if (requestId !== loadRequestRef.current) return
@@ -90,7 +93,10 @@ const AdminReviewWorkbench = () => {
       setCurrentKey(nextKey)
     } catch (error) {
       console.error('Fetch review workbench queue failed:', error)
-      show('获取审核队列失败', { variant: 'error' })
+      setLoadError(error)
+      if (requestId === loadRequestRef.current) {
+        show('获取审核队列失败', { variant: 'error' })
+      }
     } finally {
       if (requestId === loadRequestRef.current) {
         setLoading(false)
@@ -99,9 +105,9 @@ const AdminReviewWorkbench = () => {
   }
 
   useEffect(() => {
+    setCurrentKey(null)
     void loadQueue()
   }, [filter])
-
   const scrollReviewPanelToTop = () => {
     const scrollContainer = rootRef.current?.closest('[data-admin-scroll-container]')
     if (scrollContainer instanceof HTMLElement) {
@@ -244,8 +250,17 @@ const AdminReviewWorkbench = () => {
         </div>
       </div>
 
-      {loading ? (
+      {loadError && currentItem && (
+        <LoadErrorState
+          className="py-5"
+          description="审核队列可能不是最新内容。"
+          onRetry={() => void loadQueue(currentKey)}
+        />
+      )}
+      {loading && !currentItem ? (
         <div className="h-[520px] bg-surface border border-border rounded animate-pulse" />
+      ) : loadError && !currentItem ? (
+        <LoadErrorState onRetry={() => void loadQueue(currentKey)} />
       ) : currentItem ? (
         <AdminReviewContentPreview item={currentItem} />
       ) : (

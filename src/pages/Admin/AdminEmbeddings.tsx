@@ -12,6 +12,7 @@ import {
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiGet, apiPost } from '../../lib/apiClient'
+import { LoadErrorState } from '@/src/components/ui'
 import { useToast } from '../../components/Toast'
 import { ConfirmModal } from '../../components/Modal'
 
@@ -160,6 +161,7 @@ const AdminEmbeddings = () => {
   const [status, setStatus] = useState<EmbeddingsStatus | null>(null)
   const [errors, setErrors] = useState<EmbeddingsError[]>([])
   const [loading, setLoading] = useState(true)
+  const [statusError, setStatusError] = useState<unknown | null>(null)
   const [loadingErrors, setLoadingErrors] = useState(false)
   const [showErrors, setShowErrors] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -195,11 +197,13 @@ const AdminEmbeddings = () => {
 
   const fetchStatus = async () => {
     setLoading(true)
+    setStatusError(null)
     try {
       const response = await apiGet<EmbeddingsStatus>('/api/embeddings/status')
       setStatus(response)
     } catch (error) {
       console.error(error)
+      setStatusError(error)
       show('获取向量状态失败', { variant: 'error' })
     } finally {
       setLoading(false)
@@ -440,6 +444,11 @@ const AdminEmbeddings = () => {
 
   const anyActionLoading = actionLoading !== null || textActionLoading !== null
 
+  if (statusError && !status && !loading) {
+    return (
+      <LoadErrorState description="向量状态加载失败，请重试。" onRetry={() => void fetchStatus()} />
+    )
+  }
   if (loading && !status) {
     return <LoadingSkeleton />
   }
@@ -479,6 +488,13 @@ const AdminEmbeddings = () => {
           <RefreshCw size={14} /> 刷新
         </button>
       </div>
+      {statusError && status && (
+        <LoadErrorState
+          className="py-5"
+          description="向量状态可能不是最新内容。"
+          onRetry={() => void fetchStatus()}
+        />
+      )}
 
       {status && summary && (
         <>

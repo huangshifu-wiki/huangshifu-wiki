@@ -33,6 +33,7 @@ import RelationGraph from '../../components/wiki/RelationGraph'
 import type { RelationGraphData } from '../../components/wiki/RelationGraph'
 import { RELATION_TYPE_LABELS } from '../../components/wiki/types'
 import type { WikiItem, WikiRelationResolved, WikiRelationDisplayItem } from './types'
+import { LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const hasExpandableRelationGraph = (graph: RelationGraphData | null, currentSlug?: string) => {
@@ -83,6 +84,7 @@ const WikiPageView = () => {
   const navigate = useNavigate()
   const [page, setPage] = useState<WikiItem | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const { user, isAdmin, isBanned } = useAuth()
   const { t } = useI18n()
   const { show } = useToast()
@@ -113,62 +115,63 @@ const WikiPageView = () => {
   const [resolvedRelations, setResolvedRelations] = useState<WikiRelationResolved[]>([])
   const [showGraph, setShowGraph] = useState(false)
 
-  useEffect(() => {
-    const fetchPage = async () => {
-      setLoading(true)
-      try {
-        const data = await apiGet<{
-          page: WikiItem
-          backlinks: WikiItem[]
-          relations: WikiRelationResolved[]
-          relationGraph: RelationGraphData
-        }>(`/api/wiki/${slug}`)
-        setPage(data.page)
-        setBacklinks(data.backlinks || [])
-        setResolvedRelations((data.relations || []).filter((relation) => !relation.inferred))
-        const nextRelationGraph = data.relationGraph || null
-        setRelationGraph(nextRelationGraph)
-        if (!hasExpandableRelationGraph(nextRelationGraph, slug)) {
-          setShowGraph(false)
-        }
-        if (!data.page.content) {
-          console.warn('[WikiPageView] API returned empty content:', {
-            slug,
-            hasContent: !!data.page.content,
-            contentType: typeof data.page.content,
-            contentLength: data.page.content?.length,
-            pageKeys: Object.keys(data.page),
-          })
-        }
-      } catch (e) {
-        console.error('Error fetching page:', e)
+  const fetchPage = async () => {
+    setLoading(true)
+    setLoadError(false)
+    try {
+      const data = await apiGet<{
+        page: WikiItem
+        backlinks: WikiItem[]
+        relations: WikiRelationResolved[]
+        relationGraph: RelationGraphData
+      }>(`/api/wiki/${slug}`)
+      setPage(data.page)
+      setBacklinks(data.backlinks || [])
+      setResolvedRelations((data.relations || []).filter((relation) => !relation.inferred))
+      const nextRelationGraph = data.relationGraph || null
+      setRelationGraph(nextRelationGraph)
+      if (!hasExpandableRelationGraph(nextRelationGraph, slug)) {
+        setShowGraph(false)
       }
+      if (!data.page.content) {
+        console.warn('[WikiPageView] API returned empty content:', {
+          slug,
+          hasContent: !!data.page.content,
+          contentType: typeof data.page.content,
+          contentLength: data.page.content?.length,
+          pageKeys: Object.keys(data.page),
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching page:', error)
+      setLoadError(true)
+    } finally {
       setLoading(false)
     }
-    fetchPage()
+  }
+
+  useEffect(() => {
+    void fetchPage()
   }, [slug])
 
-  if (loading)
+  if (loading && !page)
     return (
-      <div className="mobile-page-shell antique-detail">
+      <div className="mobile-page-shell antique-detail" role="status" aria-label="加载中">
         <div className="mobile-page-container">
-          <div className="mb-6 h-4 w-24 animate-pulse rounded bg-surface-alt" />
+          <Skeleton className="mb-6 h-4 w-24" />
           <div className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
-            <div className="mb-4 h-10 w-2/3 animate-pulse rounded bg-surface-alt" />
-            <div className="h-5 w-1/2 animate-pulse rounded bg-surface-alt" />
+            <Skeleton className="mb-4 h-10 w-2/3" />
+            <Skeleton className="h-5 w-1/2" />
           </div>
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((item) => (
-              <div
-                key={item}
-                className="h-5 animate-pulse rounded bg-surface-alt"
-                style={{ width: `${94 - item * 10}%` }}
-              />
+              <Skeleton key={item} className="h-5" style={{ width: `${94 - item * 10}%` }} />
             ))}
           </div>
         </div>
       </div>
     )
+
   if (!page)
     return (
       <div className="mobile-page-shell antique-detail">
@@ -178,9 +181,13 @@ const WikiPageView = () => {
             fallbackLabel={t('wiki.backToList')}
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
           />
-          <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
-            {t('wiki.notFound')}
-          </div>
+          {loadError ? (
+            <LoadErrorState className="mt-8" onRetry={() => void fetchPage()} />
+          ) : (
+            <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
+              {t('wiki.notFound')}
+            </div>
+          )}
         </div>
       </div>
     )
@@ -239,7 +246,10 @@ const WikiPageView = () => {
   }
 
   return (
-    <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
+    <div
+      className="mobile-page-shell antique-detail text-[var(--color-text-antique)]"
+      aria-busy={loading}
+    >
       <div className="mobile-page-container wiki-detail-page">
         <SmartBackLink
           fallbackTo="/wiki"
@@ -247,6 +257,7 @@ const WikiPageView = () => {
           icon={<ArrowLeft size={18} />}
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
         />
+        {loadError && <LoadErrorState className="mb-6" onRetry={() => void fetchPage()} />}
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">

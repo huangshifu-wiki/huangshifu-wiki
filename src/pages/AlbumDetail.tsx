@@ -14,6 +14,7 @@ import { Lightbox } from '../components/Lightbox'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { isPlayableSong } from '../lib/musicPlayback'
+import { LoadErrorState } from '@/src/components/ui'
 import type { MusicExternalSource } from '../types/entities'
 
 type SongItem = {
@@ -53,7 +54,10 @@ const compareTracks = (a: SongItem, b: SongItem) =>
 const AlbumDetail = () => {
   const { albumId } = useParams()
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
   const [album, setAlbum] = useState<AlbumResponse['album'] | null>(null)
+  const previousAlbumIdRef = useRef<string | undefined>(undefined)
   const [favoriting, setFavoriting] = useState<string | null>(null)
   const [descExpanded, setDescExpanded] = useState(false)
   const [descNeedExpand, setDescNeedExpand] = useState(false)
@@ -76,23 +80,38 @@ const AlbumDetail = () => {
 
   const playableTracks = useMemo(() => sortedTracks.filter(isPlayableSong), [sortedTracks])
 
-  const fetchAlbum = async () => {
-    if (!albumId) return
-    setLoading(true)
-    try {
-      const response = await apiGet<AlbumResponse>(`/api/albums/${albumId}`)
-      setAlbum(response.album || null)
-    } catch (error) {
-      console.error('Fetch album detail error:', error)
-      setAlbum(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    fetchAlbum()
-  }, [albumId])
+    if (!albumId) {
+      previousAlbumIdRef.current = undefined
+      setLoading(false)
+      setLoadError(null)
+      setAlbum(null)
+      return
+    }
+
+    const preserveAlbum = previousAlbumIdRef.current === albumId
+    previousAlbumIdRef.current = albumId
+    let cancelled = false
+    setLoading(true)
+    setLoadError(null)
+    if (!preserveAlbum) setAlbum(null)
+    apiGet<AlbumResponse>(`/api/albums/${albumId}`)
+      .then((response) => {
+        if (!cancelled) setAlbum(response.album || null)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        console.error('Fetch album detail error:', error)
+        setLoadError(error)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [albumId, retryNonce])
 
   const handlePlay = (index = 0) => {
     if (!album) return
@@ -161,7 +180,22 @@ const AlbumDetail = () => {
     show('复制链接失败，请稍后重试', { variant: 'error' })
   }
 
-  if (loading) {
+  if (loadError && !album) {
+    return (
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container">
+          <SmartBackLink
+            fallbackTo="/music"
+            fallbackLabel="返回音乐馆"
+            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+          />
+          <LoadErrorState className="mt-6" onRetry={() => setRetryNonce((value) => value + 1)} />
+        </div>
+      </div>
+    )
+  }
+
+  if (loading && !album) {
     return (
       <div className="mobile-page-shell antique-page">
         <div className="mobile-page-container">
@@ -191,13 +225,23 @@ const AlbumDetail = () => {
   const coverPreviewSrc = album.coverThumbnail || album.cover
 
   return (
-    <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
+    <div
+      className="mobile-page-shell antique-detail text-[var(--color-text-antique)]"
+      aria-busy={loading || undefined}
+    >
       <div className="mobile-page-container">
         <SmartBackLink
           fallbackTo="/music"
           fallbackLabel="返回音乐馆"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
         />
+        {loadError && (
+          <LoadErrorState
+            className="mb-5"
+            description="专辑内容可能不是最新内容。"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
+        )}
 
         {/* Detail Header */}
         <div className="mb-6 flex flex-col gap-5 border-b border-border pb-6 sm:flex-row">

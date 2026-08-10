@@ -13,7 +13,8 @@ import { CoverManager } from '../../components/CoverManager'
 import { MusicImportModal } from '../../components/MusicImportModal'
 import { SmartImage } from '../../components/SmartImage'
 import { CoverPlaceholder } from '../../components/CoverPlaceholder'
-import { Button, Checkbox, Input, Select } from '@/src/components/ui'
+import { Button, Checkbox, Input, LoadErrorState, Select } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 import { SongAlbumRelationsModal } from '../../components/SongAlbumRelationsModal'
 import { SongFormModal } from '../../components/SongFormModal'
 import { useDialog } from '../../components/Dialog'
@@ -74,7 +75,10 @@ export const AdminMusicPage = () => {
   const [albums, setAlbums] = useState<AdminDataItem[]>([])
   const [songTotal, setSongTotal] = useState<number>()
   const [albumTotal, setAlbumTotal] = useState<number>()
-  const [loading, setLoading] = useState(false)
+  const [songLoading, setSongLoading] = useState(true)
+  const [albumLoading, setAlbumLoading] = useState(true)
+  const [songLoadError, setSongLoadError] = useState<unknown | null>(null)
+  const [albumLoadError, setAlbumLoadError] = useState<unknown | null>(null)
   const [pendingActions, setPendingActions] = useState<Record<string, AdminResourcePendingAction>>(
     {}
   )
@@ -134,7 +138,10 @@ export const AdminMusicPage = () => {
     async (signal?: AbortSignal, options?: { silent?: boolean }) => {
       const silent = options?.silent === true
       if (silent) saveScroll()
-      else setLoading(true)
+      else {
+        setSongLoading(true)
+        setSongLoadError(null)
+      }
       try {
         const response = await apiGet<AdminMusicListResponse>(
           '/api/admin/music',
@@ -145,6 +152,7 @@ export const AdminMusicPage = () => {
         if (signal?.aborted) return
         setSongs(response.data || [])
         setSongTotal(response.total || 0)
+        setSongLoadError(null)
         setSelectedSongIds((previous) => {
           const visibleIds = new Set((response.data || []).map(itemId))
           for (const id of previous) {
@@ -156,13 +164,11 @@ export const AdminMusicPage = () => {
         })
       } catch (error) {
         if (signal?.aborted) return
-        if (!silent) {
-          setSongs([])
-          setSongTotal(0)
-        }
-        show(error instanceof Error ? error.message : '获取歌曲列表失败', { variant: 'error' })
+        setSongLoadError(error)
+        if (!silent)
+          show(error instanceof Error ? error.message : '获取歌曲列表失败', { variant: 'error' })
       } finally {
-        if (!signal?.aborted && !silent) setLoading(false)
+        if (!signal?.aborted && !silent) setSongLoading(false)
       }
     },
     [appliedFilters, saveScroll, show, songPagination.page, songPagination.pageSize]
@@ -172,7 +178,10 @@ export const AdminMusicPage = () => {
     async (signal?: AbortSignal, options?: { silent?: boolean }) => {
       const silent = options?.silent === true
       if (silent) saveScroll()
-      else setLoading(true)
+      else {
+        setAlbumLoading(true)
+        setAlbumLoadError(null)
+      }
       try {
         const response = await apiGet<AdminAlbumListResponse>(
           '/api/admin/albums',
@@ -183,15 +192,14 @@ export const AdminMusicPage = () => {
         if (signal?.aborted) return
         setAlbums(response.data || [])
         setAlbumTotal(response.total || 0)
+        setAlbumLoadError(null)
       } catch (error) {
         if (signal?.aborted) return
-        if (!silent) {
-          setAlbums([])
-          setAlbumTotal(0)
-        }
-        show(error instanceof Error ? error.message : '获取专辑列表失败', { variant: 'error' })
+        setAlbumLoadError(error)
+        if (!silent)
+          show(error instanceof Error ? error.message : '获取专辑列表失败', { variant: 'error' })
       } finally {
-        if (!signal?.aborted && !silent) setLoading(false)
+        if (!signal?.aborted && !silent) setAlbumLoading(false)
       }
     },
     [albumPagination.page, appliedFilters, saveScroll, show]
@@ -349,6 +357,27 @@ export const AdminMusicPage = () => {
   }
 
   const selectedAllSongs = songs.length > 0 && selectedSongIds.size === songs.length
+  const activeItems = tab === 'songs' ? songs : albums
+  const activeLoading = tab === 'songs' ? songLoading : albumLoading
+  const activeLoadError = tab === 'songs' ? songLoadError : albumLoadError
+
+  if (activeLoading && activeItems.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+  if (activeLoadError && activeItems.length === 0) {
+    return (
+      <LoadErrorState
+        description={
+          activeLoadError instanceof Error
+            ? activeLoadError.message
+            : tab === 'songs'
+              ? '获取歌曲列表失败'
+              : '获取专辑列表失败'
+        }
+        onRetry={() => void refreshCurrent({ silent: false })}
+      />
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -390,6 +419,17 @@ export const AdminMusicPage = () => {
           </Button>
         </div>
       </header>
+      {activeLoadError && activeItems.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          description={
+            activeLoadError instanceof Error
+              ? activeLoadError.message
+              : '当前音乐列表可能不是最新内容。'
+          }
+          onRetry={() => void refreshCurrent({ silent: false })}
+        />
+      )}
 
       <div className="flex gap-2 border-b border-border">
         <Button
@@ -500,7 +540,7 @@ export const AdminMusicPage = () => {
       {tab === 'songs' ? (
         <SongTable
           songs={songs}
-          loading={loading}
+          loading={songLoading}
           selectedIds={selectedSongIds}
           page={songPagination.page}
           pageSize={songPagination.pageSize}
@@ -508,7 +548,6 @@ export const AdminMusicPage = () => {
             setSelectedSongIds((previous) => {
               const next = new Set(previous)
               if (selected) next.add(id)
-              else next.delete(id)
               return next
             })
           }
@@ -523,7 +562,7 @@ export const AdminMusicPage = () => {
       ) : (
         <AlbumTable
           albums={albums}
-          loading={loading}
+          loading={albumLoading}
           page={albumPagination.page}
           pageSize={albumPagination.pageSize}
           onEdit={(item) => {
@@ -903,7 +942,7 @@ const ResourceTable = ({
           </tr>
         </thead>
         <tbody>
-          {loading ? (
+          {loading && React.Children.count(children) === 0 ? (
             [1, 2, 3].map((item) => (
               <tr key={item}>
                 <td colSpan={headers.length} className="px-3 py-6">

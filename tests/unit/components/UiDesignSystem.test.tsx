@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   Button,
+  LoadErrorState,
   Checkbox,
+  Spinner,
   Dialog,
   DialogContent,
   DialogTrigger,
@@ -53,6 +55,37 @@ describe('UI 设计系统', () => {
     const button = screen.getByRole('button', { name: '保存中' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('aria-busy', 'true')
+  })
+  it('Spinner 暴露可访问文案并支持尺寸', () => {
+    render(
+      <>
+        <Spinner size="sm" label="列表加载中" />
+        <Spinner size="lg" />
+      </>
+    )
+
+    const statuses = screen.getAllByRole('status')
+    expect(statuses).toHaveLength(2)
+    expect(statuses[0]).toHaveTextContent('列表加载中')
+    expect(statuses[0].querySelector('svg')).toHaveClass('h-4', 'w-4')
+    expect(statuses[1].querySelector('svg')).toHaveClass('h-7', 'w-7')
+  })
+
+  it('LoadErrorState 显示错误信息并支持重试', () => {
+    const onRetry = vi.fn()
+    render(
+      <LoadErrorState
+        title="读取失败"
+        description="请稍后重试"
+        retryLabel="再次加载"
+        onRetry={onRetry}
+      />
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('读取失败')
+    expect(screen.getByRole('alert')).toHaveTextContent('请稍后重试')
+    fireEvent.click(screen.getByRole('button', { name: '再次加载' }))
+    expect(onRetry).toHaveBeenCalledOnce()
   })
 
   it('Button soft 变体使用浅色底与语义文字色', () => {

@@ -6,7 +6,8 @@ import { GalleryCard } from '../components/Gallery/GalleryCard'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import Pagination from '../components/Pagination'
 import { ViewModeSelector } from '../components/ViewModeSelector'
-import { LinkButton } from '@/src/components/ui'
+import { LinkButton, LoadErrorState, Spinner } from '@/src/components/ui'
+import { PageSkeleton } from '../components/PageSkeleton'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
@@ -28,6 +29,8 @@ const PAGE_SIZE_OPTIONS = [12, 24, 48, 96]
 const GalleryList = () => {
   const [, setSearchParams] = useSearchParams()
   const [galleries, setGalleries] = useState<GalleryItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [galleryLoadError, setGalleryLoadError] = useState<unknown | null>(null)
   const { user, isAdmin, isBanned } = useAuth()
   const [isGalleryAdminOnly, setIsGalleryAdminOnly] = useState(false)
   const [galleryAccessLoaded, setGalleryAccessLoaded] = useState(false)
@@ -102,6 +105,11 @@ const GalleryList = () => {
   const fetchGalleries = useCallback(
     async (options?: { bypassCache?: boolean; signal?: AbortSignal }) => {
       if (isIncrementalMode) return
+      const isSilentRefresh = options?.bypassCache === true
+      if (!isSilentRefresh) {
+        setLoading(true)
+        setGalleryLoadError(null)
+      }
       try {
         const data = await fetchGalleryPage(galleryPagination.page, options)
         setGalleries(data.items)
@@ -111,14 +119,33 @@ const GalleryList = () => {
           return
         }
         console.error('Fetch galleries error:', error)
-        if (!options?.bypassCache) {
-          setGalleries([])
-          setTotalGalleries(0)
+        if (!isSilentRefresh) {
+          setGalleryLoadError(error)
+        }
+      } finally {
+        if (!isSilentRefresh) {
+          setLoading(false)
         }
       }
     },
     [fetchGalleryPage, galleryPagination.page, isIncrementalMode]
   )
+
+  const handleRetry = () => {
+    if (isIncrementalMode) {
+      incrementalList.retry()
+      return
+    }
+    void fetchGalleries()
+  }
+
+  const isInitialLoading = isIncrementalMode
+    ? incrementalList.isInitialLoading && visibleGalleries.length === 0
+    : loading && visibleGalleries.length === 0
+  const loadError = isIncrementalMode ? incrementalList.initialError : galleryLoadError
+  const isRefreshing = isIncrementalMode
+    ? incrementalList.isInitialLoading && visibleGalleries.length > 0
+    : loading && visibleGalleries.length > 0
 
   useEffect(() => {
     fetchGalleries()
@@ -168,9 +195,12 @@ const GalleryList = () => {
     fetchGalleryAccess()
   }, [])
 
+  if (isInitialLoading) {
+    return <PageSkeleton variant="gallery" />
+  }
   return (
     <div className="gufeng-gallery-page mobile-page-shell">
-      <div className="mobile-page-container gallery-page">
+      <div className="mobile-page-container gallery-page" aria-busy={isRefreshing || undefined}>
         <header className="mobile-page-header">
           <div className="mobile-page-titlebar">
             <div className="min-w-0">
@@ -180,6 +210,7 @@ const GalleryList = () => {
               </div>
             </div>
             <div className="mobile-action-row">
+              {isRefreshing && <Spinner size="sm" label="图集刷新中" />}
               <ViewModeSelector
                 value={viewMode}
                 onChange={(mode) => void setScopedViewMode('gallery', mode)}
@@ -194,7 +225,16 @@ const GalleryList = () => {
           </div>
         </header>
 
-        {visibleGalleries.length > 0 ? (
+        {loadError && visibleGalleries.length > 0 && (
+          <LoadErrorState
+            className="py-5"
+            description="当前图集可能不是最新内容。"
+            onRetry={handleRetry}
+          />
+        )}
+        {loadError && visibleGalleries.length === 0 ? (
+          <LoadErrorState onRetry={handleRetry} />
+        ) : visibleGalleries.length > 0 ? (
           <>
             <div
               className={clsx(
@@ -225,6 +265,10 @@ const GalleryList = () => {
                 loaded={visibleGalleries.length}
                 onLoadMore={incrementalList.loadMore}
                 sentinelRef={incrementalList.sentinelRef}
+                error={
+                  incrementalList.error && !incrementalList.initialError ? '加载失败' : undefined
+                }
+                onRetry={incrementalList.retry}
               />
             ) : galleryPagination.totalPages > 1 ? (
               <Pagination

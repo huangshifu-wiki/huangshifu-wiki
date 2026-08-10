@@ -8,7 +8,7 @@ import { apiGet, apiPost } from '../../lib/apiClient'
 import { getNotificationLink, getNotificationText } from '../../lib/notifications'
 import type { NotificationsResponse } from '../../types/api'
 import type { NotificationItem } from '../../types/entities'
-import { Button, IconButton } from '@/src/components/ui'
+import { Button, IconButton, LoadErrorState, Spinner } from '@/src/components/ui'
 
 interface NotificationPanelProps {
   onNavigate: (link: string) => void
@@ -60,12 +60,14 @@ export const NotificationPanel = React.memo(({ onNavigate }: NotificationPanelPr
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [notifLoading, setNotifLoading] = useState(false)
+  const [notifLoadError, setNotifLoadError] = useState<unknown | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return
     try {
       setNotifLoading(true)
+      setNotifLoadError(null)
       const data = await apiGet<NotificationsResponse>('/api/notifications', {
         limit: 10,
       })
@@ -73,6 +75,7 @@ export const NotificationPanel = React.memo(({ onNavigate }: NotificationPanelPr
       setUnreadCount(data.unreadCount || 0)
     } catch (error) {
       console.error('Fetch notifications error:', error)
+      setNotifLoadError(error)
     } finally {
       setNotifLoading(false)
     }
@@ -164,7 +167,15 @@ export const NotificationPanel = React.memo(({ onNavigate }: NotificationPanelPr
         </div>
         <div className="max-h-80 overflow-y-auto">
           {notifLoading ? (
-            <div className="py-8 text-center text-sm text-text-muted">加载中...</div>
+            <div className="flex items-center justify-center py-8">
+              <Spinner label="通知加载中" />
+            </div>
+          ) : notifLoadError ? (
+            <LoadErrorState
+              className="px-4 py-6"
+              description="通知暂时无法加载。"
+              onRetry={() => void fetchNotifications()}
+            />
           ) : notifications.length === 0 ? (
             <div className="py-8 text-center text-sm text-text-muted">暂无通知</div>
           ) : (

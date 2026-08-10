@@ -16,6 +16,7 @@ import {
   IconButton,
   Input,
   Panel,
+  LoadErrorState,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -141,10 +142,19 @@ const UiShowcase = () => {
               <Skeleton className="h-4 w-2/3" />
               <Skeleton className="h-12" />
             </Panel>
-            <Panel className="flex items-center justify-center">
-              <Spinner />
+            <Panel className="flex flex-wrap items-center justify-center gap-3">
+              <Spinner size="sm" label="小型加载中" />
+              <Spinner label="标准加载中" />
+              <Spinner size="lg" label="大型加载中" />
             </Panel>
           </div>
+          <Panel>
+            <LoadErrorState
+              title="示例加载失败"
+              description="点击按钮检查重试反馈。"
+              onRetry={() => show('已重新加载')}
+            />
+          </Panel>
           <EmptyState title="暂无修订" description="完成第一次编辑后，修订记录会出现在这里。" />
         </ShowcaseSection>
 

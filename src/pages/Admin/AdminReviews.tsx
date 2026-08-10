@@ -9,11 +9,13 @@ import {
   REVIEW_FILTER_OPTIONS,
 } from './reviewQueue'
 import type { AdminReviewQueueMergedItem } from '../../types/api'
-import { Button } from '@/src/components/ui'
+import { Button, LoadErrorState } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 
 export const AdminReviews = () => {
   const [items, setItems] = useState<AdminReviewQueueMergedItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const filter = normalizeReviewFilter(searchParams.get('type'))
@@ -23,12 +25,15 @@ export const AdminReviews = () => {
     const requestId = loadRequestRef.current + 1
     loadRequestRef.current = requestId
     setLoading(true)
+    setLoadError(null)
     try {
       const nextItems = await fetchReviewQueue(filter)
       if (requestId !== loadRequestRef.current) return
       setItems(nextItems)
+      setLoadError(null)
     } catch (e) {
       console.error(e)
+      if (requestId === loadRequestRef.current) setLoadError(e)
     } finally {
       if (requestId === loadRequestRef.current) {
         setLoading(false)
@@ -50,6 +55,13 @@ export const AdminReviews = () => {
     navigate(`/admin/reviews/workbench?type=${filter}`)
   }
 
+  if (loading && items.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+  if (loadError && items.length === 0) {
+    return <LoadErrorState onRetry={() => void fetchQueue()} />
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -67,6 +79,13 @@ export const AdminReviews = () => {
           </Button>
         </div>
       </div>
+      {loadError && items.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          description="审核队列可能不是最新内容。"
+          onRetry={() => void fetchQueue()}
+        />
+      )}
 
       <div className="bg-surface border border-border rounded p-4 flex flex-wrap items-center gap-3">
         {REVIEW_FILTER_OPTIONS.map((item) => (
@@ -93,13 +112,7 @@ export const AdminReviews = () => {
         ))}
       </div>
 
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-28 bg-surface border border-border rounded animate-pulse" />
-          ))}
-        </div>
-      ) : items.length > 0 ? (
+      {items.length > 0 ? (
         <div className="space-y-3">
           {items.map((item) => (
             <div

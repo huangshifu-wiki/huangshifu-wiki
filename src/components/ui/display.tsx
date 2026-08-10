@@ -1,5 +1,6 @@
 import { Loader2 } from '@/src/components/icons'
 import React, { useId } from 'react'
+import { Button } from './actions'
 import { cn } from './utils'
 
 export const Panel = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
@@ -55,18 +56,68 @@ export const Separator = React.forwardRef<HTMLHRElement, React.HTMLAttributes<HT
 )
 Separator.displayName = 'Separator'
 
-export const Spinner = ({
-  className,
-  label = '加载中',
-}: {
+const spinnerSizeClasses = {
+  sm: 'h-4 w-4',
+  md: 'h-5 w-5',
+  lg: 'h-7 w-7',
+} as const
+
+export interface SpinnerProps {
   className?: string
   label?: string
-}) => (
-  <span role="status" className="inline-flex items-center">
-    <Loader2 className={cn('h-5 w-5 animate-spin', className)} aria-hidden="true" />
+  size?: keyof typeof spinnerSizeClasses
+}
+
+export const Spinner = ({ className, label = '加载中', size = 'md' }: SpinnerProps) => (
+  <span role="status" aria-label={label} className="inline-flex items-center">
+    <Loader2
+      className={cn(spinnerSizeClasses[size], 'animate-spin', className)}
+      aria-hidden="true"
+    />
     <span className="sr-only">{label}</span>
   </span>
 )
+
+export interface LoadErrorStateProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
+  title?: React.ReactNode
+  description?: React.ReactNode
+  retryLabel?: React.ReactNode
+  onRetry?: () => void
+}
+
+export const LoadErrorState = React.forwardRef<HTMLDivElement, LoadErrorStateProps>(
+  (
+    {
+      title = '加载失败',
+      description = '内容暂时无法加载，请稍后重试。',
+      retryLabel = '重新加载',
+      onRetry,
+      className,
+      ...props
+    },
+    ref
+  ) => (
+    <div
+      ref={ref}
+      className={cn('py-12 text-center text-text-muted', className)}
+      {...props}
+      role="alert"
+    >
+      <h3 className="font-[var(--book-title-font)] text-xl tracking-[0.08em] text-text-primary">
+        {title}
+      </h3>
+      {description && <p className="mx-auto mt-2 max-w-md text-sm">{description}</p>}
+      {onRetry && (
+        <div className="mt-5 flex justify-center">
+          <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+            {retryLabel}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+)
+LoadErrorState.displayName = 'LoadErrorState'
 
 export const Skeleton = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (

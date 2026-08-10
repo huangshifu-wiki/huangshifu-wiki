@@ -47,6 +47,7 @@ import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { PageSkeleton } from '../components/PageSkeleton'
+import { LoadErrorState, Spinner } from '@/src/components/ui'
 import { RouteGuard } from '../components/RouteGuard'
 import { CommentActionMenu } from '../components/CommentActionMenu'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
@@ -154,6 +155,8 @@ const PostList = () => {
   const [posts, setPosts] = useState<PostItem[]>([])
   const [sections, setSections] = useState<SectionItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
   const [totalPages, setTotalPages] = useState<number>()
   const { user, isBanned } = useAuth()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
@@ -168,7 +171,12 @@ const PostList = () => {
   })
   const fetchPostPage = useCallback(
     async (page: number) => {
-      const data = await apiGet<{ posts: PostItem[]; totalPages: number }>('/api/posts', {
+      const data = await apiGet<{
+        posts: PostItem[]
+        total?: number
+        totalPages: number
+        hasMore?: boolean
+      }>('/api/posts', {
         section,
         sort,
         page,
@@ -177,9 +185,9 @@ const PostList = () => {
 
       return {
         items: data.posts || [],
+        total: data.total ?? Math.max(0, (data.totalPages || 1) * DEFAULT_PAGE_SIZE),
+        hasMore: data.hasMore ?? page < (data.totalPages || 1),
         totalPages: data.totalPages || 1,
-        total: Math.max(0, (data.totalPages || 1) * DEFAULT_PAGE_SIZE),
-        hasMore: page < (data.totalPages || 1),
       }
     },
     [section, sort]
@@ -224,18 +232,35 @@ const PostList = () => {
     const fetchPosts = async () => {
       try {
         setLoading(true)
+        setLoadError(null)
         const data = await fetchPostPage(pagination.page)
         setPosts(data.items)
         setTotalPages(data.totalPages)
       } catch (error) {
         console.error('Error fetching posts:', error)
+        setLoadError(error)
       } finally {
         setLoading(false)
       }
     }
 
     fetchPosts()
-  }, [fetchPostPage, isIncrementalMode, pagination.page])
+  }, [fetchPostPage, isIncrementalMode, pagination.page, retryNonce])
+
+  const currentLoadError = isIncrementalMode ? incrementalList.initialError : loadError
+  const isInitialLoading = isIncrementalMode
+    ? incrementalList.isInitialLoading && visiblePosts.length === 0
+    : loading && visiblePosts.length === 0
+  const isRefreshing = isIncrementalMode
+    ? incrementalList.isInitialLoading && visiblePosts.length > 0
+    : loading && visiblePosts.length > 0
+  const handleRetry = () => {
+    if (isIncrementalMode) {
+      incrementalList.retry()
+      return
+    }
+    setRetryNonce((value) => value + 1)
+  }
 
   const getListUrl = (nextValues: { section?: string; sort?: string }) => {
     const next = new URLSearchParams(searchParams)
@@ -261,7 +286,7 @@ const PostList = () => {
 
   return (
     <div className="gufeng-forum-page mobile-page-shell">
-      <div className="mobile-page-container">
+      <div className="mobile-page-container" aria-busy={isRefreshing || undefined}>
         <header className="mobile-page-header">
           <div className="mobile-page-titlebar">
             <div className="min-w-0">
@@ -271,6 +296,7 @@ const PostList = () => {
               </div>
             </div>
             <div className="mobile-action-row">
+              {isRefreshing && <Spinner size="sm" label="论坛刷新中" />}
               {user && !isBanned && (
                 <Link
                   to="/forum/new"
@@ -292,9 +318,17 @@ const PostList = () => {
           getListUrl={getListUrl}
           onViewModeChange={(mode) => void setScopedViewMode('forum', mode)}
         />
+        {currentLoadError && visiblePosts.length > 0 && (
+          <LoadErrorState
+            className="py-5"
+            description="当前内容可能不是最新内容。"
+            onRetry={handleRetry}
+          />
+        )}
 
-        {(isIncrementalMode ? incrementalList.loadingInitial : loading) &&
-        visiblePosts.length === 0 ? (
+        {currentLoadError && visiblePosts.length === 0 ? (
+          <LoadErrorState onRetry={handleRetry} />
+        ) : isInitialLoading && visiblePosts.length === 0 ? (
           <PageSkeleton variant="forum" />
         ) : visiblePosts.length > 0 ? (
           <>
@@ -327,6 +361,10 @@ const PostList = () => {
                 loaded={visiblePosts.length}
                 onLoadMore={incrementalList.loadMore}
                 sentinelRef={incrementalList.sentinelRef}
+                error={
+                  incrementalList.error && !incrementalList.initialError ? '加载失败' : undefined
+                }
+                onRetry={incrementalList.retry}
               />
             ) : pagination.totalPages > 1 ? (
               <Pagination

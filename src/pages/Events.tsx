@@ -5,6 +5,7 @@ import { EventCard } from '../components/Events/EventCard'
 import { EventFilters, type EventSortOrder } from '../components/Events/EventFilters'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import Pagination from '../components/Pagination'
+import { LoadErrorState, Spinner } from '@/src/components/ui'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { apiGet } from '../lib/apiClient'
@@ -23,6 +24,8 @@ const Events = () => {
   const [tags, setTags] = useState<string[]>([])
   const [totalPages, setTotalPages] = useState<number>()
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
   const { getScopedViewMode, setScopedViewMode } = useUserPreferences()
   const storedViewMode = getScopedViewMode('events')
   const viewMode: ViewMode = storedViewMode === 'large' ? 'large' : 'list'
@@ -52,6 +55,7 @@ const Events = () => {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
+    setLoadError(null)
     apiGet<EventListResponse>('/api/events', {
       page,
       limit: DEFAULT_PAGE_SIZE,
@@ -66,8 +70,8 @@ const Events = () => {
       .catch((error) => {
         console.error('Fetch events failed:', error)
         if (!cancelled) {
-          setEvents([])
-          setTotalPages(1)
+          setLoadError(error)
+          setTotalPages((currentTotalPages) => currentTotalPages || 1)
         }
       })
       .finally(() => {
@@ -77,7 +81,7 @@ const Events = () => {
     return () => {
       cancelled = true
     }
-  }, [page, selectedTag, sortOrder])
+  }, [page, retryNonce, selectedTag, sortOrder])
 
   const handleSortOrderChange = (value: EventSortOrder) => {
     if (value === sortOrder) return
@@ -103,12 +107,13 @@ const Events = () => {
     const query = next.toString()
     return query ? `/events?${query}` : '/events'
   }
+  const isRefreshing = loading && events.length > 0
 
-  if (loading && events.length === 0) return <PageSkeleton />
+  if (loading && events.length === 0) return <PageSkeleton variant="events" />
 
   return (
     <div className="gufeng-events-page mobile-page-shell">
-      <div className="mobile-page-container">
+      <div className="mobile-page-container" aria-busy={isRefreshing || undefined}>
         <header className="mobile-page-header">
           <div className="mobile-page-titlebar">
             <div className="min-w-0">
@@ -117,6 +122,7 @@ const Events = () => {
                 <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
               </div>
             </div>
+            {isRefreshing && <Spinner size="sm" label="游记刷新中" />}
           </div>
         </header>
 
@@ -130,7 +136,16 @@ const Events = () => {
           onViewModeChange={(mode) => void setScopedViewMode('events', mode)}
         />
 
-        {events.length > 0 ? (
+        {loadError && events.length > 0 && (
+          <LoadErrorState
+            className="py-5"
+            description="当前数据可能不是最新内容。"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
+        )}
+        {loadError && events.length === 0 ? (
+          <LoadErrorState onRetry={() => setRetryNonce((value) => value + 1)} />
+        ) : events.length > 0 ? (
           <>
             <div
               className={clsx(

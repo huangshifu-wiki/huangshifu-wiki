@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React, { useState } from 'react'
-import { act, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react'
 
 import { useIncrementalListLoader } from '../../src/hooks/useIncrementalListLoader'
 
@@ -83,5 +83,41 @@ describe('useIncrementalListLoader preserveItemsOnReset', () => {
       settle([{ id: 'b' }])
     })
     await waitFor(() => expect(screen.getByTestId('items')).toHaveTextContent('b'))
+  })
+})
+
+let failInitialRequest = true
+
+describe('useIncrementalListLoader error states', () => {
+  beforeEach(() => {
+    failInitialRequest = true
+  })
+
+  it('初次加载失败时暴露初次错误，重试成功后清除错误', async () => {
+    const { result } = renderHook(() =>
+      useIncrementalListLoader<Item>({
+        enabled: true,
+        pageSize: 10,
+        resetKey: 'error-case',
+        fetchPage: async () => {
+          if (failInitialRequest) throw new Error('initial request failed')
+          return { items: [{ id: 'recovered' }], total: 1 }
+        },
+        getItemKey: (item) => item.id,
+      })
+    )
+
+    await waitFor(() => expect(result.current.initialError).toBeInstanceOf(Error))
+    expect(result.current.error).toBeInstanceOf(Error)
+    expect(result.current.items).toEqual([])
+
+    failInitialRequest = false
+    await act(async () => {
+      await result.current.retry()
+    })
+
+    await waitFor(() => expect(result.current.items).toEqual([{ id: 'recovered' }]))
+    expect(result.current.initialError).toBeNull()
+    expect(result.current.error).toBeNull()
   })
 })

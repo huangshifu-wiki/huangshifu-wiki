@@ -16,6 +16,13 @@ interface UseIncrementalListLoaderOptions<T> {
   preserveItemsOnReset?: boolean
 }
 
+type LoadMode = 'initial' | 'more'
+
+interface LastRequest {
+  page: number
+  mode: LoadMode
+}
+
 export function useIncrementalListLoader<T>({
   enabled,
   pageSize,
@@ -31,11 +38,16 @@ export function useIncrementalListLoader<T>({
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [autoLoadEnabled, setAutoLoadEnabled] = useState(true)
+  const [error, setError] = useState<unknown | null>(null)
+  const [initialError, setInitialError] = useState<unknown | null>(null)
   const requestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const fetchPageRef = useRef(fetchPage)
   const getItemKeyRef = useRef(getItemKey)
+  const completedInitialKeyRef = useRef<string | null>(null)
+  const failedRequestRef = useRef<LastRequest | null>(null)
+  const loadKey = `${resetKey}:${pageSize}`
 
   useEffect(() => {
     fetchPageRef.current = fetchPage
@@ -58,13 +70,16 @@ export function useIncrementalListLoader<T>({
   }, [])
 
   const loadPage = useCallback(
-    async (nextPage: number, mode: 'initial' | 'more') => {
+    async (nextPage: number, mode: LoadMode) => {
       if (!enabled) return
 
       const requestId = ++requestIdRef.current
       const abortController = new AbortController()
       abortControllerRef.current?.abort()
       abortControllerRef.current = abortController
+      failedRequestRef.current = null
+      setError(null)
+      if (mode === 'initial') setInitialError(null)
       if (mode === 'initial') {
         setLoadingInitial(true)
       } else {
@@ -91,40 +106,58 @@ export function useIncrementalListLoader<T>({
       } catch (loadError) {
         if (requestId !== requestIdRef.current) return
         if (loadError instanceof DOMException && loadError.name === 'AbortError') return
+        failedRequestRef.current = { page: nextPage, mode }
+        setError(loadError)
+        if (mode === 'initial') setInitialError(loadError)
         setAutoLoadEnabled(false)
       } finally {
         if (requestId === requestIdRef.current) {
-          setLoadingInitial(false)
-          setLoadingMore(false)
+          if (mode === 'initial') {
+            completedInitialKeyRef.current = loadKey
+            setLoadingInitial(false)
+          } else {
+            setLoadingMore(false)
+          }
           abortControllerRef.current = null
         }
       }
     },
-    [appendUniqueItems, enabled]
+    [appendUniqueItems, enabled, loadKey]
   )
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled) {
+      completedInitialKeyRef.current = null
+      return
+    }
 
     if (!preserveItemsOnReset) {
       setItems([])
       setTotal(0)
     }
+    completedInitialKeyRef.current = null
     setPage(0)
     setHasMore(false)
     setAutoLoadEnabled(true)
+    setError(null)
+    setInitialError(null)
     void loadPage(1, 'initial')
 
     return () => {
       requestIdRef.current += 1
       abortControllerRef.current?.abort()
     }
-  }, [enabled, pageSize, loadPage, preserveItemsOnReset, resetKey])
+  }, [enabled, loadKey, loadPage, preserveItemsOnReset])
 
   const loadMore = useCallback(() => {
     if (loadingInitial || loadingMore || !hasMore) return
     void loadPage(page + 1, 'more')
   }, [hasMore, loadPage, loadingInitial, loadingMore, page])
+  const retry = useCallback(async () => {
+    const failedRequest = failedRequestRef.current
+    if (!failedRequest) return
+    await loadPage(failedRequest.page, failedRequest.mode)
+  }, [loadPage])
 
   useEffect(() => {
     if (!enabled || !autoLoadEnabled || !hasMore || loadingInitial || loadingMore) return
@@ -146,6 +179,8 @@ export function useIncrementalListLoader<T>({
     return () => observer.disconnect()
   }, [autoLoadEnabled, enabled, hasMore, loadMore, loadingInitial, loadingMore])
 
+  const isInitialLoading = enabled && completedInitialKeyRef.current !== loadKey
+
   return useMemo(
     () => ({
       items,
@@ -155,10 +190,26 @@ export function useIncrementalListLoader<T>({
       page,
       loadingInitial,
       loadingMore,
+      isInitialLoading,
       hasMore,
+      error,
+      initialError,
+      retry,
       sentinelRef,
       loadMore,
     }),
-    [hasMore, items, loadMore, loadingInitial, loadingMore, page, total]
+    [
+      error,
+      hasMore,
+      initialError,
+      isInitialLoading,
+      items,
+      loadMore,
+      loadingInitial,
+      loadingMore,
+      page,
+      retry,
+      total,
+    ]
   )
 }

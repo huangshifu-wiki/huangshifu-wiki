@@ -9,6 +9,7 @@ import { apiGet } from '../../lib/apiClient'
 import WikiCard from '../../components/wiki/WikiCard'
 import { WikiFilters } from '../../components/wiki/WikiFilters'
 import Pagination from '../../components/Pagination'
+import { LoadErrorState, Spinner } from '@/src/components/ui'
 import { IncrementalLoadFooter } from '../../components/IncrementalLoadFooter'
 import type { WikiItem } from './types'
 import { DEFAULT_PAGE_SIZE } from './types'
@@ -25,6 +26,8 @@ const WikiList = () => {
   const [pages, setPages] = useState<WikiItem[]>([])
   const [total, setTotal] = useState<number>()
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
   const { user, isBanned } = useAuth()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
   const viewMode = getScopedViewMode('wiki')
@@ -69,7 +72,9 @@ const WikiList = () => {
   })
   const visiblePages = isIncrementalMode ? incrementalList.items : pages
   const visibleTotal = isIncrementalMode ? incrementalList.total : total || 0
-  const isInitialLoading = isIncrementalMode ? incrementalList.loadingInitial : loading
+  const isInitialLoading = isIncrementalMode
+    ? incrementalList.isInitialLoading && visiblePages.length === 0
+    : loading && visiblePages.length === 0
 
   useEffect(() => {
     if (!isIncrementalMode) return
@@ -90,14 +95,16 @@ const WikiList = () => {
     let cancelled = false
     const fetchPages = async () => {
       setLoading(true)
+      setLoadError(null)
       try {
         const data = await fetchWikiPage(pagination.page)
         if (cancelled) return
         setPages(data.items)
         setTotal(data.total)
-      } catch (e) {
+      } catch (error) {
         if (cancelled) return
-        console.error('Error fetching wiki pages:', e)
+        console.error('Error fetching wiki pages:', error)
+        setLoadError(error)
       }
       if (!cancelled) setLoading(false)
     }
@@ -105,7 +112,19 @@ const WikiList = () => {
     return () => {
       cancelled = true
     }
-  }, [fetchWikiPage, isIncrementalMode, pagination.page])
+  }, [fetchWikiPage, isIncrementalMode, pagination.page, retryNonce])
+
+  const currentLoadError = isIncrementalMode ? incrementalList.initialError : loadError
+  const handleRetry = () => {
+    if (isIncrementalMode) {
+      incrementalList.retry()
+      return
+    }
+    setRetryNonce((value) => value + 1)
+  }
+  const isRefreshing = isIncrementalMode
+    ? incrementalList.isInitialLoading && visiblePages.length > 0
+    : loading && visiblePages.length > 0
 
   const getCategoryUrl = (nextCategory: string) => {
     const params = new URLSearchParams(searchParams)
@@ -121,7 +140,7 @@ const WikiList = () => {
 
   return (
     <div className="gufeng-wiki-page mobile-page-shell">
-      <div className="mobile-page-container">
+      <div className="mobile-page-container" aria-busy={isRefreshing || undefined}>
         <header className="mobile-page-header">
           <div className="mobile-page-titlebar">
             <div className="min-w-0">
@@ -131,6 +150,7 @@ const WikiList = () => {
               </div>
             </div>
             <div className="mobile-action-row">
+              {isRefreshing && <Spinner size="sm" label="百科刷新中" />}
               {user && !isBanned && (
                 <Link
                   to="/wiki/new"
@@ -153,8 +173,17 @@ const WikiList = () => {
           getCategoryLabel={getCategoryLabel}
           onViewModeChange={(mode) => void setScopedViewMode('wiki', mode)}
         />
+        {currentLoadError && visiblePages.length > 0 && (
+          <LoadErrorState
+            className="py-5"
+            description="当前内容可能不是最新内容。"
+            onRetry={handleRetry}
+          />
+        )}
 
-        {isInitialLoading && visiblePages.length === 0 ? (
+        {currentLoadError && visiblePages.length === 0 ? (
+          <LoadErrorState onRetry={handleRetry} />
+        ) : isInitialLoading && visiblePages.length === 0 ? (
           <div
             className={clsx(
               viewMode === 'list'
@@ -210,6 +239,10 @@ const WikiList = () => {
                 loaded={visiblePages.length}
                 onLoadMore={incrementalList.loadMore}
                 sentinelRef={incrementalList.sentinelRef}
+                error={
+                  incrementalList.error && !incrementalList.initialError ? '加载失败' : undefined
+                }
+                onRetry={incrementalList.retry}
               />
             ) : import.meta.env.DEV || pagination.totalPages > 1 ? (
               <Pagination

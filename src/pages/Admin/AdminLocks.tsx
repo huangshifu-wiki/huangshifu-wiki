@@ -16,10 +16,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
+import { LoadErrorState } from '@/src/components/ui'
 
 export const AdminLocks = () => {
   const [data, setData] = useState<EditLockItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchReleasing, setBatchReleasing] = useState(false)
   const dialog = useDialog()
@@ -29,18 +32,22 @@ export const AdminLocks = () => {
   const fetchData = async (options?: { silent?: boolean }) => {
     const silent = options?.silent === true
     if (silent) saveScroll()
-    else setLoading(true)
+    else {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
       const result = await apiGet<{ locks: EditLockItem[] }>('/api/admin/locks')
       const locks = result.locks || []
       setData(locks)
+      setLoadError(null)
       setSelectedIds((prev) => {
         const existingIds = new Set(locks.map((lock) => lock.id))
         return new Set([...prev].filter((lockId) => existingIds.has(lockId)))
       })
     } catch (e) {
       console.error(e)
-      if (!silent) setData([])
+      setLoadError(e)
     } finally {
       if (!silent) setLoading(false)
     }
@@ -121,6 +128,10 @@ export const AdminLocks = () => {
     }
   }
 
+  if (loading && data.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -147,79 +158,90 @@ export const AdminLocks = () => {
           </Button>
         </div>
       </div>
+      {loadError && data.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          description="当前编辑锁列表可能不是最新内容。"
+          onRetry={() => void fetchData()}
+        />
+      )}
 
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-surface-alt">
-              <TableHead className="px-5 py-3 text-[11px] uppercase tracking-wider">
-                <Checkbox
-                  checked={data.length > 0 && selectedIds.size === data.length}
-                  onCheckedChange={toggleAll}
-                  aria-label="选择全部编辑锁"
-                />
-              </TableHead>
-              {['资源', '锁定者', '到期时间', '操作'].map((col) => (
-                <TableHead key={col} className="px-5 py-3 text-[11px] uppercase tracking-wider">
-                  {col}
+      {loadError && data.length === 0 ? (
+        <LoadErrorState onRetry={() => void fetchData()} />
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-surface-alt">
+                <TableHead className="px-5 py-3 text-[11px] uppercase tracking-wider">
+                  <Checkbox
+                    checked={data.length > 0 && selectedIds.size === data.length}
+                    onCheckedChange={toggleAll}
+                    aria-label="选择全部编辑锁"
+                  />
                 </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              [1, 2, 3].map((i) => (
-                <TableRow key={i} className="animate-pulse">
-                  <TableCell colSpan={5} className="px-5 py-4">
-                    <div className="h-6 bg-surface-alt rounded" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : data.length > 0 ? (
-              data.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="px-5 py-4">
-                    <Checkbox
-                      checked={selectedIds.has(item.id)}
-                      onCheckedChange={() => toggleSelected(item.id)}
-                      aria-label={`选择 ${item.collection} / ${item.recordId}`}
-                    />
-                  </TableCell>
-                  <TableCell className="px-5 py-4">
-                    <p className="text-sm font-medium text-text-primary">
-                      {item.collection} / {item.recordId}
-                    </p>
-                  </TableCell>
-                  <TableCell className="px-5 py-4 text-text-secondary">
-                    {item.username} ({item.userId?.slice(0, 8) ?? '未知'})
-                  </TableCell>
-                  <TableCell className="px-5 py-4 text-xs text-text-muted">
-                    {formatDateTime(item.expiresAt, 'N/A')}
-                  </TableCell>
-                  <TableCell className="px-5 py-4 text-left">
-                    <Button
-                      type="button"
-                      variant="warning"
-                      soft
-                      size="sm"
-                      onClick={() => releaseLock(item)}
-                      leftIcon={<Lock size={14} />}
-                    >
-                      强制释放
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
-                  暂无编辑锁
-                </TableCell>
+                {['资源', '锁定者', '到期时间', '操作'].map((col) => (
+                  <TableHead key={col} className="px-5 py-3 text-[11px] uppercase tracking-wider">
+                    {col}
+                  </TableHead>
+                ))}
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {loading && data.length === 0 ? (
+                [1, 2, 3].map((i) => (
+                  <TableRow key={i} className="animate-pulse">
+                    <TableCell colSpan={5} className="px-5 py-4">
+                      <div className="h-6 bg-surface-alt rounded" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : data.length > 0 ? (
+                data.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="px-5 py-4">
+                      <Checkbox
+                        checked={selectedIds.has(item.id)}
+                        onCheckedChange={() => toggleSelected(item.id)}
+                        aria-label={`选择 ${item.collection} / ${item.recordId}`}
+                      />
+                    </TableCell>
+                    <TableCell className="px-5 py-4">
+                      <p className="text-sm font-medium text-text-primary">
+                        {item.collection} / {item.recordId}
+                      </p>
+                    </TableCell>
+                    <TableCell className="px-5 py-4 text-text-secondary">
+                      {item.username} ({item.userId?.slice(0, 8) ?? '未知'})
+                    </TableCell>
+                    <TableCell className="px-5 py-4 text-xs text-text-muted">
+                      {formatDateTime(item.expiresAt, 'N/A')}
+                    </TableCell>
+                    <TableCell className="px-5 py-4 text-left">
+                      <Button
+                        type="button"
+                        variant="warning"
+                        soft
+                        size="sm"
+                        onClick={() => releaseLock(item)}
+                        leftIcon={<Lock size={14} />}
+                      >
+                        强制释放
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
+                    暂无编辑锁
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   )
 }

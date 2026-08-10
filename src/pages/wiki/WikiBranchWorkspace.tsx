@@ -10,6 +10,7 @@ import { formatDate } from '../../lib/dateUtils'
 import type { WikiItem, WikiBranchItem, WikiRevisionItem, WikiPullRequestItem } from './types'
 import { getBranchStatusText } from './types'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
+import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiBranchWorkspace = () => {
@@ -23,6 +24,7 @@ const WikiBranchWorkspace = () => {
   const [openPr, setOpenPr] = useState<WikiPullRequestItem | null>(null)
 
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [creatingBranch, setCreatingBranch] = useState(false)
   const [savingRevision, setSavingRevision] = useState(false)
   const [creatingPr, setCreatingPr] = useState(false)
@@ -61,6 +63,7 @@ const WikiBranchWorkspace = () => {
   const fetchWorkspace = async () => {
     if (!slug || !user) return
     setLoading(true)
+    setLoadError(false)
     try {
       const pageData = await apiGet<{ page: WikiItem }>(`/api/wiki/${slug}`)
       const currentPage = pageData.page
@@ -101,6 +104,7 @@ const WikiBranchWorkspace = () => {
       setPrDescription(currentOpenPr?.description || '')
     } catch (error) {
       console.error('Fetch wiki branch workspace error:', error)
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -218,11 +222,15 @@ const WikiBranchWorkspace = () => {
     )
   }
 
-  if (loading) {
+  if (loading && !page) {
     return (
-      <div className="mobile-page-shell antique-page">
-        <div className="mobile-page-container text-center italic text-[var(--color-text-antique-muted)]">
-          加载分支中...
+      <div className="mobile-page-shell antique-page" role="status" aria-label="加载中">
+        <div className="mobile-page-container space-y-5">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-10 w-2/3" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-40 w-full" />
         </div>
       </div>
     )
@@ -231,15 +239,21 @@ const WikiBranchWorkspace = () => {
   if (!page) {
     return (
       <div className="mobile-page-shell antique-page">
-        <div className="mobile-page-container text-center italic text-[var(--color-text-antique-muted)]">
-          页面不存在或不可访问
+        <div className="mobile-page-container">
+          {loadError ? (
+            <LoadErrorState onRetry={() => void fetchWorkspace()} />
+          ) : (
+            <p className="text-center italic text-[var(--color-text-antique-muted)]">
+              页面不存在或不可访问
+            </p>
+          )}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="mobile-page-shell">
+    <div className="mobile-page-shell" aria-busy={loading}>
       <div className="mobile-page-container space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SmartBackLink
@@ -266,6 +280,12 @@ const WikiBranchWorkspace = () => {
             )}
           </div>
         </div>
+        {loadError && <LoadErrorState onRetry={() => void fetchWorkspace()} />}
+        {loading && (
+          <div className="flex justify-end">
+            <Spinner size="sm" label="工作区刷新中" />
+          </div>
+        )}
 
         <div className="bg-surface rounded border border-border p-6 sm:p-8">
           <h1 className="text-[1.5rem] font-bold text-text-primary tracking-[0.12em] mb-2">

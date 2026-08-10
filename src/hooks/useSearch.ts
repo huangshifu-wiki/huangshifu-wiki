@@ -114,6 +114,7 @@ export function useMixedSearch() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const searchRequestRef = useRef(0)
 
   /**
    * 执行语义搜索（文字）
@@ -124,42 +125,71 @@ export function useMixedSearch() {
       options?: { limit?: number; minScore?: number }
     ): Promise<MixedSearchResult[]> => {
       if (!query.trim()) {
+        searchRequestRef.current += 1
+        abortControllerRef.current?.abort()
+        abortControllerRef.current = null
         setResults([])
+        setError(null)
+        setLoading(false)
         return []
       }
 
-      // 取消之前的请求
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-      abortControllerRef.current = new AbortController()
+      // 取消之前的请求，并用序号防止取消不及时的响应覆盖新结果。
+      abortControllerRef.current?.abort()
+      const requestId = ++searchRequestRef.current
+      const controller = new AbortController()
+      abortControllerRef.current = controller
 
       setLoading(true)
       setError(null)
 
       try {
-        const data = await apiGet<SemanticSearchResponse>('/api/search/semantic-search', {
-          q: query.trim(),
-          limit: options?.limit || 24,
-          minScore: options?.minScore,
-        })
+        const data = await apiGet<SemanticSearchResponse>(
+          '/api/search/semantic-search',
+          {
+            q: query.trim(),
+            limit: options?.limit || 24,
+            minScore: options?.minScore,
+          },
+          undefined,
+          controller.signal
+        )
 
-        setResults(data.results || [])
-        return data.results || []
+        const nextResults = data.results || []
+        if (requestId === searchRequestRef.current) {
+          setResults(nextResults)
+        }
+        return nextResults
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
           return []
         }
-        const errorMsg = err instanceof Error ? err.message : '搜索失败'
-        setError(errorMsg)
-        console.error('Semantic search error:', err)
-        return []
+        if (requestId === searchRequestRef.current) {
+          const errorMsg = err instanceof Error ? err.message : '搜索失败'
+          setError(errorMsg)
+          console.error('Semantic search error:', err)
+        }
+        throw err
       } finally {
-        setLoading(false)
+        if (requestId === searchRequestRef.current) {
+          abortControllerRef.current = null
+          setLoading(false)
+        }
       }
     },
     []
   )
+  /**
+   * 清空结果
+   */
+  const clearResults = useCallback(() => {
+    searchRequestRef.current += 1
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    setResults([])
+    setError(null)
+    setLoading(false)
+  }, [])
 
   /**
    * 执行图片搜索
@@ -188,21 +218,13 @@ export function useMixedSearch() {
         const errorMsg = err instanceof Error ? err.message : '图片搜索失败'
         setError(errorMsg)
         console.error('Image search error:', err)
-        return []
+        throw err
       } finally {
         setLoading(false)
       }
     },
     []
   )
-
-  /**
-   * 清空结果
-   */
-  const clearResults = useCallback(() => {
-    setResults([])
-    setError(null)
-  }, [])
 
   return {
     results,
@@ -281,7 +303,7 @@ export function useTraditionalSearch() {
         const errorMsg = err instanceof Error ? err.message : '搜索失败'
         setError(errorMsg)
         console.error('Traditional search error:', err)
-        return EMPTY_TRADITIONAL_RESULTS
+        throw err
       } finally {
         setLoading(false)
       }

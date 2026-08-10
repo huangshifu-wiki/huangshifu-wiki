@@ -10,7 +10,7 @@ import { formatDate } from '../../lib/dateUtils'
 import { submitFormOnModifierEnter } from '../../lib/formShortcuts'
 import type { WikiPullRequestItem, WikiPrDiffResponse } from './types'
 import { getPrStatusText } from './types'
-import { Button, Textarea } from '@/src/components/ui'
+import { Button, LoadErrorState, Skeleton, Spinner, Textarea } from '@/src/components/ui'
 import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiPullRequestDetail = () => {
@@ -18,16 +18,14 @@ const WikiPullRequestDetail = () => {
   const { user, isAdmin } = useAuth()
 
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [pullRequest, setPullRequest] = useState<WikiPullRequestItem | null>(null)
   const [diff, setDiff] = useState<WikiPrDiffResponse['diff'] | null>(null)
-  const [comment, setComment] = useState('')
-  const dialog = useDialog()
-  const { show } = useToast()
-
   const fetchDetail = async () => {
     if (!prId) return
     setLoading(true)
+    setLoadError(false)
     try {
       const [detailData, diffData] = await Promise.all([
         apiGet<{ pullRequest: WikiPullRequestItem }>(`/api/wiki/pull-requests/${prId}`),
@@ -37,12 +35,14 @@ const WikiPullRequestDetail = () => {
       setDiff(diffData.diff)
     } catch (error) {
       console.error('Fetch wiki PR detail error:', error)
-      setPullRequest(null)
-      setDiff(null)
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
   }
+  const [comment, setComment] = useState('')
+  const dialog = useDialog()
+  const { show } = useToast()
 
   useEffect(() => {
     fetchDetail()
@@ -114,11 +114,17 @@ const WikiPullRequestDetail = () => {
     )
   }
 
-  if (loading) {
+  if (loading && !pullRequest) {
     return (
-      <div className="mobile-page-shell antique-page">
-        <div className="mobile-page-container text-center text-[var(--color-text-antique-muted)] italic">
-          加载 PR 详情中...
+      <div className="mobile-page-shell antique-page" role="status" aria-label="加载中">
+        <div className="mobile-page-container space-y-5">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-10 w-2/3" />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Skeleton className="h-80 w-full" />
+            <Skeleton className="h-80 w-full" />
+          </div>
+          <Skeleton className="h-48 w-full" />
         </div>
       </div>
     )
@@ -127,15 +133,21 @@ const WikiPullRequestDetail = () => {
   if (!pullRequest || (slug && pullRequest.pageSlug !== slug)) {
     return (
       <div className="mobile-page-shell antique-page">
-        <div className="mobile-page-container text-center text-[var(--color-text-antique-muted)] italic">
-          PR 不存在或无权限查看
+        <div className="mobile-page-container">
+          {loadError ? (
+            <LoadErrorState onRetry={() => void fetchDetail()} />
+          ) : (
+            <p className="text-center italic text-[var(--color-text-antique-muted)]">
+              PR 不存在或无权限查看
+            </p>
+          )}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="mobile-page-shell">
+    <div className="mobile-page-shell" aria-busy={loading}>
       <div className="mobile-page-container space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SmartBackLink
@@ -151,6 +163,12 @@ const WikiPullRequestDetail = () => {
             查看页面：{pullRequest.page?.title || pullRequest.pageSlug}
           </Link>
         </div>
+        {loadError && <LoadErrorState onRetry={() => void fetchDetail()} />}
+        {loading && (
+          <div className="flex justify-end">
+            <Spinner size="sm" label="PR 详情刷新中" />
+          </div>
+        )}
 
         <div className="bg-surface rounded border border-border p-6 sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-3 mb-4">

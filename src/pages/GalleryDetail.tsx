@@ -12,7 +12,7 @@ import {
   Clock,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { Checkbox } from '@/src/components/ui'
+import { Checkbox, LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
@@ -98,6 +98,7 @@ const GalleryDetail = () => {
 
   const [gallery, setGallery] = useState<GalleryItem | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
 
@@ -128,11 +129,12 @@ const GalleryDetail = () => {
     if (!galleryId) return
     try {
       setLoading(true)
+      setLoadError(false)
       const data = await apiGet<GalleryDetailResponse>(`/api/galleries/${galleryId}`)
       setGallery(data.gallery)
     } catch (error) {
       console.error('Fetch gallery detail error:', error)
-      setGallery(null)
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -729,20 +731,20 @@ const GalleryDetail = () => {
     }
   }
 
-  if (loading) {
+  if (loading && !gallery) {
     return (
-      <div className="mobile-page-shell antique-detail">
+      <div className="mobile-page-shell antique-detail" role="status" aria-label="加载中">
         <div className="mobile-page-container">
-          <div className="mb-6 h-4 w-24 animate-pulse rounded bg-surface-alt" />
+          <Skeleton className="mb-6 h-4 w-24" />
           <div className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
-            <div className="mb-4 h-10 w-2/3 animate-pulse rounded bg-surface-alt" />
-            <div className="h-5 w-1/2 animate-pulse rounded bg-surface-alt" />
+            <Skeleton className="mb-4 h-10 w-2/3" />
+            <Skeleton className="h-5 w-1/2" />
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {[1, 2, 3, 4, 5, 6].map((item) => (
-              <div
+              <Skeleton
                 key={item}
-                className="aspect-[3/4] animate-pulse rounded border border-[var(--book-ink-line)] bg-surface-alt"
+                className="aspect-[3/4] rounded border border-[var(--book-ink-line)]"
               />
             ))}
           </div>
@@ -760,22 +762,27 @@ const GalleryDetail = () => {
             fallbackLabel={t('gallery.backToList')}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
           />
-          <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
-            {t('gallery.notFound')}
-          </div>
+          {loadError ? (
+            <LoadErrorState className="mt-8" onRetry={() => void fetchGallery()} />
+          ) : (
+            <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
+              {t('gallery.notFound')}
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="mobile-page-shell antique-detail">
+    <div className="mobile-page-shell antique-detail" aria-busy={loading}>
       <div className="mobile-page-container gallery-detail-page">
         <SmartBackLink
           fallbackTo="/gallery"
           fallbackLabel={t('gallery.backToList')}
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
         />
+        {loadError && <LoadErrorState className="mb-6" onRetry={() => void fetchGallery()} />}
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">

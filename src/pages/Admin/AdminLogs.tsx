@@ -14,6 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/src/components/ui'
+import { LoadErrorState } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 
 function getModerationActionLabel(action: string | undefined) {
   if (action === 'approve') return '通过'
@@ -40,15 +42,17 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
   const logType = propType || paramType || 'moderation_logs'
   const [data, setData] = useState<AdminDataItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
 
   const fetchData = async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const result = await apiGet<{ logs: AdminDataItem[] }>(`/api/admin/${logType}`)
       setData(result.logs || [])
     } catch (e) {
       console.error(e)
-      setData([])
+      setLoadError(e)
     } finally {
       setLoading(false)
     }
@@ -60,6 +64,10 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
 
   const Icon = logType === 'ban_logs' ? Shield : FileText
   const title = logType === 'ban_logs' ? '封禁日志' : '操作日志'
+
+  if (loading && data.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
 
   return (
     <div className="space-y-5">
@@ -76,6 +84,13 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
           刷新
         </Button>
       </div>
+      {loadError && data.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          description="当前日志列表可能不是最新内容。"
+          onRetry={() => void fetchData()}
+        />
+      )}
 
       <div className="overflow-x-auto">
         <Table>
@@ -89,14 +104,12 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
-              [1, 2, 3, 4, 5].map((i) => (
-                <TableRow key={i} className="animate-pulse">
-                  <TableCell colSpan={5} className="px-5 py-4">
-                    <div className="h-6 bg-surface-alt rounded" />
-                  </TableCell>
-                </TableRow>
-              ))
+            {loadError && data.length === 0 ? (
+              <tr>
+                <TableCell colSpan={5}>
+                  <LoadErrorState onRetry={() => void fetchData()} />
+                </TableCell>
+              </tr>
             ) : data.length > 0 ? (
               data.map((item) => (
                 <TableRow key={item.id}>

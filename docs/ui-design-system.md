@@ -24,6 +24,14 @@ Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`�
 - 不移除可见焦点样式；浮层关闭后焦点应恢复到触发元素。
 - 状态不能只靠颜色传达；加载状态使用 `aria-busy`，Toast 使用 live region。
 
+## 加载状态
+
+- 页面代码分片或首屏数据请求使用布局匹配的 `PageSkeleton`；`default` 旋转圈只用于没有确定布局的全局 fallback。
+- 已有内容刷新时保留旧内容，使用 `Spinner` 或 `aria-busy` 标记刷新，不用整页骨架覆盖已可读内容。
+- 状态顺序固定为加载中、错误、成功空态/成功内容；请求未完成或失败时不得显示业务空态。
+- 接口失败使用 `LoadErrorState`，错误信息使用 `role="alert"`，可重试请求必须提供“重新加载”操作。
+- 操作按钮、上传进度和弹窗内部请求使用控件级 `Button.loading`/`Spinner`，不触发页面级加载状态。
+
 ## 响应式布局
 
 - 页面默认从 320px 视口开始设计，再通过 `sm`、`md`、`lg` 增强布局。

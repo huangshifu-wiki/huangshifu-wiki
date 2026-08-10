@@ -9,6 +9,7 @@ import { formatDate } from '../../lib/dateUtils'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import { isBackdropClick } from '../../utils/modal'
 import WikiMarkdown from './WikiMarkdown'
+import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiHistory = () => {
@@ -16,6 +17,7 @@ const WikiHistory = () => {
   const { slug } = useParams()
   const [revisions, setRevisions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [selectedRevision, setSelectedRevision] = useState<any>(null)
   const previewPresence = useFloatingPresence(Boolean(selectedRevision))
   const lastSelectedRevisionRef = useRef<any>(null)
@@ -30,17 +32,22 @@ const WikiHistory = () => {
 
   const previewRevision = selectedRevision ?? lastSelectedRevisionRef.current
 
-  useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        const data = await apiGet<{ revisions: any[] }>(`/api/wiki/${slug}/history`)
-        setRevisions(data.revisions || [])
-      } catch (e) {
-        console.error('Error fetching history:', e)
-      }
+  const fetchHistory = async () => {
+    setLoading(true)
+    setLoadError(false)
+    try {
+      const data = await apiGet<{ revisions: any[] }>(`/api/wiki/${slug}/history`)
+      setRevisions(data.revisions || [])
+    } catch (error) {
+      console.error('Error fetching history:', error)
+      setLoadError(true)
+    } finally {
       setLoading(false)
     }
-    fetchHistory()
+  }
+
+  useEffect(() => {
+    void fetchHistory()
   }, [slug])
 
   const handlePreviewRevision = async (rev: any) => {
@@ -92,52 +99,62 @@ const WikiHistory = () => {
             <History size={28} /> 历史版本: {slug}
           </h2>
 
-          {loading ? (
-            <div className="space-y-4">
+          {loading && revisions.length === 0 ? (
+            <div className="space-y-4" role="status" aria-label="加载中">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-20 bg-surface-alt rounded animate-pulse"></div>
-              ))}
-            </div>
-          ) : revisions.length > 0 ? (
-            <div className="space-y-4">
-              {revisions.map((rev, i) => (
-                <div
-                  key={rev.id}
-                  className="p-6 bg-surface-alt/50 border border-border rounded flex items-center justify-between group hover:bg-surface-alt transition-all"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded bg-brand-gold/10 flex items-center justify-center text-brand-gold font-bold">
-                      {revisions.length - i}
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-text-primary">
-                        {formatDate(rev.createdAt, 'yyyy-MM-dd HH:mm:ss')}
-                      </p>
-                      <p className="text-xs text-text-muted">
-                        编辑者: {rev.editorName} ({rev.editorUid.substring(0, 6)})
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handlePreviewRevision(rev)}
-                      disabled={loadingRevision}
-                      className="px-4 py-2 bg-surface text-brand-gold text-xs font-bold rounded border border-brand-gold/20 hover:bg-brand-gold hover:text-white transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
-                    >
-                      {loadingRevision ? '加载中...' : '预览内容'}
-                    </button>
-                    <button
-                      onClick={() => handleRollback(rev)}
-                      className="px-4 py-2 bg-surface text-brand-gold text-xs font-bold rounded border border-brand-gold/20 hover:bg-brand-gold hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      回滚到此版本
-                    </button>
-                  </div>
-                </div>
+                <Skeleton key={i} className="h-20 w-full" />
               ))}
             </div>
           ) : (
-            <p className="text-center text-text-muted italic py-12">暂无历史记录</p>
+            <div aria-busy={loading}>
+              {loading && (
+                <div className="mb-3 flex justify-end">
+                  <Spinner size="sm" label="历史记录刷新中" />
+                </div>
+              )}
+              {loadError && <LoadErrorState onRetry={() => void fetchHistory()} />}
+              {loadError && revisions.length === 0 ? null : revisions.length > 0 ? (
+                <div className="space-y-4">
+                  {revisions.map((rev, i) => (
+                    <div
+                      key={rev.id}
+                      className="group flex items-center justify-between rounded border border-border bg-surface-alt/50 p-6 transition-all hover:bg-surface-alt"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded bg-brand-gold/10 font-bold text-brand-gold">
+                          {revisions.length - i}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-text-primary">
+                            {formatDate(rev.createdAt, 'yyyy-MM-dd HH:mm:ss')}
+                          </p>
+                          <p className="text-xs text-text-muted">
+                            编辑者: {rev.editorName} ({rev.editorUid.substring(0, 6)})
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handlePreviewRevision(rev)}
+                          disabled={loadingRevision}
+                          className="rounded border border-brand-gold/20 bg-surface px-4 py-2 text-xs font-bold text-brand-gold opacity-0 transition-all hover:bg-brand-gold hover:text-white group-hover:opacity-100 disabled:opacity-50"
+                        >
+                          {loadingRevision ? '加载中...' : '预览内容'}
+                        </button>
+                        <button
+                          onClick={() => handleRollback(rev)}
+                          className="rounded border border-brand-gold/20 bg-surface px-4 py-2 text-xs font-bold text-brand-gold opacity-0 transition-all hover:bg-brand-gold hover:text-white group-hover:opacity-100"
+                        >
+                          回滚到此版本
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="py-12 text-center text-text-muted italic">暂无历史记录</p>
+              )}
+            </div>
           )}
         </div>
 

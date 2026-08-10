@@ -38,7 +38,8 @@ import type {
   MediaHealthScanMode,
   MediaHealthScanResult,
 } from '../../types/api'
-import { Checkbox, Switch } from '@/src/components/ui'
+import { Checkbox, LoadErrorState, Switch } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 
 interface ImageMap {
   id: string
@@ -175,6 +176,7 @@ const AdminImages: React.FC = () => {
   const [images, setImages] = useState<ImageMap[]>([])
   const [stats, setStats] = useState<ImageStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [editingImage, setEditingImage] = useState<ImageMap | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showPreferenceModal, setShowPreferenceModal] = useState(false)
@@ -197,13 +199,18 @@ const AdminImages: React.FC = () => {
   const fetchImages = async (options?: { silent?: boolean }) => {
     const silent = options?.silent === true
     if (silent) saveScroll()
-    else setLoading(true)
+    else {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
       const response = await apiGet<{ items: ImageMap[] }>('/api/image-maps')
       setImages(response.items || [])
+      setLoadError(null)
     } catch (error) {
       console.error(error)
-      show('获取图片列表失败', { variant: 'error' })
+      setLoadError(error)
+      if (!silent) show('获取图片列表失败', { variant: 'error' })
     } finally {
       if (!silent) setLoading(false)
     }
@@ -385,6 +392,15 @@ const AdminImages: React.FC = () => {
     }
   }
 
+  if (loading && images.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+  if (loadError && images.length === 0) {
+    return (
+      <LoadErrorState description="图片列表加载失败，请重试。" onRetry={() => void fetchImages()} />
+    )
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -407,6 +423,13 @@ const AdminImages: React.FC = () => {
           </button>
         </div>
       </div>
+      {loadError && images.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          description="当前图片列表可能不是最新内容。"
+          onRetry={() => void fetchImages()}
+        />
+      )}
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -595,7 +618,7 @@ const AdminImages: React.FC = () => {
           </div>
         </div>
 
-        {loading ? (
+        {loading && images.length === 0 ? (
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="h-20 bg-surface-alt rounded animate-pulse" />

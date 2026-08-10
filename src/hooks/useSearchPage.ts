@@ -37,7 +37,7 @@ export interface SearchState {
   includeDetail: boolean
   results: SearchResults
   loading: boolean
-  hasSearched: boolean
+  error: string | null
   activeTab: string
   filters: SearchFilters
   suggestions: SearchSuggestion[]
@@ -85,7 +85,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     includeDetail: searchParams.get('detail') === '1',
     results: { wiki: [], posts: [], galleries: [], music: [], albums: [], lyrics: [] },
     loading: false,
-    hasSearched: Boolean(initialQuery),
+    error: null,
     activeTab: 'all',
     filters: {
       selectedTags: [],
@@ -220,14 +220,6 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     suggestTimeoutRef.current = setTimeout(() => fetchSuggestions(val), 300)
   }
 
-  // 混合（语义文字）搜索 -- 委托给 mixedSearch.searchByText()
-  const performMixedSearch = useCallback(
-    async (q: string, limit = 24): Promise<MixedSearchResult[]> => {
-      return mixedSearch.searchByText(q, { limit })
-    },
-    [mixedSearch]
-  )
-
   // 传统搜索 -- 委托给 traditionalSearch.search()
   // 保留编排逻辑：历史记录、URL 同步、标签过滤、searchMeta
   const performSearch = useCallback(
@@ -248,7 +240,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
       setState((prev) => ({
         ...prev,
         loading: true,
-        hasSearched: true,
+        error: null,
         query: currentQuery,
         suggestions: [],
       }))
@@ -292,13 +284,18 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
           isMixedSearch: false,
           mixedResults: [],
           loading: false,
+          error: null,
           searchMeta: data.searchMeta,
           textSemanticResults: [],
         }))
-      } catch (e) {
+      } catch (error) {
         if (requestId !== searchRequestRef.current) return
-        console.error('Search error:', e)
-        setState((prev) => ({ ...prev, loading: false }))
+        console.error('Search error:', error)
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: error instanceof Error ? error.message : '搜索失败',
+        }))
       }
     },
     [searchParams, addToHistory, traditionalSearch]
@@ -311,7 +308,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         ...prev,
         aiSearching: true,
         loading: true,
-        hasSearched: true,
+        error: null,
       }))
       try {
         const results = await mixedSearch.searchByImage(file, { limit: 24 })
@@ -321,14 +318,16 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
           mixedResults: results,
           activeTab: 'semantic',
           loading: false,
+          error: null,
           aiSearching: false,
         }))
-      } catch (err) {
-        console.error('Semantic image search error:', err)
+      } catch (error) {
+        console.error('Semantic image search error:', error)
         setState((prev) => ({
           ...prev,
           mixedResults: [],
           loading: false,
+          error: error instanceof Error ? error.message : '图片搜索失败',
           aiSearching: false,
         }))
       }

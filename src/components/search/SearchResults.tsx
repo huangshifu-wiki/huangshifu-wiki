@@ -23,13 +23,14 @@ import { SearchResultCard } from './SearchResultCard'
 import { LyricSearchResultCard } from './LyricSearchResultCard'
 import { MusicSearchResults } from './MusicSearchResults'
 import { getFirstGalleryImage, shouldWaitForGalleryThumbnail } from '../../lib/galleryThumbnails'
-import { Button } from '@/src/components/ui'
+import { Button, LoadErrorState, Skeleton } from '@/src/components/ui'
 
 interface SearchResultsProps {
   state: SearchState
   viewMode: ViewMode
   tabItems: Array<{ id: string; label: string; count: number }>
   onTabChange: (tab: string) => void
+  onRetry?: () => void
 }
 
 function wikiToConfig(page: WikiItem): import('./SearchResultCard').SearchResultCardConfig {
@@ -149,10 +150,11 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   viewMode,
   tabItems,
   onTabChange,
+  onRetry,
 }) => {
   const {
     loading,
-    hasSearched,
+    error,
     activeTab,
     isMixedSearch,
     mixedResults,
@@ -160,6 +162,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     filters,
     textSemanticResults,
   } = state
+  const hasSearched = state.query.trim().length > 0
 
   const hasFilters =
     filters.selectedTags.length > 0 || filters.dateRange.start || filters.dateRange.end
@@ -183,15 +186,19 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   if (loading) {
     return (
-      <div className="animate-pulse space-y-3">
+      <div className="space-y-3" role="status" aria-label="搜索结果加载中">
         {[1, 2, 3].map((i) => (
-          <div
+          <Skeleton
             key={i}
             className="h-24 rounded border border-[var(--book-ink-line)] book-skeleton"
           />
         ))}
       </div>
     )
+  }
+
+  if (error) {
+    return <LoadErrorState description={error} onRetry={onRetry} />
   }
 
   if (!hasSearched && !hasFilters) {

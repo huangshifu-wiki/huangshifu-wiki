@@ -7,7 +7,6 @@ import {
   AtSign,
   ThumbsUp,
   ShieldCheck,
-  Loader2,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -19,7 +18,7 @@ import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import type { NotificationItem } from '../types/entities'
-import { Button } from '@/src/components/ui'
+import { Button, LoadErrorState, Spinner } from '@/src/components/ui'
 
 type NotificationType = NotificationItem['type']
 
@@ -80,8 +79,10 @@ const Notifications = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const rawFilter = searchParams.get('filter')
   const filter: NotificationFilter = isNotificationFilter(rawFilter) ? rawFilter : 'all'
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
   const [markingAllRead, setMarkingAllRead] = useState(false)
   const { preferences } = useUserPreferences()
   const isIncrementalMode = preferences.listLoadMode === 'incremental'
@@ -172,6 +173,7 @@ const Notifications = () => {
   const fetchData = React.useCallback(async () => {
     if (isIncrementalMode) return
     setLoading(true)
+    setLoadError(null)
     try {
       const result = await fetchNotificationPage(pagination.page)
 
@@ -182,10 +184,23 @@ const Notifications = () => {
       setLoaded(true)
     } catch (error) {
       console.error('Fetch notifications error:', error)
+      setLoadError(error)
     } finally {
       setLoading(false)
     }
-  }, [fetchNotificationPage, isIncrementalMode, pagination.page])
+  }, [fetchNotificationPage, isIncrementalMode, pagination.page, retryNonce])
+
+  const currentLoadError = isIncrementalMode ? incrementalList.initialError : loadError
+  const isInitialLoading = isIncrementalMode
+    ? incrementalList.isInitialLoading && visibleNotifications.length === 0
+    : loading && visibleNotifications.length === 0
+  const handleRetry = () => {
+    if (isIncrementalMode) {
+      incrementalList.retry()
+      return
+    }
+    setRetryNonce((value) => value + 1)
+  }
 
   React.useEffect(() => {
     fetchData()
@@ -336,11 +351,24 @@ const Notifications = () => {
         </div>
 
         {/* List */}
-        <div className="bg-surface border border-border rounded overflow-hidden min-h-[360px]">
-          {(isIncrementalMode ? incrementalList.loadingInitial : loading) &&
-          visibleNotifications.length === 0 ? (
+        <div
+          className="bg-surface border border-border rounded overflow-hidden min-h-[360px]"
+          aria-busy={
+            (loading || incrementalList.isInitialLoading) && visibleNotifications.length > 0
+          }
+        >
+          {currentLoadError && visibleNotifications.length > 0 && (
+            <LoadErrorState
+              className="py-5"
+              description="当前通知可能不是最新内容。"
+              onRetry={handleRetry}
+            />
+          )}
+          {currentLoadError && visibleNotifications.length === 0 ? (
+            <LoadErrorState onRetry={handleRetry} />
+          ) : isInitialLoading ? (
             <div className="flex items-center justify-center py-20">
-              <Loader2 size={24} className="animate-spin text-brand-gold" />
+              <Spinner size="lg" label="通知加载中" />
             </div>
           ) : visibleNotifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-text-muted">
@@ -422,6 +450,8 @@ const Notifications = () => {
             loaded={visibleNotifications.length}
             onLoadMore={incrementalList.loadMore}
             sentinelRef={incrementalList.sentinelRef}
+            error={incrementalList.error && !incrementalList.initialError ? '加载失败' : undefined}
+            onRetry={incrementalList.retry}
           />
         ) : pagination.totalPages > 1 ? (
           <Pagination

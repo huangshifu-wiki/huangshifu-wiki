@@ -95,6 +95,7 @@ const Search: React.FC = () => {
           viewMode={viewMode}
           tabItems={tabItems}
           onTabChange={setActiveTab}
+          onRetry={state.query ? () => void performSearch(state.query) : undefined}
         />
       </div>
     </div>

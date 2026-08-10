@@ -8,7 +8,6 @@ import {
   FileText,
   Image as ImageIcon,
   KeyRound,
-  Loader2,
   Mail,
   MailCheck,
   MessageSquare,
@@ -52,9 +51,12 @@ import {
   Button,
   IconButton,
   Input,
+  LoadErrorState,
   SegmentedControl,
   SettingRow,
   SettingsSection,
+  Skeleton,
+  Spinner,
   Switch,
   Textarea,
 } from '@/src/components/ui'
@@ -235,12 +237,24 @@ const Settings = () => {
   const [emailVerificationConfig, setEmailVerificationConfig] =
     useState<EmailVerificationPublicConfig>({ enabled: false })
   const [savingPassword, setSavingPassword] = useState(false)
-  const [contentLoading, setContentLoading] = useState(false)
+  const [contentLoading, setContentLoading] = useState(
+    () => activeSection === 'content' && Boolean(userPublicId)
+  )
+  const [contentError, setContentError] = useState(false)
+  const [contentRetry, setContentRetry] = useState(0)
   const [myPosts, setMyPosts] = useState<PostItem[]>([])
   const [myWikiPages, setMyWikiPages] = useState<UserWikiItem[]>([])
   const [myGalleries, setMyGalleries] = useState<GalleryItem[]>([])
   const [myComments, setMyComments] = useState<UserCommentItem[]>([])
   const hasPendingGalleryThumbnails = myGalleries.some(shouldWaitForGalleryThumbnail)
+  const activeContentHasItems =
+    activeContentTab === 'posts'
+      ? myPosts.length > 0
+      : activeContentTab === 'wiki'
+        ? myWikiPages.length > 0
+        : activeContentTab === 'galleries'
+          ? myGalleries.length > 0
+          : myComments.length > 0
 
   useEffect(() => {
     if (!user) return
@@ -285,6 +299,7 @@ const Settings = () => {
     let cancelled = false
     const run = async () => {
       setContentLoading(true)
+      setContentError(false)
       try {
         if (activeContentTab === 'posts') {
           const data = await apiGet<{ posts: PostItem[] }>(`/api/users/${userPublicId}/posts`, {
@@ -322,7 +337,10 @@ const Settings = () => {
         if (!cancelled) setMyComments(data.comments || [])
       } catch (error) {
         console.error('Fetch content management data error:', error)
-        show('内容加载失败', { variant: 'error' })
+        if (!cancelled) {
+          setContentError(true)
+          show('内容加载失败', { variant: 'error' })
+        }
       } finally {
         if (!cancelled) setContentLoading(false)
       }
@@ -332,7 +350,7 @@ const Settings = () => {
     return () => {
       cancelled = true
     }
-  }, [activeContentTab, activeSection, show, userPublicId])
+  }, [activeContentTab, activeSection, contentRetry, show, userPublicId])
 
   useEffect(() => {
     if (
@@ -547,13 +565,17 @@ const Settings = () => {
   }
 
   const renderContentPanel = () => {
-    if (contentLoading) {
+    if (contentLoading && !activeContentHasItems) {
       return (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={24} className="animate-spin text-brand-gold" />
+        <div className="space-y-3 py-8" role="status" aria-label="加载中">
+          {[1, 2, 3, 4].map((item) => (
+            <Skeleton key={item} className="h-12 w-full" />
+          ))}
         </div>
       )
     }
+
+    if (contentError && !activeContentHasItems) return null
 
     if (activeContentTab === 'posts') {
       return myPosts.length ? (
@@ -991,7 +1013,17 @@ const Settings = () => {
                     })}
                   </div>
 
-                  <div className="mt-4">{renderContentPanel()}</div>
+                  <div className="mt-4" aria-busy={contentLoading}>
+                    {contentError && (
+                      <LoadErrorState onRetry={() => setContentRetry((current) => current + 1)} />
+                    )}
+                    {contentLoading && activeContentHasItems && (
+                      <div className="mb-3 flex justify-end">
+                        <Spinner size="sm" label="内容刷新中" />
+                      </div>
+                    )}
+                    {renderContentPanel()}
+                  </div>
                 </div>
               </SettingsSection>
             )}

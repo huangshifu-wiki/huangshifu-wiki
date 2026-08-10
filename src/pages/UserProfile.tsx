@@ -5,13 +5,13 @@ import {
   FileText,
   History,
   Image as ImageIcon,
-  Loader2,
   Settings,
   UserRound,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
+import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { useToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
@@ -141,8 +141,11 @@ export default function UserProfile() {
   const [galleries, setGalleries] = useState<GalleryItem[]>([])
   const [favorites, setFavorites] = useState<FavoriteItem[]>([])
   const [history, setHistory] = useState<HistoryItem[]>([])
-  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileLoading, setProfileLoading] = useState(true)
   const [contentLoading, setContentLoading] = useState(false)
+  const [contentError, setContentError] = useState(false)
+  const [contentRetry, setContentRetry] = useState(0)
+  const [profileRetry, setProfileRetry] = useState(0)
   const [error, setError] = useState('')
   const [signatureDraft, setSignatureDraft] = useState('')
   const [signatureEditing, setSignatureEditing] = useState(false)
@@ -154,6 +157,16 @@ export default function UserProfile() {
   const canViewFavorites = Boolean(profile?.canViewFavorites)
   const canViewHistory = Boolean(profile?.canViewHistory)
   const hasPendingGalleryThumbnails = galleries.some(shouldWaitForGalleryThumbnail)
+  const activeContentHasItems =
+    activeTab === 'posts'
+      ? posts.length > 0
+      : activeTab === 'galleries'
+        ? galleries.length > 0
+        : activeTab === 'favorites'
+          ? favorites.length > 0
+          : activeTab === 'history'
+            ? history.length > 0
+            : false
 
   useEffect(() => {
     if (!userId) return
@@ -182,7 +195,7 @@ export default function UserProfile() {
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [profileRetry, userId])
 
   useEffect(() => {
     if (!signatureEditing) {
@@ -296,12 +309,14 @@ export default function UserProfile() {
     if (!userId || !profileLoaded) return
     if (activeTab === 'profile') {
       setContentLoading(false)
+      setContentError(false)
       return
     }
 
     let cancelled = false
     const run = async () => {
       setContentLoading(true)
+      setContentError(false)
       try {
         if (activeTab === 'posts') {
           const data = await apiGet<{ posts: PostItem[] }>(`/api/users/${userId}/posts`, {
@@ -343,17 +358,16 @@ export default function UserProfile() {
         }
       } catch (err) {
         console.error('Fetch public profile content error:', err)
+        if (!cancelled) setContentError(true)
       } finally {
-        if (!cancelled) {
-          setContentLoading(false)
-        }
+        if (!cancelled) setContentLoading(false)
       }
     }
     void run()
     return () => {
       cancelled = true
     }
-  }, [activeTab, canViewFavorites, canViewHistory, profileLoaded, userId])
+  }, [activeTab, canViewFavorites, canViewHistory, contentRetry, profileLoaded, userId])
 
   useEffect(() => {
     if (!userId || activeTab !== 'galleries' || !hasPendingGalleryThumbnails) {
@@ -445,18 +459,22 @@ export default function UserProfile() {
     return <Navigate to="/" replace />
   }
 
-  if (profileLoading) {
+  if (profileLoading && !profile) {
     return (
       <div className="mobile-page-shell flex min-h-[60vh] items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-brand-gold" />
+        <Spinner label="资料加载中" />
       </div>
     )
   }
 
   if (!profile) {
     return (
-      <div className="mobile-page-shell flex min-h-[60vh] items-center justify-center px-6 text-center text-sm text-text-muted">
-        <span className="relative z-10">{error || '用户不存在或暂不可见'}</span>
+      <div className="mobile-page-shell px-6">
+        <LoadErrorState
+          className="min-h-[60vh] pt-24"
+          title={error || '用户不存在或暂不可见'}
+          onRetry={() => setProfileRetry((current) => current + 1)}
+        />
       </div>
     )
   }
@@ -575,100 +593,112 @@ export default function UserProfile() {
           ))}
         </nav>
 
-        {contentLoading ? (
-          <div className="flex items-center justify-center py-14">
-            <Loader2 size={24} className="animate-spin text-brand-gold" />
-          </div>
-        ) : activeTab === 'profile' ? (
-          <section className={TAB_PANEL_CLASS}>
-            {bio ? (
-              <div className="prose max-w-none text-sm leading-8 text-text-secondary">
-                <MarkdownRenderer content={bio} />
-              </div>
-            ) : (
-              <p className="max-w-[72ch] text-sm leading-8 text-text-secondary">
-                这位粉丝很神秘，还没有写下任何简介...
-              </p>
-            )}
-          </section>
-        ) : activeTab === 'posts' ? (
-          <section className={TAB_PANEL_CLASS}>
-            {posts.length ? (
-              <ul>
-                {posts.map((post) => (
-                  <li key={post.id} className="border-b border-border last:border-b-0">
-                    <Link to={`/forum/${post.slug || post.id}`} className="group block py-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
-                            {post.title}
-                          </p>
-                          <p className="mt-1 text-xs text-text-muted">
-                            {post.section} · 评论 {post.commentsCount || 0} · 喜欢{' '}
-                            {post.likesCount || 0}
+        <div aria-busy={contentLoading}>
+          {contentError && (
+            <LoadErrorState onRetry={() => setContentRetry((current) => current + 1)} />
+          )}
+          {contentLoading && activeContentHasItems && (
+            <div className="mb-3 flex justify-end">
+              <Spinner size="sm" label="内容刷新中" />
+            </div>
+          )}
+          {contentLoading && !activeContentHasItems ? (
+            <div className="space-y-3 py-8" role="status" aria-label="加载中">
+              {[1, 2, 3, 4].map((item) => (
+                <Skeleton key={item} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : contentError && !activeContentHasItems ? null : activeTab === 'profile' ? (
+            <section className={TAB_PANEL_CLASS}>
+              {bio ? (
+                <div className="prose max-w-none text-sm leading-8 text-text-secondary">
+                  <MarkdownRenderer content={bio} />
+                </div>
+              ) : (
+                <p className="max-w-[72ch] text-sm leading-8 text-text-secondary">
+                  这位粉丝很神秘，还没有写下任何简介...
+                </p>
+              )}
+            </section>
+          ) : activeTab === 'posts' ? (
+            <section className={TAB_PANEL_CLASS}>
+              {posts.length ? (
+                <ul>
+                  {posts.map((post) => (
+                    <li key={post.id} className="border-b border-border last:border-b-0">
+                      <Link to={`/forum/${post.slug || post.id}`} className="group block py-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                              {post.title}
+                            </p>
+                            <p className="mt-1 text-xs text-text-muted">
+                              {post.section} · 评论 {post.commentsCount || 0} · 喜欢{' '}
+                              {post.likesCount || 0}
+                            </p>
+                          </div>
+                          <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
+                            {formatTime(post.createdAt)}
                           </p>
                         </div>
-                        <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
-                          {formatTime(post.createdAt)}
-                        </p>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState message="暂无公开帖子" />
-            )}
-          </section>
-        ) : activeTab === 'galleries' ? (
-          <section className={TAB_PANEL_CLASS}>
-            {galleries.length ? (
-              <ul>
-                {galleries.map((gallery) => (
-                  <li key={gallery.id} className="border-b border-border last:border-b-0">
-                    <Link
-                      to={`/gallery/${gallery.slug || gallery.id}`}
-                      className="group flex gap-3 py-3"
-                    >
-                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded bg-surface-alt">
-                        {gallery.images?.[0]?.thumbnailUrl ? (
-                          <img
-                            src={gallery.images[0].thumbnailUrl}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : null}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
-                          {gallery.title}
-                        </p>
-                        <p className="mt-1 line-clamp-1 text-xs text-text-muted">
-                          {gallery.description || '暂无描述'}
-                        </p>
-                        <p className="mt-1 text-xs text-text-muted">
-                          {gallery.images?.length || 0} 张 ·{' '}
-                          {gallery.eventDate
-                            ? formatDateOnly(gallery.eventDate, 'MM-dd')
-                            : formatTime(gallery.createdAt)}
-                        </p>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState message="暂无公开图集" />
-            )}
-          </section>
-        ) : activeTab === 'favorites' && profile.canViewFavorites ? (
-          <ProfileActivityList items={favorites} emptyMessage="暂无可见收藏" verb="收藏于" />
-        ) : activeTab === 'history' && profile.canViewHistory ? (
-          <ProfileActivityList items={history} emptyMessage="暂无可见浏览历史" verb="浏览于" />
-        ) : (
-          <Navigate to={`/users/${userId}`} replace />
-        )}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState message="暂无公开帖子" />
+              )}
+            </section>
+          ) : activeTab === 'galleries' ? (
+            <section className={TAB_PANEL_CLASS}>
+              {galleries.length ? (
+                <ul>
+                  {galleries.map((gallery) => (
+                    <li key={gallery.id} className="border-b border-border last:border-b-0">
+                      <Link
+                        to={`/gallery/${gallery.slug || gallery.id}`}
+                        className="group flex gap-3 py-3"
+                      >
+                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded bg-surface-alt">
+                          {gallery.images?.[0]?.thumbnailUrl ? (
+                            <img
+                              src={gallery.images[0].thumbnailUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                            {gallery.title}
+                          </p>
+                          <p className="mt-1 line-clamp-1 text-xs text-text-muted">
+                            {gallery.description || '暂无描述'}
+                          </p>
+                          <p className="mt-1 text-xs text-text-muted">
+                            {gallery.images?.length || 0} 张 ·{' '}
+                            {gallery.eventDate
+                              ? formatDateOnly(gallery.eventDate, 'MM-dd')
+                              : formatTime(gallery.createdAt)}
+                          </p>
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState message="暂无公开图集" />
+              )}
+            </section>
+          ) : activeTab === 'favorites' && profile.canViewFavorites ? (
+            <ProfileActivityList items={favorites} emptyMessage="暂无可见收藏" verb="收藏于" />
+          ) : activeTab === 'history' && profile.canViewHistory ? (
+            <ProfileActivityList items={history} emptyMessage="暂无可见浏览历史" verb="浏览于" />
+          ) : (
+            <Navigate to={`/users/${userId}`} replace />
+          )}
+        </div>
       </div>
     </div>
   )
