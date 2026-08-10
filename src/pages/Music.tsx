@@ -418,17 +418,15 @@ const Music = () => {
                         sentinelRef={incrementalSongs.sentinelRef}
                       />
                     ) : musicPagination.totalPages > 1 ? (
-                      <div className="mt-8">
-                        <Pagination
-                          page={musicPagination.page}
-                          totalPages={musicPagination.totalPages}
-                          onPageChange={musicPagination.handlePageChange}
-                          pageSize={musicPagination.pageSize}
-                          onPageSizeChange={musicPagination.handlePageSizeChange}
-                          pageSizeOptions={MUSIC_PAGE_SIZE_OPTIONS}
-                          showPageSizeSelector
-                        />
-                      </div>
+                      <Pagination
+                        page={musicPagination.page}
+                        totalPages={musicPagination.totalPages}
+                        onPageChange={musicPagination.handlePageChange}
+                        pageSize={musicPagination.pageSize}
+                        onPageSizeChange={musicPagination.handlePageSizeChange}
+                        pageSizeOptions={MUSIC_PAGE_SIZE_OPTIONS}
+                        showPageSizeSelector
+                      />
                     ) : null}
                   </>
                 ) : (
@@ -489,15 +487,13 @@ const Music = () => {
                         sentinelRef={incrementalAlbums.sentinelRef}
                       />
                     ) : albumPagination.totalPages > 1 ? (
-                      <div className="mt-8">
-                        <Pagination
-                          page={albumPagination.page}
-                          totalPages={albumPagination.totalPages}
-                          onPageChange={albumPagination.handlePageChange}
-                          pageSize={albumPagination.pageSize}
-                          showPageSizeSelector={false}
-                        />
-                      </div>
+                      <Pagination
+                        page={albumPagination.page}
+                        totalPages={albumPagination.totalPages}
+                        onPageChange={albumPagination.handlePageChange}
+                        pageSize={albumPagination.pageSize}
+                        showPageSizeSelector={false}
+                      />
                     ) : null}
                   </>
                 ) : (

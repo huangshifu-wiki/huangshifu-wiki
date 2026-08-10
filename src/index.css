@@ -1859,6 +1859,32 @@ a[href]:not([data-press-feedback='none']),
   bottom: 0;
 }
 
+.pagination-panel {
+  bottom: 0;
+}
+
+[data-music-player='visible'] .pagination-panel {
+  bottom: 4rem;
+}
+
+@media (max-width: 767px) {
+  [data-bottom-navigation='visible'] .pagination-panel {
+    bottom: calc(env(safe-area-inset-bottom) + 3.5rem);
+  }
+}
+
+@media (max-width: 639px) {
+  [data-music-player='visible'] .pagination-panel {
+    bottom: calc(env(safe-area-inset-bottom) + 7rem);
+  }
+}
+
+@media (min-width: 640px) and (max-width: 767px) {
+  [data-music-player='visible'] .pagination-panel {
+    bottom: calc(env(safe-area-inset-bottom) + 7.5rem);
+  }
+}
+
 @media (max-width: 767px) {
   .global-music-player {
     bottom: calc(env(safe-area-inset-bottom) + 56px);

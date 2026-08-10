@@ -227,17 +227,15 @@ const GalleryList = () => {
                 sentinelRef={incrementalList.sentinelRef}
               />
             ) : galleryPagination.totalPages > 1 ? (
-              <div className="mt-8">
-                <Pagination
-                  page={galleryPagination.page}
-                  totalPages={galleryPagination.totalPages}
-                  onPageChange={galleryPagination.handlePageChange}
-                  pageSize={galleryPagination.pageSize}
-                  onPageSizeChange={galleryPagination.handlePageSizeChange}
-                  pageSizeOptions={PAGE_SIZE_OPTIONS}
-                  showPageSizeSelector
-                />
-              </div>
+              <Pagination
+                page={galleryPagination.page}
+                totalPages={galleryPagination.totalPages}
+                onPageChange={galleryPagination.handlePageChange}
+                pageSize={galleryPagination.pageSize}
+                onPageSizeChange={galleryPagination.handlePageSizeChange}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+                showPageSizeSelector
+              />
             ) : null}
           </>
         ) : (

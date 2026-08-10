@@ -150,6 +150,8 @@ const MainLayout = () => {
           path === '/' ? '' : 'site-main-offset',
           currentSong ? 'pb-36 md:pb-20' : 'pb-20 md:pb-0'
         )}
+        data-bottom-navigation="visible"
+        data-music-player={currentSong ? 'visible' : undefined}
         role="main"
         id="main-content"
       >

@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from '@/src/components/icons'
 import { Button, IconButton, Select, cn } from '@/src/components/ui'
 
@@ -30,6 +31,108 @@ function generatePageNumbers(current: number, total: number): (number | 'ellipsi
   return pages
 }
 
+interface DockedPaginationLayout {
+  height: number
+  left: number
+  width: number
+}
+
+function useDockedPagination(enabled: boolean) {
+  const anchorRef = React.useRef<HTMLDivElement>(null)
+  const navigationRef = React.useRef<HTMLElement>(null)
+  const portalHostRef = React.useRef<HTMLElement | null>(null)
+  const [dockedLayout, setDockedLayout] = React.useState<DockedPaginationLayout | null>(null)
+
+  React.useLayoutEffect(() => {
+    if (!enabled) {
+      portalHostRef.current = null
+      setDockedLayout(null)
+      return
+    }
+
+    const anchor = anchorRef.current
+    if (!anchor) return
+
+    const adminScrollContainer = anchor.closest('[data-admin-scroll-container]')
+    const scrollTarget = adminScrollContainer instanceof HTMLElement ? adminScrollContainer : window
+    const portalHost = anchor.closest('[data-bottom-navigation]')
+    portalHostRef.current = portalHost instanceof HTMLElement ? portalHost : document.body
+
+    let frameId: number | null = null
+    let observedNavigation: HTMLElement | null = null
+    let resizeObserver: ResizeObserver | null = null
+    let mutationObserver: MutationObserver | null = null
+
+    const syncLayout = () => {
+      const navigation = navigationRef.current
+      if (!navigation) return
+
+      if (resizeObserver && observedNavigation !== navigation) {
+        if (observedNavigation) resizeObserver.unobserve(observedNavigation)
+        resizeObserver.observe(navigation)
+        observedNavigation = navigation
+      }
+
+      const anchorRect = anchor.getBoundingClientRect()
+      const navigationRect = navigation.getBoundingClientRect()
+      const computedBottom = Number.parseFloat(window.getComputedStyle(navigation).bottom)
+      const bottomOffset = Number.isFinite(computedBottom) ? computedBottom : 0
+      const shouldDock = anchorRect.top > window.innerHeight - bottomOffset - navigationRect.height
+
+      setDockedLayout((current) => {
+        if (!shouldDock) return current === null ? current : null
+
+        const next = {
+          height: navigationRect.height,
+          left: anchorRect.left,
+          width: anchorRect.width,
+        }
+        if (
+          current?.height === next.height &&
+          current.left === next.left &&
+          current.width === next.width
+        ) {
+          return current
+        }
+        return next
+      })
+    }
+
+    const scheduleSync = () => {
+      if (frameId !== null) return
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        syncLayout()
+      })
+    }
+
+    resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleSync) : null
+    mutationObserver =
+      typeof MutationObserver !== 'undefined' ? new MutationObserver(scheduleSync) : null
+    if (mutationObserver && portalHostRef.current) {
+      mutationObserver.observe(portalHostRef.current, {
+        attributeFilter: ['data-music-player'],
+        attributes: true,
+      })
+    }
+    resizeObserver?.observe(anchor)
+    syncLayout()
+    scrollTarget.addEventListener('scroll', scheduleSync, { passive: true })
+    window.addEventListener('resize', scheduleSync)
+
+    return () => {
+      resizeObserver?.disconnect()
+      mutationObserver?.disconnect()
+      scrollTarget.removeEventListener('scroll', scheduleSync)
+      window.removeEventListener('resize', scheduleSync)
+      if (frameId !== null) window.cancelAnimationFrame(frameId)
+      portalHostRef.current = null
+    }
+  }, [enabled])
+
+  return { anchorRef, navigationRef, portalHostRef, dockedLayout }
+}
+
 export const Pagination: React.FC<PaginationProps> = ({
   page,
   totalPages,
@@ -39,6 +142,10 @@ export const Pagination: React.FC<PaginationProps> = ({
   pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
   showPageSizeSelector = false,
 }) => {
+  const { anchorRef, navigationRef, portalHostRef, dockedLayout } = useDockedPagination(
+    totalPages > 0
+  )
+
   if (totalPages <= 0) return null
 
   const handlePrev = () => {
@@ -59,9 +166,15 @@ export const Pagination: React.FC<PaginationProps> = ({
 
   const pageNumbers = generatePageNumbers(page, totalPages)
 
-  return (
+  const navigation = (
     <footer
-      className="mt-6 flex flex-col gap-3 border-t border-[var(--book-ink-line)] pt-4 sm:flex-row sm:items-center sm:justify-between"
+      ref={navigationRef}
+      className={cn(
+        'pagination-panel z-30 flex flex-col gap-3 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] px-2 py-2 shadow-[var(--book-panel-shadow)] backdrop-blur-[16px] sm:flex-row sm:items-center sm:justify-between sm:px-3 sm:py-3',
+        dockedLayout ? 'fixed' : 'static w-full'
+      )}
+      data-state={dockedLayout ? 'docked' : 'inline'}
+      style={dockedLayout ? { left: dockedLayout.left, width: dockedLayout.width } : undefined}
       role="navigation"
       aria-label="分页导航"
     >
@@ -156,6 +269,19 @@ export const Pagination: React.FC<PaginationProps> = ({
         </IconButton>
       </div>
     </footer>
+  )
+
+  return (
+    <div
+      ref={anchorRef}
+      className="mt-6"
+      data-pagination-anchor
+      style={dockedLayout ? { height: dockedLayout.height } : undefined}
+    >
+      {dockedLayout && portalHostRef.current
+        ? createPortal(navigation, portalHostRef.current)
+        : navigation}
+    </div>
   )
 }
 
