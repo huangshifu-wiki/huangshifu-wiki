@@ -39,14 +39,18 @@ const SourceLink = ({ source }: { source: MusicExternalSource }) => {
   // 优先由平台 ID 实时构建官方跳转地址；sourceUrl 仅作冗合层数，避免存量脏链接生效
   const url = getPlatformExternalUrl(source.platform, source.sourceId) || source.sourceUrl || null
   if (!url) {
-    return <span className="min-w-0 break-words text-right text-text-primary">{label}</span>
+    return (
+      <span className="flex-1 min-w-0 max-w-full text-wrap-anywhere text-right text-text-primary">
+        {label}
+      </span>
+    )
   }
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="min-w-0 break-words text-right text-text-primary hover:text-brand-gold transition-colors"
+      className="flex-1 min-w-0 max-w-full text-wrap-anywhere text-right text-text-primary hover:text-brand-gold transition-colors"
     >
       {label}
     </a>
@@ -290,11 +294,11 @@ const MusicDetail = () => {
               </button>
               <div className="flex-1 flex flex-col justify-center min-w-0">
                 <h1 className="mobile-page-title mb-2">{song.title}</h1>
-                <p className="text-[0.95rem] text-text-secondary tracking-[0.06em] mb-3">
+                <p className="mb-3 min-w-0 max-w-full text-wrap-anywhere text-[0.95rem] text-text-secondary tracking-[0.06em]">
                   {artistsText}
                 </p>
                 <div className="flex flex-wrap gap-x-5 gap-y-2 mb-5 text-[0.8125rem] text-text-muted">
-                  <span>专辑：{song.album}</span>
+                  <span className="min-w-0 max-w-full text-wrap-anywhere">专辑：{song.album}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2.5">
                   <button
@@ -459,10 +463,10 @@ const MusicDetail = () => {
                       href={link.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2.5 py-2.5 border-b border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:pl-1 transition-all"
+                      className="flex min-w-0 items-center gap-2.5 py-2.5 border-b border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:pl-1 transition-all"
                     >
                       <ExternalLink size={16} className="text-text-muted flex-shrink-0" />
-                      <span className="truncate">{link.label}</span>
+                      <span className="min-w-0 max-w-full flex-1 truncate">{link.label}</span>
                     </a>
                   ))}
                 </div>
@@ -480,19 +484,21 @@ const MusicDetail = () => {
                 歌曲信息
               </h3>
               <div className="flex flex-col gap-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-text-muted">歌手</span>
-                  <span className="text-text-primary">{artistsText}</span>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <span className="shrink-0 text-text-muted">歌手</span>
+                  <span className="min-w-0 max-w-full flex-1 text-right text-wrap-anywhere text-text-primary">
+                    {artistsText}
+                  </span>
                 </div>
                 {(song.tags?.length ?? 0) > 0 && (
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-text-muted flex-shrink-0">标签</span>
-                    <span className="flex flex-wrap justify-end gap-1">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <span className="shrink-0 text-text-muted">标签</span>
+                    <span className="flex min-w-0 max-w-full flex-1 flex-wrap justify-end gap-1">
                       {song.tags!.map((tag) => (
                         <Link
                           key={tag}
                           to={`/music?tag=${encodeURIComponent(tag)}`}
-                          className="rounded-sm border border-[var(--book-ink-line)] px-1.5 py-0.5 text-xs text-text-secondary transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
+                          className="min-w-0 max-w-full rounded-sm border border-[var(--book-ink-line)] px-1.5 py-0.5 text-wrap-anywhere text-xs text-text-secondary transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
                         >
                           {tag}
                         </Link>
@@ -501,37 +507,45 @@ const MusicDetail = () => {
                   </div>
                 )}
                 {creditRows.map((row) => (
-                  <div className="flex items-center justify-between" key={row.label}>
-                    <span className="text-text-muted">{row.label}</span>
-                    <span className="text-text-primary">{row.value}</span>
+                  <div className="flex min-w-0 items-start justify-between gap-3" key={row.label}>
+                    <span className="shrink-0 text-text-muted">{row.label}</span>
+                    <span className="min-w-0 max-w-full flex-1 text-right text-wrap-anywhere text-text-primary">
+                      {row.value}
+                    </span>
                   </div>
                 ))}
                 {song.releaseDate && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-text-muted">发行日期</span>
-                    <span className="text-text-primary">{song.releaseDate}</span>
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <span className="shrink-0 text-text-muted">发行日期</span>
+                    <span className="min-w-0 max-w-full flex-1 text-right text-wrap-anywhere text-text-primary">
+                      {song.releaseDate}
+                    </span>
                   </div>
                 )}
                 {typeof song.durationMs === 'number' && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-text-muted">时长</span>
-                    <span className="text-text-primary">{formatTime(song.durationMs / 1000)}</span>
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <span className="shrink-0 text-text-muted">时长</span>
+                    <span className="min-w-0 max-w-full flex-1 text-right text-wrap-anywhere text-text-primary">
+                      {formatTime(song.durationMs / 1000)}
+                    </span>
                   </div>
                 )}
-                <div className="flex items-center justify-between">
-                  <span className="text-text-muted">专辑</span>
-                  <span className="text-text-primary">{song.album}</span>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <span className="shrink-0 text-text-muted">专辑</span>
+                  <span className="min-w-0 max-w-full flex-1 text-right text-wrap-anywhere text-text-primary">
+                    {song.album}
+                  </span>
                 </div>
                 {primarySource && (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-text-muted flex-shrink-0">主来源</span>
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <span className="shrink-0 text-text-muted">主来源</span>
                     <SourceLink source={primarySource} />
                   </div>
                 )}
                 {otherSources.length > 0 && (
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-text-muted flex-shrink-0">其他来源</span>
-                    <span className="flex min-w-0 flex-col items-end gap-1">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <span className="shrink-0 text-text-muted">其他来源</span>
+                    <span className="flex min-w-0 max-w-full flex-1 flex-col items-stretch gap-1">
                       {otherSources.map((source) => (
                         <SourceLink key={source.id} source={source} />
                       ))}

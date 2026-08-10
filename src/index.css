@@ -1645,6 +1645,9 @@ a[href]:not([data-press-feedback='none']),
   gap: 2rem;
   align-items: start;
 }
+.mobile-detail-grid > * {
+  min-width: 0;
+}
 
 .mobile-detail-aside {
   position: sticky;
