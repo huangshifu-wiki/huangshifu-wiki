@@ -860,7 +860,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const wantsAlbums = type === 'all' || type === 'albums'
     const wantsLyrics = type === 'all' || type === 'lyrics'
 
-    // 搜索详情开关：关闭时只匹配标题/元数据等浅层字段，不匹配描述/正文/歌词
+    // 搜索详情开关控制其他内容的正文匹配；歌词分类始终按歌词内容检索
     const includeDetail = parseBoolean(req.query.detail)
 
     if (q) {
@@ -1123,7 +1123,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
       : Promise.resolve([])
 
     const lyricsPromise =
-      wantsLyrics && q && includeDetail
+      wantsLyrics && q && (type === 'lyrics' || includeDetail)
         ? prisma.musicTrack.findMany({
             where: {
               deletedAt: null,

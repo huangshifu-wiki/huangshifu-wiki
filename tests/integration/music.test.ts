@@ -470,7 +470,7 @@ describe('Music API - 音乐接口测试', () => {
     ).toBe(true)
   })
 
-  it('音乐搜索不索引歌词，歌词搜索受搜索详情开关约束并按行返回', async () => {
+  it('音乐搜索不索引歌词，歌词分类独立于搜索详情并按行返回', async () => {
     const song = await prisma.musicTrack.create({
       data: {
         slug: nextTestNumericSlug(),
@@ -491,15 +491,18 @@ describe('Music API - 音乐接口测试', () => {
     expect(musicRes.status).toBe(200)
     expect(musicRes.body.music.some((m: { docId: string }) => m.docId === song.docId)).toBe(false)
 
-    // 1b. 未开启搜索详情时，歌词搜索返回空（歌词属于详情）
+    // 歌词分类不依赖搜索详情开关
     const lyricNoDetailRes = await request(app)
       .get('/api/search')
       .query({ q: '独特歌词XYZ', type: 'lyrics' })
 
     expect(lyricNoDetailRes.status).toBe(200)
-    expect(lyricNoDetailRes.body.lyrics).toHaveLength(0)
+    expect(lyricNoDetailRes.body.lyrics).toHaveLength(1)
+    expect(
+      lyricNoDetailRes.body.lyrics[0].matchedLines.map((l: { text: string }) => l.text)
+    ).toEqual(['第二行独特歌词XYZ'])
 
-    // 2. 歌词类型搜索按行返回（歌词属于详情，需开启搜索详情开关）
+    // 开启详情后结果保持一致，歌词仍按行返回
     const lyricRes = await request(app)
       .get('/api/search')
       .query({ q: '独特歌词XYZ', type: 'lyrics', detail: '1' })
@@ -511,9 +514,7 @@ describe('Music API - 音乐接口测试', () => {
     ])
 
     // 3. 同一首歌多行命中集中返回、保持原顺序
-    const multiRes = await request(app)
-      .get('/api/search')
-      .query({ q: '歌词', type: 'lyrics', detail: '1' })
+    const multiRes = await request(app).get('/api/search').query({ q: '歌词', type: 'lyrics' })
 
     expect(multiRes.status).toBe(200)
     const multiSong = multiRes.body.lyrics.find(
@@ -529,7 +530,7 @@ describe('Music API - 音乐接口测试', () => {
     // 4. 歌词响应不含整段歌词字段
     expect(multiSong.lyric).toBeUndefined()
 
-    // 5. 默认全部类型搜索也返回歌词结果（歌词独立成区块，不污染音乐结果）
+    // 全部类型的详情搜索也返回歌词结果，不污染音乐结果
     const allRes = await request(app)
       .get('/api/search')
       .query({ q: '独特歌词XYZ', type: 'all', detail: '1' })

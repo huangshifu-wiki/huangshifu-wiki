@@ -163,7 +163,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   const hasFilters =
     filters.selectedTags.length > 0 || filters.dateRange.start || filters.dateRange.end
-  // 当前 tab 不在 tabItems 中（如关闭搜索详情后歌词结果清空）时回落全部
+  // 当前 tab 不在 tabItems 中时回落全部
   const effectiveTab = tabItems.some((tab) => tab.id === activeTab) ? activeTab : 'all'
   const filteredMixedResults = isMixedSearch
     ? mixedResults.filter(
