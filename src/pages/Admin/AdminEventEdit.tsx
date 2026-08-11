@@ -28,6 +28,7 @@ import { useToast } from '../../components/Toast'
 import { apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { splitTagsInput } from '../../lib/contentUtils'
+import { useTagSuggestions } from '../../hooks/useTagSuggestions'
 import {
   EVENT_ALLOWED_IMAGE_TYPES,
   EVENT_IMAGE_ACCEPT,
@@ -49,6 +50,7 @@ import type {
   EventTicketPrice,
   EventTimeSlot,
 } from '../../types/entities'
+import { TagInput } from '@/src/components/ui'
 import { runInBatches } from '../../utils/asyncBatch'
 
 type EditablePoster = {
@@ -339,6 +341,7 @@ const AdminEventEdit = () => {
   const isCreating = !eventId
   const navigate = useNavigate()
   const { show } = useToast()
+  const tagSuggestions = useTagSuggestions('event')
   const [draft, setDraft] = useState<EventDraft>(createEmptyDraft)
   const [loading, setLoading] = useState(!isCreating)
   const [saving, setSaving] = useState(false)
@@ -872,11 +875,12 @@ const AdminEventEdit = () => {
                 placeholder="地点"
                 className={bookCompactInputClass}
               />
-              <input
-                value={draft.tagsText}
-                onChange={(event) => patchDraft({ tagsText: event.target.value })}
-                placeholder="标签，逗号分隔"
-                className={bookCompactInputClass}
+              <TagInput
+                id="event-tags"
+                value={splitTagsInput(draft.tagsText)}
+                onChange={(tags) => patchDraft({ tagsText: tags.join(', ') })}
+                suggestions={tagSuggestions}
+                placeholder="输入标签后按回车添加"
               />
             </div>
           </BookEditorSection>

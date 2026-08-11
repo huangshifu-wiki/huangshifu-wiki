@@ -37,6 +37,8 @@ import {
   bookSecondaryButtonClass,
   bookSmallButtonClass,
 } from './BookEditor'
+import { useTagSuggestions } from '../hooks/useTagSuggestions'
+import { TagInput } from '@/src/components/ui'
 
 type SongFormData = {
   title: string
@@ -212,6 +214,7 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
   const [saving, setSaving] = useState(false)
   const { show } = useToast()
   const dialog = useDialog()
+  const tagSuggestions = useTagSuggestions('music', open)
 
   useEffect(() => {
     if (!open) return
@@ -521,7 +524,8 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
             </div>
 
             <BookFormField
-              label="标签（可选，逗号分隔）"
+              label="标签（可选，回车添加）"
+              htmlFor="song-tags"
               counter={
                 <CharacterCount
                   current={formData.tagsText.length}
@@ -529,13 +533,12 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
                 />
               }
             >
-              <input
-                type="text"
-                value={formData.tagsText}
-                onChange={(e) => setFormData((prev) => ({ ...prev, tagsText: e.target.value }))}
-                maxLength={CONTENT_LIMITS.music.tags * CONTENT_LIMITS.music.tag}
-                placeholder="标签，逗号分隔（可选）"
-                className={bookCompactInputClass}
+              <TagInput
+                id="song-tags"
+                value={splitTagsInput(formData.tagsText)}
+                onChange={(tags) => setFormData((prev) => ({ ...prev, tagsText: tags.join(', ') }))}
+                suggestions={tagSuggestions}
+                placeholder="输入标签后按回车添加"
               />
             </BookFormField>
 

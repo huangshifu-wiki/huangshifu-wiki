@@ -35,6 +35,7 @@ import {
   resolveMentionTargetsForText,
   allocateNumericSlug,
   isNumericSlug,
+  fetchVisibleTagSuggestions,
 } from '../utils'
 import type { AuthenticatedRequest, ContentStatus } from '../types'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -206,6 +207,15 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     console.error('Fetch posts error:', error)
     res.status(500).json({ error: '获取帖子失败' })
+  }
+})
+router.get('/tags', async (req: AuthenticatedRequest, res) => {
+  try {
+    const tags = await fetchVisibleTagSuggestions('post', req.authUser)
+    res.json({ tags })
+  } catch (error) {
+    console.error('Fetch post tags error:', error)
+    res.status(500).json({ error: '获取帖子标签失败' })
   }
 })
 

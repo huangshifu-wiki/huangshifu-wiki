@@ -6,6 +6,8 @@ import { LocationTagInput } from '../../components/LocationTagInput'
 import { CONTENT_LIMITS, WIKI_MAX_CONTENT_SIZE } from '../../lib/contentLimits'
 import type { WikiRelationRecord } from './types'
 import type { WikiCategoryItem } from '../../types/entities'
+import { TagInput } from '@/src/components/ui'
+import { splitTagsInput } from '../../lib/contentUtils'
 
 type FormData = {
   title: string
@@ -22,11 +24,12 @@ type FormData = {
 interface WikiEditorFormProps {
   formData: FormData
   categories: WikiCategoryItem[]
+  tagSuggestions: readonly string[]
   onFormDataChange: (data: Partial<FormData> | ((prev: FormData) => FormData)) => void
 }
 
 const WikiEditorForm = React.memo(
-  ({ formData, categories, onFormDataChange }: WikiEditorFormProps) => {
+  ({ formData, categories, tagSuggestions, onFormDataChange }: WikiEditorFormProps) => {
     const handleLocationChange = (locationName: string, locationCode: string) => {
       onFormDataChange({ locationName, locationCode })
     }
@@ -125,7 +128,7 @@ const WikiEditorForm = React.memo(
         <BookEditorSection title="附加信息">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <BookFormField
-              label="标签 (逗号分隔)"
+              label="标签"
               htmlFor="wiki-tags"
               counter={
                 <CharacterCount
@@ -134,14 +137,12 @@ const WikiEditorForm = React.memo(
                 />
               }
             >
-              <input
+              <TagInput
                 id="wiki-tags"
-                type="text"
-                value={formData.tags}
-                onChange={(e) => onFormDataChange({ tags: e.target.value })}
-                maxLength={CONTENT_LIMITS.wiki.tag * CONTENT_LIMITS.wiki.tags}
-                placeholder="例如：古风, 原创, 歌手"
-                className={bookInputClass}
+                value={splitTagsInput(formData.tags)}
+                onChange={(tags) => onFormDataChange({ tags: tags.join(', ') })}
+                suggestions={tagSuggestions}
+                placeholder="输入标签后按回车添加"
               />
             </BookFormField>
 

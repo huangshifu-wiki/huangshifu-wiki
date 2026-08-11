@@ -19,6 +19,8 @@ import {
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
 import { metadataCache } from '../../lib/metadataCache'
+import { splitTagsInput } from '../../lib/contentUtils'
+import { useTagSuggestions } from '../../hooks/useTagSuggestions'
 import { getWikiSaveResultText } from '../../lib/wikiWriteText'
 import { Trash2 } from '@/src/components/icons'
 import WikiEditorForm from './WikiEditorForm'
@@ -37,6 +39,7 @@ const WikiEditor = () => {
   const { t } = useI18n()
   const dialog = useDialog()
   const { categories, canEditCategory } = useWikiCategories()
+  const tagSuggestions = useTagSuggestions('wiki')
 
   const [formData, setFormData] = useState({
     title: '',
@@ -143,10 +146,7 @@ const WikiEditor = () => {
       title: formData.title,
       category: formData.category,
       content: formData.content,
-      tags: formData.tags
-        .split(',')
-        .map((t) => t.trim())
-        .filter((t) => t),
+      tags: splitTagsInput(formData.tags),
       eventDate: formData.eventDate,
       relations: formData.relations,
       locationCode: formData.locationCode || null,
@@ -249,6 +249,7 @@ const WikiEditor = () => {
         <WikiEditorForm
           formData={formData}
           categories={categories}
+          tagSuggestions={tagSuggestions}
           onFormDataChange={handleFormDataChange}
         />
 
@@ -263,7 +264,7 @@ const WikiEditor = () => {
                   title: formData.title,
                   category: formData.category,
                   content: formData.content,
-                  tags: formData.tags ? formData.tags.split(',').map((t) => t.trim()) : [],
+                  tags: splitTagsInput(formData.tags),
                   description: '',
                 }
           }

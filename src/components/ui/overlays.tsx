@@ -126,6 +126,7 @@ export const AlertDialogContent = React.forwardRef<
 AlertDialogContent.displayName = 'AlertDialogContent'
 
 export const Popover = PopoverPrimitive.Root
+export const PopoverAnchor = PopoverPrimitive.Anchor
 export const PopoverTrigger = PopoverPrimitive.Trigger
 export const PopoverClose = PopoverPrimitive.Close
 export const PopoverContent = React.forwardRef<

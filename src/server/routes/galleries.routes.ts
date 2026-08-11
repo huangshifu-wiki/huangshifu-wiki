@@ -34,6 +34,7 @@ import {
   resolveMentionTargetsForText,
   allocateNumericSlug,
   isNumericSlug,
+  fetchVisibleTagSuggestions,
 } from '../utils'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
@@ -399,6 +400,13 @@ router.get(
       console.error('Fetch galleries error:', error)
       res.status(500).json({ error: '获取图集失败' })
     }
+  })
+)
+router.get(
+  '/tags',
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const tags = await fetchVisibleTagSuggestions('gallery', req.authUser)
+    res.json({ tags })
   })
 )
 

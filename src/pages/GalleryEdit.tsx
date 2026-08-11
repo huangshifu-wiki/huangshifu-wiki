@@ -32,6 +32,7 @@ import {
 } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { splitTagsInput } from '../lib/contentUtils'
+import { useTagSuggestions } from '../hooks/useTagSuggestions'
 import { toLocalDateInputValue } from '../lib/dateUtils'
 import { useI18n } from '../lib/i18n'
 import {
@@ -51,6 +52,7 @@ import type {
   UploadSessionResponse,
 } from '../types/api'
 import type { GalleryImageItem, GalleryItem } from '../types/entities'
+import { TagInput } from '@/src/components/ui'
 
 type EditableGalleryImage = GalleryImageItem & {
   clientId: string
@@ -150,6 +152,7 @@ const GalleryEdit = () => {
   const { show } = useToast()
   const dialog = useDialog()
   const { t } = useI18n()
+  const tagSuggestions = useTagSuggestions('gallery')
 
   const [gallery, setGallery] = useState<GalleryItem | null>(null)
   const [draft, setDraft] = useState<GalleryDraft | null>(null)
@@ -779,16 +782,14 @@ const GalleryEdit = () => {
                   />
                 }
               >
-                <input
+                <TagInput
                   id="gallery-tags"
-                  type="text"
-                  value={draft.tagsText}
-                  onChange={(event) =>
-                    applyDraft((prev) => (prev ? { ...prev, tagsText: event.target.value } : prev))
+                  value={splitTagsInput(draft.tagsText)}
+                  onChange={(tags) =>
+                    applyDraft((prev) => (prev ? { ...prev, tagsText: tags.join(', ') } : prev))
                   }
-                  maxLength={CONTENT_LIMITS.gallery.tag * CONTENT_LIMITS.gallery.tags}
+                  suggestions={tagSuggestions}
                   placeholder={t('gallery.tagsPlaceholder')}
-                  className={bookInputClass}
                 />
               </BookFormField>
 

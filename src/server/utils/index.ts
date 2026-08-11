@@ -98,6 +98,7 @@ export {
   buildGalleryVisibilityWhere,
   canManageWikiPullRequest,
 } from './authorization'
+export { fetchVisibleTagSuggestions } from './tagSuggestions'
 
 export {
   SOFT_DELETE_TABS,

@@ -327,4 +327,67 @@ describe('Wiki API', () => {
     expect(missingResponse.status).toBe(404)
     expect(legacySlugResponse.status).toBe(404)
   })
+  it('按可见性聚合去重排序的Wiki标签建议', async () => {
+    const publicPage = await createTestWikiPage({
+      slug: `${WIKI_SLUG_PREFIX}tag-public`,
+      title: `${WIKI_TITLE_PREFIX} Tag Public`,
+      authorUid: normalUser.user.uid,
+    })
+    const ownDraft = await createTestWikiPage({
+      slug: `${WIKI_SLUG_PREFIX}tag-own-draft`,
+      title: `${WIKI_TITLE_PREFIX} Tag Own Draft`,
+      status: 'draft',
+      authorUid: normalUser.user.uid,
+    })
+    const otherDraft = await createTestWikiPage({
+      slug: `${WIKI_SLUG_PREFIX}tag-other-draft`,
+      title: `${WIKI_TITLE_PREFIX} Tag Other Draft`,
+      status: 'draft',
+      authorUid: adminUser.user.uid,
+    })
+    const deletedPage = await createTestWikiPage({
+      slug: `${WIKI_SLUG_PREFIX}tag-deleted`,
+      title: `${WIKI_TITLE_PREFIX} Tag Deleted`,
+      authorUid: normalUser.user.uid,
+    })
+
+    await Promise.all([
+      prisma.wikiPage.update({
+        where: { id: publicPage.id },
+        data: { tags: ['公开Wiki标签', '重复Wiki标签'] },
+      }),
+      prisma.wikiPage.update({
+        where: { id: ownDraft.id },
+        data: { tags: ['本人Wiki草稿标签'] },
+      }),
+      prisma.wikiPage.update({
+        where: { id: otherDraft.id },
+        data: { tags: ['他人Wiki草稿标签'] },
+      }),
+      prisma.wikiPage.update({
+        where: { id: deletedPage.id },
+        data: { tags: ['删除Wiki标签'], deletedAt: new Date() },
+      }),
+    ])
+
+    const anonymousResponse = await request(app).get('/api/wiki/tags')
+    expect(anonymousResponse.status).toBe(200)
+    expect(anonymousResponse.body.tags).toContain('公开Wiki标签')
+    expect(anonymousResponse.body.tags).not.toContain('本人Wiki草稿标签')
+    expect(anonymousResponse.body.tags).not.toContain('他人Wiki草稿标签')
+    expect(anonymousResponse.body.tags).not.toContain('删除Wiki标签')
+    expect(
+      anonymousResponse.body.tags.filter((tag: string) => tag === '重复Wiki标签')
+    ).toHaveLength(1)
+
+    const { agent } = await createAuthenticatedAgent(
+      normalUser.user.email,
+      normalUser.plainPassword
+    )
+    const authenticatedResponse = await agent.get('/api/wiki/tags')
+    expect(authenticatedResponse.status).toBe(200)
+    expect(authenticatedResponse.body.tags).toContain('本人Wiki草稿标签')
+    expect(authenticatedResponse.body.tags).not.toContain('他人Wiki草稿标签')
+    expect(authenticatedResponse.body.tags).not.toContain('删除Wiki标签')
+  })
 })

@@ -42,6 +42,7 @@ import {
   TabsList,
   TabsTrigger,
   Textarea,
+  TagInput,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -57,6 +58,7 @@ const UiShowcase = () => {
   const [dark, setDark] = useState(false)
   const [loadMode, setLoadMode] = useState('pagination')
   const { show } = useToast()
+  const [demoTags, setDemoTags] = useState(['古风'])
 
   return (
     <div data-theme={dark ? 'dark' : 'default'} className="mobile-page-shell min-h-screen">
@@ -138,6 +140,14 @@ const UiShowcase = () => {
               <Textarea placeholder="输入简介" />
             </Field>
           </div>
+          <Field label="标签令牌" description="聚焦输入框显示已有标签，输入后按回车添加。">
+            <TagInput
+              value={demoTags}
+              onChange={setDemoTags}
+              suggestions={['古风', '现场', '原创']}
+              placeholder="输入标签后按回车添加"
+            />
+          </Field>
           <div className="flex flex-wrap gap-6">
             <Checkbox label="允许评论" defaultChecked />
             <Switch label="公开展示" defaultChecked />

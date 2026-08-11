@@ -10,6 +10,7 @@ import {
 } from '../schemas'
 import {
   prisma,
+  fetchVisibleTagSuggestions,
   toWikiResponse,
   toWikiListResponse,
   buildWikiVisibilityWhere,
@@ -525,6 +526,13 @@ router.get(
       logger.error({ err: error }, 'Fetch wiki categories error')
       res.status(500).json({ error: '获取百科分类失败' })
     }
+  })
+)
+router.get(
+  '/tags',
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const tags = await fetchVisibleTagSuggestions('wiki', req.authUser)
+    res.json({ tags })
   })
 )
 

@@ -420,4 +420,63 @@ describe('Posts API', () => {
     })
     expect(draftNotification).toBeNull()
   })
+  it('按可见性聚合去重排序的帖子标签建议', async () => {
+    const publicPost = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Tag Public`,
+      authorUid: normalUser.user.uid,
+    })
+    const ownDraft = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Tag Own Draft`,
+      status: 'draft',
+      authorUid: normalUser.user.uid,
+    })
+    const otherDraft = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Tag Other Draft`,
+      status: 'draft',
+      authorUid: adminUser.user.uid,
+    })
+    const deletedPost = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Tag Deleted`,
+      authorUid: normalUser.user.uid,
+    })
+
+    await Promise.all([
+      prisma.post.update({
+        where: { id: publicPost.id },
+        data: { tags: ['公开帖子标签', '重复帖子标签'] },
+      }),
+      prisma.post.update({
+        where: { id: ownDraft.id },
+        data: { tags: ['本人帖子草稿标签'] },
+      }),
+      prisma.post.update({
+        where: { id: otherDraft.id },
+        data: { tags: ['他人帖子草稿标签'] },
+      }),
+      prisma.post.update({
+        where: { id: deletedPost.id },
+        data: { tags: ['删除帖子标签'], deletedAt: new Date() },
+      }),
+    ])
+
+    const anonymousResponse = await request(app).get('/api/posts/tags')
+    expect(anonymousResponse.status).toBe(200)
+    expect(anonymousResponse.body.tags).toContain('公开帖子标签')
+    expect(anonymousResponse.body.tags).not.toContain('本人帖子草稿标签')
+    expect(anonymousResponse.body.tags).not.toContain('他人帖子草稿标签')
+    expect(anonymousResponse.body.tags).not.toContain('删除帖子标签')
+    expect(
+      anonymousResponse.body.tags.filter((tag: string) => tag === '重复帖子标签')
+    ).toHaveLength(1)
+
+    const { agent } = await createAuthenticatedAgent(
+      normalUser.user.email,
+      normalUser.plainPassword
+    )
+    const authenticatedResponse = await agent.get('/api/posts/tags')
+    expect(authenticatedResponse.status).toBe(200)
+    expect(authenticatedResponse.body.tags).toContain('本人帖子草稿标签')
+    expect(authenticatedResponse.body.tags).not.toContain('他人帖子草稿标签')
+    expect(authenticatedResponse.body.tags).not.toContain('删除帖子标签')
+  })
 })

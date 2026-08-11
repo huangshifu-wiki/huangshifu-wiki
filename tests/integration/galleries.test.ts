@@ -146,4 +146,66 @@ describe('Galleries API eventDate handling', () => {
 
     expect(invalidResponse.status).toBe(400)
   })
+  it('按可见性聚合去重排序的画廊标签建议', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const viewer = await createTestUser({
+      role: 'user',
+      email: `roi_gallery_event_date_viewer_${suffix}@example.com`,
+      displayName: `RoiGalleryEventDateViewer_${suffix}`,
+    })
+    const publicGallery = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Tag Public`,
+      authorUid: adminUser.user.uid,
+    })
+    const ownDraft = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Tag Own Draft`,
+      status: 'draft',
+      authorUid: viewer.user.uid,
+    })
+    const otherDraft = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Tag Other Draft`,
+      status: 'draft',
+      authorUid: adminUser.user.uid,
+    })
+    const deletedGallery = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Tag Deleted`,
+      authorUid: viewer.user.uid,
+    })
+
+    await Promise.all([
+      prisma.gallery.update({
+        where: { id: publicGallery.id },
+        data: { tags: ['公开画廊标签', '重复画廊标签'] },
+      }),
+      prisma.gallery.update({
+        where: { id: ownDraft.id },
+        data: { tags: ['本人画廊草稿标签'] },
+      }),
+      prisma.gallery.update({
+        where: { id: otherDraft.id },
+        data: { tags: ['他人画廊草稿标签'] },
+      }),
+      prisma.gallery.update({
+        where: { id: deletedGallery.id },
+        data: { tags: ['删除画廊标签'], deletedAt: new Date() },
+      }),
+    ])
+
+    const anonymousResponse = await request(app).get('/api/galleries/tags')
+    expect(anonymousResponse.status).toBe(200)
+    expect(anonymousResponse.body.tags).toContain('公开画廊标签')
+    expect(anonymousResponse.body.tags).not.toContain('本人画廊草稿标签')
+    expect(anonymousResponse.body.tags).not.toContain('他人画廊草稿标签')
+    expect(anonymousResponse.body.tags).not.toContain('删除画廊标签')
+    expect(
+      anonymousResponse.body.tags.filter((tag: string) => tag === '重复画廊标签')
+    ).toHaveLength(1)
+
+    const { agent } = await createAuthenticatedAgent(viewer.user.email, viewer.plainPassword)
+    const authenticatedResponse = await agent.get('/api/galleries/tags')
+    expect(authenticatedResponse.status).toBe(200)
+    expect(authenticatedResponse.body.tags).toContain('本人画廊草稿标签')
+    expect(authenticatedResponse.body.tags).not.toContain('他人画廊草稿标签')
+    expect(authenticatedResponse.body.tags).not.toContain('删除画廊标签')
+  })
 })

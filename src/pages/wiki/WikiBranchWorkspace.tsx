@@ -12,11 +12,14 @@ import { getBranchStatusText } from './types'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import { SmartBackLink } from '../../components/SmartBackLink'
+import { useTagSuggestions } from '../../hooks/useTagSuggestions'
+import { TagInput } from '@/src/components/ui'
 
 const WikiBranchWorkspace = () => {
   const { slug } = useParams()
   const { user, isAdmin, isBanned } = useAuth()
   const { categories, canEditCategory } = useWikiCategories()
+  const tagSuggestions = useTagSuggestions('wiki')
 
   const [page, setPage] = useState<WikiItem | null>(null)
   const [branch, setBranch] = useState<WikiBranchItem | null>(null)
@@ -375,15 +378,19 @@ const WikiBranchWorkspace = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-widest text-brand-gold/60">
-                    标签 (逗号分隔)
+                  <label
+                    htmlFor="wiki-branch-tags"
+                    className="text-xs font-bold uppercase tracking-widest text-brand-gold/60"
+                  >
+                    标签
                   </label>
-                  <input
-                    type="text"
-                    value={tags}
-                    onChange={(event) => setTags(event.target.value)}
+                  <TagInput
+                    id="wiki-branch-tags"
+                    value={splitTagsInput(tags)}
+                    onChange={(nextTags) => setTags(nextTags.join(', '))}
+                    suggestions={tagSuggestions}
+                    placeholder="输入标签后按回车添加"
                     className="theme-input w-full mt-1 px-4 py-3 rounded text-sm"
-                    placeholder="古风, 现场, 2026"
                   />
                 </div>
               </div>

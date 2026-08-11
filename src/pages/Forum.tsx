@@ -38,7 +38,12 @@ import { apiDelete, apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '
 import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
-import { ContentStatus, getStatusClassName, getStatusText } from '../lib/contentUtils'
+import {
+  ContentStatus,
+  getStatusClassName,
+  getStatusText,
+  splitTagsInput,
+} from '../lib/contentUtils'
 import { formatDate } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import { LocationTagInput } from '../components/LocationTagInput'
@@ -47,7 +52,8 @@ import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { PageSkeleton } from '../components/PageSkeleton'
-import { LoadErrorState, Spinner } from '@/src/components/ui'
+import { useTagSuggestions } from '../hooks/useTagSuggestions'
+import { LoadErrorState, Spinner, TagInput } from '@/src/components/ui'
 import { RouteGuard } from '../components/RouteGuard'
 import { CommentActionMenu } from '../components/CommentActionMenu'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
@@ -1277,6 +1283,7 @@ const PostEditor = () => {
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const dialog = useDialog()
   const { show } = useToast()
+  const tagSuggestions = useTagSuggestions('post')
 
   useEffect(() => {
     const fetchSections = async () => {
@@ -1364,10 +1371,7 @@ const PostEditor = () => {
         title: formData.title,
         section: formData.section,
         content: formData.content,
-        tags: formData.tags
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean),
+        tags: splitTagsInput(formData.tags),
         locationCode: formData.locationCode,
         locationDetail: formData.locationName,
         status,
@@ -1532,6 +1536,7 @@ const PostEditor = () => {
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <BookFormField
               label={t('forum.tagsLabel')}
+              htmlFor="forum-tags"
               counter={
                 <CharacterCount
                   current={formData.tags.length}
@@ -1539,13 +1544,12 @@ const PostEditor = () => {
                 />
               }
             >
-              <input
-                type="text"
-                value={formData.tags}
-                onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                maxLength={CONTENT_LIMITS.post.tag * CONTENT_LIMITS.post.tags}
-                placeholder={t('forum.tagsPlaceholder')}
-                className={bookInputClass}
+              <TagInput
+                id="forum-tags"
+                value={splitTagsInput(formData.tags)}
+                onChange={(tags) => setFormData({ ...formData, tags: tags.join(', ') })}
+                suggestions={tagSuggestions}
+                placeholder="输入标签后按回车添加"
               />
             </BookFormField>
 
