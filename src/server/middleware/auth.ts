@@ -12,6 +12,10 @@ import { issueXsrfToken } from './csrf'
 const JWT_SECRET = process.env.JWT_SECRET
 const AUTH_COOKIE_NAME = 'hsf_token'
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
+export const AUTH_SESSION_DAYS = 90
+export const AUTH_SESSION_TTL_SECONDS = AUTH_SESSION_DAYS * 24 * 60 * 60
+export const AUTH_SESSION_TTL_MS = AUTH_SESSION_DAYS * ONE_DAY_MS
+export const AUTH_REFRESH_THRESHOLD_SECONDS = 30 * 24 * 60 * 60
 const IS_PROD = process.env.NODE_ENV === 'production'
 
 type CachedAuthUser = {
@@ -87,16 +91,20 @@ function isAdminRole(role: PrismaUserRole | undefined) {
   return role === 'admin' || role === 'super_admin'
 }
 
-function createToken(user: ApiUser, passwordHash: string) {
+function createTokenWithSessionVersion(user: ApiUser, sessionVersion: string) {
   return jwt.sign(
     {
       uid: user.uid,
       role: user.role,
-      sessionVersion: createSessionVersion(passwordHash),
+      sessionVersion,
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: AUTH_SESSION_TTL_SECONDS }
   )
+}
+
+function createToken(user: ApiUser, passwordHash: string) {
+  return createTokenWithSessionVersion(user, createSessionVersion(passwordHash))
 }
 
 function issueUserSession(req: Request, res: Response, user: SessionUser) {
@@ -126,7 +134,7 @@ function setAuthCookie(req: Request, res: Response, token: string) {
     httpOnly: true,
     sameSite: 'lax',
     secure: shouldUseSecureCookie(req),
-    maxAge: 7 * ONE_DAY_MS,
+    maxAge: AUTH_SESSION_TTL_MS,
     path: '/',
   })
 }
@@ -227,6 +235,16 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 
     if (apiUser) {
       authReq.authUser = apiUser
+
+      const isCookieSession = Boolean(req.cookies?.[AUTH_COOKIE_NAME])
+
+      if (isCookieSession && typeof payload.exp === 'number') {
+        const remainingSeconds = payload.exp - Math.floor(Date.now() / 1000)
+        if (remainingSeconds <= AUTH_REFRESH_THRESHOLD_SECONDS && authReq.authSessionVersion) {
+          const renewedToken = createTokenWithSessionVersion(apiUser, authReq.authSessionVersion)
+          setAuthCookie(req, res, renewedToken)
+        }
+      }
     }
   } catch (error) {
     logger.warn({ err: error }, 'Invalid auth token')

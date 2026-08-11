@@ -10,6 +10,7 @@
 
 import { beforeAll, afterAll } from 'vitest'
 import dotenv from 'dotenv'
+import type { SignOptions } from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
 import { getPasswordSaltRounds } from '../../src/server/utils/password'
 import { allocateUserPublicId } from '../../src/server/utils/userPublicId'
@@ -213,7 +214,11 @@ export async function createTestUser(overrides?: {
 /**
  * 创建认证 token 辅助函数
  */
-export async function createTestToken(userUid: string, role: string = 'user'): Promise<string> {
+export async function createTestToken(
+  userUid: string,
+  role: 'user' | 'admin' | 'super_admin' = 'user',
+  expiresIn: SignOptions['expiresIn'] = '90d'
+): Promise<string> {
   const jwt = (await import('jsonwebtoken')).default
   const JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_replace_with_random_string'
   const { createSessionVersion } = await import('../../src/server/utils/auth-session')
@@ -233,7 +238,7 @@ export async function createTestToken(userUid: string, role: string = 'user'): P
       sessionVersion: createSessionVersion(user.passwordHash),
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn }
   )
 
   return token

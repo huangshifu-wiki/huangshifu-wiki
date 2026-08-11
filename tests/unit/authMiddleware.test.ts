@@ -1,6 +1,7 @@
 import express from 'express'
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
+import type { SignOptions } from 'jsonwebtoken'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockPrisma = vi.hoisted(() => ({
@@ -77,13 +78,17 @@ function dbUser(role: 'user' | 'admin' | 'super_admin', passwordHash = CURRENT_P
   }
 }
 
-async function signToken(role: 'user' | 'admin' | 'super_admin', passwordHash: string) {
+async function signToken(
+  role: 'user' | 'admin' | 'super_admin',
+  passwordHash: string,
+  expiresIn: SignOptions['expiresIn'] = '90d'
+) {
   const { createSessionVersion } = await import('../../src/server/utils/auth-session')
   const sessionVersion = createSessionVersion(passwordHash)
 
   return {
     sessionVersion,
-    token: jwt.sign({ uid: 'user-1', role, sessionVersion }, JWT_SECRET, { expiresIn: '7d' }),
+    token: jwt.sign({ uid: 'user-1', role, sessionVersion }, JWT_SECRET, { expiresIn }),
   }
 }
 
