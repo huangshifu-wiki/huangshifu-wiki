@@ -6,13 +6,31 @@ import { describe, expect, it } from 'vitest'
 
 import { useRoutedPagination } from '../../src/hooks/useRoutedPagination'
 
-const Harness = ({ totalCount, entry = '/' }: { totalCount?: number; entry?: string }) => {
-  const pagination = useRoutedPagination({ totalCount, defaultPageSize: 20, pageSizeParam: null })
+const Harness = ({
+  totalCount,
+  entry = '/',
+  pageSizeParam = null,
+  enabled = true,
+}: {
+  totalCount?: number
+  entry?: string
+  pageSizeParam?: string | null
+  enabled?: boolean
+}) => {
+  const pagination = useRoutedPagination({
+    totalCount,
+    defaultPageSize: 20,
+    pageSizeParam,
+    pageSizeOptions: [10, 20, 50],
+    enabled,
+  })
   const [searchParams] = useSearchParams()
   return (
     <div>
       <span data-testid="page">{pagination.page}</span>
+      <span data-testid="page-size">{pagination.pageSize}</span>
       <span data-testid="total-pages">{pagination.totalPages}</span>
+      <span data-testid="has-multiple">{String(pagination.hasMultiplePages)}</span>
       <span data-testid="url">{searchParams.toString()}</span>
     </div>
   )
@@ -70,5 +88,68 @@ describe('useRoutedPagination 页码钳制', () => {
     )
     await waitFor(() => expect(screen.getByTestId('total-pages')).toHaveTextContent('3'))
     expect(screen.getByTestId('page')).toHaveTextContent('3')
+  })
+
+  it('只有已知总数超过一页时标记为多页', () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <Harness />
+      </MemoryRouter>
+    )
+    expect(screen.getByTestId('has-multiple')).toHaveTextContent('false')
+
+    rerender(
+      <MemoryRouter>
+        <Harness totalCount={0} />
+      </MemoryRouter>
+    )
+    expect(screen.getByTestId('has-multiple')).toHaveTextContent('false')
+
+    rerender(
+      <MemoryRouter>
+        <Harness totalCount={20} />
+      </MemoryRouter>
+    )
+    expect(screen.getByTestId('has-multiple')).toHaveTextContent('false')
+
+    rerender(
+      <MemoryRouter>
+        <Harness totalCount={21} />
+      </MemoryRouter>
+    )
+    expect(screen.getByTestId('has-multiple')).toHaveTextContent('true')
+  })
+
+  it('规范化页码和页大小 URL', async () => {
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/?page=2&pageSize=50']}>
+        <Harness totalCount={100} pageSizeParam="pageSize" />
+      </MemoryRouter>
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('page')).toHaveTextContent('2')
+      expect(screen.getByTestId('page-size')).toHaveTextContent('50')
+    })
+
+    rerender(
+      <MemoryRouter key="invalid-page-size" initialEntries={['/?page=4&pageSize=999']}>
+        <Harness totalCount={100} pageSizeParam="pageSize" />
+      </MemoryRouter>
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('page-size')).toHaveTextContent('20')
+      expect(screen.getByTestId('url')).not.toHaveTextContent('pageSize=999')
+    })
+  })
+
+  it('禁用时不改写分页 URL', async () => {
+    render(
+      <MemoryRouter initialEntries={['/?page=3&pageSize=50']}>
+        <Harness totalCount={100} pageSizeParam="pageSize" enabled={false} />
+      </MemoryRouter>
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('url')).toHaveTextContent('page=3&pageSize=50')
+    })
   })
 })

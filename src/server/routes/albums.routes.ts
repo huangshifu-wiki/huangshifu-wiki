@@ -13,6 +13,7 @@ import {
   parseMusicPlatform,
   normalizeTrackDiscPayload,
   parseInteger,
+  createPaginationMeta,
   parseBoolean,
   normalizeOptionalDateOnly,
   applyAlbumTracksToRelations,
@@ -161,10 +162,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
         ...toAlbumResponse(album),
         trackCount: album._count.songRelations,
       })),
-      total,
-      page,
-      limit,
-      hasMore: page * limit < total,
+      ...createPaginationMeta(total, page, limit, albums.length),
     }
 
     if (!req.authUser) {

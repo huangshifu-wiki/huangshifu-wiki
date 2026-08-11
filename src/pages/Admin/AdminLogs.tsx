@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { FileText, Shield, RefreshCw } from '@/src/components/icons'
 import { clsx } from 'clsx'
@@ -16,6 +16,8 @@ import {
 } from '@/src/components/ui'
 import { LoadErrorState } from '@/src/components/ui'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 
 function getModerationActionLabel(action: string | undefined) {
   if (action === 'approve') return '通过'
@@ -42,25 +44,45 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
   const logType = propType || paramType || 'moderation_logs'
   const [data, setData] = useState<AdminDataItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState<number | undefined>()
   const [loadError, setLoadError] = useState<unknown | null>(null)
 
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
+  const requestIdRef = useRef(0)
   const fetchData = async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setLoadError(null)
     try {
-      const result = await apiGet<{ logs: AdminDataItem[] }>(`/api/admin/${logType}`)
+      const result = await apiGet<{ logs: AdminDataItem[]; total: number }>(
+        `/api/admin/${logType}`,
+        {
+          page: pagination.page,
+          limit: pagination.pageSize,
+        }
+      )
+      if (requestId !== requestIdRef.current) return
       setData(result.logs || [])
+      setTotal(result.total || 0)
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       console.error(e)
       setLoadError(e)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchData()
-  }, [logType])
+    void fetchData()
+  }, [logType, pagination.page, pagination.pageSize])
 
   const Icon = logType === 'ban_logs' ? Shield : FileText
   const title = logType === 'ban_logs' ? '封禁日志' : '操作日志'
@@ -171,6 +193,17 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
           </TableBody>
         </Table>
       </div>
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
     </div>
   )
 }

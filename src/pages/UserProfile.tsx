@@ -13,8 +13,10 @@ import { format } from 'date-fns'
 
 import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import MarkdownRenderer from '../components/MarkdownRenderer'
+import Pagination from '../components/Pagination'
 import { useToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
+import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { apiGet, apiPatch } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { PROFILE_SIGNATURE_MAX_LENGTH } from '../lib/contentLimits'
@@ -141,6 +143,17 @@ export default function UserProfile() {
   const [galleries, setGalleries] = useState<GalleryItem[]>([])
   const [favorites, setFavorites] = useState<FavoriteItem[]>([])
   const [history, setHistory] = useState<HistoryItem[]>([])
+  const [contentTotal, setContentTotal] = useState<number | undefined>()
+  const pagination = useRoutedPagination({
+    totalCount: contentTotal,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+    enabled: activeTab !== 'profile',
+  })
+  const contentScopeRef = useRef<string | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [contentLoading, setContentLoading] = useState(false)
   const [contentError, setContentError] = useState(false)
@@ -306,10 +319,21 @@ export default function UserProfile() {
   }
 
   useEffect(() => {
+    if (!userId) return
+    const scope = `${activeTab}:${userId}`
+    if (contentScopeRef.current !== null && contentScopeRef.current !== scope) {
+      pagination.setPage(1)
+      setContentTotal(undefined)
+    }
+    contentScopeRef.current = scope
+  }, [activeTab, userId])
+
+  useEffect(() => {
     if (!userId || !profileLoaded) return
     if (activeTab === 'profile') {
       setContentLoading(false)
       setContentError(false)
+      setContentTotal(undefined)
       return
     }
 
@@ -319,42 +343,64 @@ export default function UserProfile() {
       setContentError(false)
       try {
         if (activeTab === 'posts') {
-          const data = await apiGet<{ posts: PostItem[] }>(`/api/users/${userId}/posts`, {
-            limit: 50,
-            visibility: 'public',
-          })
-          if (!cancelled) setPosts(data.posts || [])
+          const data = await apiGet<{ posts: PostItem[]; total: number }>(
+            `/api/users/${userId}/posts`,
+            {
+              page: pagination.page,
+              limit: pagination.pageSize,
+              visibility: 'public',
+            }
+          )
+          if (!cancelled) {
+            setPosts(data.posts || [])
+            setContentTotal(data.total || 0)
+          }
           return
         }
 
         if (activeTab === 'galleries') {
-          const data = await apiGet<{ galleries: GalleryItem[] }>(
+          const data = await apiGet<{ galleries: GalleryItem[]; total: number }>(
             `/api/users/${userId}/galleries`,
             {
-              limit: 50,
+              page: pagination.page,
+              limit: pagination.pageSize,
               visibility: 'public',
             }
           )
-          if (!cancelled) setGalleries(data.galleries || [])
+          if (!cancelled) {
+            setGalleries(data.galleries || [])
+            setContentTotal(data.total || 0)
+          }
           return
         }
 
         if (activeTab === 'favorites' && canViewFavorites) {
-          const data = await apiGet<{ favorites: FavoriteItem[] }>(
+          const data = await apiGet<{ favorites: FavoriteItem[]; total: number }>(
             `/api/users/${userId}/favorites`,
             {
-              limit: 50,
+              page: pagination.page,
+              limit: pagination.pageSize,
             }
           )
-          if (!cancelled) setFavorites(data.favorites || [])
+          if (!cancelled) {
+            setFavorites(data.favorites || [])
+            setContentTotal(data.total || 0)
+          }
           return
         }
 
         if (activeTab === 'history' && canViewHistory) {
-          const data = await apiGet<{ history: HistoryItem[] }>(`/api/users/${userId}/history`, {
-            limit: 50,
-          })
-          if (!cancelled) setHistory(data.history || [])
+          const data = await apiGet<{ history: HistoryItem[]; total: number }>(
+            `/api/users/${userId}/history`,
+            {
+              page: pagination.page,
+              limit: pagination.pageSize,
+            }
+          )
+          if (!cancelled) {
+            setHistory(data.history || [])
+            setContentTotal(data.total || 0)
+          }
         }
       } catch (err) {
         console.error('Fetch public profile content error:', err)
@@ -367,7 +413,16 @@ export default function UserProfile() {
     return () => {
       cancelled = true
     }
-  }, [activeTab, canViewFavorites, canViewHistory, contentRetry, profileLoaded, userId])
+  }, [
+    activeTab,
+    canViewFavorites,
+    canViewHistory,
+    contentRetry,
+    pagination.page,
+    pagination.pageSize,
+    profileLoaded,
+    userId,
+  ])
 
   useEffect(() => {
     if (!userId || activeTab !== 'galleries' || !hasPendingGalleryThumbnails) {
@@ -382,16 +437,20 @@ export default function UserProfile() {
     const poll = async () => {
       attempts += 1
       try {
-        const data = await apiGet<{ galleries: GalleryItem[] }>(
+        const data = await apiGet<{ galleries: GalleryItem[]; total: number }>(
           `/api/users/${userId}/galleries`,
           {
-            limit: 50,
+            page: pagination.page,
+            limit: pagination.pageSize,
             visibility: 'public',
           },
           THUMBNAIL_POLL_DEDUP_OPTIONS,
           abortController.signal
         )
-        if (!stopped) setGalleries(data.galleries || [])
+        if (!stopped) {
+          setGalleries(data.galleries || [])
+          setContentTotal(data.total || 0)
+        }
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
           console.error('Poll public user gallery thumbnails error:', err)
@@ -412,7 +471,7 @@ export default function UserProfile() {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [activeTab, hasPendingGalleryThumbnails, userId])
+  }, [activeTab, hasPendingGalleryThumbnails, pagination.page, pagination.pageSize, userId])
 
   const visibleTabs = useMemo(() => {
     const tabs: Array<{ id: UserProfileTab; label: string; icon: React.ReactNode; path: string }> =
@@ -699,6 +758,17 @@ export default function UserProfile() {
             <Navigate to={`/users/${userId}`} replace />
           )}
         </div>
+        {activeTab !== 'profile' && activeContentHasItems && pagination.hasMultiplePages ? (
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={pagination.handlePageChange}
+            pageSize={pagination.pageSize}
+            onPageSizeChange={pagination.handlePageSizeChange}
+            pageSizeOptions={[20, 50, 100]}
+            showPageSizeSelector
+          />
+        ) : null}
       </div>
     </div>
   )

@@ -4,6 +4,7 @@ import { useLskyPhotos } from '../hooks/useLskyPhotos'
 import { useLskyAlbums } from '../hooks/useLskyAlbums'
 import { useDialog } from './Dialog'
 import { useToast } from './Toast'
+import Pagination from './Pagination'
 
 export function LskyImageManager() {
   const [activeTab, setActiveTab] = useState<'upload' | 'photos' | 'albums'>('upload')
@@ -315,7 +316,13 @@ function PhotosPanel() {
       confirmText: '删除',
       variant: 'danger',
     })
-    if (confirmed) await deletePhoto(id)
+    if (confirmed) {
+      const currentPage = pagination?.current_page ?? 1
+      const nextPage = photos.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage
+      if (await deletePhoto(id)) {
+        await fetchPhotos({ page: nextPage })
+      }
+    }
   }
 
   if (loading) {
@@ -368,32 +375,19 @@ function PhotosPanel() {
       </div>
 
       {pagination && pagination.last_page > 1 && (
-        <div style={{ marginTop: '20px', textAlign: 'center' }}>
-          <button
-            className="lsky-btn"
-            onClick={() => fetchPhotos({ page: pagination.current_page - 1 })}
-            disabled={pagination.current_page === 1}
-          >
-            上一页
-          </button>
-          <span style={{ margin: '0 10px' }}>
-            {pagination.current_page} / {pagination.last_page}
-          </span>
-          <button
-            className="lsky-btn"
-            onClick={() => fetchPhotos({ page: pagination.current_page + 1 })}
-            disabled={pagination.current_page === pagination.last_page}
-          >
-            下一页
-          </button>
-        </div>
+        <Pagination
+          page={pagination.current_page}
+          totalPages={pagination.last_page}
+          onPageChange={(page) => void fetchPhotos({ page })}
+        />
       )}
     </div>
   )
 }
 
 function AlbumsPanel() {
-  const { loading, error, albums, createAlbum, deleteAlbum } = useLskyAlbums()
+  const { loading, error, albums, pagination, fetchAlbums, createAlbum, deleteAlbum } =
+    useLskyAlbums()
   const dialog = useDialog()
   const { show } = useToast()
   const [showCreate, setShowCreate] = useState(false)
@@ -412,6 +406,7 @@ function AlbumsPanel() {
     })
 
     if (result) {
+      await fetchAlbums({ page: pagination?.current_page ?? 1 })
       setShowCreate(false)
       setNewAlbumName('')
       setNewAlbumDesc('')
@@ -426,7 +421,13 @@ function AlbumsPanel() {
       confirmText: '删除',
       variant: 'danger',
     })
-    if (confirmed) await deleteAlbum(id)
+    if (confirmed) {
+      const currentPage = pagination?.current_page ?? 1
+      const nextPage = albums.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage
+      if (await deleteAlbum(id)) {
+        await fetchAlbums({ page: nextPage })
+      }
+    }
   }
 
   if (loading) {
@@ -512,6 +513,13 @@ function AlbumsPanel() {
           ))}
         </div>
       )}
+      {albums.length > 0 && pagination && pagination.last_page > 1 ? (
+        <Pagination
+          page={pagination.current_page}
+          totalPages={pagination.last_page}
+          onPageChange={(page) => void fetchAlbums({ page })}
+        />
+      ) : null}
     </div>
   )
 }

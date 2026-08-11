@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import {
   BookOpen,
   Camera,
@@ -21,10 +21,12 @@ import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
 import { AvatarCropModal } from '../components/AvatarCropModal'
+import Pagination from '../components/Pagination'
 import { CharacterCount } from '../components/CharacterCount'
 import MarkdownEditor from '../components/MarkdownEditor'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useToast } from '../components/Toast'
+import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import {
@@ -241,6 +243,17 @@ const Settings = () => {
     () => activeSection === 'content' && Boolean(userPublicId)
   )
   const [contentError, setContentError] = useState(false)
+  const [contentTotal, setContentTotal] = useState<number | undefined>()
+  const pagination = useRoutedPagination({
+    totalCount: contentTotal,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'contentPage',
+    pageSizeParam: 'contentPageSize',
+    showPageSizeSelector: true,
+    enabled: activeSection === 'content',
+  })
+  const contentScopeRef = useRef<string | null>(null)
   const [contentRetry, setContentRetry] = useState(0)
   const [myPosts, setMyPosts] = useState<PostItem[]>([])
   const [myWikiPages, setMyWikiPages] = useState<UserWikiItem[]>([])
@@ -294,6 +307,16 @@ const Settings = () => {
   }, [activeSection, user?.uid])
 
   useEffect(() => {
+    if (!userPublicId) return
+    const scope = `${activeSection}:${activeContentTab}:${userPublicId}`
+    if (contentScopeRef.current !== null && contentScopeRef.current !== scope) {
+      pagination.setPage(1)
+      setContentTotal(undefined)
+    }
+    contentScopeRef.current = scope
+  }, [activeContentTab, activeSection, userPublicId])
+
+  useEffect(() => {
     if (!userPublicId || activeSection !== 'content') return
 
     let cancelled = false
@@ -301,40 +324,51 @@ const Settings = () => {
       setContentLoading(true)
       setContentError(false)
       try {
+        const params = { page: pagination.page, limit: pagination.pageSize }
         if (activeContentTab === 'posts') {
-          const data = await apiGet<{ posts: PostItem[] }>(`/api/users/${userPublicId}/posts`, {
-            limit: 50,
-          })
-          if (!cancelled) setMyPosts(data.posts || [])
+          const data = await apiGet<{ posts: PostItem[]; total: number }>(
+            `/api/users/${userPublicId}/posts`,
+            params
+          )
+          if (!cancelled) {
+            setMyPosts(data.posts || [])
+            setContentTotal(data.total || 0)
+          }
           return
         }
 
         if (activeContentTab === 'wiki') {
-          const data = await apiGet<{ pages: UserWikiItem[] }>(`/api/users/${userPublicId}/wiki`, {
-            limit: 50,
-          })
-          if (!cancelled) setMyWikiPages(data.pages || [])
+          const data = await apiGet<{ pages: UserWikiItem[]; total: number }>(
+            `/api/users/${userPublicId}/wiki`,
+            params
+          )
+          if (!cancelled) {
+            setMyWikiPages(data.pages || [])
+            setContentTotal(data.total || 0)
+          }
           return
         }
 
         if (activeContentTab === 'galleries') {
-          const data = await apiGet<{ galleries: GalleryItem[] }>(
+          const data = await apiGet<{ galleries: GalleryItem[]; total: number }>(
             `/api/users/${userPublicId}/galleries`,
-            {
-              limit: 50,
-            }
+            params
           )
-          if (!cancelled) setMyGalleries(data.galleries || [])
+          if (!cancelled) {
+            setMyGalleries(data.galleries || [])
+            setContentTotal(data.total || 0)
+          }
           return
         }
 
-        const data = await apiGet<{ comments: UserCommentItem[] }>(
+        const data = await apiGet<{ comments: UserCommentItem[]; total: number }>(
           `/api/users/${userPublicId}/comments`,
-          {
-            limit: 50,
-          }
+          params
         )
-        if (!cancelled) setMyComments(data.comments || [])
+        if (!cancelled) {
+          setMyComments(data.comments || [])
+          setContentTotal(data.total || 0)
+        }
       } catch (error) {
         console.error('Fetch content management data error:', error)
         if (!cancelled) {
@@ -350,7 +384,15 @@ const Settings = () => {
     return () => {
       cancelled = true
     }
-  }, [activeContentTab, activeSection, contentRetry, show, userPublicId])
+  }, [
+    activeContentTab,
+    activeSection,
+    contentRetry,
+    pagination.page,
+    pagination.pageSize,
+    show,
+    userPublicId,
+  ])
 
   useEffect(() => {
     if (
@@ -370,15 +412,19 @@ const Settings = () => {
     const poll = async () => {
       attempts += 1
       try {
-        const data = await apiGet<{ galleries: GalleryItem[] }>(
+        const data = await apiGet<{ galleries: GalleryItem[]; total: number }>(
           `/api/users/${userPublicId}/galleries`,
           {
-            limit: 50,
+            page: pagination.page,
+            limit: pagination.pageSize,
           },
           THUMBNAIL_POLL_DEDUP_OPTIONS,
           abortController.signal
         )
-        if (!stopped) setMyGalleries(data.galleries || [])
+        if (!stopped) {
+          setMyGalleries(data.galleries || [])
+          setContentTotal(data.total || 0)
+        }
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           console.error('Poll my gallery thumbnails error:', error)
@@ -399,7 +445,14 @@ const Settings = () => {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [activeContentTab, activeSection, hasPendingGalleryThumbnails, userPublicId])
+  }, [
+    activeContentTab,
+    activeSection,
+    hasPendingGalleryThumbnails,
+    pagination.page,
+    pagination.pageSize,
+    userPublicId,
+  ])
 
   if (!activeSection) {
     return <Navigate to="/settings/profile" replace />
@@ -1024,6 +1077,17 @@ const Settings = () => {
                     )}
                     {renderContentPanel()}
                   </div>
+                  {activeContentHasItems && pagination.hasMultiplePages ? (
+                    <Pagination
+                      page={pagination.page}
+                      totalPages={pagination.totalPages}
+                      onPageChange={pagination.handlePageChange}
+                      pageSize={pagination.pageSize}
+                      onPageSizeChange={pagination.handlePageSizeChange}
+                      pageSizeOptions={[20, 50, 100]}
+                      showPageSizeSelector
+                    />
+                  ) : null}
                 </div>
               </SettingsSection>
             )}

@@ -312,3 +312,18 @@ export function parsePagination(query: Record<string, unknown>) {
   const offset = (page - 1) * limit
   return { limit, page, offset }
 }
+
+export function createPaginationMeta(
+  total: number,
+  page: number,
+  limit: number,
+  itemCount: number
+) {
+  return {
+    total,
+    page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+    hasMore: (page - 1) * limit + itemCount < total,
+  }
+}

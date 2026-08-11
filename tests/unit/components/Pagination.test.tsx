@@ -194,9 +194,11 @@ describe('Pagination', () => {
     expect(onPageSizeChange).toHaveBeenCalledWith(50)
   })
 
-  it('总页数不为正数时不渲染导航', () => {
-    render(<Pagination page={1} totalPages={0} onPageChange={vi.fn()} />)
+  it('总页数为 0 或 1 时不渲染导航', () => {
+    const { rerender } = render(<Pagination page={1} totalPages={0} onPageChange={vi.fn()} />)
+    expect(screen.queryByRole('navigation', { name: '分页导航' })).not.toBeInTheDocument()
 
+    rerender(<Pagination page={1} totalPages={1} onPageChange={vi.fn()} />)
     expect(screen.queryByRole('navigation', { name: '分页导航' })).not.toBeInTheDocument()
   })
 })

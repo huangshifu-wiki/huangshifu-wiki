@@ -31,12 +31,15 @@ import { FormModal } from '../../components/Modal'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/passwordRules'
 import { useDismissableLayer } from '../../hooks/useClickOutside'
 import { useScrollRestore } from '../../hooks/useScrollRestore'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import {
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   PROFILE_SIGNATURE_MAX_LENGTH,
   WIKI_MAX_CONTENT_SIZE,
 } from '../../lib/contentLimits'
 import type { AdminDataItem } from '../../types/entities'
+import type { AdminDataListResponse } from '../../types/api'
 
 const ADMIN_USERS_API_PREFIX = '/api/admin/users'
 const ADMIN_PERMISSIONS_API_PATH = '/api/config/admin-permissions'
@@ -73,6 +76,7 @@ export const AdminUsers = () => {
   const { user: currentUser, profile } = useAuth()
   const isSuperAdmin = profile?.role === 'super_admin'
   const [data, setData] = useState<AdminDataItem[]>([])
+  const [total, setTotal] = useState<number | undefined>()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [editTarget, setEditTarget] = useState<AdminDataItem | null>(null)
@@ -85,6 +89,15 @@ export const AdminUsers = () => {
   const dialog = useDialog()
   const { show } = useToast()
   const saveScroll = useScrollRestore()
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
+  const requestIdRef = useRef(0)
 
   const closeActionsMenu = useCallback(() => setOpenMenuUid(null), [])
   const invalidateAdminUsersCache = () => invalidateApiCacheByPrefix(ADMIN_USERS_API_PREFIX)
@@ -122,6 +135,7 @@ export const AdminUsers = () => {
   }
 
   const fetchData = async (options?: { silent?: boolean }) => {
+    const requestId = ++requestIdRef.current
     closeActionsMenu()
     const silent = options?.silent === true
     if (silent) saveScroll()
@@ -130,23 +144,28 @@ export const AdminUsers = () => {
       setLoadError(null)
     }
     try {
-      const permissionsRequest = isSuperAdmin
-        ? apiGet<AdminPermissionConfig>(ADMIN_PERMISSIONS_API_PATH).catch(
-            () => DEFAULT_ADMIN_PERMISSIONS
-          )
-        : Promise.resolve(DEFAULT_ADMIN_PERMISSIONS)
       const [result, permissions] = await Promise.all([
-        apiGet<{ data: AdminDataItem[] }>(ADMIN_USERS_API_PREFIX),
-        permissionsRequest,
+        apiGet<AdminDataListResponse>(ADMIN_USERS_API_PREFIX, {
+          page: pagination.page,
+          limit: pagination.pageSize,
+        }),
+        isSuperAdmin
+          ? apiGet<AdminPermissionConfig>(ADMIN_PERMISSIONS_API_PATH).catch(
+              () => DEFAULT_ADMIN_PERMISSIONS
+            )
+          : Promise.resolve(DEFAULT_ADMIN_PERMISSIONS),
       ])
+      if (requestId !== requestIdRef.current) return
       setData(result.data || [])
+      setTotal(result.total || 0)
       setAdminPermissions(permissions)
       setLoadError(null)
     } catch (error) {
+      if (requestId !== requestIdRef.current) return
       console.error(error)
       setLoadError(error)
     } finally {
-      if (!silent) setLoading(false)
+      if (requestId === requestIdRef.current && !silent) setLoading(false)
     }
   }
 
@@ -156,8 +175,8 @@ export const AdminUsers = () => {
   }
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    void fetchData()
+  }, [pagination.page, pagination.pageSize, isSuperAdmin])
 
   const toggleBan = async (target: AdminDataItem) => {
     closeActionsMenu()
@@ -624,6 +643,17 @@ export const AdminUsers = () => {
           </table>
         </div>
       </div>
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
 
       <FormModal
         open={Boolean(editTarget)}

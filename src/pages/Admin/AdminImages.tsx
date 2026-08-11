@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Download,
   Upload,
@@ -28,6 +28,8 @@ import { clsx } from 'clsx'
 import { SmartImage } from '../../components/SmartImage'
 import { clearImagePreferenceCache } from '../../services/imageService'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import { isBackdropClick } from '../../utils/modal'
 import type {
   MediaHealthBlockReason,
@@ -174,6 +176,7 @@ const buildMediaHealthItems = (mediaHealth: MediaHealthScanResult | null): Media
 
 const AdminImages: React.FC = () => {
   const [images, setImages] = useState<ImageMap[]>([])
+  const [imageTotal, setImageTotal] = useState<number | undefined>()
   const [stats, setStats] = useState<ImageStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
@@ -195,8 +198,18 @@ const AdminImages: React.FC = () => {
   const { show } = useToast()
 
   const saveScroll = useScrollRestore()
+  const pagination = useRoutedPagination({
+    totalCount: imageTotal,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
+  const imageRequestIdRef = useRef(0)
 
   const fetchImages = async (options?: { silent?: boolean }) => {
+    const requestId = ++imageRequestIdRef.current
     const silent = options?.silent === true
     if (silent) saveScroll()
     else {
@@ -204,15 +217,21 @@ const AdminImages: React.FC = () => {
       setLoadError(null)
     }
     try {
-      const response = await apiGet<{ items: ImageMap[] }>('/api/image-maps')
+      const response = await apiGet<{ items: ImageMap[]; total: number }>('/api/image-maps', {
+        page: pagination.page,
+        limit: pagination.pageSize,
+      })
+      if (requestId !== imageRequestIdRef.current) return
       setImages(response.items || [])
+      setImageTotal(response.total || 0)
       setLoadError(null)
     } catch (error) {
+      if (requestId !== imageRequestIdRef.current) return
       console.error(error)
       setLoadError(error)
       if (!silent) show('获取图片列表失败', { variant: 'error' })
     } finally {
-      if (!silent) setLoading(false)
+      if (requestId === imageRequestIdRef.current && !silent) setLoading(false)
     }
   }
 
@@ -240,7 +259,10 @@ const AdminImages: React.FC = () => {
   }
 
   useEffect(() => {
-    fetchImages()
+    void fetchImages()
+  }, [pagination.page, pagination.pageSize])
+
+  useEffect(() => {
     fetchStats()
     fetchPreference()
   }, [])
@@ -275,9 +297,8 @@ const AdminImages: React.FC = () => {
     if (!confirmed) return
     try {
       await apiDelete(`/api/image-maps/${id}`)
-      setImages((prev) => prev.filter((img) => img.id !== id))
+      await Promise.all([refreshImages(), fetchStats()])
       show('删除成功', { variant: 'success' })
-      fetchStats()
     } catch {
       show('删除失败', { variant: 'error' })
     }
@@ -725,6 +746,17 @@ const AdminImages: React.FC = () => {
           </div>
         )}
       </div>
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
 
       {editModalPresence.mounted && editingImage && (
         <div

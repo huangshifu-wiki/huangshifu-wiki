@@ -99,6 +99,7 @@ export function useRoutedPagination(options: UseRoutedPaginationOptions = {}): U
     return 1
   }, [serverTotalPages, totalCount, pageSize])
   const hasKnownTotal = totalKnown ?? (serverTotalPages !== undefined || totalCount !== undefined)
+  const hasMultiplePages = hasKnownTotal && totalPages > 1
 
   const updatePaginationParams = useCallback(
     (nextPage: number, nextPageSize = pageSize, replace = false) => {
@@ -194,9 +195,10 @@ export function useRoutedPagination(options: UseRoutedPaginationOptions = {}): U
     page,
     pageSize,
     totalPages,
+    hasMultiplePages,
     handlePageChange,
     handlePageSizeChange,
-    setPage: (newPage: number) => updatePaginationParams(newPage, pageSize),
-    setPageSize: (newSize: number) => updatePaginationParams(1, newSize),
+    setPage: (newPage) => updatePaginationParams(newPage, pageSize),
+    setPageSize: (newSize) => updatePaginationParams(1, newSize),
   }
 }

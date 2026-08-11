@@ -578,7 +578,7 @@ export const AdminMusicPage = () => {
         />
       )}
 
-      {tab === 'songs' && songPagination.totalPages > 1 && (
+      {tab === 'songs' && songPagination.hasMultiplePages && (
         <Pagination
           page={songPagination.page}
           totalPages={songPagination.totalPages}
@@ -589,7 +589,7 @@ export const AdminMusicPage = () => {
           showPageSizeSelector
         />
       )}
-      {tab === 'albums' && albumPagination.totalPages > 1 && (
+      {tab === 'albums' && albumPagination.hasMultiplePages && (
         <Pagination
           page={albumPagination.page}
           totalPages={albumPagination.totalPages}

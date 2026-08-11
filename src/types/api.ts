@@ -1,17 +1,20 @@
-import type { AlbumItem, EventItem, GalleryItem, SongItem } from './entities'
-import type { AdminDataItem } from './entities'
+import type { AdminDataItem, AlbumItem, EventItem, GalleryItem, SongItem } from './entities'
 import type { Platform } from './common'
 
 export interface ApiResponse<T> {
   data: T
 }
 
-export interface PaginatedResponse<T> {
-  items: T[]
+export interface PaginationMeta {
   total: number
   page: number
   limit: number
   totalPages: number
+  hasMore: boolean
+}
+
+export interface PaginatedResponse<T> extends PaginationMeta {
+  items: T[]
 }
 
 export interface HomeFeedResponse {
@@ -40,7 +43,7 @@ export interface HomeFeedResponse {
   }>
 }
 
-export interface NotificationsResponse {
+export interface NotificationsResponse extends PaginationMeta {
   notifications: Array<{
     id: string
     type: 'reply' | 'like' | 'review_result' | 'mention'
@@ -48,10 +51,7 @@ export interface NotificationsResponse {
     isRead: boolean
     createdAt: string
   }>
-  total: number
   unreadCount: number
-  page: number
-  limit: number
 }
 
 export interface UploadSessionResponse {
@@ -91,13 +91,10 @@ export interface GalleryCreateResponse {
   gallery: GalleryItem
 }
 
-export interface EventListResponse {
+export interface GalleryDetailResponse extends GalleryCreateResponse {}
+
+export interface EventListResponse extends PaginationMeta {
   events: EventItem[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-  hasMore: boolean
 }
 
 export interface EventDetailResponse {
@@ -446,36 +443,21 @@ export interface PostDetailResponse {
 
 export interface PostListResponse extends PaginatedResponse<PostDetailResponse['post']> {}
 
-// ============================================================================
-// 音乐相关类型
-// ============================================================================
-
-export interface MusicListResponse {
+export interface MusicListResponse extends PaginationMeta {
   songs: SongItem[]
-  total: number
-  page: number
-  limit: number
-  hasMore: boolean
 }
 
-export interface AlbumListResponse {
+export interface AlbumListResponse extends PaginationMeta {
   albums: AlbumItem[]
-  total: number
-  page: number
-  limit: number
-  hasMore: boolean
 }
 
-export interface AdminMusicListResponse {
+export interface AdminDataListResponse extends PaginationMeta {
   data: AdminDataItem[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-  hasMore: boolean
 }
 
-export interface AdminAlbumListResponse extends AdminMusicListResponse {}
+export interface AdminMusicListResponse extends AdminDataListResponse {}
+
+export interface AdminAlbumListResponse extends AdminDataListResponse {}
 
 export interface MusicDetailResponse {
   song: {
@@ -528,16 +510,8 @@ export interface MusicPlayUrlResponse {
 // 画廊相关类型
 // ============================================================================
 
-export interface GalleryDetailResponse {
-  gallery: GalleryItem
-}
-
-export interface GalleryListResponse {
+export interface GalleryListResponse extends PaginationMeta {
   galleries: GalleryItem[]
-  total: number
-  page: number
-  limit: number
-  hasMore: boolean
 }
 
 export interface GalleryUploadResponse {
@@ -653,8 +627,8 @@ export type AdminReviewQueueMergedItem = AdminReviewQueueItem & {
   reviewId: string
 }
 
-export interface AdminReviewQueueResponse {
-  type: AdminReviewQueueType
+export interface AdminReviewQueueResponse extends PaginationMeta {
+  type: AdminReviewQueueType | 'all'
   status: 'draft' | 'pending' | 'published' | 'rejected'
   items: AdminReviewQueueItem[]
 }

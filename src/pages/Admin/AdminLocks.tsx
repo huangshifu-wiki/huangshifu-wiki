@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Lock, RefreshCw, Trash2 } from '@/src/components/icons'
 import { apiDelete, apiGet, invalidateApiCacheByPrefix } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'
@@ -16,11 +16,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/src/components/ui'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 import { LoadErrorState } from '@/src/components/ui'
 
 export const AdminLocks = () => {
   const [data, setData] = useState<EditLockItem[]>([])
+  const [total, setTotal] = useState<number | undefined>()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -28,8 +31,18 @@ export const AdminLocks = () => {
   const dialog = useDialog()
   const { show } = useToast()
   const saveScroll = useScrollRestore()
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
+  const requestIdRef = useRef(0)
 
   const fetchData = async (options?: { silent?: boolean }) => {
+    const requestId = ++requestIdRef.current
     const silent = options?.silent === true
     if (silent) saveScroll()
     else {
@@ -37,19 +50,25 @@ export const AdminLocks = () => {
       setLoadError(null)
     }
     try {
-      const result = await apiGet<{ locks: EditLockItem[] }>('/api/admin/locks')
+      const result = await apiGet<{ locks: EditLockItem[]; total: number }>('/api/admin/locks', {
+        page: pagination.page,
+        limit: pagination.pageSize,
+      })
+      if (requestId !== requestIdRef.current) return
       const locks = result.locks || []
       setData(locks)
+      setTotal(result.total || 0)
       setLoadError(null)
       setSelectedIds((prev) => {
         const existingIds = new Set(locks.map((lock) => lock.id))
         return new Set([...prev].filter((lockId) => existingIds.has(lockId)))
       })
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       console.error(e)
       setLoadError(e)
     } finally {
-      if (!silent) setLoading(false)
+      if (requestId === requestIdRef.current && !silent) setLoading(false)
     }
   }
 
@@ -59,8 +78,8 @@ export const AdminLocks = () => {
   }
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    void fetchData()
+  }, [pagination.page, pagination.pageSize])
 
   const releaseLock = async (lock: EditLockItem) => {
     const confirmed = await dialog.confirm({
@@ -72,12 +91,6 @@ export const AdminLocks = () => {
     if (!confirmed) return
     try {
       await apiDelete(`/api/admin/locks/${lock.id}`)
-      setData((prev) => prev.filter((item) => item.id !== lock.id))
-      setSelectedIds((prev) => {
-        const next = new Set(prev)
-        next.delete(lock.id)
-        return next
-      })
       await refreshLocks()
       show('已释放', { variant: 'success' })
     } catch (e) {
@@ -242,6 +255,17 @@ export const AdminLocks = () => {
           </Table>
         </div>
       )}
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
     </div>
   )
 }

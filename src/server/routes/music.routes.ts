@@ -25,6 +25,7 @@ import {
   ensureDisplayRelation,
   normalizeTrackDiscPayload,
   parseInteger,
+  createPaginationMeta,
   parseBoolean,
   normalizeOptionalDateOnly,
   normalizeOptionalDurationMs,
@@ -324,10 +325,7 @@ router.get(
             excludeDescription: true,
           })
         ),
-        total,
-        page,
-        limit,
-        hasMore: page * limit < total,
+        ...createPaginationMeta(total, page, limit, songs.length),
       }
 
       if (!req.authUser && !albumDocId) {

@@ -29,7 +29,12 @@ const Events = () => {
   const { getScopedViewMode, setScopedViewMode } = useUserPreferences()
   const storedViewMode = getScopedViewMode('events')
   const viewMode: ViewMode = storedViewMode === 'large' ? 'large' : 'list'
-  const { page, handlePageChange } = useRoutedPagination({
+  const {
+    page,
+    totalPages: resolvedTotalPages,
+    handlePageChange,
+    hasMultiplePages,
+  } = useRoutedPagination({
     serverTotalPages: totalPages,
     defaultPageSize: DEFAULT_PAGE_SIZE,
     pageSizeParam: null,
@@ -163,8 +168,12 @@ const Events = () => {
                 <EventCard key={event.id} event={event} viewMode={viewMode} />
               ))}
             </div>
-            {totalPages > 1 && (
-              <Pagination page={page} totalPages={totalPages} onPageChange={handlePageChange} />
+            {hasMultiplePages && (
+              <Pagination
+                page={page}
+                totalPages={resolvedTotalPages}
+                onPageChange={handlePageChange}
+              />
             )}
           </>
         ) : (

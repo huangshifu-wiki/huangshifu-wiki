@@ -41,6 +41,7 @@ import {
   parseFavoriteType,
   safeDeleteUploadFileByUrl,
   parsePagination,
+  createPaginationMeta,
   logger,
   getPasswordSaltRounds,
   ensureTextLimit,
@@ -1669,10 +1670,7 @@ router.get(
             dislikedByMe: dislikedPostSet.has(post.id),
           }
         }),
-        total,
-        page,
-        limit,
-        hasMore: skip + posts.length < total,
+        ...createPaginationMeta(total, page, limit, posts.length),
       })
     } catch (error) {
       console.error('Fetch user posts error:', error)
@@ -1720,10 +1718,7 @@ router.get(
 
       res.json({
         galleries: await toGalleryListResponse(galleries),
-        total,
-        page,
-        limit,
-        hasMore: skip + galleries.length < total,
+        ...createPaginationMeta(total, page, limit, galleries.length),
       })
     } catch (error) {
       console.error('Fetch user galleries error:', error)
@@ -1870,10 +1865,7 @@ router.get(
             dislikedByMe: dislikedWikiSet.has(item.slug),
           }
         }),
-        total,
-        page,
-        limit,
-        hasMore: skip + pageItems.length < total,
+        ...createPaginationMeta(total, page, limit, pageItems.length),
       })
     } catch (error) {
       console.error('Fetch user wiki pages error:', error)
@@ -2014,10 +2006,7 @@ router.get(
                 : null,
           }
         }),
-        total,
-        page,
-        limit,
-        hasMore: skip + comments.length < total,
+        ...createPaginationMeta(total, page, limit, comments.length),
       })
     } catch (error) {
       console.error('Fetch user comments error:', error)
@@ -2071,10 +2060,7 @@ router.get(
 
       res.json({
         favorites: toProfileContentItems(pageItems, targets),
-        total,
-        page,
-        limit,
-        hasMore: skip + pageItems.length < total,
+        ...createPaginationMeta(total, page, limit, pageItems.length),
       })
     } catch (error) {
       console.error('Fetch user public favorites error:', error)
@@ -2127,10 +2113,7 @@ router.get(
 
       res.json({
         history: toProfileContentItems(pageItems, targets),
-        total,
-        page,
-        limit,
-        hasMore: skip + pageItems.length < total,
+        ...createPaginationMeta(total, page, limit, pageItems.length),
       })
     } catch (error) {
       console.error('Fetch user public history error:', error)

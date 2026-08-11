@@ -93,6 +93,7 @@ const WikiBranchWorkspace = () => {
         apiGet<{ revisions: WikiRevisionItem[] }>(`/api/wiki/branches/${mine.id}/revisions`),
         apiGet<{ pullRequests: WikiPullRequestItem[] }>('/api/wiki/pull-requests/list', {
           status: 'open',
+          branchId: mine.id,
         }),
       ])
 

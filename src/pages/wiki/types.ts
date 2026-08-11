@@ -51,6 +51,21 @@ export type WikiRevisionItem = {
   isAutoSave: boolean
   createdAt: string
 }
+export type WikiListPaginationMeta = {
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  hasMore: boolean
+}
+
+export type WikiRevisionListResponse = WikiListPaginationMeta & {
+  revisions: WikiRevisionItem[]
+}
+
+export type WikiPullRequestListResponse = WikiListPaginationMeta & {
+  pullRequests: WikiPullRequestItem[]
+}
 
 export type WikiPullRequestComment = {
   id: string

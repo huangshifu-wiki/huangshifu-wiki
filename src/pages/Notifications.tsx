@@ -18,17 +18,10 @@ import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import type { NotificationItem } from '../types/entities'
+import type { NotificationsResponse } from '../types/api'
 import { Button, LoadErrorState, Spinner } from '@/src/components/ui'
 
 type NotificationType = NotificationItem['type']
-
-type NotificationsResponse = {
-  notifications: NotificationItem[]
-  total: number
-  unreadCount: number
-  page: number
-  limit: number
-}
 
 type NotificationFilter = 'all' | NotificationType | 'unread'
 
@@ -89,9 +82,11 @@ const Notifications = () => {
   const [data, setData] = useState<NotificationsResponse>({
     notifications: [],
     total: 0,
-    unreadCount: 0,
     page: 1,
     limit: PAGE_SIZE,
+    totalPages: 1,
+    hasMore: false,
+    unreadCount: 0,
   })
   const pagination = useRoutedPagination({
     totalCount: data.total,
@@ -447,13 +442,14 @@ const Notifications = () => {
             hasMore={incrementalList.hasMore}
             loading={incrementalList.loadingMore}
             total={incrementalList.total}
+            pageSize={PAGE_SIZE}
             loaded={visibleNotifications.length}
             onLoadMore={incrementalList.loadMore}
             sentinelRef={incrementalList.sentinelRef}
             error={incrementalList.error && !incrementalList.initialError ? '加载失败' : undefined}
             onRetry={incrementalList.retry}
           />
-        ) : pagination.totalPages > 1 ? (
+        ) : pagination.hasMultiplePages ? (
           <Pagination
             page={pagination.page}
             totalPages={pagination.totalPages}

@@ -152,10 +152,10 @@ export const Pagination: React.FC<PaginationProps> = ({
   showPageSizeSelector = false,
 }) => {
   const { anchorRef, navigationRef, portalHostRef, dockedLayout } = useDockedPagination(
-    totalPages > 0
+    totalPages > 1
   )
 
-  if (totalPages <= 0) return null
+  if (totalPages <= 1) return null
 
   const handlePrev = () => {
     if (page > 1) onPageChange(page - 1)

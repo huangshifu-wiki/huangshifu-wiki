@@ -457,6 +457,7 @@ const Music = () => {
                         hasMore={incrementalSongs.hasMore}
                         loading={incrementalSongs.loadingMore}
                         total={visibleSongTotal}
+                        pageSize={musicPagination.pageSize}
                         loaded={visibleSongs.length}
                         onLoadMore={incrementalSongs.loadMore}
                         sentinelRef={incrementalSongs.sentinelRef}
@@ -467,7 +468,7 @@ const Music = () => {
                         }
                         onRetry={incrementalSongs.retry}
                       />
-                    ) : musicPagination.totalPages > 1 ? (
+                    ) : musicPagination.hasMultiplePages ? (
                       <Pagination
                         page={musicPagination.page}
                         totalPages={musicPagination.totalPages}
@@ -541,6 +542,7 @@ const Music = () => {
                         hasMore={incrementalAlbums.hasMore}
                         loading={incrementalAlbums.loadingMore}
                         total={visibleAlbumTotal}
+                        pageSize={albumPagination.pageSize}
                         loaded={visibleAlbums.length}
                         onLoadMore={incrementalAlbums.loadMore}
                         sentinelRef={incrementalAlbums.sentinelRef}
@@ -551,7 +553,7 @@ const Music = () => {
                         }
                         onRetry={incrementalAlbums.retry}
                       />
-                    ) : albumPagination.totalPages > 1 ? (
+                    ) : albumPagination.hasMultiplePages ? (
                       <Pagination
                         page={albumPagination.page}
                         totalPages={albumPagination.totalPages}

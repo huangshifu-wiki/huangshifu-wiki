@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Ban,
@@ -29,9 +29,12 @@ import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { useScrollRestore } from '../../hooks/useScrollRestore'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import { SmartImage } from '../../components/SmartImage'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
+import type { AdminDataListResponse } from '../../types/api'
 import { Button, Checkbox, LinkButton, LoadErrorState } from '@/src/components/ui'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 
@@ -64,11 +67,6 @@ type ListConfig = {
   apiPath: string
   columns: { key: ColumnKey; label: string; className?: string }[]
   hasCreate: boolean
-}
-
-type AdminListResponse = {
-  data: AdminDataItem[]
-  total?: number
 }
 
 const WIKI_CATEGORIES_ADMIN_PATH = '/api/admin/wiki-categories'
@@ -488,6 +486,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const cfg = configMap[type]
   const Icon = cfg.icon
   const [data, setData] = useState<AdminDataItem[]>([])
+  const [total, setTotal] = useState<number | undefined>()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [pendingActions, setPendingActions] = useState<
@@ -498,6 +497,16 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const dialog = useDialog()
   const { show } = useToast()
   const saveScroll = useScrollRestore()
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
+  const requestIdRef = useRef(0)
+  const filterScopeRef = useRef(`${type}:${showDeleted}`)
   const [newItem, setNewItem] = useState<any>({})
 
   const invalidateCurrentDataCaches = () => {
@@ -510,6 +519,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   }
 
   const fetchData = async (options?: { silent?: boolean }) => {
+    const requestId = ++requestIdRef.current
     const silent = options?.silent === true
     if (silent) saveScroll()
     else {
@@ -517,16 +527,21 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       setLoadError(null)
     }
     try {
-      const result = await apiGet<AdminListResponse>(`/api/admin/${cfg.apiPath}`, {
+      const result = await apiGet<AdminDataListResponse>(`/api/admin/${cfg.apiPath}`, {
         includeDeleted: showDeleted ? 'true' : undefined,
+        page: pagination.page,
+        limit: pagination.pageSize,
       })
+      if (requestId !== requestIdRef.current) return
       setData(result.data || [])
+      setTotal(result.total || 0)
       setLoadError(null)
     } catch (error) {
+      if (requestId !== requestIdRef.current) return
       console.error(error)
       setLoadError(error)
     } finally {
-      if (!silent) setLoading(false)
+      if (requestId === requestIdRef.current && !silent) setLoading(false)
     }
   }
 
@@ -543,8 +558,16 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   }
 
   useEffect(() => {
-    void fetchData()
+    const scope = `${type}:${showDeleted}`
+    if (filterScopeRef.current === scope) return
+    filterScopeRef.current = scope
+    pagination.setPage(1)
+    setTotal(undefined)
   }, [type, showDeleted])
+
+  useEffect(() => {
+    void fetchData()
+  }, [type, showDeleted, pagination.page, pagination.pageSize])
 
   const handleToggleDeleted = () => {
     setSearchParams((prev) => {
@@ -602,6 +625,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       }
       show('已删除', { variant: 'success' })
       invalidateCurrentDataCaches()
+      await fetchData({ silent: true })
     } catch (e) {
       setData(previousData)
       show(e instanceof Error ? e.message : '删除失败', { variant: 'error' })
@@ -625,6 +649,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       )
       show('已恢复', { variant: 'success' })
       invalidateCurrentDataCaches()
+      await fetchData({ silent: true })
     } catch (e) {
       setData(previousData)
       show(e instanceof Error ? e.message : '恢复失败', { variant: 'error' })
@@ -649,6 +674,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       await apiDelete(`/api/admin/${cfg.apiPath}/${id}/permanent`)
       show('已彻底删除', { variant: 'success' })
       invalidateCurrentDataCaches()
+      await fetchData({ silent: true })
     } catch (e) {
       setData(previousData)
       show(e instanceof Error ? e.message : '彻底删除失败', { variant: 'error' })
@@ -715,6 +741,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         )
       )
       show('状态已更新', { variant: 'success' })
+      await fetchData({ silent: true })
     } catch (e) {
       show('更新失败', { variant: 'error' })
     }
@@ -1092,6 +1119,17 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             </table>
           </div>
         </div>
+        {pagination.hasMultiplePages ? (
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={pagination.handlePageChange}
+            pageSize={pagination.pageSize}
+            onPageSizeChange={pagination.handlePageSizeChange}
+            pageSizeOptions={[20, 50, 100]}
+            showPageSizeSelector
+          />
+        ) : null}
       </div>
     </>
   )

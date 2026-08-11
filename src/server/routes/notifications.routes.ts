@@ -1,7 +1,7 @@
 import type { Router } from 'express'
 import { createRouter } from '../utils/typed-router'
 import { requireAuth } from '../middleware/auth'
-import { prisma, toNotificationResponse, parsePagination } from '../utils'
+import { prisma, toNotificationResponse, parsePagination, createPaginationMeta } from '../utils'
 import type { AuthenticatedRequest } from '../types'
 
 const router = createRouter()
@@ -33,10 +33,8 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
 
     res.json({
       notifications: notifications.map(toNotificationResponse),
-      total,
       unreadCount,
-      page,
-      limit,
+      ...createPaginationMeta(total, page, limit, notifications.length),
     })
   } catch (error) {
     console.error('Fetch notifications error:', error)

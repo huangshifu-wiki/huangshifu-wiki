@@ -3,23 +3,35 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { formatDateTime } from '../../lib/dateUtils'
 import {
-  fetchReviewQueue,
+  fetchReviewQueuePage,
   invalidateReviewQueueCaches,
   normalizeReviewFilter,
   REVIEW_FILTER_OPTIONS,
 } from './reviewQueue'
 import type { AdminReviewQueueMergedItem } from '../../types/api'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import { Button, LoadErrorState } from '@/src/components/ui'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 
 export const AdminReviews = () => {
   const [items, setItems] = useState<AdminReviewQueueMergedItem[]>([])
+  const [total, setTotal] = useState<number | undefined>()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const filter = normalizeReviewFilter(searchParams.get('type'))
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: 20,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
   const loadRequestRef = useRef(0)
+  const filterRef = useRef(filter)
 
   const fetchQueue = async () => {
     const requestId = loadRequestRef.current + 1
@@ -27,9 +39,10 @@ export const AdminReviews = () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const nextItems = await fetchReviewQueue(filter)
+      const result = await fetchReviewQueuePage(filter, pagination.page, pagination.pageSize)
       if (requestId !== loadRequestRef.current) return
-      setItems(nextItems)
+      setItems(result.items)
+      setTotal(result.total)
       setLoadError(null)
     } catch (e) {
       console.error(e)
@@ -42,8 +55,15 @@ export const AdminReviews = () => {
   }
 
   useEffect(() => {
-    void fetchQueue()
+    if (filterRef.current === filter) return
+    filterRef.current = filter
+    pagination.setPage(1)
+    setTotal(undefined)
   }, [filter])
+
+  useEffect(() => {
+    void fetchQueue()
+  }, [filter, pagination.page, pagination.pageSize])
 
   const handleRefreshQueue = () => {
     invalidateReviewQueueCaches()
@@ -177,6 +197,17 @@ export const AdminReviews = () => {
           当前没有待审核内容
         </div>
       )}
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
     </div>
   )
 }

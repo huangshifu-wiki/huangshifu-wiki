@@ -6,25 +6,40 @@ import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost } from '../../lib/apiClient'
 import { formatDate } from '../../lib/dateUtils'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import { isBackdropClick } from '../../utils/modal'
 import WikiMarkdown from './WikiMarkdown'
+import Pagination from '../../components/Pagination'
+import type { WikiRevisionItem, WikiRevisionListResponse } from './types'
 import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiHistory = () => {
   const { isBanned } = useAuth()
   const { slug } = useParams()
-  const [revisions, setRevisions] = useState<any[]>([])
+  const [revisions, setRevisions] = useState<WikiRevisionItem[]>([])
+  const [revisionTotal, setRevisionTotal] = useState<number | undefined>()
+  const pagination = useRoutedPagination({
+    totalCount: revisionTotal,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+    enabled: Boolean(slug),
+  })
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
-  const [selectedRevision, setSelectedRevision] = useState<any>(null)
+  const [selectedRevision, setSelectedRevision] = useState<WikiRevisionItem | null>(null)
   const previewPresence = useFloatingPresence(Boolean(selectedRevision))
-  const lastSelectedRevisionRef = useRef<any>(null)
+  const lastSelectedRevisionRef = useRef<WikiRevisionItem | null>(null)
   const [loadingRevision, setLoadingRevision] = useState(false)
   const navigate = useNavigate()
   const dialog = useDialog()
   const { show } = useToast()
+  const historyRequestIdRef = useRef(0)
+  const previousSlugRef = useRef(slug)
 
   if (selectedRevision) {
     lastSelectedRevisionRef.current = selectedRevision
@@ -33,27 +48,43 @@ const WikiHistory = () => {
   const previewRevision = selectedRevision ?? lastSelectedRevisionRef.current
 
   const fetchHistory = async () => {
+    const requestId = ++historyRequestIdRef.current
     setLoading(true)
     setLoadError(false)
     try {
-      const data = await apiGet<{ revisions: any[] }>(`/api/wiki/${slug}/history`)
+      const data = await apiGet<WikiRevisionListResponse>(`/api/wiki/${slug}/history`, {
+        page: pagination.page,
+        limit: pagination.pageSize,
+      })
+      if (requestId !== historyRequestIdRef.current) return
       setRevisions(data.revisions || [])
+      setRevisionTotal(data.total || 0)
     } catch (error) {
+      if (requestId !== historyRequestIdRef.current) return
       console.error('Error fetching history:', error)
       setLoadError(true)
     } finally {
-      setLoading(false)
+      if (requestId === historyRequestIdRef.current) setLoading(false)
     }
   }
 
   useEffect(() => {
-    void fetchHistory()
+    if (previousSlugRef.current === slug) return
+    previousSlugRef.current = slug
+    pagination.setPage(1)
+    setRevisionTotal(undefined)
   }, [slug])
 
-  const handlePreviewRevision = async (rev: any) => {
+  useEffect(() => {
+    void fetchHistory()
+  }, [slug, pagination.page, pagination.pageSize])
+
+  const handlePreviewRevision = async (rev: WikiRevisionItem) => {
     setLoadingRevision(true)
     try {
-      const data = await apiGet<{ revision: any }>(`/api/wiki/${slug}/revisions/${rev.id}`)
+      const data = await apiGet<{ revision: WikiRevisionItem }>(
+        `/api/wiki/${slug}/revisions/${rev.id}`
+      )
       setSelectedRevision(data.revision)
     } catch (e) {
       console.error('Error fetching revision:', e)
@@ -62,7 +93,7 @@ const WikiHistory = () => {
     setLoadingRevision(false)
   }
 
-  const handleRollback = async (revision: any) => {
+  const handleRollback = async (revision: WikiRevisionItem) => {
     const confirmed = await dialog.confirm({
       title: '回滚版本',
       message: `确定要回滚到 ${formatDate(revision.createdAt, 'yyyy-MM-dd HH:mm')} 的版本吗？`,
@@ -122,7 +153,7 @@ const WikiHistory = () => {
                     >
                       <div className="flex items-center gap-4">
                         <div className="flex h-10 w-10 items-center justify-center rounded bg-brand-gold/10 font-bold text-brand-gold">
-                          {revisions.length - i}
+                          {revisionTotal - (pagination.page - 1) * pagination.pageSize - i}
                         </div>
                         <div>
                           <p className="text-sm font-bold text-text-primary">
@@ -157,6 +188,17 @@ const WikiHistory = () => {
             </div>
           )}
         </div>
+        {revisions.length > 0 && pagination.hasMultiplePages ? (
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={pagination.handlePageChange}
+            pageSize={pagination.pageSize}
+            onPageSizeChange={pagination.handlePageSizeChange}
+            pageSizeOptions={[20, 50, 100]}
+            showPageSizeSelector
+          />
+        ) : null}
 
         {previewPresence.mounted && previewRevision && (
           <div

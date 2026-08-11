@@ -364,6 +364,7 @@ const PostList = () => {
                 hasMore={incrementalList.hasMore}
                 loading={incrementalList.loadingMore}
                 total={incrementalList.total}
+                pageSize={pagination.pageSize}
                 loaded={visiblePosts.length}
                 onLoadMore={incrementalList.loadMore}
                 sentinelRef={incrementalList.sentinelRef}
@@ -372,7 +373,7 @@ const PostList = () => {
                 }
                 onRetry={incrementalList.retry}
               />
-            ) : pagination.totalPages > 1 ? (
+            ) : pagination.hasMultiplePages ? (
               <Pagination
                 page={pagination.page}
                 totalPages={pagination.totalPages}

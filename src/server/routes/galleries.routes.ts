@@ -11,6 +11,7 @@ import {
   parseAssetIdList,
   parseBoolean,
   parsePagination,
+  createPaginationMeta,
   normalizeOptionalDateOnlyString,
   normalizeGalleryWriteStatus,
   canViewGallery,
@@ -384,10 +385,7 @@ router.get(
         galleries: await toGalleryListResponse(
           await attachGalleryListInteractions(galleries, req.authUser)
         ),
-        total,
-        page,
-        limit,
-        hasMore: skip + galleries.length < total,
+        ...createPaginationMeta(total, page, limit, galleries.length),
       }
 
       if (!req.authUser) {

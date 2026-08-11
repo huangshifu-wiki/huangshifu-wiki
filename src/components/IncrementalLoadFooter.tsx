@@ -6,6 +6,7 @@ interface IncrementalLoadFooterProps {
   loading: boolean
   total: number
   loaded: number
+  pageSize: number
   onLoadMore: () => void
   sentinelRef: RefObject<HTMLDivElement | null>
   error?: ReactNode
@@ -17,11 +18,13 @@ export function IncrementalLoadFooter({
   loading,
   total,
   loaded,
+  pageSize,
   onLoadMore,
   sentinelRef,
   error,
   onRetry,
 }: IncrementalLoadFooterProps) {
+  if (loaded <= 0 || total <= pageSize) return null
   return (
     <footer className="mt-8 flex flex-col items-center gap-3 text-sm">
       <div ref={sentinelRef} className="h-1 w-full" aria-hidden="true" />

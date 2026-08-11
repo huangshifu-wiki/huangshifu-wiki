@@ -54,15 +54,17 @@ export const fetchReviewQueue = async (
 
   const results = await Promise.all(
     requestedTypes.map((type) =>
-      apiGet<AdminReviewQueueResponse>('/api/admin/review-queue', {
+      apiGet<AdminReviewQueueResponse & { type: AdminReviewQueueType }>('/api/admin/review-queue', {
         type,
         status: 'pending',
+        page: 1,
+        limit: 100,
       })
     )
   )
 
   const merged = results.flatMap((bucket) =>
-    (bucket.items || []).map((item) => ({
+    bucket.items.map((item) => ({
       ...item,
       reviewType: getReviewItemType(bucket.type),
       reviewId: getReviewId(item, bucket.type),
@@ -76,4 +78,44 @@ export const fetchReviewQueue = async (
   })
 
   return merged
+}
+export type ReviewQueuePage = {
+  items: AdminReviewQueueMergedItem[]
+  total: number
+}
+
+export const fetchReviewQueuePage = async (
+  filter: ReviewFilter,
+  page: number,
+  limit: number
+): Promise<ReviewQueuePage> => {
+  if (filter === 'all') {
+    const response = await apiGet<
+      AdminReviewQueueResponse & { type: 'all'; items: AdminReviewQueueMergedItem[] }
+    >('/api/admin/review-queue', {
+      type: 'all',
+      status: 'pending',
+      page,
+      limit,
+    })
+    return {
+      items: response.items,
+      total: response.total,
+    }
+  }
+
+  const response = await apiGet<AdminReviewQueueResponse>('/api/admin/review-queue', {
+    type: filter,
+    status: 'pending',
+    page,
+    limit,
+  })
+  return {
+    items: response.items.map((item) => ({
+      ...item,
+      reviewType: getReviewItemType(filter),
+      reviewId: getReviewId(item, filter),
+    })),
+    total: response.total,
+  }
 }

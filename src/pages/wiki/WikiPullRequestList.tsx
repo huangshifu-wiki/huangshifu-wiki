@@ -1,11 +1,17 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { clsx } from 'clsx'
 import { apiGet } from '../../lib/apiClient'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import { formatDate } from '../../lib/dateUtils'
-import type { WikiPullRequestItem, WikiPullRequestStatus } from './types'
+import type {
+  WikiPullRequestItem,
+  WikiPullRequestListResponse,
+  WikiPullRequestStatus,
+} from './types'
 import { getPrStatusText } from './types'
 import { Button, LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import { SmartBackLink } from '../../components/SmartBackLink'
@@ -14,31 +20,56 @@ const WikiPullRequestList = () => {
   const { slug } = useParams()
   const { user, isAdmin } = useAuth()
   const [status, setStatus] = useState<WikiPullRequestStatus>('open')
+  const [items, setItems] = useState<WikiPullRequestItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
-  const [items, setItems] = useState<WikiPullRequestItem[]>([])
+  const [prTotal, setPrTotal] = useState<number | undefined>()
+  const pagination = useRoutedPagination({
+    totalCount: prTotal,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+    enabled: Boolean(user),
+  })
+  const requestIdRef = useRef(0)
+  const previousScopeRef = useRef(`${status}:${slug ?? ''}`)
 
   const fetchList = async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setLoadError(false)
     try {
-      const data = await apiGet<{ pullRequests: WikiPullRequestItem[] }>(
-        '/api/wiki/pull-requests/list',
-        { status }
-      )
-      const list = data.pullRequests || []
-      setItems(slug ? list.filter((item) => item.pageSlug === slug) : list)
+      const data = await apiGet<WikiPullRequestListResponse>('/api/wiki/pull-requests/list', {
+        status,
+        page: pagination.page,
+        limit: pagination.pageSize,
+        ...(slug ? { pageSlug: slug } : {}),
+      })
+      if (requestId !== requestIdRef.current) return
+      setItems(data.pullRequests || [])
+      setPrTotal(data.total || 0)
     } catch (error) {
+      if (requestId !== requestIdRef.current) return
       console.error('Fetch wiki PR list error:', error)
       setLoadError(true)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchList()
+    const scope = `${status}:${slug ?? ''}`
+    if (previousScopeRef.current === scope) return
+    previousScopeRef.current = scope
+    pagination.setPage(1)
+    setPrTotal(undefined)
   }, [status, slug])
+
+  useEffect(() => {
+    void fetchList()
+  }, [pagination.page, pagination.pageSize, status, slug])
 
   if (!user) {
     return (
@@ -134,6 +165,17 @@ const WikiPullRequestList = () => {
             </div>
           )}
         </div>
+        {items.length > 0 && pagination.hasMultiplePages ? (
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={pagination.handlePageChange}
+            pageSize={pagination.pageSize}
+            onPageSizeChange={pagination.handlePageSizeChange}
+            pageSizeOptions={[20, 50, 100]}
+            showPageSizeSelector
+          />
+        ) : null}
       </div>
     </div>
   )

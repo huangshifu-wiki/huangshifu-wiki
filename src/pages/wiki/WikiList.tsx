@@ -236,6 +236,7 @@ const WikiList = () => {
                 hasMore={incrementalList.hasMore}
                 loading={incrementalList.loadingMore}
                 total={visibleTotal}
+                pageSize={pageSize}
                 loaded={visiblePages.length}
                 onLoadMore={incrementalList.loadMore}
                 sentinelRef={incrementalList.sentinelRef}
@@ -244,7 +245,7 @@ const WikiList = () => {
                 }
                 onRetry={incrementalList.retry}
               />
-            ) : import.meta.env.DEV || pagination.totalPages > 1 ? (
+            ) : pagination.hasMultiplePages ? (
               <Pagination
                 page={pagination.page}
                 totalPages={pagination.totalPages}

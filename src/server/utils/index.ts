@@ -47,6 +47,7 @@ export {
   normalizeModerationTargetType,
   parsePostSort,
   parsePagination,
+  createPaginationMeta,
 } from './parsers'
 
 export {

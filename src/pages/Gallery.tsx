@@ -262,6 +262,7 @@ const GalleryList = () => {
                 hasMore={incrementalList.hasMore}
                 loading={incrementalList.loadingMore}
                 total={visibleTotal || 0}
+                pageSize={pageSize}
                 loaded={visibleGalleries.length}
                 onLoadMore={incrementalList.loadMore}
                 sentinelRef={incrementalList.sentinelRef}
@@ -270,7 +271,7 @@ const GalleryList = () => {
                 }
                 onRetry={incrementalList.retry}
               />
-            ) : galleryPagination.totalPages > 1 ? (
+            ) : galleryPagination.hasMultiplePages ? (
               <Pagination
                 page={galleryPagination.page}
                 totalPages={galleryPagination.totalPages}

@@ -1,7 +1,13 @@
 import type { Router } from 'express'
 import { createRouter } from '../utils/typed-router'
 import { requireAuth, requireAdmin, requireActiveUser, isAdminRole } from '../middleware/auth'
-import { prisma, resolveUploadPathByUrl, softDeleteData } from '../utils'
+import {
+  prisma,
+  resolveUploadPathByUrl,
+  softDeleteData,
+  parsePagination,
+  createPaginationMeta,
+} from '../utils'
 import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService'
 import { getS3BaseUrl, getPublicConfig } from '../s3/s3Service'
 import fs from 'fs'
@@ -56,18 +62,24 @@ function normalizeImageMap(item: {
 router.get('/', async (req, res) => {
   try {
     const md5 = typeof req.query.md5 === 'string' ? req.query.md5 : ''
-
-    const items = await prisma.imageMap.findMany({
-      where: {
-        deletedAt: null,
-        ...(md5 ? { md5 } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    })
+    const { limit, page, offset: skip } = parsePagination(req.query)
+    const where = {
+      deletedAt: null,
+      ...(md5 ? { md5 } : {}),
+    }
+    const [items, total] = await Promise.all([
+      prisma.imageMap.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip,
+      }),
+      prisma.imageMap.count({ where }),
+    ])
 
     res.json({
       items: items.map(normalizeImageMap),
+      ...createPaginationMeta(total, page, limit, items.length),
     })
   } catch (error) {
     console.error('Fetch image maps error:', error)

@@ -34,6 +34,7 @@ import {
   parseDisplayAlbumMode,
   parseMusicPlatform,
   parsePagination,
+  createPaginationMeta,
   normalizeTrackDiscPayload,
   normalizeModerationTargetType,
   createNotification,
@@ -977,8 +978,99 @@ router.get(
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const type = normalizeModerationTargetType(req.query.type)
       const status = parseContentStatus(req.query.status) || 'pending'
+
+      if (req.query.type === 'all') {
+        const { limit, page, offset: skip } = parsePagination(req.query)
+        const take = skip + limit
+        const [wikiItems, postItems, galleryItems, wikiTotal, postTotal, galleryTotal] =
+          await Promise.all([
+            prisma.wikiPage.findMany({
+              where: { status, deletedAt: null },
+              include: {
+                lastEditor: { select: { displayName: true } },
+                location: true,
+              },
+              orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+              take,
+            }),
+            prisma.post.findMany({
+              where: { status, deletedAt: null },
+              include: {
+                author: { select: { displayName: true } },
+                sectionRef: { select: { name: true } },
+                location: true,
+              },
+              orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+              take,
+            }),
+            prisma.gallery.findMany({
+              where: { status, deletedAt: null },
+              include: {
+                images: {
+                  include: { asset: true },
+                  orderBy: { sortOrder: 'asc' },
+                },
+                location: true,
+              },
+              orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+              take,
+            }),
+            prisma.wikiPage.count({ where: { status, deletedAt: null } }),
+            prisma.post.count({ where: { status, deletedAt: null } }),
+            prisma.gallery.count({ where: { status, deletedAt: null } }),
+          ])
+        const mergedItems = [
+          ...wikiItems.map((item) => ({
+            data: {
+              ...toWikiResponse(item),
+              sensitiveWords: containsSensitive(item.content || ''),
+              reviewType: 'wiki' as const,
+              reviewId: item.slug,
+            },
+            sortKey: item.id,
+          })),
+          ...(await toGalleryListResponse(galleryItems)).map((item) => ({
+            data: {
+              ...item,
+              reviewType: 'gallery' as const,
+              reviewId: item.id,
+            },
+            sortKey: item.id,
+          })),
+          ...postItems.map((item) => ({
+            data: {
+              ...toPostResponse(item),
+              sectionName: item.sectionRef?.name || item.section,
+              sensitiveWords: containsSensitive(item.content || ''),
+              reviewType: 'post' as const,
+              reviewId: item.id,
+            },
+            sortKey: item.id,
+          })),
+        ].sort((left, right) => {
+          const updatedAtDifference =
+            new Date(String(right.data.updatedAt || 0)).getTime() -
+            new Date(String(left.data.updatedAt || 0)).getTime()
+          if (updatedAtDifference !== 0) return updatedAtDifference
+          const sortKeyDifference = right.sortKey.localeCompare(left.sortKey)
+          if (sortKeyDifference !== 0) return sortKeyDifference
+          return `${right.data.reviewType}:${right.data.reviewId}`.localeCompare(
+            `${left.data.reviewType}:${left.data.reviewId}`
+          )
+        })
+        const total = wikiTotal + postTotal + galleryTotal
+        const items = mergedItems.slice(skip, skip + limit).map(({ data }) => data)
+        res.json({
+          type: 'all',
+          status,
+          items,
+          ...createPaginationMeta(total, page, limit, items.length),
+        })
+        return
+      }
+
+      const type = normalizeModerationTargetType(req.query.type)
 
       if (!type) {
         res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' })
@@ -989,69 +1081,88 @@ router.get(
         res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' })
         return
       }
+      const { limit, page, offset: skip } = parsePagination(req.query)
 
       if (type === 'wiki') {
-        const items = await prisma.wikiPage.findMany({
-          where: { status, deletedAt: null },
-          include: {
-            lastEditor: { select: { displayName: true } },
-            location: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 200,
-        })
+        const [items, total] = await Promise.all([
+          prisma.wikiPage.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              lastEditor: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+          prisma.wikiPage.count({ where: { status, deletedAt: null } }),
+        ])
+        const responseItems = items.map((item) => ({
+          ...toWikiResponse(item),
+          sensitiveWords: containsSensitive(item.content || ''),
+        }))
         res.json({
           type,
           status,
-          items: items.map((item) => ({
-            ...toWikiResponse(item),
-            sensitiveWords: containsSensitive(item.content || ''),
-          })),
+          items: responseItems,
+          ...createPaginationMeta(total, page, limit, responseItems.length),
         })
         return
       }
 
       if (type === 'gallery') {
-        const items = await prisma.gallery.findMany({
-          where: { status, deletedAt: null },
-          include: {
-            images: {
-              include: {
-                asset: true,
+        const [items, total] = await Promise.all([
+          prisma.gallery.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              images: {
+                include: {
+                  asset: true,
+                },
+                orderBy: { sortOrder: 'asc' },
               },
-              orderBy: { sortOrder: 'asc' },
+              location: true,
             },
-            location: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 200,
-        })
+            orderBy: { updatedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+          prisma.gallery.count({ where: { status, deletedAt: null } }),
+        ])
+        const responseItems = await toGalleryListResponse(items)
         res.json({
           type: 'galleries',
           status,
-          items: await toGalleryListResponse(items),
+          items: responseItems,
+          ...createPaginationMeta(total, page, limit, responseItems.length),
         })
         return
       }
 
-      const items = await prisma.post.findMany({
-        where: { status, deletedAt: null },
-        include: {
-          author: { select: { displayName: true } },
-          sectionRef: { select: { name: true } },
-          location: true,
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 200,
-      })
+      const [items, total] = await Promise.all([
+        prisma.post.findMany({
+          where: { status, deletedAt: null },
+          include: {
+            author: { select: { displayName: true } },
+            sectionRef: { select: { name: true } },
+            location: true,
+          },
+          orderBy: { updatedAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.post.count({ where: { status, deletedAt: null } }),
+      ])
+      const responseItems = items.map((item) => ({
+        ...toPostResponse(item),
+        sectionName: item.sectionRef?.name || item.section,
+        sensitiveWords: containsSensitive(item.content || ''),
+      }))
       res.json({
         type: 'posts',
         status,
-        items: items.map((item) => ({
-          ...toPostResponse(item),
-          sectionName: item.sectionRef?.name || item.section,
-          sensitiveWords: containsSensitive(item.content || ''),
-        })),
+        items: responseItems,
+        ...createPaginationMeta(total, page, limit, responseItems.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'Fetch review queue error')
@@ -1255,16 +1366,29 @@ router.delete(
 router.get(
   '/locks',
   requireAdmin,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     try {
-      const locks = await prisma.editLock.findMany({
-        orderBy: {
-          createdAt: 'desc',
+      await prisma.editLock.deleteMany({
+        where: {
+          expiresAt: {
+            lt: new Date(),
+          },
         },
-        take: 200,
       })
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [locks, total] = await Promise.all([
+        prisma.editLock.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+        }),
+        prisma.editLock.count(),
+      ])
 
-      res.json({ locks: locks.map(toEditLockResponse) })
+      res.json({
+        locks: locks.map(toEditLockResponse),
+        ...createPaginationMeta(total, page, limit, locks.length),
+      })
     } catch (error) {
       logger.error({ err: error }, 'Fetch edit locks error')
       res.status(500).json({ error: '获取编辑锁列表失败' })
@@ -1420,17 +1544,22 @@ router.delete(
 router.get(
   '/moderation_logs',
   requireAdmin,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     try {
-      const logs = await prisma.moderationLog.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-        include: {
-          operator: {
-            select: { uid: true, displayName: true, email: true },
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [logs, total] = await Promise.all([
+        prisma.moderationLog.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+          include: {
+            operator: {
+              select: { uid: true, displayName: true, email: true },
+            },
           },
-        },
-      })
+        }),
+        prisma.moderationLog.count(),
+      ])
 
       res.json({
         logs: logs.map((log) => ({
@@ -1443,6 +1572,7 @@ router.get(
           note: log.note,
           createdAt: log.createdAt.toISOString(),
         })),
+        ...createPaginationMeta(total, page, limit, logs.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'Fetch moderation logs error')
@@ -1455,20 +1585,25 @@ router.get(
 router.get(
   '/ban_logs',
   requireAdmin,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     try {
-      const logs = await prisma.userBanLog.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-        include: {
-          target: {
-            select: { uid: true, displayName: true, email: true },
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [logs, total] = await Promise.all([
+        prisma.userBanLog.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+          include: {
+            target: {
+              select: { uid: true, displayName: true, email: true },
+            },
+            operator: {
+              select: { uid: true, displayName: true, email: true },
+            },
           },
-          operator: {
-            select: { uid: true, displayName: true, email: true },
-          },
-        },
-      })
+        }),
+        prisma.userBanLog.count(),
+      ])
 
       res.json({
         logs: logs.map((log) => ({
@@ -1481,6 +1616,7 @@ router.get(
           note: log.note,
           createdAt: log.createdAt.toISOString(),
         })),
+        ...createPaginationMeta(total, page, limit, logs.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'Fetch ban logs error')
@@ -2640,16 +2776,22 @@ router.get(
       const includeDeleted = includeDeletedFromQuery(req.query)
       const activeWhere = deletedAtFilter(includeDeleted)
 
+      const { limit, page, offset: skip } = parsePagination(req.query)
+
       if (tab === 'wiki') {
-        const data = await prisma.wikiPage.findMany({
-          where: activeWhere,
-          include: {
-            lastEditor: { select: { displayName: true } },
-            location: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
-        })
+        const [data, total] = await Promise.all([
+          prisma.wikiPage.findMany({
+            where: activeWhere,
+            include: {
+              lastEditor: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.wikiPage.count({ where: activeWhere }),
+        ])
         const deleteReasonsBySlug = await getDeleteReasonsByTargetId(
           'wiki',
           data.filter((page) => page.deletedAt).map((page) => page.slug)
@@ -2659,20 +2801,25 @@ router.get(
             ...toWikiResponse(page),
             deletionReason: deleteReasonsBySlug.get(page.slug) ?? null,
           })),
+          ...createPaginationMeta(total, page, limit, data.length),
         })
         return
       }
 
       if (tab === 'posts') {
-        const data = await prisma.post.findMany({
-          where: activeWhere,
-          include: {
-            author: { select: { displayName: true } },
-            location: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
-        })
+        const [data, total] = await Promise.all([
+          prisma.post.findMany({
+            where: activeWhere,
+            include: {
+              author: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.post.count({ where: activeWhere }),
+        ])
         const deleteReasonsById = await getDeleteReasonsByTargetId(
           'post',
           data.filter((post) => post.deletedAt).map((post) => post.id)
@@ -2682,25 +2829,29 @@ router.get(
             ...toPostResponse(post),
             deletionReason: deleteReasonsById.get(post.id) ?? null,
           })),
+          ...createPaginationMeta(total, page, limit, data.length),
         })
         return
       }
-
       if (tab === 'galleries') {
-        const data = await prisma.gallery.findMany({
-          where: activeWhere,
-          include: {
-            images: {
-              include: {
-                asset: true,
+        const [data, total] = await Promise.all([
+          prisma.gallery.findMany({
+            where: activeWhere,
+            include: {
+              images: {
+                include: {
+                  asset: true,
+                },
+                orderBy: { sortOrder: 'asc' },
               },
-              orderBy: { sortOrder: 'asc' },
+              location: true,
             },
-            location: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
-        })
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.gallery.count({ where: activeWhere }),
+        ])
         const deleteReasonsById = await getDeleteReasonsByTargetId(
           'gallery',
           data.filter((gallery) => gallery.deletedAt).map((gallery) => gallery.id)
@@ -2711,69 +2862,66 @@ router.get(
             ...gallery,
             deletionReason: deleteReasonsById.get(gallery.id) ?? null,
           })),
+          ...createPaginationMeta(total, page, limit, data.length),
         })
         return
       }
 
       if (tab === 'events') {
-        const data = await prisma.event.findMany({
-          where: activeWhere,
-          include: adminEventInclude,
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
+        const [data, total] = await Promise.all([
+          prisma.event.findMany({
+            where: activeWhere,
+            include: adminEventInclude,
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.event.count({ where: activeWhere }),
+        ])
+        res.json({
+          data: await toEventListResponse(data),
+          ...createPaginationMeta(total, page, limit, data.length),
         })
-        res.json({ data: await toEventListResponse(data) })
         return
       }
 
       if (tab === 'users') {
-        const data = await prisma.user.findMany({
-          where: activeWhere,
-          orderBy: { createdAt: 'desc' },
-          take: 100,
-          select: {
-            uid: true,
-            publicId: true,
-            email: true,
-            displayName: true,
-            photoURL: true,
-            role: true,
-            status: true,
-            banReason: true,
-            bannedAt: true,
-            emailVerifiedAt: true,
-            level: true,
-            signature: true,
-            bio: true,
-            deletedAt: true,
-            deletedBy: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        })
-        res.json({ data: data.map(toUserResponse) })
-        return
-      }
-
-      if (tab === 'locks') {
-        await prisma.editLock.deleteMany({
-          where: {
-            expiresAt: {
-              lt: new Date(),
+        const [data, total] = await Promise.all([
+          prisma.user.findMany({
+            where: activeWhere,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip,
+            select: {
+              uid: true,
+              publicId: true,
+              email: true,
+              displayName: true,
+              photoURL: true,
+              role: true,
+              status: true,
+              banReason: true,
+              bannedAt: true,
+              emailVerifiedAt: true,
+              level: true,
+              signature: true,
+              bio: true,
+              deletedAt: true,
+              deletedBy: true,
+              createdAt: true,
+              updatedAt: true,
             },
-          },
+          }),
+          prisma.user.count({ where: activeWhere }),
+        ])
+        res.json({
+          data: data.map(toUserResponse),
+          ...createPaginationMeta(total, page, limit, data.length),
         })
-
-        const data = await prisma.editLock.findMany({
-          orderBy: { createdAt: 'desc' },
-          take: 200,
-        })
-        res.json({ data: data.map(toEditLockResponse) })
         return
       }
 
       if (tab === 'music') {
-        const { limit, page, offset: skip } = parsePagination(req.query)
         const sortBy = parseAdminMusicSortBy(req.query.sortBy)
         const sortOrder = parseAdminMusicSortOrder(req.query.sortOrder)
         const { where } = await buildAdminMusicWhere(req)
@@ -2880,20 +3028,14 @@ router.get(
           prisma.musicTrack.count({ where: where as never }),
           fetchRows(),
         ])
-        const totalPages = Math.max(1, Math.ceil(total / limit))
         res.json({
           data: orderedRows.map((track) => toMusicResponse(track)),
-          total,
-          page,
-          limit,
-          totalPages,
-          hasMore: skip + orderedRows.length < total,
+          ...createPaginationMeta(total, page, limit, orderedRows.length),
         })
         return
       }
 
       if (tab === 'albums') {
-        const { limit, page, offset: skip } = parsePagination(req.query)
         const sortBy = parseAdminMusicSortBy(req.query.sortBy)
         const sortOrder = parseAdminMusicSortOrder(req.query.sortOrder)
         const { where } = buildAdminAlbumWhere(req)
@@ -2948,48 +3090,63 @@ router.get(
             take: limit,
           }),
         ])
-        const totalPages = Math.max(1, Math.ceil(total / limit))
         res.json({
           data: albums.map((album) => ({
             ...toAlbumResponse({ ...album, songRelations: undefined }),
             trackCount: album.songRelations.length,
             discCount: normalizeTrackDiscPayload(album.tracks).length,
           })),
-          total,
-          page,
-          limit,
-          totalPages,
-          hasMore: skip + albums.length < total,
+          ...createPaginationMeta(total, page, limit, albums.length),
         })
         return
       }
       if (tab === 'announcements') {
-        const data = await prisma.announcement.findMany({
-          where: activeWhere,
-          orderBy: { createdAt: 'desc' },
-          take: 100,
+        const [data, total] = await Promise.all([
+          prisma.announcement.findMany({
+            where: activeWhere,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.announcement.count({ where: activeWhere }),
+        ])
+        res.json({
+          data,
+          ...createPaginationMeta(total, page, limit, data.length),
         })
-        res.json({ data })
         return
       }
-
       if (tab === 'sections') {
-        const data = await prisma.section.findMany({
-          where: activeWhere,
-          orderBy: { order: 'asc' },
-          take: 100,
+        const [data, total] = await Promise.all([
+          prisma.section.findMany({
+            where: activeWhere,
+            orderBy: { order: 'asc' },
+            take: limit,
+            skip,
+          }),
+          prisma.section.count({ where: activeWhere }),
+        ])
+        res.json({
+          data,
+          ...createPaginationMeta(total, page, limit, data.length),
         })
-        res.json({ data })
         return
       }
 
       if (tab === 'wiki-categories') {
-        const data = await prisma.wikiCategory.findMany({
-          where: activeWhere,
-          orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
-          take: 100,
+        const [data, total] = await Promise.all([
+          prisma.wikiCategory.findMany({
+            where: activeWhere,
+            orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+            take: limit,
+            skip,
+          }),
+          prisma.wikiCategory.count({ where: activeWhere }),
+        ])
+        res.json({
+          data,
+          ...createPaginationMeta(total, page, limit, data.length),
         })
-        res.json({ data })
         return
       }
 
