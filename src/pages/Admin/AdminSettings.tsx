@@ -764,10 +764,10 @@ const AdminSettings = () => {
     }
   }, [loadRateLimitConfig])
 
-  const saveConfig = async () => {
+  const saveConfig = async (): Promise<boolean> => {
     if (loading || loadError) {
       show('请先成功加载站点设置后再保存', { variant: 'error' })
-      return
+      return false
     }
 
     try {
@@ -794,17 +794,18 @@ const AdminSettings = () => {
       })
       clearApiCache(EMAIL_VERIFICATION_ADMIN_CONFIG_CACHE_KEY)
       setForm(toForm(result.config))
-      show('站点设置已保存')
+      return true
     } catch (error) {
       console.error('Save email verification config failed:', error)
       show(error instanceof Error ? error.message : '站点设置保存失败', { variant: 'error' })
+      return false
     }
   }
 
-  const saveRegistrationConfig = async () => {
+  const saveRegistrationConfig = async (): Promise<boolean> => {
     if (registrationLoading || registrationLoadError) {
       show('请先成功加载注册设置后再保存', { variant: 'error' })
-      return
+      return false
     }
 
     try {
@@ -816,17 +817,18 @@ const AdminSettings = () => {
       })
       clearApiCache(REGISTRATION_ADMIN_CONFIG_CACHE_KEY)
       setRegistrationConfig(result.config)
-      show('注册设置已保存')
+      return true
     } catch (error) {
       console.error('Save registration config failed:', error)
       show(error instanceof Error ? error.message : '注册设置保存失败', { variant: 'error' })
+      return false
     }
   }
 
-  const saveSearchHotKeywordsConfig = async () => {
+  const saveSearchHotKeywordsConfig = async (): Promise<boolean> => {
     if (searchHotKeywordsLoading || searchHotKeywordsLoadError) {
       show('请先成功加载搜索热词设置后再保存', { variant: 'error' })
-      return
+      return false
     }
 
     try {
@@ -839,17 +841,18 @@ const AdminSettings = () => {
       clearApiCache(SEARCH_HOT_KEYWORDS_ADMIN_CONFIG_CACHE_KEY)
       clearApiCache(PUBLIC_FEATURES_CONFIG_CACHE_KEY)
       setSearchHotKeywordsConfig(result.config)
-      show('搜索热词设置已保存')
+      return true
     } catch (error) {
       console.error('Save search hot keywords config failed:', error)
       show(error instanceof Error ? error.message : '搜索热词设置保存失败', { variant: 'error' })
+      return false
     }
   }
 
-  const saveRateLimitConfig = async () => {
+  const saveRateLimitConfig = async (): Promise<boolean> => {
     if (!rateLimitConfig || rateLimitLoading || rateLimitLoadError) {
       show('请先成功加载请求限流配置后再保存', { variant: 'error' })
-      return
+      return false
     }
 
     try {
@@ -860,10 +863,11 @@ const AdminSettings = () => {
 
       clearApiCache(RATE_LIMIT_ADMIN_CONFIG_CACHE_KEY)
       setRateLimitConfig(response.data)
-      show('请求限流配置已保存')
+      return true
     } catch (error) {
       console.error('Save rate limit config failed:', error)
       show(error instanceof Error ? error.message : '请求限流配置保存失败', { variant: 'error' })
+      return false
     }
   }
 
@@ -905,8 +909,8 @@ const AdminSettings = () => {
     return Number.isFinite(parsed) ? parsed : null
   }
 
-  const saveRuntimeConfig = async () => {
-    if (!runtimeForm) return
+  const saveRuntimeConfig = async (): Promise<boolean> => {
+    if (!runtimeForm) return false
     const errors: string[] = []
     for (const field of NUMBER_FIELDS) {
       const value = runtimeForm[field.key]
@@ -916,7 +920,7 @@ const AdminSettings = () => {
     }
     if (errors.length > 0) {
       setRuntimeValidationErrors(errors)
-      return
+      return false
     }
     try {
       setRuntimeValidationErrors([])
@@ -928,11 +932,13 @@ const AdminSettings = () => {
         setRuntimeForm({ ...result.data })
         setRuntimeSaveSuccess(true)
         setTimeout(() => setRuntimeSaveSuccess(false), 3000)
+        return true
       } else {
         throw new Error(result.error || '保存失败')
       }
     } catch (err) {
       show(err instanceof Error ? err.message : '保存失败', { variant: 'error' })
+      return false
     }
   }
 
@@ -973,18 +979,18 @@ const AdminSettings = () => {
     setSecretsDirty(true)
   }
 
-  const saveSecretsConfig = async () => {
-    if (!secretsConfig) return
-    if (!secretsDirty) return
+  const saveSecretsConfig = async (): Promise<boolean> => {
+    if (!secretsConfig) return false
+    if (!secretsDirty) return true
     if (secretsConfig.disabled) {
       show('未配置 SECRETS_ENCRYPTION_KEY，无法管理凭证', { variant: 'error' })
-      return
+      return false
     }
     const payload: Record<string, string | null> = {}
     for (const [key, value] of Object.entries(secretsForm)) {
       payload[key] = value === '' ? null : value
     }
-    if (Object.keys(payload).length === 0) return
+    if (Object.keys(payload).length === 0) return true
     try {
       const result = await apiPatch<RuntimeApiResponse<SecretsAdminConfig>>(
         SECRETS_CONFIG_PATH,
@@ -994,19 +1000,20 @@ const AdminSettings = () => {
         setSecretsConfig(result.data)
         setSecretsForm({})
         setSecretsDirty(false)
-        show('服务凭证已保存')
+        return true
       } else {
         throw new Error(result.error || '保存失败')
       }
     } catch (err) {
       show(err instanceof Error ? err.message : '服务凭证保存失败', { variant: 'error' })
+      return false
     }
   }
 
   const handleSaveAll = async () => {
     setSavingAll(true)
     try {
-      await Promise.all([
+      const results = await Promise.all([
         saveConfig(),
         saveRegistrationConfig(),
         saveSearchHotKeywordsConfig(),
@@ -1014,6 +1021,7 @@ const AdminSettings = () => {
         saveRuntimeConfig(),
         saveSecretsConfig(),
       ])
+      if (results.every(Boolean)) show('站点设置已保存')
     } finally {
       setSavingAll(false)
     }
