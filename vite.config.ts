@@ -105,6 +105,8 @@ export default defineConfig(({ mode }) => {
               if (id.includes('/pages/Forum')) return 'page-forum'
               if (id.includes('/pages/Music')) return 'page-music'
               if (id.includes('/pages/Gallery')) return 'page-gallery'
+              if (id.includes('/pages/Events')) return 'page-events'
+              if (id.includes('/pages/wiki/')) return 'page-wiki'
               if (id.includes('/pages/Search')) return 'page-search'
               if (id.includes('GalleryDetail')) return 'page-gallery-detail'
               if (id.includes('MusicDetail')) return 'page-music-detail'

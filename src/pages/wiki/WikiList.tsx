@@ -10,6 +10,7 @@ import WikiCard from '../../components/wiki/WikiCard'
 import { WikiFilters } from '../../components/wiki/WikiFilters'
 import Pagination from '../../components/Pagination'
 import { LoadErrorState, Spinner } from '@/src/components/ui'
+import { PageSkeleton } from '../../components/PageSkeleton'
 import { IncrementalLoadFooter } from '../../components/IncrementalLoadFooter'
 import type { WikiItem } from './types'
 import { DEFAULT_PAGE_SIZE } from './types'
@@ -138,6 +139,10 @@ const WikiList = () => {
     return query ? `/wiki?${query}` : '/wiki'
   }
 
+  if (isInitialLoading && visiblePages.length === 0) {
+    return <PageSkeleton variant="wiki" />
+  }
+
   return (
     <div className="gufeng-wiki-page mobile-page-shell">
       <div className="mobile-page-container" aria-busy={isRefreshing || undefined}>
@@ -180,33 +185,8 @@ const WikiList = () => {
             onRetry={handleRetry}
           />
         )}
-
         {currentLoadError && visiblePages.length === 0 ? (
           <LoadErrorState onRetry={handleRetry} />
-        ) : isInitialLoading && visiblePages.length === 0 ? (
-          <div
-            className={clsx(
-              viewMode === 'list'
-                ? 'flex flex-col gap-0.5'
-                : clsx(
-                    'mobile-grid grid',
-                    'items-start',
-                    viewMode === 'large' && 'wiki-large-grid',
-                    VIEW_MODE_CONFIG[viewMode].gridCols,
-                    VIEW_MODE_CONFIG[viewMode].gap
-                  )
-            )}
-          >
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className={clsx(
-                  viewMode === 'list' ? 'h-24' : VIEW_MODE_CONFIG[viewMode].cardHeight,
-                  'book-skeleton rounded border border-[var(--book-ink-line)]'
-                )}
-              ></div>
-            ))}
-          </div>
         ) : visiblePages.length > 0 ? (
           <>
             <div

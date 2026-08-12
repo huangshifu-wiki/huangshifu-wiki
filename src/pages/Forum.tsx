@@ -290,6 +290,10 @@ const PostList = () => {
     return query ? `/forum?${query}` : '/forum'
   }
 
+  if (isInitialLoading && visiblePosts.length === 0) {
+    return <PageSkeleton variant="forum" />
+  }
+
   return (
     <div className="gufeng-forum-page mobile-page-shell">
       <div className="mobile-page-container" aria-busy={isRefreshing || undefined}>
@@ -334,8 +338,6 @@ const PostList = () => {
 
         {currentLoadError && visiblePosts.length === 0 ? (
           <LoadErrorState onRetry={handleRetry} />
-        ) : isInitialLoading && visiblePosts.length === 0 ? (
-          <PageSkeleton variant="forum" />
         ) : visiblePosts.length > 0 ? (
           <>
             <div

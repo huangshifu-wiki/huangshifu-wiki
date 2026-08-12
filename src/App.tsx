@@ -22,6 +22,7 @@ import {
   isMiniProgramWebView,
 } from './lib/miniProgram'
 import { getSetupStatus, type SetupStatus } from './lib/setup'
+import { getRouteSkeletonVariant } from './lib/routeSkeleton'
 
 const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.default })))
 const Wiki = lazy(() => import('./pages/wiki').then((m) => ({ default: m.default })))
@@ -156,7 +157,7 @@ const MainLayout = () => {
         id="main-content"
       >
         <ErrorBoundary>
-          <Suspense fallback={<PageSkeleton />}>
+          <Suspense fallback={<PageSkeleton variant={getRouteSkeletonVariant(path)} />}>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/wiki/*" element={<Wiki />} />
@@ -211,6 +212,9 @@ const MainLayout = () => {
     </div>
   )
 }
+export const AppRouter = ({ children }: { children: React.ReactNode }) => (
+  <Router useTransitions={false}>{children}</Router>
+)
 
 export default function App() {
   React.useEffect(() => {
@@ -250,7 +254,7 @@ export default function App() {
   }, [])
 
   return (
-    <Router>
+    <AppRouter>
       <BackLinkTracker />
       <ScrollPositionSync />
       <AuthProvider>
@@ -258,6 +262,6 @@ export default function App() {
           <MainLayout />
         </MusicProvider>
       </AuthProvider>
-    </Router>
+    </AppRouter>
   )
 }
