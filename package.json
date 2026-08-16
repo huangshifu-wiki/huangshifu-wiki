@@ -58,6 +58,7 @@
     "@amap/amap-jsapi-loader": "^1.0.1",
     "@aws-sdk/client-s3": "^3.1075.0",
     "@aws-sdk/s3-request-presigner": "^3.1075.0",
+    "@hello-pangea/dnd": "^18.0.1",
     "@huggingface/transformers": "^3.8.1",
     "@meting/core": "^1.6.1",
     "@prisma/client": "^6.7.0",
