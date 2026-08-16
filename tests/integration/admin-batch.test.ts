@@ -363,4 +363,71 @@ describe('Admin batch operations API', () => {
     })
     expect(displayRelations.every((relation) => relation.isDisplay)).toBe(true)
   })
+  it('专辑软删除、重复删除和永久删除遵守状态边界', async () => {
+    const album = await prisma.album.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: `Batch Album Lifecycle ${Date.now()}`,
+        artist: '测试艺人',
+      },
+    })
+    const cover = await prisma.albumCover.create({
+      data: {
+        albumDocId: album.docId,
+        storageKey: `test-admin-batch/cover-${Date.now()}.jpg`,
+        publicUrl: '/uploads/test-admin-batch-cover.jpg',
+        thumbnailUrl: '/uploads/test-admin-batch-cover-thumb.jpg',
+        isDefault: true,
+      },
+    })
+    const activeAlbum = await prisma.album.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: `Batch Album Active ${Date.now()}`,
+        artist: '测试艺人',
+      },
+    })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const deleted = await agent
+      .delete(`/api/admin/albums/${album.docId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(deleted.status).toBe(200)
+
+    const duplicate = await agent
+      .delete(`/api/admin/albums/${album.docId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(duplicate.status).toBe(404)
+
+    const deletedCover = await agent
+      .delete(`/api/albums/${album.docId}/covers/${cover.id}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(deletedCover.status).toBe(404)
+    const defaultCover = await agent
+      .patch(`/api/albums/${album.docId}/covers/${cover.id}/default`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(defaultCover.status).toBe(404)
+
+    const permanentActive = await agent
+      .delete(`/api/admin/albums/${activeAlbum.docId}/permanent`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(permanentActive.status).toBe(400)
+    await expect(
+      prisma.album.findUnique({ where: { docId: activeAlbum.docId } })
+    ).resolves.toBeTruthy()
+
+    const permanent = await agent
+      .delete(`/api/admin/albums/${album.docId}/permanent`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(permanent.status).toBe(200)
+
+    const duplicatePermanent = await agent
+      .delete(`/api/admin/albums/${album.docId}/permanent`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(duplicatePermanent.status).toBe(404)
+    expect(await prisma.albumCover.count({ where: { albumDocId: album.docId } })).toBe(0)
+  })
 })

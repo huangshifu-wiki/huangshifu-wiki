@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Loader2, Trash2, Star, Upload, X } from '@/src/components/icons'
-import { Checkbox } from '@/src/components/ui'
+import { Checkbox, LoadErrorState } from '@/src/components/ui'
 import { clsx } from 'clsx'
 
 import {
@@ -11,11 +11,16 @@ import {
   invalidateApiCacheByPrefix,
   invalidateMusicApiCaches,
 } from '../lib/apiClient'
+import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import { useDialog } from './Dialog'
 import { useToast } from './Toast'
 import { uploadImageWithStrategy, type UploadImageResult } from '../services/imageService'
-import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/uploadLimits'
-import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import {
+  COVER_IMAGE_ACCEPT,
+  isAllowedCoverImage,
+  UPLOAD_MAX_FILE_SIZE_BYTES,
+  formatUploadLimitWithSize,
+} from '../lib/uploadLimits'
 import { isBackdropClick } from '../utils/modal'
 
 type CoverItem = {
@@ -76,6 +81,7 @@ export const CoverManager = ({
   const config = RESOURCE_CONFIG[resourceType]
   const [covers, setCovers] = useState<CoverItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [uploading, setUploading] = useState(false)
   const [settingDefault, setSettingDefault] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -86,45 +92,60 @@ export const CoverManager = ({
   const { show } = useToast()
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
-  const fetchCovers = React.useCallback(async () => {
-    setLoading(true)
-    try {
-      const response = await apiGet<CoversResponse>(`${config.apiPrefix}/${resourceId}/covers`)
-      const nextCovers = response.covers || []
-      setCovers(nextCovers)
-      setSelectedCoverIds((prev) => {
-        const existingIds = new Set(nextCovers.map((cover) => cover.id))
-        for (const coverId of prev) {
-          if (!existingIds.has(coverId)) {
-            return new Set([...prev].filter((id) => existingIds.has(id)))
+  const fetchCovers = React.useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const response = await apiGet<CoversResponse>(
+          `${config.apiPrefix}/${resourceId}/covers`,
+          undefined,
+          undefined,
+          signal
+        )
+        if (signal?.aborted) return []
+        const nextCovers = response.covers || []
+        setCovers(nextCovers)
+        setSelectedCoverIds((prev) => {
+          const existingIds = new Set(nextCovers.map((cover) => cover.id))
+          for (const coverId of prev) {
+            if (!existingIds.has(coverId)) {
+              return new Set([...prev].filter((id) => existingIds.has(id)))
+            }
           }
+          return prev
+        })
+        return nextCovers
+      } catch (error) {
+        if (!signal?.aborted) {
+          setLoadError(error)
+          console.error('Fetch covers failed:', error)
         }
-        return prev
-      })
-      return nextCovers
-    } catch (error) {
-      console.error('Fetch covers failed:', error)
-      return []
-    } finally {
-      setLoading(false)
-    }
-  }, [config.apiPrefix, resourceId])
+        return []
+      } finally {
+        if (!signal?.aborted) setLoading(false)
+      }
+    },
+    [config.apiPrefix, resourceId]
+  )
 
   const invalidateCoversCache = React.useCallback(() => {
     invalidateApiCacheByPrefix(`${config.apiPrefix}/${resourceId}/covers`)
   }, [config.apiPrefix, resourceId])
 
   React.useEffect(() => {
-    if (open) {
-      fetchCovers()
-    }
+    if (!open) return
+    const controller = new AbortController()
+    void fetchCovers(controller.signal)
+    return () => controller.abort()
   }, [open, fetchCovers])
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      show('请选择图片文件', { variant: 'error' })
+    if (!isAllowedCoverImage(file)) {
+      show('请选择 JPG、PNG、WEBP、GIF 或 BMP 图片', { variant: 'error' })
+      if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
     if (file.size > UPLOAD_MAX_FILE_SIZE_BYTES) {
@@ -142,7 +163,7 @@ export const CoverManager = ({
       await apiPost(`${config.apiPrefix}/${resourceId}/covers`, { assetId: result.assetId })
       show('封面上传成功')
       invalidateMusicApiCaches()
-      fetchCovers()
+      void fetchCovers()
     } catch (error) {
       console.error('Upload cover failed:', error)
       show(error instanceof Error ? error.message : '上传封面失败', { variant: 'error' })
@@ -329,7 +350,7 @@ export const CoverManager = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept={COVER_IMAGE_ACCEPT}
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -370,6 +391,11 @@ export const CoverManager = ({
             <div className="flex items-center justify-center py-8">
               <Loader2 size={22} className="animate-spin text-brand-gold" />
             </div>
+          ) : loadError ? (
+            <LoadErrorState
+              description={loadError instanceof Error ? loadError.message : '获取封面失败'}
+              onRetry={() => void fetchCovers()}
+            />
           ) : covers.length > 0 ? (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">

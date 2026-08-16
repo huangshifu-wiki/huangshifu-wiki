@@ -139,6 +139,63 @@ describe('AlbumFormModal', () => {
     expect(onSuccess).toHaveBeenCalledOnce()
     expect(onClose).toHaveBeenCalledOnce()
   })
+  it('编辑基本信息时保留全部来源元数据', async () => {
+    const user = userEvent.setup()
+    mockedApiPatch.mockResolvedValue({})
+    renderModal({
+      mode: 'edit',
+      album: {
+        docId: 'album-1',
+        title: '旧专辑',
+        artist: '黄诗扶',
+        sources: [
+          {
+            id: 'source-1',
+            resourceType: 'album',
+            platform: 'netease',
+            sourceId: '123',
+            sourceUrl: 'https://custom.example/123',
+            isPrimary: true,
+          },
+          {
+            id: 'source-2',
+            resourceType: 'album',
+            platform: 'netease',
+            sourceId: '456',
+            sourceUrl: 'https://custom.example/456',
+            isPrimary: false,
+          },
+        ],
+      } as unknown as AdminDataItem,
+    })
+
+    await user.type(screen.getByLabelText('专辑简介'), '新增简介')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(mockedApiPatch).toHaveBeenCalledOnce())
+    expect(mockedApiPatch).toHaveBeenCalledWith('/api/albums/album-1', {
+      title: '旧专辑',
+      artist: '黄诗扶',
+      description: '新增简介',
+      releaseDate: null,
+      sources: [
+        {
+          resourceType: 'album',
+          platform: 'netease',
+          sourceId: '123',
+          sourceUrl: 'https://custom.example/123',
+          isPrimary: true,
+        },
+        {
+          resourceType: 'album',
+          platform: 'netease',
+          sourceId: '456',
+          sourceUrl: 'https://custom.example/456',
+          isPrimary: false,
+        },
+      ],
+    })
+  })
 
   it('Esc 关闭提醒弹窗时保存流程继续并给出成功反馈', async () => {
     const user = userEvent.setup()

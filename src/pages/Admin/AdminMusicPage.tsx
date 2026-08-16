@@ -239,37 +239,39 @@ export const AdminMusicPage = () => {
     else await fetchAlbums(undefined, { silent })
   }
 
+  const resetMusicPageParams = (previous: URLSearchParams) => {
+    const next = new URLSearchParams(previous)
+    next.delete('songPage')
+    next.delete('albumPage')
+    return next
+  }
+
   const handleFilterChange = (next: MusicAdminFilterState) => {
     setDraftFilters(next)
-    if (next.query === draftFilters.query) {
-      setAppliedFilters(next)
-      if (tab === 'songs') songPagination.setPage(1)
-      else albumPagination.setPage(1)
-    }
+    if (next.query !== draftFilters.query) return
+
+    setAppliedFilters((previous) => ({ ...next, query: previous.query }))
+    setSearchParams((previous) => resetMusicPageParams(previous))
   }
 
   const handleSearch = () => {
     setAppliedFilters({ ...draftFilters, query: draftFilters.query.trim() })
-    if (tab === 'songs') songPagination.setPage(1)
-    else albumPagination.setPage(1)
+    setSearchParams((previous) => resetMusicPageParams(previous))
   }
 
   const handleReset = () => {
     setDraftFilters(DEFAULT_FILTERS)
     setAppliedFilters(DEFAULT_FILTERS)
-    songPagination.setPage(1)
-    albumPagination.setPage(1)
+    setSearchParams((previous) => resetMusicPageParams(previous))
   }
 
   const handleTabChange = (nextTab: 'songs' | 'albums') => {
     setSearchParams((previous) => {
-      const next = new URLSearchParams(previous)
+      const next = resetMusicPageParams(previous)
       if (nextTab === 'songs') next.delete('musicTab')
       else next.set('musicTab', 'albums')
       return next
     })
-    if (nextTab === 'songs') songPagination.setPage(1)
-    else albumPagination.setPage(1)
   }
 
   const setPending = (id: string, action: AdminResourcePendingAction) => {
@@ -548,6 +550,7 @@ export const AdminMusicPage = () => {
             setSelectedSongIds((previous) => {
               const next = new Set(previous)
               if (selected) next.add(id)
+              else next.delete(id)
               return next
             })
           }
@@ -651,7 +654,21 @@ export const AdminMusicPage = () => {
         resourceId={coverTarget ? itemId(coverTarget.item) : ''}
         currentCover={coverTarget ? text(coverTarget.item.cover, '') : ''}
         onClose={() => setCoverTarget(null)}
-        onCoverUpdated={() => void refreshCurrent()}
+        onCoverUpdated={(cover) => {
+          setCoverTarget((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  item: {
+                    ...previous.item,
+                    cover: cover.url,
+                    coverThumbnail: cover.thumbnailUrl || '',
+                  },
+                }
+              : previous
+          )
+          void refreshCurrent()
+        }}
         onSyncToSongs={() => void refreshCurrent()}
       />
     </div>

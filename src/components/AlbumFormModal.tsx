@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
 
-import { ExternalLink } from '@/src/components/icons'
+import { ExternalLink, Plus, Trash2 } from '@/src/components/icons'
 import { apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import {
   getMusicPlatformLabel,
   getPlatformExternalUrl,
+  isMusicPlatform,
   MUSIC_PLATFORM_OPTIONS,
 } from '../lib/musicPlatformUrls'
 import type { Platform } from '../types/common'
@@ -14,6 +15,7 @@ import type { DuplicateAlbumSourceWarning } from '../types/api'
 import { useDialog } from './Dialog'
 import { useToast } from './Toast'
 import { BookEditorSection, BookFormField, bookCompactInputClass } from './BookEditor'
+import { Button } from '@/src/components/ui'
 import { FormModal } from './Modal/FormModal'
 
 interface AlbumFormData {
@@ -24,8 +26,10 @@ interface AlbumFormData {
 }
 
 interface AlbumSourceDraft {
+  key: string
   platform: Platform
   sourceId: string
+  sourceUrl: string | null
   isPrimary: boolean
 }
 
@@ -46,23 +50,50 @@ const emptyFormData: AlbumFormData = {
 
 const isAlbumSource = (
   value: unknown
-): value is { platform: Platform; sourceId: string; isPrimary?: boolean } => {
+): value is {
+  id?: string
+  platform: Platform
+  sourceId: string
+  sourceUrl?: string | null
+  isPrimary?: boolean
+} => {
   if (!value || typeof value !== 'object') return false
   if (!('platform' in value) || !('sourceId' in value)) return false
   return (
-    MUSIC_PLATFORM_OPTIONS.some((item) => item.value === value.platform) &&
+    typeof value.platform === 'string' &&
+    isMusicPlatform(value.platform) &&
     typeof value.sourceId === 'string'
   )
 }
 
+const createSourceDraft = (key: string, platform: Platform): AlbumSourceDraft => ({
+  key,
+  platform,
+  sourceId: '',
+  sourceUrl: null,
+  isPrimary: false,
+})
+
+const createEmptySources = (): AlbumSourceDraft[] =>
+  MUSIC_PLATFORM_OPTIONS.map(({ value: platform }) =>
+    createSourceDraft(`new-${platform}`, platform)
+  )
+
 const readSources = (album: AdminDataItem | null): AlbumSourceDraft[] => {
   const sourceItems = Array.isArray(album?.sources) ? album.sources : []
-  return MUSIC_PLATFORM_OPTIONS.flatMap(({ value: platform }) => {
-    const source = sourceItems.find((item) => isAlbumSource(item) && item.platform === platform)
-    return source
-      ? [{ platform, sourceId: source.sourceId, isPrimary: source.isPrimary === true }]
-      : []
+  const sources = sourceItems.flatMap((item, index) => {
+    if (!isAlbumSource(item)) return []
+    return [
+      {
+        key: item.id || `${item.platform}-${index}`,
+        platform: item.platform,
+        sourceId: item.sourceId,
+        sourceUrl: item.sourceUrl || null,
+        isPrimary: item.isPrimary === true,
+      },
+    ]
   })
+  return sources.length ? sources : createEmptySources()
 }
 
 export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumFormModalProps) => {
@@ -85,16 +116,47 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
           }
         : { ...emptyFormData }
     )
-    setSources(isEdit ? readSources(album) : [])
+    setSources(isEdit ? readSources(album) : createEmptySources())
     setSaving(false)
   }, [album, isEdit, open])
 
-  const updateSource = (platform: Platform, sourceId: string) => {
-    setSources((previous) => {
-      const next = previous.filter((source) => source.platform !== platform)
-      if (sourceId.trim()) next.push({ platform, sourceId, isPrimary: false })
-      return next
-    })
+  const updateSource = (key: string, sourceId: string) => {
+    setSources((previous) =>
+      previous.map((source) =>
+        source.key === key
+          ? {
+              ...source,
+              sourceId,
+              sourceUrl: source.sourceId.trim() === sourceId.trim() ? source.sourceUrl : null,
+            }
+          : source
+      )
+    )
+  }
+
+  const updateSourcePlatform = (key: string, platform: Platform) => {
+    setSources((previous) =>
+      previous.map((source) =>
+        source.key === key ? { ...source, platform, sourceUrl: null } : source
+      )
+    )
+  }
+
+  const addSource = () => {
+    setSources((previous) => [
+      ...previous,
+      createSourceDraft(`new-${Date.now()}-${previous.length}`, MUSIC_PLATFORM_OPTIONS[0].value),
+    ])
+  }
+
+  const removeSource = (key: string) => {
+    setSources((previous) => previous.filter((source) => source.key !== key))
+  }
+
+  const setPrimarySource = (key: string) => {
+    setSources((previous) =>
+      previous.map((source) => ({ ...source, isPrimary: source.key === key }))
+    )
   }
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -115,7 +177,7 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
         resourceType: 'album' as const,
         platform: source.platform,
         sourceId: source.sourceId.trim(),
-        sourceUrl: null,
+        sourceUrl: source.sourceUrl,
         isPrimary: source.isPrimary,
       }))
       .filter((source) => source.sourceId)
@@ -161,10 +223,7 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
           cancelText: null,
           variant: 'info',
         })
-        // Esc/遮罩关闭弹窗时仍要有成功反馈，避免误判保存失败而重复提交
-        if (!confirmed) {
-          show(isEdit ? '专辑已更新' : '专辑已创建')
-        }
+        if (!confirmed) show(isEdit ? '专辑已更新' : '专辑已创建')
       } else {
         show(isEdit ? '专辑已更新' : '专辑已创建')
       }
@@ -242,38 +301,87 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
       </BookEditorSection>
       <BookEditorSection title="平台来源">
         <div className="space-y-2">
-          {MUSIC_PLATFORM_OPTIONS.map(({ value: platform, label }) => {
-            const sourceId = sources.find((source) => source.platform === platform)?.sourceId || ''
+          {sources.map((source, index) => {
+            const platformOption = MUSIC_PLATFORM_OPTIONS.find(
+              (option) => option.value === source.platform
+            )
+            const platformLabel = platformOption?.label || source.platform
+            const sourceId = source.sourceId.trim()
             return (
               <div
-                key={platform}
-                className="grid grid-cols-[7rem_minmax(0,1fr)_auto] items-center gap-2"
+                key={source.key}
+                className="grid grid-cols-[7rem_minmax(0,1fr)_auto_auto] items-center gap-2"
               >
-                <span className="text-sm text-text-secondary">{label}</span>
+                <select
+                  value={source.platform}
+                  onChange={(event) => {
+                    const option = MUSIC_PLATFORM_OPTIONS.find(
+                      (item) => item.value === event.target.value
+                    )
+                    if (option) updateSourcePlatform(source.key, option.value)
+                  }}
+                  aria-label={`来源平台 ${index + 1}`}
+                  className={bookCompactInputClass}
+                >
+                  {MUSIC_PLATFORM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
                 <input
                   type="text"
-                  value={sourceId}
-                  onChange={(event) => updateSource(platform, event.target.value)}
+                  value={source.sourceId}
+                  onChange={(event) => updateSource(source.key, event.target.value)}
                   maxLength={CONTENT_LIMITS.album.sourceId}
-                  placeholder="输入专辑来源 ID"
+                  placeholder={`${platformLabel} 专辑来源 ID`}
+                  aria-label={`${platformLabel}来源 ID ${index + 1}`}
                   className={bookCompactInputClass}
                 />
-                {sourceId.trim() ? (
+                {sourceId ? (
                   <a
-                    href={getPlatformExternalUrl(platform, sourceId.trim()) || '#'}
+                    href={getPlatformExternalUrl(source.platform, sourceId) || '#'}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="rounded p-2 text-text-muted hover:text-brand-gold"
-                    aria-label={`打开${label}`}
+                    aria-label={`打开${platformLabel}`}
                   >
                     <ExternalLink size={15} />
                   </a>
                 ) : (
                   <span className="h-8 w-8" />
                 )}
+                <div className="flex items-center gap-1">
+                  <label className="flex items-center gap-1 text-xs text-text-muted">
+                    <input
+                      type="radio"
+                      name="album-primary-source"
+                      checked={source.isPrimary}
+                      onChange={() => setPrimarySource(source.key)}
+                    />
+                    主来源
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeSource(source.key)}
+                    aria-label={`删除来源 ${index + 1}`}
+                    leftIcon={<Trash2 size={14} />}
+                  />
+                </div>
               </div>
             )
           })}
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={addSource}
+            leftIcon={<Plus size={14} />}
+          >
+            添加平台来源
+          </Button>
         </div>
       </BookEditorSection>
     </FormModal>

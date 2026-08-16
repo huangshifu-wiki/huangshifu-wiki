@@ -2,7 +2,7 @@ import { describe, beforeEach, afterEach, it, expect } from 'vitest'
 import request from 'supertest'
 import { Prisma } from '@prisma/client'
 import { app } from '../../server'
-import { prisma, createTestUser, nextTestNumericSlug } from './setup'
+import { prisma, createTestPost, createTestUser, nextTestNumericSlug } from './setup'
 import { applyAlbumTracksToRelations } from '../../src/server/utils/music'
 
 function findCookieValue(setCookieHeader: string | string[] | undefined, cookieName: string) {
@@ -29,51 +29,58 @@ async function createAuthenticatedAgent(email: string, password: string) {
   }
 }
 
+const MUSIC_TEST_TITLE_PREFIXES = [
+  'Markdown Description Test Song',
+  'Optional Metadata Test Song',
+  'Artist Partial Search Test Song',
+  'Artist Partial Admin Search Test Song',
+  'Admin Search Desc Test Song',
+  'Admin Search All Mode Test Song',
+  'Display Relation Song',
+  'Paged Music Test Song',
+  '000 Paged Music Test Song',
+  'Release Date Sort Test Song',
+  'Lyric Storage Test Song',
+  'Display Sync Test Song',
+  'Duplicate Relation Test Song',
+  'Lyric Search Contract Song',
+  'Admin List Fields Test Song',
+  'Shared Source Test Song',
+  'Album Admin Bugfix',
+] as const
+
+const ALBUM_TEST_TITLE_PREFIXES = [
+  'Display Relation Album',
+  'Optional Album',
+  'Display Sync Current Album',
+  'Display Sync Other Album',
+  'Album Admin Bugfix',
+  'Duplicate Relation Test Album',
+] as const
+
+const startsWithAny = (prefixes: readonly string[]) =>
+  prefixes.map((title) => ({ title: { startsWith: title } }))
+
+async function cleanupMusicFixtures() {
+  await prisma.musicTrack.deleteMany({
+    where: { OR: startsWithAny(MUSIC_TEST_TITLE_PREFIXES) },
+  })
+  await prisma.post.deleteMany({
+    where: { title: { startsWith: 'Album Admin Bugfix Post' } },
+  })
+  await prisma.album.deleteMany({
+    where: { OR: startsWithAny(ALBUM_TEST_TITLE_PREFIXES) },
+  })
+  await prisma.user.deleteMany({
+    where: { email: { startsWith: 'test_music_desc_' } },
+  })
+}
+
 describe('Music API - 音乐接口测试', () => {
   let adminUser: Awaited<ReturnType<typeof createTestUser>>
 
   beforeEach(async () => {
-    await prisma.musicTrack.deleteMany({
-      where: {
-        OR: [
-          { title: { startsWith: 'Markdown Description Test Song' } },
-          { title: { startsWith: 'Optional Metadata Test Song' } },
-          { title: { startsWith: 'Artist Partial Search Test Song' } },
-          { title: { startsWith: 'Artist Partial Admin Search Test Song' } },
-          { title: { startsWith: 'Display Relation Song' } },
-          { title: { startsWith: 'Paged Music Test Song' } },
-          { title: { startsWith: '000 Paged Music Test Song' } },
-          { title: { startsWith: 'Release Date Sort Test Song' } },
-          { title: { startsWith: 'Lyric Storage Test Song' } },
-          { title: { startsWith: 'Display Sync Test Song' } },
-          { title: { startsWith: 'Duplicate Relation Test Song' } },
-          { title: { startsWith: 'Lyric Search Contract Song' } },
-          { title: { startsWith: 'Admin List Fields Test Song' } },
-          { title: { startsWith: 'Admin Search Desc Test Song' } },
-          { title: { startsWith: 'Admin Search All Mode Test Song' } },
-          { title: { startsWith: 'Shared Source Test Song' } },
-        ],
-      },
-    })
-    await prisma.album.deleteMany({
-      where: {
-        OR: [
-          { title: { startsWith: 'Display Relation Album' } },
-          { title: { startsWith: 'Optional Album' } },
-          { title: { startsWith: 'Display Sync Current Album' } },
-          { title: { startsWith: 'Display Sync Other Album' } },
-          { title: { startsWith: 'Duplicate Relation Test Album' } },
-        ],
-      },
-    })
-    await prisma.user.deleteMany({
-      where: {
-        email: {
-          startsWith: 'test_music_desc_',
-        },
-      },
-    })
-
+    await cleanupMusicFixtures()
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     adminUser = await createTestUser({
       role: 'admin',
@@ -83,46 +90,7 @@ describe('Music API - 音乐接口测试', () => {
   })
 
   afterEach(async () => {
-    await prisma.musicTrack.deleteMany({
-      where: {
-        OR: [
-          { title: { startsWith: 'Markdown Description Test Song' } },
-          { title: { startsWith: 'Optional Metadata Test Song' } },
-          { title: { startsWith: 'Artist Partial Search Test Song' } },
-          { title: { startsWith: 'Artist Partial Admin Search Test Song' } },
-          { title: { startsWith: 'Display Relation Song' } },
-          { title: { startsWith: 'Paged Music Test Song' } },
-          { title: { startsWith: '000 Paged Music Test Song' } },
-          { title: { startsWith: 'Release Date Sort Test Song' } },
-          { title: { startsWith: 'Lyric Storage Test Song' } },
-          { title: { startsWith: 'Display Sync Test Song' } },
-          { title: { startsWith: 'Duplicate Relation Test Song' } },
-          { title: { startsWith: 'Lyric Search Contract Song' } },
-          { title: { startsWith: 'Admin List Fields Test Song' } },
-          { title: { startsWith: 'Admin Search Desc Test Song' } },
-          { title: { startsWith: 'Admin Search All Mode Test Song' } },
-          { title: { startsWith: 'Shared Source Test Song' } },
-        ],
-      },
-    })
-    await prisma.album.deleteMany({
-      where: {
-        OR: [
-          { title: { startsWith: 'Display Relation Album' } },
-          { title: { startsWith: 'Optional Album' } },
-          { title: { startsWith: 'Display Sync Current Album' } },
-          { title: { startsWith: 'Display Sync Other Album' } },
-          { title: { startsWith: 'Duplicate Relation Test Album' } },
-        ],
-      },
-    })
-    await prisma.user.deleteMany({
-      where: {
-        email: {
-          startsWith: 'test_music_desc_',
-        },
-      },
-    })
+    await cleanupMusicFixtures()
   })
 
   it('更新歌曲描述时应保留 Markdown 源文本首尾空白', async () => {
@@ -443,6 +411,239 @@ describe('Music API - 音乐接口测试', () => {
     expect(normalRelation?.isDisplay).toBe(false)
   })
 
+  it('专辑重排与关系增删保留其它 Disc 和自定义名称', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const [album, songOne, songTwo, songThree] = await Promise.all([
+      prisma.album.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: `Album Admin Bugfix ${suffix}`,
+          artist: '测试艺人',
+          tracks: [
+            {
+              disc: 1,
+              name: '主碟',
+              songs: [{ songDocId: 'pending-one', trackOrder: 0 }],
+            },
+            {
+              disc: 2,
+              name: '附碟',
+              songs: [{ songDocId: 'pending-two', trackOrder: 0 }],
+            },
+          ],
+        },
+      }),
+      prisma.musicTrack.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: `Album Admin Bugfix Song One ${suffix}`,
+          artists: ['测试艺人'],
+        },
+      }),
+      prisma.musicTrack.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: `Album Admin Bugfix Song Two ${suffix}`,
+          artists: ['测试艺人'],
+        },
+      }),
+      prisma.musicTrack.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: `Album Admin Bugfix Song Three ${suffix}`,
+          artists: ['测试艺人'],
+        },
+      }),
+    ])
+    await prisma.album.update({
+      where: { docId: album.docId },
+      data: {
+        tracks: [
+          {
+            disc: 1,
+            name: '主碟',
+            songs: [{ songDocId: songOne.docId, trackOrder: 0 }],
+          },
+          {
+            disc: 2,
+            name: '附碟',
+            songs: [{ songDocId: songTwo.docId, trackOrder: 0 }],
+          },
+        ],
+      },
+    })
+    await prisma.songAlbumRelation.createMany({
+      data: [
+        {
+          songDocId: songOne.docId,
+          albumDocId: album.docId,
+          discNumber: 1,
+          trackOrder: 0,
+          isDisplay: true,
+        },
+        {
+          songDocId: songTwo.docId,
+          albumDocId: album.docId,
+          discNumber: 2,
+          trackOrder: 0,
+          isDisplay: false,
+        },
+      ],
+    })
+
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const incomplete = await agent
+      .patch(`/api/albums/${album.docId}/tracks/reorder`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        tracks: [{ disc: 1, name: '主碟', songs: [{ songDocId: songOne.docId, trackOrder: 1 }] }],
+      })
+    expect(incomplete.status).toBe(400)
+
+    const reorder = await agent
+      .patch(`/api/albums/${album.docId}/tracks/reorder`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        tracks: [
+          { disc: 1, name: '主碟', songs: [{ songDocId: songOne.docId, trackOrder: 1 }] },
+          { disc: 2, name: '附碟', songs: [{ songDocId: songTwo.docId, trackOrder: 0 }] },
+        ],
+      })
+    expect(reorder.status).toBe(200)
+
+    const afterReorder = await prisma.album.findUnique({ where: { docId: album.docId } })
+    expect(afterReorder?.tracks).toMatchObject([
+      { disc: 1, name: '主碟' },
+      { disc: 2, name: '附碟' },
+    ])
+    await expect(
+      prisma.songAlbumRelation.findMany({
+        where: { albumDocId: album.docId },
+        orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+      })
+    ).resolves.toMatchObject([
+      { songDocId: songOne.docId, discNumber: 1, trackOrder: 1, isDisplay: true },
+      { songDocId: songTwo.docId, discNumber: 2, trackOrder: 0, isDisplay: false },
+    ])
+
+    const add = await agent
+      .post(`/api/music/${songThree.docId}/albums`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ albumDocId: album.docId, discNumber: 2, trackOrder: 1 })
+    expect(add.status).toBe(201)
+
+    const afterAdd = await request(app).get(`/api/albums/${album.slug}`)
+    expect(afterAdd.status).toBe(200)
+    expect(afterAdd.body.album.discs).toMatchObject([
+      { disc: 1, name: '主碟' },
+      { disc: 2, name: '附碟' },
+    ])
+
+    const remove = await agent
+      .delete(`/api/music/${songThree.docId}/albums/${album.docId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(remove.status).toBe(200)
+    const afterRemove = await request(app).get(`/api/albums/${album.slug}`)
+    expect(afterRemove.body.album.discs).toMatchObject([
+      { disc: 1, name: '主碟' },
+      { disc: 2, name: '附碟' },
+    ])
+  })
+  it('软删除歌曲后专辑计数过滤且拒绝空白标题更新', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const [album, song] = await Promise.all([
+      prisma.album.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: `Album Admin Bugfix Count ${suffix}`,
+          artist: '测试艺人',
+        },
+      }),
+      prisma.musicTrack.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: `Album Admin Bugfix Count Song ${suffix}`,
+          artists: ['测试艺人'],
+        },
+      }),
+    ])
+    await prisma.songAlbumRelation.create({
+      data: {
+        songDocId: song.docId,
+        albumDocId: album.docId,
+        discNumber: 1,
+        trackOrder: 0,
+      },
+    })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const before = await agent.get('/api/albums').query({ limit: 100 })
+    expect(before.status).toBe(200)
+    expect(
+      before.body.albums.find((item: { docId: string }) => item.docId === album.docId)
+    ).toMatchObject({
+      trackCount: 1,
+    })
+
+    await prisma.musicTrack.update({
+      where: { docId: song.docId },
+      data: { deletedAt: new Date() },
+    })
+    const after = await agent.get('/api/albums').query({ limit: 100 })
+    expect(
+      after.body.albums.find((item: { docId: string }) => item.docId === album.docId)
+    ).toMatchObject({
+      trackCount: 0,
+    })
+
+    const blankUpdate = await agent
+      .patch(`/api/albums/${album.docId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ title: '   ' })
+    expect(blankUpdate.status).toBe(400)
+    await expect(prisma.album.findUnique({ where: { docId: album.docId } })).resolves.toMatchObject(
+      {
+        title: `Album Admin Bugfix Count ${suffix}`,
+      }
+    )
+  })
+  it('已删除专辑不再提供关联帖子', async () => {
+    const album = await prisma.album.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: `Album Admin Bugfix Posts ${Date.now()}`,
+        artist: '测试艺人',
+      },
+    })
+    const post = await createTestPost({
+      title: `Album Admin Bugfix Post ${Date.now()}`,
+      authorUid: adminUser.user.uid,
+    })
+    await prisma.post.update({ where: { id: post.id }, data: { albumDocId: album.docId } })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const visible = await agent.get(`/api/albums/${album.docId}/posts`)
+    expect(visible.status).toBe(200)
+    expect(visible.body.posts).toHaveLength(1)
+
+    await prisma.album.update({
+      where: { docId: album.docId },
+      data: { deletedAt: new Date(), deletedBy: adminUser.user.uid },
+    })
+    const hidden = await agent
+      .get(`/api/albums/${album.docId}/posts`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(hidden.status).toBe(404)
+  })
   it('音乐搜索和搜索建议支持艺术家名称部分匹配', async () => {
     const song = await prisma.musicTrack.create({
       data: {

@@ -156,3 +156,46 @@ export const adminBatchMusicDisplaySchema = z
       })
     }
   })
+const adminAlbumTrackSongSchema = z.object({
+  songDocId: z.string({ error: '歌曲 ID 必须是字符串' }).trim().min(1, '歌曲 ID 不能为空').max(191),
+  trackOrder: z.number({ error: '轨序必须是数字' }).int().min(0).max(5000),
+})
+
+const adminAlbumTrackDiscSchema = z.object({
+  disc: z.number({ error: 'Disc 编号必须是数字' }).int().min(1).max(20),
+  name: z
+    .string({ error: 'Disc 名称必须是字符串' })
+    .trim()
+    .min(1, 'Disc 名称不能为空')
+    .max(CONTENT_LIMITS.album.discName),
+  songs: z.array(adminAlbumTrackSongSchema).max(5000),
+})
+
+export const adminAlbumTrackReorderSchema = z
+  .object({
+    tracks: z.array(adminAlbumTrackDiscSchema).max(20),
+  })
+  .superRefine((value, ctx) => {
+    const discs = new Set<number>()
+    const songs = new Set<string>()
+    value.tracks.forEach((disc, discIndex) => {
+      if (discs.has(disc.disc)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tracks', discIndex, 'disc'],
+          message: 'Disc 编号不能重复',
+        })
+      }
+      discs.add(disc.disc)
+      disc.songs.forEach((song, songIndex) => {
+        if (songs.has(song.songDocId)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['tracks', discIndex, 'songs', songIndex, 'songDocId'],
+            message: '歌曲不能重复出现在多个曲目位置',
+          })
+        }
+        songs.add(song.songDocId)
+      })
+    })
+  })

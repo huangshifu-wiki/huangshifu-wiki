@@ -74,6 +74,7 @@ import {
   cleanupUnusedMediaAssetById,
   cleanupUntrackedUploadImageByUrl,
 } from '../services/mediaAssetCleanupService'
+import { deleteMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
 import {
   generateMediaRestoreReport,
   isMediaRestoreReportFilename,
@@ -687,15 +688,22 @@ async function permanentlyDeleteMusicTrackByDocId(docId: string, operatorUid: st
   return true
 }
 
-async function permanentlyDeleteAlbumByDocId(docId: string, operatorUid: string) {
+async function permanentlyDeleteAlbumByDocId(
+  docId: string,
+  operatorUid: string
+): Promise<'not-found' | 'active' | 'deleted'> {
   const album = await prisma.album.findUnique({
     where: { docId },
     include: { covers: true },
   })
-  if (!album) return false
+  if (!album) return 'not-found'
+  if (!album.deletedAt) return 'active'
 
   const assetIds = [...new Set(album.covers.map((cover) => cover.assetId).filter(isString))]
   const coversWithoutAsset = album.covers.filter((cover) => !cover.assetId)
+  const thumbnailUrls = album.covers
+    .map((cover) => cover.thumbnailUrl)
+    .filter((url): url is string => Boolean(url))
 
   await prisma.$transaction(async (tx) => {
     await tx.musicTrack.updateMany({
@@ -720,8 +728,9 @@ async function permanentlyDeleteAlbumByDocId(docId: string, operatorUid: string)
   await Promise.all(
     coversWithoutAsset.map((cover) => cleanupUntrackedUploadImageByUrl(cover.publicUrl))
   )
+  await Promise.all(thumbnailUrls.map((url) => deleteMusicCoverThumbnail(url)))
 
-  return true
+  return 'deleted'
 }
 
 async function permanentlyDeleteImageMapById(id: string, operatorUid: string) {
@@ -3464,6 +3473,14 @@ router.delete(
         return
       }
       if (tab === 'albums') {
+        const album = await prisma.album.findUnique({
+          where: { docId: id },
+          select: { deletedAt: true },
+        })
+        if (!album || album.deletedAt) {
+          res.status(404).json({ error: '专辑不存在' })
+          return
+        }
         await prisma.album.update({ where: { docId: id }, data: softDeleteData(req.authUser!.uid) })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
@@ -3898,9 +3915,13 @@ router.delete(
         return
       }
       if (tab === 'albums') {
-        const deleted = await permanentlyDeleteAlbumByDocId(id, req.authUser!.uid)
-        if (!deleted) {
+        const result = await permanentlyDeleteAlbumByDocId(id, req.authUser!.uid)
+        if (result === 'not-found') {
           res.status(404).json({ error: '专辑不存在' })
+          return
+        }
+        if (result === 'active') {
+          res.status(400).json({ error: '请先软删除专辑' })
           return
         }
         invalidateSoftDeleteCaches(tab)

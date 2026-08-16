@@ -3,7 +3,7 @@ import React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
+import userEvent from '@testing-library/user-event'
 import { DialogProvider } from '../../../src/components/Dialog'
 import { ToastProvider } from '../../../src/components/Toast'
 import { AdminMusicPage } from '../../../src/pages/Admin/AdminMusicPage'
@@ -269,5 +269,51 @@ describe('AdminMusicPage list covers', () => {
     expect(await screen.findByText('获取歌曲列表失败')).toBeInTheDocument()
     expect(screen.getByText('歌曲一')).toBeInTheDocument()
     expect(screen.queryByText('歌曲一（已更新）')).not.toBeInTheDocument()
+  })
+  it('取消歌曲勾选后清除选择状态', async () => {
+    mockedApiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/admin/music') {
+        return {
+          data: [{ docId: 'song-1', title: '歌曲一', artists: ['歌手'] }],
+          total: 1,
+        } as never
+      }
+      if (path === '/api/admin/albums') return { data: [], total: 0 } as never
+      throw new Error(`unexpected apiGet path: ${path}`)
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    const checkbox = await screen.findByRole('checkbox', { name: '选择 歌曲一' })
+    const batchButton = screen.getByRole('button', { name: '批量设置展示' })
+    expect(batchButton).toBeDisabled()
+
+    await user.click(checkbox)
+    expect(batchButton).not.toBeDisabled()
+    await user.click(checkbox)
+    expect(batchButton).toBeDisabled()
+  })
+
+  it('修改非关键词筛选时不会提交未点击搜索的关键词', async () => {
+    const albumCalls: Array<Record<string, unknown> | undefined> = []
+    mockedApiGet.mockImplementation(async (path: string, query?: Record<string, unknown>) => {
+      if (path === '/api/admin/albums') {
+        albumCalls.push(query)
+        return { data: [], total: 0 } as never
+      }
+      if (path === '/api/admin/music') return { data: [], total: 0 } as never
+      throw new Error(`unexpected apiGet path: ${path}`)
+    })
+    const user = userEvent.setup()
+    renderPage('/admin/music?musicTab=albums')
+
+    const queryInput = await screen.findByPlaceholderText('搜索专辑、艺人或简介')
+    await user.type(queryInput, '未提交关键词')
+    await user.selectOptions(screen.getByLabelText('平台'), 'netease')
+
+    await waitFor(() => expect(albumCalls.length).toBeGreaterThan(1))
+    const latestQuery = albumCalls[albumCalls.length - 1]
+    expect(latestQuery).toMatchObject({ platform: 'netease' })
+    expect(latestQuery?.q).toBeUndefined()
   })
 })

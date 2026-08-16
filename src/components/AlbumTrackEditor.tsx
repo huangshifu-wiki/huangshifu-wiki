@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Loader2, Plus, Save, Trash2, X } from '@/src/components/icons'
 import { apiDelete, apiGet, apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import type { AdminDataItem } from '../types/entities'
-import { Button, Dialog, DialogContent, Input, Select } from '@/src/components/ui'
+import { Button, Dialog, DialogContent, Input, LoadErrorState, Select } from '@/src/components/ui'
 import { useToast } from './Toast'
 
 interface EditorSong {
@@ -31,6 +31,49 @@ interface AlbumDetail {
   discs: EditorDisc[]
 }
 
+const normalizeEditorTracks = (rawTracks: unknown): EditorTrack[] => {
+  if (!Array.isArray(rawTracks)) return []
+  return rawTracks.flatMap((item, index) => {
+    if (!item || typeof item !== 'object') return []
+    const record = item as Record<string, unknown>
+    const nestedSong =
+      record.song && typeof record.song === 'object'
+        ? (record.song as Record<string, unknown>)
+        : undefined
+    const songDocId =
+      (typeof record.songDocId === 'string' && record.songDocId) ||
+      (typeof record.docId === 'string' && record.docId) ||
+      (typeof nestedSong?.docId === 'string' && nestedSong.docId)
+    if (!songDocId) return []
+
+    const rawArtists = nestedSong?.artists ?? record.artists
+    const artists = Array.isArray(rawArtists)
+      ? rawArtists.filter((artist): artist is string => typeof artist === 'string')
+      : typeof rawArtists === 'string'
+        ? [rawArtists]
+        : []
+    const title =
+      (typeof nestedSong?.title === 'string' && nestedSong.title) ||
+      (typeof record.title === 'string' && record.title) ||
+      songDocId
+
+    return [
+      {
+        songDocId,
+        trackOrder:
+          typeof record.trackOrder === 'number' && Number.isFinite(record.trackOrder)
+            ? record.trackOrder
+            : index,
+        discNumber:
+          typeof record.discNumber === 'number' && Number.isFinite(record.discNumber)
+            ? record.discNumber
+            : 1,
+        song: { docId: songDocId, title, artists },
+      },
+    ]
+  })
+}
+
 export interface AlbumTrackEditorProps {
   open: boolean
   album: AdminDataItem | null
@@ -40,6 +83,7 @@ export interface AlbumTrackEditorProps {
 
 export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrackEditorProps) => {
   const [detail, setDetail] = useState<AlbumDetail | null>(null)
+  const [detailError, setDetailError] = useState<unknown | null>(null)
   const [songQuery, setSongQuery] = useState('')
   const [songs, setSongs] = useState<AdminDataItem[]>([])
   const [selectedSongDocId, setSelectedSongDocId] = useState('')
@@ -57,6 +101,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
   const fetchDetail = async (signal?: AbortSignal) => {
     if (!albumSlug) return
     setLoading(true)
+    setDetailError(null)
     try {
       const response = await apiGet<{ album: AlbumDetail }>(
         `/api/albums/${albumSlug}`,
@@ -65,10 +110,14 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
         signal
       )
       if (signal?.aborted) return
-      setDetail(response.album)
-      setSelectedDisc(response.album.discs?.[0] ? String(response.album.discs[0].disc) : '')
+      setDetail({ ...response.album, tracks: normalizeEditorTracks(response.album.tracks) })
+      const availableDiscs = response.album.discs?.map((disc) => String(disc.disc)) || []
+      setSelectedDisc((previous) =>
+        previous && availableDiscs.includes(previous) ? previous : availableDiscs[0] || ''
+      )
     } catch (error) {
       if (!signal?.aborted) {
+        setDetailError(error)
         show(error instanceof Error ? error.message : '获取专辑详情失败', { variant: 'error' })
       }
     } finally {
@@ -220,28 +269,23 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
     }
   }
 
-  const handleReorder = async (tracks: EditorTrack[]) => {
-    if (!albumId) return
-    const grouped = new Map<number, EditorTrack[]>()
-    tracks.forEach((track) => {
-      const list = grouped.get(track.discNumber) || []
-      list.push(track)
-      grouped.set(track.discNumber, list)
-    })
-    const payload = [...grouped.entries()]
-      .sort(([left], [right]) => left - right)
-      .map(([disc, items]) => ({
-        disc,
-        name: detail?.discs.find((item) => item.disc === disc)?.name || `Disc ${disc}`,
-        songs: items
-          .sort((left, right) => left.trackOrder - right.trackOrder)
-          .map((item, index) => ({
-            songDocId: item.songDocId,
-            trackOrder: item.trackOrder,
-            song: item.song || undefined,
-            index,
-          })),
-      }))
+  const handleReorder = async (discNumber: number, draftTracks: EditorTrack[]) => {
+    if (!albumId || !detail) return
+    const mergedTracks = [
+      ...detail.tracks.filter((track) => track.discNumber !== discNumber),
+      ...draftTracks.map((track) => ({ ...track, discNumber })),
+    ]
+    const payload = (detail.discs || []).map((disc) => ({
+      disc: disc.disc,
+      name: disc.name || `Disc ${disc.disc}`,
+      songs: mergedTracks
+        .filter((track) => track.discNumber === disc.disc)
+        .sort((left, right) => left.trackOrder - right.trackOrder)
+        .map((item) => ({
+          songDocId: item.songDocId,
+          trackOrder: item.trackOrder,
+        })),
+    }))
     setSaving(true)
     try {
       await apiPatch(`/api/albums/${albumId}/tracks/reorder`, { tracks: payload })
@@ -361,6 +405,11 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
             <div className="flex justify-center py-8">
               <Loader2 size={22} className="animate-spin text-brand-gold" />
             </div>
+          ) : detailError ? (
+            <LoadErrorState
+              description={detailError instanceof Error ? detailError.message : '获取专辑详情失败'}
+              onRetry={() => void fetchDetail()}
+            />
           ) : detail?.discs?.length ? (
             <div className="space-y-3">
               {detail.discs.map((disc) => (
@@ -402,7 +451,7 @@ const DiscSection = ({
   saving: boolean
   onDeleteDisc: () => void
   onDeleteTrack: (track: EditorTrack) => void
-  onSave: (tracks: EditorTrack[]) => Promise<void>
+  onSave: (discNumber: number, tracks: EditorTrack[]) => Promise<void>
 }) => {
   const [expanded, setExpanded] = useState(true)
   const [draftTracks, setDraftTracks] = useState(tracks)
@@ -466,7 +515,7 @@ const DiscSection = ({
                   type="button"
                   variant="secondary"
                   size="sm"
-                  onClick={() => void onSave(draftTracks)}
+                  onClick={() => void onSave(disc.disc, draftTracks)}
                   disabled={saving}
                   leftIcon={<Save size={14} />}
                   aria-label="保存轨序"

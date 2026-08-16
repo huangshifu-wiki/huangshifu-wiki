@@ -1,7 +1,7 @@
 import type { Router } from 'express'
 import { createRouter } from '../utils/typed-router'
 import { requireAdmin } from '../middleware/auth'
-import { adminBatchAlbumCoversSchema, validateBody } from '../schemas'
+import { adminAlbumTrackReorderSchema, adminBatchAlbumCoversSchema, validateBody } from '../schemas'
 import {
   prisma,
   toAlbumResponse,
@@ -147,7 +147,11 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
             orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
           },
           _count: {
-            select: { songRelations: true },
+            select: {
+              songRelations: {
+                where: { song: { deletedAt: null } },
+              },
+            },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -272,6 +276,14 @@ router.get('/:slug', async (req: AuthenticatedRequest, res) => {
 router.get('/:id/posts', async (req: AuthenticatedRequest, res) => {
   try {
     const docId = req.params.id
+    const album = await prisma.album.findUnique({
+      where: { docId },
+      select: { deletedAt: true },
+    })
+    if (!album || album.deletedAt) {
+      res.status(404).json({ error: '专辑不存在' })
+      return
+    }
     const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 })
     const sort = parsePostSort(req.query.sort)
     const visibilityWhere = buildPostVisibilityWhere(req.authUser)
@@ -444,8 +456,22 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
     const body = (req.body || {}) as Record<string, unknown>
     const updateData: Record<string, unknown> = {}
 
-    if (typeof body.title === 'string') updateData.title = body.title.trim()
-    if (typeof body.artist === 'string') updateData.artist = body.artist.trim()
+    if (typeof body.title === 'string') {
+      const title = body.title.trim()
+      if (!title) {
+        res.status(400).json({ error: '专辑标题不能为空' })
+        return
+      }
+      updateData.title = title
+    }
+    if (typeof body.artist === 'string') {
+      const artist = body.artist.trim()
+      if (!artist) {
+        res.status(400).json({ error: '艺人不能为空' })
+        return
+      }
+      updateData.artist = artist
+    }
     if (typeof body.description === 'string' || body.description === null)
       updateData.description = body.description
     if (Object.prototype.hasOwnProperty.call(body, 'releaseDate')) {
@@ -460,17 +486,14 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
       return
     }
 
-    if (body.tracks !== undefined) {
-      const normalizedTracks = normalizeTrackDiscPayload(body.tracks)
+    const normalizedTracks =
+      body.tracks === undefined ? undefined : normalizeTrackDiscPayload(body.tracks)
+    if (normalizedTracks !== undefined) {
       updateData.tracks = normalizedTracks
-      await applyAlbumTracksToRelations(docId, normalizedTracks)
     }
 
     const shouldReplaceSources = Object.prototype.hasOwnProperty.call(body, 'sources')
     const sources = shouldReplaceSources ? normalizeMusicExternalSourceInputs(body.sources) : []
-    // 同一平台 id 可被多张专辑共享，重复时只提醒不拒绝（排除当前专辑自身）；
-    // 检查与写事务互不依赖（写事务只替换当前专辑自身的来源行），并行执行；
-    // 检查失败只丢失提醒，不影响写入与缓存失效
     const duplicateSourcesPromise = shouldReplaceSources
       ? findDuplicateAlbumSources(sources, docId).catch((error) => {
           console.warn('重复来源检查失败，跳过提醒:', error)
@@ -483,6 +506,9 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
           where: { docId },
           data: updateData,
         })
+        if (normalizedTracks !== undefined) {
+          await applyAlbumTracksToRelations(docId, normalizedTracks, tx)
+        }
         if (shouldReplaceSources) {
           await tx.musicExternalSource.deleteMany({
             where: { resourceType: 'album', albumDocId: docId },
@@ -659,6 +685,7 @@ router.post('/:docId/covers', requireAdmin, async (req, res) => {
         sortOrder: cover.sortOrder,
       },
     })
+    invalidateMusicContentCaches()
   } catch (error) {
     console.error('Create album cover error:', error)
     res.status(500).json({ error: '添加专辑封面失败' })
@@ -702,10 +729,17 @@ router.delete(
     }
   }
 )
-
 router.delete('/:docId/covers/:coverId', requireAdmin, async (req, res) => {
   try {
     const { docId: albumDocId, coverId } = req.params
+    const album = await prisma.album.findUnique({
+      where: { docId: albumDocId },
+      select: { deletedAt: true },
+    })
+    if (!album || album.deletedAt) {
+      res.status(404).json({ error: '专辑不存在' })
+      return
+    }
     const deleted = await deleteAlbumCoverById(albumDocId, coverId)
     if (!deleted) {
       res.status(404).json({ error: '封面不存在' })
@@ -724,6 +758,14 @@ router.delete('/:docId/covers/:coverId', requireAdmin, async (req, res) => {
 router.patch('/:docId/covers/:coverId/default', requireAdmin, async (req, res) => {
   try {
     const { docId: albumDocId, coverId } = req.params
+    const album = await prisma.album.findUnique({
+      where: { docId: albumDocId },
+      select: { deletedAt: true },
+    })
+    if (!album || album.deletedAt) {
+      res.status(404).json({ error: '专辑不存在' })
+      return
+    }
     const cover = await prisma.albumCover.findFirst({
       where: {
         id: coverId,
@@ -747,6 +789,7 @@ router.patch('/:docId/covers/:coverId/default', requireAdmin, async (req, res) =
       where: { docId: albumDocId },
       data: { coverId },
     })
+    invalidateMusicContentCaches()
 
     res.json({ success: true })
   } catch (error) {
@@ -811,6 +854,7 @@ router.post('/:docId/sync-covers-to-songs', requireAdmin, async (req, res) => {
         coverAlbumDocId: albumDocId,
       },
     })
+    invalidateMusicContentCaches()
 
     res.json({
       success: true,
@@ -916,30 +960,53 @@ router.delete('/:docId/discs/:discNumber', requireAdmin, async (req, res) => {
 })
 
 // Reorder album tracks
-router.patch('/:docId/tracks/reorder', requireAdmin, async (req, res) => {
-  try {
-    const docId = req.params.docId
-    const album = await prisma.album.findUnique({ where: { docId } })
-    if (!album || album.deletedAt) {
-      res.status(404).json({ error: '专辑不存在' })
-      return
+router.patch(
+  '/:docId/tracks/reorder',
+  requireAdmin,
+  validateBody(adminAlbumTrackReorderSchema),
+  async (req, res) => {
+    try {
+      const docId = req.params.docId
+      const album = await prisma.album.findUnique({
+        where: { docId },
+        select: { deletedAt: true },
+      })
+      if (!album || album.deletedAt) {
+        res.status(404).json({ error: '专辑不存在' })
+        return
+      }
+
+      const tracks = normalizeTrackDiscPayload(req.body.tracks)
+      const currentRelations = await prisma.songAlbumRelation.findMany({
+        where: { albumDocId: docId, song: { deletedAt: null } },
+        select: { songDocId: true },
+      })
+      const currentSongIds = new Set(currentRelations.map((relation) => relation.songDocId))
+      const requestedSongIds = tracks.flatMap((disc) => disc.songs.map((song) => song.songDocId))
+      if (
+        requestedSongIds.length !== currentSongIds.size ||
+        requestedSongIds.some((songDocId) => !currentSongIds.has(songDocId))
+      ) {
+        res.status(400).json({ error: '曲目快照必须包含专辑当前全部歌曲' })
+        return
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.album.update({
+          where: { docId },
+          data: { tracks },
+        })
+        await applyAlbumTracksToRelations(docId, tracks, tx)
+      })
+
+      invalidateMusicContentCaches()
+      res.json({ success: true })
+    } catch (error) {
+      console.error('Reorder album tracks error:', error)
+      res.status(500).json({ error: '重排专辑曲目失败' })
     }
-
-    const tracks = normalizeTrackDiscPayload(req.body?.tracks)
-    await prisma.album.update({
-      where: { docId },
-      data: {
-        tracks,
-      },
-    })
-    await applyAlbumTracksToRelations(docId, tracks)
-
-    res.json({ success: true })
-  } catch (error) {
-    console.error('Reorder album tracks error:', error)
-    res.status(500).json({ error: '重排专辑曲目失败' })
   }
-})
+)
 
 // Sync display to songs
 router.post('/:docId/sync-display-to-songs', requireAdmin, async (req, res) => {

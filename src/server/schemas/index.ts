@@ -37,4 +37,5 @@ export {
   adminBatchAlbumCoversSchema,
   adminBatchEditLocksSchema,
   adminBatchMusicDisplaySchema,
+  adminAlbumTrackReorderSchema,
 } from './admin.schema'

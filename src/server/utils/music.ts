@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import type { MusicPlayableOverride } from '@prisma/client'
 import { prisma, DEFAULT_MUSIC_PLATFORMS, uploadsDir } from './config'
 import { runtimeConfigService } from '../services/runtimeConfig.service'
+import { normalizeTrackDiscPayload, type TrackDiscPayload } from './upload'
 import { enhancedCache, CACHE_KEYS } from './cache'
 import { parseInteger } from './parsers'
 import { withNumericSlugTransaction } from './numericSlug'
@@ -654,88 +655,89 @@ export function buildAlbumTracksPayload(
       title: string
       artists: string[]
     }
-  }>
+  }>,
+  existingTracks?: Prisma.JsonValue
 ) {
   const byDisc = new Map<
     number,
-    Array<{
-      songDocId: string
-      trackOrder: number
-      song: { docId: string; title: string; artists: string[] }
-    }>
+    {
+      name: string
+      songs: Array<{
+        songDocId: string
+        trackOrder: number
+        song: { docId: string; title: string; artists: string[] }
+      }>
+    }
   >()
 
-  relations.forEach((relation) => {
+  for (const disc of normalizeTrackDiscPayload(existingTracks)) {
+    byDisc.set(disc.disc, { name: disc.name, songs: [] })
+  }
+
+  for (const relation of relations) {
     const disc = relation.discNumber > 0 ? relation.discNumber : 1
-    if (!byDisc.has(disc)) {
-      byDisc.set(disc, [])
+    let entry = byDisc.get(disc)
+    if (!entry) {
+      entry = { name: `Disc ${disc}`, songs: [] }
+      byDisc.set(disc, entry)
     }
-    byDisc.get(disc)!.push({
+    entry.songs.push({
       songDocId: relation.songDocId,
       trackOrder: relation.trackOrder,
       song: relation.song,
     })
-  })
+  }
 
   return [...byDisc.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([disc, songs]) => ({
+    .sort(([left], [right]) => left - right)
+    .map(([disc, entry]) => ({
       disc,
-      name: `Disc ${disc}`,
-      songs: songs
-        .sort((a, b) => a.trackOrder - b.trackOrder)
-        .map((entry) => ({
-          songDocId: entry.songDocId,
-          trackOrder: entry.trackOrder,
-          song: entry.song,
-        })),
+      name: entry.name || `Disc ${disc}`,
+      songs: entry.songs.sort((left, right) => left.trackOrder - right.trackOrder),
     }))
 }
 
-/** applyAlbumTracksToRelations 接受的 tracks 参数类型（与 normalizeTrackDiscPayload 返回值一致） */
-export type AlbumTrackDiscPayload = Array<{
-  disc: number
-  name: string
-  songs: Array<{ songDocId: string; trackOrder: number }>
-}>
-
 export async function applyAlbumTracksToRelations(
   albumDocId: string,
-  tracks: AlbumTrackDiscPayload
+  tracks: TrackDiscPayload,
+  db: Prisma.TransactionClient | typeof prisma = prisma
 ) {
-  const existingRelations = await prisma.songAlbumRelation.findMany({
-    where: { albumDocId },
-    select: { songDocId: true, isDisplay: true },
-  })
-  const existingDisplayBySongDocId = new Map(
-    existingRelations.map((relation) => [relation.songDocId, relation.isDisplay])
-  )
-  const createRows: Array<{
-    songDocId: string
-    albumDocId: string
-    discNumber: number
-    trackOrder: number
-    isDisplay: boolean
-  }> = []
+  const sync = async (client: Prisma.TransactionClient | typeof prisma) => {
+    const existingRelations = await client.songAlbumRelation.findMany({
+      where: { albumDocId },
+      select: { songDocId: true, isDisplay: true },
+    })
+    const existingDisplayBySongDocId = new Map(
+      existingRelations.map((relation) => [relation.songDocId, relation.isDisplay])
+    )
+    const createRows: Array<{
+      songDocId: string
+      albumDocId: string
+      discNumber: number
+      trackOrder: number
+      isDisplay: boolean
+    }> = []
 
-  tracks.forEach((discEntry) => {
-    discEntry.songs.forEach((songEntry) => {
-      createRows.push({
-        songDocId: songEntry.songDocId,
-        albumDocId,
-        discNumber: discEntry.disc,
-        trackOrder: songEntry.trackOrder,
-        isDisplay: existingDisplayBySongDocId.get(songEntry.songDocId) ?? false,
+    tracks.forEach((discEntry) => {
+      discEntry.songs.forEach((songEntry) => {
+        createRows.push({
+          songDocId: songEntry.songDocId,
+          albumDocId,
+          discNumber: discEntry.disc,
+          trackOrder: songEntry.trackOrder,
+          isDisplay: existingDisplayBySongDocId.get(songEntry.songDocId) ?? false,
+        })
       })
     })
-  })
 
-  await prisma.$transaction([
-    prisma.songAlbumRelation.deleteMany({ where: { albumDocId } }),
-    ...(createRows.length
-      ? [prisma.songAlbumRelation.createMany({ data: createRows, skipDuplicates: true })]
-      : []),
-  ])
+    await client.songAlbumRelation.deleteMany({ where: { albumDocId } })
+    if (createRows.length) {
+      await client.songAlbumRelation.createMany({ data: createRows, skipDuplicates: true })
+    }
+  }
+
+  if (db === prisma) await prisma.$transaction((tx) => sync(tx))
+  else await sync(db)
 }
 
 export async function addSongCoverFromAsset(

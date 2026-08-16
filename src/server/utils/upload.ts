@@ -22,17 +22,15 @@ import {
 
 // ─── 编辑锁/会话辅助 ────────────────────────────────────────────────
 
-export function normalizeTrackDiscPayload(rawTracks: unknown): Array<{
+export type TrackDiscPayload = Array<{
   disc: number
   name: string
   songs: Array<{ songDocId: string; trackOrder: number }>
-}> {
+}>
+
+export function normalizeTrackDiscPayload(rawTracks: unknown): TrackDiscPayload {
   if (!Array.isArray(rawTracks)) {
-    return [] as Array<{
-      disc: number
-      name: string
-      songs: Array<{ songDocId: string; trackOrder: number }>
-    }>
+    return []
   }
 
   const normalized = rawTracks
