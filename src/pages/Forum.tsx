@@ -52,8 +52,8 @@ import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { PageSkeleton } from '../components/PageSkeleton'
+import { Spinner, TagInput } from '@/src/components/ui'
 import { useTagSuggestions } from '../hooks/useTagSuggestions'
-import { LoadErrorState, Spinner, TagInput } from '@/src/components/ui'
 import { RouteGuard } from '../components/RouteGuard'
 import { CommentActionMenu } from '../components/CommentActionMenu'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
@@ -67,6 +67,8 @@ import MarkdownRenderer from '../components/MarkdownRenderer'
 import MentionTextarea from '../components/MentionTextarea'
 import MentionText from '../components/MentionText'
 import NotFound from './NotFound'
+import { ListPageContentState, ListPageLoadingBoundary } from '../components/ListPageState'
+import { getListLoadState } from '../lib/listLoadState'
 import { ForumFilters } from '../components/Forum/ForumFilters'
 import { PostCard } from '../components/Forum/PostCard'
 import {
@@ -176,18 +178,23 @@ const PostList = () => {
     enabled: !isIncrementalMode,
   })
   const fetchPostPage = useCallback(
-    async (page: number) => {
+    async (page: number, signal?: AbortSignal) => {
       const data = await apiGet<{
         posts: PostItem[]
         total?: number
         totalPages: number
         hasMore?: boolean
-      }>('/api/posts', {
-        section,
-        sort,
-        page,
-        limit: DEFAULT_PAGE_SIZE,
-      })
+      }>(
+        '/api/posts',
+        {
+          section,
+          sort,
+          page,
+          limit: DEFAULT_PAGE_SIZE,
+        },
+        undefined,
+        signal
+      )
 
       return {
         items: data.posts || [],
@@ -230,43 +237,46 @@ const PostList = () => {
       }
     }
 
-    fetchSections()
+    void fetchSections()
   }, [])
 
   useEffect(() => {
     if (isIncrementalMode) return
+    let cancelled = false
+    const abortController = new AbortController()
+
     const fetchPosts = async () => {
       try {
         setLoading(true)
         setLoadError(null)
-        const data = await fetchPostPage(pagination.page)
+        const data = await fetchPostPage(pagination.page, abortController.signal)
+        if (cancelled) return
         setPosts(data.items)
         setTotalPages(data.totalPages)
       } catch (error) {
+        if (cancelled) return
         console.error('Error fetching posts:', error)
         setLoadError(error)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
-    fetchPosts()
+    void fetchPosts()
+
+    return () => {
+      cancelled = true
+      abortController.abort()
+    }
   }, [fetchPostPage, isIncrementalMode, pagination.page, retryNonce])
 
-  const currentLoadError = isIncrementalMode ? incrementalList.initialError : loadError
-  const isInitialLoading = isIncrementalMode
-    ? incrementalList.isInitialLoading && visiblePosts.length === 0
-    : loading && visiblePosts.length === 0
-  const isRefreshing = isIncrementalMode
-    ? incrementalList.isInitialLoading && visiblePosts.length > 0
-    : loading && visiblePosts.length > 0
-  const handleRetry = () => {
-    if (isIncrementalMode) {
-      incrementalList.retry()
-      return
-    }
-    setRetryNonce((value) => value + 1)
-  }
+  const forumState = getListLoadState({
+    items: visiblePosts,
+    loading,
+    error: loadError,
+    retry: () => setRetryNonce((value) => value + 1),
+    incremental: isIncrementalMode ? incrementalList : null,
+  })
 
   const getListUrl = (nextValues: { section?: string; sort?: string }) => {
     const next = new URLSearchParams(searchParams)
@@ -290,109 +300,101 @@ const PostList = () => {
     return query ? `/forum?${query}` : '/forum'
   }
 
-  if (isInitialLoading && visiblePosts.length === 0) {
-    return <PageSkeleton variant="forum" />
-  }
-
   return (
-    <div className="gufeng-forum-page mobile-page-shell">
-      <div className="mobile-page-container" aria-busy={isRefreshing || undefined}>
-        <header className="mobile-page-header">
-          <div className="mobile-page-titlebar">
-            <div className="min-w-0">
-              <h1 className="mobile-page-title">{t('forum.title')}</h1>
-              <div className="mt-3 flex">
-                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+    <ListPageLoadingBoundary variant="forum" isInitialLoading={forumState.isInitialLoading}>
+      <div className="gufeng-forum-page mobile-page-shell">
+        <div className="mobile-page-container" aria-busy={forumState.isRefreshing || undefined}>
+          <header className="mobile-page-header">
+            <div className="mobile-page-titlebar">
+              <div className="min-w-0">
+                <h1 className="mobile-page-title">{t('forum.title')}</h1>
+                <div className="mt-3 flex">
+                  <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+                </div>
+              </div>
+              <div className="mobile-action-row">
+                {forumState.isRefreshing && <Spinner size="sm" label="论坛刷新中" />}
+                {user && !isBanned && (
+                  <Link
+                    to="/forum/new"
+                    data-pressable
+                    className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
+                  >
+                    <Plus size={15} aria-hidden="true" /> {t('forum.newPost')}
+                  </Link>
+                )}
               </div>
             </div>
-            <div className="mobile-action-row">
-              {isRefreshing && <Spinner size="sm" label="论坛刷新中" />}
-              {user && !isBanned && (
-                <Link
-                  to="/forum/new"
-                  data-pressable
-                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
-                >
-                  <Plus size={15} aria-hidden="true" /> {t('forum.newPost')}
-                </Link>
-              )}
-            </div>
-          </div>
-        </header>
+          </header>
 
-        <ForumFilters
-          sections={sections}
-          activeSection={section}
-          activeSort={sort}
-          viewMode={viewMode}
-          getListUrl={getListUrl}
-          onViewModeChange={(mode) => void setScopedViewMode('forum', mode)}
-        />
-        {currentLoadError && visiblePosts.length > 0 && (
-          <LoadErrorState
-            className="py-5"
-            description="当前内容可能不是最新内容。"
-            onRetry={handleRetry}
+          <ForumFilters
+            sections={sections}
+            activeSection={section}
+            activeSort={sort}
+            viewMode={viewMode}
+            getListUrl={getListUrl}
+            onViewModeChange={(mode) => void setScopedViewMode('forum', mode)}
           />
-        )}
 
-        {currentLoadError && visiblePosts.length === 0 ? (
-          <LoadErrorState onRetry={handleRetry} />
-        ) : visiblePosts.length > 0 ? (
-          <>
-            <div
-              className={clsx(
-                viewMode === 'list'
-                  ? 'shared-ink-list'
-                  : clsx(
-                      'mobile-grid grid items-start',
-                      viewMode === 'large' && 'forum-large-grid',
-                      VIEW_MODE_CONFIG[viewMode].gridCols,
-                      VIEW_MODE_CONFIG[viewMode].gap
-                    )
-              )}
-            >
-              {visiblePosts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  viewMode={viewMode}
-                  sectionName={sections.find((s) => s.id === post.section)?.name || post.section}
+          <ListPageContentState
+            hasItems={forumState.items.length > 0}
+            error={forumState.error}
+            onRetry={forumState.retry}
+            empty={
+              <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+                <MessageSquare size={48} className="mx-auto mb-6 text-border" />
+                <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
+                  {t('forum.emptyPosts')}
+                </p>
+              </div>
+            }
+          >
+            <>
+              <div
+                className={clsx(
+                  viewMode === 'list'
+                    ? 'shared-ink-list'
+                    : clsx(
+                        'mobile-grid grid items-start',
+                        viewMode === 'large' && 'forum-large-grid',
+                        VIEW_MODE_CONFIG[viewMode].gridCols,
+                        VIEW_MODE_CONFIG[viewMode].gap
+                      )
+                )}
+              >
+                {visiblePosts.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    viewMode={viewMode}
+                    sectionName={sections.find((s) => s.id === post.section)?.name || post.section}
+                  />
+                ))}
+              </div>
+              {isIncrementalMode ? (
+                <IncrementalLoadFooter
+                  hasMore={incrementalList.hasMore}
+                  loading={incrementalList.loadingMore}
+                  total={incrementalList.total}
+                  pageSize={pagination.pageSize}
+                  loaded={visiblePosts.length}
+                  onLoadMore={incrementalList.loadMore}
+                  sentinelRef={incrementalList.sentinelRef}
+                  error={forumState.loadMoreError ? '加载失败' : undefined}
+                  onRetry={forumState.retry}
                 />
-              ))}
-            </div>
-            {isIncrementalMode ? (
-              <IncrementalLoadFooter
-                hasMore={incrementalList.hasMore}
-                loading={incrementalList.loadingMore}
-                total={incrementalList.total}
-                pageSize={pagination.pageSize}
-                loaded={visiblePosts.length}
-                onLoadMore={incrementalList.loadMore}
-                sentinelRef={incrementalList.sentinelRef}
-                error={
-                  incrementalList.error && !incrementalList.initialError ? '加载失败' : undefined
-                }
-                onRetry={incrementalList.retry}
-              />
-            ) : pagination.hasMultiplePages ? (
-              <Pagination
-                page={pagination.page}
-                totalPages={pagination.totalPages}
-                onPageChange={pagination.handlePageChange}
-              />
-            ) : null}
-          </>
-        ) : (
-          <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
-            <MessageSquare size={48} className="mx-auto mb-6 text-border" />
-            <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
-              {t('forum.emptyPosts')}
-            </p>
-          </div>
-        )}
+              ) : pagination.hasMultiplePages ? (
+                <Pagination
+                  page={pagination.page}
+                  totalPages={pagination.totalPages}
+                  onPageChange={pagination.handlePageChange}
+                />
+              ) : null}
+            </>
+          </ListPageContentState>
+        </div>
       </div>
-    </div>
+    </ListPageLoadingBoundary>
   )
 }
 

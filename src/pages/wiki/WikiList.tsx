@@ -9,13 +9,14 @@ import { apiGet } from '../../lib/apiClient'
 import WikiCard from '../../components/wiki/WikiCard'
 import { WikiFilters } from '../../components/wiki/WikiFilters'
 import Pagination from '../../components/Pagination'
-import { LoadErrorState, Spinner } from '@/src/components/ui'
-import { PageSkeleton } from '../../components/PageSkeleton'
+import { Spinner } from '@/src/components/ui'
+import { ListPageContentState, ListPageLoadingBoundary } from '../../components/ListPageState'
 import { IncrementalLoadFooter } from '../../components/IncrementalLoadFooter'
 import type { WikiItem } from './types'
 import { DEFAULT_PAGE_SIZE } from './types'
 import { useIncrementalListLoader } from '../../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../../hooks/useRoutedPagination'
+import { getListLoadState } from '../../lib/listLoadState'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
@@ -73,9 +74,13 @@ const WikiList = () => {
   })
   const visiblePages = isIncrementalMode ? incrementalList.items : pages
   const visibleTotal = isIncrementalMode ? incrementalList.total : total || 0
-  const isInitialLoading = isIncrementalMode
-    ? incrementalList.isInitialLoading && visiblePages.length === 0
-    : loading && visiblePages.length === 0
+  const wikiState = getListLoadState({
+    items: visiblePages,
+    loading,
+    error: loadError,
+    retry: () => setRetryNonce((value) => value + 1),
+    incremental: isIncrementalMode ? incrementalList : null,
+  })
 
   useEffect(() => {
     if (!isIncrementalMode) return
@@ -109,23 +114,11 @@ const WikiList = () => {
       }
       if (!cancelled) setLoading(false)
     }
-    fetchPages()
+    void fetchPages()
     return () => {
       cancelled = true
     }
   }, [fetchWikiPage, isIncrementalMode, pagination.page, retryNonce])
-
-  const currentLoadError = isIncrementalMode ? incrementalList.initialError : loadError
-  const handleRetry = () => {
-    if (isIncrementalMode) {
-      incrementalList.retry()
-      return
-    }
-    setRetryNonce((value) => value + 1)
-  }
-  const isRefreshing = isIncrementalMode
-    ? incrementalList.isInitialLoading && visiblePages.length > 0
-    : loading && visiblePages.length > 0
 
   const getCategoryUrl = (nextCategory: string) => {
     const params = new URLSearchParams(searchParams)
@@ -139,112 +132,108 @@ const WikiList = () => {
     return query ? `/wiki?${query}` : '/wiki'
   }
 
-  if (isInitialLoading && visiblePages.length === 0) {
-    return <PageSkeleton variant="wiki" />
-  }
-
   return (
-    <div className="gufeng-wiki-page mobile-page-shell">
-      <div className="mobile-page-container" aria-busy={isRefreshing || undefined}>
-        <header className="mobile-page-header">
-          <div className="mobile-page-titlebar">
-            <div className="min-w-0">
-              <h1 className="mobile-page-title">百科</h1>
-              <div className="mt-3 flex">
-                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+    <ListPageLoadingBoundary variant="wiki" isInitialLoading={wikiState.isInitialLoading}>
+      <div className="gufeng-wiki-page mobile-page-shell">
+        <div className="mobile-page-container" aria-busy={wikiState.isRefreshing || undefined}>
+          <header className="mobile-page-header">
+            <div className="mobile-page-titlebar">
+              <div className="min-w-0">
+                <h1 className="mobile-page-title">百科</h1>
+                <div className="mt-3 flex">
+                  <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+                </div>
+              </div>
+              <div className="mobile-action-row">
+                {wikiState.isRefreshing && <Spinner size="sm" label="百科刷新中" />}
+                {user && !isBanned && (
+                  <Link
+                    to="/wiki/new"
+                    data-pressable
+                    className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
+                  >
+                    <Plus size={15} aria-hidden="true" /> 创建页面
+                  </Link>
+                )}
               </div>
             </div>
-            <div className="mobile-action-row">
-              {isRefreshing && <Spinner size="sm" label="百科刷新中" />}
-              {user && !isBanned && (
-                <Link
-                  to="/wiki/new"
-                  data-pressable
-                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
-                >
-                  <Plus size={15} aria-hidden="true" /> 创建页面
-                </Link>
-              )}
-            </div>
-          </div>
-        </header>
+          </header>
 
-        <WikiFilters
-          categories={categories}
-          activeCategory={category}
-          total={visibleTotal}
-          viewMode={viewMode}
-          getCategoryUrl={getCategoryUrl}
-          getCategoryLabel={getCategoryLabel}
-          onViewModeChange={(mode) => void setScopedViewMode('wiki', mode)}
-        />
-        {currentLoadError && visiblePages.length > 0 && (
-          <LoadErrorState
-            className="py-5"
-            description="当前内容可能不是最新内容。"
-            onRetry={handleRetry}
+          <WikiFilters
+            categories={categories}
+            activeCategory={category}
+            total={visibleTotal}
+            viewMode={viewMode}
+            getCategoryUrl={getCategoryUrl}
+            getCategoryLabel={getCategoryLabel}
+            onViewModeChange={(mode) => void setScopedViewMode('wiki', mode)}
           />
-        )}
-        {currentLoadError && visiblePages.length === 0 ? (
-          <LoadErrorState onRetry={handleRetry} />
-        ) : visiblePages.length > 0 ? (
-          <>
-            <div
-              className={clsx(
-                viewMode === 'list'
-                  ? 'flex flex-col gap-0.5'
-                  : clsx(
-                      'mobile-grid grid',
-                      'items-start',
-                      viewMode === 'large' && 'wiki-large-grid',
-                      VIEW_MODE_CONFIG[viewMode].gridCols,
-                      VIEW_MODE_CONFIG[viewMode].gap
-                    )
-              )}
-            >
-              {visiblePages.map((page) => (
-                <WikiCard
-                  key={page.id}
-                  page={page}
-                  viewMode={viewMode}
-                  categoryLabel={getCategoryLabel(page.category)}
+
+          <ListPageContentState
+            hasItems={wikiState.items.length > 0}
+            error={wikiState.error}
+            onRetry={wikiState.retry}
+            staleDescription="当前内容可能不是最新内容。"
+            empty={
+              <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+                <Book size={48} className="mx-auto mb-6 text-border" />
+                <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
+                  暂无相关百科页面
+                </p>
+              </div>
+            }
+          >
+            <>
+              <div
+                className={clsx(
+                  viewMode === 'list'
+                    ? 'flex flex-col gap-0.5'
+                    : clsx(
+                        'mobile-grid grid',
+                        'items-start',
+                        viewMode === 'large' && 'wiki-large-grid',
+                        VIEW_MODE_CONFIG[viewMode].gridCols,
+                        VIEW_MODE_CONFIG[viewMode].gap
+                      )
+                )}
+              >
+                {visiblePages.map((page) => (
+                  <WikiCard
+                    key={page.id}
+                    page={page}
+                    viewMode={viewMode}
+                    categoryLabel={getCategoryLabel(page.category)}
+                  />
+                ))}
+              </div>
+              {isIncrementalMode ? (
+                <IncrementalLoadFooter
+                  hasMore={incrementalList.hasMore}
+                  loading={incrementalList.loadingMore}
+                  total={visibleTotal}
+                  pageSize={pageSize}
+                  loaded={visiblePages.length}
+                  onLoadMore={incrementalList.loadMore}
+                  sentinelRef={incrementalList.sentinelRef}
+                  error={wikiState.loadMoreError ? '加载失败' : undefined}
+                  onRetry={wikiState.retry}
                 />
-              ))}
-            </div>
-            {isIncrementalMode ? (
-              <IncrementalLoadFooter
-                hasMore={incrementalList.hasMore}
-                loading={incrementalList.loadingMore}
-                total={visibleTotal}
-                pageSize={pageSize}
-                loaded={visiblePages.length}
-                onLoadMore={incrementalList.loadMore}
-                sentinelRef={incrementalList.sentinelRef}
-                error={
-                  incrementalList.error && !incrementalList.initialError ? '加载失败' : undefined
-                }
-                onRetry={incrementalList.retry}
-              />
-            ) : pagination.hasMultiplePages ? (
-              <Pagination
-                page={pagination.page}
-                totalPages={pagination.totalPages}
-                onPageChange={pagination.handlePageChange}
-                pageSize={pagination.pageSize}
-                onPageSizeChange={pagination.handlePageSizeChange}
-                pageSizeOptions={PAGE_SIZE_OPTIONS}
-                showPageSizeSelector
-              />
-            ) : null}
-          </>
-        ) : (
-          <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
-            <Book size={48} className="mx-auto mb-6 text-border" />
-            <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">暂无相关百科页面</p>
-          </div>
-        )}
+              ) : pagination.hasMultiplePages ? (
+                <Pagination
+                  page={pagination.page}
+                  totalPages={pagination.totalPages}
+                  onPageChange={pagination.handlePageChange}
+                  pageSize={pagination.pageSize}
+                  onPageSizeChange={pagination.handlePageSizeChange}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
+                  showPageSizeSelector
+                />
+              ) : null}
+            </>
+          </ListPageContentState>
+        </div>
       </div>
-    </div>
+    </ListPageLoadingBoundary>
   )
 }
 

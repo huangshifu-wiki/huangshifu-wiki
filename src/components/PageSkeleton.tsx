@@ -1,17 +1,19 @@
 import React from 'react'
 
-interface PageSkeletonProps {
-  variant?:
-    | 'default'
-    | 'wiki'
-    | 'gallery'
-    | 'music'
-    | 'forum'
-    | 'events'
-    | 'notifications'
-    | 'search'
-    | 'admin'
+export interface PageSkeletonProps {
+  variant?: PageSkeletonVariant
 }
+
+export type PageSkeletonVariant =
+  | 'default'
+  | 'wiki'
+  | 'gallery'
+  | 'music'
+  | 'forum'
+  | 'events'
+  | 'notifications'
+  | 'search'
+  | 'admin'
 
 const SkeletonLine = ({ className }: { className: string }) => (
   <div className={`book-skeleton rounded ${className}`} aria-hidden="true" />

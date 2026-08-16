@@ -6,8 +6,9 @@ import { GalleryCard } from '../components/Gallery/GalleryCard'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import Pagination from '../components/Pagination'
 import { ViewModeSelector } from '../components/ViewModeSelector'
-import { LinkButton, LoadErrorState, Spinner } from '@/src/components/ui'
-import { PageSkeleton } from '../components/PageSkeleton'
+import { LinkButton, Spinner } from '@/src/components/ui'
+import { ListPageContentState, ListPageLoadingBoundary } from '../components/ListPageState'
+import { getListLoadState } from '../lib/listLoadState'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
@@ -112,9 +113,11 @@ const GalleryList = () => {
       }
       try {
         const data = await fetchGalleryPage(galleryPagination.page, options)
+        if (options?.signal?.aborted) return
         setGalleries(data.items)
         setTotalGalleries(data.total)
       } catch (error) {
+        if (options?.signal?.aborted) return
         if (error instanceof DOMException && error.name === 'AbortError') {
           return
         }
@@ -123,7 +126,7 @@ const GalleryList = () => {
           setGalleryLoadError(error)
         }
       } finally {
-        if (!isSilentRefresh) {
+        if (!isSilentRefresh && !options?.signal?.aborted) {
           setLoading(false)
         }
       }
@@ -133,22 +136,27 @@ const GalleryList = () => {
 
   const handleRetry = () => {
     if (isIncrementalMode) {
-      incrementalList.retry()
+      void incrementalList.retry()
       return
     }
     void fetchGalleries()
   }
 
-  const isInitialLoading = isIncrementalMode
-    ? incrementalList.isInitialLoading && visibleGalleries.length === 0
-    : loading && visibleGalleries.length === 0
-  const loadError = isIncrementalMode ? incrementalList.initialError : galleryLoadError
-  const isRefreshing = isIncrementalMode
-    ? incrementalList.isInitialLoading && visibleGalleries.length > 0
-    : loading && visibleGalleries.length > 0
+  const galleryState = getListLoadState({
+    items: visibleGalleries,
+    loading,
+    error: galleryLoadError,
+    retry: handleRetry,
+    incremental: isIncrementalMode ? incrementalList : null,
+  })
 
   useEffect(() => {
-    fetchGalleries()
+    const abortController = new AbortController()
+    void fetchGalleries({ signal: abortController.signal })
+
+    return () => {
+      abortController.abort()
+    }
   }, [fetchGalleries])
 
   useEffect(() => {
@@ -195,104 +203,101 @@ const GalleryList = () => {
     fetchGalleryAccess()
   }, [])
 
-  if (isInitialLoading) {
-    return <PageSkeleton variant="gallery" />
-  }
   return (
-    <div className="gufeng-gallery-page mobile-page-shell">
-      <div className="mobile-page-container gallery-page" aria-busy={isRefreshing || undefined}>
-        <header className="mobile-page-header">
-          <div className="mobile-page-titlebar">
-            <div className="min-w-0">
-              <h1 className="mobile-page-title">画廊</h1>
-              <div className="mt-3 flex">
-                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+    <ListPageLoadingBoundary variant="gallery" isInitialLoading={galleryState.isInitialLoading}>
+      <div className="gufeng-gallery-page mobile-page-shell">
+        <div
+          className="mobile-page-container gallery-page"
+          aria-busy={galleryState.isRefreshing || undefined}
+        >
+          <header className="mobile-page-header">
+            <div className="mobile-page-titlebar">
+              <div className="min-w-0">
+                <h1 className="mobile-page-title">画廊</h1>
+                <div className="mt-3 flex">
+                  <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+                </div>
+              </div>
+              <div className="mobile-action-row">
+                {galleryState.isRefreshing && <Spinner size="sm" label="图集刷新中" />}
+                <ViewModeSelector
+                  value={viewMode}
+                  onChange={(mode) => void setScopedViewMode('gallery', mode)}
+                  size="sm"
+                />
+                {canUpload && (
+                  <LinkButton to="/gallery/new" leftIcon={<Plus size={15} aria-hidden="true" />}>
+                    上传图集
+                  </LinkButton>
+                )}
               </div>
             </div>
-            <div className="mobile-action-row">
-              {isRefreshing && <Spinner size="sm" label="图集刷新中" />}
-              <ViewModeSelector
-                value={viewMode}
-                onChange={(mode) => void setScopedViewMode('gallery', mode)}
-                size="sm"
-              />
-              {canUpload && (
-                <LinkButton to="/gallery/new" leftIcon={<Plus size={15} aria-hidden="true" />}>
-                  上传图集
-                </LinkButton>
-              )}
-            </div>
-          </div>
-        </header>
+          </header>
 
-        {loadError && visibleGalleries.length > 0 && (
-          <LoadErrorState
-            className="py-5"
-            description="当前图集可能不是最新内容。"
-            onRetry={handleRetry}
-          />
-        )}
-        {loadError && visibleGalleries.length === 0 ? (
-          <LoadErrorState onRetry={handleRetry} />
-        ) : visibleGalleries.length > 0 ? (
-          <>
-            <div
-              className={clsx(
-                viewMode === 'list'
-                  ? 'flex flex-col gap-0.5'
-                  : clsx(
-                      'mobile-grid grid',
-                      viewMode === 'large' && 'gallery-large-grid',
-                      VIEW_MODE_CONFIG[viewMode].gridCols,
-                      VIEW_MODE_CONFIG[viewMode].gap
-                    )
-              )}
-            >
-              {visibleGalleries.map((gallery, index) => (
-                <GalleryCard
-                  key={gallery.id}
-                  gallery={gallery}
-                  viewMode={viewMode}
-                  priority={index < 3}
+          <ListPageContentState
+            hasItems={galleryState.items.length > 0}
+            error={galleryState.error}
+            onRetry={galleryState.retry}
+            staleDescription="当前图集可能不是最新内容。"
+            empty={
+              <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+                <ImageIcon size={48} className="mx-auto mb-6 text-border" />
+                <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
+                  暂无图集，快来上传吧！
+                </p>
+              </div>
+            }
+          >
+            <>
+              <div
+                className={clsx(
+                  viewMode === 'list'
+                    ? 'flex flex-col gap-0.5'
+                    : clsx(
+                        'mobile-grid grid',
+                        viewMode === 'large' && 'gallery-large-grid',
+                        VIEW_MODE_CONFIG[viewMode].gridCols,
+                        VIEW_MODE_CONFIG[viewMode].gap
+                      )
+                )}
+              >
+                {visibleGalleries.map((gallery, index) => (
+                  <GalleryCard
+                    key={gallery.id}
+                    gallery={gallery}
+                    viewMode={viewMode}
+                    priority={index < 3}
+                  />
+                ))}
+              </div>
+              {isIncrementalMode ? (
+                <IncrementalLoadFooter
+                  hasMore={incrementalList.hasMore}
+                  loading={incrementalList.loadingMore}
+                  total={visibleTotal || 0}
+                  pageSize={pageSize}
+                  loaded={visibleGalleries.length}
+                  onLoadMore={incrementalList.loadMore}
+                  sentinelRef={incrementalList.sentinelRef}
+                  error={galleryState.loadMoreError ? '加载失败' : undefined}
+                  onRetry={galleryState.retry}
                 />
-              ))}
-            </div>
-            {isIncrementalMode ? (
-              <IncrementalLoadFooter
-                hasMore={incrementalList.hasMore}
-                loading={incrementalList.loadingMore}
-                total={visibleTotal || 0}
-                pageSize={pageSize}
-                loaded={visibleGalleries.length}
-                onLoadMore={incrementalList.loadMore}
-                sentinelRef={incrementalList.sentinelRef}
-                error={
-                  incrementalList.error && !incrementalList.initialError ? '加载失败' : undefined
-                }
-                onRetry={incrementalList.retry}
-              />
-            ) : galleryPagination.hasMultiplePages ? (
-              <Pagination
-                page={galleryPagination.page}
-                totalPages={galleryPagination.totalPages}
-                onPageChange={galleryPagination.handlePageChange}
-                pageSize={galleryPagination.pageSize}
-                onPageSizeChange={galleryPagination.handlePageSizeChange}
-                pageSizeOptions={PAGE_SIZE_OPTIONS}
-                showPageSizeSelector
-              />
-            ) : null}
-          </>
-        ) : (
-          <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
-            <ImageIcon size={48} className="mx-auto mb-6 text-border" />
-            <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
-              暂无图集，快来上传吧！
-            </p>
-          </div>
-        )}
+              ) : galleryPagination.hasMultiplePages ? (
+                <Pagination
+                  page={galleryPagination.page}
+                  totalPages={galleryPagination.totalPages}
+                  onPageChange={galleryPagination.handlePageChange}
+                  pageSize={galleryPagination.pageSize}
+                  onPageSizeChange={galleryPagination.handlePageSizeChange}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
+                  showPageSizeSelector
+                />
+              ) : null}
+            </>
+          </ListPageContentState>
+        </div>
       </div>
-    </div>
+    </ListPageLoadingBoundary>
   )
 }
 

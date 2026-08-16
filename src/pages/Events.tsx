@@ -5,13 +5,14 @@ import { EventCard } from '../components/Events/EventCard'
 import { EventFilters, type EventSortOrder } from '../components/Events/EventFilters'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import Pagination from '../components/Pagination'
-import { LoadErrorState, Spinner } from '@/src/components/ui'
-import { PageSkeleton } from '../components/PageSkeleton'
+import { ListPageContentState, ListPageLoadingBoundary } from '../components/ListPageState'
+import { Spinner } from '@/src/components/ui'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { apiGet } from '../lib/apiClient'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import type { EventListResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
+import { getListLoadState } from '../lib/listLoadState'
 import type { ViewMode } from '../types/userPreferences'
 
 const DEFAULT_PAGE_SIZE = 12
@@ -112,77 +113,80 @@ const Events = () => {
     const query = next.toString()
     return query ? `/events?${query}` : '/events'
   }
-  const isRefreshing = loading && events.length > 0
-
-  if (loading && events.length === 0) return <PageSkeleton variant="events" />
+  const eventsState = getListLoadState({
+    items: events,
+    loading,
+    error: loadError,
+    retry: () => setRetryNonce((value) => value + 1),
+    incremental: null,
+  })
 
   return (
-    <div className="gufeng-events-page mobile-page-shell">
-      <div className="mobile-page-container" aria-busy={isRefreshing || undefined}>
-        <header className="mobile-page-header">
-          <div className="mobile-page-titlebar">
-            <div className="min-w-0">
-              <h1 className="mobile-page-title">游记</h1>
-              <div className="mt-3 flex">
-                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+    <ListPageLoadingBoundary variant="events" isInitialLoading={eventsState.isInitialLoading}>
+      <div className="gufeng-events-page mobile-page-shell">
+        <div className="mobile-page-container" aria-busy={eventsState.isRefreshing || undefined}>
+          <header className="mobile-page-header">
+            <div className="mobile-page-titlebar">
+              <div className="min-w-0">
+                <h1 className="mobile-page-title">游记</h1>
+                <div className="mt-3 flex">
+                  <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+                </div>
               </div>
+              {eventsState.isRefreshing && <Spinner size="sm" label="游记刷新中" />}
             </div>
-            {isRefreshing && <Spinner size="sm" label="游记刷新中" />}
-          </div>
-        </header>
+          </header>
 
-        <EventFilters
-          tags={tags}
-          selectedTag={selectedTag}
-          sortOrder={sortOrder}
-          viewMode={viewMode}
-          getTagUrl={getTagUrl}
-          onSortOrderChange={handleSortOrderChange}
-          onViewModeChange={(mode) => void setScopedViewMode('events', mode)}
-        />
-
-        {loadError && events.length > 0 && (
-          <LoadErrorState
-            className="py-5"
-            description="当前数据可能不是最新内容。"
-            onRetry={() => setRetryNonce((value) => value + 1)}
+          <EventFilters
+            tags={tags}
+            selectedTag={selectedTag}
+            sortOrder={sortOrder}
+            viewMode={viewMode}
+            getTagUrl={getTagUrl}
+            onSortOrderChange={handleSortOrderChange}
+            onViewModeChange={(mode) => void setScopedViewMode('events', mode)}
           />
-        )}
-        {loadError && events.length === 0 ? (
-          <LoadErrorState onRetry={() => setRetryNonce((value) => value + 1)} />
-        ) : events.length > 0 ? (
-          <>
-            <div
-              className={clsx(
-                viewMode === 'list'
-                  ? 'flex flex-col gap-0.5'
-                  : clsx(
-                      'mobile-grid grid',
-                      viewMode === 'large' && 'events-large-grid',
-                      VIEW_MODE_CONFIG[viewMode].gridCols,
-                      VIEW_MODE_CONFIG[viewMode].gap
-                    )
+
+          <ListPageContentState
+            hasItems={eventsState.items.length > 0}
+            error={eventsState.error}
+            onRetry={eventsState.retry}
+            staleDescription="当前数据可能不是最新内容。"
+            empty={
+              <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+                <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">暂无活动</p>
+              </div>
+            }
+          >
+            <>
+              <div
+                className={clsx(
+                  viewMode === 'list'
+                    ? 'flex flex-col gap-0.5'
+                    : clsx(
+                        'mobile-grid grid',
+                        viewMode === 'large' && 'events-large-grid',
+                        VIEW_MODE_CONFIG[viewMode].gridCols,
+                        VIEW_MODE_CONFIG[viewMode].gap
+                      )
+                )}
+              >
+                {events.map((event) => (
+                  <EventCard key={event.id} event={event} viewMode={viewMode} />
+                ))}
+              </div>
+              {hasMultiplePages && (
+                <Pagination
+                  page={page}
+                  totalPages={resolvedTotalPages}
+                  onPageChange={handlePageChange}
+                />
               )}
-            >
-              {events.map((event) => (
-                <EventCard key={event.id} event={event} viewMode={viewMode} />
-              ))}
-            </div>
-            {hasMultiplePages && (
-              <Pagination
-                page={page}
-                totalPages={resolvedTotalPages}
-                onPageChange={handlePageChange}
-              />
-            )}
-          </>
-        ) : (
-          <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
-            <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">暂无活动</p>
-          </div>
-        )}
+            </>
+          </ListPageContentState>
+        </div>
       </div>
-    </div>
+    </ListPageLoadingBoundary>
   )
 }
 

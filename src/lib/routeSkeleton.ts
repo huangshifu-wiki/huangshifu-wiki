@@ -1,8 +1,10 @@
-export type RouteSkeletonVariant = 'default' | 'wiki' | 'gallery' | 'music' | 'forum' | 'events'
+import type { PageSkeletonVariant } from '../components/PageSkeleton'
+
+export type RouteSkeletonVariant = PageSkeletonVariant
 
 const ROUTE_SKELETON_VARIANTS: Array<{
   basePath: string
-  variant: Exclude<RouteSkeletonVariant, 'default'>
+  variant: Extract<PageSkeletonVariant, 'wiki' | 'gallery' | 'music' | 'forum' | 'events'>
 }> = [
   { basePath: '/music', variant: 'music' },
   { basePath: '/gallery', variant: 'gallery' },

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -121,7 +121,7 @@ describe('游记列表加载状态', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '重新加载' }))
 
-    await waitFor(() => expect(screen.getByText('春日现场')).toBeInTheDocument())
+    await screen.findByText('春日现场')
     expect(attempts).toBe(2)
   })
 

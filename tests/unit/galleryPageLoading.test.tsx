@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -10,7 +10,6 @@ import type { GalleryItem } from '../../src/types/entities'
 
 vi.mock('../../src/lib/apiClient', () => ({
   apiGet: vi.fn(),
-  invalidateApiCacheByPrefix: vi.fn(),
 }))
 
 vi.mock('../../src/context/AuthContext', () => ({
@@ -137,7 +136,7 @@ describe('画廊列表加载状态', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '重新加载' }))
 
-    await waitFor(() => expect(screen.getByText('春日图集')).toBeInTheDocument())
+    await screen.findByText('春日图集')
     expect(attempts).toBe(2)
   })
 })
