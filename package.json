@@ -36,7 +36,7 @@
     "test:unit": "NODE_ENV=test vitest run --reporter=dot --silent=passed-only",
     "test:watch": "NODE_ENV=test vitest --reporter=dot --silent=passed-only",
     "test:coverage": "NODE_ENV=test vitest run --coverage --reporter=dot --silent=passed-only",
-    "test:integration": "NODE_ENV=test INTEGRATION_TEST_FAST_BCRYPT=1 DOTENV_CONFIG_QUIET=true vitest run --config vitest.integration.config.ts --reporter=dot",
+    "test:integration": "NODE_ENV=test INTEGRATION_TEST_FAST_BCRYPT=1 DOTENV_CONFIG_QUIET=true vitest run --config vitest.integration.config.ts --reporter=dot --silent=passed-only",
     "test:db:init": "tsx scripts/test-db-init.ts",
     "test:db:cleanup": "tsx scripts/test-db-cleanup.ts",
     "test:db:reset": "tsx scripts/test-db-cleanup.ts --force && tsx scripts/test-db-init.ts",

@@ -26,5 +26,9 @@ export const logger = pino({
  * 运行时调整日志级别（pino 支持动态切换），由 runtimeConfigService 驱动。
  */
 export function setLogLevel(level: 'debug' | 'info' | 'warn' | 'error'): void {
+  if (isTest && !verboseIntegrationLogging) {
+    logger.level = 'error'
+    return
+  }
   logger.level = level
 }

@@ -8,19 +8,23 @@
  * 4. 测试后清理数据库数据
  */
 
-import { beforeAll, afterAll } from 'vitest'
+import { beforeAll, afterAll, beforeEach } from 'vitest'
 import dotenv from 'dotenv'
 import type { SignOptions } from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
 import { getPasswordSaltRounds } from '../../src/server/utils/password'
 import { allocateUserPublicId } from '../../src/server/utils/userPublicId'
+import { setLogLevel } from '../../src/server/utils/logger'
+
+beforeEach(() => {
+  setLogLevel('error')
+})
 
 // 加载测试环境变量
-dotenv.config({ path: '.env.test' })
+dotenv.config({ path: '.env.test', quiet: true })
 
 const verboseIntegrationLogging = process.env.DEBUG_INTEGRATION === '1'
 const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds()
-
 if (!verboseIntegrationLogging) {
   const originalConsoleLog = console.log.bind(console)
   const originalConsoleWarn = console.warn.bind(console)
@@ -33,6 +37,8 @@ if (!verboseIntegrationLogging) {
     '[CloudSync]',
     '[API]',
     '[SensitiveWord]',
+    '[Admin]',
+    '[Admin/RuntimeConfig]',
     '  - ',
   ]
 
@@ -44,23 +50,17 @@ if (!verboseIntegrationLogging) {
   }
 
   console.log = (...args: Parameters<typeof console.log>) => {
-    if (shouldSuppress(args)) {
-      return
-    }
+    if (shouldSuppress(args)) return
     originalConsoleLog(...args)
   }
 
   console.warn = (...args: Parameters<typeof console.warn>) => {
-    if (shouldSuppress(args)) {
-      return
-    }
+    if (shouldSuppress(args)) return
     originalConsoleWarn(...args)
   }
 
   console.error = (...args: Parameters<typeof console.error>) => {
-    if (shouldSuppress(args)) {
-      return
-    }
+    if (shouldSuppress(args)) return
     originalConsoleError(...args)
   }
 }
