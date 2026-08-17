@@ -1550,6 +1550,22 @@ const StringListEditor = ({
   onApplyJson: (field: JsonField, text: string) => string | null
 }) => {
   const inputRefs = useRef<Array<HTMLInputElement | null>>([])
+  const duplicateIndices = new Set<number>()
+  if (field === 'lineup') {
+    const firstIndexByValue = new Map<string, number>()
+    values.forEach((value, index) => {
+      const normalizedValue = value.trim()
+      if (!normalizedValue) return
+      const firstIndex = firstIndexByValue.get(normalizedValue)
+      if (firstIndex === undefined) {
+        firstIndexByValue.set(normalizedValue, index)
+      } else {
+        duplicateIndices.add(firstIndex)
+        duplicateIndices.add(index)
+      }
+    })
+  }
+
   const focusInput = (index: number) => {
     window.requestAnimationFrame(() => inputRefs.current[index]?.focus())
   }
@@ -1573,34 +1589,41 @@ const StringListEditor = ({
     >
       <ListHeader title={title} onAdd={appendItem} />
       <div className="space-y-3">
-        {values.map((value, index) => (
-          <div key={index} className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-            <input
-              ref={(element) => {
-                inputRefs.current[index] = element
-              }}
-              value={value}
-              onChange={(event) =>
-                onChange(
-                  values.map((item, currentIndex) =>
-                    currentIndex === index ? event.target.value : item
+        {values.map((value, index) => {
+          const isDuplicate = duplicateIndices.has(index)
+          return (
+            <div key={index} className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+              <input
+                ref={(element) => {
+                  inputRefs.current[index] = element
+                }}
+                value={value}
+                onChange={(event) =>
+                  onChange(
+                    values.map((item, currentIndex) =>
+                      currentIndex === index ? event.target.value : item
+                    )
                   )
-                )
-              }
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
-                event.preventDefault()
-                insertItem(index + 1)
-              }}
-              placeholder={placeholder}
-              className={bookCompactInputClass}
-            />
-            <IconButton
-              label={`删除${title}`}
-              onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
-            />
-          </div>
-        ))}
+                }
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+                  event.preventDefault()
+                  insertItem(index + 1)
+                }}
+                placeholder={placeholder}
+                className={clsx(
+                  bookCompactInputClass,
+                  isDuplicate &&
+                    '!border-[var(--color-warning)] focus:!border-[var(--color-warning)]'
+                )}
+              />
+              <IconButton
+                label={`删除${title}`}
+                onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
+              />
+            </div>
+          )
+        })}
       </div>
     </JsonEditableSection>
   )
