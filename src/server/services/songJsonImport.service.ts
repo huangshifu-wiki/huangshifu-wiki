@@ -8,6 +8,7 @@ import { enqueueMusicTextEmbeddingsDeferred } from '../vector/textEmbeddingSync'
 import {
   addSongCoverFromUrl,
   autoLinkInstrumental,
+  buildMusicMetadataFillUpdateData,
   enhancedCache,
   normalizeMusicExternalSourceInputs,
   normalizeOptionalDateOnly,
@@ -17,6 +18,7 @@ import {
   withNumericSlugTransaction,
   normalizeLyricStorage,
 } from '../utils'
+import type { MusicMetadataFields } from '../utils'
 import type { MusicPlatform, SongCustomPlatformLink } from '../types'
 
 export type SongDuplicateAction = 'fill' | 'overwrite' | 'skip'
@@ -446,17 +448,18 @@ function hasText(value: string | null | undefined) {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function hasList(value: unknown) {
-  return Array.isArray(value) && value.length > 0
-}
-
 function buildFillUpdateData(input: NormalizedSongJsonInput, existing: SongImportExistingSong) {
-  const data: Prisma.MusicTrackUpdateInput = {}
-
-  if (!hasList(existing.lyricists) && input.lyricists.length) data.lyricists = input.lyricists
-  if (!hasList(existing.composers) && input.composers.length) data.composers = input.composers
-  if (!hasList(existing.arrangers) && input.arrangers.length) data.arrangers = input.arrangers
-  if (!hasList(existing.vocals) && input.vocals.length) data.vocals = input.vocals
+  const data: Prisma.MusicTrackUpdateInput = buildMusicMetadataFillUpdateData(
+    {
+      lyricists: input.lyricists,
+      composers: input.composers,
+      arrangers: input.arrangers,
+      vocals: input.vocals,
+      releaseDate: input.releaseDate,
+      durationMs: input.durationMs,
+    } satisfies MusicMetadataFields,
+    existing
+  )
   if (!hasText(existing.album) && input.album) data.album = input.album
   if (!hasText(existing.audioUrl) && input.audioUrl) data.audioUrl = input.audioUrl
   if (!hasText(existing.lyric) && input.lyric) {
@@ -470,8 +473,6 @@ function buildFillUpdateData(input: NormalizedSongJsonInput, existing: SongImpor
     if (!existing.lyricSource && input.lyricSource) data.lyricSource = input.lyricSource
   }
   if (!hasText(existing.description) && input.description) data.description = input.description
-  if (!existing.releaseDate && input.releaseDate) data.releaseDate = input.releaseDate
-  if (existing.durationMs === null && input.durationMs !== null) data.durationMs = input.durationMs
   if (!existing.customPlatformLinks && input.customPlatformLinks.length) {
     data.customPlatformLinks = toJsonValue(input.customPlatformLinks)
   }

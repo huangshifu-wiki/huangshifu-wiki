@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import path from 'path'
-import os from 'os'
 import {
   addAlbumCoverFromUrl,
   addSongCoverFromUrl,
@@ -9,6 +7,9 @@ import {
 
 const mockLocalizeImageUrlAsMediaAsset = vi.hoisted(() => vi.fn())
 const mockEnqueue = vi.hoisted(() => vi.fn())
+const mockGetMusicTrackMetadata = vi.hoisted(() => vi.fn())
+const mockResolveAudioUrl = vi.hoisted(() => vi.fn())
+const mockResolveLyric = vi.hoisted(() => vi.fn())
 
 const mockPrisma = vi.hoisted(() => ({
   mediaAsset: {
@@ -60,16 +61,20 @@ vi.mock('../../src/server/services/variantGenerator', () => ({
 
 vi.mock('../../src/server/music/metingService', () => ({
   getMusicResourcePreview: vi.fn(),
-  resolveAudioUrl: vi.fn(),
-  resolveLyric: vi.fn(),
+  getMusicTrackMetadata: mockGetMusicTrackMetadata,
+  resolveAudioUrl: mockResolveAudioUrl,
+  resolveLyric: mockResolveLyric,
   resolveCoverUrl: vi.fn(() => 'https://example.com/resolved-cover.jpg'),
 }))
 
 describe('music cover localization', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockLocalizeImageUrlAsMediaAsset.mockResolvedValue({ assetId: 'asset-1' })
     mockEnqueue.mockResolvedValue(undefined)
+    mockLocalizeImageUrlAsMediaAsset.mockResolvedValue({ assetId: 'asset-1' })
+    mockGetMusicTrackMetadata.mockResolvedValue({ releaseDate: null, durationMs: null })
+    mockResolveAudioUrl.mockResolvedValue('')
+    mockResolveLyric.mockResolvedValue('')
     mockPrisma.mediaAsset.findUnique.mockResolvedValue({
       id: 'asset-1',
       storageKey: 'music-covers/songs/cover.jpg',
@@ -308,5 +313,179 @@ describe('music cover localization', () => {
         docId: 'song-1',
       },
     })
+  })
+  it('新建歌曲时写入平台日期、时长和歌词署名', async () => {
+    mockResolveLyric.mockResolvedValue(`[00:00.000] 作词 : 梨衿
+[00:01.000] 作曲 : Soda纯白
+[00:02.000] 编曲 : Soda纯白
+[00:03.000] 演唱 : 李常超 (Lao乾妈)
+[00:25.991]光 是谁燃烛照亮`)
+    mockGetMusicTrackMetadata.mockResolvedValue({
+      releaseDate: '2018-07-31',
+      durationMs: 277350,
+    })
+
+    await createOrUpdateImportedSong({
+      platform: 'netease',
+      track: {
+        sourceId: '1297802566',
+        title: '盗墓笔记·十年人间',
+        artists: ['李常超 (Lao乾妈)'],
+        album: '盗墓笔记·十年人间',
+        picId: '109951163434990771',
+        urlId: '1297802566',
+        lyricId: '1297802566',
+        cover: '',
+        sourceUrl: 'https://music.163.com/#/song?id=1297802566',
+      },
+    })
+
+    expect(mockPrisma.musicTrack.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lyricists: ['梨衿'],
+          composers: ['Soda纯白'],
+          arrangers: ['Soda纯白'],
+          vocals: ['李常超 (Lao乾妈)'],
+          releaseDate: new Date('2018-07-31T00:00:00.000Z'),
+          durationMs: 277350,
+        }),
+      })
+    )
+  })
+
+  it('无演唱署名时为非纯音乐回退使用艺术家', async () => {
+    mockResolveLyric.mockResolvedValue('[00:00]作词: 梨衿\n[00:20]正文歌词')
+
+    await createOrUpdateImportedSong({
+      platform: 'netease',
+      track: {
+        sourceId: 'song-vocal-fallback',
+        title: '歌曲',
+        artists: ['李常超 (Lao乾妈)'],
+        album: '专辑',
+        picId: 'pic-1',
+        urlId: 'url-1',
+        lyricId: 'lyric-1',
+        cover: '',
+        sourceUrl: 'https://music.163.com/#/song?id=song-vocal-fallback',
+      },
+    })
+
+    expect(mockPrisma.musicTrack.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ vocals: ['李常超 (Lao乾妈)'] }),
+      })
+    )
+  })
+
+  it('重复导入时保护已有署名、日期和时长，并补齐空字段', async () => {
+    mockResolveLyric.mockResolvedValue(`[00:00]作词: 新作词
+[00:01]作曲: 新作曲
+[00:02]编曲: 新编曲
+[00:03]演唱: 新演唱`)
+    mockGetMusicTrackMetadata.mockResolvedValue({
+      releaseDate: '2018-07-31',
+      durationMs: 277350,
+    })
+    mockPrisma.musicExternalSource.findMany.mockResolvedValueOnce([
+      {
+        platform: 'netease',
+        sourceId: 'song-1',
+        song: {
+          docId: 'existing-song',
+          title: '旧歌曲',
+          artists: ['旧歌手'],
+          lyricists: ['已有作词'],
+          composers: ['已有作曲'],
+          arrangers: ['已有编曲'],
+          vocals: ['已有演唱'],
+          releaseDate: new Date('2017-01-01T00:00:00.000Z'),
+          durationMs: 1000,
+          deletedAt: null,
+          description: null,
+          coverId: null,
+          coverAlbumDocId: null,
+        },
+      },
+    ])
+
+    await createOrUpdateImportedSong({
+      platform: 'netease',
+      track: {
+        sourceId: 'song-1',
+        title: '歌曲',
+        artists: ['歌手'],
+        album: '专辑',
+        picId: 'pic-1',
+        urlId: 'url-1',
+        lyricId: 'lyric-1',
+        cover: '',
+        sourceUrl: 'https://music.163.com/#/song?id=song-1',
+      },
+    })
+
+    expect(mockPrisma.musicTrack.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.not.objectContaining({
+          lyricists: expect.anything(),
+          composers: expect.anything(),
+          arrangers: expect.anything(),
+          vocals: expect.anything(),
+          releaseDate: expect.anything(),
+          durationMs: expect.anything(),
+        }),
+      })
+    )
+
+    mockPrisma.musicExternalSource.findMany.mockResolvedValueOnce([
+      {
+        platform: 'netease',
+        sourceId: 'song-2',
+        song: {
+          docId: 'empty-song',
+          title: '空歌曲',
+          artists: ['歌手'],
+          lyricists: [],
+          composers: [],
+          arrangers: [],
+          vocals: [],
+          releaseDate: null,
+          durationMs: null,
+          deletedAt: null,
+          description: null,
+          coverId: null,
+          coverAlbumDocId: null,
+        },
+      },
+    ])
+
+    await createOrUpdateImportedSong({
+      platform: 'netease',
+      track: {
+        sourceId: 'song-2',
+        title: '歌曲',
+        artists: ['歌手'],
+        album: '专辑',
+        picId: 'pic-2',
+        urlId: 'url-2',
+        lyricId: 'lyric-2',
+        cover: '',
+        sourceUrl: 'https://music.163.com/#/song?id=song-2',
+      },
+    })
+
+    expect(mockPrisma.musicTrack.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lyricists: ['新作词'],
+          composers: ['新作曲'],
+          arrangers: ['新编曲'],
+          vocals: ['新演唱'],
+          releaseDate: new Date('2018-07-31T00:00:00.000Z'),
+          durationMs: 277350,
+        }),
+      })
+    )
   })
 })

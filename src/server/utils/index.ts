@@ -165,6 +165,7 @@ export {
   setCachedPlayUrl,
   resolveMusicPlayUrl,
   normalizeMusicImportTracks,
+  buildMusicMetadataFillUpdateData,
   buildAlbumTracksPayload,
   applyAlbumTracksToRelations,
   addSongCoverFromAsset,
@@ -179,8 +180,11 @@ export {
   findMusicDocIdsByArtistPartial,
   ensureDisplayRelation,
 } from './music'
-
-export type { DuplicateSongSourceWarning, DuplicateAlbumSourceWarning } from './music'
+export type {
+  DuplicateSongSourceWarning,
+  DuplicateAlbumSourceWarning,
+  MusicMetadataFields,
+} from './music'
 
 // === 通知与用户行为 ===
 export {

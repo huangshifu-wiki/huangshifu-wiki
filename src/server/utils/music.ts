@@ -6,11 +6,18 @@ import { prisma, DEFAULT_MUSIC_PLATFORMS, uploadsDir } from './config'
 import { runtimeConfigService } from '../services/runtimeConfig.service'
 import { normalizeTrackDiscPayload, type TrackDiscPayload } from './upload'
 import { enhancedCache, CACHE_KEYS } from './cache'
-import { parseInteger } from './parsers'
+import { normalizeOptionalDateOnly, parseInteger } from './parsers'
 import { withNumericSlugTransaction } from './numericSlug'
 import { normalizeLyricStorage } from './lyrics'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
-import { firstMusicCredit, normalizeStringListInput } from '../../lib/musicCredits'
+import {
+  extractMusicCreditsFromLyric,
+  firstMusicCredit,
+  normalizeStringListInput,
+  resolveImportedVocals,
+} from '../../lib/musicCredits'
+import type { MusicImportCredits } from '../../lib/musicCredits'
+import type { LyricType } from '../../lib/lrcParser'
 import type {
   MusicPlatform,
   MusicTrackWithRelations,
@@ -22,6 +29,7 @@ import type {
 import { parseMusicUrl, type MusicPlatform as ParsedMusicPlatform } from '../music/musicUrlParser'
 import {
   getMusicResourcePreview,
+  getMusicTrackMetadata,
   resolveAudioUrl as resolveMetingAudioUrl,
   resolveLyric as resolveMetingLyric,
   resolveCoverUrl as resolveMetingCoverUrl,
@@ -898,6 +906,108 @@ async function maybeAddImportedSongCover(songDocId: string, coverUrl: string, ma
     return false
   }
 }
+type ResolvedImportedSongData = {
+  resolvedCover: string
+  resolvedAudioUrl: string
+  resolvedLyric: string
+  lyricStorage: {
+    lyric: string | null
+    lyricType: LyricType | null
+    lyricPlain: string | null
+    lyricSource: MusicPlatform | null
+  }
+  credits: MusicImportCredits
+  releaseDate: string | null
+  durationMs: number | null
+}
+
+async function resolveImportedSongData(
+  platform: MusicPlatform,
+  track: ImportSongInput
+): Promise<ResolvedImportedSongData> {
+  const coverPromise = track.cover
+    ? Promise.resolve(track.cover)
+    : resolveMetingCoverUrl(platform as ParsedMusicPlatform, track.picId, track.cover)
+  const [resolvedCoverRaw, resolvedAudioUrlRaw, resolvedLyricRaw, metadata] = await Promise.all([
+    coverPromise,
+    resolveMetingAudioUrl(platform as ParsedMusicPlatform, track.urlId),
+    resolveMetingLyric(platform as ParsedMusicPlatform, track.lyricId),
+    getMusicTrackMetadata(platform, track.sourceId),
+  ])
+  const resolvedCover = resolvedCoverRaw || track.cover
+  const resolvedAudioUrl = resolvedAudioUrlRaw || ''
+  const resolvedLyric = resolvedLyricRaw || ''
+  const lyricStorage = normalizeLyricStorage({ lyric: resolvedLyric, lyricSource: platform })
+  const credits = extractMusicCreditsFromLyric(resolvedLyric)
+  credits.vocals = resolveImportedVocals(
+    credits.vocals,
+    track.artists,
+    track.isInstrumental === true
+  )
+
+  return {
+    resolvedCover,
+    resolvedAudioUrl,
+    resolvedLyric,
+    lyricStorage: lyricStorage.data,
+    credits,
+    releaseDate: metadata.releaseDate,
+    durationMs: metadata.durationMs,
+  }
+}
+
+export type MusicMetadataFields = {
+  lyricists: string[]
+  composers: string[]
+  arrangers: string[]
+  vocals: string[]
+  releaseDate: Date | null
+  durationMs: number | null
+}
+
+function buildImportedMetadataFields(data: ResolvedImportedSongData): MusicMetadataFields {
+  return {
+    lyricists: data.credits.lyricists,
+    composers: data.credits.composers,
+    arrangers: data.credits.arrangers,
+    vocals: data.credits.vocals,
+    releaseDate: normalizeOptionalDateOnly(data.releaseDate) ?? null,
+    durationMs: data.durationMs,
+  }
+}
+
+export function buildMusicMetadataFillUpdateData(
+  incoming: MusicMetadataFields,
+  existing: Partial<MusicMetadataFields>
+): Prisma.MusicTrackUpdateInput {
+  const updateData: Prisma.MusicTrackUpdateInput = {}
+  if (!existing.lyricists?.length && incoming.lyricists.length) {
+    updateData.lyricists = incoming.lyricists
+  }
+  if (!existing.composers?.length && incoming.composers.length) {
+    updateData.composers = incoming.composers
+  }
+  if (!existing.arrangers?.length && incoming.arrangers.length) {
+    updateData.arrangers = incoming.arrangers
+  }
+  if (!existing.vocals?.length && incoming.vocals.length) {
+    updateData.vocals = incoming.vocals
+  }
+  if (!existing.releaseDate && incoming.releaseDate) {
+    updateData.releaseDate = incoming.releaseDate
+  }
+  if (existing.durationMs == null && incoming.durationMs !== null) {
+    updateData.durationMs = incoming.durationMs
+  }
+  return updateData
+}
+
+function buildImportedMetadataUpdateData(
+  data: ResolvedImportedSongData,
+  existing: Partial<MusicMetadataFields>
+): Prisma.MusicTrackUpdateInput {
+  return buildMusicMetadataFillUpdateData(buildImportedMetadataFields(data), existing)
+}
 
 export async function createOrUpdateImportedSong(params: {
   platform: MusicPlatform
@@ -920,7 +1030,6 @@ export async function createOrUpdateImportedSong(params: {
       song: true,
     },
   })
-
   // 同一 id 可被多首歌共享：仅当恰好一个活歌曲占用时合并导入数据，
   // 多个占用者或没有占用者时新建，避免覆写已人工整理的歌曲；
   // where 已过滤软删除，这里再留一道防御
@@ -934,32 +1043,24 @@ export async function createOrUpdateImportedSong(params: {
     const title = track.title || fallbackTitle
     const artists = track.artists.length ? track.artists : ['未知歌手']
     const album = track.album || albumNameFallback || '未知专辑'
+    const importedData = await resolveImportedSongData(platform, track)
+    const lyricUpdate = importedData.resolvedLyric ? importedData.lyricStorage : {}
+    const metadataUpdate = buildImportedMetadataUpdateData(importedData, existingSong)
 
-    const [resolvedCoverRaw, resolvedAudioUrlRaw, resolvedLyricRaw] = await Promise.all([
-      resolveMetingCoverUrl(platform as ParsedMusicPlatform, track.picId, track.cover),
-      resolveMetingAudioUrl(platform as ParsedMusicPlatform, track.urlId),
-      resolveMetingLyric(platform as ParsedMusicPlatform, track.lyricId),
-    ])
-    const resolvedCover = resolvedCoverRaw || track.cover
-    const resolvedAudioUrl = resolvedAudioUrlRaw || ''
-    const resolvedLyric = resolvedLyricRaw || ''
-
-    const lyricUpdate = resolvedLyric
-      ? normalizeLyricStorage({ lyric: resolvedLyric, lyricSource: platform }).data
-      : {}
     const song = await prisma.musicTrack.update({
       where: { docId: existingSong.docId },
       data: {
         title,
         artists,
         album,
-        audioUrl: resolvedAudioUrl || '',
+        audioUrl: importedData.resolvedAudioUrl,
         ...lyricUpdate,
+        ...metadataUpdate,
         description: existingSong.description ?? null,
       },
     })
-    if (resolvedCover && !existingSong.coverId && !existingSong.coverAlbumDocId) {
-      await maybeAddImportedSongCover(song.docId, resolvedCover, true)
+    if (importedData.resolvedCover && !existingSong.coverId && !existingSong.coverAlbumDocId) {
+      await maybeAddImportedSongCover(song.docId, importedData.resolvedCover, true)
     }
     enqueueMusicTextEmbeddingsDeferred(prisma, [song.docId])
     return {
@@ -984,31 +1085,29 @@ export async function createOrUpdateImportedSong(params: {
     },
   })
 
-  const [resolvedCoverRaw, resolvedAudioUrlRaw, resolvedLyricRaw] = await Promise.all([
-    resolveMetingCoverUrl(platform as ParsedMusicPlatform, track.picId, track.cover),
-    resolveMetingAudioUrl(platform as ParsedMusicPlatform, track.urlId),
-    resolveMetingLyric(platform as ParsedMusicPlatform, track.lyricId),
-  ])
-  const resolvedCover = resolvedCoverRaw || track.cover
-  const resolvedAudioUrl = resolvedAudioUrlRaw || ''
-  const resolvedLyric = resolvedLyricRaw || ''
-  const lyricStorage = normalizeLyricStorage({ lyric: resolvedLyric, lyricSource: platform })
-  const lyricUpdate = resolvedLyric ? lyricStorage.data : {}
+  const importedData = await resolveImportedSongData(platform, track)
+  const lyricUpdate = importedData.resolvedLyric ? importedData.lyricStorage : {}
 
   if (existingByTitleArtist) {
+    const metadataUpdate = buildImportedMetadataUpdateData(importedData, existingByTitleArtist)
     const updatedSong = await prisma.musicTrack.update({
       where: { docId: existingByTitleArtist.docId },
       data: {
         title,
         artists,
         album,
-        audioUrl: resolvedAudioUrl || '',
+        audioUrl: importedData.resolvedAudioUrl,
         ...lyricUpdate,
+        ...metadataUpdate,
         description: existingByTitleArtist.description ?? null,
       },
     })
-    if (resolvedCover && !existingByTitleArtist.coverId && !existingByTitleArtist.coverAlbumDocId) {
-      await maybeAddImportedSongCover(updatedSong.docId, resolvedCover, true)
+    if (
+      importedData.resolvedCover &&
+      !existingByTitleArtist.coverId &&
+      !existingByTitleArtist.coverAlbumDocId
+    ) {
+      await maybeAddImportedSongCover(updatedSong.docId, importedData.resolvedCover, true)
     }
     await prisma.musicExternalSource.create({
       data: {
@@ -1033,6 +1132,7 @@ export async function createOrUpdateImportedSong(params: {
     }
   }
 
+  const metadataData = buildImportedMetadataFields(importedData)
   const song = await withNumericSlugTransaction(prisma, 'MusicTrack', async (tx, slug) => {
     return tx.musicTrack.create({
       data: {
@@ -1040,8 +1140,9 @@ export async function createOrUpdateImportedSong(params: {
         title,
         artists,
         album,
-        audioUrl: resolvedAudioUrl || '',
-        ...lyricStorage.data,
+        audioUrl: importedData.resolvedAudioUrl,
+        ...importedData.lyricStorage,
+        ...metadataData,
         description: null,
         externalSources: {
           create: {
@@ -1055,8 +1156,8 @@ export async function createOrUpdateImportedSong(params: {
       },
     })
   })
-  if (resolvedCover) {
-    await maybeAddImportedSongCover(song.docId, resolvedCover, true)
+  if (importedData.resolvedCover) {
+    await maybeAddImportedSongCover(song.docId, importedData.resolvedCover, true)
   }
 
   await autoLinkInstrumental(song.docId, title, primaryArtist, track.isInstrumental)
