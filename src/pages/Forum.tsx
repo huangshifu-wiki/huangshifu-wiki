@@ -1440,8 +1440,11 @@ const PostEditor = () => {
 
       const data =
         isEditing && editablePostId
-          ? await apiPut<{ post: PostItem }>(`/api/posts/${editablePostId}`, payload)
-          : await apiPost<{ post: PostItem }>('/api/posts', payload)
+          ? await apiPut<{ post: PostItem & { slug: string } }>(
+              `/api/posts/${editablePostId}`,
+              payload
+            )
+          : await apiPost<{ post: PostItem & { slug: string } }>('/api/posts', payload)
 
       const savedPost = data.post
 
@@ -1453,9 +1456,11 @@ const PostEditor = () => {
         show(t('forum.draftSaved'))
       }
 
-      if (isEditing || savedPost.status === 'pending' || savedPost.status === 'published') {
-        invalidateApiCacheByPrefix('/api/posts')
-        redirectTarget = `/forum/${savedPost.slug || savedPost.id}`
+      invalidateApiCacheByPrefix('/api/posts')
+      if (!isEditing && savedPost.status === 'draft') {
+        redirectTarget = `/forum/${savedPost.slug}/edit`
+      } else if (isEditing || savedPost.status === 'pending' || savedPost.status === 'published') {
+        redirectTarget = `/forum/${savedPost.slug}`
       }
     } catch (error) {
       console.error('Error saving post:', error)
