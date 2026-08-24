@@ -156,7 +156,7 @@ export default function UserProfile() {
   const contentScopeRef = useRef<string | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [contentLoading, setContentLoading] = useState(false)
-  const [contentError, setContentError] = useState(false)
+  const [contentError, setContentError] = useState<unknown | null>(null)
   const [contentRetry, setContentRetry] = useState(0)
   const [profileRetry, setProfileRetry] = useState(0)
   const [error, setError] = useState('')
@@ -332,7 +332,7 @@ export default function UserProfile() {
     if (!userId || !profileLoaded) return
     if (activeTab === 'profile') {
       setContentLoading(false)
-      setContentError(false)
+      setContentError(null)
       setContentTotal(undefined)
       return
     }
@@ -340,7 +340,7 @@ export default function UserProfile() {
     let cancelled = false
     const run = async () => {
       setContentLoading(true)
-      setContentError(false)
+      setContentError(null)
       try {
         if (activeTab === 'posts') {
           const data = await apiGet<{ posts: PostItem[]; total: number }>(
@@ -404,7 +404,7 @@ export default function UserProfile() {
         }
       } catch (err) {
         console.error('Fetch public profile content error:', err)
-        if (!cancelled) setContentError(true)
+        if (!cancelled) setContentError(err)
       } finally {
         if (!cancelled) setContentLoading(false)
       }
@@ -654,7 +654,10 @@ export default function UserProfile() {
 
         <div aria-busy={contentLoading}>
           {contentError && (
-            <LoadErrorState onRetry={() => setContentRetry((current) => current + 1)} />
+            <LoadErrorState
+              error={contentError}
+              onRetry={() => setContentRetry((current) => current + 1)}
+            />
           )}
           {contentLoading && activeContentHasItems && (
             <div className="mb-3 flex justify-end">

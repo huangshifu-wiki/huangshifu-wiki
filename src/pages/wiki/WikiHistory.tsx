@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { formatDate } from '../../lib/dateUtils'
 import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
@@ -30,7 +31,7 @@ const WikiHistory = () => {
     enabled: Boolean(slug),
   })
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [selectedRevision, setSelectedRevision] = useState<WikiRevisionItem | null>(null)
   const previewPresence = useFloatingPresence(Boolean(selectedRevision))
   const lastSelectedRevisionRef = useRef<WikiRevisionItem | null>(null)
@@ -50,7 +51,7 @@ const WikiHistory = () => {
   const fetchHistory = async () => {
     const requestId = ++historyRequestIdRef.current
     setLoading(true)
-    setLoadError(false)
+    setLoadError(null)
     try {
       const data = await apiGet<WikiRevisionListResponse>(`/api/wiki/${slug}/history`, {
         page: pagination.page,
@@ -62,7 +63,7 @@ const WikiHistory = () => {
     } catch (error) {
       if (requestId !== historyRequestIdRef.current) return
       console.error('Error fetching history:', error)
-      setLoadError(true)
+      setLoadError(error)
     } finally {
       if (requestId === historyRequestIdRef.current) setLoading(false)
     }
@@ -88,7 +89,7 @@ const WikiHistory = () => {
       setSelectedRevision(data.revision)
     } catch (e) {
       console.error('Error fetching revision:', e)
-      show('加载修订版本失败', { variant: 'error' })
+      show(getErrorMessage(e, '加载修订版本失败'), { variant: 'error' })
     }
     setLoadingRevision(false)
   }
@@ -111,7 +112,7 @@ const WikiHistory = () => {
       navigate(`/wiki/${slug}`)
     } catch (e) {
       console.error('Rollback error:', e)
-      show('回滚失败', { variant: 'error' })
+      show(getErrorMessage(e, '回滚失败'), { variant: 'error' })
     }
   }
 
@@ -143,7 +144,9 @@ const WikiHistory = () => {
                   <Spinner size="sm" label="历史记录刷新中" />
                 </div>
               )}
-              {loadError && <LoadErrorState onRetry={() => void fetchHistory()} />}
+              {loadError && (
+                <LoadErrorState error={loadError} onRetry={() => void fetchHistory()} />
+              )}
               {loadError && revisions.length === 0 ? null : revisions.length > 0 ? (
                 <div className="space-y-4">
                   {revisions.map((rev, i) => (

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { apiGet, apiPost } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { clsx } from 'clsx'
@@ -79,8 +80,8 @@ export default function AdminMarkdownLinks() {
       const result = await apiGet<ScanResult>('/api/admin/wiki-links/scan')
       setScanResult(result)
       show('扫描完成', { variant: 'success' })
-    } catch {
-      show('扫描失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '扫描失败'), { variant: 'error' })
     } finally {
       setScanning(false)
     }
@@ -97,8 +98,8 @@ export default function AdminMarkdownLinks() {
       const result = await apiPost<any[]>('/api/admin/wiki-links/preview', { mappings: valid })
       setPreviewResult(result)
       show('预览完成', { variant: 'success' })
-    } catch {
-      show('预览失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '预览失败'), { variant: 'error' })
     } finally {
       setPreviewing(false)
     }
@@ -127,8 +128,8 @@ export default function AdminMarkdownLinks() {
       })
       setUpdateResult(result)
       show(dryRun ? '预览更新完成' : '更新完成', { variant: 'success' })
-    } catch {
-      show('更新失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '更新失败'), { variant: 'error' })
     } finally {
       setUpdating(false)
     }
@@ -158,8 +159,8 @@ export default function AdminMarkdownLinks() {
       })
       setUpdateResult(result)
       show(dryRun ? '预览切换完成' : '切换完成', { variant: 'success' })
-    } catch {
-      show('切换失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '切换失败'), { variant: 'error' })
     } finally {
       setUpdating(false)
     }
@@ -180,8 +181,8 @@ export default function AdminMarkdownLinks() {
       const result = await apiPost<any>('/api/admin/wiki-links/sync-with-imagemap', { dryRun })
       if (result.result) setUpdateResult(result.result)
       show(result.message || (dryRun ? '预览同步完成' : '同步完成'), { variant: 'success' })
-    } catch {
-      show('同步失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '同步失败'), { variant: 'error' })
     } finally {
       setUpdating(false)
     }

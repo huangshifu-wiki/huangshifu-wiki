@@ -33,7 +33,7 @@ export function IncrementalLoadFooter({
       </p>
       {error ? (
         <div className="flex flex-col items-center gap-2" role="alert">
-          <span className="text-[0.8125rem] text-error">加载失败，请重试</span>
+          <span className="text-[0.8125rem] text-error">{error}</span>
           {onRetry && (
             <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
               重新加载

@@ -11,6 +11,7 @@ import {
 import { clsx } from 'clsx'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiGet, apiPost } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import { getNotificationLink, getNotificationText } from '../lib/notifications'
 import Pagination from '../components/Pagination'
@@ -355,12 +356,13 @@ const Notifications = () => {
           {currentLoadError && visibleNotifications.length > 0 && (
             <LoadErrorState
               className="py-5"
+              error={currentLoadError}
               description="当前通知可能不是最新内容。"
               onRetry={handleRetry}
             />
           )}
           {currentLoadError && visibleNotifications.length === 0 ? (
-            <LoadErrorState onRetry={handleRetry} />
+            <LoadErrorState error={currentLoadError} onRetry={handleRetry} />
           ) : isInitialLoading ? (
             <div className="flex items-center justify-center py-20">
               <Spinner size="lg" label="通知加载中" />
@@ -446,7 +448,11 @@ const Notifications = () => {
             loaded={visibleNotifications.length}
             onLoadMore={incrementalList.loadMore}
             sentinelRef={incrementalList.sentinelRef}
-            error={incrementalList.error && !incrementalList.initialError ? '加载失败' : undefined}
+            error={
+              incrementalList.error && !incrementalList.initialError
+                ? getErrorMessage(incrementalList.error, '加载失败，请重试')
+                : undefined
+            }
             onRetry={incrementalList.retry}
           />
         ) : pagination.hasMultiplePages ? (

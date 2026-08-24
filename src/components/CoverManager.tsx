@@ -11,6 +11,7 @@ import {
   invalidateApiCacheByPrefix,
   invalidateMusicApiCaches,
 } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import { useDialog } from './Dialog'
 import { useToast } from './Toast'
@@ -166,7 +167,7 @@ export const CoverManager = ({
       void fetchCovers()
     } catch (error) {
       console.error('Upload cover failed:', error)
-      show(error instanceof Error ? error.message : '上传封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '上传封面失败'), { variant: 'error' })
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -189,7 +190,7 @@ export const CoverManager = ({
       invalidateMusicApiCaches()
     } catch (error) {
       console.error('Set default cover failed:', error)
-      show('设置默认封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '设置默认封面失败'), { variant: 'error' })
     } finally {
       setSettingDefault(null)
     }
@@ -225,7 +226,7 @@ export const CoverManager = ({
       invalidateMusicApiCaches()
     } catch (error) {
       console.error('Delete cover failed:', error)
-      show('删除封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '删除封面失败'), { variant: 'error' })
     } finally {
       setDeleting(null)
     }
@@ -277,7 +278,7 @@ export const CoverManager = ({
       invalidateMusicApiCaches()
     } catch (error) {
       console.error('Batch delete covers failed:', error)
-      show(error instanceof Error ? error.message : '批量删除封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '批量删除封面失败'), { variant: 'error' })
     } finally {
       setBatchDeleting(false)
     }
@@ -298,7 +299,7 @@ export const CoverManager = ({
       onSyncToSongs?.()
     } catch (error) {
       console.error('Sync covers to songs failed:', error)
-      show('同步封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '同步封面失败'), { variant: 'error' })
     }
   }
 
@@ -393,7 +394,8 @@ export const CoverManager = ({
             </div>
           ) : loadError ? (
             <LoadErrorState
-              description={loadError instanceof Error ? loadError.message : '获取封面失败'}
+              error={loadError}
+              description="获取封面失败"
               onRetry={() => void fetchCovers()}
             />
           ) : covers.length > 0 ? (

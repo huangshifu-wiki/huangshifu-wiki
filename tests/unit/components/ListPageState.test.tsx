@@ -34,7 +34,7 @@ describe('ListPageContentState', () => {
       </ListPageContentState>
     )
 
-    expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('failed')
     expect(screen.getByRole('button', { name: '重新加载' })).toBeInTheDocument()
     expect(screen.queryByText('空数据')).not.toBeInTheDocument()
   })
@@ -52,7 +52,7 @@ describe('ListPageContentState', () => {
       </ListPageContentState>
     )
 
-    expect(screen.getByText('数据可能已过期')).toBeInTheDocument()
+    expect(screen.getByText('stale')).toBeInTheDocument()
     expect(screen.getByText('列表内容')).toBeInTheDocument()
     expect(screen.queryByText('空数据')).not.toBeInTheDocument()
   })

@@ -109,6 +109,7 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
       {loadError && data.length > 0 && (
         <LoadErrorState
           className="py-5"
+          error={loadError}
           description="当前日志列表可能不是最新内容。"
           onRetry={() => void fetchData()}
         />
@@ -129,7 +130,7 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
             {loadError && data.length === 0 ? (
               <tr>
                 <TableCell colSpan={5}>
-                  <LoadErrorState onRetry={() => void fetchData()} />
+                  <LoadErrorState error={loadError} onRetry={() => void fetchData()} />
                 </TableCell>
               </tr>
             ) : data.length > 0 ? (

@@ -122,7 +122,7 @@ const MusicDetail = () => {
   const [song, setSong] = useState<SongItem | null>(null)
   const [posts, setPosts] = useState<PostItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [descExpanded, setDescExpanded] = useState(false)
   const [lyricsExpanded, setLyricsExpanded] = useState(false)
   const [lyricsCopied, setLyricsCopied] = useState(false)
@@ -145,7 +145,7 @@ const MusicDetail = () => {
   const fetchData = async () => {
     if (!songId) return
     setLoading(true)
-    setLoadError(false)
+    setLoadError(null)
     try {
       const detail = await apiGet<SongDetailResponse>(`/api/music/${songId}`)
       const currentSong = detail.song || null
@@ -164,7 +164,7 @@ const MusicDetail = () => {
       }
     } catch (error) {
       console.error('Fetch song detail failed:', error)
-      setLoadError(true)
+      setLoadError(error)
     } finally {
       setLoading(false)
     }
@@ -248,7 +248,7 @@ const MusicDetail = () => {
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
           />
           {loadError ? (
-            <LoadErrorState className="mt-8" onRetry={() => void fetchData()} />
+            <LoadErrorState error={loadError} className="mt-8" onRetry={() => void fetchData()} />
           ) : (
             <div className="mt-8 py-16 text-center">
               <p className="text-[0.9rem] tracking-[0.08em] text-text-muted">
@@ -284,7 +284,9 @@ const MusicDetail = () => {
           fallbackLabel="返回音乐馆"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
         />
-        {loadError && <LoadErrorState className="mb-6" onRetry={() => void fetchData()} />}
+        {loadError && (
+          <LoadErrorState error={loadError} className="mb-6" onRetry={() => void fetchData()} />
+        )}
 
         <div className="mobile-detail-grid">
           {/* Main Content */}

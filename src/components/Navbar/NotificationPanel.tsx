@@ -173,6 +173,7 @@ export const NotificationPanel = React.memo(({ onNavigate }: NotificationPanelPr
           ) : notifLoadError ? (
             <LoadErrorState
               className="px-4 py-6"
+              error={notifLoadError}
               description="通知暂时无法加载。"
               onRetry={() => void fetchNotifications()}
             />

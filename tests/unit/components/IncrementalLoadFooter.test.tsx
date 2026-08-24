@@ -41,6 +41,7 @@ describe('IncrementalLoadFooter', () => {
   it('加载失败显示重试按钮', () => {
     const onRetry = vi.fn()
     render(<IncrementalLoadFooter {...createProps({ error: 'failed', onRetry })} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('failed')
     screen.getByRole('button', { name: '重新加载' }).click()
     expect(onRetry).toHaveBeenCalledOnce()
   })

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Lock, RefreshCw, Trash2 } from '@/src/components/icons'
 import { apiDelete, apiGet, invalidateApiCacheByPrefix } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { formatDateTime } from '../../lib/dateUtils'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
@@ -94,7 +95,7 @@ export const AdminLocks = () => {
       await refreshLocks()
       show('已释放', { variant: 'success' })
     } catch (e) {
-      show('释放失败', { variant: 'error' })
+      show(getErrorMessage(e, '释放失败'), { variant: 'error' })
     }
   }
 
@@ -135,7 +136,7 @@ export const AdminLocks = () => {
       await refreshLocks()
       show('已批量释放', { variant: 'success' })
     } catch (e) {
-      show('批量释放失败', { variant: 'error' })
+      show(getErrorMessage(e, '批量释放失败'), { variant: 'error' })
     } finally {
       setBatchReleasing(false)
     }
@@ -174,13 +175,14 @@ export const AdminLocks = () => {
       {loadError && data.length > 0 && (
         <LoadErrorState
           className="py-5"
+          error={loadError}
           description="当前编辑锁列表可能不是最新内容。"
           onRetry={() => void fetchData()}
         />
       )}
 
       {loadError && data.length === 0 ? (
-        <LoadErrorState onRetry={() => void fetchData()} />
+        <LoadErrorState error={loadError} onRetry={() => void fetchData()} />
       ) : (
         <div className="overflow-x-auto">
           <Table>

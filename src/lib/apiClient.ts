@@ -1,5 +1,6 @@
 import {
   classifyError,
+  getApiErrorMessage,
   logApiError,
   NetworkError,
   type ApiErrorContext,
@@ -55,12 +56,7 @@ function buildUrl(path: string, query?: RequestOptions['query']) {
   return qs ? `${path}?${qs}` : path
 }
 
-function getResponseErrorMessage(data: unknown) {
-  if (!data || typeof data !== 'object' || !('error' in data)) return ''
-  return String((data as Record<string, unknown>).error)
-}
-
-function shouldRefreshAuthState(status: number, data: unknown) {
+function shouldRefreshAuthState(status: number, data: unknown, message: string) {
   if (status === 401) return true
   if (status !== 403) return false
 
@@ -70,7 +66,6 @@ function shouldRefreshAuthState(status: number, data: unknown) {
       : ''
   if (code === 'USER_BANNED') return true
 
-  const message = getResponseErrorMessage(data)
   return (
     message.includes('账号已被封禁') ||
     message === '需要管理员权限' ||
@@ -102,7 +97,7 @@ async function parseResponse<T>(
     }
 
     const authErrorCallback = getAuthErrorCallback()
-    if (authErrorCallback && shouldRefreshAuthState(response.status, data)) {
+    if (authErrorCallback && shouldRefreshAuthState(response.status, data, error.message)) {
       authErrorCallback(error)
     }
 

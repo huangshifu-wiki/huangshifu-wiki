@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, RotateCw } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { apiPut } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -95,7 +96,7 @@ const AdminReviewWorkbench = () => {
       console.error('Fetch review workbench queue failed:', error)
       setLoadError(error)
       if (requestId === loadRequestRef.current) {
-        show('获取审核队列失败', { variant: 'error' })
+        show(getErrorMessage(error, '获取审核队列失败'), { variant: 'error' })
       }
     } finally {
       if (requestId === loadRequestRef.current) {
@@ -177,7 +178,9 @@ const AdminReviewWorkbench = () => {
       })
     } catch (error) {
       console.error('Review action failed:', error)
-      show(action === 'approve' ? '审核通过失败' : '驳回失败', { variant: 'error' })
+      show(getErrorMessage(error, action === 'approve' ? '审核通过失败' : '驳回失败'), {
+        variant: 'error',
+      })
     } finally {
       setActionLoading(null)
     }
@@ -253,6 +256,7 @@ const AdminReviewWorkbench = () => {
       {loadError && currentItem && (
         <LoadErrorState
           className="py-5"
+          error={loadError}
           description="审核队列可能不是最新内容。"
           onRetry={() => void loadQueue(currentKey)}
         />
@@ -260,7 +264,7 @@ const AdminReviewWorkbench = () => {
       {loading && !currentItem ? (
         <div className="h-[520px] bg-surface border border-border rounded animate-pulse" />
       ) : loadError && !currentItem ? (
-        <LoadErrorState onRetry={() => void loadQueue(currentKey)} />
+        <LoadErrorState error={loadError} onRetry={() => void loadQueue(currentKey)} />
       ) : currentItem ? (
         <AdminReviewContentPreview item={currentItem} />
       ) : (

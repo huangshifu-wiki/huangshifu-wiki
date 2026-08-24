@@ -26,6 +26,7 @@ import { SmartImage } from '../../components/SmartImage'
 import { CoverPlaceholder } from '../../components/CoverPlaceholder'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { splitTagsInput } from '../../lib/contentUtils'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
@@ -394,7 +395,7 @@ const AdminEventEdit = () => {
       })
       .catch((error) => {
         console.error('Fetch event for edit failed:', error)
-        show('活动不存在或无法编辑', { variant: 'error' })
+        show(getErrorMessage(error, '活动不存在或无法编辑'), { variant: 'error' })
         navigate('/admin/events')
       })
       .finally(() => {
@@ -561,10 +562,10 @@ const AdminEventEdit = () => {
           previewUrl,
           progress: 0,
           status: 'error',
-          error: error instanceof Error ? error.message : '上传封面失败',
+          error: getErrorMessage(error, '上传封面失败'),
         })
       }
-      show(error instanceof Error ? error.message : '上传封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '上传封面失败'), { variant: 'error' })
     } finally {
       if (controller && coverUploadControllerRef.current === controller) {
         coverUploadControllerRef.current = null
@@ -646,7 +647,7 @@ const AdminEventEdit = () => {
       updatePosterUpload(clientId, {
         uploadStatus: 'error',
         progress: 0,
-        error: error instanceof Error ? error.message : '上传海报失败',
+        error: getErrorMessage(error, '上传海报失败'),
       })
       return 'failed'
     } finally {
@@ -815,7 +816,7 @@ const AdminEventEdit = () => {
       show('活动已保存', { variant: 'success' })
       navigate('/admin/events', { replace: true })
     } catch (error) {
-      show(error instanceof Error ? error.message : '保存活动失败', { variant: 'error' })
+      show(getErrorMessage(error, '保存活动失败'), { variant: 'error' })
     } finally {
       setSaving(false)
     }

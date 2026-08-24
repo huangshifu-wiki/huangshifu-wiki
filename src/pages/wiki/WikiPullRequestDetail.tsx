@@ -6,6 +6,7 @@ import { clsx } from 'clsx'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { formatDate } from '../../lib/dateUtils'
 import { submitFormOnModifierEnter } from '../../lib/formShortcuts'
 import type { WikiPullRequestItem, WikiPrDiffResponse } from './types'
@@ -18,14 +19,14 @@ const WikiPullRequestDetail = () => {
   const { user, isAdmin } = useAuth()
 
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [saving, setSaving] = useState(false)
   const [pullRequest, setPullRequest] = useState<WikiPullRequestItem | null>(null)
   const [diff, setDiff] = useState<WikiPrDiffResponse['diff'] | null>(null)
   const fetchDetail = async () => {
     if (!prId) return
     setLoading(true)
-    setLoadError(false)
+    setLoadError(null)
     try {
       const [detailData, diffData] = await Promise.all([
         apiGet<{ pullRequest: WikiPullRequestItem }>(`/api/wiki/pull-requests/${prId}`),
@@ -35,7 +36,7 @@ const WikiPullRequestDetail = () => {
       setDiff(diffData.diff)
     } catch (error) {
       console.error('Fetch wiki PR detail error:', error)
-      setLoadError(true)
+      setLoadError(error)
     } finally {
       setLoading(false)
     }
@@ -59,7 +60,7 @@ const WikiPullRequestDetail = () => {
       await fetchDetail()
     } catch (error) {
       console.error('Create wiki PR comment error:', error)
-      show('评论失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '评论失败，请稍后重试'), { variant: 'error' })
     } finally {
       setSaving(false)
     }
@@ -96,9 +97,13 @@ const WikiPullRequestDetail = () => {
       await fetchDetail()
     } catch (error) {
       console.error(`${action} wiki PR error:`, error)
-      show(action === 'merge' ? '合并失败，请稍后重试' : '驳回失败，请稍后重试', {
-        variant: 'error',
-      })
+      show(
+        getErrorMessage(
+          error,
+          action === 'merge' ? '合并失败，请稍后重试' : '驳回失败，请稍后重试'
+        ),
+        { variant: 'error' }
+      )
     } finally {
       setSaving(false)
     }
@@ -135,7 +140,7 @@ const WikiPullRequestDetail = () => {
       <div className="mobile-page-shell antique-page">
         <div className="mobile-page-container">
           {loadError ? (
-            <LoadErrorState onRetry={() => void fetchDetail()} />
+            <LoadErrorState error={loadError} onRetry={() => void fetchDetail()} />
           ) : (
             <p className="text-center italic text-[var(--color-text-antique-muted)]">
               PR 不存在或无权限查看
@@ -163,7 +168,7 @@ const WikiPullRequestDetail = () => {
             查看页面：{pullRequest.page?.title || pullRequest.pageSlug}
           </Link>
         </div>
-        {loadError && <LoadErrorState onRetry={() => void fetchDetail()} />}
+        {loadError && <LoadErrorState error={loadError} onRetry={() => void fetchDetail()} />}
         {loading && (
           <div className="flex justify-end">
             <Spinner size="sm" label="PR 详情刷新中" />

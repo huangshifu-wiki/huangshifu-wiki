@@ -79,7 +79,7 @@ export const AdminReviews = () => {
     return <PageSkeleton variant="admin" />
   }
   if (loadError && items.length === 0) {
-    return <LoadErrorState onRetry={() => void fetchQueue()} />
+    return <LoadErrorState error={loadError} onRetry={() => void fetchQueue()} />
   }
 
   return (
@@ -102,6 +102,7 @@ export const AdminReviews = () => {
       {loadError && items.length > 0 && (
         <LoadErrorState
           className="py-5"
+          error={loadError}
           description="审核队列可能不是最新内容。"
           onRetry={() => void fetchQueue()}
         />

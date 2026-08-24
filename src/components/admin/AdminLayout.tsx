@@ -29,6 +29,7 @@ import {
   RefreshCw,
   Settings as SettingsIcon,
 } from '@/src/components/icons'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { clsx } from 'clsx'
 import { useAuth } from '../../context/AuthContext'
 import { logoutRequest } from '../../lib/auth'
@@ -273,7 +274,7 @@ export const AdminLayout = () => {
       navigate('/')
     } catch (error) {
       console.error('Logout failed:', error)
-      show('退出登录失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '退出登录失败，请稍后重试'), { variant: 'error' })
     }
   }
 

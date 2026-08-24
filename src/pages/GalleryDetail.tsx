@@ -23,6 +23,7 @@ import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import { useI18n } from '../lib/i18n'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
@@ -98,7 +99,7 @@ const GalleryDetail = () => {
 
   const [gallery, setGallery] = useState<GalleryItem | null>(null)
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
 
@@ -129,12 +130,12 @@ const GalleryDetail = () => {
     if (!galleryId) return
     try {
       setLoading(true)
-      setLoadError(false)
+      setLoadError(null)
       const data = await apiGet<GalleryDetailResponse>(`/api/galleries/${galleryId}`)
       setGallery(data.gallery)
     } catch (error) {
       console.error('Fetch gallery detail error:', error)
-      setLoadError(true)
+      setLoadError(error)
     } finally {
       setLoading(false)
     }
@@ -455,7 +456,7 @@ const GalleryDetail = () => {
     } catch (error) {
       setGallery(previous)
       console.error('Toggle gallery like error:', error)
-      show('图集点赞失败', { variant: 'error' })
+      show(getErrorMessage(error, '图集点赞失败'), { variant: 'error' })
     } finally {
       setLikingGallery(false)
     }
@@ -524,7 +525,7 @@ const GalleryDetail = () => {
     } catch (error) {
       setGallery(previous)
       console.error('Toggle gallery dislike error:', error)
-      show('图集点踩失败', { variant: 'error' })
+      show(getErrorMessage(error, '图集点踩失败'), { variant: 'error' })
     } finally {
       setDislikingGallery(false)
     }
@@ -566,7 +567,7 @@ const GalleryDetail = () => {
     } catch (error) {
       setGallery(previous)
       console.error('Toggle gallery favorite error:', error)
-      show('图集收藏失败', { variant: 'error' })
+      show(getErrorMessage(error, '图集收藏失败'), { variant: 'error' })
     } finally {
       setFavoritingGallery(false)
     }
@@ -597,7 +598,7 @@ const GalleryDetail = () => {
       )
     } catch (error) {
       console.error('Submit gallery review error:', error)
-      show(t('gallery.submitReviewFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.submitReviewFailed')), { variant: 'error' })
     } finally {
       setSubmittingReview(false)
     }
@@ -633,7 +634,7 @@ const GalleryDetail = () => {
       setReplyTo(null)
     } catch (error) {
       console.error('Error adding comment:', error)
-      show(t('gallery.commentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.commentFailed')), { variant: 'error' })
     } finally {
       setSubmittingComment(false)
     }
@@ -691,7 +692,7 @@ const GalleryDetail = () => {
       show(t('gallery.commentDeleted'))
     } catch (error) {
       console.error('Error deleting gallery comment:', error)
-      show(t('gallery.deleteCommentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.deleteCommentFailed')), { variant: 'error' })
     } finally {
       setDeletingCommentId(null)
     }
@@ -713,7 +714,7 @@ const GalleryDetail = () => {
       setComments((prev) => updateCommentLike(prev, comment.id, data))
     } catch (error) {
       console.error('Error toggling gallery comment like:', error)
-      show(t('gallery.commentLikeFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.commentLikeFailed')), { variant: 'error' })
     } finally {
       setLikingCommentId(null)
     }
@@ -729,7 +730,7 @@ const GalleryDetail = () => {
       show(t('gallery.commentRestored'))
     } catch (error) {
       console.error('Error restoring gallery comment:', error)
-      show(t('gallery.restoreCommentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.restoreCommentFailed')), { variant: 'error' })
     } finally {
       setRestoringCommentId(null)
     }
@@ -767,7 +768,11 @@ const GalleryDetail = () => {
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
           />
           {loadError ? (
-            <LoadErrorState className="mt-8" onRetry={() => void fetchGallery()} />
+            <LoadErrorState
+              error={loadError}
+              className="mt-8"
+              onRetry={() => void fetchGallery()}
+            />
           ) : (
             <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
               {t('gallery.notFound')}
@@ -786,7 +791,9 @@ const GalleryDetail = () => {
           fallbackLabel={t('gallery.backToList')}
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
         />
-        {loadError && <LoadErrorState className="mb-6" onRetry={() => void fetchGallery()} />}
+        {loadError && (
+          <LoadErrorState error={loadError} className="mb-6" onRetry={() => void fetchGallery()} />
+        )}
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">

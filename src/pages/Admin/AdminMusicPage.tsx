@@ -22,6 +22,7 @@ import { useToast } from '../../components/Toast'
 import Pagination from '../../components/Pagination'
 import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import { useScrollRestore } from '../../hooks/useScrollRestore'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { apiDelete, apiGet, apiPatch, apiPost, invalidateMusicApiCaches } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'
 import { formatMusicCredits } from '../../lib/musicCredits'
@@ -165,8 +166,7 @@ export const AdminMusicPage = () => {
       } catch (error) {
         if (signal?.aborted) return
         setSongLoadError(error)
-        if (!silent)
-          show(error instanceof Error ? error.message : '获取歌曲列表失败', { variant: 'error' })
+        if (!silent) show(getErrorMessage(error, '获取歌曲列表失败'), { variant: 'error' })
       } finally {
         if (!signal?.aborted && !silent) setSongLoading(false)
       }
@@ -196,8 +196,7 @@ export const AdminMusicPage = () => {
       } catch (error) {
         if (signal?.aborted) return
         setAlbumLoadError(error)
-        if (!silent)
-          show(error instanceof Error ? error.message : '获取专辑列表失败', { variant: 'error' })
+        if (!silent) show(getErrorMessage(error, '获取专辑列表失败'), { variant: 'error' })
       } finally {
         if (!signal?.aborted && !silent) setAlbumLoading(false)
       }
@@ -304,7 +303,7 @@ export const AdminMusicPage = () => {
       show(action === 'delete' ? '已删除' : '已彻底删除', { variant: 'success' })
       await refreshCurrent()
     } catch (error) {
-      show(error instanceof Error ? error.message : '删除失败', { variant: 'error' })
+      show(getErrorMessage(error, '删除失败'), { variant: 'error' })
     } finally {
       setPending(id, null)
     }
@@ -318,7 +317,7 @@ export const AdminMusicPage = () => {
       show('已恢复', { variant: 'success' })
       await refreshCurrent()
     } catch (error) {
-      show(error instanceof Error ? error.message : '恢复失败', { variant: 'error' })
+      show(getErrorMessage(error, '恢复失败'), { variant: 'error' })
     } finally {
       setPending(id, null)
     }
@@ -352,7 +351,7 @@ export const AdminMusicPage = () => {
       setBatchDisplayOpen(false)
       await refreshCurrent()
     } catch (error) {
-      show(error instanceof Error ? error.message : '批量更新失败', { variant: 'error' })
+      show(getErrorMessage(error, '批量更新失败'), { variant: 'error' })
     } finally {
       setBatchDisplaySaving(false)
     }
@@ -369,13 +368,8 @@ export const AdminMusicPage = () => {
   if (activeLoadError && activeItems.length === 0) {
     return (
       <LoadErrorState
-        description={
-          activeLoadError instanceof Error
-            ? activeLoadError.message
-            : tab === 'songs'
-              ? '获取歌曲列表失败'
-              : '获取专辑列表失败'
-        }
+        description="加载失败，请重试。"
+        error={activeLoadError}
         onRetry={() => void refreshCurrent({ silent: false })}
       />
     )
@@ -424,11 +418,8 @@ export const AdminMusicPage = () => {
       {activeLoadError && activeItems.length > 0 && (
         <LoadErrorState
           className="py-5"
-          description={
-            activeLoadError instanceof Error
-              ? activeLoadError.message
-              : '当前音乐列表可能不是最新内容。'
-          }
+          description="当前列表可能不是最新内容。"
+          error={activeLoadError}
           onRetry={() => void refreshCurrent({ silent: false })}
         />
       )}

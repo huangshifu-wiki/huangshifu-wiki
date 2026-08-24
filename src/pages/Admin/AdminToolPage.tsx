@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Cpu, Database, Image, ShieldCheck, Link as LinkIcon } from '@/src/components/icons'
 import { apiPost } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { useToast } from '../../components/Toast'
 import AdminEmbeddings from './AdminEmbeddings'
 import AdminBackups from './AdminBackups'
@@ -38,8 +39,8 @@ export const AdminToolPage = ({ type: propType }: { type?: ToolType }) => {
         text: sensitiveText,
       })
       setSensitiveResult(data.sensitiveWords || [])
-    } catch {
-      show('检测失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '检测失败'), { variant: 'error' })
     } finally {
       setSensitiveLoading(false)
     }

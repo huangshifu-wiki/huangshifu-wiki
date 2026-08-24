@@ -4,6 +4,7 @@ import { Disc3, Play, Heart, Link2, ChevronDown, ChevronUp } from '@/src/compone
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import { useMusic } from '../context/MusicContext'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../components/Toast'
@@ -163,7 +164,7 @@ const AlbumDetail = () => {
       })
     } catch (error) {
       console.error('Toggle favorite in album detail error:', error)
-      show('收藏操作失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '收藏操作失败，请稍后重试'), { variant: 'error' })
     } finally {
       setFavoriting(null)
     }
@@ -189,7 +190,11 @@ const AlbumDetail = () => {
             fallbackLabel="返回音乐馆"
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
           />
-          <LoadErrorState className="mt-6" onRetry={() => setRetryNonce((value) => value + 1)} />
+          <LoadErrorState
+            error={loadError}
+            className="mt-6"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
         </div>
       </div>
     )
@@ -238,6 +243,7 @@ const AlbumDetail = () => {
         {loadError && (
           <LoadErrorState
             className="mb-5"
+            error={loadError}
             description="专辑内容可能不是最新内容。"
             onRetry={() => setRetryNonce((value) => value + 1)}
           />

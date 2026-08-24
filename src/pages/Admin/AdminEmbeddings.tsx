@@ -12,6 +12,7 @@ import {
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiGet, apiPost } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { LoadErrorState } from '@/src/components/ui'
 import { useToast } from '../../components/Toast'
 import { ConfirmModal } from '../../components/Modal'
@@ -204,7 +205,7 @@ const AdminEmbeddings = () => {
     } catch (error) {
       console.error(error)
       setStatusError(error)
-      show('获取向量状态失败', { variant: 'error' })
+      show(getErrorMessage(error, '获取向量状态失败'), { variant: 'error' })
     } finally {
       setLoading(false)
     }
@@ -220,7 +221,7 @@ const AdminEmbeddings = () => {
       setErrors(response.errors || [])
     } catch (error) {
       console.error(error)
-      show('获取错误列表失败', { variant: 'error' })
+      show(getErrorMessage(error, '获取错误列表失败'), { variant: 'error' })
     } finally {
       setLoadingErrors(false)
     }
@@ -270,8 +271,8 @@ const AdminEmbeddings = () => {
       if (response.post) parts.push(`帖子 ${response.post.queued} 个`)
       show(parts.length > 0 ? `已加入队列: ${parts.join(', ')}` : '没有需要加入队列的任务')
       fetchStatus()
-    } catch {
-      show('补齐队列失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '补齐队列失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -296,8 +297,8 @@ const AdminEmbeddings = () => {
         parts.push(`帖子 ${response.post.ready}/${response.post.ready + response.post.failed}`)
       show(parts.length > 0 ? `批量同步完成: ${parts.join(', ')}` : '批量同步已启动')
       fetchStatus()
-    } catch {
-      show('批量同步失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '批量同步失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -318,8 +319,8 @@ const AdminEmbeddings = () => {
       show(`已重置 ${totalReset} 个失败任务并开始重新同步`)
       fetchStatus()
       if (showErrors) fetchErrors()
-    } catch {
-      show('重试失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '重试失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -339,8 +340,8 @@ const AdminEmbeddings = () => {
         (response.post?.resetCount ?? 0)
       show(`已重置 ${totalReset} 条记录并开始重建`)
       fetchStatus()
-    } catch {
-      show('重建失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '重建失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -362,8 +363,8 @@ const AdminEmbeddings = () => {
       if (response.album) parts.push(`专辑 ${response.album.queued} 个`)
       show(parts.length > 0 ? `已加入队列: ${parts.join(', ')}` : '没有需要加入队列的任务')
       fetchStatus()
-    } catch {
-      show('补齐队列失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '补齐队列失败'), { variant: 'error' })
     } finally {
       setTextActionLoading(null)
     }
@@ -389,8 +390,8 @@ const AdminEmbeddings = () => {
         parts.push(`专辑 ${response.album.ready}/${response.album.ready + response.album.failed}`)
       show(parts.length > 0 ? `批量同步完成: ${parts.join(', ')}` : '批量同步已启动')
       fetchStatus()
-    } catch {
-      show('批量同步失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '批量同步失败'), { variant: 'error' })
     } finally {
       setTextActionLoading(null)
     }
@@ -412,8 +413,8 @@ const AdminEmbeddings = () => {
         (response.album?.resetCount ?? 0)
       show(`已重置 ${totalReset} 个失败任务并开始重新同步`)
       fetchStatus()
-    } catch {
-      show('重试失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '重试失败'), { variant: 'error' })
     } finally {
       setTextActionLoading(null)
     }
@@ -435,8 +436,8 @@ const AdminEmbeddings = () => {
         (response.album?.resetCount ?? 0)
       show(`已重置 ${totalReset} 条记录并开始重建`)
       fetchStatus()
-    } catch {
-      show('重建失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '重建失败'), { variant: 'error' })
     } finally {
       setTextActionLoading(null)
     }
@@ -446,7 +447,11 @@ const AdminEmbeddings = () => {
 
   if (statusError && !status && !loading) {
     return (
-      <LoadErrorState description="向量状态加载失败，请重试。" onRetry={() => void fetchStatus()} />
+      <LoadErrorState
+        error={statusError}
+        description="向量状态加载失败，请重试。"
+        onRetry={() => void fetchStatus()}
+      />
     )
   }
   if (loading && !status) {
@@ -491,6 +496,7 @@ const AdminEmbeddings = () => {
       {statusError && status && (
         <LoadErrorState
           className="py-5"
+          error={statusError}
           description="向量状态可能不是最新内容。"
           onRetry={() => void fetchStatus()}
         />

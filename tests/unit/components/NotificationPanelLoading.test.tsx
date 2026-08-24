@@ -81,7 +81,7 @@ describe('通知面板加载状态', () => {
     renderPanel()
     openPanel()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('通知暂时无法加载。')
+    expect(await screen.findByRole('alert')).toHaveTextContent('notifications unavailable')
     expect(screen.queryByText('暂无通知')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '重新加载' }))

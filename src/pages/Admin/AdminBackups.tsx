@@ -14,6 +14,7 @@ import {
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'
+import { getApiErrorMessage, getErrorMessage } from '../../lib/errorHandler'
 import { Button, LoadErrorState } from '@/src/components/ui'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 import { useToast } from '../../components/Toast'
@@ -82,7 +83,7 @@ const AdminBackups = () => {
       } catch (error) {
         console.error('Fetch backups failed:', error)
         setLoadError(error)
-        if (showSpinner) show('获取备份列表失败', { variant: 'error' })
+        if (showSpinner) show(getErrorMessage(error, '获取备份列表失败'), { variant: 'error' })
       } finally {
         if (showSpinner) setLoading(false)
       }
@@ -137,7 +138,7 @@ const AdminBackups = () => {
       ])
       await fetchBackups(false)
     } catch (error) {
-      show(error instanceof Error ? error.message : '创建备份失败', { variant: 'error' })
+      show(getErrorMessage(error, '创建备份失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -159,7 +160,7 @@ const AdminBackups = () => {
       )
       closeDialog()
     } catch (error) {
-      show(error instanceof Error ? error.message : '更新备注失败', { variant: 'error' })
+      show(getErrorMessage(error, '更新备注失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -174,8 +175,10 @@ const AdminBackups = () => {
     setActionLoading(options.loadingKey)
     try {
       const response = await apiDownload(url, { method: 'POST' })
-      if (!response.ok)
-        throw new Error((await response.json().catch(() => ({}))).error || options.errorMessage)
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(getApiErrorMessage(data) || options.errorMessage)
+      }
       const blob = await response.blob()
       const objectUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -187,7 +190,7 @@ const AdminBackups = () => {
       URL.revokeObjectURL(objectUrl)
       show(options.successMessage, { variant: 'success' })
     } catch (error) {
-      show(error instanceof Error ? error.message : options.errorMessage, { variant: 'error' })
+      show(getErrorMessage(error, options.errorMessage), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -222,7 +225,7 @@ const AdminBackups = () => {
       closeDialog()
       await fetchBackups(false)
     } catch (error) {
-      show(error instanceof Error ? error.message : '恢复失败', { variant: 'error' })
+      show(getErrorMessage(error, '恢复失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -238,7 +241,7 @@ const AdminBackups = () => {
       closeDialog()
       await fetchBackups(false)
     } catch (error) {
-      show(error instanceof Error ? error.message : '删除失败', { variant: 'error' })
+      show(getErrorMessage(error, '删除失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -256,7 +259,7 @@ const AdminBackups = () => {
       closeDialog()
       await fetchBackups(false)
     } catch (error) {
-      show(error instanceof Error ? error.message : '恢复失败', { variant: 'error' })
+      show(getErrorMessage(error, '恢复失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -297,6 +300,7 @@ const AdminBackups = () => {
   if (loadError && backups.length === 0) {
     return (
       <LoadErrorState
+        error={loadError}
         description="备份列表加载失败，请重试。"
         onRetry={() => void fetchBackups()}
       />
@@ -331,6 +335,7 @@ const AdminBackups = () => {
       {loadError && backups.length > 0 && (
         <LoadErrorState
           className="py-5"
+          error={loadError}
           description="当前备份列表可能不是最新内容。"
           onRetry={() => void fetchBackups()}
         />

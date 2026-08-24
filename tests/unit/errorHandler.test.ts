@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   AppError,
   AuthError,
+  classifyError,
+  getApiErrorMessage,
+  getErrorMessage,
   getUserMessage,
   handleError,
   NetworkError,
@@ -141,6 +144,38 @@ describe('errorHandler', () => {
 
     it('returns default message for unknown errors', () => {
       expect(getUserMessage(null)).toBe('未知错误，请稍后重试')
+    })
+  })
+  describe('getErrorMessage', () => {
+    it('keeps operational AppError messages', () => {
+      expect(getErrorMessage(new AppError('版块不存在'), '保存失败')).toBe('版块不存在')
+    })
+
+    it('falls back for non-operational errors and unknown values', () => {
+      expect(getErrorMessage(new AppError('内部堆栈', 'INTERNAL', 500, false), '保存失败')).toBe(
+        '保存失败'
+      )
+      expect(getErrorMessage(null, '保存失败')).toBe('保存失败')
+    })
+  })
+
+  describe('getApiErrorMessage', () => {
+    it('returns validation field reasons instead of the generic error', () => {
+      expect(
+        getApiErrorMessage({ error: 'Validation failed', fields: { title: '标题不能为空' } })
+      ).toBe('标题不能为空')
+    })
+
+    it('combines a business error and field reasons', () => {
+      expect(getApiErrorMessage({ error: '请求无效', fields: { content: '内容不能为空' } })).toBe(
+        '请求无效：内容不能为空'
+      )
+    })
+  })
+  describe('classifyError', () => {
+    it('uses status-specific fallback messages when response has no error', () => {
+      expect(classifyError(401, {}).message).toBe('登录已过期，请重新登录')
+      expect(classifyError(503, {}).message).toBe('服务暂时不可用，请稍后再试')
     })
   })
 

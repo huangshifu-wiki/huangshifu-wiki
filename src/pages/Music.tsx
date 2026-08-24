@@ -6,6 +6,7 @@ import { useMusic } from '../context/MusicContext'
 import { clsx } from 'clsx'
 import { useToast } from '../components/Toast'
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import Pagination from '../components/Pagination'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
@@ -326,7 +327,7 @@ const Music = () => {
       }
     } catch (error) {
       console.error('Toggle music favorite error:', error)
-      show('收藏操作失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '收藏操作失败，请稍后重试'), { variant: 'error' })
     } finally {
       setFavoriting(null)
     }
@@ -461,7 +462,11 @@ const Music = () => {
                           loaded={visibleSongs.length}
                           onLoadMore={incrementalSongs.loadMore}
                           sentinelRef={incrementalSongs.sentinelRef}
-                          error={songState.loadMoreError ? '加载失败' : undefined}
+                          error={
+                            songState.loadMoreError
+                              ? getErrorMessage(songState.loadMoreError, '加载失败，请重试')
+                              : undefined
+                          }
                           onRetry={songState.retry}
                         />
                       ) : musicPagination.hasMultiplePages ? (
@@ -523,7 +528,11 @@ const Music = () => {
                           loaded={visibleAlbums.length}
                           onLoadMore={incrementalAlbums.loadMore}
                           sentinelRef={incrementalAlbums.sentinelRef}
-                          error={albumState.loadMoreError ? '加载失败' : undefined}
+                          error={
+                            albumState.loadMoreError
+                              ? getErrorMessage(albumState.loadMoreError, '加载失败，请重试')
+                              : undefined
+                          }
                           onRetry={albumState.retry}
                         />
                       ) : albumPagination.hasMultiplePages ? (

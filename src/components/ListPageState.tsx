@@ -39,7 +39,7 @@ export const ListPageContentState = ({
   children,
 }: ListPageContentStateProps): React.ReactElement => {
   if (!hasItems && error) {
-    return <LoadErrorState onRetry={onRetry} />
+    return <LoadErrorState error={error} onRetry={onRetry} />
   }
 
   if (hasItems && error) {
@@ -47,6 +47,7 @@ export const ListPageContentState = ({
       <>
         <LoadErrorState
           className="py-5"
+          error={error}
           description={staleDescription ?? '当前内容可能不是最新内容。'}
           onRetry={onRetry}
         />

@@ -16,6 +16,7 @@ import type { WikiItem } from './types'
 import { DEFAULT_PAGE_SIZE } from './types'
 import { useIncrementalListLoader } from '../../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../../hooks/useRoutedPagination'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { getListLoadState } from '../../lib/listLoadState'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 
@@ -215,7 +216,11 @@ const WikiList = () => {
                   loaded={visiblePages.length}
                   onLoadMore={incrementalList.loadMore}
                   sentinelRef={incrementalList.sentinelRef}
-                  error={wikiState.loadMoreError ? '加载失败' : undefined}
+                  error={
+                    wikiState.loadMoreError
+                      ? getErrorMessage(wikiState.loadMoreError, '加载失败，请重试')
+                      : undefined
+                  }
                   onRetry={wikiState.retry}
                 />
               ) : pagination.hasMultiplePages ? (

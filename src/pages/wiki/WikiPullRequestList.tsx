@@ -22,7 +22,7 @@ const WikiPullRequestList = () => {
   const [status, setStatus] = useState<WikiPullRequestStatus>('open')
   const [items, setItems] = useState<WikiPullRequestItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [prTotal, setPrTotal] = useState<number | undefined>()
   const pagination = useRoutedPagination({
     totalCount: prTotal,
@@ -39,7 +39,7 @@ const WikiPullRequestList = () => {
   const fetchList = async () => {
     const requestId = ++requestIdRef.current
     setLoading(true)
-    setLoadError(false)
+    setLoadError(null)
     try {
       const data = await apiGet<WikiPullRequestListResponse>('/api/wiki/pull-requests/list', {
         status,
@@ -53,7 +53,7 @@ const WikiPullRequestList = () => {
     } catch (error) {
       if (requestId !== requestIdRef.current) return
       console.error('Fetch wiki PR list error:', error)
-      setLoadError(true)
+      setLoadError(error)
     } finally {
       if (requestId === requestIdRef.current) setLoading(false)
     }
@@ -125,7 +125,7 @@ const WikiPullRequestList = () => {
                   <Spinner size="sm" label="PR 列表刷新中" />
                 </div>
               )}
-              {loadError && <LoadErrorState onRetry={() => void fetchList()} />}
+              {loadError && <LoadErrorState error={loadError} onRetry={() => void fetchList()} />}
               {loadError && items.length === 0 ? null : items.length ? (
                 <div className="space-y-3">
                   {items.map((item) => (

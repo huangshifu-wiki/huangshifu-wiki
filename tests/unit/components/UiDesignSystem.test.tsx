@@ -76,14 +76,14 @@ describe('UI 设计系统', () => {
     render(
       <LoadErrorState
         title="读取失败"
-        description="请稍后重试"
+        error={new Error('服务不可用')}
         retryLabel="再次加载"
         onRetry={onRetry}
       />
     )
 
     expect(screen.getByRole('alert')).toHaveTextContent('读取失败')
-    expect(screen.getByRole('alert')).toHaveTextContent('请稍后重试')
+    expect(screen.getByRole('alert')).toHaveTextContent('服务不可用')
     fireEvent.click(screen.getByRole('button', { name: '再次加载' }))
     expect(onRetry).toHaveBeenCalledOnce()
   })

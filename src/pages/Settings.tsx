@@ -35,6 +35,7 @@ import {
   WIKI_MAX_CONTENT_SIZE,
 } from '../lib/contentLimits'
 import { apiGet, apiPatch, apiPost, apiPut } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import { formatDateOnly } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import {
@@ -100,10 +101,6 @@ type UserWikiItem = {
   reviewNote?: string | null
   updatedAt: string
   editedAt?: string
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback
 }
 
 const WECHAT_PLACEHOLDER_EMAIL_SUFFIX = '@wechat.local'
@@ -242,7 +239,7 @@ const Settings = () => {
   const [contentLoading, setContentLoading] = useState(
     () => activeSection === 'content' && Boolean(userPublicId)
   )
-  const [contentError, setContentError] = useState(false)
+  const [contentError, setContentError] = useState<unknown | null>(null)
   const [contentTotal, setContentTotal] = useState<number | undefined>()
   const pagination = useRoutedPagination({
     totalCount: contentTotal,
@@ -322,7 +319,7 @@ const Settings = () => {
     let cancelled = false
     const run = async () => {
       setContentLoading(true)
-      setContentError(false)
+      setContentError(null)
       try {
         const params = { page: pagination.page, limit: pagination.pageSize }
         if (activeContentTab === 'posts') {
@@ -372,8 +369,8 @@ const Settings = () => {
       } catch (error) {
         console.error('Fetch content management data error:', error)
         if (!cancelled) {
-          setContentError(true)
-          show('内容加载失败', { variant: 'error' })
+          setContentError(error)
+          show(getErrorMessage(error, '内容加载失败'), { variant: 'error' })
         }
       } finally {
         if (!cancelled) setContentLoading(false)
@@ -1068,7 +1065,10 @@ const Settings = () => {
 
                   <div className="mt-4" aria-busy={contentLoading}>
                     {contentError && (
-                      <LoadErrorState onRetry={() => setContentRetry((current) => current + 1)} />
+                      <LoadErrorState
+                        error={contentError}
+                        onRetry={() => setContentRetry((current) => current + 1)}
+                      />
                     )}
                     {contentLoading && activeContentHasItems && (
                       <div className="mb-3 flex justify-end">

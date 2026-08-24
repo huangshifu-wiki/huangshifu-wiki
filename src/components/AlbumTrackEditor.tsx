@@ -22,6 +22,7 @@ import {
 } from '@/src/components/icons'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { formatMusicCredits } from '../lib/musicCredits'
+import { getErrorMessage } from '../lib/errorHandler'
 import { apiDelete, apiGet, apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import type { AdminDataItem } from '../types/entities'
 import {
@@ -227,7 +228,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
       if (!signal?.aborted) {
         setDetailError(error)
         if (!detail) {
-          show(error instanceof Error ? error.message : '获取专辑详情失败', { variant: 'error' })
+          show(getErrorMessage(error, '获取专辑详情失败'), { variant: 'error' })
         }
       }
     } finally {
@@ -385,7 +386,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
       show('曲目编排已保存')
       await notifyChanged()
     } catch (error) {
-      show(error instanceof Error ? error.message : '保存曲目编排失败', { variant: 'error' })
+      show(getErrorMessage(error, '保存曲目编排失败'), { variant: 'error' })
     } finally {
       setPendingAction(null)
     }
@@ -414,7 +415,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
       show('Disc 已创建')
       await notifyChanged()
     } catch (error) {
-      show(error instanceof Error ? error.message : '创建 Disc 失败', { variant: 'error' })
+      show(getErrorMessage(error, '创建 Disc 失败'), { variant: 'error' })
     } finally {
       setPendingAction(null)
     }
@@ -452,7 +453,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
       show('歌曲已添加')
       await notifyChanged()
     } catch (error) {
-      show(error instanceof Error ? error.message : '添加歌曲失败', { variant: 'error' })
+      show(getErrorMessage(error, '添加歌曲失败'), { variant: 'error' })
     } finally {
       setPendingAction(null)
     }
@@ -474,7 +475,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
       show('歌曲已移出专辑')
       await notifyChanged()
     } catch (error) {
-      show(error instanceof Error ? error.message : '删除歌曲失败', { variant: 'error' })
+      show(getErrorMessage(error, '删除歌曲失败'), { variant: 'error' })
     } finally {
       setPendingAction(null)
     }
@@ -498,7 +499,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
       show('Disc 已删除')
       await notifyChanged()
     } catch (error) {
-      show(error instanceof Error ? error.message : '删除 Disc 失败', { variant: 'error' })
+      show(getErrorMessage(error, '删除 Disc 失败'), { variant: 'error' })
     } finally {
       setPendingAction(null)
     }
@@ -553,7 +554,8 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
             </div>
           ) : initialError ? (
             <LoadErrorState
-              description={detailError instanceof Error ? detailError.message : '获取专辑详情失败'}
+              error={detailError}
+              description="获取专辑详情失败"
               onRetry={() => void fetchDetail()}
             />
           ) : (
@@ -563,9 +565,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
                   className="flex flex-wrap items-center justify-between gap-3 border border-[var(--color-warning)] bg-surface-alt px-3 py-2 text-sm text-text-secondary"
                   role="alert"
                 >
-                  <span>
-                    {detailError instanceof Error ? detailError.message : '刷新专辑详情失败'}
-                  </span>
+                  <span>{getErrorMessage(detailError, '刷新专辑详情失败')}</span>
                   <Button
                     type="button"
                     variant="secondary"
@@ -976,7 +976,7 @@ const SongSearch = ({
               className="flex flex-wrap items-center justify-between gap-3 px-3 py-3 text-sm text-text-secondary"
               role="alert"
             >
-              <span>{error instanceof Error ? error.message : '搜索歌曲失败'}</span>
+              <span>{getErrorMessage(error, '搜索歌曲失败')}</span>
               <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
                 重新搜索
               </Button>

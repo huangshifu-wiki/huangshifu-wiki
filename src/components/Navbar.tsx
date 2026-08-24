@@ -4,6 +4,7 @@ import { Menu, X } from '@/src/components/icons'
 import { logoutRequest } from '../lib/auth'
 import { HeaderUserControls } from './HeaderUserControls'
 import { useToast } from './Toast'
+import { getErrorMessage } from '../lib/errorHandler'
 import { AuthModal } from './Navbar/AuthModal'
 import type { AuthMode } from './Navbar/types'
 import { NAV_LINK_ITEMS } from './Navbar/NavLinks'
@@ -45,7 +46,7 @@ export const Navbar = () => {
       setIsMenuOpen(false)
     } catch (error) {
       console.error('Logout failed:', error)
-      show('退出登录失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '退出登录失败，请稍后重试'), { variant: 'error' })
     }
   }
 

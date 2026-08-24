@@ -148,6 +148,16 @@ describe('apiClient', () => {
 
     await expect(apiGet('/api/secret')).rejects.toThrow('forbidden')
   })
+  it('includes validation field reasons when request fails', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ error: 'Validation failed', fields: { title: '标题不能为空' } }),
+        { status: 400 }
+      )
+    )
+
+    await expect(apiPost('/api/posts', {})).rejects.toThrow('标题不能为空')
+  })
 
   it('does not invoke auth error callback for business permission errors', async () => {
     const authErrorCallback = vi.fn()

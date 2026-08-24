@@ -21,6 +21,7 @@ import {
   apiPut,
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { SmartImage } from '../../components/SmartImage'
@@ -205,8 +206,8 @@ export const AdminUsers = () => {
           await refreshUsers()
           show(shouldUnban ? '已解封' : '已封禁', { variant: 'success' })
           return true
-        } catch {
-          show(shouldUnban ? '解封失败' : '封禁失败', { variant: 'error' })
+        } catch (error) {
+          show(getErrorMessage(error, shouldUnban ? '解封失败' : '封禁失败'), { variant: 'error' })
           return false
         }
       },
@@ -234,7 +235,7 @@ export const AdminUsers = () => {
       await refreshUsers()
       show('角色已更新', { variant: 'success' })
     } catch (e) {
-      show('更新角色失败', { variant: 'error' })
+      show(getErrorMessage(e, '更新角色失败'), { variant: 'error' })
     }
   }
 
@@ -268,7 +269,7 @@ export const AdminUsers = () => {
           show('角色已更新', { variant: 'success' })
           return true
         } catch (error) {
-          show(error instanceof Error ? error.message : '更新角色失败', { variant: 'error' })
+          show(getErrorMessage(error, '更新角色失败'), { variant: 'error' })
           return false
         }
       },
@@ -297,7 +298,7 @@ export const AdminUsers = () => {
       await refreshUsers()
       show('已删除', { variant: 'success' })
     } catch (error) {
-      show(error instanceof Error ? error.message : '删除失败', { variant: 'error' })
+      show(getErrorMessage(error, '删除失败'), { variant: 'error' })
     }
   }
 
@@ -418,7 +419,7 @@ export const AdminUsers = () => {
         variant: 'success',
       })
     } catch (error) {
-      show(error instanceof Error ? error.message : '更新用户资料失败', { variant: 'error' })
+      show(getErrorMessage(error, '更新用户资料失败'), { variant: 'error' })
     } finally {
       setEditLoading(false)
     }
@@ -442,6 +443,7 @@ export const AdminUsers = () => {
       {loadError && data.length > 0 && (
         <LoadErrorState
           className="py-5"
+          error={loadError}
           description="当前用户列表可能不是最新内容。"
           onRetry={() => void fetchData()}
         />
@@ -466,7 +468,7 @@ export const AdminUsers = () => {
               {loadError && data.length === 0 ? (
                 <tr>
                   <td colSpan={4}>
-                    <LoadErrorState onRetry={() => void fetchData()} />
+                    <LoadErrorState error={loadError} onRetry={() => void fetchData()} />
                   </td>
                 </tr>
               ) : data.length > 0 ? (

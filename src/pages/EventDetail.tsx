@@ -145,7 +145,11 @@ const EventDetail = () => {
             fallbackLabel="返回游记"
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
           />
-          <LoadErrorState className="mt-6" onRetry={() => setRetryNonce((value) => value + 1)} />
+          <LoadErrorState
+            error={loadError}
+            className="mt-6"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
         </div>
       </div>
     )
@@ -216,6 +220,7 @@ const EventDetail = () => {
         {loadError && (
           <LoadErrorState
             className="mb-6"
+            error={loadError}
             description="活动内容可能不是最新内容。"
             onRetry={() => setRetryNonce((value) => value + 1)}
           />

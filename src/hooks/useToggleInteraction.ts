@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { apiPost, apiDelete } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 
 export type InteractionType = 'like' | 'dislike' | 'favorite' | 'pin'
 
@@ -148,7 +149,7 @@ export function useToggleInteraction<T extends Record<string, any>>(
     } catch (error) {
       if (prevState) setEntity(prevState)
       console.error('Toggle like failed:', error)
-      toast.show(t(`${prefix}.likeFailed`), { variant: 'error' })
+      toast.show(getErrorMessage(error, t(`${prefix}.likeFailed`)), { variant: 'error' })
     } finally {
       setLiking(false)
     }
@@ -215,7 +216,7 @@ export function useToggleInteraction<T extends Record<string, any>>(
     } catch (error) {
       if (prevState) setEntity(prevState)
       console.error('Toggle dislike failed:', error)
-      toast.show(t(`${prefix}.dislikeFailed`), { variant: 'error' })
+      toast.show(getErrorMessage(error, t(`${prefix}.dislikeFailed`)), { variant: 'error' })
     } finally {
       setDisliking(false)
     }
@@ -270,7 +271,7 @@ export function useToggleInteraction<T extends Record<string, any>>(
     } catch (error) {
       if (prevState) setEntity(prevState)
       console.error('Toggle favorite failed:', error)
-      toast.show(t(`${prefix}.favoriteFailed`), { variant: 'error' })
+      toast.show(getErrorMessage(error, t(`${prefix}.favoriteFailed`)), { variant: 'error' })
     } finally {
       setFavoriting(false)
     }
@@ -305,7 +306,7 @@ export function useToggleInteraction<T extends Record<string, any>>(
       // pin 操作的回滚：恢复到之前的状态
       if (prevState) setEntity(prevState)
       console.error('Toggle pin failed:', error)
-      toast.show(t(`${prefix}.pinFailed`), { variant: 'error' })
+      toast.show(getErrorMessage(error, t(`${prefix}.pinFailed`)), { variant: 'error' })
     } finally {
       setPinning(false)
     }

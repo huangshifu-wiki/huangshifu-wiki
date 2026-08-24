@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Loader2, RefreshCw } from '@/src/components/icons'
 import { Button, SettingsSection } from '@/src/components/ui'
 import { clsx } from 'clsx'
+import { getErrorMessage } from '../../lib/errorHandler'
 
 /**
  * 管理后台通用区块容器：无框标题行（图标 + 标题 + 分隔线）+ 内容。
@@ -71,7 +72,7 @@ export function SectionStatus({
 }: {
   loading: boolean
   loadingText: string
-  loadError: boolean
+  loadError: unknown | null
   errorText: string
   onRetry: () => void
   children: ReactNode
@@ -88,7 +89,7 @@ export function SectionStatus({
   if (loadError) {
     return (
       <div className="flex flex-col gap-3 text-sm text-text-secondary" role="alert">
-        <p>{errorText}</p>
+        <p>{getErrorMessage(loadError, errorText)}</p>
         <Button
           variant="secondary"
           onClick={onRetry}

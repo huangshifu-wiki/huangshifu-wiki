@@ -14,6 +14,7 @@ import { useUserPreferences } from '../context/UserPreferencesContext'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { apiGet, invalidateApiCacheByPrefix } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import {
   shouldWaitForGalleryThumbnail,
   THUMBNAIL_POLL_DEDUP_OPTIONS,
@@ -279,7 +280,11 @@ const GalleryList = () => {
                   loaded={visibleGalleries.length}
                   onLoadMore={incrementalList.loadMore}
                   sentinelRef={incrementalList.sentinelRef}
-                  error={galleryState.loadMoreError ? '加载失败' : undefined}
+                  error={
+                    galleryState.loadMoreError
+                      ? getErrorMessage(galleryState.loadMoreError, '加载失败，请重试')
+                      : undefined
+                  }
                   onRetry={galleryState.retry}
                 />
               ) : galleryPagination.hasMultiplePages ? (

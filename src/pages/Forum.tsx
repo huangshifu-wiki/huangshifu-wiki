@@ -35,6 +35,7 @@ import MarkdownEditor from '../components/MarkdownEditor'
 import { SmartBackLink } from '../components/SmartBackLink'
 import { CharacterCount } from '../components/CharacterCount'
 import { apiDelete, apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
@@ -380,7 +381,11 @@ const PostList = () => {
                   loaded={visiblePosts.length}
                   onLoadMore={incrementalList.loadMore}
                   sentinelRef={incrementalList.sentinelRef}
-                  error={forumState.loadMoreError ? '加载失败' : undefined}
+                  error={
+                    forumState.loadMoreError
+                      ? getErrorMessage(forumState.loadMoreError, '加载失败，请重试')
+                      : undefined
+                  }
                   onRetry={forumState.retry}
                 />
               ) : pagination.hasMultiplePages ? (
@@ -537,7 +542,7 @@ const PostDetail = () => {
       setReplyTo(null)
     } catch (error) {
       console.error('Error adding comment:', error)
-      show(t('forum.commentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('forum.commentFailed')), { variant: 'error' })
     } finally {
       setSubmittingComment(false)
     }
@@ -595,7 +600,7 @@ const PostDetail = () => {
       show(t('forum.commentDeleted'))
     } catch (error) {
       console.error('Error deleting comment:', error)
-      show(t('forum.deleteCommentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('forum.deleteCommentFailed')), { variant: 'error' })
     } finally {
       setDeletingCommentId(null)
     }
@@ -617,7 +622,7 @@ const PostDetail = () => {
       setComments((prev) => updateCommentLike(prev, comment.id, data))
     } catch (error) {
       console.error('Error toggling comment like:', error)
-      show(t('forum.commentLikeFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('forum.commentLikeFailed')), { variant: 'error' })
     } finally {
       setLikingCommentId(null)
     }
@@ -633,7 +638,7 @@ const PostDetail = () => {
       show(t('forum.commentRestored'))
     } catch (error) {
       console.error('Error restoring comment:', error)
-      show(t('forum.restoreCommentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('forum.restoreCommentFailed')), { variant: 'error' })
     } finally {
       setRestoringCommentId(null)
     }
@@ -799,7 +804,7 @@ const PostDetail = () => {
       show(t('forum.reviewSubmitted'))
     } catch (error) {
       console.error('Error submitting review:', error)
-      show(t('forum.submitReviewFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('forum.submitReviewFailed')), { variant: 'error' })
     } finally {
       setSubmittingReview(false)
     }
@@ -1349,7 +1354,7 @@ const PostEditor = () => {
         })
       } catch (error) {
         console.error('Error loading editable post:', error)
-        show(t('forum.loadPostFailed'), { variant: 'error' })
+        show(getErrorMessage(error, t('forum.loadPostFailed')), { variant: 'error' })
       } finally {
         setLoadingPost(false)
       }
@@ -1408,9 +1413,12 @@ const PostEditor = () => {
     } catch (error) {
       console.error('Error saving post:', error)
       show(
-        status === 'draft'
-          ? t('forum.saveDraftFailed')
-          : t(isAdmin ? 'forum.publishFailed' : 'forum.submitReviewFailed'),
+        getErrorMessage(
+          error,
+          status === 'draft'
+            ? t('forum.saveDraftFailed')
+            : t(isAdmin ? 'forum.publishFailed' : 'forum.submitReviewFailed')
+        ),
         {
           variant: 'error',
         }
@@ -1450,10 +1458,8 @@ const PostEditor = () => {
       await apiDelete(`/api/posts/${editablePostId}`, reason ? { reason } : {})
       invalidateApiCacheByPrefix('/api/posts')
       show(t('forum.postDeleted'), { variant: 'success' })
-      navigate('/forum')
     } catch (error) {
-      console.error('Error deleting post:', error)
-      show(error instanceof Error ? error.message : t('forum.deletePostFailed'), {
+      show(getErrorMessage(error, t('forum.deletePostFailed')), {
         variant: 'error',
       })
     } finally {

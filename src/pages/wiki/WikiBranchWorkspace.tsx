@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { clsx } from 'clsx'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost, invalidateApiCacheByPrefix } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { splitTagsInput } from '../../lib/contentUtils'
 import { formatDate } from '../../lib/dateUtils'
 import type { WikiItem, WikiBranchItem, WikiRevisionItem, WikiPullRequestItem } from './types'
@@ -27,7 +28,7 @@ const WikiBranchWorkspace = () => {
   const [openPr, setOpenPr] = useState<WikiPullRequestItem | null>(null)
 
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [creatingBranch, setCreatingBranch] = useState(false)
   const [savingRevision, setSavingRevision] = useState(false)
   const [creatingPr, setCreatingPr] = useState(false)
@@ -66,7 +67,7 @@ const WikiBranchWorkspace = () => {
   const fetchWorkspace = async () => {
     if (!slug || !user) return
     setLoading(true)
-    setLoadError(false)
+    setLoadError(null)
     try {
       const pageData = await apiGet<{ page: WikiItem }>(`/api/wiki/${slug}`)
       const currentPage = pageData.page
@@ -108,7 +109,7 @@ const WikiBranchWorkspace = () => {
       setPrDescription(currentOpenPr?.description || '')
     } catch (error) {
       console.error('Fetch wiki branch workspace error:', error)
-      setLoadError(true)
+      setLoadError(error)
     } finally {
       setLoading(false)
     }
@@ -127,7 +128,7 @@ const WikiBranchWorkspace = () => {
       await fetchWorkspace()
     } catch (error) {
       console.error('Create branch error:', error)
-      show('创建分支失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '创建分支失败，请稍后重试'), { variant: 'error' })
     } finally {
       setCreatingBranch(false)
     }
@@ -157,7 +158,7 @@ const WikiBranchWorkspace = () => {
       await fetchWorkspace()
     } catch (error) {
       console.error('Save branch revision error:', error)
-      show('保存分支失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '保存分支失败，请稍后重试'), { variant: 'error' })
     } finally {
       setSavingRevision(false)
     }
@@ -180,7 +181,7 @@ const WikiBranchWorkspace = () => {
       await fetchWorkspace()
     } catch (error) {
       console.error('Create wiki PR error:', error)
-      show('提交 PR 失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '提交 PR 失败，请稍后重试'), { variant: 'error' })
     } finally {
       setCreatingPr(false)
     }
@@ -210,7 +211,7 @@ const WikiBranchWorkspace = () => {
       await fetchWorkspace()
     } catch (error) {
       console.error('Resolve wiki conflict error:', error)
-      show('解决冲突失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '解决冲突失败，请稍后重试'), { variant: 'error' })
     } finally {
       setResolvingConflict(false)
     }
@@ -245,7 +246,7 @@ const WikiBranchWorkspace = () => {
       <div className="mobile-page-shell antique-page">
         <div className="mobile-page-container">
           {loadError ? (
-            <LoadErrorState onRetry={() => void fetchWorkspace()} />
+            <LoadErrorState error={loadError} onRetry={() => void fetchWorkspace()} />
           ) : (
             <p className="text-center italic text-[var(--color-text-antique-muted)]">
               页面不存在或不可访问
@@ -284,7 +285,7 @@ const WikiBranchWorkspace = () => {
             )}
           </div>
         </div>
-        {loadError && <LoadErrorState onRetry={() => void fetchWorkspace()} />}
+        {loadError && <LoadErrorState error={loadError} onRetry={() => void fetchWorkspace()} />}
         {loading && (
           <div className="flex justify-end">
             <Spinner size="sm" label="工作区刷新中" />

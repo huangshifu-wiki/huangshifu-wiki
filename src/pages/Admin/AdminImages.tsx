@@ -20,6 +20,7 @@ import {
   apiDownload,
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
+import { getApiErrorMessage, getErrorMessage } from '../../lib/errorHandler'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { useScrollRestore } from '../../hooks/useScrollRestore'
@@ -229,7 +230,7 @@ const AdminImages: React.FC = () => {
       if (requestId !== imageRequestIdRef.current) return
       console.error(error)
       setLoadError(error)
-      if (!silent) show('获取图片列表失败', { variant: 'error' })
+      if (!silent) show(getErrorMessage(error, '获取图片列表失败'), { variant: 'error' })
     } finally {
       if (requestId === imageRequestIdRef.current && !silent) setLoading(false)
     }
@@ -270,8 +271,10 @@ const AdminImages: React.FC = () => {
   const handleExport = async (format: 'json' | 'csv') => {
     try {
       const response = await apiDownload(`/api/image-maps/export?format=${format}`)
-      if (!response.ok)
-        throw new Error((await response.json().catch(() => ({}))).error || '导出失败')
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(getApiErrorMessage(data) || '导出失败')
+      }
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -283,7 +286,7 @@ const AdminImages: React.FC = () => {
       URL.revokeObjectURL(url)
       show(`成功导出 ${images.length} 条图片记录`, { variant: 'success' })
     } catch (error) {
-      show(error instanceof Error ? error.message : '导出失败', { variant: 'error' })
+      show(getErrorMessage(error, '导出失败'), { variant: 'error' })
     }
   }
 
@@ -299,8 +302,8 @@ const AdminImages: React.FC = () => {
       await apiDelete(`/api/image-maps/${id}`)
       await Promise.all([refreshImages(), fetchStats()])
       show('删除成功', { variant: 'success' })
-    } catch {
-      show('删除失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '删除失败'), { variant: 'error' })
     }
   }
 
@@ -314,8 +317,8 @@ const AdminImages: React.FC = () => {
         setImages((prev) => prev.map((img) => (img.id === id ? response.item : img)))
         show('Blurhash 生成成功', { variant: 'success' })
       }
-    } catch {
-      show('生成 Blurhash 失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '生成 Blurhash 失败'), { variant: 'error' })
     }
   }
 
@@ -332,8 +335,8 @@ const AdminImages: React.FC = () => {
       setEditingImage(null)
       show('更新成功', { variant: 'success' })
       fetchStats()
-    } catch {
-      show('更新失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '更新失败'), { variant: 'error' })
     }
   }
 
@@ -343,8 +346,8 @@ const AdminImages: React.FC = () => {
       clearImagePreferenceCache()
       setShowPreferenceModal(false)
       show('设置已保存', { variant: 'success' })
-    } catch {
-      show('保存设置失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '保存设置失败'), { variant: 'error' })
     }
   }
 
@@ -359,7 +362,7 @@ const AdminImages: React.FC = () => {
       setMediaHealth(response.data)
       setSelectedHealthItems([])
     } catch (error) {
-      show(error instanceof Error ? error.message : '媒体健康扫描失败', { variant: 'error' })
+      show(getErrorMessage(error, '媒体健康扫描失败'), { variant: 'error' })
     } finally {
       setMediaHealthLoading(false)
     }
@@ -407,7 +410,7 @@ const AdminImages: React.FC = () => {
       })
       await Promise.all([handleScanMediaHealth(mediaHealthMode), refreshImages(), fetchStats()])
     } catch (error) {
-      show(error instanceof Error ? error.message : '媒体记录清理失败', { variant: 'error' })
+      show(getErrorMessage(error, '媒体记录清理失败'), { variant: 'error' })
     } finally {
       setMediaHealthCleaning(false)
     }
@@ -418,7 +421,11 @@ const AdminImages: React.FC = () => {
   }
   if (loadError && images.length === 0) {
     return (
-      <LoadErrorState description="图片列表加载失败，请重试。" onRetry={() => void fetchImages()} />
+      <LoadErrorState
+        error={loadError}
+        description="图片列表加载失败，请重试。"
+        onRetry={() => void fetchImages()}
+      />
     )
   }
 
@@ -447,6 +454,7 @@ const AdminImages: React.FC = () => {
       {loadError && images.length > 0 && (
         <LoadErrorState
           className="py-5"
+          error={loadError}
           description="当前图片列表可能不是最新内容。"
           onRetry={() => void fetchImages()}
         />
@@ -1001,8 +1009,8 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) =
         })
       else show(`成功导入 ${response.success} 条记录`, { variant: 'success' })
       onSuccess()
-    } catch {
-      show('导入失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '导入失败'), { variant: 'error' })
     } finally {
       setLoading(false)
     }

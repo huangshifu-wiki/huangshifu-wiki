@@ -5,6 +5,7 @@ import { useMusic } from '../../context/MusicContext'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../Toast'
 import { apiDelete, apiPost } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { VIEW_MODE_CONFIG } from '../../lib/viewModes'
 import type { SongItem } from '../../types/entities'
 import type { ViewMode } from '../../types/userPreferences'
@@ -66,7 +67,7 @@ export const MusicSearchResults: React.FC<MusicSearchResultsProps> = ({ songs, v
     } catch (error) {
       console.error('Toggle music favorite error:', error)
       applyFavorite(song.favoritedByMe)
-      show('收藏操作失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '收藏操作失败，请稍后重试'), { variant: 'error' })
     } finally {
       setFavoriting(null)
     }

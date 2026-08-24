@@ -2,6 +2,7 @@ import { Loader2 } from '@/src/components/icons'
 import React, { useId } from 'react'
 import { Button } from './actions'
 import { cn } from './utils'
+import { getErrorMessage } from '@/src/lib/errorHandler'
 
 export const Panel = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
@@ -81,6 +82,7 @@ export const Spinner = ({ className, label = '加载中', size = 'md' }: Spinner
 export interface LoadErrorStateProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
   title?: React.ReactNode
   description?: React.ReactNode
+  error?: unknown
   retryLabel?: React.ReactNode
   onRetry?: () => void
 }
@@ -90,32 +92,40 @@ export const LoadErrorState = React.forwardRef<HTMLDivElement, LoadErrorStatePro
     {
       title = '加载失败',
       description = '内容暂时无法加载，请稍后重试。',
+      error,
       retryLabel = '重新加载',
       onRetry,
       className,
       ...props
     },
     ref
-  ) => (
-    <div
-      ref={ref}
-      className={cn('py-12 text-center text-text-muted', className)}
-      {...props}
-      role="alert"
-    >
-      <h3 className="font-[var(--book-title-font)] text-xl tracking-[0.08em] text-text-primary">
-        {title}
-      </h3>
-      {description && <p className="mx-auto mt-2 max-w-md text-sm">{description}</p>}
-      {onRetry && (
-        <div className="mt-5 flex justify-center">
-          <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
-            {retryLabel}
-          </Button>
-        </div>
-      )}
-    </div>
-  )
+  ) => {
+    const errorMessage = error == null ? '' : getErrorMessage(error, '')
+    const resolvedDescription = errorMessage || description
+
+    return (
+      <div
+        ref={ref}
+        className={cn('py-12 text-center text-text-muted', className)}
+        {...props}
+        role="alert"
+      >
+        <h3 className="font-[var(--book-title-font)] text-xl tracking-[0.08em] text-text-primary">
+          {title}
+        </h3>
+        {resolvedDescription && (
+          <p className="mx-auto mt-2 max-w-md text-sm">{resolvedDescription}</p>
+        )}
+        {onRetry && (
+          <div className="mt-5 flex justify-center">
+            <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+              {retryLabel}
+            </Button>
+          </div>
+        )}
+      </div>
+    )
+  }
 )
 LoadErrorState.displayName = 'LoadErrorState'
 

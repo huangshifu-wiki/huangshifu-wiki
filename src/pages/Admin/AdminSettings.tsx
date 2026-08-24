@@ -31,6 +31,7 @@ import {
   clearApiCache,
   generateApiCacheKey,
 } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { useToast } from '../../components/Toast'
 import type {
   EmailVerificationAdminConfig,
@@ -540,7 +541,7 @@ interface BooleanSettingSectionProps {
   title: string
   loading: boolean
   loadingText: string
-  loadError: boolean
+  loadError: unknown | null
   errorText: string
   retry: () => void
   enabled: boolean
@@ -589,37 +590,37 @@ const AdminSettings = () => {
   const { show } = useToast()
   const [form, setForm] = useState<EmailVerificationForm>(DEFAULT_EMAIL_VERIFICATION_FORM)
   const [loading, setLoading] = useState(false)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [savingAll, setSavingAll] = useState(false)
   const [registrationConfig, setRegistrationConfig] = useState<RegistrationConfig>({
     enabled: true,
   })
   const [registrationLoading, setRegistrationLoading] = useState(true)
-  const [registrationLoadError, setRegistrationLoadError] = useState(false)
+  const [registrationLoadError, setRegistrationLoadError] = useState<unknown | null>(null)
   const [searchHotKeywordsConfig, setSearchHotKeywordsConfig] = useState<SearchHotKeywordsConfig>({
     enabled: true,
   })
   const [searchHotKeywordsLoading, setSearchHotKeywordsLoading] = useState(true)
-  const [searchHotKeywordsLoadError, setSearchHotKeywordsLoadError] = useState(false)
+  const [searchHotKeywordsLoadError, setSearchHotKeywordsLoadError] = useState<unknown | null>(null)
   const [rateLimitConfig, setRateLimitConfig] = useState<RateLimitAdminConfig | null>(null)
   const [rateLimitLoading, setRateLimitLoading] = useState(true)
-  const [rateLimitLoadError, setRateLimitLoadError] = useState(false)
+  const [rateLimitLoadError, setRateLimitLoadError] = useState<unknown | null>(null)
   const [rateLimitResetting, setRateLimitResetting] = useState(false)
   const [runtimeForm, setRuntimeForm] = useState<RuntimeAdminConfig | null>(null)
   const [runtimeLoading, setRuntimeLoading] = useState(true)
-  const [runtimeLoadError, setRuntimeLoadError] = useState(false)
+  const [runtimeLoadError, setRuntimeLoadError] = useState<unknown | null>(null)
   const [runtimeSaveSuccess, setRuntimeSaveSuccess] = useState(false)
   const [runtimeValidationErrors, setRuntimeValidationErrors] = useState<string[]>([])
   const [secretsConfig, setSecretsConfig] = useState<SecretsAdminConfig | null>(null)
   const [secretsLoading, setSecretsLoading] = useState(true)
-  const [secretsLoadError, setSecretsLoadError] = useState(false)
+  const [secretsLoadError, setSecretsLoadError] = useState<unknown | null>(null)
   const [secretsDirty, setSecretsDirty] = useState(false)
   const [secretsForm, setSecretsForm] = useState<Record<string, string | null>>({})
 
   const loadConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
       setLoading(true)
-      setLoadError(false)
+      setLoadError(null)
 
       try {
         const data = await apiRequest<EmailVerificationAdminConfig>(
@@ -635,8 +636,8 @@ const AdminSettings = () => {
       } catch (error) {
         if (!isActive()) return
         console.error('Load email verification config failed:', error)
-        setLoadError(true)
-        show('邮件服务配置加载失败', { variant: 'error' })
+        setLoadError(error)
+        show(getErrorMessage(error, '邮件服务配置加载失败'), { variant: 'error' })
       } finally {
         if (isActive()) setLoading(false)
       }
@@ -656,7 +657,7 @@ const AdminSettings = () => {
   const loadRegistrationConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
       setRegistrationLoading(true)
-      setRegistrationLoadError(false)
+      setRegistrationLoadError(null)
 
       try {
         const data = await apiRequest<RegistrationConfig>(REGISTRATION_ADMIN_CONFIG_PATH, {
@@ -669,8 +670,8 @@ const AdminSettings = () => {
       } catch (error) {
         if (!isActive()) return
         console.error('Load registration config failed:', error)
-        setRegistrationLoadError(true)
-        show('注册配置加载失败', { variant: 'error' })
+        setRegistrationLoadError(error)
+        show(getErrorMessage(error, '注册配置加载失败'), { variant: 'error' })
       } finally {
         if (isActive()) setRegistrationLoading(false)
       }
@@ -690,7 +691,7 @@ const AdminSettings = () => {
   const loadSearchHotKeywordsConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
       setSearchHotKeywordsLoading(true)
-      setSearchHotKeywordsLoadError(false)
+      setSearchHotKeywordsLoadError(null)
 
       try {
         const data = await apiRequest<SearchHotKeywordsConfig>(
@@ -706,8 +707,8 @@ const AdminSettings = () => {
       } catch (error) {
         if (!isActive()) return
         console.error('Load search hot keywords config failed:', error)
-        setSearchHotKeywordsLoadError(true)
-        show('搜索热词配置加载失败', { variant: 'error' })
+        setSearchHotKeywordsLoadError(error)
+        show(getErrorMessage(error, '搜索热词配置加载失败'), { variant: 'error' })
       } finally {
         if (isActive()) setSearchHotKeywordsLoading(false)
       }
@@ -727,7 +728,7 @@ const AdminSettings = () => {
   const loadRateLimitConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
       setRateLimitLoading(true)
-      setRateLimitLoadError(false)
+      setRateLimitLoadError(null)
 
       try {
         const response = await apiGet<{
@@ -740,8 +741,8 @@ const AdminSettings = () => {
       } catch (error) {
         if (!isActive()) return
         console.error('Load rate limit config failed:', error)
-        setRateLimitLoadError(true)
-        show('请求限流配置加载失败', { variant: 'error' })
+        setRateLimitLoadError(error)
+        show(getErrorMessage(error, '请求限流配置加载失败'), { variant: 'error' })
       } finally {
         if (isActive()) setRateLimitLoading(false)
       }
@@ -791,7 +792,7 @@ const AdminSettings = () => {
       return true
     } catch (error) {
       console.error('Save email verification config failed:', error)
-      show(error instanceof Error ? error.message : '站点设置保存失败', { variant: 'error' })
+      show(getErrorMessage(error, '站点设置保存失败'), { variant: 'error' })
       return false
     }
   }
@@ -814,7 +815,7 @@ const AdminSettings = () => {
       return true
     } catch (error) {
       console.error('Save registration config failed:', error)
-      show(error instanceof Error ? error.message : '注册设置保存失败', { variant: 'error' })
+      show(getErrorMessage(error, '注册设置保存失败'), { variant: 'error' })
       return false
     }
   }
@@ -838,7 +839,7 @@ const AdminSettings = () => {
       return true
     } catch (error) {
       console.error('Save search hot keywords config failed:', error)
-      show(error instanceof Error ? error.message : '搜索热词设置保存失败', { variant: 'error' })
+      show(getErrorMessage(error, '搜索热词设置保存失败'), { variant: 'error' })
       return false
     }
   }
@@ -860,14 +861,14 @@ const AdminSettings = () => {
       return true
     } catch (error) {
       console.error('Save rate limit config failed:', error)
-      show(error instanceof Error ? error.message : '请求限流配置保存失败', { variant: 'error' })
+      show(getErrorMessage(error, '请求限流配置保存失败'), { variant: 'error' })
       return false
     }
   }
 
   const loadRuntimeConfig = useCallback(async () => {
     setRuntimeLoading(true)
-    setRuntimeLoadError(false)
+    setRuntimeLoadError(null)
     try {
       const result = await apiGet<RuntimeApiResponse<RuntimeAdminConfig>>(
         RUNTIME_CONFIG_PATH,
@@ -877,10 +878,10 @@ const AdminSettings = () => {
       if (result.success) {
         setRuntimeForm({ ...result.data })
       } else {
-        setRuntimeLoadError(true)
+        setRuntimeLoadError(new Error(result.error || '系统参数加载失败'))
       }
-    } catch {
-      setRuntimeLoadError(true)
+    } catch (error) {
+      setRuntimeLoadError(error)
     } finally {
       setRuntimeLoading(false)
     }
@@ -931,14 +932,14 @@ const AdminSettings = () => {
         throw new Error(result.error || '保存失败')
       }
     } catch (err) {
-      show(err instanceof Error ? err.message : '保存失败', { variant: 'error' })
+      show(getErrorMessage(err, '保存失败'), { variant: 'error' })
       return false
     }
   }
 
   const loadSecretsConfig = useCallback(async () => {
     setSecretsLoading(true)
-    setSecretsLoadError(false)
+    setSecretsLoadError(null)
     try {
       const result = await apiGet<RuntimeApiResponse<SecretsAdminConfig>>(
         SECRETS_CONFIG_PATH,
@@ -950,10 +951,10 @@ const AdminSettings = () => {
         setSecretsForm({})
         setSecretsDirty(false)
       } else {
-        setSecretsLoadError(true)
+        setSecretsLoadError(new Error(result.error || '服务凭证加载失败'))
       }
-    } catch {
-      setSecretsLoadError(true)
+    } catch (error) {
+      setSecretsLoadError(error)
     } finally {
       setSecretsLoading(false)
     }
@@ -999,7 +1000,7 @@ const AdminSettings = () => {
         throw new Error(result.error || '保存失败')
       }
     } catch (err) {
-      show(err instanceof Error ? err.message : '服务凭证保存失败', { variant: 'error' })
+      show(getErrorMessage(err, '服务凭证保存失败'), { variant: 'error' })
       return false
     }
   }
@@ -1031,11 +1032,11 @@ const AdminSettings = () => {
 
       clearApiCache(RATE_LIMIT_ADMIN_CONFIG_CACHE_KEY)
       setRateLimitConfig(response.data)
-      setRateLimitLoadError(false)
+      setRateLimitLoadError(null)
       show('请求限流配置已恢复默认')
     } catch (error) {
       console.error('Reset rate limit config failed:', error)
-      show(error instanceof Error ? error.message : '请求限流配置重置失败', { variant: 'error' })
+      show(getErrorMessage(error, '请求限流配置重置失败'), { variant: 'error' })
     } finally {
       setRateLimitResetting(false)
     }

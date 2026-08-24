@@ -22,6 +22,7 @@ import { useToast } from '../../components/Toast'
 import { useToggleInteraction } from '../../hooks/useToggleInteraction'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../../lib/copyLink'
 import { apiGet, apiPost } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { formatDate } from '../../lib/dateUtils'
 import { buildMiniRelationGraphData } from '../../lib/wikiRelationGraph'
@@ -84,7 +85,7 @@ const WikiPageView = () => {
   const navigate = useNavigate()
   const [page, setPage] = useState<WikiItem | null>(null)
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const { user, isAdmin, isBanned } = useAuth()
   const { t } = useI18n()
   const { show } = useToast()
@@ -117,7 +118,7 @@ const WikiPageView = () => {
 
   const fetchPage = async () => {
     setLoading(true)
-    setLoadError(false)
+    setLoadError(null)
     try {
       const data = await apiGet<{
         page: WikiItem
@@ -144,7 +145,7 @@ const WikiPageView = () => {
       }
     } catch (error) {
       console.error('Error fetching page:', error)
-      setLoadError(true)
+      setLoadError(error)
     } finally {
       setLoading(false)
     }
@@ -182,7 +183,7 @@ const WikiPageView = () => {
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
           />
           {loadError ? (
-            <LoadErrorState className="mt-8" onRetry={() => void fetchPage()} />
+            <LoadErrorState error={loadError} className="mt-8" onRetry={() => void fetchPage()} />
           ) : (
             <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
               {t('wiki.notFound')}
@@ -239,7 +240,7 @@ const WikiPageView = () => {
       }
     } catch (error) {
       console.error('Submit wiki review failed:', error)
-      show(t('wiki.reviewSubmitFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('wiki.reviewSubmitFailed')), { variant: 'error' })
     } finally {
       setSubmittingReview(false)
     }
@@ -257,7 +258,9 @@ const WikiPageView = () => {
           icon={<ArrowLeft size={18} />}
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
         />
-        {loadError && <LoadErrorState className="mb-6" onRetry={() => void fetchPage()} />}
+        {loadError && (
+          <LoadErrorState error={loadError} className="mb-6" onRetry={() => void fetchPage()} />
+        )}
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">

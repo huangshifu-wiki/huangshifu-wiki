@@ -24,6 +24,7 @@ import {
   apiPost,
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { formatDateTime } from '../../lib/dateUtils'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { useDialog } from '../../components/Dialog'
@@ -628,7 +629,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       await fetchData({ silent: true })
     } catch (e) {
       setData(previousData)
-      show(e instanceof Error ? e.message : '删除失败', { variant: 'error' })
+      show(getErrorMessage(e, '删除失败'), { variant: 'error' })
     } finally {
       setRowPendingAction(id, null)
     }
@@ -652,7 +653,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       await fetchData({ silent: true })
     } catch (e) {
       setData(previousData)
-      show(e instanceof Error ? e.message : '恢复失败', { variant: 'error' })
+      show(getErrorMessage(e, '恢复失败'), { variant: 'error' })
     } finally {
       setRowPendingAction(id, null)
     }
@@ -677,7 +678,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       await fetchData({ silent: true })
     } catch (e) {
       setData(previousData)
-      show(e instanceof Error ? e.message : '彻底删除失败', { variant: 'error' })
+      show(getErrorMessage(e, '彻底删除失败'), { variant: 'error' })
     } finally {
       setRowPendingAction(id, null)
     }
@@ -708,7 +709,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       show('创建成功', { variant: 'success' })
       await fetchData({ silent: true })
     } catch (e) {
-      show('创建失败', { variant: 'error' })
+      show(getErrorMessage(e, '创建失败'), { variant: 'error' })
     }
   }
 
@@ -723,7 +724,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       show('更新成功', { variant: 'success' })
       await fetchData({ silent: true })
     } catch (e) {
-      show(e instanceof Error ? e.message : '更新失败', { variant: 'error' })
+      show(getErrorMessage(e, '更新失败'), { variant: 'error' })
     }
   }
 
@@ -743,7 +744,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       show('状态已更新', { variant: 'success' })
       await fetchData({ silent: true })
     } catch (e) {
-      show('更新失败', { variant: 'error' })
+      show(getErrorMessage(e, '更新失败'), { variant: 'error' })
     }
   }
 
@@ -880,6 +881,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         {loadError && data.length > 0 && (
           <LoadErrorState
             className="py-5"
+            error={loadError}
             description="当前列表可能不是最新内容。"
             onRetry={() => void fetchData()}
           />
@@ -1067,7 +1069,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                 {loadError && data.length === 0 ? (
                   <tr>
                     <td colSpan={cfg.columns.length}>
-                      <LoadErrorState onRetry={() => void fetchData()} />
+                      <LoadErrorState error={loadError} onRetry={() => void fetchData()} />
                     </td>
                   </tr>
                 ) : data.length > 0 ? (
