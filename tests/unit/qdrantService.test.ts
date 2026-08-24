@@ -432,6 +432,24 @@ describe('qdrantService', () => {
       const callArgs = qdrantClientInstanceMock.search.mock.calls[0][1]
       expect(callArgs.filter).toBeUndefined()
     })
+    it('透传向量分页 offset', async () => {
+      qdrantClientInstanceMock.search.mockResolvedValueOnce([])
+      const { searchImageEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
+      await searchImageEmbeddingPoints({ vector: [0.1, 0.2], limit: 100, offset: 200 })
+      expect(qdrantClientInstanceMock.search).toHaveBeenCalledWith(
+        'hsf_image_embeddings',
+        expect.objectContaining({ limit: 100, offset: 200 })
+      )
+    })
+  })
+  it('透传文本向量分页 offset', async () => {
+    qdrantClientInstanceMock.search.mockResolvedValueOnce([])
+    const { searchTextEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
+    await searchTextEmbeddingPoints([0.1, 0.2], 100, 0.5, 200)
+    expect(qdrantClientInstanceMock.search).toHaveBeenCalledWith(
+      'hsf_text_embeddings',
+      expect.objectContaining({ limit: 100, offset: 200, score_threshold: 0.5 })
+    )
   })
 
   describe('toEmbeddingPayload', () => {

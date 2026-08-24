@@ -9,6 +9,7 @@ interface SearchResultSectionBaseProps<T> {
   items: T[]
   pagination: UsePaginationReturn
   dockGroup: string
+  onPageChange?: (page: number) => void
 }
 
 type SearchResultSectionProps<T> =
@@ -20,16 +21,14 @@ type SearchResultSectionProps<T> =
     })
   | (SearchResultSectionBaseProps<T> & {
       renderGrid: false
-      renderItems: (items: T[], startIndex: number) => React.ReactNode
+      renderItems: (items: T[]) => React.ReactNode
     })
 
 export function SearchResultSection<T>(props: SearchResultSectionProps<T>) {
-  const { title, icon, items, pagination, dockGroup } = props
+  const { title, icon, items, pagination, dockGroup, onPageChange } = props
   const sectionRef = React.useRef<HTMLElement | null>(null)
   const totalPages = Math.max(1, pagination.totalPages)
   const page = Math.max(1, Math.min(pagination.page, totalPages))
-  const startIndex = (page - 1) * pagination.pageSize
-  const visibleItems = items.slice(startIndex, startIndex + pagination.pageSize)
 
   return (
     <motion.section
@@ -43,12 +42,12 @@ export function SearchResultSection<T>(props: SearchResultSectionProps<T>) {
         {icon} {title}
       </h2>
       {props.renderGrid === false ? (
-        props.renderItems(visibleItems, startIndex)
+        props.renderItems(items)
       ) : (
         <div className={props.resultGridClassName}>
-          {visibleItems.map((item, index) => (
-            <React.Fragment key={props.getItemKey(item, startIndex + index)}>
-              {props.renderItem(item, startIndex + index)}
+          {items.map((item, index) => (
+            <React.Fragment key={props.getItemKey(item, index)}>
+              {props.renderItem(item, index)}
             </React.Fragment>
           ))}
         </div>
@@ -57,11 +56,13 @@ export function SearchResultSection<T>(props: SearchResultSectionProps<T>) {
         <Pagination
           page={page}
           totalPages={totalPages}
-          onPageChange={pagination.setPage}
+          onPageChange={(nextPage) => {
+            pagination.setPage(nextPage)
+            onPageChange?.(nextPage)
+          }}
           dockGroup={dockGroup}
           dockLabel={title}
           dockSectionRef={sectionRef}
-          showPageSizeSelector={false}
         />
       )}
     </motion.section>

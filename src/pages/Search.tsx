@@ -27,6 +27,7 @@ const Search: React.FC = () => {
     resetFilters,
     setActiveTab,
     setShowFilters,
+    fetchImageSearchPage,
     dismissSuggestions,
     removeSearchHistoryItem,
     clearSearchHistory,
@@ -95,6 +96,7 @@ const Search: React.FC = () => {
           viewMode={viewMode}
           tabItems={tabItems}
           onTabChange={setActiveTab}
+          onMixedPageChange={fetchImageSearchPage}
           onRetry={
             state.query
               ? () =>

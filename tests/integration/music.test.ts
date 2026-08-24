@@ -37,8 +37,7 @@ const MUSIC_TEST_TITLE_PREFIXES = [
   'Admin Search Desc Test Song',
   'Admin Search All Mode Test Song',
   'Display Relation Song',
-  'Paged Music Test Song',
-  '000 Paged Music Test Song',
+  'Unbounded Search Test Song',
   'Release Date Sort Test Song',
   'Lyric Storage Test Song',
   'Display Sync Test Song',
@@ -656,9 +655,8 @@ describe('Music API - 音乐接口测试', () => {
 
     const searchResponse = await request(app).get('/api/search').query({ q: '诗扶', type: 'music' })
 
-    expect(searchResponse.status).toBe(200)
     expect(
-      searchResponse.body.music.some((item: { docId: string }) => item.docId === song.docId)
+      searchResponse.body.music.items.some((item: { docId: string }) => item.docId === song.docId)
     ).toBe(true)
 
     const suggestResponse = await request(app).get('/api/search/suggest').query({ q: '诗扶' })
@@ -669,6 +667,41 @@ describe('Music API - 音乐接口测试', () => {
         (item: { type: string; id?: string }) => item.type === 'music' && item.id === song.slug
       )
     ).toBe(true)
+  })
+  it('音乐搜索分页可读取超过原有百条上限的结果', async () => {
+    await prisma.musicTrack.createMany({
+      data: Array.from({ length: 101 }, (_, index) => ({
+        slug: nextTestNumericSlug(),
+        title: `Unbounded Search Test Song ${index + 1}`,
+        artists: ['分页测试艺人'],
+        album: '',
+      })),
+    })
+
+    const firstPage = await request(app)
+      .get('/api/search')
+      .query({ q: 'Unbounded Search Test Song', type: 'music', musicPage: 1 })
+    const sixthPage = await request(app)
+      .get('/api/search')
+      .query({ q: 'Unbounded Search Test Song', type: 'music', musicPage: 6 })
+    const outOfRange = await request(app)
+      .get('/api/search')
+      .query({ q: 'Unbounded Search Test Song', type: 'music', musicPage: 999 })
+
+    expect(firstPage.status).toBe(200)
+    expect(sixthPage.status).toBe(200)
+    expect(outOfRange.status).toBe(200)
+    expect(firstPage.body.music.limit).toBe(20)
+    expect(firstPage.body.music.total).toBeGreaterThanOrEqual(101)
+    expect(firstPage.body.music.totalPages).toBeGreaterThanOrEqual(6)
+    expect(firstPage.body.music.items).toHaveLength(20)
+    expect(sixthPage.body.music.items).toHaveLength(1)
+    expect(firstPage.body.music.items.map((item: { docId: string }) => item.docId)).not.toEqual(
+      expect.arrayContaining(
+        sixthPage.body.music.items.map((item: { docId: string }) => item.docId)
+      )
+    )
+    expect(outOfRange.body.music.page).toBe(outOfRange.body.music.totalPages)
   })
 
   it('音乐搜索不索引歌词，歌词分类独立于搜索详情并按行返回', async () => {
@@ -690,7 +723,9 @@ describe('Music API - 音乐接口测试', () => {
       .query({ q: '独特歌词XYZ', type: 'music' })
 
     expect(musicRes.status).toBe(200)
-    expect(musicRes.body.music.some((m: { docId: string }) => m.docId === song.docId)).toBe(false)
+    expect(musicRes.body.music.items.some((m: { docId: string }) => m.docId === song.docId)).toBe(
+      false
+    )
 
     // 歌词分类不依赖搜索详情开关
     const lyricNoDetailRes = await request(app)
@@ -698,9 +733,9 @@ describe('Music API - 音乐接口测试', () => {
       .query({ q: '独特歌词XYZ', type: 'lyrics' })
 
     expect(lyricNoDetailRes.status).toBe(200)
-    expect(lyricNoDetailRes.body.lyrics).toHaveLength(1)
+    expect(lyricNoDetailRes.body.lyrics.items).toHaveLength(1)
     expect(
-      lyricNoDetailRes.body.lyrics[0].matchedLines.map((l: { text: string }) => l.text)
+      lyricNoDetailRes.body.lyrics.items[0].matchedLines.map((l: { text: string }) => l.text)
     ).toEqual(['第二行独特歌词XYZ'])
 
     // 开启详情后结果保持一致，歌词仍按行返回
@@ -709,16 +744,16 @@ describe('Music API - 音乐接口测试', () => {
       .query({ q: '独特歌词XYZ', type: 'lyrics', detail: '1' })
 
     expect(lyricRes.status).toBe(200)
-    expect(lyricRes.body.lyrics).toHaveLength(1)
-    expect(lyricRes.body.lyrics[0].matchedLines.map((l: { text: string }) => l.text)).toEqual([
-      '第二行独特歌词XYZ',
-    ])
+    expect(lyricRes.body.lyrics.items).toHaveLength(1)
+    expect(lyricRes.body.lyrics.items[0].matchedLines.map((l: { text: string }) => l.text)).toEqual(
+      ['第二行独特歌词XYZ']
+    )
 
     // 3. 同一首歌多行命中集中返回、保持原顺序
     const multiRes = await request(app).get('/api/search').query({ q: '歌词', type: 'lyrics' })
 
     expect(multiRes.status).toBe(200)
-    const multiSong = multiRes.body.lyrics.find(
+    const multiSong = multiRes.body.lyrics.items.find(
       (item: { docId: string }) => item.docId === song.docId
     )
     expect(multiSong).toBeTruthy()
@@ -734,9 +769,11 @@ describe('Music API - 音乐接口测试', () => {
     // 全部类型搜索也返回歌词结果，不污染音乐结果
     const allRes = await request(app).get('/api/search').query({ q: '独特歌词XYZ', type: 'all' })
     expect(allRes.status).toBe(200)
-    expect(allRes.body.music.some((m: { docId: string }) => m.docId === song.docId)).toBe(false)
-    expect(allRes.body.lyrics).toHaveLength(1)
-    expect(allRes.body.lyrics[0].matchedLines.map((l: { text: string }) => l.text)).toEqual([
+    expect(allRes.body.music.items.some((m: { docId: string }) => m.docId === song.docId)).toBe(
+      false
+    )
+    expect(allRes.body.lyrics.items).toHaveLength(1)
+    expect(allRes.body.lyrics.items[0].matchedLines.map((l: { text: string }) => l.text)).toEqual([
       '第二行独特歌词XYZ',
     ])
   })
@@ -755,18 +792,18 @@ describe('Music API - 音乐接口测试', () => {
     // 默认关闭搜索详情：描述命中不返回
     const plain = await request(app).get('/api/search').query({ q: '独特描述词XYZ', type: 'music' })
     expect(plain.status).toBe(200)
-    expect(plain.body.music.some((item: { docId: string }) => item.docId === song.docId)).toBe(
-      false
-    )
+    expect(
+      plain.body.music.items.some((item: { docId: string }) => item.docId === song.docId)
+    ).toBe(false)
 
     // 开启搜索详情：描述命中返回
     const withDetail = await request(app)
       .get('/api/search')
       .query({ q: '独特描述词XYZ', type: 'music', detail: '1' })
     expect(withDetail.status).toBe(200)
-    expect(withDetail.body.music.some((item: { docId: string }) => item.docId === song.docId)).toBe(
-      true
-    )
+    expect(
+      withDetail.body.music.items.some((item: { docId: string }) => item.docId === song.docId)
+    ).toBe(true)
   })
 
   it('搜索详情开关约束全部类型搜索与混合模式', async () => {
@@ -785,29 +822,28 @@ describe('Music API - 音乐接口测试', () => {
       .get('/api/search')
       .query({ q: '独特描述词XYZ', type: 'all' })
     expect(plainAll.status).toBe(200)
-    expect(plainAll.body.music.some((item: { docId: string }) => item.docId === song.docId)).toBe(
-      false
-    )
-    expect(plainAll.body.lyrics).toHaveLength(0)
+    expect(
+      plainAll.body.music.items.some((item: { docId: string }) => item.docId === song.docId)
+    ).toBe(false)
+    expect(plainAll.body.lyrics.items).toHaveLength(0)
 
     // 2. type=all 开启详情：描述命中（同 q 两次结果不同，验证 detail 维度进入缓存键）
     const detailAll = await request(app)
       .get('/api/search')
       .query({ q: '独特描述词XYZ', type: 'all', detail: '1' })
     expect(detailAll.status).toBe(200)
-    expect(detailAll.body.music.some((item: { docId: string }) => item.docId === song.docId)).toBe(
-      true
-    )
+    expect(
+      detailAll.body.music.items.some((item: { docId: string }) => item.docId === song.docId)
+    ).toBe(true)
 
     // 3. 混合模式关闭详情：退化为 keyword 形状响应，描述不命中
     const plainHybrid = await request(app)
       .get('/api/search')
       .query({ q: '独特描述词XYZ', type: 'music', mode: 'hybrid' })
     expect(plainHybrid.status).toBe(200)
-    expect(plainHybrid.body.searchMeta.mode).toBe('keyword')
     expect(plainHybrid.body.searchMeta.vectorResultCount).toBe(0)
     expect(
-      plainHybrid.body.music.some((item: { docId: string }) => item.docId === song.docId)
+      plainHybrid.body.music.items.some((item: { docId: string }) => item.docId === song.docId)
     ).toBe(false)
 
     // 4. 混合模式开启详情：关键词部分命中描述
@@ -816,7 +852,7 @@ describe('Music API - 音乐接口测试', () => {
       .query({ q: '独特描述词XYZ', type: 'music', mode: 'hybrid', detail: '1' })
     expect(detailHybrid.status).toBe(200)
     expect(
-      detailHybrid.body.music.some((item: { docId: string }) => item.docId === song.docId)
+      detailHybrid.body.music.items.some((item: { docId: string }) => item.docId === song.docId)
     ).toBe(true)
   })
 

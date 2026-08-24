@@ -3,13 +3,16 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
+import { randomUUID } from 'crypto'
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/auth'
-import type { ApiUser } from '../types'
 import { searchLimiter } from '../middleware/rateLimiter'
+import type { ApiUser } from '../types'
 import {
   parseInteger,
-  parseBoolean,
+  parsePagination,
+  createPaginationMeta,
   parseMinSimilarityScore,
+  parseBoolean,
   extractBase64Payload,
   normalizeKeyword,
   increaseSearchKeywordCount,
@@ -37,21 +40,102 @@ import { formatMusicCredits } from '../../lib/musicCredits'
 import { parseLyrics } from '../../lib/lrcParser'
 import type { LyricMatchLine, LyricSearchItem } from '../../types/entities'
 import type { ImageSourceType, ImageEmbeddingPayload } from '../vector/qdrantService'
+import type { SemanticSearchResult } from '../../types/api'
 import { createUploadStorageInfo } from '../uploadPath'
 
 const router = Router()
 
-const VECTOR_SEARCH_CANDIDATE_LIMIT = 200
+const SEARCH_PAGE_SIZE = 20
+const VECTOR_SCAN_BATCH_SIZE = 100
 export const RRF_K = 60
-const LYRICS_SEARCH_TAKE = 100
 const MAX_MATCHED_LINES_PER_SONG = 30
 
-function getImageSearchResultLimit(): number {
-  return runtimeConfigService.getConfig().imageSearchResultLimit
+function makeSearchPage<T>(items: T[], total: number, pagination: { page: number; limit: number }) {
+  const totalPages = Math.max(1, Math.ceil(total / pagination.limit))
+  const page = Math.min(pagination.page, totalPages)
+  return {
+    items,
+    ...createPaginationMeta(total, page, pagination.limit, items.length),
+  }
+}
+function makeHybridPagedResponse(
+  response: HybridSearchResponse,
+  pages: Record<
+    'wiki' | 'posts' | 'galleries' | 'music' | 'albums' | 'lyrics',
+    { page: number; limit: number; offset?: number }
+  >
+) {
+  const page = <T>(items: T[], pagination: { page: number; limit: number; offset?: number }) => {
+    const total = items.length
+    const meta = makeSearchPage(
+      items.slice(
+        pagination.offset ?? (pagination.page - 1) * pagination.limit,
+        (pagination.offset ?? (pagination.page - 1) * pagination.limit) + pagination.limit
+      ),
+      total,
+      pagination
+    )
+    return meta
+  }
+  return {
+    wiki: page(response.wiki, pages.wiki),
+    posts: page(response.posts, pages.posts),
+    galleries: page(response.galleries, pages.galleries),
+    music: page(response.music, pages.music),
+    albums: page(response.albums, pages.albums),
+    lyrics: page(response.lyrics || [], pages.lyrics),
+    searchMeta: response.searchMeta,
+  }
 }
 
 function getQdrantTimeoutMs(): number {
   return runtimeConfigService.getConfig().qdrantTimeoutMs
+}
+type ImageSearchSessionResult = Pick<
+  SemanticSearchResult,
+  'sourceType' | 'sourceId' | 'imageUrl' | 'similarity'
+>
+type ImageSearchSession = {
+  userId: string | null
+  results: ImageSearchSessionResult[]
+  expiresAt: number
+}
+
+const imageSearchSessions = new Map<string, ImageSearchSession>()
+
+function cleanupExpiredImageSearchSessions() {
+  const now = Date.now()
+  for (const [key, session] of imageSearchSessions) {
+    if (session.expiresAt <= now) imageSearchSessions.delete(key)
+  }
+}
+
+async function scanAllImageEmbeddingPoints(
+  vector: number[],
+  minScore?: number,
+  timeoutMs = getQdrantTimeoutMs()
+) {
+  const { searchImageEmbeddingPoints } = await loadQdrantService()
+  const matches = []
+  const deadline = Date.now() + timeoutMs
+  for (let offset = 0; ; offset += VECTOR_SCAN_BATCH_SIZE) {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw new Error('Qdrant 搜索超时')
+    const batch = await Promise.race([
+      searchImageEmbeddingPoints({
+        vector,
+        limit: VECTOR_SCAN_BATCH_SIZE,
+        offset,
+        minScore,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Qdrant 搜索超时')), remaining)
+      ),
+    ])
+    matches.push(...batch)
+    if (batch.length < VECTOR_SCAN_BATCH_SIZE) break
+  }
+  return matches
 }
 // 音乐搜索与歌词搜索共用的歌曲字段，覆盖 toMusicResponse 必填入参
 // （description/customPlatformLinks 为可选字段，搜索结果有意不取）
@@ -217,14 +301,6 @@ const searchImageUpload = multer({
     cb(null, true)
   },
 })
-
-interface SemanticSearchResult {
-  sourceType: ImageSourceType
-  sourceId: string
-  imageUrl: string
-  similarity: number
-  data: unknown
-}
 
 type TextSearchResult = {
   sourceType: string
@@ -403,8 +479,11 @@ async function processSemanticSearchResults(
 ): Promise<SemanticSearchResult[]> {
   // 按 sourceType 分组
   const galleryIds: string[] = []
+  const galleryIdSet = new Set<string>()
   const wikiSlugs: string[] = []
+  const wikiSlugSet = new Set<string>()
   const postIds: string[] = []
+  const postIdSet = new Set<string>()
 
   // 记录每个 sourceId 的最高相似度分数
   const scoreBySourceId = new Map<string, number>()
@@ -429,12 +508,15 @@ async function processSemanticSearchResults(
     }
 
     // 去重收集 ID
-    if (sourceType === 'gallery' && !galleryIds.includes(sourceId)) {
+    if (sourceType === 'gallery' && !galleryIdSet.has(sourceId)) {
       galleryIds.push(sourceId)
-    } else if (sourceType === 'wiki' && !wikiSlugs.includes(sourceId)) {
+      galleryIdSet.add(sourceId)
+    } else if (sourceType === 'wiki' && !wikiSlugSet.has(sourceId)) {
       wikiSlugs.push(sourceId)
-    } else if (sourceType === 'post' && !postIds.includes(sourceId)) {
+      wikiSlugSet.add(sourceId)
+    } else if (sourceType === 'post' && !postIdSet.has(sourceId)) {
       postIds.push(sourceId)
+      postIdSet.add(sourceId)
     }
   }
 
@@ -505,27 +587,30 @@ export function rrfScore(ranks: Array<number | undefined>): number {
 
 export async function fetchVectorSearchWithTimeout(
   q: string,
-  limit: number,
+  _limit: number,
   minScore: number,
   timeoutMs: number,
   authUser?: ApiUser
 ): Promise<{ results: SemanticSearchResult[]; timedOut: boolean }> {
-  if (!isSemanticSearchEnabled()) {
-    return { results: [], timedOut: false }
-  }
-
+  if (!isSemanticSearchEnabled()) return { results: [], timedOut: false }
   const results = await Promise.race([
-    (async (): Promise<{ results: SemanticSearchResult[]; timedOut: boolean }> => {
+    (async () => {
       const [{ generateTextEmbedding }, { searchImageEmbeddingPoints }] = await Promise.all([
         loadClipEmbedding(),
         loadQdrantService(),
       ])
       const queryVector = await generateTextEmbedding(q)
-      const matches = await searchImageEmbeddingPoints({
-        vector: queryVector,
-        limit,
-        minScore,
-      })
+      const matches = []
+      for (let offset = 0; ; offset += VECTOR_SCAN_BATCH_SIZE) {
+        const batch = await searchImageEmbeddingPoints({
+          vector: queryVector,
+          limit: VECTOR_SCAN_BATCH_SIZE,
+          offset,
+          minScore,
+        })
+        matches.push(...batch)
+        if (batch.length < VECTOR_SCAN_BATCH_SIZE) break
+      }
       return { results: await processSemanticSearchResults(matches, authUser), timedOut: false }
     })(),
     new Promise<{ results: SemanticSearchResult[]; timedOut: boolean }>((resolve) =>
@@ -537,26 +622,29 @@ export async function fetchVectorSearchWithTimeout(
 
 async function fetchTextVectorSearchWithTimeout(
   q: string,
-  limit: number,
+  _limit: number,
   minScore: number,
   timeoutMs: number,
   authUser?: ApiUser
 ): Promise<{ results: TextSearchResult[]; timedOut: boolean }> {
-  if (!isSemanticSearchEnabled()) {
-    return { results: [], timedOut: false }
-  }
-
-  const [{ generateTextEmbedding, isTextModelLoaded }, { searchTextEmbeddingPoints }] =
-    await Promise.all([loadClipEmbedding(), loadQdrantService()])
-
-  if (!isTextModelLoaded()) {
-    return { results: [], timedOut: false }
-  }
-
+  if (!isSemanticSearchEnabled()) return { results: [], timedOut: false }
   const results = await Promise.race([
-    (async (): Promise<{ results: TextSearchResult[]; timedOut: boolean }> => {
+    (async () => {
+      const [{ generateTextEmbedding, isTextModelLoaded }, { searchTextEmbeddingPoints }] =
+        await Promise.all([loadClipEmbedding(), loadQdrantService()])
+      if (!isTextModelLoaded()) return { results: [], timedOut: false }
       const queryVector = await generateTextEmbedding(q)
-      const matches = await searchTextEmbeddingPoints(queryVector, limit, minScore)
+      const matches = []
+      for (let offset = 0; ; offset += VECTOR_SCAN_BATCH_SIZE) {
+        const batch = await searchTextEmbeddingPoints(
+          queryVector,
+          VECTOR_SCAN_BATCH_SIZE,
+          minScore,
+          offset
+        )
+        matches.push(...batch)
+        if (batch.length < VECTOR_SCAN_BATCH_SIZE) break
+      }
       return { results: await processTextSearchResults(matches, authUser), timedOut: false }
     })(),
     new Promise<{ results: TextSearchResult[]; timedOut: boolean }>((resolve) =>
@@ -859,10 +947,17 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const wantsMusic = type === 'all' || type === 'music'
     const wantsAlbums = type === 'all' || type === 'albums'
     const wantsLyrics = type === 'all' || type === 'lyrics'
-
+    const wikiPage = parsePagination({ page: req.query.wikiPage, limit: SEARCH_PAGE_SIZE })
+    const postsPage = parsePagination({ page: req.query.postsPage, limit: SEARCH_PAGE_SIZE })
+    const galleriesPage = parsePagination({
+      page: req.query.galleriesPage,
+      limit: SEARCH_PAGE_SIZE,
+    })
+    const musicPage = parsePagination({ page: req.query.musicPage, limit: SEARCH_PAGE_SIZE })
+    const albumsPage = parsePagination({ page: req.query.albumsPage, limit: SEARCH_PAGE_SIZE })
+    const lyricsPage = parsePagination({ page: req.query.lyricsPage, limit: SEARCH_PAGE_SIZE })
     // 搜索详情开关控制其他内容的正文匹配；歌词分类始终按歌词内容检索
     const includeDetail = parseBoolean(req.query.detail)
-
     if (q) {
       increaseSearchKeywordCount(q)
     }
@@ -870,13 +965,11 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const wikiVisibilityWhere = buildWikiVisibilityWhere(req.authUser)
     const postVisibilityWhere = buildPostVisibilityWhere(req.authUser)
     const galleryVisibilityWhere = buildGalleryVisibilityWhere(req.authUser)
-
-    const cacheKey = `search:${q}:${category || 'all'}:${type}:${mode}:${req.authUser?.role || 'anonymous'}:${includeDetail ? 'detail' : 'title'}`
+    const cacheKey = `search:${q}:${category || 'all'}:${type}:${mode}:${req.authUser?.uid || 'anonymous'}:${includeDetail ? 'detail' : 'title'}:${JSON.stringify({ tags: [...tags].sort(), startDate, endDate, pages: { wiki: wikiPage.page, posts: postsPage.page, galleries: galleriesPage.page, music: musicPage.page, albums: albumsPage.page, lyrics: lyricsPage.page } })}`
     const cached = enhancedCache.get(cacheKey)
     if (cached) return res.json(cached)
-    const musicArtistMatchDocIds =
-      wantsMusic && q ? await findMusicDocIdsByArtistPartial(q, 100) : []
 
+    const musicArtistMatchDocIds = wantsMusic && q ? await findMusicDocIdsByArtistPartial(q) : []
     const wikiPromise = wantsWiki
       ? prisma.wikiPage.findMany({
           where: {
@@ -891,6 +984,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                   ],
                 }
               : {}),
+            ...(tags.length ? { tags: { array_contains: tags } } : {}),
             ...(startDate || endDate
               ? {
                   updatedAt: {
@@ -926,8 +1020,9 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
             updatedAt: true,
             location: true,
           },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
+          orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+          skip: mode === 'keyword' ? wikiPage.offset : undefined,
+          take: mode === 'keyword' ? wikiPage.limit : undefined,
         })
       : Promise.resolve([])
 
@@ -944,6 +1039,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                   ],
                 }
               : {}),
+            ...(tags.length ? { tags: { array_contains: tags } } : {}),
             ...(startDate || endDate
               ? {
                   updatedAt: {
@@ -980,8 +1076,9 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
             updatedAt: true,
             location: true,
           },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
+          orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+          skip: mode === 'keyword' ? postsPage.offset : undefined,
+          take: mode === 'keyword' ? postsPage.limit : undefined,
         })
       : Promise.resolve([])
 
@@ -997,6 +1094,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
                   ],
                 }
               : {}),
+            ...(tags.length ? { tags: { array_contains: tags } } : {}),
             ...(startDate || endDate
               ? {
                   updatedAt: {
@@ -1014,8 +1112,9 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
               orderBy: { sortOrder: 'asc' },
             },
           },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
+          orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+          skip: mode === 'keyword' ? galleriesPage.offset : undefined,
+          take: mode === 'keyword' ? galleriesPage.limit : undefined,
         })
       : Promise.resolve([])
 
@@ -1038,8 +1137,9 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
               : {}),
           },
           select: MUSIC_SEARCH_SELECT,
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
+          orderBy: [{ updatedAt: 'desc' }, { docId: 'asc' }],
+          skip: mode === 'keyword' ? musicPage.offset : undefined,
+          take: mode === 'keyword' ? musicPage.limit : undefined,
         })
       : Promise.resolve([])
 
@@ -1117,11 +1217,11 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
             createdAt: true,
             updatedAt: true,
           },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
+          orderBy: [{ updatedAt: 'desc' }, { docId: 'asc' }],
+          skip: mode === 'keyword' ? albumsPage.offset : undefined,
+          take: mode === 'keyword' ? albumsPage.limit : undefined,
         })
       : Promise.resolve([])
-
     const lyricsPromise =
       wantsLyrics && q
         ? prisma.musicTrack.findMany({
@@ -1134,18 +1234,163 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
               lyric: true,
               lyricPlain: true,
             },
-            orderBy: { updatedAt: 'desc' },
-            take: LYRICS_SEARCH_TAKE,
+            orderBy: [{ updatedAt: 'desc' }, { docId: 'asc' }],
+            skip: mode === 'keyword' ? lyricsPage.offset : undefined,
+            take: mode === 'keyword' ? lyricsPage.limit : undefined,
           })
         : Promise.resolve([])
+    const wikiCountPromise =
+      mode === 'keyword' && wantsWiki
+        ? prisma.wikiPage.count({
+            where: {
+              ...wikiVisibilityWhere,
+              ...(category ? { category } : {}),
+              ...(q
+                ? {
+                    OR: [
+                      { title: { contains: q } },
+                      { slug: { contains: q } },
+                      ...(includeDetail ? [{ content: { contains: q } }] : []),
+                    ],
+                  }
+                : {}),
+              ...(tags.length ? { tags: { array_contains: tags } } : {}),
+              ...(startDate || endDate
+                ? {
+                    updatedAt: {
+                      ...(startDate ? { gte: startDate } : {}),
+                      ...(endDate ? { lte: endDate } : {}),
+                    },
+                  }
+                : {}),
+            },
+          })
+        : Promise.resolve(0)
+    const postsCountPromise =
+      mode === 'keyword' && wantsPosts
+        ? prisma.post.count({
+            where: {
+              ...postVisibilityWhere,
+              ...(category ? { section: category } : {}),
+              ...(q
+                ? {
+                    OR: [
+                      { title: { contains: q } },
+                      ...(includeDetail ? [{ content: { contains: q } }] : []),
+                    ],
+                  }
+                : {}),
+              ...(tags.length ? { tags: { array_contains: tags } } : {}),
+              ...(startDate || endDate
+                ? {
+                    updatedAt: {
+                      ...(startDate ? { gte: startDate } : {}),
+                      ...(endDate ? { lte: endDate } : {}),
+                    },
+                  }
+                : {}),
+            },
+          })
+        : Promise.resolve(0)
+    const galleriesCountPromise =
+      mode === 'keyword' && wantsGalleries
+        ? prisma.gallery.count({
+            where: {
+              ...galleryVisibilityWhere,
+              ...(q
+                ? {
+                    OR: [
+                      { title: { contains: q } },
+                      ...(includeDetail ? [{ description: { contains: q } }] : []),
+                    ],
+                  }
+                : {}),
+              ...(tags.length ? { tags: { array_contains: tags } } : {}),
+              ...(startDate || endDate
+                ? {
+                    updatedAt: {
+                      ...(startDate ? { gte: startDate } : {}),
+                      ...(endDate ? { lte: endDate } : {}),
+                    },
+                  }
+                : {}),
+            },
+          })
+        : Promise.resolve(0)
+    const musicCountPromise =
+      mode === 'keyword' && wantsMusic
+        ? prisma.musicTrack.count({
+            where: {
+              deletedAt: null,
+              ...(q
+                ? {
+                    OR: [
+                      { title: { contains: q } },
+                      { artists: { has: q } },
+                      ...(musicArtistMatchDocIds.length
+                        ? [{ docId: { in: musicArtistMatchDocIds } }]
+                        : []),
+                      { album: { contains: q } },
+                      ...(includeDetail ? [{ description: { contains: q } }] : []),
+                    ],
+                  }
+                : {}),
+            },
+          })
+        : Promise.resolve(0)
+    const albumsCountPromise =
+      mode === 'keyword' && wantsAlbums
+        ? prisma.album.count({
+            where: {
+              deletedAt: null,
+              ...(q
+                ? {
+                    OR: [
+                      { title: { contains: q } },
+                      { artist: { contains: q } },
+                      ...(includeDetail ? [{ description: { contains: q } }] : []),
+                    ],
+                  }
+                : {}),
+            },
+          })
+        : Promise.resolve(0)
+    const lyricsCountPromise =
+      mode === 'keyword' && wantsLyrics && q
+        ? prisma.musicTrack.count({
+            where: {
+              deletedAt: null,
+              OR: [{ lyric: { contains: q } }, { lyricPlain: { contains: q } }],
+            },
+          })
+        : Promise.resolve(0)
 
-    const [wiki, posts, galleries, music, albums, lyrics] = await Promise.all([
+    const [
+      wiki,
+      posts,
+      galleries,
+      music,
+      albums,
+      lyrics,
+      wikiTotal,
+      postsTotal,
+      galleriesTotal,
+      musicTotal,
+      albumsTotal,
+      lyricsTotal,
+    ] = await Promise.all([
       wikiPromise,
       postsPromise,
       galleriesPromise,
       musicPromise,
       albumsPromise,
       lyricsPromise,
+      wikiCountPromise,
+      postsCountPromise,
+      galleriesCountPromise,
+      musicCountPromise,
+      albumsCountPromise,
+      lyricsCountPromise,
     ])
 
     const favoritedMusicSet = await fetchFavoritedMusicDocIds(
@@ -1191,7 +1436,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
         const [vectorResponse, textResponse] = await Promise.all([
           fetchVectorSearchWithTimeout(
             q,
-            VECTOR_SEARCH_CANDIDATE_LIMIT,
+            VECTOR_SCAN_BATCH_SIZE,
             0.25,
             qdrantTimeoutMs,
             req.authUser
@@ -1204,7 +1449,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
           }),
           fetchTextVectorSearchWithTimeout(
             q,
-            VECTOR_SEARCH_CANDIDATE_LIMIT,
+            VECTOR_SCAN_BATCH_SIZE,
             0.25,
             qdrantTimeoutMs,
             req.authUser
@@ -1234,40 +1479,42 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
           favoritedMusicSet
         )
       }
-
-      // 歌词结果是纯关键词行为：独立附加、不参与向量融合，keyword 与 hybrid 模式均返回
-      if (wantsLyrics) {
-        const builtLyrics = buildLyricSearchItems(lyrics, q)
-        hybridResponse.lyrics = builtLyrics
-        hybridResponse.searchMeta.keywordResultCount += builtLyrics.length
-      }
-
-      enhancedCache.set(cacheKey, hybridResponse, 30)
-      return res.json(hybridResponse)
+      res.json(
+        makeHybridPagedResponse(hybridResponse, {
+          wiki: wikiPage,
+          posts: postsPage,
+          galleries: galleriesPage,
+          music: musicPage,
+          albums: albumsPage,
+          lyrics: lyricsPage,
+        })
+      )
+      return
     }
-
     const builtLyrics = buildLyricSearchItems(lyrics, q)
-
     const keywordResult = {
-      wiki: wiki.map(toWikiResponse),
-      posts: posts.map(toPostResponse),
-      galleries: await toGalleryListResponse(galleries),
-      music: music.map((track) =>
-        toMusicResponse(track, { favoritedByMe: favoritedMusicSet.has(track.docId) })
+      wiki: makeSearchPage(wiki.map(toWikiResponse), wikiTotal, wikiPage),
+      posts: makeSearchPage(posts.map(toPostResponse), postsTotal, postsPage),
+      galleries: makeSearchPage(
+        await toGalleryListResponse(galleries),
+        galleriesTotal,
+        galleriesPage
       ),
-      albums: albums.map(toAlbumResponse),
-      lyrics: builtLyrics,
+      music: makeSearchPage(
+        music.map((track) =>
+          toMusicResponse(track, { favoritedByMe: favoritedMusicSet.has(track.docId) })
+        ),
+        musicTotal,
+        musicPage
+      ),
+      albums: makeSearchPage(albums.map(toAlbumResponse), albumsTotal, albumsPage),
+      lyrics: makeSearchPage(builtLyrics, lyricsTotal, lyricsPage),
       searchMeta: {
         mode: 'keyword',
         query: q,
         degraded: false,
         keywordResultCount:
-          wiki.length +
-          posts.length +
-          galleries.length +
-          music.length +
-          albums.length +
-          builtLyrics.length,
+          wikiTotal + postsTotal + galleriesTotal + musicTotal + albumsTotal + lyricsTotal,
         vectorResultCount: 0,
         textVectorResultCount: 0,
       },
@@ -1287,37 +1534,27 @@ router.get(
   async (req: AuthenticatedRequest, res) => {
     try {
       const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-      const requestedLimit = parseInteger(req.query.limit as string, getImageSearchResultLimit(), {
-        min: 1,
-        max: 60,
-      })
+      const page = parsePagination({ page: req.query.page, limit: SEARCH_PAGE_SIZE })
       const minScore = parseMinSimilarityScore(req.query.minScore as string)
 
       if (!q) {
         res.status(400).json({ error: '请提供搜索文字 (q 参数)' })
         return
       }
-
-      // 搜索详情开关关闭时，文本语义搜索同样不可用（与主搜索端点一致）
       if (!parseBoolean(req.query.detail)) {
-        res.json({ results: [], total: 0, query: q, minScore })
+        res.json({ results: makeSearchPage([], 0, page), total: 0, query: q, minScore })
         return
       }
-
       const textResponse = await fetchTextVectorSearchWithTimeout(
         q,
-        requestedLimit,
+        VECTOR_SCAN_BATCH_SIZE,
         minScore,
         getQdrantTimeoutMs(),
         req.authUser
       )
-
-      res.json({
-        results: textResponse.results,
-        total: textResponse.results.length,
-        query: q,
-        minScore,
-      })
+      const total = textResponse.results.length
+      const items = textResponse.results.slice(page.offset, page.offset + page.limit)
+      res.json({ results: makeSearchPage(items, total, page), total, query: q, minScore })
     } catch (error) {
       logger.error({ err: error }, 'Text semantic search error')
       res.status(500).json({ error: '文本语义搜索失败' })
@@ -1357,12 +1594,8 @@ router.post(
   async (req: AuthenticatedRequest, res) => {
     const tempFile = req.file
     try {
-      const requestedLimit = parseInteger(req.body?.limit, getImageSearchResultLimit(), {
-        min: 1,
-        max: 60,
-      })
+      const page = parsePagination({ page: req.body?.page, limit: SEARCH_PAGE_SIZE })
       const minScore = parseMinSimilarityScore(req.body?.minScore)
-
       let imageBuffer: Buffer | null = null
 
       if (tempFile?.path) {
@@ -1372,7 +1605,6 @@ router.post(
           imageBuffer = null
         }
       }
-
       if (!imageBuffer || imageBuffer.length === 0) {
         const base64Payload = extractBase64Payload(req.body?.imageBase64)
         if (base64Payload) {
@@ -1383,29 +1615,60 @@ router.post(
           }
         }
       }
-
       if (!imageBuffer || imageBuffer.length === 0) {
         res.status(400).json({ error: '请上传图片文件，或提供 imageBase64' })
         return
       }
 
-      const [{ generateImageEmbedding }, { searchImageEmbeddingPoints }] = await Promise.all([
-        loadClipEmbedding(),
-        loadQdrantService(),
-      ])
+      const { generateImageEmbedding } = await loadClipEmbedding()
       const queryVector = await generateImageEmbedding(imageBuffer)
-      const matches = await searchImageEmbeddingPoints({
-        vector: queryVector,
-        limit: requestedLimit,
-        minScore,
-      })
-
+      const matches = await scanAllImageEmbeddingPoints(queryVector, minScore)
       const results = await processSemanticSearchResults(matches, req.authUser)
-
+      cleanupExpiredImageSearchSessions()
+      const sessionId = randomUUID()
+      imageSearchSessions.set(`image-search:${sessionId}`, {
+        userId: req.authUser?.uid || null,
+        results: results.map(({ sourceType, sourceId, imageUrl, similarity }) => ({
+          sourceType,
+          sourceId,
+          imageUrl,
+          similarity,
+        })),
+        expiresAt: Date.now() + 300_000,
+      })
+      const bySource = (sourceType: SemanticSearchResult['sourceType']) =>
+        results.filter((item) => item.sourceType === sourceType)
+      const wikiResults = bySource('wiki')
+      const postResults = bySource('post')
+      const galleryResults = bySource('gallery')
+      const categoryPages = {
+        semantic: makeSearchPage(
+          results.slice(page.offset, page.offset + page.limit),
+          results.length,
+          page
+        ),
+        wiki: makeSearchPage(
+          wikiResults.slice(page.offset, page.offset + page.limit),
+          wikiResults.length,
+          page
+        ),
+        post: makeSearchPage(
+          postResults.slice(page.offset, page.offset + page.limit),
+          postResults.length,
+          page
+        ),
+        gallery: makeSearchPage(
+          galleryResults.slice(page.offset, page.offset + page.limit),
+          galleryResults.length,
+          page
+        ),
+      }
       res.json({
         mode: 'semantic_image',
+        sessionId,
+        categoryPages,
         totalMatches: results.length,
-        results,
+        results: categoryPages.semantic,
       })
     } catch (error) {
       logger.error({ err: error }, 'Image semantic search error')
@@ -1420,8 +1683,53 @@ router.post(
   }
 )
 
+router.get('/by-image/:sessionId', searchLimiter, async (req: AuthenticatedRequest, res) => {
+  cleanupExpiredImageSearchSessions()
+  const session = imageSearchSessions.get(`image-search:${req.params.sessionId}`)
+  if (
+    !session ||
+    session.expiresAt <= Date.now() ||
+    session.userId !== (req.authUser?.uid || null)
+  ) {
+    imageSearchSessions.delete(`image-search:${req.params.sessionId}`)
+    res.status(410).json({ error: '图片搜索会话已过期，请重新上传图片' })
+    return
+  }
+  const source = req.query.source
+  if (source !== 'semantic' && source !== 'wiki' && source !== 'post' && source !== 'gallery') {
+    res.status(400).json({ error: '无效的图片搜索来源' })
+    return
+  }
+  const page = parsePagination({ page: req.query.page, limit: SEARCH_PAGE_SIZE })
+  const freshResults = await processSemanticSearchResults(
+    session.results.map((item) => ({
+      id: item.sourceId,
+      score: item.similarity,
+      payload: {
+        sourceType: item.sourceType,
+        sourceId: item.sourceId,
+        imageUrl: item.imageUrl,
+        updatedAt: '',
+      },
+    })),
+    req.authUser
+  )
+  const results =
+    source === 'semantic' ? freshResults : freshResults.filter((item) => item.sourceType === source)
+  const pageResult = makeSearchPage(
+    results.slice(page.offset, page.offset + page.limit),
+    results.length,
+    page
+  )
+  res.json({
+    mode: 'semantic_image',
+    sessionId: req.params.sessionId,
+    totalMatches: results.length,
+    results: pageResult,
+  })
+})
+
 /**
- * 新的语义搜索接口 - 支持混合结果
  */
 router.get(
   '/semantic-search',
@@ -1430,35 +1738,27 @@ router.get(
   async (req: AuthenticatedRequest, res) => {
     try {
       const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-      const requestedLimit = parseInteger(req.query.limit as string, getImageSearchResultLimit(), {
-        min: 1,
-        max: 60,
-      })
+      const page = parsePagination({ page: req.query.page, limit: SEARCH_PAGE_SIZE })
       const minScore = parseMinSimilarityScore(req.query.minScore)
-
       if (!q) {
         res.status(400).json({ error: '请提供搜索文字 (q 参数)' })
         return
       }
 
-      const [{ generateTextEmbedding }, { searchImageEmbeddingPoints }] = await Promise.all([
-        loadClipEmbedding(),
-        loadQdrantService(),
-      ])
+      const { generateTextEmbedding } = await loadClipEmbedding()
       const queryVector = await generateTextEmbedding(q)
-      const matches = await searchImageEmbeddingPoints({
-        vector: queryVector,
-        limit: requestedLimit,
-        minScore,
-      })
-
+      const matches = await scanAllImageEmbeddingPoints(queryVector, minScore)
       const results = await processSemanticSearchResults(matches, req.authUser)
-
+      const pageResult = makeSearchPage(
+        results.slice(page.offset, page.offset + page.limit),
+        results.length,
+        page
+      )
       res.json({
         mode: 'semantic_text',
         query: q,
         totalMatches: results.length,
-        results,
+        results: pageResult,
       })
     } catch (error) {
       logger.error({ err: error }, 'Semantic search error')
@@ -1466,7 +1766,6 @@ router.get(
     }
   }
 )
-
 router.get('/suggest', searchLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
@@ -1474,7 +1773,6 @@ router.get('/suggest', searchLimiter, async (req: AuthenticatedRequest, res) => 
       res.json({ suggestions: [] })
       return
     }
-
     const normalized = normalizeKeyword(q)
     const [musicArtistMatchDocIds, hotKeywordsEnabled] = await Promise.all([
       findMusicDocIdsByArtistPartial(q, 3),

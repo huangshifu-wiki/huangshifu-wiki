@@ -319,16 +319,17 @@ export async function upsertImageEmbeddingPoint(params: {
 export async function searchImageEmbeddingPoints(params: {
   vector: number[]
   limit: number
+  offset?: number
   minScore?: number
   sourceType?: string
 }) {
   await ensureQdrantCollection()
   const client = getQdrantClient()
   const collectionName = getQdrantCollectionName()
-
   const results = await client.search(collectionName, {
     vector: params.vector,
     limit: params.limit,
+    offset: params.offset,
     score_threshold: params.minScore,
     with_payload: true,
     with_vector: false,
@@ -408,7 +409,8 @@ export async function upsertTextEmbeddingPoint(params: {
 export async function searchTextEmbeddingPoints(
   queryVector: number[],
   limit?: number,
-  minScore?: number
+  minScore?: number,
+  offset?: number
 ): Promise<
   Array<{
     sourceType: string
@@ -421,10 +423,10 @@ export async function searchTextEmbeddingPoints(
   await ensureTextQdrantCollection()
   const client = getQdrantClient()
   const collectionName = getTextCollectionName()
-
   const results = await client.search(collectionName, {
     vector: queryVector,
     limit: limit ?? 10,
+    offset,
     score_threshold: minScore,
     with_payload: true,
     with_vector: false,

@@ -36,10 +36,17 @@ interface SearchResultsProps {
   tabItems: Array<{ id: string; label: string; count: number }>
   onTabChange: (tab: string) => void
   onRetry?: () => void
+  onMixedPageChange?: (source: 'semantic' | 'wiki' | 'post' | 'gallery', page: number) => void
 }
-function useSearchResultsPagination(totalCount: number, pageParam: string, totalKnown: boolean) {
+function useSearchResultsPagination(
+  totalCount: number,
+  pageParam: string,
+  totalKnown: boolean,
+  serverTotalPages?: number
+) {
   return useRoutedPagination({
     totalCount,
+    serverTotalPages,
     totalKnown,
     defaultPageSize: SEARCH_PAGE_SIZE,
     pageParam,
@@ -107,29 +114,28 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   tabItems,
   onTabChange,
   onRetry,
+  onMixedPageChange,
 }) => {
-  const { loading, error, activeTab, isMixedSearch, mixedResults, results, filters } = state
-  const searchPaginationDockGroup = `${SEARCH_PAGINATION_DOCK_GROUP}-${React.useId()}`
+  const { loading, error, activeTab, isMixedSearch, results, filters } = state
   const hasSearched = state.query.trim().length > 0
-
   const hasFilters =
     filters.selectedTags.length > 0 || filters.dateRange.start || filters.dateRange.end
   const fallbackTab = tabItems[0]?.id ?? (isMixedSearch ? 'semantic' : 'all')
   const effectiveTab = tabItems.some((tab) => tab.id === activeTab) ? activeTab : fallbackTab
+  const imagePages = state.imageCategoryPages
+  const mixedSemanticResults = imagePages?.semantic.items ?? []
   const filteredMixedResults = isMixedSearch
-    ? mixedResults.filter(
-        (result) => effectiveTab === 'semantic' || result.sourceType === effectiveTab
-      )
+    ? effectiveTab === 'semantic'
+      ? mixedSemanticResults
+      : (imagePages?.[effectiveTab as 'wiki' | 'post' | 'gallery'].items ?? [])
     : []
-  const mixedWikiResults = mixedResults
-    .filter((result) => result.sourceType === 'wiki')
-    .map((result) => result.data as WikiItem)
-  const mixedPostResults = mixedResults
-    .filter((result) => result.sourceType === 'post')
-    .map((result) => result.data as PostItem)
-  const mixedGalleryResults = mixedResults
-    .filter((result) => result.sourceType === 'gallery')
-    .map((result) => result.data as GalleryItem)
+  const mixedWikiResults = (imagePages?.wiki.items ?? []).map((result) => result.data as WikiItem)
+  const mixedPostResults = (imagePages?.post.items ?? []).map((result) => result.data as PostItem)
+  const mixedGalleryResults = (imagePages?.gallery.items ?? []).map(
+    (result) => result.data as GalleryItem
+  )
+  const mixedTotal = imagePages?.semantic.total ?? 0
+  const searchPaginationDockGroup = `${SEARCH_PAGINATION_DOCK_GROUP}-${React.useId()}`
   const resultGridClassName = clsx(
     viewMode === 'list'
       ? 'shared-ink-list'
@@ -142,47 +148,54 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   )
 
   const totalResults =
-    results.wiki.length +
-    results.posts.length +
-    results.galleries.length +
-    results.music.length +
-    results.albums.length +
-    results.lyrics.length
+    results.wiki.total +
+    results.posts.total +
+    results.galleries.total +
+    results.music.total +
+    results.albums.total +
+    results.lyrics.total
   const paginationTotalKnown = !loading
   const semanticPagination = useSearchResultsPagination(
-    isMixedSearch ? mixedResults.length : 0,
+    isMixedSearch ? (imagePages?.semantic.total ?? 0) : 0,
     SEARCH_PAGE_PARAM_BY_CATEGORY.semantic,
-    paginationTotalKnown
+    paginationTotalKnown,
+    isMixedSearch ? imagePages?.semantic.totalPages : undefined
   )
   const wikiPagination = useSearchResultsPagination(
-    isMixedSearch ? mixedWikiResults.length : results.wiki.length,
+    isMixedSearch ? (imagePages?.wiki.total ?? 0) : results.wiki.total,
     SEARCH_PAGE_PARAM_BY_CATEGORY.wiki,
-    paginationTotalKnown
+    paginationTotalKnown,
+    isMixedSearch ? imagePages?.wiki.totalPages : results.wiki.totalPages
   )
   const postsPagination = useSearchResultsPagination(
-    isMixedSearch ? mixedPostResults.length : results.posts.length,
+    isMixedSearch ? (imagePages?.post.total ?? 0) : results.posts.total,
     SEARCH_PAGE_PARAM_BY_CATEGORY.posts,
-    paginationTotalKnown
+    paginationTotalKnown,
+    isMixedSearch ? imagePages?.post.totalPages : results.posts.totalPages
   )
   const galleriesPagination = useSearchResultsPagination(
-    isMixedSearch ? mixedGalleryResults.length : results.galleries.length,
+    isMixedSearch ? (imagePages?.gallery.total ?? 0) : results.galleries.total,
     SEARCH_PAGE_PARAM_BY_CATEGORY.galleries,
-    paginationTotalKnown
+    paginationTotalKnown,
+    isMixedSearch ? imagePages?.gallery.totalPages : results.galleries.totalPages
   )
   const musicPagination = useSearchResultsPagination(
-    isMixedSearch ? 0 : results.music.length,
+    results.music.total,
     SEARCH_PAGE_PARAM_BY_CATEGORY.music,
-    paginationTotalKnown
+    paginationTotalKnown,
+    results.music.totalPages
   )
   const lyricsPagination = useSearchResultsPagination(
-    isMixedSearch ? 0 : results.lyrics.length,
+    results.lyrics.total,
     SEARCH_PAGE_PARAM_BY_CATEGORY.lyrics,
-    paginationTotalKnown
+    paginationTotalKnown,
+    results.lyrics.totalPages
   )
   const albumsPagination = useSearchResultsPagination(
-    isMixedSearch ? 0 : results.albums.length,
+    results.albums.total,
     SEARCH_PAGE_PARAM_BY_CATEGORY.albums,
-    paginationTotalKnown
+    paginationTotalKnown,
+    results.albums.totalPages
   )
 
   if (loading) {
@@ -224,7 +237,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     )
   }
 
-  if (isMixedSearch && mixedResults.length === 0) {
+  if (isMixedSearch && mixedTotal === 0) {
     return (
       <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
         <Sparkles size={48} className="mx-auto mb-6 text-border" />
@@ -276,7 +289,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
           ))}
         </div>
         <div className="mobile-filter-actions">
-          {isMixedSearch ? `${mixedResults.length} 个结果` : `${totalResults} 个结果`}
+          {isMixedSearch ? `${mixedTotal} 个结果` : `${totalResults} 个结果`}
         </div>
       </div>
 
@@ -288,7 +301,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
       <div className="space-y-8">
         <AnimatePresence mode="wait">
-          {isMixedSearch && mixedResults.length > 0 && mixedConfig && (
+          {isMixedSearch && mixedTotal > 0 && mixedConfig && (
             <SearchResultSection
               title={mixedConfig.title}
               dockGroup={searchPaginationDockGroup}
@@ -300,18 +313,31 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               renderItem={(result) => (
                 <MixedSearchResultCard result={result} viewMode={viewMode} showSimilarity={true} />
               )}
+              onPageChange={
+                onMixedPageChange
+                  ? (page) =>
+                      onMixedPageChange(
+                        effectiveTab === 'semantic' ||
+                          effectiveTab === 'wiki' ||
+                          effectiveTab === 'post' ||
+                          effectiveTab === 'gallery'
+                          ? effectiveTab
+                          : 'semantic',
+                        page
+                      )
+                  : undefined
+              }
             />
           )}
-
           {!isMixedSearch && (
             <>
               {effectiveTab === 'all' || effectiveTab === 'wiki'
-                ? results.wiki.length > 0 && (
+                ? results.wiki.total > 0 && (
                     <SearchResultSection
                       title="百科页面"
                       dockGroup={searchPaginationDockGroup}
                       icon={<Book size={14} className="text-brand-gold" />}
-                      items={results.wiki}
+                      items={results.wiki.items}
                       pagination={wikiPagination}
                       resultGridClassName={resultGridClassName}
                       getItemKey={(page) => page.id}
@@ -323,12 +349,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 : null}
 
               {effectiveTab === 'all' || effectiveTab === 'posts'
-                ? results.posts.length > 0 && (
+                ? results.posts.total > 0 && (
                     <SearchResultSection
                       title="社区帖子"
                       dockGroup={searchPaginationDockGroup}
                       icon={<MessageSquare size={14} className="text-brand-gold" />}
-                      items={results.posts}
+                      items={results.posts.items}
                       pagination={postsPagination}
                       resultGridClassName={resultGridClassName}
                       getItemKey={(post) => post.id}
@@ -340,12 +366,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 : null}
 
               {effectiveTab === 'all' || effectiveTab === 'galleries'
-                ? results.galleries.length > 0 && (
+                ? results.galleries.total > 0 && (
                     <SearchResultSection
                       title="画廊"
                       dockGroup={searchPaginationDockGroup}
                       icon={<ImageIcon size={14} className="text-brand-gold" />}
-                      items={results.galleries}
+                      items={results.galleries.items}
                       pagination={galleriesPagination}
                       resultGridClassName={resultGridClassName}
                       getItemKey={(gallery) => gallery.id}
@@ -357,12 +383,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 : null}
 
               {effectiveTab === 'all' || effectiveTab === 'music'
-                ? results.music.length > 0 && (
+                ? results.music.total > 0 && (
                     <SearchResultSection
                       title="音乐曲目"
                       dockGroup={searchPaginationDockGroup}
                       icon={<Music size={14} className="text-brand-gold" />}
-                      items={results.music}
+                      items={results.music.items}
                       pagination={musicPagination}
                       renderItems={(songs) => (
                         <MusicSearchResults songs={songs} viewMode={viewMode} />
@@ -373,12 +399,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 : null}
 
               {effectiveTab === 'all' || effectiveTab === 'lyrics'
-                ? results.lyrics.length > 0 && (
+                ? results.lyrics.total > 0 && (
                     <SearchResultSection
                       title="歌词匹配"
                       dockGroup={searchPaginationDockGroup}
                       icon={<FileText size={14} className="text-brand-gold" />}
-                      items={results.lyrics}
+                      items={results.lyrics.items}
                       pagination={lyricsPagination}
                       resultGridClassName={resultGridClassName}
                       getItemKey={(item) => item.docId}
@@ -394,12 +420,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 : null}
 
               {effectiveTab === 'all' || effectiveTab === 'albums'
-                ? results.albums.length > 0 && (
+                ? results.albums.total > 0 && (
                     <SearchResultSection
                       title="音乐专辑"
                       dockGroup={searchPaginationDockGroup}
                       icon={<Music size={14} className="text-brand-gold" />}
-                      items={results.albums}
+                      items={results.albums.items}
                       pagination={albumsPagination}
                       resultGridClassName={resultGridClassName}
                       getItemKey={(album) => album.docId}

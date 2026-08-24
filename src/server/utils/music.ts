@@ -56,7 +56,7 @@ export async function findMusicDocIdsByArtistPartial(
         FROM unnest("artists") AS artist_name(name)
         WHERE artist_name.name ILIKE ${`%${query}%`}
       )
-    ORDER BY "updatedAt" DESC
+    ORDER BY "updatedAt" DESC, "docId" ASC
     ${limitClause}
   `)
   return rows.map((row) => row.docId)

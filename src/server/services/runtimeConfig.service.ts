@@ -30,7 +30,6 @@ export interface RuntimeConfig {
   playUrlCacheTtlSeconds: number
   cacheMaxKeys: number
   qdrantTimeoutMs: number
-  imageSearchResultLimit: number
   imageEmbeddingBatchSize: number
   editLockCleanupIntervalMs: number
   // 变体生成
@@ -84,7 +83,6 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   playUrlCacheTtlSeconds: 600,
   cacheMaxKeys: 5000,
   qdrantTimeoutMs: 2000,
-  imageSearchResultLimit: 24,
   imageEmbeddingBatchSize: 100,
   editLockCleanupIntervalMs: 90000,
   variantMaxConcurrent: 3,
@@ -130,7 +128,6 @@ const NUMBER_LIMITS: Record<string, [number, number]> = {
   playUrlCacheTtlSeconds: [60, 86400],
   cacheMaxKeys: [100, 1_000_000],
   qdrantTimeoutMs: [100, 30000],
-  imageSearchResultLimit: [1, 100],
   imageEmbeddingBatchSize: [1, 2000],
   editLockCleanupIntervalMs: [10000, 3_600_000],
   variantMaxConcurrent: [1, 32],

@@ -1,57 +1,21 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
+import { createEmptySearchResultPage } from '../lib/searchPagination'
 import { apiGet, apiUpload } from '../lib/apiClient'
-import type { GalleryItem, WikiItem, PostItem, LyricSearchItem } from '../types/entities'
+import type {
+  ImageSearchSessionResponse,
+  SearchResultsResponse,
+  SemanticSearchResult,
+} from '../types/api'
+
+export type { SearchMeta, SearchResultsResponse, SemanticSearchResult } from '../types/api'
 
 /**
  * 图片来源类型
  */
-export type ImageSourceType = 'gallery' | 'wiki' | 'post'
+export type ImageSourceType = SemanticSearchResult['sourceType']
 
-/**
- * 混合搜索结果项
- */
-export interface MixedSearchResult {
-  /** 来源类型 */
-  sourceType: ImageSourceType
-  /** 来源ID */
-  sourceId: string
-  /** 匹配的图片URL */
-  imageUrl: string
-  /** 相似度分数 (0-1) */
-  similarity: number
-  /** 具体数据 */
-  data: GalleryItem | WikiItem | PostItem
-}
-
-/**
- * 语义搜索响应
- */
-export interface SemanticSearchResponse {
-  mode: 'semantic_text' | 'semantic_image'
-  query?: string
-  totalMatches: number
-  results: MixedSearchResult[]
-}
-
-/**
- * 向后兼容：语义搜索画廊响应
- */
-export interface SemanticGalleriesResponse {
-  mode: 'semantic_text'
-  query: string
-  totalMatches: number
-  totalGalleries: number
-  galleries: Array<GalleryItem & { similarity: number }>
-}
-
-/**
- * 图片搜索响应
- */
-export interface ImageSearchResponse {
-  mode: 'semantic_image'
-  totalMatches: number
-  results: MixedSearchResult[]
-}
+export type MixedSearchResult = SemanticSearchResult
+export type ImageSearchResponse = ImageSearchSessionResponse
 
 /**
  * 搜索建议项
@@ -63,36 +27,15 @@ export interface SearchSuggestion {
   id?: string
 }
 
-/**
- * 传统搜索结果
- */
-export interface SearchMeta {
-  mode: string
-  query: string
-  degraded: boolean
-  degradationReason?: string
-  keywordResultCount: number
-  vectorResultCount: number
-  textVectorResultCount: number
-}
-
-export interface TraditionalSearchResults {
-  wiki: WikiItem[]
-  posts: PostItem[]
-  galleries: GalleryItem[]
-  music: unknown[]
-  albums: unknown[]
-  lyrics: LyricSearchItem[]
-  searchMeta?: SearchMeta
-}
+export type TraditionalSearchResults = SearchResultsResponse
 
 const EMPTY_TRADITIONAL_RESULTS: TraditionalSearchResults = {
-  wiki: [],
-  posts: [],
-  galleries: [],
-  music: [],
-  albums: [],
-  lyrics: [],
+  wiki: createEmptySearchResultPage(),
+  posts: createEmptySearchResultPage(),
+  galleries: createEmptySearchResultPage(),
+  music: createEmptySearchResultPage(),
+  albums: createEmptySearchResultPage(),
+  lyrics: createEmptySearchResultPage(),
 }
 
 /**
@@ -106,133 +49,23 @@ export interface SearchFilters {
 }
 
 /**
- * 使用混合搜索的 Hook
+ * 图片搜索请求委托。
+ * 搜索结果和加载状态由 useSearchPage 统一管理，避免维护第二份状态树。
  */
 export function useMixedSearch() {
-  const [results, setResults] = useState<MixedSearchResult[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
-  const searchRequestRef = useRef(0)
-
-  /**
-   * 执行语义搜索（文字）
-   */
-  const searchByText = useCallback(
-    async (
-      query: string,
-      options?: { limit?: number; minScore?: number }
-    ): Promise<MixedSearchResult[]> => {
-      if (!query.trim()) {
-        searchRequestRef.current += 1
-        abortControllerRef.current?.abort()
-        abortControllerRef.current = null
-        setResults([])
-        setError(null)
-        setLoading(false)
-        return []
-      }
-
-      // 取消之前的请求，并用序号防止取消不及时的响应覆盖新结果。
-      abortControllerRef.current?.abort()
-      const requestId = ++searchRequestRef.current
-      const controller = new AbortController()
-      abortControllerRef.current = controller
-
-      setLoading(true)
-      setError(null)
-
-      try {
-        const data = await apiGet<SemanticSearchResponse>(
-          '/api/search/semantic-search',
-          {
-            q: query.trim(),
-            limit: options?.limit || 24,
-            minScore: options?.minScore,
-          },
-          undefined,
-          controller.signal
-        )
-
-        const nextResults = data.results || []
-        if (requestId === searchRequestRef.current) {
-          setResults(nextResults)
-        }
-        return nextResults
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          return []
-        }
-        if (requestId === searchRequestRef.current) {
-          const errorMsg = err instanceof Error ? err.message : '搜索失败'
-          setError(errorMsg)
-          console.error('Semantic search error:', err)
-        }
-        throw err
-      } finally {
-        if (requestId === searchRequestRef.current) {
-          abortControllerRef.current = null
-          setLoading(false)
-        }
-      }
-    },
-    []
-  )
-  /**
-   * 清空结果
-   */
-  const clearResults = useCallback(() => {
-    searchRequestRef.current += 1
-    abortControllerRef.current?.abort()
-    abortControllerRef.current = null
-    setResults([])
-    setError(null)
-    setLoading(false)
-  }, [])
-
-  /**
-   * 执行图片搜索
-   */
   const searchByImage = useCallback(
-    async (
-      file: File,
-      options?: { limit?: number; minScore?: number }
-    ): Promise<MixedSearchResult[]> => {
-      setLoading(true)
-      setError(null)
-
-      try {
-        const formData = new FormData()
-        formData.append('image', file)
-        formData.append('limit', String(options?.limit || 24))
-        if (options?.minScore !== undefined) {
-          formData.append('minScore', String(options.minScore))
-        }
-
-        const data = await apiUpload<ImageSearchResponse>('/api/search/by-image', formData)
-
-        setResults(data.results || [])
-        return data.results || []
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '图片搜索失败'
-        setError(errorMsg)
-        console.error('Image search error:', err)
-        throw err
-      } finally {
-        setLoading(false)
+    async (file: File, options?: { minScore?: number }): Promise<ImageSearchResponse> => {
+      const formData = new FormData()
+      formData.append('image', file)
+      if (options?.minScore !== undefined) {
+        formData.append('minScore', String(options.minScore))
       }
+      return apiUpload<ImageSearchResponse>('/api/search/by-image', formData)
     },
     []
   )
 
-  return {
-    results,
-    loading,
-    error,
-    searchByText,
-    searchByImage,
-    clearResults,
-  }
+  return { searchByImage }
 }
 
 /**
@@ -250,7 +83,11 @@ export function useTraditionalSearch() {
     async (
       query: string,
       filters?: Partial<SearchFilters>,
-      options?: { mode?: 'keyword' | 'vector' | 'hybrid'; includeDetail?: boolean }
+      options?: {
+        mode?: 'keyword' | 'vector' | 'hybrid'
+        includeDetail?: boolean
+        pageParams?: Record<string, number>
+      }
     ): Promise<TraditionalSearchResults> => {
       if (!query.trim()) {
         setResults(EMPTY_TRADITIONAL_RESULTS)
@@ -284,20 +121,11 @@ export function useTraditionalSearch() {
           ...(filters?.dateRange?.start ? { startDate: filters.dateRange.start } : {}),
           ...(filters?.dateRange?.end ? { endDate: filters.dateRange.end } : {}),
           ...(filters?.selectedTags?.length ? { tags: filters.selectedTags.join(',') } : {}),
+          ...options?.pageParams,
         })
 
-        const normalizedResults = {
-          wiki: data.wiki || [],
-          posts: data.posts || [],
-          galleries: data.galleries || [],
-          music: data.music || [],
-          albums: data.albums || [],
-          lyrics: data.lyrics || [],
-          searchMeta: data.searchMeta,
-        }
-
-        setResults(normalizedResults)
-        return normalizedResults
+        setResults(data)
+        return data
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '搜索失败'
         setError(errorMsg)

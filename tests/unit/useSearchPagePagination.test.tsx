@@ -28,13 +28,29 @@ vi.mock('../../src/hooks/useSearchHistory', () => ({
 
 import { useSearchPage } from '../../src/hooks/useSearchPage'
 
+const page = <T,>(): {
+  items: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  hasMore: boolean
+} => ({
+  items: [],
+  total: 0,
+  page: 1,
+  limit: 20,
+  totalPages: 1,
+  hasMore: false,
+})
+
 const emptySearchResponse = {
-  wiki: [],
-  posts: [],
-  galleries: [],
-  music: [],
-  albums: [],
-  lyrics: [],
+  wiki: page(),
+  posts: page(),
+  galleries: page(),
+  music: page(),
+  albums: page(),
+  lyrics: page(),
   searchMeta: {
     mode: 'keyword',
     query: '搜索',

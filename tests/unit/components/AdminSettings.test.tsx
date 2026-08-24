@@ -56,7 +56,6 @@ const runtimeConfig: RuntimeAdminConfig = {
   playUrlCacheTtlSeconds: 600,
   cacheMaxKeys: 5000,
   qdrantTimeoutMs: 2000,
-  imageSearchResultLimit: 24,
   imageEmbeddingBatchSize: 100,
   editLockCleanupIntervalMs: 90000,
   variantMaxConcurrent: 3,

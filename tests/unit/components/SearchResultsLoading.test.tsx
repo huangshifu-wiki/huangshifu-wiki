@@ -6,14 +6,37 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { SearchResults } from '../../../src/components/search/SearchResults'
 import type { SearchState } from '../../../src/hooks/useSearchPage'
+import type {
+  AlbumItem,
+  GalleryItem,
+  LyricSearchItem,
+  PostItem,
+  SongItem,
+  WikiItem,
+} from '../../../src/types/entities'
+const emptyPage = <T,>(): {
+  items: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  hasMore: boolean
+} => ({
+  items: [],
+  total: 0,
+  page: 1,
+  limit: 20,
+  totalPages: 1,
+  hasMore: false,
+})
 
 const emptyResults = {
-  wiki: [],
-  posts: [],
-  galleries: [],
-  music: [],
-  albums: [],
-  lyrics: [],
+  wiki: emptyPage<WikiItem>(),
+  posts: emptyPage<PostItem>(),
+  galleries: emptyPage<GalleryItem>(),
+  music: emptyPage<SongItem>(),
+  albums: emptyPage<AlbumItem>(),
+  lyrics: emptyPage<LyricSearchItem>(),
 }
 
 const makeState = (overrides: Partial<SearchState> = {}): SearchState => ({

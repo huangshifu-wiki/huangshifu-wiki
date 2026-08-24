@@ -1,4 +1,13 @@
-import type { AdminDataItem, AlbumItem, EventItem, GalleryItem, SongItem } from './entities'
+import type {
+  AdminDataItem,
+  AlbumItem,
+  EventItem,
+  GalleryItem,
+  LyricSearchItem,
+  PostItem,
+  SongItem,
+  WikiItem,
+} from './entities'
 import type { Platform } from './common'
 
 export interface ApiResponse<T> {
@@ -15,6 +24,61 @@ export interface PaginationMeta {
 
 export interface PaginatedResponse<T> extends PaginationMeta {
   items: T[]
+}
+
+export interface SearchResultPage<T> extends PaginationMeta {
+  items: T[]
+}
+
+export interface SearchMeta {
+  mode: string
+  query: string
+  degraded: boolean
+  degradationReason?: string
+  keywordResultCount: number
+  vectorResultCount: number
+  textVectorResultCount: number
+}
+
+export type SemanticSearchResult = {
+  sourceType: 'gallery' | 'wiki' | 'post'
+  sourceId: string
+  imageUrl: string
+  similarity: number
+  data: unknown
+}
+
+export interface SearchResultsResponse {
+  wiki: SearchResultPage<WikiItem>
+  posts: SearchResultPage<PostItem>
+  galleries: SearchResultPage<GalleryItem>
+  music: SearchResultPage<SongItem>
+  albums: SearchResultPage<AlbumItem>
+  lyrics: SearchResultPage<LyricSearchItem>
+  searchMeta?: SearchMeta
+}
+
+export interface SemanticSearchPageResponse {
+  mode: 'semantic_text' | 'semantic_image'
+  query?: string
+  results: SearchResultPage<SemanticSearchResult>
+  totalMatches: number
+}
+export type SemanticSearchCategory = 'semantic' | 'wiki' | 'post' | 'gallery'
+
+export type SemanticSearchCategoryPages = Record<
+  SemanticSearchCategory,
+  SearchResultPage<SemanticSearchResult>
+>
+
+export interface ImageSearchSessionResponse extends SemanticSearchPageResponse {
+  mode: 'semantic_image'
+  sessionId: string
+  categoryPages: SemanticSearchCategoryPages
+}
+export interface ImageSearchSessionPageResponse extends SemanticSearchPageResponse {
+  mode: 'semantic_image'
+  sessionId: string
 }
 
 export interface HomeFeedResponse {
@@ -247,7 +311,6 @@ export interface RuntimeAdminConfig {
   playUrlCacheTtlSeconds: number
   cacheMaxKeys: number
   qdrantTimeoutMs: number
-  imageSearchResultLimit: number
   imageEmbeddingBatchSize: number
   editLockCleanupIntervalMs: number
   variantMaxConcurrent: number

@@ -8,30 +8,33 @@ import type {
   AlbumItem,
   LyricSearchItem,
 } from '../types/entities'
-import type { MixedSearchResult, SearchSuggestion, SearchFilters, SearchMeta } from './useSearch'
+import type { MixedSearchResult, SearchSuggestion, SearchFilters } from './useSearch'
 import { useMixedSearch, useTraditionalSearch } from './useSearch'
-import type { GalleryDetailResponse } from '../types/api'
 import { useSearchHistory } from './useSearchHistory'
+import type {
+  GalleryDetailResponse,
+  ImageSearchSessionPageResponse,
+  ImageSearchSessionResponse,
+  SearchMeta,
+  SearchResultsResponse,
+  SemanticSearchCategoryPages,
+} from '../types/api'
 import { apiGet } from '../lib/apiClient'
+import {
+  createEmptySearchResultPage,
+  SEARCH_API_PAGE_PARAM_BY_CATEGORY,
+  SEARCH_PAGE_PARAM_BY_CATEGORY,
+  SEARCH_PAGE_PARAMS,
+  clearSearchPaginationParams,
+} from '../lib/searchPagination'
 import {
   shouldWaitForGalleryThumbnail,
   THUMBNAIL_POLL_DEDUP_OPTIONS,
   THUMBNAIL_POLL_INTERVAL_MS,
   THUMBNAIL_POLL_MAX_ATTEMPTS,
 } from '../lib/galleryThumbnails'
-import { clearSearchPaginationParams } from '../lib/searchPagination'
-
-// 向后兼容：re-export SearchFilters，供 SearchFilters 组件使用
 export type { SearchFilters } from './useSearch'
-
-export interface SearchResults {
-  wiki: WikiItem[]
-  posts: PostItem[]
-  galleries: GalleryItem[]
-  music: SongItem[]
-  albums: AlbumItem[]
-  lyrics: LyricSearchItem[]
-}
+export type SearchResults = SearchResultsResponse
 
 export interface SearchState {
   query: string
@@ -48,8 +51,9 @@ export interface SearchState {
   hotKeywords: string[]
   showFilters: boolean
   searchMeta?: SearchMeta
+  imageSearchSessionId?: string | null
+  imageCategoryPages?: SemanticSearchCategoryPages | null
 }
-
 function getPendingGalleryIds(state: SearchState) {
   const ids = new Set<string>()
   if (state.isMixedSearch) {
@@ -59,13 +63,12 @@ function getPendingGalleryIds(state: SearchState) {
       if (shouldWaitForGalleryThumbnail(gallery)) ids.add(gallery.id)
     })
   } else {
-    state.results.galleries.forEach((gallery) => {
+    state.results.galleries.items.forEach((gallery) => {
       if (shouldWaitForGalleryThumbnail(gallery)) ids.add(gallery.id)
     })
   }
   return Array.from(ids)
 }
-
 export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') || ''
@@ -87,7 +90,14 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   const [state, setState] = useState<SearchState>({
     query: initialQuery,
     includeDetail: urlIncludeDetail,
-    results: { wiki: [], posts: [], galleries: [], music: [], albums: [], lyrics: [] },
+    results: {
+      wiki: createEmptySearchResultPage(),
+      posts: createEmptySearchResultPage(),
+      galleries: createEmptySearchResultPage(),
+      music: createEmptySearchResultPage(),
+      albums: createEmptySearchResultPage(),
+      lyrics: createEmptySearchResultPage(),
+    },
     loading: Boolean(initialQuery),
     error: null,
     activeTab: 'all',
@@ -98,6 +108,8 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
       semanticImageSearch: false,
     },
     suggestions: [],
+    imageSearchSessionId: null,
+    imageCategoryPages: null,
     mixedResults: [],
     isMixedSearch: false,
     aiSearching: false,
@@ -113,7 +125,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   const suggestionRequestRef = useRef(0)
   const hotKeywordsRequestRef = useRef(0)
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
+  const skipNextUrlSearchRef = useRef(false)
   useEffect(() => {
     return () => {
       searchRequestRef.current += 1
@@ -145,8 +157,16 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotKeywordsEnabled])
 
+  const searchPageSignature = SEARCH_PAGE_PARAMS.map(
+    (param) => `${param}=${searchParams.get(param) || ''}`
+  ).join('&')
+
   // 初始查询及 URL 驱动的详情状态变化
   useEffect(() => {
+    if (skipNextUrlSearchRef.current) {
+      skipNextUrlSearchRef.current = false
+      return
+    }
     if (initialQuery) {
       if (stateRef.current.includeDetail !== urlIncludeDetail) {
         setState((prev) => ({ ...prev, includeDetail: urlIncludeDetail }))
@@ -154,13 +174,11 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
       void performSearch(initialQuery, undefined, urlIncludeDetail, { preservePagination: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQuery, urlIncludeDetail])
-
+  }, [initialQuery, urlIncludeDetail, searchPageSignature])
   const hasPendingGalleryThumbnails = getPendingGalleryIds(state).length > 0
 
   useEffect(() => {
     if (!hasPendingGalleryThumbnails) return
-
     const abortController = new AbortController()
     let attempts = 0
     let stopped = false
@@ -184,22 +202,41 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
           })
         )
         if (stopped) return
-
         const refreshedById = new Map(refreshed.map((gallery) => [gallery.id, gallery]))
-        setState((prev) => ({
-          ...prev,
-          results: {
-            ...prev.results,
-            galleries: prev.results.galleries.map(
-              (gallery) => refreshedById.get(gallery.id) || gallery
-            ),
-          },
-          mixedResults: prev.mixedResults.map((result) => {
-            if (result.sourceType !== 'gallery') return result
-            const gallery = refreshedById.get((result.data as GalleryItem).id)
-            return gallery ? { ...result, data: gallery } : result
-          }),
-        }))
+        setState((prev) => {
+          const hasChanged = prev.results.galleries.items.some((gallery) => {
+            const refreshedGallery = refreshedById.get(gallery.id)
+            if (!refreshedGallery) return false
+            return gallery.images.some((image, index) => {
+              const refreshedImage = refreshedGallery.images[index]
+              return (
+                refreshedImage &&
+                (image.thumbnailUrl !== refreshedImage.thumbnailUrl ||
+                  image.thumbnailStatus !== refreshedImage.thumbnailStatus)
+              )
+            })
+          })
+          if (!hasChanged) return prev
+          return {
+            ...prev,
+            results: {
+              ...prev.results,
+              galleries: {
+                ...prev.results.galleries,
+                items: prev.results.galleries.items.map(
+                  (gallery) => refreshedById.get(gallery.id) || gallery
+                ) as GalleryItem[],
+              },
+            },
+            mixedResults: prev.isMixedSearch
+              ? prev.mixedResults.map((result) => {
+                  if (result.sourceType !== 'gallery') return result
+                  const gallery = refreshedById.get((result.data as GalleryItem).id)
+                  return gallery ? { ...result, data: gallery } : result
+                })
+              : prev.mixedResults,
+          }
+        })
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           console.error('Poll search gallery thumbnails error:', error)
@@ -270,7 +307,6 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         loading: true,
         error: null,
         query: currentQuery,
-        suggestions: [],
       }))
 
       let sp = new URLSearchParams(searchParams)
@@ -284,38 +320,44 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         sp = clearSearchPaginationParams(sp)
       }
       if (sp.toString() !== searchParams.toString()) {
+        skipNextUrlSearchRef.current = true
         setSearchParams(sp)
       }
-
       const filters = { ...stateRef.current.filters, ...filtersOverride }
       const searchMode = filters.semanticImageSearch ? 'hybrid' : 'keyword'
+      const pageParams = options?.preservePagination
+        ? Object.fromEntries(
+            Object.entries(SEARCH_PAGE_PARAM_BY_CATEGORY).flatMap(([category, browserParam]) => {
+              const value = Number(sp.get(browserParam))
+              return Number.isInteger(value) && value > 0
+                ? [
+                    [
+                      SEARCH_API_PAGE_PARAM_BY_CATEGORY[
+                        category as keyof typeof SEARCH_API_PAGE_PARAM_BY_CATEGORY
+                      ],
+                      value,
+                    ],
+                  ]
+                : []
+            })
+          )
+        : {}
 
       try {
         const data = await traditionalSearch.search(currentQuery, filters, {
           mode: searchMode,
           includeDetail,
+          pageParams,
         })
         if (requestId !== searchRequestRef.current) return
 
-        const filterFn = (item: WikiItem | PostItem | GalleryItem) => {
-          const matchesTags =
-            filters.selectedTags.length === 0 ||
-            filters.selectedTags.every((tag: string) => (item.tags || []).includes(tag))
-          return matchesTags
-        }
-
         setState((prev) => ({
           ...prev,
-          results: {
-            wiki: data.wiki.filter(filterFn),
-            posts: data.posts.filter(filterFn),
-            galleries: data.galleries.filter(filterFn),
-            music: data.music as SongItem[],
-            albums: data.albums as AlbumItem[],
-            lyrics: data.lyrics,
-          },
+          results: data,
           isMixedSearch: false,
           mixedResults: [],
+          imageSearchSessionId: null,
+          imageCategoryPages: null,
           loading: false,
           error: null,
           searchMeta: data.searchMeta,
@@ -353,12 +395,14 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         error: null,
       }))
       try {
-        const results = await mixedSearch.searchByImage(file, { limit: 24 })
+        const response = await mixedSearch.searchByImage(file)
         if (requestId !== searchRequestRef.current) return
         setState((prev) => ({
           ...prev,
           isMixedSearch: true,
-          mixedResults: results,
+          imageSearchSessionId: response.sessionId,
+          imageCategoryPages: response.categoryPages,
+          mixedResults: response.results.items,
           activeTab: 'semantic',
           loading: false,
           error: null,
@@ -378,7 +422,6 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     },
     [mixedSearch, setSearchParams]
   )
-
   // 搜索详情开关：翻转状态并同步 URL；已有查询时立即按新开关重搜
   const toggleDetail = (checked: boolean) => {
     setState((prev) => ({ ...prev, includeDetail: checked }))
@@ -389,15 +432,54 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     }
 
     const sp = new URLSearchParams(searchParams)
-    if (checked) {
-      sp.set('detail', '1')
-    } else {
-      sp.delete('detail')
-    }
-    if (sp.toString() !== searchParams.toString()) {
-      setSearchParams(sp)
-    }
+    if (checked) sp.set('detail', '1')
+    else sp.delete('detail')
+    if (sp.toString() !== searchParams.toString()) setSearchParams(sp)
   }
+
+  const fetchImageSearchPage = useCallback(
+    async (source: 'semantic' | 'wiki' | 'post' | 'gallery', page: number) => {
+      const sessionId = stateRef.current.imageSearchSessionId
+      if (!sessionId) return
+      const requestId = ++searchRequestRef.current
+      setState((prev) => ({ ...prev, loading: true, error: null }))
+      try {
+        const response = await apiGet<ImageSearchSessionPageResponse>(
+          `/api/search/by-image/${sessionId}`,
+          { source, page }
+        )
+        if (requestId !== searchRequestRef.current) return
+        setState((prev) => {
+          const activeSource =
+            prev.activeTab === 'wiki' || prev.activeTab === 'post' || prev.activeTab === 'gallery'
+              ? prev.activeTab
+              : 'semantic'
+          return {
+            ...prev,
+            mixedResults: activeSource === source ? response.results.items : prev.mixedResults,
+            loading: false,
+            error: null,
+            imageCategoryPages: prev.imageCategoryPages
+              ? { ...prev.imageCategoryPages, [source]: response.results }
+              : prev.imageCategoryPages,
+          }
+        })
+      } catch (error) {
+        if (requestId !== searchRequestRef.current) return
+        const message = error instanceof Error ? error.message : '图片搜索分页失败'
+        const expired = message.includes('过期') || message.includes('410')
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: message,
+          ...(expired
+            ? { imageSearchSessionId: null, imageCategoryPages: null, mixedResults: [] }
+            : {}),
+        }))
+      }
+    },
+    []
+  )
 
   const toggleTag = (tag: string) => {
     setState((prev) => ({
@@ -431,7 +513,13 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   }
 
   const setActiveTab = (tab: string) => {
-    setState((prev) => ({ ...prev, activeTab: tab }))
+    setState((prev) => {
+      if (!prev.isMixedSearch || !prev.imageCategoryPages) {
+        return { ...prev, activeTab: tab }
+      }
+      const source = tab === 'wiki' || tab === 'post' || tab === 'gallery' ? tab : 'semantic'
+      return { ...prev, activeTab: tab, mixedResults: prev.imageCategoryPages[source].items }
+    })
   }
 
   const setShowFilters = (show: boolean) => {
@@ -443,34 +531,49 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   }
 
   const totalResults =
-    state.results.wiki.length +
-    state.results.posts.length +
-    state.results.galleries.length +
-    state.results.music.length +
-    state.results.albums.length +
-    state.results.lyrics.length
-  const getMixedResultsCount = (type: 'gallery' | 'wiki' | 'post') => {
-    return state.mixedResults.filter((r) => r.sourceType === type).length
-  }
+    state.results.wiki.total +
+    state.results.posts.total +
+    state.results.galleries.total +
+    state.results.music.total +
+    state.results.albums.total +
+    state.results.lyrics.total
+  const getMixedResultsCount = (type: 'gallery' | 'wiki' | 'post') =>
+    state.mixedResults.filter((r) => r.sourceType === type).length
 
   const tabItems = (
     state.isMixedSearch
       ? [
-          { id: 'semantic', label: '智能匹配', count: state.mixedResults.length },
-          { id: 'gallery', label: '图库', count: getMixedResultsCount('gallery') },
-          { id: 'wiki', label: '百科', count: getMixedResultsCount('wiki') },
-          { id: 'post', label: '帖子', count: getMixedResultsCount('post') },
+          {
+            id: 'semantic',
+            label: '智能匹配',
+            count: state.imageCategoryPages?.semantic.total ?? state.mixedResults.length,
+          },
+          {
+            id: 'gallery',
+            label: '图库',
+            count: state.imageCategoryPages?.gallery.total ?? getMixedResultsCount('gallery'),
+          },
+          {
+            id: 'wiki',
+            label: '百科',
+            count: state.imageCategoryPages?.wiki.total ?? getMixedResultsCount('wiki'),
+          },
+          {
+            id: 'post',
+            label: '帖子',
+            count: state.imageCategoryPages?.post.total ?? getMixedResultsCount('post'),
+          },
         ]
       : [
           { id: 'all', label: '全部', count: totalResults },
-          { id: 'wiki', label: '百科', count: state.results.wiki.length },
-          { id: 'posts', label: '帖子', count: state.results.posts.length },
-          { id: 'galleries', label: '图集', count: state.results.galleries.length },
-          { id: 'music', label: '音乐', count: state.results.music.length },
-          ...(state.results.lyrics.length > 0
-            ? [{ id: 'lyrics', label: '歌词', count: state.results.lyrics.length }]
+          { id: 'wiki', label: '百科', count: state.results.wiki.total },
+          { id: 'posts', label: '帖子', count: state.results.posts.total },
+          { id: 'galleries', label: '图集', count: state.results.galleries.total },
+          { id: 'music', label: '音乐', count: state.results.music.total },
+          ...(state.results.lyrics.total > 0
+            ? [{ id: 'lyrics', label: '歌词', count: state.results.lyrics.total }]
             : []),
-          { id: 'albums', label: '专辑', count: state.results.albums.length },
+          { id: 'albums', label: '专辑', count: state.results.albums.total },
         ]
   ).filter((tab) => tab.id === 'all' || tab.count > 0)
 
@@ -480,6 +583,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     tabItems,
     totalResults,
     performSearch,
+    fetchImageSearchPage,
     handleQueryChange,
     handleImageSearch,
     toggleDetail,

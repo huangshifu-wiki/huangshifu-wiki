@@ -7,7 +7,14 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { SearchResults } from '../../../src/components/search/SearchResults'
 import type { SearchState } from '../../../src/hooks/useSearchPage'
-import type { GalleryItem, PostItem, WikiItem } from '../../../src/types/entities'
+import type {
+  AlbumItem,
+  GalleryItem,
+  LyricSearchItem,
+  PostItem,
+  SongItem,
+  WikiItem,
+} from '../../../src/types/entities'
 
 const UrlProbe = () => {
   const [searchParams] = useSearchParams()
@@ -34,13 +41,29 @@ const makePost = () =>
     updatedAt: '2026-01-01T00:00:00.000Z',
   }) as unknown as PostItem
 
+const emptyPage = <T,>(): {
+  items: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  hasMore: boolean
+} => ({
+  items: [],
+  total: 0,
+  page: 1,
+  limit: 20,
+  totalPages: 1,
+  hasMore: false,
+})
+
 const emptyResults = {
-  wiki: [],
-  posts: [],
-  galleries: [] as GalleryItem[],
-  music: [],
-  albums: [],
-  lyrics: [],
+  wiki: emptyPage<WikiItem>(),
+  posts: emptyPage<PostItem>(),
+  galleries: emptyPage<GalleryItem>(),
+  music: emptyPage<SongItem>(),
+  albums: emptyPage<AlbumItem>(),
+  lyrics: emptyPage<LyricSearchItem>(),
 }
 
 const makeState = (overrides: Partial<SearchState> = {}): SearchState => ({
@@ -73,7 +96,13 @@ describe('搜索结果分类分页', () => {
     render(
       <MemoryRouter initialEntries={['/search?q=春日']}>
         <SearchResults
-          state={makeState({ results: { ...emptyResults, wiki, posts: [makePost()] } })}
+          state={makeState({
+            results: {
+              ...emptyResults,
+              wiki: { ...emptyPage(), items: wiki.slice(0, 20), total: 21, totalPages: 2 },
+              posts: { ...emptyPage(), items: [makePost()], total: 1 },
+            },
+          })}
           viewMode="list"
           tabItems={[
             { id: 'all', label: '全部', count: 22 },
@@ -93,10 +122,9 @@ describe('搜索结果分类分页', () => {
     expect(screen.getByText('第 1 / 2 页')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '第 2 页' }))
+    await waitFor(() => expect(screen.getByTestId('search-wiki-page')).toHaveTextContent('2'))
+    expect(screen.queryByText('百科 21')).not.toBeInTheDocument()
 
-    expect(screen.queryByText('百科 1')).not.toBeInTheDocument()
-    expect(screen.getByText('百科 21')).toBeInTheDocument()
-    expect(screen.getByText('帖子结果')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByTestId('search-wiki-page')).toHaveTextContent('2'))
   })
 })

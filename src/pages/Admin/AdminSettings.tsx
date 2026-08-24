@@ -198,12 +198,6 @@ const CONFIG_GROUPS: ConfigGroup[] = [
         type: 'number',
       },
       {
-        key: 'imageSearchResultLimit',
-        label: '图片搜索默认返回数量',
-        description: '取值范围 1–100',
-        type: 'number',
-      },
-      {
         key: 'imageEmbeddingBatchSize',
         label: '向量批量同步每批大小',
         description: '取值范围 1–2000',
