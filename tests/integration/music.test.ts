@@ -678,6 +678,9 @@ describe('Music API - 音乐接口测试', () => {
       })),
     })
 
+    const aggregate = await request(app)
+      .get('/api/search')
+      .query({ q: 'Unbounded Search Test Song', type: 'all', musicPage: 1 })
     const firstPage = await request(app)
       .get('/api/search')
       .query({ q: 'Unbounded Search Test Song', type: 'music', musicPage: 1 })
@@ -688,6 +691,13 @@ describe('Music API - 音乐接口测试', () => {
       .get('/api/search')
       .query({ q: 'Unbounded Search Test Song', type: 'music', musicPage: 999 })
 
+    expect(aggregate.status).toBe(200)
+    expect(aggregate.body.music.items).toHaveLength(20)
+    expect(sixthPage.body.wiki.items).toHaveLength(0)
+    expect(sixthPage.body.posts.items).toHaveLength(0)
+    expect(sixthPage.body.galleries.items).toHaveLength(0)
+    expect(sixthPage.body.albums.items).toHaveLength(0)
+    expect(sixthPage.body.lyrics.items).toHaveLength(0)
     expect(firstPage.status).toBe(200)
     expect(sixthPage.status).toBe(200)
     expect(outOfRange.status).toBe(200)

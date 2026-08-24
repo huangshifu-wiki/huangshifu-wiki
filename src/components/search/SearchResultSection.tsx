@@ -2,14 +2,17 @@ import React from 'react'
 import { motion } from 'motion/react'
 import type { UsePaginationReturn } from '../../hooks/usePagination'
 import { Pagination } from '../Pagination'
-
+import { LoadErrorState, Skeleton } from '@/src/components/ui'
 interface SearchResultSectionBaseProps<T> {
   title: string
   icon: React.ReactNode
   items: T[]
   pagination: UsePaginationReturn
   dockGroup: string
+  isLoading?: boolean
+  error?: string
   onPageChange?: (page: number) => void
+  onRetry?: () => void
 }
 
 type SearchResultSectionProps<T> =
@@ -25,10 +28,43 @@ type SearchResultSectionProps<T> =
     })
 
 export function SearchResultSection<T>(props: SearchResultSectionProps<T>) {
-  const { title, icon, items, pagination, dockGroup, onPageChange } = props
+  const {
+    title,
+    icon,
+    items,
+    pagination,
+    dockGroup,
+    isLoading = false,
+    error,
+    onPageChange,
+    onRetry,
+  } = props
   const sectionRef = React.useRef<HTMLElement | null>(null)
   const totalPages = Math.max(1, pagination.totalPages)
   const page = Math.max(1, Math.min(pagination.page, totalPages))
+
+  const renderItems = () => {
+    if (error) return <LoadErrorState description={error} onRetry={onRetry} />
+    if (isLoading) {
+      return (
+        <div className="space-y-3" role="status" aria-label={`${title}加载中`}>
+          {[1, 2, 3].map((index) => (
+            <Skeleton key={index} className="h-24 rounded border border-[var(--book-ink-line)]" />
+          ))}
+        </div>
+      )
+    }
+    if (props.renderGrid === false) return props.renderItems(items)
+    return (
+      <div className={props.resultGridClassName}>
+        {items.map((item, index) => (
+          <React.Fragment key={props.getItemKey(item, index)}>
+            {props.renderItem(item, index)}
+          </React.Fragment>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <motion.section
@@ -41,17 +77,7 @@ export function SearchResultSection<T>(props: SearchResultSectionProps<T>) {
       <h2 className="mb-4 flex items-center gap-2 text-[0.875rem] font-semibold uppercase tracking-[0.12em] text-text-secondary">
         {icon} {title}
       </h2>
-      {props.renderGrid === false ? (
-        props.renderItems(items)
-      ) : (
-        <div className={props.resultGridClassName}>
-          {items.map((item, index) => (
-            <React.Fragment key={props.getItemKey(item, index)}>
-              {props.renderItem(item, index)}
-            </React.Fragment>
-          ))}
-        </div>
-      )}
+      {renderItems()}
       {pagination.hasMultiplePages && (
         <Pagination
           page={page}

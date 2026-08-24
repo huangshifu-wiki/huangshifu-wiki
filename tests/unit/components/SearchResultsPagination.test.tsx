@@ -71,7 +71,9 @@ const makeState = (overrides: Partial<SearchState> = {}): SearchState => ({
   includeDetail: false,
   results: emptyResults,
   loading: false,
+  loadingCategoryPages: new Set(),
   error: null,
+  pageErrorByCategory: {},
   activeTab: 'all',
   filters: {
     selectedTags: [],
@@ -91,6 +93,7 @@ const makeState = (overrides: Partial<SearchState> = {}): SearchState => ({
 describe('搜索结果分类分页', () => {
   it('独立分页并保留其他类别结果', async () => {
     const user = userEvent.setup()
+    const onCategoryPageChange = vi.fn()
     const wiki = Array.from({ length: 21 }, (_, index) => makeWiki(index + 1))
 
     render(
@@ -110,6 +113,7 @@ describe('搜索结果分类分页', () => {
             { id: 'posts', label: '帖子', count: 1 },
           ]}
           onTabChange={vi.fn()}
+          onCategoryPageChange={onCategoryPageChange}
         />
         <UrlProbe />
       </MemoryRouter>
@@ -123,8 +127,30 @@ describe('搜索结果分类分页', () => {
 
     await user.click(screen.getByRole('button', { name: '第 2 页' }))
     await waitFor(() => expect(screen.getByTestId('search-wiki-page')).toHaveTextContent('2'))
+    expect(onCategoryPageChange).toHaveBeenCalledWith('wiki', 2)
     expect(screen.queryByText('百科 21')).not.toBeInTheDocument()
+  })
 
-    await waitFor(() => expect(screen.getByTestId('search-wiki-page')).toHaveTextContent('2'))
+  it('类别加载或失败时不隐藏其他类别', () => {
+    render(
+      <MemoryRouter initialEntries={['/search?q=春日']}>
+        <SearchResults
+          state={makeState({
+            loadingCategoryPages: new Set(['wiki']),
+            results: {
+              ...emptyResults,
+              wiki: { ...emptyPage(), items: [makeWiki(1)], total: 21, totalPages: 2 },
+              posts: { ...emptyPage(), items: [makePost()], total: 1 },
+            },
+          })}
+          viewMode="list"
+          tabItems={[{ id: 'all', label: '全部', count: 22 }]}
+          onTabChange={vi.fn()}
+        />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByRole('status', { name: '百科页面加载中' })).toBeInTheDocument()
+    expect(screen.getByText('帖子结果')).toBeInTheDocument()
   })
 })

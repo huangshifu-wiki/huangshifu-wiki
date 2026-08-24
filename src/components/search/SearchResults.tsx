@@ -22,9 +22,11 @@ import { LyricSearchResultCard } from './LyricSearchResultCard'
 import { MusicSearchResults } from './MusicSearchResults'
 import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import {
+  getSearchResultCount,
   SEARCH_PAGE_PARAM_BY_CATEGORY,
   SEARCH_PAGE_SIZE,
   SEARCH_PAGINATION_DOCK_GROUP,
+  type SearchPaginationCategory,
 } from '../../lib/searchPagination'
 import { SearchResultSection } from './SearchResultSection'
 import { getFirstGalleryImage, shouldWaitForGalleryThumbnail } from '../../lib/galleryThumbnails'
@@ -36,6 +38,7 @@ interface SearchResultsProps {
   tabItems: Array<{ id: string; label: string; count: number }>
   onTabChange: (tab: string) => void
   onRetry?: () => void
+  onCategoryPageChange?: (category: SearchPaginationCategory, page: number) => void
   onMixedPageChange?: (source: 'semantic' | 'wiki' | 'post' | 'gallery', page: number) => void
 }
 function useSearchResultsPagination(
@@ -114,6 +117,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   tabItems,
   onTabChange,
   onRetry,
+  onCategoryPageChange,
   onMixedPageChange,
 }) => {
   const { loading, error, activeTab, isMixedSearch, results, filters } = state
@@ -147,13 +151,15 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
         )
   )
 
-  const totalResults =
-    results.wiki.total +
-    results.posts.total +
-    results.galleries.total +
-    results.music.total +
-    results.albums.total +
-    results.lyrics.total
+  const resultCounts = {
+    wiki: getSearchResultCount(results.wiki),
+    posts: getSearchResultCount(results.posts),
+    galleries: getSearchResultCount(results.galleries),
+    music: getSearchResultCount(results.music),
+    albums: getSearchResultCount(results.albums),
+    lyrics: getSearchResultCount(results.lyrics),
+  }
+  const totalResults = Object.values(resultCounts).reduce((sum, count) => sum + count, 0)
   const paginationTotalKnown = !loading
   const semanticPagination = useSearchResultsPagination(
     isMixedSearch ? (imagePages?.semantic.total ?? 0) : 0,
@@ -162,37 +168,37 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     isMixedSearch ? imagePages?.semantic.totalPages : undefined
   )
   const wikiPagination = useSearchResultsPagination(
-    isMixedSearch ? (imagePages?.wiki.total ?? 0) : results.wiki.total,
+    isMixedSearch ? (imagePages?.wiki.total ?? 0) : resultCounts.wiki,
     SEARCH_PAGE_PARAM_BY_CATEGORY.wiki,
     paginationTotalKnown,
     isMixedSearch ? imagePages?.wiki.totalPages : results.wiki.totalPages
   )
   const postsPagination = useSearchResultsPagination(
-    isMixedSearch ? (imagePages?.post.total ?? 0) : results.posts.total,
+    isMixedSearch ? (imagePages?.post.total ?? 0) : resultCounts.posts,
     SEARCH_PAGE_PARAM_BY_CATEGORY.posts,
     paginationTotalKnown,
     isMixedSearch ? imagePages?.post.totalPages : results.posts.totalPages
   )
   const galleriesPagination = useSearchResultsPagination(
-    isMixedSearch ? (imagePages?.gallery.total ?? 0) : results.galleries.total,
+    isMixedSearch ? (imagePages?.gallery.total ?? 0) : resultCounts.galleries,
     SEARCH_PAGE_PARAM_BY_CATEGORY.galleries,
     paginationTotalKnown,
     isMixedSearch ? imagePages?.gallery.totalPages : results.galleries.totalPages
   )
   const musicPagination = useSearchResultsPagination(
-    results.music.total,
+    resultCounts.music,
     SEARCH_PAGE_PARAM_BY_CATEGORY.music,
     paginationTotalKnown,
     results.music.totalPages
   )
   const lyricsPagination = useSearchResultsPagination(
-    results.lyrics.total,
+    resultCounts.lyrics,
     SEARCH_PAGE_PARAM_BY_CATEGORY.lyrics,
     paginationTotalKnown,
     results.lyrics.totalPages
   )
   const albumsPagination = useSearchResultsPagination(
-    results.albums.total,
+    resultCounts.albums,
     SEARCH_PAGE_PARAM_BY_CATEGORY.albums,
     paginationTotalKnown,
     results.albums.totalPages
@@ -332,13 +338,17 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
           {!isMixedSearch && (
             <>
               {effectiveTab === 'all' || effectiveTab === 'wiki'
-                ? results.wiki.total > 0 && (
+                ? resultCounts.wiki > 0 && (
                     <SearchResultSection
                       title="百科页面"
                       dockGroup={searchPaginationDockGroup}
                       icon={<Book size={14} className="text-brand-gold" />}
                       items={results.wiki.items}
                       pagination={wikiPagination}
+                      isLoading={state.loadingCategoryPages.has('wiki')}
+                      error={state.pageErrorByCategory.wiki}
+                      onPageChange={(page) => onCategoryPageChange?.('wiki', page)}
+                      onRetry={() => onCategoryPageChange?.('wiki', wikiPagination.page)}
                       resultGridClassName={resultGridClassName}
                       getItemKey={(page) => page.id}
                       renderItem={(page) => (
@@ -349,13 +359,17 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 : null}
 
               {effectiveTab === 'all' || effectiveTab === 'posts'
-                ? results.posts.total > 0 && (
+                ? resultCounts.posts > 0 && (
                     <SearchResultSection
                       title="社区帖子"
                       dockGroup={searchPaginationDockGroup}
                       icon={<MessageSquare size={14} className="text-brand-gold" />}
                       items={results.posts.items}
                       pagination={postsPagination}
+                      isLoading={state.loadingCategoryPages.has('posts')}
+                      error={state.pageErrorByCategory.posts}
+                      onPageChange={(page) => onCategoryPageChange?.('posts', page)}
+                      onRetry={() => onCategoryPageChange?.('posts', postsPagination.page)}
                       resultGridClassName={resultGridClassName}
                       getItemKey={(post) => post.id}
                       renderItem={(post) => (
@@ -366,13 +380,17 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 : null}
 
               {effectiveTab === 'all' || effectiveTab === 'galleries'
-                ? results.galleries.total > 0 && (
+                ? resultCounts.galleries > 0 && (
                     <SearchResultSection
                       title="画廊"
                       dockGroup={searchPaginationDockGroup}
                       icon={<ImageIcon size={14} className="text-brand-gold" />}
                       items={results.galleries.items}
                       pagination={galleriesPagination}
+                      isLoading={state.loadingCategoryPages.has('galleries')}
+                      error={state.pageErrorByCategory.galleries}
+                      onPageChange={(page) => onCategoryPageChange?.('galleries', page)}
+                      onRetry={() => onCategoryPageChange?.('galleries', galleriesPagination.page)}
                       resultGridClassName={resultGridClassName}
                       getItemKey={(gallery) => gallery.id}
                       renderItem={(gallery) => (
@@ -383,13 +401,17 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 : null}
 
               {effectiveTab === 'all' || effectiveTab === 'music'
-                ? results.music.total > 0 && (
+                ? resultCounts.music > 0 && (
                     <SearchResultSection
                       title="音乐曲目"
                       dockGroup={searchPaginationDockGroup}
                       icon={<Music size={14} className="text-brand-gold" />}
                       items={results.music.items}
                       pagination={musicPagination}
+                      isLoading={state.loadingCategoryPages.has('music')}
+                      error={state.pageErrorByCategory.music}
+                      onPageChange={(page) => onCategoryPageChange?.('music', page)}
+                      onRetry={() => onCategoryPageChange?.('music', musicPagination.page)}
                       renderItems={(songs) => (
                         <MusicSearchResults songs={songs} viewMode={viewMode} />
                       )}
@@ -399,8 +421,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 : null}
 
               {effectiveTab === 'all' || effectiveTab === 'lyrics'
-                ? results.lyrics.total > 0 && (
+                ? resultCounts.lyrics > 0 && (
                     <SearchResultSection
+                      isLoading={state.loadingCategoryPages.has('lyrics')}
+                      error={state.pageErrorByCategory.lyrics}
+                      onPageChange={(page) => onCategoryPageChange?.('lyrics', page)}
+                      onRetry={() => onCategoryPageChange?.('lyrics', lyricsPagination.page)}
                       title="歌词匹配"
                       dockGroup={searchPaginationDockGroup}
                       icon={<FileText size={14} className="text-brand-gold" />}
@@ -420,13 +446,17 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                 : null}
 
               {effectiveTab === 'all' || effectiveTab === 'albums'
-                ? results.albums.total > 0 && (
+                ? resultCounts.albums > 0 && (
                     <SearchResultSection
                       title="音乐专辑"
                       dockGroup={searchPaginationDockGroup}
                       icon={<Music size={14} className="text-brand-gold" />}
                       items={results.albums.items}
                       pagination={albumsPagination}
+                      isLoading={state.loadingCategoryPages.has('albums')}
+                      error={state.pageErrorByCategory.albums}
+                      onPageChange={(page) => onCategoryPageChange?.('albums', page)}
+                      onRetry={() => onCategoryPageChange?.('albums', albumsPagination.page)}
                       resultGridClassName={resultGridClassName}
                       getItemKey={(album) => album.docId}
                       renderItem={(album) => (

@@ -19,6 +19,7 @@ const Search: React.FC = () => {
     searchHistory,
     tabItems,
     performSearch,
+    searchCategoryPage,
     handleQueryChange,
     handleImageSearch,
     toggleDetail,
@@ -96,6 +97,7 @@ const Search: React.FC = () => {
           viewMode={viewMode}
           tabItems={tabItems}
           onTabChange={setActiveTab}
+          onCategoryPageChange={searchCategoryPage}
           onMixedPageChange={fetchImageSearchPage}
           onRetry={
             state.query

@@ -80,4 +80,28 @@ describe('useTraditionalSearch lyrics category', () => {
       mode: 'keyword',
     })
   })
+
+  it('类别分页请求覆盖过滤器类别并只发送目标页码', async () => {
+    const { result } = renderHook(() => useTraditionalSearch())
+
+    await act(async () => {
+      await result.current.search(
+        '歌词',
+        {
+          contentType: 'all',
+          selectedTags: [],
+          dateRange: { start: '', end: '' },
+          semanticImageSearch: false,
+        },
+        { mode: 'keyword', requestType: 'music', pageParams: { musicPage: 6 } }
+      )
+    })
+
+    expect(apiGetMock).toHaveBeenCalledWith('/api/search', {
+      q: '歌词',
+      type: 'music',
+      mode: 'keyword',
+      musicPage: 6,
+    })
+  })
 })

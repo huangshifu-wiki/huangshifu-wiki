@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { createEmptySearchResultPage } from '../lib/searchPagination'
+import { useCallback } from 'react'
+import { createEmptySearchResultPage, type SearchPaginationCategory } from '../lib/searchPagination'
 import { apiGet, apiUpload } from '../lib/apiClient'
 import type {
   ImageSearchSessionResponse,
@@ -27,9 +27,7 @@ export interface SearchSuggestion {
   id?: string
 }
 
-export type TraditionalSearchResults = SearchResultsResponse
-
-const EMPTY_TRADITIONAL_RESULTS: TraditionalSearchResults = {
+const EMPTY_TRADITIONAL_RESULTS: SearchResultsResponse = {
   wiki: createEmptySearchResultPage(),
   posts: createEmptySearchResultPage(),
   galleries: createEmptySearchResultPage(),
@@ -37,7 +35,6 @@ const EMPTY_TRADITIONAL_RESULTS: TraditionalSearchResults = {
   albums: createEmptySearchResultPage(),
   lyrics: createEmptySearchResultPage(),
 }
-
 /**
  * 搜索过滤器
  */
@@ -72,10 +69,6 @@ export function useMixedSearch() {
  * 使用传统搜索的 Hook
  */
 export function useTraditionalSearch() {
-  const [results, setResults] = useState<TraditionalSearchResults>(EMPTY_TRADITIONAL_RESULTS)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
   /**
    * 执行传统搜索
    */
@@ -86,54 +79,24 @@ export function useTraditionalSearch() {
       options?: {
         mode?: 'keyword' | 'vector' | 'hybrid'
         includeDetail?: boolean
+        requestType?: 'all' | SearchPaginationCategory
         pageParams?: Record<string, number>
       }
-    ): Promise<TraditionalSearchResults> => {
-      if (!query.trim()) {
-        setResults(EMPTY_TRADITIONAL_RESULTS)
-        return EMPTY_TRADITIONAL_RESULTS
-      }
+    ): Promise<SearchResultsResponse> => {
+      if (!query.trim()) return EMPTY_TRADITIONAL_RESULTS
+      const apiType = options?.requestType ?? filters?.contentType ?? 'all'
+      const mode = options?.mode || 'keyword'
 
-      setLoading(true)
-      setError(null)
-
-      try {
-        const typeMap: Record<string, string> = {
-          wiki: 'wiki',
-          posts: 'posts',
-          galleries: 'galleries',
-          music: 'music',
-          albums: 'albums',
-          lyrics: 'lyrics',
-        }
-        const apiType =
-          filters?.contentType === 'all' || !filters?.contentType
-            ? 'all'
-            : typeMap[filters.contentType] || 'all'
-
-        const mode = options?.mode || 'keyword'
-
-        const data = await apiGet<TraditionalSearchResults>('/api/search', {
-          q: query.trim(),
-          type: apiType,
-          mode,
-          ...(options?.includeDetail ? { detail: '1' } : {}),
-          ...(filters?.dateRange?.start ? { startDate: filters.dateRange.start } : {}),
-          ...(filters?.dateRange?.end ? { endDate: filters.dateRange.end } : {}),
-          ...(filters?.selectedTags?.length ? { tags: filters.selectedTags.join(',') } : {}),
-          ...options?.pageParams,
-        })
-
-        setResults(data)
-        return data
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '搜索失败'
-        setError(errorMsg)
-        console.error('Traditional search error:', err)
-        throw err
-      } finally {
-        setLoading(false)
-      }
+      return apiGet<SearchResultsResponse>('/api/search', {
+        q: query.trim(),
+        type: apiType,
+        mode,
+        ...(options?.includeDetail ? { detail: '1' } : {}),
+        ...(filters?.dateRange?.start ? { startDate: filters.dateRange.start } : {}),
+        ...(filters?.dateRange?.end ? { endDate: filters.dateRange.end } : {}),
+        ...(filters?.selectedTags?.length ? { tags: filters.selectedTags.join(',') } : {}),
+        ...options?.pageParams,
+      })
     },
     []
   )
@@ -172,21 +135,9 @@ export function useTraditionalSearch() {
     }
   }, [])
 
-  /**
-   * 清空结果
-   */
-  const clearResults = useCallback(() => {
-    setResults(EMPTY_TRADITIONAL_RESULTS)
-    setError(null)
-  }, [])
-
   return {
-    results,
-    loading,
-    error,
     search,
     getSuggestions,
     getHotKeywords,
-    clearResults,
   }
 }

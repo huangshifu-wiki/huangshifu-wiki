@@ -23,9 +23,12 @@ import { apiGet } from '../lib/apiClient'
 import {
   createEmptySearchResultPage,
   SEARCH_API_PAGE_PARAM_BY_CATEGORY,
+  getSearchResultCount,
+  SEARCH_CATEGORY_TYPE_BY_PAGE_PARAM,
   SEARCH_PAGE_PARAM_BY_CATEGORY,
   SEARCH_PAGE_PARAMS,
   clearSearchPaginationParams,
+  type SearchPaginationCategory,
 } from '../lib/searchPagination'
 import {
   shouldWaitForGalleryThumbnail,
@@ -41,7 +44,9 @@ export interface SearchState {
   includeDetail: boolean
   results: SearchResults
   loading: boolean
+  loadingCategoryPages: ReadonlySet<SearchPaginationCategory>
   error: string | null
+  pageErrorByCategory: Partial<Record<SearchPaginationCategory, string>>
   activeTab: string
   filters: SearchFilters
   suggestions: SearchSuggestion[]
@@ -54,6 +59,10 @@ export interface SearchState {
   imageSearchSessionId?: string | null
   imageCategoryPages?: SemanticSearchCategoryPages | null
 }
+function getSearchPageSignature(params: URLSearchParams) {
+  return SEARCH_PAGE_PARAMS.map((param) => `${param}=${params.get(param) || ''}`).join('&')
+}
+
 function getPendingGalleryIds(state: SearchState) {
   const ids = new Set<string>()
   if (state.isMixedSearch) {
@@ -99,7 +108,9 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
       lyrics: createEmptySearchResultPage(),
     },
     loading: Boolean(initialQuery),
+    loadingCategoryPages: new Set(),
     error: null,
+    pageErrorByCategory: {},
     activeTab: 'all',
     filters: {
       selectedTags: [],
@@ -126,9 +137,10 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   const hotKeywordsRequestRef = useRef(0)
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipNextUrlSearchRef = useRef(false)
+  const searchContextSignatureRef = useRef<string | null>(null)
+  const pageSignatureRef = useRef<string | null>(null)
   useEffect(() => {
     return () => {
-      searchRequestRef.current += 1
       suggestionRequestRef.current += 1
       hotKeywordsRequestRef.current += 1
       if (suggestTimeoutRef.current) {
@@ -157,22 +169,45 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotKeywordsEnabled])
 
-  const searchPageSignature = SEARCH_PAGE_PARAMS.map(
-    (param) => `${param}=${searchParams.get(param) || ''}`
-  ).join('&')
+  const searchPageSignature = getSearchPageSignature(searchParams)
 
-  // 初始查询及 URL 驱动的详情状态变化
+  // 初始查询及 URL 驱动的详情状态变化；单个类别页码变化只请求该类别
   useEffect(() => {
     if (skipNextUrlSearchRef.current) {
       skipNextUrlSearchRef.current = false
       return
     }
-    if (initialQuery) {
-      if (stateRef.current.includeDetail !== urlIncludeDetail) {
-        setState((prev) => ({ ...prev, includeDetail: urlIncludeDetail }))
-      }
-      void performSearch(initialQuery, undefined, urlIncludeDetail, { preservePagination: true })
+    if (!initialQuery) return
+
+    const contextSignature = `${initialQuery}\u0000${urlIncludeDetail ? '1' : '0'}`
+    const previousPageSignature = pageSignatureRef.current
+    const contextChanged = searchContextSignatureRef.current !== contextSignature
+    const changedCategories =
+      previousPageSignature === null
+        ? []
+        : SEARCH_PAGE_PARAMS.filter((param, index) => {
+            if (param === SEARCH_PAGE_PARAM_BY_CATEGORY.semantic) return false
+            const previous = previousPageSignature.split('&')[index]
+            return previous !== `${param}=${searchParams.get(param) || ''}`
+          }).flatMap((param) => [SEARCH_CATEGORY_TYPE_BY_PAGE_PARAM[param]])
+
+    searchContextSignatureRef.current = contextSignature
+    pageSignatureRef.current = searchPageSignature
+    if (stateRef.current.includeDetail !== urlIncludeDetail) {
+      setState((prev) => ({ ...prev, includeDetail: urlIncludeDetail }))
     }
+
+    if (!contextChanged) {
+      if (previousPageSignature === searchPageSignature) return
+      if (changedCategories.length === 1) {
+        const category = changedCategories[0]
+        const page = Number(searchParams.get(SEARCH_PAGE_PARAM_BY_CATEGORY[category])) || 1
+        void searchCategoryPage(category, page)
+        return
+      }
+    }
+
+    void performSearch(initialQuery, undefined, urlIncludeDetail, { preservePagination: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery, urlIncludeDetail, searchPageSignature])
   const hasPendingGalleryThumbnails = getPendingGalleryIds(state).length > 0
@@ -281,7 +316,6 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   }
 
   // 传统搜索 -- 委托给 traditionalSearch.search()
-  // 保留编排逻辑：历史记录、URL 同步、标签过滤、searchMeta
   const performSearch = useCallback(
     async (
       q: string,
@@ -305,7 +339,9 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
       setState((prev) => ({
         ...prev,
         loading: true,
+        loadingCategoryPages: new Set(),
         error: null,
+        pageErrorByCategory: {},
         query: currentQuery,
       }))
 
@@ -319,6 +355,8 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
       if (!options?.preservePagination) {
         sp = clearSearchPaginationParams(sp)
       }
+      searchContextSignatureRef.current = `${currentQuery}\u0000${includeDetail ? '1' : '0'}`
+      pageSignatureRef.current = getSearchPageSignature(sp)
       if (sp.toString() !== searchParams.toString()) {
         skipNextUrlSearchRef.current = true
         setSearchParams(sp)
@@ -327,18 +365,11 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
       const searchMode = filters.semanticImageSearch ? 'hybrid' : 'keyword'
       const pageParams = options?.preservePagination
         ? Object.fromEntries(
-            Object.entries(SEARCH_PAGE_PARAM_BY_CATEGORY).flatMap(([category, browserParam]) => {
+            Object.entries(SEARCH_API_PAGE_PARAM_BY_CATEGORY).flatMap(([category, apiParam]) => {
+              const browserParam =
+                SEARCH_PAGE_PARAM_BY_CATEGORY[category as SearchPaginationCategory]
               const value = Number(sp.get(browserParam))
-              return Number.isInteger(value) && value > 0
-                ? [
-                    [
-                      SEARCH_API_PAGE_PARAM_BY_CATEGORY[
-                        category as keyof typeof SEARCH_API_PAGE_PARAM_BY_CATEGORY
-                      ],
-                      value,
-                    ],
-                  ]
-                : []
+              return Number.isInteger(value) && value > 0 ? [[apiParam, value]] : []
             })
           )
         : {}
@@ -347,6 +378,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         const data = await traditionalSearch.search(currentQuery, filters, {
           mode: searchMode,
           includeDetail,
+          requestType: 'all',
           pageParams,
         })
         if (requestId !== searchRequestRef.current) return
@@ -359,7 +391,9 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
           imageSearchSessionId: null,
           imageCategoryPages: null,
           loading: false,
+          loadingCategoryPages: new Set(),
           error: null,
+          pageErrorByCategory: {},
           searchMeta: data.searchMeta,
         }))
       } catch (error) {
@@ -368,11 +402,103 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         setState((prev) => ({
           ...prev,
           loading: false,
+          loadingCategoryPages: new Set(),
           error: error instanceof Error ? error.message : '搜索失败',
         }))
       }
     },
     [searchParams, addToHistory, traditionalSearch]
+  )
+
+  const searchCategoryPage = useCallback(
+    async (category: SearchPaginationCategory, page: number) => {
+      const currentQuery = stateRef.current.query.trim()
+      if (!currentQuery || stateRef.current.isMixedSearch) return
+
+      const requestId = ++searchRequestRef.current
+      const filters = stateRef.current.filters
+      const includeDetail = stateRef.current.includeDetail
+      const searchMode = filters.semanticImageSearch ? 'hybrid' : 'keyword'
+      const previousPage = stateRef.current.results[category].page
+      const pageParam = SEARCH_API_PAGE_PARAM_BY_CATEGORY[category]
+      const browserPageParam = SEARCH_PAGE_PARAM_BY_CATEGORY[category]
+      const expectedParams = new URLSearchParams(searchParams)
+      if (page > 1) expectedParams.set(browserPageParam, String(page))
+      else expectedParams.delete(browserPageParam)
+      pageSignatureRef.current = getSearchPageSignature(expectedParams)
+
+      setState((prev) => {
+        const loadingCategoryPages = new Set(prev.loadingCategoryPages)
+        loadingCategoryPages.add(category)
+        const pageErrorByCategory = { ...prev.pageErrorByCategory }
+        delete pageErrorByCategory[category]
+        return { ...prev, loadingCategoryPages, pageErrorByCategory }
+      })
+
+      try {
+        const data = await traditionalSearch.search(currentQuery, filters, {
+          mode: searchMode,
+          includeDetail,
+          requestType: category,
+          pageParams: { [pageParam]: page },
+        })
+        if (requestId !== searchRequestRef.current) return
+
+        const categoryPage = data[category]
+        if (categoryPage.total > 0 && categoryPage.items.length === 0) {
+          throw new Error('搜索分页返回了空结果')
+        }
+        setState((prev) => {
+          const loadingCategoryPages = new Set(prev.loadingCategoryPages)
+          loadingCategoryPages.delete(category)
+          const pageErrorByCategory = { ...prev.pageErrorByCategory }
+          delete pageErrorByCategory[category]
+          return {
+            ...prev,
+            results: { ...prev.results, [category]: categoryPage },
+            loadingCategoryPages,
+            pageErrorByCategory,
+          }
+        })
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev)
+            if (categoryPage.page > 1) next.set(browserPageParam, String(categoryPage.page))
+            else next.delete(browserPageParam)
+            if (next.toString() === prev.toString()) return prev
+            pageSignatureRef.current = getSearchPageSignature(next)
+            skipNextUrlSearchRef.current = true
+            return next
+          },
+          { replace: true }
+        )
+      } catch (error) {
+        if (requestId !== searchRequestRef.current) return
+        const message = error instanceof Error ? error.message : '搜索分页失败'
+        setState((prev) => {
+          const loadingCategoryPages = new Set(prev.loadingCategoryPages)
+          loadingCategoryPages.delete(category)
+          return {
+            ...prev,
+            loadingCategoryPages,
+            pageErrorByCategory: { ...prev.pageErrorByCategory, [category]: message },
+          }
+        })
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev)
+            if (previousPage > 1) next.set(browserPageParam, String(previousPage))
+            else next.delete(browserPageParam)
+            if (next.toString() === prev.toString()) return prev
+            pageSignatureRef.current = getSearchPageSignature(next)
+            skipNextUrlSearchRef.current = true
+            return next
+          },
+          { replace: true }
+        )
+      }
+    },
+    [searchParams, setSearchParams, traditionalSearch]
   )
 
   // 图片搜索 -- 委托给 mixedSearch.searchByImage()
@@ -392,7 +518,9 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         ...prev,
         aiSearching: true,
         loading: true,
+        loadingCategoryPages: new Set(),
         error: null,
+        pageErrorByCategory: {},
       }))
       try {
         const response = await mixedSearch.searchByImage(file)
@@ -530,13 +658,15 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     setState((prev) => (prev.suggestions.length === 0 ? prev : { ...prev, suggestions: [] }))
   }
 
-  const totalResults =
-    state.results.wiki.total +
-    state.results.posts.total +
-    state.results.galleries.total +
-    state.results.music.total +
-    state.results.albums.total +
-    state.results.lyrics.total
+  const resultCounts = {
+    wiki: getSearchResultCount(state.results.wiki),
+    posts: getSearchResultCount(state.results.posts),
+    galleries: getSearchResultCount(state.results.galleries),
+    music: getSearchResultCount(state.results.music),
+    albums: getSearchResultCount(state.results.albums),
+    lyrics: getSearchResultCount(state.results.lyrics),
+  }
+  const totalResults = Object.values(resultCounts).reduce((sum, count) => sum + count, 0)
   const getMixedResultsCount = (type: 'gallery' | 'wiki' | 'post') =>
     state.mixedResults.filter((r) => r.sourceType === type).length
 
@@ -566,14 +696,14 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         ]
       : [
           { id: 'all', label: '全部', count: totalResults },
-          { id: 'wiki', label: '百科', count: state.results.wiki.total },
-          { id: 'posts', label: '帖子', count: state.results.posts.total },
-          { id: 'galleries', label: '图集', count: state.results.galleries.total },
-          { id: 'music', label: '音乐', count: state.results.music.total },
-          ...(state.results.lyrics.total > 0
-            ? [{ id: 'lyrics', label: '歌词', count: state.results.lyrics.total }]
+          { id: 'wiki', label: '百科', count: resultCounts.wiki },
+          { id: 'posts', label: '帖子', count: resultCounts.posts },
+          { id: 'galleries', label: '图集', count: resultCounts.galleries },
+          { id: 'music', label: '音乐', count: resultCounts.music },
+          ...(resultCounts.lyrics > 0
+            ? [{ id: 'lyrics', label: '歌词', count: resultCounts.lyrics }]
             : []),
-          { id: 'albums', label: '专辑', count: state.results.albums.total },
+          { id: 'albums', label: '专辑', count: resultCounts.albums },
         ]
   ).filter((tab) => tab.id === 'all' || tab.count > 0)
 
@@ -583,6 +713,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     tabItems,
     totalResults,
     performSearch,
+    searchCategoryPage,
     fetchImageSearchPage,
     handleQueryChange,
     handleImageSearch,

@@ -44,7 +44,9 @@ const makeState = (overrides: Partial<SearchState> = {}): SearchState => ({
   includeDetail: false,
   results: emptyResults,
   loading: false,
+  loadingCategoryPages: new Set(),
   error: null,
+  pageErrorByCategory: {},
   activeTab: 'all',
   filters: {
     selectedTags: [],
