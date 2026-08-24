@@ -378,7 +378,23 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
   }
 
   const handleSaveOrder = async () => {
-    if (!albumId || !orderDirty) return
+    if (
+      draftDiscs.length > 20 ||
+      draftDiscs.some(
+        (disc) =>
+          !Number.isInteger(disc.disc) ||
+          disc.disc < 1 ||
+          disc.disc > 20 ||
+          disc.name.length > CONTENT_LIMITS.album.discName ||
+          disc.tracks.some(
+            (track) =>
+              !Number.isInteger(track.trackOrder) || track.trackOrder < 0 || track.trackOrder > 5000
+          )
+      )
+    ) {
+      show('曲目编排包含无效的 Disc 或轨序', { variant: 'error' })
+      return
+    }
     setPendingAction({ type: 'save-order' })
     try {
       await apiPatch(`/api/albums/${albumId}/tracks/reorder`, buildReorderPayload(draftDiscs))

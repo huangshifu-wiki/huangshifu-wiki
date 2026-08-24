@@ -13,6 +13,7 @@ import type { Platform } from '../types/common'
 import type { AdminDataItem } from '../types/entities'
 import type { DuplicateAlbumSourceWarning } from '../types/api'
 import { useDialog } from './Dialog'
+import { validateMaxLength, validateUrl, type ClientValidationError } from '../lib/clientValidation'
 import { useToast } from './Toast'
 import { BookEditorSection, BookFormField, bookCompactInputClass } from './BookEditor'
 import { Button } from '@/src/components/ui'
@@ -183,6 +184,32 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
       .filter((source) => source.sourceId)
     if (normalizedSources.length && !normalizedSources.some((source) => source.isPrimary)) {
       normalizedSources[0].isPrimary = true
+    }
+
+    const validationError =
+      validateMaxLength(title, 'title', '专辑标题', CONTENT_LIMITS.album.title) ||
+      validateMaxLength(artist, 'artist', '艺术家', CONTENT_LIMITS.album.artist) ||
+      validateMaxLength(
+        formData.description,
+        'description',
+        '专辑简介',
+        CONTENT_LIMITS.album.description
+      ) ||
+      normalizedSources.reduce<ClientValidationError | null>(
+        (result, source) =>
+          result ||
+          validateMaxLength(
+            source.sourceId,
+            'sourceId',
+            '来源 ID',
+            CONTENT_LIMITS.album.sourceId
+          ) ||
+          validateUrl(source.sourceUrl, 'sourceUrl', '来源地址', CONTENT_LIMITS.url),
+        null
+      )
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
     }
 
     setSaving(true)

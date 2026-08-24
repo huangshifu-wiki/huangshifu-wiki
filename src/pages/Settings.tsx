@@ -45,6 +45,12 @@ import {
   THUMBNAIL_POLL_MAX_ATTEMPTS,
 } from '../lib/galleryThumbnails'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
+import {
+  validateEmail,
+  validateMaxLength,
+  validatePassword,
+  validateRequiredText,
+} from '../lib/clientValidation'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import type { CommentItem, GalleryItem, PostItem } from '../types/entities'
 import type { ContentStatus } from '../types/common'
@@ -481,12 +487,26 @@ const Settings = () => {
 
   const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const profileError =
+      validateMaxLength(
+        profileForm.displayName,
+        'displayName',
+        '昵称',
+        PROFILE_DISPLAY_NAME_MAX_LENGTH
+      ) ||
+      validateMaxLength(profileForm.signature, 'signature', '签名', PROFILE_SIGNATURE_MAX_LENGTH) ||
+      validateMaxLength(profileForm.bio, 'bio', '个人简介', WIKI_MAX_CONTENT_SIZE)
+    if (profileError) {
+      show(profileError.message, { variant: 'error' })
+      return
+    }
+
     setSavingProfile(true)
     try {
       await apiPatch('/api/users/me', {
-        displayName: profileForm.displayName,
-        signature: profileForm.signature,
-        bio: profileForm.bio,
+        displayName: profileForm.displayName.trim(),
+        signature: profileForm.signature.trim(),
+        bio: profileForm.bio.trim(),
         photoURL: profileForm.photoURL,
       })
       await refreshAuth()
@@ -518,20 +538,18 @@ const Settings = () => {
   const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!emailForm.currentPassword.trim()) {
-      show('当前密码不能为空', { variant: 'error' })
-      return
-    }
-
-    if (!emailForm.newEmail.trim()) {
-      show('新邮箱不能为空', { variant: 'error' })
+    const emailError =
+      validateRequiredText(emailForm.currentPassword, 'currentPassword', '当前密码') ||
+      validateEmail(emailForm.newEmail, 'newEmail', '新邮箱')
+    if (emailError) {
+      show(emailError.message, { variant: 'error' })
       return
     }
 
     setSavingEmail(true)
     try {
       await apiPut('/api/users/email', {
-        newEmail: emailForm.newEmail,
+        newEmail: emailForm.newEmail.trim(),
         currentPassword: emailForm.currentPassword,
       })
       await refreshAuth()
@@ -587,8 +605,11 @@ const Settings = () => {
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!passwordForm.currentPassword.trim()) {
-      show('当前密码不能为空', { variant: 'error' })
+    const passwordError =
+      validateRequiredText(passwordForm.currentPassword, 'currentPassword', '当前密码') ||
+      validatePassword(passwordForm.newPassword, 'newPassword', '新密码')
+    if (passwordError) {
+      show(passwordError.message, { variant: 'error' })
       return
     }
 
@@ -596,7 +617,6 @@ const Settings = () => {
       show('两次输入的新密码不一致', { variant: 'error' })
       return
     }
-
     setSavingPassword(true)
     try {
       await apiPut('/api/users/password', {

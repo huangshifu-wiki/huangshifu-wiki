@@ -22,6 +22,8 @@ import {
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
+import { validateEmail, validateMaxLength, validatePassword } from '../../lib/clientValidation'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { SmartImage } from '../../components/SmartImage'
@@ -197,10 +199,17 @@ export const AdminUsers = () => {
       variant: shouldUnban ? 'info' : 'warning',
       multiline: true,
       onConfirm: async (value) => {
-        if (!shouldUnban && !value.trim()) {
-          show('请输入封禁原因', { variant: 'error' })
+        const reasonError = validateMaxLength(
+          value,
+          'reason',
+          shouldUnban ? '解封备注' : '封禁原因',
+          shouldUnban ? CONTENT_LIMITS.userModeration.note : CONTENT_LIMITS.userModeration.banReason
+        )
+        if (reasonError) {
+          show(reasonError.message, { variant: 'error' })
           return false
         }
+
         try {
           await apiPut(endpoint, shouldUnban ? { note: value } : { reason: value })
           await refreshUsers()
@@ -361,8 +370,9 @@ export const AdminUsers = () => {
       show(`昵称不能超过${PROFILE_DISPLAY_NAME_MAX_LENGTH}个字符`, { variant: 'error' })
       return
     }
-    if (!editForm.email.trim()) {
-      show('邮箱不能为空', { variant: 'error' })
+    const emailError = validateEmail(editForm.email, 'email', '邮箱')
+    if (emailError) {
+      show(emailError.message, { variant: 'error' })
       return
     }
     if (editForm.signature.length > PROFILE_SIGNATURE_MAX_LENGTH) {
@@ -378,17 +388,7 @@ export const AdminUsers = () => {
         show('两次输入的新密码不一致', { variant: 'error' })
         return
       }
-      if (editForm.newPassword.length < PASSWORD_MIN_LENGTH) {
-        show(`新密码至少${PASSWORD_MIN_LENGTH}个字符`, { variant: 'error' })
-        return
-      }
-      if (editForm.newPassword.length > PASSWORD_MAX_LENGTH) {
-        show(`新密码最多${PASSWORD_MAX_LENGTH}个字符`, { variant: 'error' })
-        return
-      }
     }
-
-    setEditLoading(true)
     try {
       const payload: {
         displayName: string

@@ -151,32 +151,40 @@ export const AdminDiskMonitor: React.FC = () => {
     const errors: string[] = []
     if (
       'warningThresholdGB' in nc &&
-      (typeof nc.warningThresholdGB !== 'number' || nc.warningThresholdGB <= 0)
+      (typeof nc.warningThresholdGB !== 'number' ||
+        !Number.isFinite(nc.warningThresholdGB) ||
+        nc.warningThresholdGB <= 0)
     ) {
       errors.push('警告阈值必须是正数')
     }
     if (
       'criticalThresholdGB' in nc &&
-      (typeof nc.criticalThresholdGB !== 'number' || nc.criticalThresholdGB <= 0)
+      (typeof nc.criticalThresholdGB !== 'number' ||
+        !Number.isFinite(nc.criticalThresholdGB) ||
+        nc.criticalThresholdGB <= 0)
     ) {
       errors.push('严重阈值必须是正数')
     }
     if (
-      nc.warningThresholdGB &&
-      nc.criticalThresholdGB &&
+      typeof nc.warningThresholdGB === 'number' &&
+      typeof nc.criticalThresholdGB === 'number' &&
       nc.criticalThresholdGB >= nc.warningThresholdGB
     ) {
       errors.push('严重阈值必须小于警告阈值')
     }
     if (
       'checkIntervalMs' in nc &&
-      (typeof nc.checkIntervalMs !== 'number' || nc.checkIntervalMs < 60000)
+      (typeof nc.checkIntervalMs !== 'number' ||
+        !Number.isFinite(nc.checkIntervalMs) ||
+        nc.checkIntervalMs < 60000)
     ) {
       errors.push('检查间隔必须 >= 60 秒')
     }
     if (
       'uploadsMinFreeMB' in nc &&
-      (typeof nc.uploadsMinFreeMB !== 'number' || nc.uploadsMinFreeMB < 10)
+      (typeof nc.uploadsMinFreeMB !== 'number' ||
+        !Number.isFinite(nc.uploadsMinFreeMB) ||
+        nc.uploadsMinFreeMB < 10)
     ) {
       errors.push('最小空闲空间必须 >= 10 MB')
     }

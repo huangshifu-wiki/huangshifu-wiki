@@ -29,6 +29,7 @@ import { useI18n } from '../lib/i18n'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
 import { formatDateOnly, formatDateTime } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
+import { validateMaxLength, validateRequiredText } from '../lib/clientValidation'
 import { submitFormOnModifierEnter } from '../lib/formShortcuts'
 import {
   shouldWaitForAnyGalleryThumbnail,
@@ -606,7 +607,15 @@ const GalleryDetail = () => {
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!gallery?.id || !user || !newComment.trim() || submittingComment) return
+    const comment = newComment.trim()
+    const commentError =
+      validateRequiredText(comment, 'comment', '评论') ||
+      validateMaxLength(comment, 'comment', '评论', CONTENT_LIMITS.gallery.comment)
+    if (commentError) {
+      show(commentError.message, { variant: 'error' })
+      return
+    }
+    if (!gallery?.id || !user || submittingComment) return
     if (isBanned) {
       show(t('gallery.bannedCannotComment'), { variant: 'error' })
       return
@@ -621,7 +630,7 @@ const GalleryDetail = () => {
       const data = await apiPost<{ comment: CommentItem }>(
         `/api/galleries/${gallery.id}/comments`,
         {
-          content: newComment,
+          content: comment,
           parentId: replyTo?.id || null,
         }
       )
@@ -668,6 +677,16 @@ const GalleryDetail = () => {
       })
       reason = promptValue?.trim() || null
       if (promptValue === null) return
+      const reasonError = validateMaxLength(
+        reason,
+        'reason',
+        '删除理由',
+        CONTENT_LIMITS.gallery.reviewNote
+      )
+      if (reasonError) {
+        show(reasonError.message, { variant: 'error' })
+        return
+      }
       if (!reason) {
         show('删除他人评论必须填写删除理由', { variant: 'error' })
         return

@@ -7,6 +7,8 @@ import { useToast } from '../../components/Toast'
 import { apiGet, apiPost, invalidateApiCacheByPrefix } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
 import { splitTagsInput } from '../../lib/contentUtils'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { validateMaxLength, validateRequiredText, validateTags } from '../../lib/clientValidation'
 import { formatDate } from '../../lib/dateUtils'
 import type { WikiItem, WikiBranchItem, WikiRevisionItem, WikiPullRequestItem } from './types'
 import { getBranchStatusText } from './types'
@@ -135,22 +137,36 @@ const WikiBranchWorkspace = () => {
   }
 
   const handleSaveRevision = async () => {
-    if (!branch || isBanned || savingRevision) return
-    if (!title.trim() || !content.trim() || !category.trim()) {
-      show('请先填写标题、分类和内容', { variant: 'error' })
+    const validationError =
+      validateRequiredText(title, 'title', '标题') ||
+      validateRequiredText(category, 'category', '分类') ||
+      validateRequiredText(content, 'content', '内容') ||
+      validateMaxLength(title, 'title', '标题', CONTENT_LIMITS.wiki.title) ||
+      validateMaxLength(category, 'category', '分类', CONTENT_LIMITS.wiki.category) ||
+      validateMaxLength(content, 'content', '内容', CONTENT_LIMITS.wiki.content) ||
+      validateTags(
+        splitTagsInput(tags),
+        'tags',
+        '标签',
+        CONTENT_LIMITS.wiki.tags,
+        CONTENT_LIMITS.wiki.tag
+      )
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
       return
     }
     if (!canEditCategory(category, isAdmin)) {
       show('该分类仅管理员可编辑', { variant: 'error' })
       return
     }
+
     try {
       setSavingRevision(true)
       await apiPost(`/api/wiki/branches/${branch.id}/revisions`, {
         title: title.trim(),
-        content,
-        category,
-        eventDate: eventDate || null,
+        content: content.trim(),
+        category: category.trim(),
+        eventDate: eventDate.trim() || null,
         tags: splitTagsInput(tags),
       })
       invalidateApiCacheByPrefix(`/api/wiki/${slug}`)
@@ -166,8 +182,17 @@ const WikiBranchWorkspace = () => {
 
   const handleCreatePr = async () => {
     if (!branch || creatingPr || openPr || isBanned) return
-    if (!prTitle.trim()) {
-      show('请填写 PR 标题', { variant: 'error' })
+    const prValidationError =
+      validateRequiredText(prTitle, 'prTitle', 'PR 标题') ||
+      validateMaxLength(prTitle, 'prTitle', 'PR 标题', CONTENT_LIMITS.wiki.prTitle) ||
+      validateMaxLength(
+        prDescription,
+        'prDescription',
+        'PR 描述',
+        CONTENT_LIMITS.wiki.prDescription
+      )
+    if (prValidationError) {
+      show(prValidationError.message, { variant: 'error' })
       return
     }
     try {
@@ -189,8 +214,22 @@ const WikiBranchWorkspace = () => {
 
   const handleResolveConflict = async () => {
     if (!branch || branch.status !== 'conflict' || resolvingConflict || isBanned) return
-    if (!title.trim() || !content.trim() || !category.trim()) {
-      show('请先填写标题、分类和内容', { variant: 'error' })
+    const validationError =
+      validateRequiredText(title, 'title', '标题') ||
+      validateRequiredText(category, 'category', '分类') ||
+      validateRequiredText(content, 'content', '内容') ||
+      validateMaxLength(title, 'title', '标题', CONTENT_LIMITS.wiki.title) ||
+      validateMaxLength(category, 'category', '分类', CONTENT_LIMITS.wiki.category) ||
+      validateMaxLength(content, 'content', '内容', CONTENT_LIMITS.wiki.content) ||
+      validateTags(
+        splitTagsInput(tags),
+        'tags',
+        '标签',
+        CONTENT_LIMITS.wiki.tags,
+        CONTENT_LIMITS.wiki.tag
+      )
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
       return
     }
     if (!canEditCategory(category, isAdmin)) {
@@ -201,9 +240,9 @@ const WikiBranchWorkspace = () => {
       setResolvingConflict(true)
       await apiPost(`/api/wiki/branches/${branch.id}/resolve-conflict`, {
         title: title.trim(),
-        content,
-        category,
-        eventDate: eventDate || null,
+        content: content.trim(),
+        category: category.trim(),
+        eventDate: eventDate.trim() || null,
         tags: splitTagsInput(tags),
       })
       invalidateApiCacheByPrefix(`/api/wiki/${slug}`)

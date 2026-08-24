@@ -80,15 +80,36 @@ describe('论坛保存草稿错误原因', () => {
     mockedApiGet.mockResolvedValue({ sections: [{ id: 'section-1', name: '综合讨论' }] } as never)
   })
 
+  const fillValidPost = () => {
+    fireEvent.change(screen.getByPlaceholderText('forum.titlePlaceholder'), {
+      target: { value: '测试标题' },
+    })
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'section-1' } })
+    fireEvent.change(screen.getByLabelText('正文'), { target: { value: '测试正文' } })
+  }
+
   it('显示 API 返回的保存原因而不是固定失败文案', async () => {
     mockedApiPost.mockRejectedValueOnce(new Error('版块不存在'))
+    renderEditor()
+
+    await screen.findByRole('button', { name: '保存草稿' })
+    fillValidPost()
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }))
+
+    await waitFor(() => {
+      expect(toastShow).toHaveBeenCalledWith('版块不存在', { variant: 'error' })
+    })
+  })
+
+  it('空标题时在请求前显示字段原因', async () => {
     renderEditor()
 
     await screen.findByRole('button', { name: '保存草稿' })
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }))
 
     await waitFor(() => {
-      expect(toastShow).toHaveBeenCalledWith('版块不存在', { variant: 'error' })
+      expect(toastShow).toHaveBeenCalledWith('标题不能为空', { variant: 'error' })
+      expect(mockedApiPost).not.toHaveBeenCalled()
     })
   })
 
@@ -97,6 +118,7 @@ describe('论坛保存草稿错误原因', () => {
     renderEditor()
 
     await screen.findByRole('button', { name: '保存草稿' })
+    fillValidPost()
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }))
 
     await waitFor(() => {

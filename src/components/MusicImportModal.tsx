@@ -5,6 +5,7 @@ import { clsx } from 'clsx'
 
 import { apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
+import { validateRequiredText, validateUrl } from '../lib/clientValidation'
 import { getMusicPlatformLabel } from '../lib/musicPlatformUrls'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import { isBackdropClick } from '../utils/modal'
@@ -91,8 +92,10 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
   }
 
   const handleParse = async () => {
-    if (!url.trim()) {
-      setError('请先粘贴音乐链接')
+    const urlError =
+      validateRequiredText(url, 'url', '音乐链接') || validateUrl(url, 'url', '音乐链接')
+    if (urlError) {
+      setError(urlError.message)
       return
     }
     setParsing(true)

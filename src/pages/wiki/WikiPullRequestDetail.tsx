@@ -8,6 +8,8 @@ import { useToast } from '../../components/Toast'
 import { apiGet, apiPost } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
 import { formatDate } from '../../lib/dateUtils'
+import { validateMaxLength, validateRequiredText } from '../../lib/clientValidation'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { submitFormOnModifierEnter } from '../../lib/formShortcuts'
 import type { WikiPullRequestItem, WikiPrDiffResponse } from './types'
 import { getPrStatusText } from './types'
@@ -50,11 +52,19 @@ const WikiPullRequestDetail = () => {
   }, [prId])
 
   const handleComment = async () => {
-    if (!prId || !comment.trim() || saving) return
+    const commentText = comment.trim()
+    const validationError =
+      validateRequiredText(commentText, 'comment', '评论') ||
+      validateMaxLength(commentText, 'comment', '评论', CONTENT_LIMITS.wiki.prComment)
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
+    if (!prId || saving) return
     try {
       setSaving(true)
       await apiPost(`/api/wiki/pull-requests/${prId}/comments`, {
-        content: comment.trim(),
+        content: commentText,
       })
       setComment('')
       await fetchDetail()
@@ -77,8 +87,8 @@ const WikiPullRequestDetail = () => {
       })
       if (!confirmed) return
     }
-
     let note = ''
+
     if (action === 'reject') {
       note =
         (await dialog.prompt({
@@ -89,6 +99,11 @@ const WikiPullRequestDetail = () => {
           variant: 'warning',
           multiline: true,
         })) || ''
+      const noteError = validateMaxLength(note, 'note', '驳回说明', CONTENT_LIMITS.wiki.reviewNote)
+      if (noteError) {
+        show(noteError.message, { variant: 'error' })
+        return
+      }
     }
 
     try {

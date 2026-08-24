@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertCircle, KeyRound } from '@/src/components/icons'
 import { confirmPasswordReset } from '../lib/auth'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
+import { validatePassword, validateRequiredText } from '../lib/clientValidation'
 import { CharacterCount } from '../components/CharacterCount'
 import { useToast } from '../components/Toast'
 import { Button, Input, LinkButton } from '@/src/components/ui'
@@ -18,15 +19,15 @@ const ResetPassword = () => {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!token) return
-
-    if (newPassword !== confirmPassword) {
-      show('两次输入的密码不一致', { variant: 'error' })
+    const tokenError = validateRequiredText(token, 'token', '重置 token')
+    const passwordError = validatePassword(newPassword, 'password', '密码')
+    if (tokenError || passwordError) {
+      show((tokenError || passwordError)!.message, { variant: 'error' })
       return
     }
 
-    if (newPassword.length < PASSWORD_MIN_LENGTH) {
-      show(`密码至少${PASSWORD_MIN_LENGTH}个字符`, { variant: 'error' })
+    if (newPassword !== confirmPassword) {
+      show('两次输入的密码不一致', { variant: 'error' })
       return
     }
 

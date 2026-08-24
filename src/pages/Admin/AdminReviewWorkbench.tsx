@@ -152,6 +152,10 @@ const AdminReviewWorkbench = () => {
         show('驳回原因不能为空', { variant: 'error' })
         return
       }
+      if (note.length > CONTENT_LIMITS.post.reviewNote) {
+        show(`驳回原因不能超过${CONTENT_LIMITS.post.reviewNote}个字符`, { variant: 'error' })
+        return
+      }
     }
 
     setActionLoading(action)

@@ -36,6 +36,12 @@ import {
   getEventCoverSrc,
   isEventTicketPrice,
 } from '../../lib/eventFormat'
+import {
+  validateMaxLength,
+  validateRequiredText,
+  validateTags,
+  validateUrl,
+} from '../../lib/clientValidation'
 import { formatUploadLimitWithSize, UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
 import { uploadImageWithStrategy } from '../../services/imageService'
 import type {
@@ -222,6 +228,8 @@ const normalizeSaleTimes = (items: EventSaleTime[]) =>
     .map((item) => ({ time: item.time.trim(), note: item.note?.trim() || undefined }))
     .filter((item) => item.time)
 
+const EVENT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const EVENT_DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
 const normalizeExternalLinks = (items: EventExternalLink[]) =>
   items
     .map((item) => ({ label: item.label.trim(), url: item.url.trim() }))
@@ -763,6 +771,71 @@ const AdminEventEdit = () => {
       coverUpload?.status === 'error' ||
       draft.posters.some((poster) => poster.uploadStatus === 'error')
     const hasUnsavedPoster = draft.posters.some((poster) => !poster.imageId && !poster.assetId)
+    const validationError =
+      validateRequiredText(draft.title, 'title', '活动标题') ||
+      validateMaxLength(draft.title, 'title', '活动标题', CONTENT_LIMITS.event.title) ||
+      validateMaxLength(draft.location, 'location', '活动地点', CONTENT_LIMITS.event.location) ||
+      validateMaxLength(draft.content, 'content', '活动内容', CONTENT_LIMITS.event.content) ||
+      validateTags(
+        splitTagsInput(draft.tagsText),
+        'tags',
+        '标签',
+        CONTENT_LIMITS.event.tags,
+        CONTENT_LIMITS.event.tag
+      ) ||
+      (draft.lineup.length > CONTENT_LIMITS.event.lineup
+        ? { field: 'lineup', message: `阵容最多${CONTENT_LIMITS.event.lineup}项` }
+        : draft.lineup.some((item) => item.trim().length > CONTENT_LIMITS.event.lineupItem)
+          ? {
+              field: 'lineup',
+              message: `阵容单项长度不能超过${CONTENT_LIMITS.event.lineupItem}个字符`,
+            }
+          : null) ||
+      (draft.ticketPrices.length > CONTENT_LIMITS.event.ticketPrices
+        ? { field: 'ticketPrices', message: `票价最多${CONTENT_LIMITS.event.ticketPrices}项` }
+        : null) ||
+      (draft.timeSlots.length > CONTENT_LIMITS.event.timeSlots
+        ? { field: 'timeSlots', message: `时间最多${CONTENT_LIMITS.event.timeSlots}项` }
+        : null) ||
+      (draft.saleTimes.length > CONTENT_LIMITS.event.saleTimes
+        ? { field: 'saleTimes', message: `起售时间最多${CONTENT_LIMITS.event.saleTimes}项` }
+        : null)
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
+    const invalidTimeSlot = draft.timeSlots.find((slot) => {
+      const start = slot.start.trim()
+      const end = slot.end?.trim()
+      if (!start) return false
+      const pattern = slot.type === 'datetime' ? EVENT_DATETIME_PATTERN : EVENT_DATE_PATTERN
+      return !pattern.test(start) || Boolean(end && (!pattern.test(end) || end < start))
+    })
+    if (invalidTimeSlot) {
+      show('活动时间必须是有效日期，且结束时间不能早于开始时间', { variant: 'error' })
+      return
+    }
+    const invalidSaleTime = draft.saleTimes.find(
+      (item) => item.time.trim() && !EVENT_DATETIME_PATTERN.test(item.time.trim())
+    )
+    if (invalidSaleTime) {
+      show('起售时间必须是有效日期时间', { variant: 'error' })
+      return
+    }
+    const invalidExternalLink = [...draft.externalLinks, ...draft.relatedLinks].find((link) => {
+      const label = link.label.trim()
+      const url = link.url.trim()
+      return (
+        !label ||
+        !url ||
+        label.length > CONTENT_LIMITS.event.externalLinkLabel ||
+        validateUrl(url, 'url', '链接', CONTENT_LIMITS.url) !== null
+      )
+    })
+    if (invalidExternalLink) {
+      show('外部链接必须填写名称并使用有效的 http/https URL', { variant: 'error' })
+      return
+    }
 
     if (hasPendingUploads) {
       show('请等待图片上传完成后再保存', { variant: 'error' })
@@ -770,10 +843,6 @@ const AdminEventEdit = () => {
     }
     if (hasFailedUploads || hasUnsavedPoster) {
       show('请先删除或重新上传失败的图片', { variant: 'error' })
-      return
-    }
-    if (!draft.title.trim()) {
-      show('活动标题不能为空', { variant: 'error' })
       return
     }
     if (hasInvalidTicketPrice(draft.ticketPrices)) {

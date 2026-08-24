@@ -295,8 +295,12 @@ export default function UserProfile() {
   const saveSignature = async () => {
     if (signatureSaving || !profile) return
 
-    const nextSignature = signatureDraft
+    const nextSignature = signatureDraft.trim()
     const currentSignature = profile.signature || ''
+    if (nextSignature.length > PROFILE_SIGNATURE_MAX_LENGTH) {
+      toast.show(`签名不能超过${PROFILE_SIGNATURE_MAX_LENGTH}个字符`, { variant: 'error' })
+      return
+    }
     setSignatureEditing(false)
 
     if (nextSignature === currentSignature) {

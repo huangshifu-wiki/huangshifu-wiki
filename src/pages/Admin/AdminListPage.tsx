@@ -25,6 +25,8 @@ import {
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { validateMaxLength, validateRequiredText, validateUrl } from '../../lib/clientValidation'
 import { formatDateTime } from '../../lib/dateUtils'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { useDialog } from '../../components/Dialog'
@@ -596,6 +598,16 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       show('删除该内容必须填写删除理由', { variant: 'error' })
       return
     }
+    const reasonError = validateMaxLength(
+      trimmedReasonInput,
+      'reason',
+      '删除理由',
+      CONTENT_LIMITS.userModeration.note
+    )
+    if (reasonError) {
+      show(reasonError.message, { variant: 'error' })
+      return
+    }
     const confirmed = await dialog.confirm({
       title: '删除内容',
       message: '确定要删除吗？删除后可在回收站恢复。',
@@ -619,11 +631,8 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     )
     try {
       const deletePath = `/api/admin/${cfg.apiPath}/${id}`
-      if (trimmedReasonInput) {
-        await apiDelete(deletePath, { reason: trimmedReasonInput })
-      } else {
-        await apiDelete(deletePath)
-      }
+      if (trimmedReasonInput) await apiDelete(deletePath, { reason: trimmedReasonInput })
+      else await apiDelete(deletePath)
       show('已删除', { variant: 'success' })
       invalidateCurrentDataCaches()
       await fetchData({ silent: true })
@@ -684,13 +693,51 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     }
   }
 
+  const validateNewItem = () =>
+    type === 'sections'
+      ? validateRequiredText(newItem.name, 'name', '版块名称') ||
+        validateMaxLength(newItem.name, 'name', '版块名称', CONTENT_LIMITS.section.name) ||
+        validateMaxLength(
+          newItem.description,
+          'description',
+          '版块描述',
+          CONTENT_LIMITS.section.description
+        ) ||
+        (Number.isFinite(newItem.order ?? 0) && (newItem.order ?? 0) >= 0
+          ? null
+          : { field: 'order', message: '排序必须是非负数字' })
+      : type === 'wiki-categories'
+        ? validateRequiredText(newItem.id, 'id', '分类 ID') ||
+          validateRequiredText(newItem.name, 'name', '分类名称') ||
+          validateMaxLength(newItem.id, 'id', '分类 ID', CONTENT_LIMITS.wiki.slug) ||
+          validateMaxLength(newItem.name, 'name', '分类名称', CONTENT_LIMITS.wiki.category) ||
+          validateMaxLength(
+            newItem.description,
+            'description',
+            '分类描述',
+            CONTENT_LIMITS.section.description
+          )
+        : validateRequiredText(newItem.content, 'content', '公告内容') ||
+          validateMaxLength(
+            newItem.content,
+            'content',
+            '公告内容',
+            CONTENT_LIMITS.announcement.content
+          ) ||
+          validateUrl(newItem.link, 'link', '公告链接', CONTENT_LIMITS.announcement.link)
+
   const handleCreate = async () => {
+    const validationError = validateNewItem()
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
     try {
       if (type === 'sections') {
         await apiPost('/api/sections', {
           name: newItem.name?.trim(),
           description: newItem.description?.trim(),
-          order: Number.isFinite(newItem.order) ? newItem.order : 0,
+          order: newItem.order ?? 0,
         })
       } else if (type === 'wiki-categories') {
         await apiPost(WIKI_CATEGORIES_ADMIN_PATH, {
@@ -715,6 +762,22 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
 
   const handleUpdateWikiCategory = async () => {
     if (type !== 'wiki-categories' || !editingCategory?.id) return
+    const validationError =
+      validateRequiredText(editingCategory.name, 'name', '分类名称') ||
+      (Number.isFinite(Number(editingCategory.order ?? 0)) &&
+      Number(editingCategory.order ?? 0) >= 0
+        ? null
+        : { field: 'order', message: '排序必须是非负数字' }) ||
+      validateMaxLength(
+        editingCategory.description,
+        'description',
+        '分类描述',
+        CONTENT_LIMITS.section.description
+      )
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
     try {
       await apiPatch(`${WIKI_CATEGORIES_ADMIN_PATH}/${editingCategory.id}`, {
         ...getWikiCategoryPayload(editingCategory),

@@ -63,6 +63,7 @@ import { useToggleInteraction } from '../hooks/useToggleInteraction'
 import { submitFormOnModifierEnter } from '../lib/formShortcuts'
 import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
+import { validateMaxLength, validateRequiredText, validateTags } from '../lib/clientValidation'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import MentionTextarea from '../components/MentionTextarea'
@@ -516,7 +517,15 @@ const PostDetail = () => {
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!post?.id || !user || !newComment.trim() || submittingComment) return
+    const comment = newComment.trim()
+    const commentError =
+      validateRequiredText(comment, 'comment', '评论') ||
+      validateMaxLength(comment, 'comment', '评论', CONTENT_LIMITS.post.comment)
+    if (commentError) {
+      show(commentError.message, { variant: 'error' })
+      return
+    }
+    if (!post?.id || !user || submittingComment) return
     if (isBanned) {
       show(t('forum.bannedCannotComment'), { variant: 'error' })
       return
@@ -529,7 +538,7 @@ const PostDetail = () => {
     try {
       setSubmittingComment(true)
       const data = await apiPost<{ comment: CommentItem }>(`/api/posts/${post.id}/comments`, {
-        content: newComment,
+        content: comment,
         parentId: replyTo?.id || null,
       })
 
@@ -576,6 +585,16 @@ const PostDetail = () => {
       })
       reason = promptValue?.trim() || null
       if (promptValue === null) return
+      const reasonError = validateMaxLength(
+        reason,
+        'reason',
+        '删除理由',
+        CONTENT_LIMITS.post.reviewNote
+      )
+      if (reasonError) {
+        show(reasonError.message, { variant: 'error' })
+        return
+      }
       if (!reason) {
         show('删除他人评论必须填写删除理由', { variant: 'error' })
         return
@@ -1373,17 +1392,45 @@ const PostEditor = () => {
       show(t('forum.bannedCannotPost'), { variant: 'error' })
       return
     }
+    const title = formData.title.trim()
+    const section = formData.section.trim()
+    const content = formData.content.trim()
+    const tags = splitTagsInput(formData.tags)
+    const validationError =
+      validateRequiredText(title, 'title', '标题') ||
+      validateRequiredText(section, 'section', '版块') ||
+      validateRequiredText(content, 'content', '内容') ||
+      validateMaxLength(section, 'section', '版块', CONTENT_LIMITS.post.section) ||
+      validateMaxLength(content, 'content', '内容', CONTENT_LIMITS.post.content) ||
+      validateTags(tags, 'tags', '标签', CONTENT_LIMITS.post.tags, CONTENT_LIMITS.post.tag) ||
+      validateMaxLength(
+        formData.locationCode,
+        'locationCode',
+        '地点编码',
+        CONTENT_LIMITS.post.locationCode
+      ) ||
+      validateMaxLength(
+        formData.locationName,
+        'locationDetail',
+        '地点详情',
+        CONTENT_LIMITS.post.locationDetail
+      )
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
+
     setSavingMode(status)
     let redirectTarget: string | null = null
 
     try {
       const payload: Record<string, unknown> = {
-        title: formData.title,
-        section: formData.section,
-        content: formData.content,
-        tags: splitTagsInput(formData.tags),
-        locationCode: formData.locationCode,
-        locationDetail: formData.locationName,
+        title,
+        section,
+        content,
+        tags,
+        locationCode: formData.locationCode?.trim() || null,
+        locationDetail: formData.locationName?.trim() || null,
         status,
       }
 
@@ -1431,13 +1478,24 @@ const PostEditor = () => {
       navigate(redirectTarget)
     }
   }
-
   const handleDelete = async () => {
     if (!postId || !isEditing || !editablePostAuthorUid || !editablePostId || isDeleting) return
     if (!user || (editablePostAuthorUid !== user.uid && !isAdmin)) return
 
     const isSelfDelete = editablePostAuthorUid === user.uid
     const reason = isSelfDelete ? null : deleteReason.trim()
+    if (!isSelfDelete) {
+      const reasonError = validateMaxLength(
+        reason,
+        'reason',
+        '删除理由',
+        CONTENT_LIMITS.post.reviewNote
+      )
+      if (reasonError) {
+        show(reasonError.message, { variant: 'error' })
+        return
+      }
+    }
     if (!isSelfDelete && !reason) {
       show('删除他人帖子必须填写删除理由', { variant: 'error' })
       return

@@ -20,6 +20,12 @@ import {
 } from '../lib/musicPlatformUrls'
 import { formatMusicCredits, normalizeStringListInput } from '../lib/musicCredits'
 import { splitTagsInput } from '../lib/contentUtils'
+import {
+  validateMaxLength,
+  validateTags,
+  validateUrl,
+  type ClientValidationError,
+} from '../lib/clientValidation'
 import type { Platform } from '../types/common'
 import type { MusicExternalSource, MusicPlayableOverride } from '../types/entities'
 import type { DuplicateSongSourceWarning } from '../types/api'
@@ -283,12 +289,47 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
     }
 
     const tags = splitTagsInput(formData.tagsText)
-    if (tags.length > CONTENT_LIMITS.music.tags) {
-      show(`标签最多 ${CONTENT_LIMITS.music.tags} 个`, { variant: 'error' })
-      return
-    }
-    if (tags.some((item) => item.length > CONTENT_LIMITS.music.tag)) {
-      show(`标签单项长度不能超过 ${CONTENT_LIMITS.music.tag} 个字符`, { variant: 'error' })
+
+    const validationError =
+      validateTags(tags, 'tags', '标签', CONTENT_LIMITS.music.tags, CONTENT_LIMITS.music.tag) ||
+      (artists.some((artist) => artist.length > CONTENT_LIMITS.music.artist)
+        ? {
+            field: 'artists',
+            message: `艺术家单项长度不能超过${CONTENT_LIMITS.music.artist}个字符`,
+          }
+        : null) ||
+      validateMaxLength(formData.album, 'album', '专辑', CONTENT_LIMITS.music.album) ||
+      validateMaxLength(
+        formData.description,
+        'description',
+        '简介',
+        CONTENT_LIMITS.music.description
+      ) ||
+      validateMaxLength(formData.lyric, 'lyric', '歌词', CONTENT_LIMITS.music.lyric) ||
+      validateUrl(formData.audioUrl, 'audioUrl', '音频地址', CONTENT_LIMITS.music.audioUrl) ||
+      (formData.durationMs &&
+      (!Number.isFinite(Number(formData.durationMs)) || Number(formData.durationMs) < 0)
+        ? { field: 'durationMs', message: '时长必须是非负数字' }
+        : null) ||
+      normalizedCustomPlatformLinks.reduce<ClientValidationError | null>(
+        (result, link) =>
+          result ||
+          validateMaxLength(
+            link.label,
+            'customPlatformLabel',
+            '平台名称',
+            CONTENT_LIMITS.music.customPlatformLabel
+          ) ||
+          validateUrl(
+            normalizeCustomPlatformLinkUrl(link.url),
+            'customPlatformUrl',
+            '平台链接',
+            CONTENT_LIMITS.music.customPlatformUrl
+          ),
+        null
+      )
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
       return
     }
 

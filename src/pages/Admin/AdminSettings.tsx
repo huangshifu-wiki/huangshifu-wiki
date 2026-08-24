@@ -40,6 +40,8 @@ import type {
   SecretsAdminConfig,
   SearchHotKeywordsConfig,
 } from '../../types/api'
+import { validateMaxLength, validateUrl } from '../../lib/clientValidation'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { Button, Checkbox, Field, Input, Select, Switch, Textarea } from '@/src/components/ui'
 import { AdminSection, SectionStatus } from '../../components/admin/AdminSection'
 
@@ -762,6 +764,23 @@ const AdminSettings = () => {
   const saveConfig = async (): Promise<boolean> => {
     if (loading || loadError) {
       show('请先成功加载站点设置后再保存', { variant: 'error' })
+      return false
+    }
+    const validationError =
+      validateUrl(form.publicBaseUrl, 'publicBaseUrl', '公开地址', CONTENT_LIMITS.url) ||
+      (form.enabled && !form.publicBaseUrl.trim()
+        ? { field: 'publicBaseUrl', message: '启用邮件验证时必须填写公开地址' }
+        : null) ||
+      (Number.isFinite(form.tokenTtlMinutes) && form.tokenTtlMinutes > 0
+        ? null
+        : { field: 'tokenTtlMinutes', message: '令牌有效期必须是正数' }) ||
+      (Number.isInteger(form.smtpPort) && form.smtpPort >= 1 && form.smtpPort <= 65535
+        ? null
+        : { field: 'smtpPort', message: 'SMTP 端口必须是 1 到 65535 之间的整数' }) ||
+      validateMaxLength(form.verificationSubject, 'verificationSubject', '验证邮件主题', 200) ||
+      validateMaxLength(form.resetSubject, 'resetSubject', '重置邮件主题', 200)
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
       return false
     }
 

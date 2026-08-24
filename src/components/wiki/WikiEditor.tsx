@@ -18,8 +18,11 @@ import {
   invalidateApiCache,
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
+import { validateMaxLength, validateRequiredText, validateTags } from '../../lib/clientValidation'
 import { metadataCache } from '../../lib/metadataCache'
 import { splitTagsInput } from '../../lib/contentUtils'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
 import { getWikiSaveResultText } from '../../lib/wikiWriteText'
 import { Trash2 } from '@/src/components/icons'
@@ -123,34 +126,50 @@ const WikiEditor = () => {
       return
     }
 
-    if (!formData.title.trim()) {
-      show(t('wiki.titleRequired'), { variant: 'error' })
-      return
-    }
-    if (!formData.category) {
-      show(t('wiki.categoryRequired'), { variant: 'error' })
+    const tags = splitTagsInput(formData.tags)
+    const validationError =
+      validateRequiredText(formData.title, 'title', '标题') ||
+      validateRequiredText(formData.category, 'category', '分类') ||
+      validateRequiredText(formData.content, 'content', '内容') ||
+      validateMaxLength(formData.title, 'title', '标题', CONTENT_LIMITS.wiki.title) ||
+      validateMaxLength(formData.category, 'category', '分类', CONTENT_LIMITS.wiki.category) ||
+      validateMaxLength(formData.content, 'content', '内容', CONTENT_LIMITS.wiki.content) ||
+      validateTags(tags, 'tags', '标签', CONTENT_LIMITS.wiki.tags, CONTENT_LIMITS.wiki.tag) ||
+      (formData.relations.length > CONTENT_LIMITS.wiki.relations
+        ? { field: 'relations', message: `关系最多${CONTENT_LIMITS.wiki.relations}个` }
+        : null) ||
+      validateMaxLength(
+        formData.locationCode,
+        'locationCode',
+        '地点编码',
+        CONTENT_LIMITS.wiki.locationCode
+      ) ||
+      validateMaxLength(
+        formData.locationName,
+        'locationDetail',
+        '地点详情',
+        CONTENT_LIMITS.wiki.locationDetail
+      )
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
       return
     }
     if (!canEditCategory(formData.category, isAdmin)) {
       show('该分类不可编辑或不存在', { variant: 'error' })
       return
     }
-    if (!formData.content.trim()) {
-      show(t('wiki.contentRequired'), { variant: 'error' })
-      return
-    }
 
     setSavingMode(status)
 
     const pageData = {
-      title: formData.title,
-      category: formData.category,
-      content: formData.content,
-      tags: splitTagsInput(formData.tags),
-      eventDate: formData.eventDate,
+      title: formData.title.trim(),
+      category: formData.category.trim(),
+      content: formData.content.trim(),
+      tags,
+      eventDate: formData.eventDate?.trim() || null,
       relations: formData.relations,
-      locationCode: formData.locationCode || null,
-      locationDetail: formData.locationName || null,
+      locationCode: formData.locationCode?.trim() || null,
+      locationDetail: formData.locationName?.trim() || null,
       status,
     }
 
@@ -179,11 +198,12 @@ const WikiEditor = () => {
       navigate(`/wiki/${data.page.slug}`)
       return
     } catch (e) {
-      console.error('Error saving wiki page:', e)
-      show(e instanceof Error ? e.message : t('wiki.saveFailed'), { variant: 'error' })
+      console.error('Error saving wiki:', e)
+      show(getErrorMessage(e, t('wiki.saveFailed')), { variant: 'error' })
     } finally {
       setSavingMode(null)
     }
+    return
   }
 
   const handleDelete = async () => {
@@ -198,6 +218,16 @@ const WikiEditor = () => {
     const reason = deleteReason.trim()
     if (!reason) {
       show('删除 Wiki 必须填写删除理由', { variant: 'error' })
+      return
+    }
+    const reasonError = validateMaxLength(
+      reason,
+      'reason',
+      '删除理由',
+      CONTENT_LIMITS.wiki.reviewNote
+    )
+    if (reasonError) {
+      show(reasonError.message, { variant: 'error' })
       return
     }
 

@@ -35,6 +35,7 @@ import { splitTagsInput } from '../lib/contentUtils'
 import { useTagSuggestions } from '../hooks/useTagSuggestions'
 import { toLocalDateInputValue } from '../lib/dateUtils'
 import { useI18n } from '../lib/i18n'
+import { validateMaxLength, validateRequiredText, validateTags } from '../lib/clientValidation'
 import {
   shouldWaitForAnyGalleryThumbnail,
   THUMBNAIL_POLL_DEDUP_OPTIONS,
@@ -444,8 +445,31 @@ const GalleryEdit = () => {
     const currentDraft = draftRef.current
     if (!currentDraft || !canManage || savingMode || uploading) return
     if (!isCreating && (!gallery || !galleryId)) return
-    if (!currentDraft.title.trim()) {
-      show(t('gallery.titleLabel') + '不能为空', { variant: 'error' })
+
+    const titleError =
+      validateRequiredText(currentDraft.title, 'title', '图集标题') ||
+      validateMaxLength(currentDraft.title, 'title', '图集标题', CONTENT_LIMITS.gallery.title) ||
+      validateMaxLength(
+        currentDraft.description,
+        'description',
+        '图集描述',
+        CONTENT_LIMITS.gallery.description
+      ) ||
+      validateMaxLength(
+        currentDraft.copyrightText,
+        'copyright',
+        '版权信息',
+        CONTENT_LIMITS.gallery.copyright
+      ) ||
+      validateTags(
+        splitTagsInput(currentDraft.tagsText),
+        'tags',
+        '标签',
+        CONTENT_LIMITS.gallery.tags,
+        CONTENT_LIMITS.gallery.tag
+      )
+    if (titleError) {
+      show(titleError.message, { variant: 'error' })
       return
     }
     if (currentDraft.images.length === 0) {
@@ -622,6 +646,18 @@ const GalleryEdit = () => {
 
     const isSelfDelete = gallery.authorUid === user.uid
     const reason = isSelfDelete ? null : deleteReason.trim()
+    if (!isSelfDelete) {
+      const reasonError = validateMaxLength(
+        reason,
+        'reason',
+        '删除理由',
+        CONTENT_LIMITS.gallery.reviewNote
+      )
+      if (reasonError) {
+        show(reasonError.message, { variant: 'error' })
+        return
+      }
+    }
     if (!isSelfDelete && !reason) {
       show(t('gallery.deleteOtherReasonRequired'), { variant: 'error' })
       return

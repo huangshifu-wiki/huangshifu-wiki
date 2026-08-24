@@ -3,6 +3,13 @@ import { login, loginWithWeChat, register, requestPasswordReset } from '../lib/a
 import { PROFILE_DISPLAY_NAME_MAX_LENGTH } from '../lib/contentLimits'
 import { useI18n } from '../lib/i18n'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
+import {
+  validateEmail,
+  validateMaxLength,
+  validatePassword,
+  validateRequiredText,
+  validateUrl,
+} from '../lib/clientValidation'
 import { CharacterCount } from './CharacterCount'
 import { useToast } from './Toast'
 import { Button, Input } from '@/src/components/ui'
@@ -42,22 +49,37 @@ export const AuthForm = ({
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (authMode === 'wechat') {
-      if (!wechatCode.trim()) return
-    } else if (isForgotPasswordMode) {
-      if (!email) return
-    } else if (!email || !password) {
+    const validationError =
+      authMode === 'wechat'
+        ? validateRequiredText(wechatCode, 'wechatCode', '微信登录码') ||
+          validateMaxLength(wechatCode, 'wechatCode', '微信登录码', 256) ||
+          validateUrl(wechatPhotoURL, 'wechatPhotoURL', '头像地址')
+        : validateEmail(email, 'email', '邮箱') ||
+          (isRegisterMode
+            ? validatePassword(password, 'password', '密码') ||
+              validateMaxLength(
+                displayName,
+                'displayName',
+                '显示名称',
+                PROFILE_DISPLAY_NAME_MAX_LENGTH
+              )
+            : isForgotPasswordMode
+              ? null
+              : validateRequiredText(password, 'password', '密码'))
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
       return
     }
+    const normalizedEmail = email.trim()
+    const normalizedDisplayName = displayName.trim()
 
     try {
       setAuthLoading(true)
       if (authMode === 'login') {
-        await login(email, password)
+        await login(normalizedEmail, password)
         onAuthSuccess()
       } else if (isRegisterMode) {
-        const result = await register(email, password, displayName)
-        setAuthMode('login')
+        const result = await register(normalizedEmail, password, normalizedDisplayName)
         setPassword('')
         show(
           result.verificationEmailSent
@@ -66,14 +88,13 @@ export const AuthForm = ({
           { duration: 4000 }
         )
       } else if (authMode === 'forgot-password') {
-        const result = await requestPasswordReset(email)
+        const result = await requestPasswordReset(normalizedEmail)
         setAuthMode('login')
-        setPassword('')
         show(result.message || '如果该邮箱存在，我们会发送一封密码重置邮件', { duration: 5000 })
       } else {
-        await loginWithWeChat(wechatCode, {
-          displayName: displayName || undefined,
-          photoURL: wechatPhotoURL || undefined,
+        await loginWithWeChat(wechatCode.trim(), {
+          displayName: normalizedDisplayName || undefined,
+          photoURL: wechatPhotoURL.trim() || undefined,
         })
         onAuthSuccess()
       }

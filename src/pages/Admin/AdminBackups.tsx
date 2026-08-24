@@ -15,12 +15,13 @@ import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'
 import { getApiErrorMessage, getErrorMessage } from '../../lib/errorHandler'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { validateMaxLength } from '../../lib/clientValidation'
 import { Button, LoadErrorState } from '@/src/components/ui'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import { isBackdropClick } from '../../utils/modal'
-import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import type {
   AdminBackup,
   AdminBackupCreateResponse,
@@ -124,7 +125,16 @@ const AdminBackups = () => {
   }
 
   const handleCreate = async () => {
-    setActionLoading('create')
+    const noteError = validateMaxLength(
+      createNote,
+      'note',
+      '备份备注',
+      CONTENT_LIMITS.admin.backupNote
+    )
+    if (noteError) {
+      show(noteError.message, { variant: 'error' })
+      return
+    }
     try {
       const body = createNote.trim() ? { note: createNote } : undefined
       const response = body
@@ -146,7 +156,16 @@ const AdminBackups = () => {
 
   const handleUpdateNote = async () => {
     if (!noteTarget) return
-    setActionLoading('note')
+    const noteError = validateMaxLength(
+      editNote,
+      'note',
+      '备份备注',
+      CONTENT_LIMITS.admin.backupNote
+    )
+    if (noteError) {
+      show(noteError.message, { variant: 'error' })
+      return
+    }
     try {
       const response = await apiPost<AdminBackupNoteResponse>(
         `/api/admin/backup/${encodeURIComponent(noteTarget)}/note`,
