@@ -11,6 +11,9 @@ interface PaginationProps {
   onPageSizeChange?: (size: number) => void
   pageSizeOptions?: number[]
   showPageSizeSelector?: boolean
+  dockGroup?: string
+  dockLabel?: string
+  dockSectionRef?: React.RefObject<HTMLElement | null>
 }
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
@@ -38,16 +41,127 @@ interface DockedPaginationLayout {
 }
 const DOCK_HYSTERESIS_PX = 16
 
-function useDockedPagination(enabled: boolean) {
+interface DockedPaginationEntry {
+  anchor: HTMLDivElement
+  navigationRef: React.MutableRefObject<HTMLElement | null>
+  setDockedLayout: (layout: DockedPaginationLayout | null) => void
+  sectionRef?: React.RefObject<HTMLElement | null>
+  syncNavigationObservation: () => void
+}
+
+interface DockedPaginationGroup {
+  entries: Set<DockedPaginationEntry>
+  winner: DockedPaginationEntry | null
+  frameId: number | null
+}
+function getDockMetrics(navigation: HTMLElement) {
+  const navigationRect = navigation.getBoundingClientRect()
+  const computedBottom = Number.parseFloat(window.getComputedStyle(navigation).bottom)
+  const bottomOffset = Number.isFinite(computedBottom) ? computedBottom : 0
+  const viewportBottom = window.innerHeight - bottomOffset
+  return {
+    navigationRect,
+    viewportBottom,
+    dockThreshold: viewportBottom - navigationRect.height,
+  }
+}
+
+function isDockSectionVisible(entry: DockedPaginationEntry, viewportBottom: number) {
+  const section = entry.sectionRef?.current
+  if (!section) return true
+
+  const sectionRect = section.getBoundingClientRect()
+  return sectionRect.top < viewportBottom && sectionRect.bottom > 0
+}
+
+const dockedPaginationGroups = new Map<string, DockedPaginationGroup>()
+
+function syncDockedPaginationGroup(name: string, forceRecalculate = false) {
+  const group = dockedPaginationGroups.get(name)
+  if (!group) return
+  const entries = Array.from(group.entries)
+
+  let winner = forceRecalculate
+    ? null
+    : group.winner && group.entries.has(group.winner)
+      ? group.winner
+      : null
+  let keepWinner = false
+
+  if (winner) {
+    const navigation = winner.navigationRef.current
+    if (navigation) {
+      const metrics = getDockMetrics(navigation)
+      if (isDockSectionVisible(winner, metrics.viewportBottom)) {
+        const anchorRect = winner.anchor.getBoundingClientRect()
+        keepWinner = anchorRect.top > metrics.dockThreshold - DOCK_HYSTERESIS_PX
+      }
+    }
+  }
+
+  if (!keepWinner) {
+    const candidates = entries
+      .map((entry) => {
+        const navigation = entry.navigationRef.current
+        if (!navigation) return null
+        const metrics = getDockMetrics(navigation)
+        if (!isDockSectionVisible(entry, metrics.viewportBottom)) return null
+        const anchorRect = entry.anchor.getBoundingClientRect()
+        return anchorRect.top > metrics.dockThreshold + DOCK_HYSTERESIS_PX
+          ? { entry, top: anchorRect.top }
+          : null
+      })
+      .filter(
+        (candidate): candidate is { entry: DockedPaginationEntry; top: number } =>
+          candidate !== null
+      )
+      .sort((left, right) => left.top - right.top)
+    winner = candidates[0]?.entry || null
+  }
+  group.winner = winner
+  for (const entry of entries) {
+    const navigation = entry.navigationRef.current
+    let next: DockedPaginationLayout | null = null
+    if (entry === winner && navigation) {
+      const anchorRect = entry.anchor.getBoundingClientRect()
+      const navigationRect = navigation.getBoundingClientRect()
+      next = {
+        height: navigationRect.height,
+        left: anchorRect.left,
+        width: anchorRect.width,
+      }
+    }
+    entry.setDockedLayout(next)
+  }
+}
+
+function scheduleDockedPaginationGroup(name: string) {
+  const group = dockedPaginationGroups.get(name)
+  if (!group || group.frameId !== null) return
+
+  group.frameId = window.requestAnimationFrame(() => {
+    group.frameId = null
+    for (const entry of group.entries) entry.syncNavigationObservation()
+    syncDockedPaginationGroup(name)
+  })
+}
+
+function useDockedPagination(
+  enabled: boolean,
+  dockGroup?: string,
+  dockSectionRef?: React.RefObject<HTMLElement | null>
+) {
   const anchorRef = React.useRef<HTMLDivElement>(null)
   const navigationRef = React.useRef<HTMLElement>(null)
   const portalHostRef = React.useRef<HTMLElement | null>(null)
   const dockedRef = React.useRef(false)
+  const dockedLayoutRef = React.useRef<DockedPaginationLayout | null>(null)
   const [dockedLayout, setDockedLayout] = React.useState<DockedPaginationLayout | null>(null)
 
   React.useLayoutEffect(() => {
     if (!enabled) {
       dockedRef.current = false
+      dockedLayoutRef.current = null
       portalHostRef.current = null
       setDockedLayout(null)
       return
@@ -66,48 +180,59 @@ function useDockedPagination(enabled: boolean) {
     let resizeObserver: ResizeObserver | null = null
     let mutationObserver: MutationObserver | null = null
 
+    const syncNavigationObservation = () => {
+      const navigation = navigationRef.current
+      if (resizeObserver && observedNavigation !== navigation) {
+        if (observedNavigation) resizeObserver.unobserve(observedNavigation)
+        if (navigation) resizeObserver.observe(navigation)
+        observedNavigation = navigation
+      }
+    }
+
+    const updateDockedLayout = (next: DockedPaginationLayout | null) => {
+      const current = dockedLayoutRef.current
+      if (
+        current === next ||
+        (current &&
+          next &&
+          current.height === next.height &&
+          current.left === next.left &&
+          current.width === next.width)
+      ) {
+        return
+      }
+      dockedLayoutRef.current = next
+      setDockedLayout(next)
+    }
+
     const syncLayout = () => {
       const navigation = navigationRef.current
       if (!navigation) return
 
-      if (resizeObserver && observedNavigation !== navigation) {
-        if (observedNavigation) resizeObserver.unobserve(observedNavigation)
-        resizeObserver.observe(navigation)
-        observedNavigation = navigation
-      }
-
+      syncNavigationObservation()
       const anchorRect = anchor.getBoundingClientRect()
-      const navigationRect = navigation.getBoundingClientRect()
-      const computedBottom = Number.parseFloat(window.getComputedStyle(navigation).bottom)
-      const bottomOffset = Number.isFinite(computedBottom) ? computedBottom : 0
-      const viewportBottom = window.innerHeight - bottomOffset
-      const dockThreshold = viewportBottom - navigationRect.height
+      const metrics = getDockMetrics(navigation)
       const shouldDock = dockedRef.current
-        ? anchorRect.top > dockThreshold - DOCK_HYSTERESIS_PX
-        : anchorRect.top > dockThreshold + DOCK_HYSTERESIS_PX
+        ? anchorRect.top > metrics.dockThreshold - DOCK_HYSTERESIS_PX
+        : anchorRect.top > metrics.dockThreshold + DOCK_HYSTERESIS_PX
 
       dockedRef.current = shouldDock
-
-      setDockedLayout((current) => {
-        if (!shouldDock) return current === null ? current : null
-
-        const next = {
-          height: navigationRect.height,
-          left: anchorRect.left,
-          width: anchorRect.width,
-        }
-        if (
-          current?.height === next.height &&
-          current.left === next.left &&
-          current.width === next.width
-        ) {
-          return current
-        }
-        return next
-      })
+      updateDockedLayout(
+        shouldDock
+          ? {
+              height: metrics.navigationRect.height,
+              left: anchorRect.left,
+              width: anchorRect.width,
+            }
+          : null
+      )
     }
 
     const scheduleSync = () => {
+      if (dockGroup) {
+        scheduleDockedPaginationGroup(dockGroup)
+        return
+      }
       if (frameId !== null) return
       frameId = window.requestAnimationFrame(() => {
         frameId = null
@@ -125,7 +250,31 @@ function useDockedPagination(enabled: boolean) {
       })
     }
     resizeObserver?.observe(anchor)
-    syncLayout()
+    if (dockSectionRef?.current) resizeObserver?.observe(dockSectionRef.current)
+
+    const groupEntry: DockedPaginationEntry = {
+      anchor,
+      navigationRef,
+      setDockedLayout: updateDockedLayout,
+      sectionRef: dockSectionRef,
+      syncNavigationObservation,
+    }
+    if (dockGroup) {
+      const group = dockedPaginationGroups.get(dockGroup) || {
+        entries: new Set<DockedPaginationEntry>(),
+        winner: null,
+        frameId: null,
+      }
+      group.entries.add(groupEntry)
+      dockedPaginationGroups.set(dockGroup, group)
+    }
+
+    syncNavigationObservation()
+    if (dockGroup) {
+      syncDockedPaginationGroup(dockGroup, true)
+    } else {
+      syncLayout()
+    }
     scrollTarget.addEventListener('scroll', scheduleSync, { passive: true })
     window.addEventListener('resize', scheduleSync)
 
@@ -135,9 +284,22 @@ function useDockedPagination(enabled: boolean) {
       scrollTarget.removeEventListener('scroll', scheduleSync)
       window.removeEventListener('resize', scheduleSync)
       if (frameId !== null) window.cancelAnimationFrame(frameId)
+      if (dockGroup) {
+        const group = dockedPaginationGroups.get(dockGroup)
+        group?.entries.delete(groupEntry)
+        if (group?.winner === groupEntry) group.winner = null
+        if (group && group.entries.size > 0) {
+          syncDockedPaginationGroup(dockGroup)
+        } else if (group) {
+          if (group.frameId !== null) window.cancelAnimationFrame(group.frameId)
+          dockedPaginationGroups.delete(dockGroup)
+        }
+      }
+      dockedRef.current = false
+      dockedLayoutRef.current = null
       portalHostRef.current = null
     }
-  }, [enabled])
+  }, [dockGroup, dockSectionRef, enabled])
 
   return { anchorRef, navigationRef, portalHostRef, dockedLayout }
 }
@@ -150,9 +312,14 @@ export const Pagination: React.FC<PaginationProps> = ({
   onPageSizeChange,
   pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
   showPageSizeSelector = false,
+  dockGroup,
+  dockLabel,
+  dockSectionRef,
 }) => {
   const { anchorRef, navigationRef, portalHostRef, dockedLayout } = useDockedPagination(
-    totalPages > 1
+    totalPages > 1,
+    dockGroup,
+    dockSectionRef
   )
 
   if (totalPages <= 1) return null
@@ -174,7 +341,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   }
 
   const pageNumbers = generatePageNumbers(page, totalPages)
-
+  const navigationAriaLabel = dockLabel ? `${dockLabel}分页导航` : '分页导航'
   const navigation = (
     <footer
       ref={navigationRef}
@@ -186,10 +353,12 @@ export const Pagination: React.FC<PaginationProps> = ({
       )}
       data-state={dockedLayout ? 'docked' : 'inline'}
       style={dockedLayout ? { left: dockedLayout.left, width: dockedLayout.width } : undefined}
+      data-pagination-dock-group={dockGroup}
       role="navigation"
-      aria-label="分页导航"
+      aria-label={navigationAriaLabel}
     >
       <div className="flex items-center gap-3">
+        {dockLabel && <span className="text-xs font-medium text-text-secondary">{dockLabel}</span>}
         <p className="text-xs text-text-muted" aria-live="polite" aria-atomic="true">
           第 {Math.min(page, totalPages)} / {totalPages} 页
         </p>

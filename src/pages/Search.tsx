@@ -95,7 +95,14 @@ const Search: React.FC = () => {
           viewMode={viewMode}
           tabItems={tabItems}
           onTabChange={setActiveTab}
-          onRetry={state.query ? () => void performSearch(state.query) : undefined}
+          onRetry={
+            state.query
+              ? () =>
+                  void performSearch(state.query, undefined, undefined, {
+                    preservePagination: true,
+                  })
+              : undefined
+          }
         />
       </div>
     </div>

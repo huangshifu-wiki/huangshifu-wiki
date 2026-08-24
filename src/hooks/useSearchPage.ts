@@ -10,7 +10,7 @@ import type {
 } from '../types/entities'
 import type { MixedSearchResult, SearchSuggestion, SearchFilters, SearchMeta } from './useSearch'
 import { useMixedSearch, useTraditionalSearch } from './useSearch'
-import type { GalleryDetailResponse, TextSearchResult } from '../types/api'
+import type { GalleryDetailResponse } from '../types/api'
 import { useSearchHistory } from './useSearchHistory'
 import { apiGet } from '../lib/apiClient'
 import {
@@ -19,6 +19,7 @@ import {
   THUMBNAIL_POLL_INTERVAL_MS,
   THUMBNAIL_POLL_MAX_ATTEMPTS,
 } from '../lib/galleryThumbnails'
+import { clearSearchPaginationParams } from '../lib/searchPagination'
 
 // 向后兼容：re-export SearchFilters，供 SearchFilters 组件使用
 export type { SearchFilters } from './useSearch'
@@ -47,25 +48,28 @@ export interface SearchState {
   hotKeywords: string[]
   showFilters: boolean
   searchMeta?: SearchMeta
-  textSemanticResults: TextSearchResult[]
 }
 
 function getPendingGalleryIds(state: SearchState) {
   const ids = new Set<string>()
-  state.results.galleries.forEach((gallery) => {
-    if (shouldWaitForGalleryThumbnail(gallery)) ids.add(gallery.id)
-  })
-  state.mixedResults.forEach((result) => {
-    if (result.sourceType !== 'gallery') return
-    const gallery = result.data as GalleryItem
-    if (shouldWaitForGalleryThumbnail(gallery)) ids.add(gallery.id)
-  })
+  if (state.isMixedSearch) {
+    state.mixedResults.forEach((result) => {
+      if (result.sourceType !== 'gallery') return
+      const gallery = result.data as GalleryItem
+      if (shouldWaitForGalleryThumbnail(gallery)) ids.add(gallery.id)
+    })
+  } else {
+    state.results.galleries.forEach((gallery) => {
+      if (shouldWaitForGalleryThumbnail(gallery)) ids.add(gallery.id)
+    })
+  }
   return Array.from(ids)
 }
 
 export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') || ''
+  const urlIncludeDetail = searchParams.get('detail') === '1'
   const hotKeywordsEnabled = options?.hotKeywordsEnabled ?? true
 
   // 搜索历史管理
@@ -82,9 +86,9 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
 
   const [state, setState] = useState<SearchState>({
     query: initialQuery,
-    includeDetail: searchParams.get('detail') === '1',
+    includeDetail: urlIncludeDetail,
     results: { wiki: [], posts: [], galleries: [], music: [], albums: [], lyrics: [] },
-    loading: false,
+    loading: Boolean(initialQuery),
     error: null,
     activeTab: 'all',
     filters: {
@@ -100,20 +104,29 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     hotKeywords: [],
     showFilters: false,
     searchMeta: undefined,
-    textSemanticResults: [],
   })
 
   const stateRef = useRef(state)
   stateRef.current = state
-
   // 搜索请求序号：丢弃过期响应，避免快速切换开关/换词时后返回者覆盖新结果
   const searchRequestRef = useRef(0)
-
+  const suggestionRequestRef = useRef(0)
+  const hotKeywordsRequestRef = useRef(0)
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 获取热门关键词 -- 委托给 traditionalSearch.getHotKeywords()
   useEffect(() => {
+    return () => {
+      searchRequestRef.current += 1
+      suggestionRequestRef.current += 1
+      hotKeywordsRequestRef.current += 1
+      if (suggestTimeoutRef.current) {
+        clearTimeout(suggestTimeoutRef.current)
+        suggestTimeoutRef.current = null
+      }
+    }
+  }, [])
+  useEffect(() => {
+    const requestId = ++hotKeywordsRequestRef.current
     const loadHotKeywords = async () => {
       if (!hotKeywordsEnabled) {
         setState((prev) => ({ ...prev, hotKeywords: [] }))
@@ -121,19 +134,27 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
       }
 
       const keywords = await traditionalSearch.getHotKeywords()
-      setState((prev) => ({ ...prev, hotKeywords: keywords }))
+      if (requestId === hotKeywordsRequestRef.current) {
+        setState((prev) => ({ ...prev, hotKeywords: keywords }))
+      }
     }
-    loadHotKeywords()
+    void loadHotKeywords()
+    return () => {
+      hotKeywordsRequestRef.current += 1
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotKeywordsEnabled])
 
-  // 初始查询
+  // 初始查询及 URL 驱动的详情状态变化
   useEffect(() => {
     if (initialQuery) {
-      performSearch(initialQuery)
+      if (stateRef.current.includeDetail !== urlIncludeDetail) {
+        setState((prev) => ({ ...prev, includeDetail: urlIncludeDetail }))
+      }
+      void performSearch(initialQuery, undefined, urlIncludeDetail, { preservePagination: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQuery])
+  }, [initialQuery, urlIncludeDetail])
 
   const hasPendingGalleryThumbnails = getPendingGalleryIds(state).length > 0
 
@@ -204,16 +225,18 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   // 搜索建议 -- 委托给 traditionalSearch.getSuggestions()
   const fetchSuggestions = useCallback(
     async (q: string) => {
+      const requestId = ++suggestionRequestRef.current
       if (!q || q.length < 2) {
         setState((prev) => ({ ...prev, suggestions: [] }))
         return
       }
       const suggestions = await traditionalSearch.getSuggestions(q)
-      setState((prev) => ({ ...prev, suggestions }))
+      if (requestId === suggestionRequestRef.current) {
+        setState((prev) => ({ ...prev, suggestions }))
+      }
     },
     [traditionalSearch]
   )
-
   const handleQueryChange = (val: string) => {
     setState((prev) => ({ ...prev, query: val }))
     if (suggestTimeoutRef.current) clearTimeout(suggestTimeoutRef.current)
@@ -223,7 +246,12 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   // 传统搜索 -- 委托给 traditionalSearch.search()
   // 保留编排逻辑：历史记录、URL 同步、标签过滤、searchMeta
   const performSearch = useCallback(
-    async (q: string, filtersOverride?: Partial<SearchFilters>, detailOverride?: boolean) => {
+    async (
+      q: string,
+      filtersOverride?: Partial<SearchFilters>,
+      detailOverride?: boolean,
+      options?: { preservePagination?: boolean }
+    ) => {
       const currentQuery = (q || stateRef.current.query).trim()
       if (!currentQuery) return
 
@@ -245,14 +273,19 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         suggestions: [],
       }))
 
-      const sp = new URLSearchParams(searchParams)
+      let sp = new URLSearchParams(searchParams)
       sp.set('q', currentQuery)
       if (includeDetail) {
         sp.set('detail', '1')
       } else {
         sp.delete('detail')
       }
-      setSearchParams(sp)
+      if (!options?.preservePagination) {
+        sp = clearSearchPaginationParams(sp)
+      }
+      if (sp.toString() !== searchParams.toString()) {
+        setSearchParams(sp)
+      }
 
       const filters = { ...stateRef.current.filters, ...filtersOverride }
       const searchMode = filters.semanticImageSearch ? 'hybrid' : 'keyword'
@@ -286,7 +319,6 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
           loading: false,
           error: null,
           searchMeta: data.searchMeta,
-          textSemanticResults: [],
         }))
       } catch (error) {
         if (requestId !== searchRequestRef.current) return
@@ -304,6 +336,16 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   // 图片搜索 -- 委托给 mixedSearch.searchByImage()
   const handleImageSearch = useCallback(
     async (file: File) => {
+      const requestId = ++searchRequestRef.current
+      setSearchParams(
+        (prev) => {
+          const next = clearSearchPaginationParams(prev)
+          next.delete('q')
+          next.delete('detail')
+          return next
+        },
+        { replace: true }
+      )
       setState((prev) => ({
         ...prev,
         aiSearching: true,
@@ -312,6 +354,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
       }))
       try {
         const results = await mixedSearch.searchByImage(file, { limit: 24 })
+        if (requestId !== searchRequestRef.current) return
         setState((prev) => ({
           ...prev,
           isMixedSearch: true,
@@ -322,6 +365,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
           aiSearching: false,
         }))
       } catch (error) {
+        if (requestId !== searchRequestRef.current) return
         console.error('Semantic image search error:', error)
         setState((prev) => ({
           ...prev,
@@ -332,20 +376,27 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         }))
       }
     },
-    [mixedSearch]
+    [mixedSearch, setSearchParams]
   )
 
-  // 搜索详情开关：翻转状态并同步 URL；已有查询时立即按新开关重搜（空查询由 performSearch 内部早退处理）
+  // 搜索详情开关：翻转状态并同步 URL；已有查询时立即按新开关重搜
   const toggleDetail = (checked: boolean) => {
     setState((prev) => ({ ...prev, includeDetail: checked }))
+    const query = stateRef.current.query.trim()
+    if (query) {
+      void performSearch(query, undefined, checked)
+      return
+    }
+
     const sp = new URLSearchParams(searchParams)
     if (checked) {
       sp.set('detail', '1')
     } else {
       sp.delete('detail')
     }
-    setSearchParams(sp)
-    performSearch(stateRef.current.query, undefined, checked)
+    if (sp.toString() !== searchParams.toString()) {
+      setSearchParams(sp)
+    }
   }
 
   const toggleTag = (tag: string) => {
@@ -397,45 +448,35 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
     state.results.galleries.length +
     state.results.music.length +
     state.results.albums.length +
-    state.results.lyrics.length +
-    state.textSemanticResults.length
-
+    state.results.lyrics.length
   const getMixedResultsCount = (type: 'gallery' | 'wiki' | 'post') => {
     return state.mixedResults.filter((r) => r.sourceType === type).length
   }
 
-  const tabItems = state.isMixedSearch
-    ? [
-        { id: 'semantic', label: '智能匹配', count: state.mixedResults.length },
-        { id: 'gallery', label: '图库', count: getMixedResultsCount('gallery') },
-        { id: 'wiki', label: '百科', count: getMixedResultsCount('wiki') },
-        { id: 'post', label: '帖子', count: getMixedResultsCount('post') },
-      ]
-    : [
-        { id: 'all', label: '全部', count: totalResults },
-        ...(state.textSemanticResults.length > 0
-          ? [
-              {
-                id: 'textSemantic',
-                label: '语义匹配',
-                count: state.textSemanticResults.length,
-              },
-            ]
-          : []),
-        { id: 'wiki', label: '百科', count: state.results.wiki.length },
-        { id: 'posts', label: '帖子', count: state.results.posts.length },
-        { id: 'galleries', label: '图集', count: state.results.galleries.length },
-        { id: 'music', label: '音乐', count: state.results.music.length },
-        ...(state.results.lyrics.length > 0
-          ? [{ id: 'lyrics', label: '歌词', count: state.results.lyrics.length }]
-          : []),
-        { id: 'albums', label: '专辑', count: state.results.albums.length },
-      ]
+  const tabItems = (
+    state.isMixedSearch
+      ? [
+          { id: 'semantic', label: '智能匹配', count: state.mixedResults.length },
+          { id: 'gallery', label: '图库', count: getMixedResultsCount('gallery') },
+          { id: 'wiki', label: '百科', count: getMixedResultsCount('wiki') },
+          { id: 'post', label: '帖子', count: getMixedResultsCount('post') },
+        ]
+      : [
+          { id: 'all', label: '全部', count: totalResults },
+          { id: 'wiki', label: '百科', count: state.results.wiki.length },
+          { id: 'posts', label: '帖子', count: state.results.posts.length },
+          { id: 'galleries', label: '图集', count: state.results.galleries.length },
+          { id: 'music', label: '音乐', count: state.results.music.length },
+          ...(state.results.lyrics.length > 0
+            ? [{ id: 'lyrics', label: '歌词', count: state.results.lyrics.length }]
+            : []),
+          { id: 'albums', label: '专辑', count: state.results.albums.length },
+        ]
+  ).filter((tab) => tab.id === 'all' || tab.count > 0)
 
   return {
     state,
     searchHistory,
-    fileInputRef,
     tabItems,
     totalResults,
     performSearch,

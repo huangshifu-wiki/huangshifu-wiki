@@ -1,6 +1,6 @@
 import React from 'react'
 import { clsx } from 'clsx'
-import { motion, AnimatePresence } from 'motion/react'
+import { AnimatePresence } from 'motion/react'
 import {
   Book,
   MessageSquare,
@@ -12,16 +12,21 @@ import {
   FileText,
 } from '@/src/components/icons'
 import { VIEW_MODE_CONFIG } from '../../lib/viewModes'
-import { formatMusicCredits } from '../../lib/musicCredits'
 import type { ViewMode } from '../../types/userPreferences'
 import { formatDate } from '../../lib/dateUtils'
 import type { SearchState } from '../../hooks/useSearchPage'
 import type { WikiItem, PostItem, GalleryItem, AlbumItem } from '../../types/entities'
-import type { TextSearchResult } from '../../types/api'
 import { MixedSearchResultCard } from '../MixedSearchResultCard'
 import { SearchResultCard } from './SearchResultCard'
 import { LyricSearchResultCard } from './LyricSearchResultCard'
 import { MusicSearchResults } from './MusicSearchResults'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
+import {
+  SEARCH_PAGE_PARAM_BY_CATEGORY,
+  SEARCH_PAGE_SIZE,
+  SEARCH_PAGINATION_DOCK_GROUP,
+} from '../../lib/searchPagination'
+import { SearchResultSection } from './SearchResultSection'
 import { getFirstGalleryImage, shouldWaitForGalleryThumbnail } from '../../lib/galleryThumbnails'
 import { Button, LoadErrorState, Skeleton } from '@/src/components/ui'
 
@@ -31,6 +36,16 @@ interface SearchResultsProps {
   tabItems: Array<{ id: string; label: string; count: number }>
   onTabChange: (tab: string) => void
   onRetry?: () => void
+}
+function useSearchResultsPagination(totalCount: number, pageParam: string, totalKnown: boolean) {
+  return useRoutedPagination({
+    totalCount,
+    totalKnown,
+    defaultPageSize: SEARCH_PAGE_SIZE,
+    pageParam,
+    pageSizeParam: null,
+    showPageSizeSelector: false,
+  })
 }
 
 function wikiToConfig(page: WikiItem): import('./SearchResultCard').SearchResultCardConfig {
@@ -86,65 +101,6 @@ function postToConfig(post: PostItem): import('./SearchResultCard').SearchResult
   }
 }
 
-const TEXT_SEMANTIC_SOURCE_LABELS: Record<string, string> = {
-  wiki: '百科',
-  post: '帖子',
-  music: '音乐',
-  album: '专辑',
-}
-
-function getTextSemanticLink(result: TextSearchResult): string {
-  switch (result.sourceType) {
-    case 'wiki':
-      return `/wiki/${result.entity.slug || result.sourceId}`
-    case 'post':
-      return `/forum/${result.entity.slug || result.sourceId}`
-    case 'music':
-      return `/music/${result.entity.slug || result.sourceId}`
-    case 'album':
-      return `/album/${result.entity.slug || result.sourceId}`
-    default:
-      return '#'
-  }
-}
-
-function getTextSemanticTitle(result: TextSearchResult): string {
-  switch (result.sourceType) {
-    case 'wiki':
-      return result.entity.title || result.sourceId
-    case 'post':
-      return result.entity.title || result.sourceId
-    case 'music':
-      return result.entity.title || formatMusicCredits(result.entity.artists, '') || result.sourceId
-    case 'album':
-      return result.entity.title || result.entity.artist || result.sourceId
-    default:
-      return ''
-  }
-}
-
-function textSemanticToConfig(
-  result: TextSearchResult
-): import('./SearchResultCard').SearchResultCardConfig {
-  return {
-    id: `${result.sourceType}-${result.sourceId}`,
-    title: getTextSemanticTitle(result),
-    subtitle:
-      result.sourceType === 'music' || result.sourceType === 'album'
-        ? result.sourceType === 'music'
-          ? formatMusicCredits(result.entity.artists, '未知歌手')
-          : result.entity.artist
-        : undefined,
-    description: undefined,
-    link: getTextSemanticLink(result),
-    tags: [TEXT_SEMANTIC_SOURCE_LABELS[result.sourceType] || result.sourceType],
-    meta: `相似度 ${(result.score * 100).toFixed(1)}%`,
-    type: result.sourceType,
-    chunkPreview: result.chunkPreview,
-    matchSource: 'semantic',
-  }
-}
-
 export const SearchResults: React.FC<SearchResultsProps> = ({
   state,
   viewMode,
@@ -152,27 +108,28 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   onTabChange,
   onRetry,
 }) => {
-  const {
-    loading,
-    error,
-    activeTab,
-    isMixedSearch,
-    mixedResults,
-    results,
-    filters,
-    textSemanticResults,
-  } = state
+  const { loading, error, activeTab, isMixedSearch, mixedResults, results, filters } = state
+  const searchPaginationDockGroup = `${SEARCH_PAGINATION_DOCK_GROUP}-${React.useId()}`
   const hasSearched = state.query.trim().length > 0
 
   const hasFilters =
     filters.selectedTags.length > 0 || filters.dateRange.start || filters.dateRange.end
-  // 当前 tab 不在 tabItems 中时回落全部
-  const effectiveTab = tabItems.some((tab) => tab.id === activeTab) ? activeTab : 'all'
+  const fallbackTab = tabItems[0]?.id ?? (isMixedSearch ? 'semantic' : 'all')
+  const effectiveTab = tabItems.some((tab) => tab.id === activeTab) ? activeTab : fallbackTab
   const filteredMixedResults = isMixedSearch
     ? mixedResults.filter(
         (result) => effectiveTab === 'semantic' || result.sourceType === effectiveTab
       )
     : []
+  const mixedWikiResults = mixedResults
+    .filter((result) => result.sourceType === 'wiki')
+    .map((result) => result.data as WikiItem)
+  const mixedPostResults = mixedResults
+    .filter((result) => result.sourceType === 'post')
+    .map((result) => result.data as PostItem)
+  const mixedGalleryResults = mixedResults
+    .filter((result) => result.sourceType === 'gallery')
+    .map((result) => result.data as GalleryItem)
   const resultGridClassName = clsx(
     viewMode === 'list'
       ? 'shared-ink-list'
@@ -184,13 +141,57 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
         )
   )
 
+  const totalResults =
+    results.wiki.length +
+    results.posts.length +
+    results.galleries.length +
+    results.music.length +
+    results.albums.length +
+    results.lyrics.length
+  const paginationTotalKnown = !loading
+  const semanticPagination = useSearchResultsPagination(
+    isMixedSearch ? mixedResults.length : 0,
+    SEARCH_PAGE_PARAM_BY_CATEGORY.semantic,
+    paginationTotalKnown
+  )
+  const wikiPagination = useSearchResultsPagination(
+    isMixedSearch ? mixedWikiResults.length : results.wiki.length,
+    SEARCH_PAGE_PARAM_BY_CATEGORY.wiki,
+    paginationTotalKnown
+  )
+  const postsPagination = useSearchResultsPagination(
+    isMixedSearch ? mixedPostResults.length : results.posts.length,
+    SEARCH_PAGE_PARAM_BY_CATEGORY.posts,
+    paginationTotalKnown
+  )
+  const galleriesPagination = useSearchResultsPagination(
+    isMixedSearch ? mixedGalleryResults.length : results.galleries.length,
+    SEARCH_PAGE_PARAM_BY_CATEGORY.galleries,
+    paginationTotalKnown
+  )
+  const musicPagination = useSearchResultsPagination(
+    isMixedSearch ? 0 : results.music.length,
+    SEARCH_PAGE_PARAM_BY_CATEGORY.music,
+    paginationTotalKnown
+  )
+  const lyricsPagination = useSearchResultsPagination(
+    isMixedSearch ? 0 : results.lyrics.length,
+    SEARCH_PAGE_PARAM_BY_CATEGORY.lyrics,
+    paginationTotalKnown
+  )
+  const albumsPagination = useSearchResultsPagination(
+    isMixedSearch ? 0 : results.albums.length,
+    SEARCH_PAGE_PARAM_BY_CATEGORY.albums,
+    paginationTotalKnown
+  )
+
   if (loading) {
     return (
       <div className="space-y-3" role="status" aria-label="搜索结果加载中">
         {[1, 2, 3].map((i) => (
           <Skeleton
             key={i}
-            className="h-24 rounded border border-[var(--book-ink-line)] book-skeleton"
+            className="book-skeleton h-24 rounded border border-[var(--book-ink-line)]"
           />
         ))}
       </div>
@@ -201,7 +202,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     return <LoadErrorState description={error} onRetry={onRetry} />
   }
 
-  if (!hasSearched && !hasFilters) {
+  if (!hasSearched && !hasFilters && !isMixedSearch) {
     return (
       <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
         <Tag size={48} className="mx-auto mb-6 text-border" />
@@ -211,15 +212,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
       </div>
     )
   }
-
-  const totalResults =
-    results.wiki.length +
-    results.posts.length +
-    results.galleries.length +
-    results.music.length +
-    results.albums.length +
-    results.lyrics.length +
-    textSemanticResults.length
 
   if (!isMixedSearch && totalResults === 0) {
     return (
@@ -241,9 +233,24 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
     )
   }
 
+  const mixedSectionConfig = {
+    semantic: { title: '智能匹配', icon: <Sparkles size={14} className="text-brand-gold" /> },
+    gallery: { title: '图库', icon: <ImageIcon size={14} className="text-brand-gold" /> },
+    wiki: { title: '百科', icon: <Book size={14} className="text-brand-gold" /> },
+    post: { title: '帖子', icon: <MessageSquare size={14} className="text-brand-gold" /> },
+  } as const
+  const mixedPagination =
+    effectiveTab === 'semantic'
+      ? semanticPagination
+      : effectiveTab === 'gallery'
+        ? galleriesPagination
+        : effectiveTab === 'wiki'
+          ? wikiPagination
+          : postsPagination
+  const mixedConfig = mixedSectionConfig[effectiveTab as keyof typeof mixedSectionConfig]
+
   return (
     <div className="space-y-8">
-      {/* Tab bar */}
       <div className="mobile-filterbar">
         <div className="mobile-filter-tabs">
           {tabItems.map((tab) => (
@@ -252,6 +259,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               variant="ghost"
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
+              aria-pressed={effectiveTab === tab.id}
               className={clsx(
                 'relative min-h-0 cursor-pointer rounded-none border-0 px-0 pb-2 text-[1.0625rem] tracking-[0.06em]',
                 effectiveTab === tab.id
@@ -280,184 +288,127 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
       <div className="space-y-8">
         <AnimatePresence mode="wait">
-          {isMixedSearch && mixedResults.length > 0 && (
-            <motion.section
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-            >
-              <div className={resultGridClassName}>
-                {filteredMixedResults.map((result, index) => (
-                  <MixedSearchResultCard
-                    key={`${result.sourceType}-${result.sourceId}-${index}`}
-                    result={result}
-                    viewMode={viewMode}
-                    showSimilarity={true}
-                  />
-                ))}
-              </div>
-            </motion.section>
+          {isMixedSearch && mixedResults.length > 0 && mixedConfig && (
+            <SearchResultSection
+              title={mixedConfig.title}
+              dockGroup={searchPaginationDockGroup}
+              icon={mixedConfig.icon}
+              items={filteredMixedResults}
+              pagination={mixedPagination}
+              resultGridClassName={resultGridClassName}
+              getItemKey={(result, index) => `${result.sourceType}-${result.sourceId}-${index}`}
+              renderItem={(result) => (
+                <MixedSearchResultCard result={result} viewMode={viewMode} showSimilarity={true} />
+              )}
+            />
           )}
 
           {!isMixedSearch && (
             <>
-              {/* Text Semantic Results */}
-              {(effectiveTab === 'all' || effectiveTab === 'textSemantic') &&
-                textSemanticResults.length > 0 && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -12 }}
-                    className="space-y-4"
-                  >
-                    <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
-                      <FileText size={14} className="text-brand-gold" /> 语义匹配
-                    </h2>
-                    <div className={resultGridClassName}>
-                      {textSemanticResults.map((result) => (
-                        <SearchResultCard
-                          key={`${result.sourceType}-${result.sourceId}`}
-                          config={textSemanticToConfig(result)}
-                          viewMode={viewMode}
-                        />
-                      ))}
-                    </div>
-                  </motion.section>
-                )}
+              {effectiveTab === 'all' || effectiveTab === 'wiki'
+                ? results.wiki.length > 0 && (
+                    <SearchResultSection
+                      title="百科页面"
+                      dockGroup={searchPaginationDockGroup}
+                      icon={<Book size={14} className="text-brand-gold" />}
+                      items={results.wiki}
+                      pagination={wikiPagination}
+                      resultGridClassName={resultGridClassName}
+                      getItemKey={(page) => page.id}
+                      renderItem={(page) => (
+                        <SearchResultCard config={wikiToConfig(page)} viewMode={viewMode} />
+                      )}
+                    />
+                  )
+                : null}
 
-              {/* Wiki Results */}
-              {(effectiveTab === 'all' || effectiveTab === 'wiki') && results.wiki.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  className="space-y-4"
-                >
-                  <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
-                    <Book size={14} className="text-brand-gold" /> 百科页面
-                  </h2>
-                  <div className={resultGridClassName}>
-                    {results.wiki.map((page) => (
-                      <SearchResultCard
-                        key={page.id}
-                        config={wikiToConfig(page)}
-                        viewMode={viewMode}
-                      />
-                    ))}
-                  </div>
-                </motion.section>
-              )}
+              {effectiveTab === 'all' || effectiveTab === 'posts'
+                ? results.posts.length > 0 && (
+                    <SearchResultSection
+                      title="社区帖子"
+                      dockGroup={searchPaginationDockGroup}
+                      icon={<MessageSquare size={14} className="text-brand-gold" />}
+                      items={results.posts}
+                      pagination={postsPagination}
+                      resultGridClassName={resultGridClassName}
+                      getItemKey={(post) => post.id}
+                      renderItem={(post) => (
+                        <SearchResultCard config={postToConfig(post)} viewMode={viewMode} />
+                      )}
+                    />
+                  )
+                : null}
 
-              {/* Posts Results */}
-              {(effectiveTab === 'all' || effectiveTab === 'posts') && results.posts.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  className="space-y-4"
-                >
-                  <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
-                    <MessageSquare size={14} className="text-brand-gold" /> 社区帖子
-                  </h2>
-                  <div className={resultGridClassName}>
-                    {results.posts.map((post) => (
-                      <SearchResultCard
-                        key={post.id}
-                        config={postToConfig(post)}
-                        viewMode={viewMode}
-                      />
-                    ))}
-                  </div>
-                </motion.section>
-              )}
+              {effectiveTab === 'all' || effectiveTab === 'galleries'
+                ? results.galleries.length > 0 && (
+                    <SearchResultSection
+                      title="画廊"
+                      dockGroup={searchPaginationDockGroup}
+                      icon={<ImageIcon size={14} className="text-brand-gold" />}
+                      items={results.galleries}
+                      pagination={galleriesPagination}
+                      resultGridClassName={resultGridClassName}
+                      getItemKey={(gallery) => gallery.id}
+                      renderItem={(gallery) => (
+                        <SearchResultCard config={galleryToConfig(gallery)} viewMode={viewMode} />
+                      )}
+                    />
+                  )
+                : null}
 
-              {/* Galleries Results */}
-              {(effectiveTab === 'all' || effectiveTab === 'galleries') &&
-                results.galleries.length > 0 && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -12 }}
-                    className="space-y-4"
-                  >
-                    <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
-                      <ImageIcon size={14} className="text-brand-gold" /> 画廊
-                    </h2>
-                    <div className={resultGridClassName}>
-                      {results.galleries.map((gallery) => (
-                        <SearchResultCard
-                          key={gallery.id}
-                          config={galleryToConfig(gallery)}
-                          viewMode={viewMode}
-                        />
-                      ))}
-                    </div>
-                  </motion.section>
-                )}
+              {effectiveTab === 'all' || effectiveTab === 'music'
+                ? results.music.length > 0 && (
+                    <SearchResultSection
+                      title="音乐曲目"
+                      dockGroup={searchPaginationDockGroup}
+                      icon={<Music size={14} className="text-brand-gold" />}
+                      items={results.music}
+                      pagination={musicPagination}
+                      renderItems={(songs) => (
+                        <MusicSearchResults songs={songs} viewMode={viewMode} />
+                      )}
+                      renderGrid={false}
+                    />
+                  )
+                : null}
 
-              {/* Music Results */}
-              {(effectiveTab === 'all' || effectiveTab === 'music') && results.music.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  className="space-y-4"
-                >
-                  <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
-                    <Music size={14} className="text-brand-gold" /> 音乐曲目
-                  </h2>
-                  <MusicSearchResults songs={results.music} viewMode={viewMode} />
-                </motion.section>
-              )}
-
-              {/* Lyrics Results */}
-              {(effectiveTab === 'all' || effectiveTab === 'lyrics') &&
-                results.lyrics.length > 0 && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -12 }}
-                    className="space-y-4"
-                  >
-                    <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
-                      <FileText size={14} className="text-brand-gold" /> 歌词匹配
-                    </h2>
-                    <div className={resultGridClassName}>
-                      {results.lyrics.map((item) => (
+              {effectiveTab === 'all' || effectiveTab === 'lyrics'
+                ? results.lyrics.length > 0 && (
+                    <SearchResultSection
+                      title="歌词匹配"
+                      dockGroup={searchPaginationDockGroup}
+                      icon={<FileText size={14} className="text-brand-gold" />}
+                      items={results.lyrics}
+                      pagination={lyricsPagination}
+                      resultGridClassName={resultGridClassName}
+                      getItemKey={(item) => item.docId}
+                      renderItem={(item) => (
                         <LyricSearchResultCard
-                          key={item.docId}
                           item={item}
                           query={state.searchMeta?.query ?? state.query}
                           viewMode={viewMode}
                         />
-                      ))}
-                    </div>
-                  </motion.section>
-                )}
+                      )}
+                    />
+                  )
+                : null}
 
-              {/* Albums Results */}
-              {(effectiveTab === 'all' || effectiveTab === 'albums') &&
-                results.albums.length > 0 && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -12 }}
-                    className="space-y-4"
-                  >
-                    <h2 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-4 flex items-center gap-2">
-                      <Music size={14} className="text-brand-gold" /> 音乐专辑
-                    </h2>
-                    <div className={resultGridClassName}>
-                      {results.albums.map((album) => (
-                        <SearchResultCard
-                          key={album.docId}
-                          config={albumToConfig(album)}
-                          viewMode={viewMode}
-                        />
-                      ))}
-                    </div>
-                  </motion.section>
-                )}
+              {effectiveTab === 'all' || effectiveTab === 'albums'
+                ? results.albums.length > 0 && (
+                    <SearchResultSection
+                      title="音乐专辑"
+                      dockGroup={searchPaginationDockGroup}
+                      icon={<Music size={14} className="text-brand-gold" />}
+                      items={results.albums}
+                      pagination={albumsPagination}
+                      resultGridClassName={resultGridClassName}
+                      getItemKey={(album) => album.docId}
+                      renderItem={(album) => (
+                        <SearchResultCard config={albumToConfig(album)} viewMode={viewMode} />
+                      )}
+                    />
+                  )
+                : null}
             </>
           )}
         </AnimatePresence>

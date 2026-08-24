@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { apiGet, apiUpload } from '../lib/apiClient'
 import type { GalleryItem, WikiItem, PostItem, LyricSearchItem } from '../types/entities'
-import type { TextSearchResult, TextSearchResponse } from '../types/api'
 
 /**
  * 图片来源类型
@@ -360,67 +359,6 @@ export function useTraditionalSearch() {
     search,
     getSuggestions,
     getHotKeywords,
-    clearResults,
-  }
-}
-
-export function useTextSemanticSearch() {
-  const [results, setResults] = useState<TextSearchResult[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
-
-  const search = useCallback(
-    async (
-      query: string,
-      options?: { limit?: number; minScore?: number; includeDetail?: boolean }
-    ): Promise<TextSearchResult[]> => {
-      if (!query.trim()) {
-        setResults([])
-        return []
-      }
-
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-      abortControllerRef.current = new AbortController()
-
-      setLoading(true)
-      setError(null)
-
-      try {
-        const data = await apiGet<TextSearchResponse>('/api/search/text-semantic', {
-          q: query.trim(),
-          limit: options?.limit || 24,
-          ...(options?.minScore !== undefined ? { minScore: options.minScore } : {}),
-          ...(options?.includeDetail ? { detail: '1' } : {}),
-        })
-
-        setResults(data.results || [])
-        return data.results || []
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return []
-        const errorMsg = err instanceof Error ? err.message : '文本语义搜索失败'
-        setError(errorMsg)
-        console.error('Text semantic search error:', err)
-        return []
-      } finally {
-        setLoading(false)
-      }
-    },
-    []
-  )
-
-  const clearResults = useCallback(() => {
-    setResults([])
-    setError(null)
-  }, [])
-
-  return {
-    results,
-    loading,
-    error,
-    search,
     clearResults,
   }
 }

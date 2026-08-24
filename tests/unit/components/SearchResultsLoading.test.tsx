@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
 import { SearchResults } from '../../../src/components/search/SearchResults'
@@ -34,7 +35,6 @@ const makeState = (overrides: Partial<SearchState> = {}): SearchState => ({
   aiSearching: false,
   hotKeywords: [],
   showFilters: false,
-  textSemanticResults: [],
   ...overrides,
 })
 
@@ -43,13 +43,15 @@ describe('搜索结果错误状态', () => {
     const onRetry = vi.fn()
 
     render(
-      <SearchResults
-        state={makeState({ error: '搜索服务暂时不可用' })}
-        viewMode="list"
-        tabItems={[{ id: 'all', label: '全部', count: 0 }]}
-        onTabChange={vi.fn()}
-        onRetry={onRetry}
-      />
+      <MemoryRouter>
+        <SearchResults
+          state={makeState({ error: '搜索服务暂时不可用' })}
+          viewMode="list"
+          tabItems={[{ id: 'all', label: '全部', count: 0 }]}
+          onTabChange={vi.fn()}
+          onRetry={onRetry}
+        />
+      </MemoryRouter>
     )
 
     expect(screen.getByRole('alert')).toHaveTextContent('搜索服务暂时不可用')

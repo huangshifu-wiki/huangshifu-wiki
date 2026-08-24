@@ -1,3 +1,4 @@
+import { createRef } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -51,6 +52,158 @@ describe('Pagination', () => {
     expect(inlineNavigation).not.toHaveClass('border-b-transparent', 'rounded-b-none')
     expect(inlineNavigation).not.toHaveClass('gap-2', 'py-1', 'sm:gap-3', 'sm:py-1.5')
     expect(inlineNavigation).toHaveAttribute('data-state', 'inline')
+  })
+  it('同一分组只停靠视口下方最近的分页', () => {
+    let firstAnchorTop = 1100
+    let secondAnchorTop = 900
+    let scheduledFrame: FrameRequestCallback | null = null
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      scheduledFrame = callback
+      return 1
+    })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const anchors = Array.from(document.querySelectorAll('[data-pagination-anchor]'))
+      const anchorIndex = anchors.indexOf(this as Element)
+      if (anchorIndex === 0) return new DOMRect(24, firstAnchorTop, 600, 86)
+      if (anchorIndex === 1) return new DOMRect(24, secondAnchorTop, 600, 86)
+
+      const navigations = Array.from(document.querySelectorAll('[aria-label="分页导航"]'))
+      const navigationIndex = navigations.indexOf(this as Element)
+      if (navigationIndex >= 0) {
+        const isFirstNavigation = this.textContent?.includes('第 1 / 2 页')
+        return new DOMRect(24, isFirstNavigation ? firstAnchorTop : secondAnchorTop, 600, 86)
+      }
+      return new DOMRect()
+    })
+
+    render(
+      <>
+        <Pagination
+          page={1}
+          totalPages={2}
+          onPageChange={vi.fn()}
+          dockGroup="search-results-test"
+        />
+        <Pagination
+          page={1}
+          totalPages={3}
+          onPageChange={vi.fn()}
+          dockGroup="search-results-test"
+        />
+      </>
+    )
+
+    const firstNavigation = screen.getByText('第 1 / 2 页').closest('[aria-label="分页导航"]')
+    const secondNavigation = screen.getByText('第 1 / 3 页').closest('[aria-label="分页导航"]')
+    expect(firstNavigation).toHaveAttribute('data-state', 'inline')
+    expect(secondNavigation).toHaveAttribute('data-state', 'docked')
+    expect(document.querySelectorAll('[data-pagination-anchor]')[1]).toHaveStyle({ height: '86px' })
+
+    firstAnchorTop = 750
+    secondAnchorTop = 650
+    fireEvent.scroll(window)
+    act(() => scheduledFrame?.(0))
+
+    const updatedFirstNavigation = screen
+      .getByText('第 1 / 2 页')
+      .closest('[aria-label="分页导航"]')
+    const updatedSecondNavigation = screen
+      .getByText('第 1 / 3 页')
+      .closest('[aria-label="分页导航"]')
+    expect(updatedFirstNavigation).toHaveAttribute('data-state', 'docked')
+    expect(updatedSecondNavigation).toHaveAttribute('data-state', 'inline')
+    expect(document.querySelectorAll('[data-pagination-anchor]')[0]).toHaveStyle({ height: '86px' })
+  })
+  it('仅停靠当前可见区块并显示所属类别', () => {
+    let firstSectionTop = 100
+    let firstSectionBottom = 1400
+    let secondSectionTop = 1600
+    let secondSectionBottom = 1900
+    let firstAnchorTop = 1500
+    let secondAnchorTop = 2000
+    let scheduledFrame: FrameRequestCallback | null = null
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      scheduledFrame = callback
+      return 1
+    })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.matches('[data-section="first"]')) {
+        return new DOMRect(24, firstSectionTop, 600, firstSectionBottom - firstSectionTop)
+      }
+      if (this.matches('[data-section="second"]')) {
+        return new DOMRect(24, secondSectionTop, 600, secondSectionBottom - secondSectionTop)
+      }
+      if (this.hasAttribute('data-pagination-anchor')) {
+        const section = this.closest('[data-section]')?.getAttribute('data-section')
+        const top = section === 'first' ? firstAnchorTop : secondAnchorTop
+        return new DOMRect(24, top, 600, 86)
+      }
+      if (this.getAttribute('aria-label') === '百科页面分页导航') {
+        return new DOMRect(24, firstAnchorTop, 600, 86)
+      }
+      if (this.getAttribute('aria-label') === '社区帖子分页导航') {
+        return new DOMRect(24, secondAnchorTop, 600, 86)
+      }
+      return new DOMRect()
+    })
+
+    const firstSectionRef = createRef<HTMLElement>()
+    const secondSectionRef = createRef<HTMLElement>()
+    render(
+      <>
+        <section ref={firstSectionRef} data-section="first">
+          <Pagination
+            page={1}
+            totalPages={2}
+            onPageChange={vi.fn()}
+            dockGroup="search-results-context-test"
+            dockLabel="百科页面"
+            dockSectionRef={firstSectionRef}
+          />
+        </section>
+        <section ref={secondSectionRef} data-section="second">
+          <Pagination
+            page={1}
+            totalPages={2}
+            onPageChange={vi.fn()}
+            dockGroup="search-results-context-test"
+            dockLabel="社区帖子"
+            dockSectionRef={secondSectionRef}
+          />
+        </section>
+      </>
+    )
+
+    expect(screen.getByRole('navigation', { name: '百科页面分页导航' })).toHaveAttribute(
+      'data-state',
+      'docked'
+    )
+    expect(screen.getByRole('navigation', { name: '社区帖子分页导航' })).toHaveAttribute(
+      'data-state',
+      'inline'
+    )
+    expect(screen.getByRole('navigation', { name: '百科页面分页导航' })).toHaveTextContent(
+      '百科页面'
+    )
+
+    firstSectionBottom = -10
+    secondSectionTop = 100
+    secondSectionBottom = 1400
+    firstAnchorTop = -100
+    secondAnchorTop = 1500
+    fireEvent.scroll(window)
+    act(() => scheduledFrame?.(0))
+
+    expect(screen.getByRole('navigation', { name: '百科页面分页导航' })).toHaveAttribute(
+      'data-state',
+      'inline'
+    )
+    expect(screen.getByRole('navigation', { name: '社区帖子分页导航' })).toHaveAttribute(
+      'data-state',
+      'docked'
+    )
   })
   it('在悬浮与原位边界附近保持稳定，不来回闪烁', () => {
     let anchorTop = 900

@@ -29,7 +29,10 @@ export const MusicSearchResults: React.FC<MusicSearchResultsProps> = ({ songs, v
   useEffect(() => {
     setDisplaySongs(songs)
   }, [songs])
-
+  const isSamePage =
+    displaySongs.length === songs.length &&
+    displaySongs.every((song, index) => song.docId === songs[index]?.docId)
+  const visibleSongs = isSamePage ? displaySongs : songs
   const playSong = (song: SongItem) => {
     // SongCard 在无源时禁用按钮，setCurrentSong 内部也有可播放性守卫
     setCurrentSong(song)
@@ -81,7 +84,7 @@ export const MusicSearchResults: React.FC<MusicSearchResultsProps> = ({ songs, v
             )
       }
     >
-      {displaySongs.map((song) => (
+      {visibleSongs.map((song) => (
         <SongCard
           key={song.docId}
           song={song}
