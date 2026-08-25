@@ -11,6 +11,7 @@ import {
   fetchSongWithRelationsByDocId,
   normalizeMusicImportTracks,
   createOrUpdateImportedSong,
+  batchMatchAndDiffImportTracks,
   resolveMusicPlayUrl,
   normalizeMusicExternalSourceInputs,
   findDuplicateSongSources,
@@ -45,12 +46,9 @@ import {
   normalizeLyricStorage,
   logger,
 } from '../utils'
+import type { SongDuplicateStrategy } from '../utils'
 import { parseMusicUrl } from '../music/musicUrlParser'
-import {
-  getMusicResourcePreview,
-  searchMusicResources,
-  type MusicResourcePreview,
-} from '../music/metingService'
+import { getMusicResourcePreview, searchMusicResources } from '../music/metingService'
 import { cleanupUnusedMediaAssetById } from '../services/mediaAssetCleanupService'
 import { deleteMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
 import { enqueueMusicTextEmbeddingsDeferred } from '../vector/textEmbeddingSync'
@@ -489,10 +487,32 @@ router.post(
 
       const preview = await getMusicResourcePreview(parsed.platform, parsed.type, parsed.id)
 
+      const normalizedTracks = normalizeMusicImportTracks(preview.songs)
+      const { matches, summary: matchSummary } = await batchMatchAndDiffImportTracks({
+        platform: parsed.platform,
+        tracks: normalizedTracks,
+        albumFallback: preview.title,
+      })
+      const matchBySourceId = new Map(
+        normalizedTracks.map((track, index) => [track.sourceId, matches[index]])
+      )
+
+      const enrichedSongs = preview.songs.map((song) => ({
+        ...song,
+        match: matchBySourceId.get(song.sourceId) || {
+          status: 'new' as const,
+          matchType: 'none' as const,
+          existingSong: null,
+          diffs: [],
+        },
+      }))
+
       res.json({
         resource: {
           ...preview,
+          songs: enrichedSongs,
           totalSongs: preview.songs.length,
+          matchSummary,
         },
       })
     } catch (error) {
@@ -521,6 +541,13 @@ router.post(
       }
 
       const preview = await getMusicResourcePreview(parsed.platform, parsed.type, parsed.id)
+      const duplicateStrategyRaw =
+        typeof req.body?.duplicateStrategy === 'string' ? req.body.duplicateStrategy.trim() : 'fill'
+      const duplicateStrategy: SongDuplicateStrategy =
+        duplicateStrategyRaw === 'overwrite' || duplicateStrategyRaw === 'skip'
+          ? duplicateStrategyRaw
+          : 'fill'
+
       const selectedSongIdsRaw = Array.isArray(req.body?.selectedSongIds)
         ? req.body.selectedSongIds
         : []
@@ -529,7 +556,6 @@ router.post(
         .map((item: string) => item.trim())
         .filter(Boolean)
       const selectedSet = selectedSongIds.length ? new Set(selectedSongIds) : null
-
       const tracks = normalizeMusicImportTracks(preview.songs).filter((track) => {
         if (!selectedSet) return true
         return selectedSet.has(track.sourceId)
@@ -566,6 +592,7 @@ router.post(
             platform: preview.platform,
             track,
             albumNameFallback: preview.title,
+            duplicateStrategy,
           })
           if (result.created) {
             imported += 1

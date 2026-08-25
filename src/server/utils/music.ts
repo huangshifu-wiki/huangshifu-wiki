@@ -1009,12 +1009,54 @@ function buildImportedMetadataUpdateData(
   return buildMusicMetadataFillUpdateData(buildImportedMetadataFields(data), existing)
 }
 
+export type SongDuplicateStrategy = 'fill' | 'overwrite' | 'skip'
+
+type ImportedSongExisting = Pick<
+  MusicMetadataFields,
+  'lyricists' | 'composers' | 'arrangers' | 'vocals' | 'releaseDate' | 'durationMs'
+> & {
+  title: string
+  artists: string[]
+  album: string
+  audioUrl: string
+  lyric: string | null
+  description: string | null
+}
+
+function buildImportedSongUpdateData(params: {
+  data: ResolvedImportedSongData
+  existing: ImportedSongExisting
+  incoming: { title: string; artists: string[]; album: string }
+  strategy: Exclude<SongDuplicateStrategy, 'skip'>
+}): Prisma.MusicTrackUpdateInput {
+  const { data, existing, incoming, strategy } = params
+  const lyricUpdate =
+    data.resolvedLyric && (strategy === 'overwrite' || !existing.lyric) ? data.lyricStorage : {}
+  const metadataUpdate = buildImportedMetadataUpdateData(data, existing)
+
+  return {
+    title: strategy === 'overwrite' ? incoming.title : existing.title || incoming.title,
+    artists:
+      strategy === 'overwrite'
+        ? incoming.artists
+        : existing.artists.length
+          ? existing.artists
+          : incoming.artists,
+    album: strategy === 'overwrite' ? incoming.album : existing.album || incoming.album,
+    audioUrl:
+      strategy === 'overwrite' ? data.resolvedAudioUrl : existing.audioUrl || data.resolvedAudioUrl,
+    ...lyricUpdate,
+    ...metadataUpdate,
+    description: existing.description ?? null,
+  }
+}
 export async function createOrUpdateImportedSong(params: {
   platform: MusicPlatform
   track: ImportSongInput
   albumNameFallback?: string
+  duplicateStrategy?: SongDuplicateStrategy
 }) {
-  const { platform, track, albumNameFallback } = params
+  const { platform, track, albumNameFallback, duplicateStrategy = 'fill' } = params
   const platformId = track.sourceId
 
   const existingSources = await prisma.musicExternalSource.findMany({
@@ -1039,25 +1081,29 @@ export async function createOrUpdateImportedSong(params: {
       : null
 
   if (existingSong) {
+    if (duplicateStrategy === 'skip') {
+      return {
+        song: existingSong,
+        created: false,
+        linked: false,
+      }
+    }
+
     const fallbackTitle = `未命名歌曲 ${track.sourceId}`
-    const title = track.title || fallbackTitle
-    const artists = track.artists.length ? track.artists : ['未知歌手']
-    const album = track.album || albumNameFallback || '未知专辑'
+    const incomingTitle = track.title || fallbackTitle
+    const incomingArtists = track.artists.length ? track.artists : ['未知歌手']
+    const incomingAlbum = track.album || albumNameFallback || '未知专辑'
     const importedData = await resolveImportedSongData(platform, track)
-    const lyricUpdate = importedData.resolvedLyric ? importedData.lyricStorage : {}
-    const metadataUpdate = buildImportedMetadataUpdateData(importedData, existingSong)
+    const updateData = buildImportedSongUpdateData({
+      data: importedData,
+      existing: existingSong,
+      incoming: { title: incomingTitle, artists: incomingArtists, album: incomingAlbum },
+      strategy: duplicateStrategy,
+    })
 
     const song = await prisma.musicTrack.update({
       where: { docId: existingSong.docId },
-      data: {
-        title,
-        artists,
-        album,
-        audioUrl: importedData.resolvedAudioUrl,
-        ...lyricUpdate,
-        ...metadataUpdate,
-        description: existingSong.description ?? null,
-      },
+      data: updateData,
     })
     if (importedData.resolvedCover && !existingSong.coverId && !existingSong.coverAlbumDocId) {
       await maybeAddImportedSongCover(song.docId, importedData.resolvedCover, true)
@@ -1085,22 +1131,26 @@ export async function createOrUpdateImportedSong(params: {
     },
   })
 
-  const importedData = await resolveImportedSongData(platform, track)
-  const lyricUpdate = importedData.resolvedLyric ? importedData.lyricStorage : {}
-
   if (existingByTitleArtist) {
-    const metadataUpdate = buildImportedMetadataUpdateData(importedData, existingByTitleArtist)
+    if (duplicateStrategy === 'skip') {
+      return {
+        song: existingByTitleArtist,
+        created: false,
+        linked: false,
+      }
+    }
+
+    const importedData = await resolveImportedSongData(platform, track)
+    const updateData = buildImportedSongUpdateData({
+      data: importedData,
+      existing: existingByTitleArtist,
+      incoming: { title, artists, album },
+      strategy: duplicateStrategy,
+    })
+
     const updatedSong = await prisma.musicTrack.update({
       where: { docId: existingByTitleArtist.docId },
-      data: {
-        title,
-        artists,
-        album,
-        audioUrl: importedData.resolvedAudioUrl,
-        ...lyricUpdate,
-        ...metadataUpdate,
-        description: existingByTitleArtist.description ?? null,
-      },
+      data: updateData,
     })
     if (
       importedData.resolvedCover &&
@@ -1132,6 +1182,7 @@ export async function createOrUpdateImportedSong(params: {
     }
   }
 
+  const importedData = await resolveImportedSongData(platform, track)
   const metadataData = buildImportedMetadataFields(importedData)
   const song = await withNumericSlugTransaction(prisma, 'MusicTrack', async (tx, slug) => {
     return tx.musicTrack.create({

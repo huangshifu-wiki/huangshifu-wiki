@@ -10,8 +10,8 @@
 
 import { beforeAll, afterAll, beforeEach } from 'vitest'
 import dotenv from 'dotenv'
+import { PrismaClient, type User } from '@prisma/client'
 import type { SignOptions } from 'jsonwebtoken'
-import { PrismaClient } from '@prisma/client'
 import { getPasswordSaltRounds } from '../../src/server/utils/password'
 import { allocateUserPublicId } from '../../src/server/utils/userPublicId'
 import { setLogLevel } from '../../src/server/utils/logger'
@@ -169,6 +169,11 @@ export async function cleanupDatabase() {
   }
 
   console.log('[Integration Test] Database cleanup completed')
+}
+
+export interface TestUserCreated {
+  user: User
+  plainPassword: string
 }
 
 /**

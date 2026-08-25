@@ -180,11 +180,22 @@ export {
   findMusicDocIdsByArtistPartial,
   ensureDisplayRelation,
 } from './music'
+export { diffImportTrackWithExisting, batchMatchAndDiffImportTracks } from './musicImportMatch'
 export type {
   DuplicateSongSourceWarning,
   DuplicateAlbumSourceWarning,
+  SongDuplicateStrategy,
   MusicMetadataFields,
 } from './music'
+export type {
+  SongImportMatchStatus,
+  SongImportDiffFieldStatus,
+  SongImportFieldDiff,
+  SongImportExistingSongSummary,
+  SongImportMatchResult,
+  SongImportMatchSummary,
+  MusicImportTrackWithMeta,
+} from './musicImportMatch'
 
 // === 通知与用户行为 ===
 export {
