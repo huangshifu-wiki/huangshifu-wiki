@@ -54,6 +54,7 @@ export const AdminRoutes = () => (
       <Route path="music" element={<AdminMusicPage />} />
       <Route path="posts" element={<AdminListPage type="posts" />} />
       <Route path="galleries" element={<AdminListPage type="galleries" />} />
+      <Route path="ticket-listings" element={<AdminListPage type="ticket-listings" />} />
       <Route path="events" element={<AdminListPage type="events" />} />
       <Route path="events/new" element={<AdminEventEdit />} />
       <Route path="events/:eventId/edit" element={<AdminEventEdit />} />

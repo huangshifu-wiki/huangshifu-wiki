@@ -33,6 +33,7 @@ import { registerWikiRoutes } from './src/server/routes/wiki.routes'
 import { registerPostsRoutes } from './src/server/routes/posts.routes'
 import { registerGalleriesRoutes } from './src/server/routes/galleries.routes'
 import { registerEventsRoutes } from './src/server/routes/events.routes'
+import { registerTicketListingsRoutes } from './src/server/routes/ticket-listings.routes'
 import { registerMusicRoutes } from './src/server/routes/music.routes'
 import { registerAlbumsRoutes } from './src/server/routes/albums.routes'
 import { registerSearchRoutes } from './src/server/routes/search.routes'
@@ -346,6 +347,7 @@ registerUsersRoutes(app)
 registerWikiRoutes(app)
 registerPostsRoutes(app)
 registerGalleriesRoutes(app)
+registerTicketListingsRoutes(app)
 registerEventsRoutes(app)
 registerMusicRoutes(app)
 registerAlbumsRoutes(app)

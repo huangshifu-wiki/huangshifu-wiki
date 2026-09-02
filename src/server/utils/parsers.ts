@@ -244,6 +244,7 @@ export function normalizePostWriteStatus(rawStatus: unknown, authUser: ApiUser):
 export function normalizeGalleryWriteStatus(rawStatus: unknown, authUser: ApiUser): ContentStatus {
   return normalizePostWriteStatus(rawStatus, authUser)
 }
+export const normalizeTicketListingWriteStatus = normalizePostWriteStatus
 
 export function parseFavoriteType(value: unknown): FavoriteTargetType | null {
   if (value === 'wiki' || value === 'post' || value === 'music' || value === 'gallery') {
@@ -279,7 +280,9 @@ export function parseBrowsingTargetType(value: unknown): BrowsingTargetType | nu
   return null
 }
 
-export function parseModerationTargetType(value: unknown): ModerationTargetType | null {
+export function parseModerationTargetType(
+  value: unknown
+): Extract<ModerationTargetType, 'wiki' | 'post' | 'gallery' | 'comment'> | null {
   if (value === 'wiki' || value === 'post' || value === 'gallery' || value === 'comment') {
     return value
   }
@@ -287,14 +290,11 @@ export function parseModerationTargetType(value: unknown): ModerationTargetType 
 }
 
 export function normalizeModerationTargetType(value: unknown): ModerationTargetType | null {
-  if (value === 'posts') {
-    return 'post'
-  }
-  if (value === 'galleries') {
-    return 'gallery'
-  }
-  if (value === 'comments') {
-    return 'comment'
+  if (value === 'posts') return 'post'
+  if (value === 'galleries') return 'gallery'
+  if (value === 'comments') return 'comment'
+  if (value === 'tickets' || value === 'ticket' || value === 'ticketListing') {
+    return 'ticketListing'
   }
   return parseModerationTargetType(value)
 }

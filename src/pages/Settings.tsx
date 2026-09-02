@@ -14,6 +14,7 @@ import {
   Save,
   Shield,
   SlidersHorizontal,
+  Ticket,
   UserRound,
 } from '@/src/components/icons'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
@@ -34,7 +35,7 @@ import {
   PROFILE_SIGNATURE_MAX_LENGTH,
   WIKI_MAX_CONTENT_SIZE,
 } from '../lib/contentLimits'
-import { apiGet, apiPatch, apiPost, apiPut } from '../lib/apiClient'
+import { apiGet, apiPatch, apiPost, apiPut, apiRequest } from '../lib/apiClient'
 import { getErrorMessage } from '../lib/errorHandler'
 import { formatDateOnly } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
@@ -52,9 +53,9 @@ import {
   validateRequiredText,
 } from '../lib/clientValidation'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
-import type { CommentItem, GalleryItem, PostItem } from '../types/entities'
+import type { CommentItem, GalleryItem, PostItem, TicketListingSummary } from '../types/entities'
 import type { ContentStatus } from '../types/common'
-import type { EmailVerificationPublicConfig } from '../types/api'
+import type { EmailVerificationPublicConfig, TicketListingMineResponse } from '../types/api'
 import type { ListLoadMode } from '../types/userPreferences'
 import {
   Button,
@@ -89,7 +90,7 @@ type PasswordForm = {
 }
 
 type SettingsSection = 'profile' | 'content' | 'privacy' | 'account' | 'appearance'
-type ContentTab = 'posts' | 'wiki' | 'galleries' | 'comments'
+type ContentTab = 'posts' | 'wiki' | 'galleries' | 'comments' | 'tickets'
 
 type UserCommentItem = CommentItem & {
   targetType?: 'post' | 'gallery'
@@ -137,7 +138,7 @@ const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'account',
   'appearance',
 ])
-const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'wiki', 'galleries', 'comments'])
+const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'wiki', 'galleries', 'comments', 'tickets'])
 const CONTENT_ITEM_LINK_CLASS =
   'group -mx-3 block max-w-[calc(100%+1.5rem)] px-3 transition-colors hover:bg-surface-alt/70'
 const CONTENT_META_ROW_CLASS =
@@ -261,6 +262,7 @@ const Settings = () => {
   const [myPosts, setMyPosts] = useState<PostItem[]>([])
   const [myWikiPages, setMyWikiPages] = useState<UserWikiItem[]>([])
   const [myGalleries, setMyGalleries] = useState<GalleryItem[]>([])
+  const [myTicketListings, setMyTicketListings] = useState<TicketListingSummary[]>([])
   const [myComments, setMyComments] = useState<UserCommentItem[]>([])
   const hasPendingGalleryThumbnails = myGalleries.some(shouldWaitForGalleryThumbnail)
   const activeContentHasItems =
@@ -270,7 +272,9 @@ const Settings = () => {
         ? myWikiPages.length > 0
         : activeContentTab === 'galleries'
           ? myGalleries.length > 0
-          : myComments.length > 0
+          : activeContentTab === 'tickets'
+            ? myTicketListings.length > 0
+            : myComments.length > 0
 
   useEffect(() => {
     if (!user) return
@@ -359,6 +363,19 @@ const Settings = () => {
           )
           if (!cancelled) {
             setMyGalleries(data.galleries || [])
+            setContentTotal(data.total || 0)
+          }
+          return
+        }
+
+        if (activeContentTab === 'tickets') {
+          const data = await apiRequest<TicketListingMineResponse>('/api/ticket-listings/mine', {
+            method: 'GET',
+            query: params,
+            dedup: false,
+          })
+          if (!cancelled) {
+            setMyTicketListings(data.listings || [])
             setContentTotal(data.total || 0)
           }
           return
@@ -801,6 +818,55 @@ const Settings = () => {
       )
     }
 
+    if (activeContentTab === 'tickets') {
+      return myTicketListings.length ? (
+        <ul>
+          {myTicketListings.map((listing) => (
+            <li key={listing.id} className="border-b border-border last:border-b-0">
+              <Link
+                to={`/tickets/${listing.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={clsx(CONTENT_ITEM_LINK_CLASS, 'py-3')}
+              >
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className={CONTENT_META_ROW_CLASS}>
+                      <span className="min-w-0 break-words text-text-muted">
+                        {listing.type === 'offer' ? '出票' : '收票'} · {listing.quantity}张 ·{' '}
+                        {listing.ticketTier}
+                      </span>
+                      {listing.status ? (
+                        <span
+                          className={clsx(
+                            CONTENT_STATUS_BADGE_CLASS,
+                            getStatusClassName(listing.status)
+                          )}
+                        >
+                          {getStatusText(listing.status)}
+                          {listing.status === 'rejected' && listing.reviewNote
+                            ? `（原因：${listing.reviewNote}）`
+                            : ''}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                      {listing.eventName || listing.customEventName || '未命名活动'}
+                    </p>
+                  </div>
+                  <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
+                    {format(new Date(listing.updatedAt), 'MM-dd HH:mm')}
+                  </p>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <EmptyState message="暂无盘票信息" />
+      )
+    }
+
     return myComments.length ? (
       <ul>
         {myComments.map((comment) => {
@@ -1060,6 +1126,7 @@ const Settings = () => {
                       { id: 'posts', label: '帖子', icon: FileText },
                       { id: 'wiki', label: '编辑过的百科', icon: BookOpen },
                       { id: 'galleries', label: '图集', icon: ImageIcon },
+                      { id: 'tickets', label: '盘票', icon: Ticket },
                       { id: 'comments', label: '评论', icon: MessageSquare },
                     ].map((item) => {
                       const Icon = item.icon

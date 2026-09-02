@@ -21,6 +21,7 @@ import { RELATION_TYPE_LABELS } from '../../lib/relationConstants'
 import type {
   UserStatus,
   ContentStatus,
+  TicketListingType,
   WikiRelationType,
   FavoriteTargetType,
   ModerationTargetType,
@@ -363,6 +364,98 @@ export function toPostResponse(post: {
     createdAt: post.createdAt.toISOString(),
     updatedAt: post.updatedAt.toISOString(),
   }
+}
+type TicketListingTransformerInput = {
+  id: string
+  slug: string
+  type: TicketListingType
+  eventId: string | null
+  customEventName: string | null
+  quantity: number
+  ticketTier: string
+  seat: string
+  description?: string
+  contact?: string
+  authorUid: string
+  status?: ContentStatus
+  reviewNote?: string | null
+  reviewedBy?: string | null
+  reviewedAt?: Date | null
+  deletedAt?: Date | null
+  deletedBy?: string | null
+  createdAt: Date
+  updatedAt: Date
+  event?: {
+    id: string
+    slug: string
+    title: string
+    location: string
+    deletedAt?: Date | null
+  } | null
+  author?: { publicId: string; displayName: string } | null
+  deletionReason?: string | null
+}
+
+type TicketListingResponseOptions = {
+  includePrivate?: boolean
+  includeContent?: boolean
+}
+
+function toTicketListingBaseResponse(
+  listing: TicketListingTransformerInput,
+  options: TicketListingResponseOptions = {}
+) {
+  const includePrivate = options.includePrivate === true
+  const eventUnavailable = Boolean(listing.event?.deletedAt)
+  const eventName = listing.event?.title || listing.customEventName || '未命名活动'
+  const response = {
+    id: listing.id,
+    slug: listing.slug,
+    type: listing.type,
+    eventId: eventUnavailable ? null : listing.eventId,
+    customEventName:
+      listing.customEventName || (eventUnavailable ? listing.event?.title || null : null),
+    eventName,
+    eventSlug: eventUnavailable ? null : listing.event?.slug || null,
+    eventLocation: listing.event?.location || null,
+    quantity: listing.quantity,
+    ticketTier: listing.ticketTier,
+    seat: listing.seat,
+    authorUid: listing.authorUid,
+    authorPublicId: listing.author?.publicId || null,
+    authorName: listing.author?.displayName || '匿名',
+    createdAt: listing.createdAt.toISOString(),
+    updatedAt: listing.updatedAt.toISOString(),
+    ...(options.includeContent === true
+      ? { description: listing.description || '', contact: listing.contact || '' }
+      : {}),
+    ...(includePrivate
+      ? {
+          status: listing.status,
+          reviewNote: listing.reviewNote,
+          reviewedAt: listing.reviewedAt ? listing.reviewedAt.toISOString() : null,
+          isDeleted: Boolean(listing.deletedAt),
+          deletedAt: listing.deletedAt ? listing.deletedAt.toISOString() : null,
+          deletedBy: listing.deletedBy || null,
+          deletionReason: listing.deletionReason || null,
+        }
+      : {}),
+  }
+  return response
+}
+
+export function toTicketListingResponse(
+  listing: TicketListingTransformerInput,
+  options: TicketListingResponseOptions = {}
+) {
+  return toTicketListingBaseResponse(listing, { ...options, includeContent: true })
+}
+
+export function toTicketListingListResponse(
+  listing: TicketListingTransformerInput,
+  options: TicketListingResponseOptions = {}
+) {
+  return toTicketListingBaseResponse(listing, { ...options, includeContent: false })
 }
 
 const DELETED_COMMENT_PLACEHOLDER = '评论已删除'

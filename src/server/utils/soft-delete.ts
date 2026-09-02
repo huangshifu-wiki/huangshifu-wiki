@@ -12,6 +12,7 @@ export const SOFT_DELETE_TABS = [
   'sections',
   'announcements',
   'image-maps',
+  'ticket-listings',
 ] as const
 
 export type SoftDeleteTab = (typeof SOFT_DELETE_TABS)[number]

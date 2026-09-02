@@ -60,6 +60,7 @@ describe('AdminLayout 导航分组', () => {
     expect(screen.getByRole('button', { name: /系统工具/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /设置/ })).not.toBeInTheDocument()
 
+    expect(screen.getByRole('link', { name: /盘票管理/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /审核队列/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /向量管理/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /变体管理/ })).toBeInTheDocument()

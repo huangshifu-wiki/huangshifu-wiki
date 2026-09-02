@@ -31,6 +31,11 @@ enum ContentStatus {
   rejected
 }
 
+enum TicketListingType {
+  offer
+  request
+}
+
 enum ModerationTargetType {
   wiki
   post
@@ -45,6 +50,7 @@ enum ModerationTargetType {
   wikiCategory
   config
   user
+  ticketListing
 }
 
 enum ModerationAction {
@@ -212,6 +218,7 @@ model User {
   mediaAssets   MediaAsset[]
   editLocks     EditLock[]
   emailVerificationTokens EmailVerificationToken[]
+  ticketListings TicketListing[] @relation("UserTicketListings")
 
   @@index([status, createdAt])
   @@index([wechatUnionId])
@@ -795,6 +802,7 @@ model Event {
   createdBy    User     @relation("EventCreator", fields: [createdByUid], references: [uid], onDelete: Cascade)
   updatedBy    User?    @relation("EventUpdater", fields: [updatedByUid], references: [uid], onDelete: SetNull)
   posters      EventPoster[]
+  ticketListings TicketListing[]
 
   @@index([sortStart])
   @@index([createdAt])
@@ -819,6 +827,34 @@ model EventPoster {
 
   @@index([eventId, sortOrder])
   @@index([assetId])
+}
+model TicketListing {
+  id             String           @id @default(cuid())
+  slug           String           @unique
+  type           TicketListingType
+  eventId        String?
+  customEventName String?
+  quantity       Int
+  ticketTier     String
+  seat           String           @default("")
+  description    String           @default("")
+  contact        String
+  authorUid      String
+  status         ContentStatus    @default(draft)
+  reviewNote     String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  deletedAt      DateTime?
+  deletedBy      String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  event          Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  author         User             @relation("UserTicketListings", fields: [authorUid], references: [uid], onDelete: Cascade)
+
+  @@index([status, updatedAt])
+  @@index([authorUid, updatedAt])
+  @@index([eventId, status, createdAt])
+  @@index([deletedAt])
 }
 
 model ImageEmbedding {

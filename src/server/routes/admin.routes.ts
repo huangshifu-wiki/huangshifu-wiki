@@ -26,6 +26,8 @@ import {
   toGalleryListResponse,
   toEventResponse,
   toEventListResponse,
+  toTicketListingResponse,
+  toTicketListingListResponse,
   toUserResponse,
   toEditLockResponse,
   toMusicResponse,
@@ -64,6 +66,7 @@ import {
   resolveDeleteReason,
   normalizeDeleteReason,
   enhancedCache,
+  invalidateTicketListingCaches,
   findMusicDocIdsByArtistPartial,
   CACHE_KEYS,
   clearWikiRelationCache,
@@ -110,6 +113,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const router = createRouter()
+class ReviewActionConflictError extends Error {
+  readonly statusCode = 409
+
+  constructor() {
+    super('该盘票已被其他管理员处理或已删除')
+  }
+}
 const BACKUP_RESTORE_RESPONSE_TIMEOUT_MS = 15 * 60 * 1000
 
 const adminEventInclude = {
@@ -123,6 +133,34 @@ const adminEventInclude = {
     orderBy: { sortOrder: 'asc' as const },
   },
 }
+
+const adminTicketListingInclude = {
+  event: {
+    select: { id: true, slug: true, title: true, location: true, deletedAt: true },
+  },
+  author: { select: { publicId: true, displayName: true } },
+} as const
+const adminTicketListingListSelect = {
+  id: true,
+  slug: true,
+  type: true,
+  eventId: true,
+  customEventName: true,
+  quantity: true,
+  ticketTier: true,
+  seat: true,
+  authorUid: true,
+  status: true,
+  reviewNote: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  deletedAt: true,
+  deletedBy: true,
+  createdAt: true,
+  updatedAt: true,
+  event: adminTicketListingInclude.event,
+  author: adminTicketListingInclude.author,
+} as const
 
 function canManageTargetUserRole(
   operatorRole: AuthenticatedRequest['authUser']['role'] | undefined,
@@ -250,7 +288,7 @@ function invalidateWikiContentCaches() {
 }
 
 async function getDeleteReasonsByTargetId(
-  targetType: 'wiki' | 'post' | 'gallery' | 'comment',
+  targetType: 'wiki' | 'post' | 'gallery' | 'comment' | 'ticketListing',
   targetIds: string[]
 ) {
   const uniqueTargetIds = [...new Set(targetIds.filter(Boolean))]
@@ -304,6 +342,7 @@ const MODERATION_TARGET_TYPES: Record<string, ModerationTargetType> = {
   'wiki-categories': 'wikiCategory',
   'image-maps': 'imageMap',
   users: 'user',
+  'ticket-listings': 'ticketListing',
 }
 
 function getModerationTargetType(tab: string): ModerationTargetType {
@@ -527,6 +566,10 @@ async function permanentlyDeleteEventById(id: string, operatorUid: string) {
   ]
 
   await prisma.$transaction(async (tx) => {
+    await tx.ticketListing.updateMany({
+      where: { eventId: id },
+      data: { eventId: null, customEventName: event.title },
+    })
     await tx.event.delete({ where: { id } })
     await tx.moderationLog.create({
       data: {
@@ -542,6 +585,28 @@ async function permanentlyDeleteEventById(id: string, operatorUid: string) {
   await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
   await Promise.all(imageUrlsWithoutAsset.map((url) => cleanupUntrackedUploadImageByUrl(url)))
 
+  return true
+}
+
+async function permanentlyDeleteTicketListingById(id: string, operatorUid: string) {
+  const listing = await prisma.ticketListing.findUnique({
+    where: { id },
+    select: { id: true },
+  })
+  if (!listing) return false
+
+  await prisma.$transaction(async (tx) => {
+    await tx.ticketListing.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'ticketListing',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
   return true
 }
 
@@ -568,6 +633,14 @@ function invalidateSoftDeleteCaches(
 
   if (tab === 'galleries') {
     enhancedCache.invalidateByPrefix('gallery_list_public:')
+    return
+  }
+  if (tab === 'events') {
+    invalidateTicketListingCaches()
+    return
+  }
+  if (tab === 'ticket-listings') {
+    invalidateTicketListingCaches()
     return
   }
 
@@ -602,7 +675,7 @@ async function notifyContentRestored(options: {
   recipientUid: string | null | undefined
   operatorUid: string
   operatorName?: string | null
-  targetType: 'wiki' | 'post'
+  targetType: 'wiki' | 'post' | 'ticketListing'
   targetId: string
   title: string
   status: string
@@ -634,7 +707,7 @@ async function notifyContentDeleted(options: {
   recipientUid: string | null | undefined
   operatorUid: string
   operatorName?: string | null
-  targetType: 'wiki' | 'post' | 'gallery'
+  targetType: 'wiki' | 'post' | 'gallery' | 'ticketListing'
   targetId: string
   title: string
   note: string
@@ -771,7 +844,7 @@ const uploadBackup = multer({
 })
 
 async function handleReviewAction(
-  targetType: 'wiki' | 'post' | 'gallery',
+  targetType: 'wiki' | 'post' | 'gallery' | 'ticketListing',
   targetId: string,
   action: 'approve' | 'reject',
   reqAuthUser: { uid: string; role: string; displayName?: string | null },
@@ -892,6 +965,51 @@ async function handleReviewAction(
     }
   }
 
+  if (targetType === 'ticketListing') {
+    const updateResult = await prisma.ticketListing.updateMany({
+      where: { id: targetId, status: 'pending', deletedAt: null },
+      data: {
+        status: action === 'approve' ? 'published' : 'rejected',
+        reviewNote,
+        reviewedBy: reqAuthUser.uid,
+        reviewedAt,
+      },
+    })
+    if (!updateResult.count) throw new ReviewActionConflictError()
+    const listing = await prisma.ticketListing.findUnique({
+      where: { id: targetId },
+      include: adminTicketListingInclude,
+    })
+    if (!listing) throw new ReviewActionConflictError()
+
+    await prisma.moderationLog.create({
+      data: {
+        targetType: 'ticketListing',
+        targetId,
+        action,
+        operatorUid: reqAuthUser.uid,
+        note: reviewNote,
+      },
+    })
+
+    if (listing.authorUid !== reqAuthUser.uid) {
+      await createNotification(listing.authorUid, 'review_result', {
+        approved: action === 'approve',
+        targetType: 'ticketListing',
+        targetId,
+        targetSlug: listing.slug,
+        title: listing.event?.title || listing.customEventName || '盘票信息',
+        note: reviewNote,
+      })
+    }
+
+    invalidateTicketListingCaches()
+    return {
+      item: toTicketListingResponse(listing, { includePrivate: true }),
+      targetType,
+    }
+  }
+
   const nextStatus = action === 'approve' ? 'published' : 'rejected'
   const gallery = await prisma.gallery.update({
     where: { id: targetId },
@@ -933,12 +1051,13 @@ async function handleReviewAction(
       note: reviewNote,
     })
   }
-
   return { item: await toGalleryResponse(gallery), targetType }
 }
 
-function isReviewTargetType(value: unknown): value is 'wiki' | 'post' | 'gallery' {
-  return value === 'wiki' || value === 'post' || value === 'gallery'
+function isReviewTargetType(
+  value: unknown
+): value is 'wiki' | 'post' | 'gallery' | 'ticketListing' {
+  return value === 'wiki' || value === 'post' || value === 'gallery' || value === 'ticketListing'
 }
 
 /**
@@ -956,12 +1075,18 @@ router.get(
       const type = normalizeModerationTargetType(req.query.type)
       const status = parseContentStatus(req.query.status) || 'pending'
 
-      if (type && type !== 'wiki' && type !== 'post' && type !== 'gallery') {
-        res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' })
+      if (
+        type &&
+        type !== 'wiki' &&
+        type !== 'post' &&
+        type !== 'gallery' &&
+        type !== 'ticketListing'
+      ) {
+        res.status(400).json({ error: 'type 必须为 wiki、posts、galleries 或 tickets' })
         return
       }
 
-      const [wiki, posts, galleries] = await Promise.all([
+      const [wiki, posts, galleries, tickets] = await Promise.all([
         type && type !== 'wiki'
           ? Promise.resolve(0)
           : prisma.wikiPage.count({ where: { status, deletedAt: null } }),
@@ -971,9 +1096,16 @@ router.get(
         type && type !== 'gallery'
           ? Promise.resolve(0)
           : prisma.gallery.count({ where: { status, deletedAt: null } }),
+        type && type !== 'ticketListing'
+          ? Promise.resolve(0)
+          : prisma.ticketListing.count({ where: { status, deletedAt: null } }),
       ])
 
-      res.json({ status, counts: { wiki, posts, galleries }, total: wiki + posts + galleries })
+      res.json({
+        status,
+        counts: { wiki, posts, galleries, tickets },
+        total: wiki + posts + galleries + tickets,
+      })
     } catch (error) {
       logger.error({ err: error }, 'Fetch review queue count error')
       res.status(500).json({ error: '获取审核队列数量失败' })
@@ -992,43 +1124,58 @@ router.get(
       if (req.query.type === 'all') {
         const { limit, page, offset: skip } = parsePagination(req.query)
         const take = skip + limit
-        const [wikiItems, postItems, galleryItems, wikiTotal, postTotal, galleryTotal] =
-          await Promise.all([
-            prisma.wikiPage.findMany({
-              where: { status, deletedAt: null },
-              include: {
-                lastEditor: { select: { displayName: true } },
-                location: true,
+        const [
+          wikiItems,
+          postItems,
+          galleryItems,
+          ticketItems,
+          wikiTotal,
+          postTotal,
+          galleryTotal,
+          ticketTotal,
+        ] = await Promise.all([
+          prisma.wikiPage.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              lastEditor: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.post.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              author: { select: { displayName: true } },
+              sectionRef: { select: { name: true } },
+              location: true,
+            },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.gallery.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              images: {
+                include: { asset: true },
+                orderBy: { sortOrder: 'asc' },
               },
-              orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-              take,
-            }),
-            prisma.post.findMany({
-              where: { status, deletedAt: null },
-              include: {
-                author: { select: { displayName: true } },
-                sectionRef: { select: { name: true } },
-                location: true,
-              },
-              orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-              take,
-            }),
-            prisma.gallery.findMany({
-              where: { status, deletedAt: null },
-              include: {
-                images: {
-                  include: { asset: true },
-                  orderBy: { sortOrder: 'asc' },
-                },
-                location: true,
-              },
-              orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-              take,
-            }),
-            prisma.wikiPage.count({ where: { status, deletedAt: null } }),
-            prisma.post.count({ where: { status, deletedAt: null } }),
-            prisma.gallery.count({ where: { status, deletedAt: null } }),
-          ])
+              location: true,
+            },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.ticketListing.findMany({
+            where: { status, deletedAt: null },
+            select: adminTicketListingListSelect,
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.wikiPage.count({ where: { status, deletedAt: null } }),
+          prisma.post.count({ where: { status, deletedAt: null } }),
+          prisma.gallery.count({ where: { status, deletedAt: null } }),
+          prisma.ticketListing.count({ where: { status, deletedAt: null } }),
+        ])
         const mergedItems = [
           ...wikiItems.map((item) => ({
             data: {
@@ -1057,6 +1204,14 @@ router.get(
             },
             sortKey: item.id,
           })),
+          ...ticketItems.map((item) => ({
+            data: {
+              ...toTicketListingListResponse(item, { includePrivate: true }),
+              reviewType: 'ticket' as const,
+              reviewId: item.id,
+            },
+            sortKey: item.id,
+          })),
         ].sort((left, right) => {
           const updatedAtDifference =
             new Date(String(right.data.updatedAt || 0)).getTime() -
@@ -1068,7 +1223,7 @@ router.get(
             `${left.data.reviewType}:${left.data.reviewId}`
           )
         })
-        const total = wikiTotal + postTotal + galleryTotal
+        const total = wikiTotal + postTotal + galleryTotal + ticketTotal
         const items = mergedItems.slice(skip, skip + limit).map(({ data }) => data)
         res.json({
           type: 'all',
@@ -1082,14 +1237,15 @@ router.get(
       const type = normalizeModerationTargetType(req.query.type)
 
       if (!type) {
-        res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' })
+        res.status(400).json({ error: 'type 必须为 wiki、posts、galleries 或 tickets' })
         return
       }
 
-      if (type !== 'wiki' && type !== 'post' && type !== 'gallery') {
-        res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' })
+      if (type !== 'wiki' && type !== 'post' && type !== 'gallery' && type !== 'ticketListing') {
+        res.status(400).json({ error: 'type 必须为 wiki、posts、galleries 或 tickets' })
         return
       }
+
       const { limit, page, offset: skip } = parsePagination(req.query)
 
       if (type === 'wiki') {
@@ -1112,6 +1268,29 @@ router.get(
         }))
         res.json({
           type,
+          status,
+          items: responseItems,
+          ...createPaginationMeta(total, page, limit, responseItems.length),
+        })
+        return
+      }
+
+      if (type === 'ticketListing') {
+        const [items, total] = await Promise.all([
+          prisma.ticketListing.findMany({
+            where: { status, deletedAt: null },
+            select: adminTicketListingListSelect,
+            orderBy: { updatedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+          prisma.ticketListing.count({ where: { status, deletedAt: null } }),
+        ])
+        const responseItems = items.map((item) =>
+          toTicketListingListResponse(item, { includePrivate: true })
+        )
+        res.json({
+          type: 'tickets',
           status,
           items: responseItems,
           ...createPaginationMeta(total, page, limit, responseItems.length),
@@ -1198,6 +1377,10 @@ router.put(
       const result = await handleReviewAction(targetType, targetId, 'approve', reqAuthUser, '')
       res.json(result)
     } catch (error) {
+      if (error instanceof ReviewActionConflictError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
       logger.error({ err: error }, 'Approve review item error')
       res.status(500).json({ error: '审核通过失败' })
     }
@@ -1225,7 +1408,9 @@ router.put(
       const reviewNoteLimit =
         targetType === 'gallery'
           ? CONTENT_LIMITS.gallery.reviewNote
-          : CONTENT_LIMITS.post.reviewNote
+          : targetType === 'ticketListing'
+            ? CONTENT_LIMITS.ticketListing.reviewNote
+            : CONTENT_LIMITS.post.reviewNote
       if (!ensureTextLimit(res, note, '审核备注', reviewNoteLimit)) {
         return
       }
@@ -1233,6 +1418,10 @@ router.put(
       const result = await handleReviewAction(targetType, targetId, 'reject', reqAuthUser, note)
       res.json(result)
     } catch (error) {
+      if (error instanceof ReviewActionConflictError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
       logger.error({ err: error }, 'Reject review item error')
       res.status(500).json({ error: '驳回失败' })
     }
@@ -1271,7 +1460,9 @@ router.post(
         const reviewNoteLimit =
           targetType === 'gallery'
             ? CONTENT_LIMITS.gallery.reviewNote
-            : CONTENT_LIMITS.post.reviewNote
+            : targetType === 'ticketListing'
+              ? CONTENT_LIMITS.ticketListing.reviewNote
+              : CONTENT_LIMITS.post.reviewNote
         if (!ensureTextLimit(res, rejectNote, '审核备注', reviewNoteLimit)) {
           return
         }
@@ -1280,6 +1471,10 @@ router.post(
       const result = await handleReviewAction(targetType, id, action, req.authUser!, rejectNote)
       res.json(result)
     } catch (error) {
+      if (error instanceof ReviewActionConflictError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
       logger.error({ err: error }, 'Review action error')
       res.status(500).json({ error: '审核操作失败' })
     }
@@ -2876,6 +3071,51 @@ router.get(
         return
       }
 
+      if (tab === 'ticket-listings') {
+        const [data, total] = await Promise.all([
+          prisma.ticketListing.findMany({
+            where: activeWhere,
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take: limit,
+            skip,
+            select: {
+              id: true,
+              slug: true,
+              type: true,
+              eventId: true,
+              customEventName: true,
+              quantity: true,
+              ticketTier: true,
+              seat: true,
+              authorUid: true,
+              status: true,
+              reviewNote: true,
+              reviewedBy: true,
+              reviewedAt: true,
+              deletedAt: true,
+              deletedBy: true,
+              createdAt: true,
+              updatedAt: true,
+              event: adminTicketListingInclude.event,
+              author: adminTicketListingInclude.author,
+            },
+          }),
+          prisma.ticketListing.count({ where: activeWhere }),
+        ])
+        const deleteReasonsById = await getDeleteReasonsByTargetId(
+          'ticketListing',
+          data.filter((listing) => listing.deletedAt).map((listing) => listing.id)
+        )
+        res.json({
+          data: data.map((listing) => ({
+            ...toTicketListingListResponse(listing, { includePrivate: true }),
+            deletionReason: deleteReasonsById.get(listing.id) ?? null,
+          })),
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+
       if (tab === 'events') {
         const [data, total] = await Promise.all([
           prisma.event.findMany({
@@ -3222,6 +3462,25 @@ router.get(
         return
       }
 
+      if (tab === 'ticket-listings') {
+        const item = await prisma.ticketListing.findUnique({
+          where: { id },
+          include: adminTicketListingInclude,
+        })
+        if (!item) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        const deleteReasons = await getDeleteReasonsByTargetId('ticketListing', [id])
+        res.json({
+          item: {
+            ...toTicketListingResponse(item, { includePrivate: true }),
+            deletionReason: deleteReasons.get(id) ?? null,
+          },
+        })
+        return
+      }
+
       if (tab === 'events') {
         const item = await prisma.event.findUnique({
           where: { id },
@@ -3436,6 +3695,56 @@ router.delete(
             targetType: 'gallery',
             targetId: id,
             title: gallery.title,
+            note: reason,
+          })
+        }
+
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+
+      if (tab === 'ticket-listings') {
+        const listing = await prisma.ticketListing.findUnique({
+          where: { id },
+          include: { event: { select: { title: true } } },
+        })
+        if (!listing || listing.deletedAt) {
+          res.status(404).json({ error: '盘票信息不存在' })
+          return
+        }
+
+        const isSelfDelete = listing.authorUid === req.authUser!.uid
+        const reason = resolveDeleteReason(rawReason, isSelfDelete)
+        if (!isSelfDelete && !reason) {
+          res.status(400).json({ error: '删除理由不能为空' })
+          return
+        }
+        if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.ticketListing.reviewNote)) {
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.ticketListing.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'ticketListing',
+              targetId: id,
+              action: 'delete',
+              operatorUid: req.authUser!.uid,
+              note: reason,
+            },
+          })
+        })
+
+        if (!isSelfDelete) {
+          await notifyContentDeleted({
+            recipientUid: listing.authorUid,
+            operatorUid: req.authUser!.uid,
+            operatorName: req.authUser!.displayName,
+            targetType: 'ticketListing',
+            targetId: id,
+            title: listing.event?.title || listing.customEventName || '盘票信息',
             note: reason,
           })
         }
@@ -3663,6 +3972,48 @@ router.post(
         res.json({ success: true })
         return
       }
+      if (tab === 'ticket-listings') {
+        const listing = await prisma.ticketListing.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            slug: true,
+            status: true,
+            authorUid: true,
+            event: { select: { title: true } },
+            customEventName: true,
+            deletedAt: true,
+          },
+        })
+        if (!listing) {
+          res.status(404).json({ error: '盘票信息不存在' })
+          return
+        }
+        if (!listing.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.ticketListing.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'ticket-listings', id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        await notifyContentRestored({
+          recipientUid: listing.authorUid,
+          operatorUid: req.authUser!.uid,
+          operatorName: req.authUser!.displayName,
+          targetType: 'ticketListing',
+          targetId: listing.id,
+          title: listing.event?.title || listing.customEventName || '盘票信息',
+          status: listing.status,
+          linkable: true,
+          wasDeleted: true,
+        })
+        res.json({ success: true })
+        return
+      }
+
       if (tab === 'events') {
         const event = await prisma.event.findUnique({
           where: { id },
@@ -3894,6 +4245,17 @@ router.delete(
         res.json({ success: true })
         return
       }
+      if (tab === 'ticket-listings') {
+        const deleted = await permanentlyDeleteTicketListingById(id, req.authUser!.uid)
+        if (!deleted) {
+          res.status(404).json({ error: '盘票信息不存在' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+
       if (tab === 'events') {
         const deleted = await permanentlyDeleteEventById(id, req.authUser!.uid)
         if (!deleted) {

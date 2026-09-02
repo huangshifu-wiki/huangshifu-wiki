@@ -8,12 +8,13 @@ import type { AuthenticatedRequest } from '../types'
 import { prisma } from '../prisma'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import {
+  allocateNumericSlug,
   parsePagination,
   softDeleteData,
   restoreDeleteData,
   toEventResponse,
   toEventListResponse,
-  allocateNumericSlug,
+  invalidateTicketListingCaches,
   isNumericSlug,
 } from '../utils'
 import { syncGalleryImageToImageMapWithVariant } from '../services/galleryImageSyncService'
@@ -424,6 +425,7 @@ router.put(
       console.error('Sync event images to ImageMap error:', error)
     })
 
+    invalidateTicketListingCaches()
     res.json({ event: await toEventResponse(event) })
   })
 )
@@ -457,6 +459,7 @@ router.delete(
       })
     })
 
+    invalidateTicketListingCaches()
     res.json({ success: true })
   })
 )
@@ -499,6 +502,7 @@ router.post(
       return restored
     })
 
+    invalidateTicketListingCaches()
     res.json({ event: await toEventResponse(event) })
   })
 )
@@ -517,6 +521,10 @@ router.delete(
     }
 
     await prisma.$transaction(async (tx) => {
+      await tx.ticketListing.updateMany({
+        where: { eventId: event.id },
+        data: { eventId: null, customEventName: event.title },
+      })
       await tx.event.delete({ where: { id: event.id } })
       await tx.moderationLog.create({
         data: {
@@ -535,6 +543,7 @@ router.delete(
       console.error('Cleanup permanently deleted event images error:', error)
     })
 
+    invalidateTicketListingCaches()
     res.json({ success: true })
   })
 )

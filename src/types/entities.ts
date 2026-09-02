@@ -91,6 +91,47 @@ export interface AlbumItem {
   tracks?: unknown[]
 }
 
+export type TicketListingType = 'offer' | 'request'
+
+export interface TicketListingEventOption {
+  id: string
+  slug: string
+  title: string
+  location: string
+  sortStart: string | null
+}
+
+export interface TicketListingSummary {
+  id: string
+  slug: string
+  type: TicketListingType
+  eventId: string | null
+  customEventName: string | null
+  eventName: string
+  eventSlug: string | null
+  eventLocation: string | null
+  quantity: number
+  ticketTier: string
+  seat: string
+  authorUid: string
+  authorPublicId: string | null
+  authorName: string
+  status?: ContentStatus
+  reviewNote?: string | null
+  reviewedAt?: string | null
+  isDeleted?: boolean
+  deletedAt?: string | null
+  deletedBy?: string | null
+  deletionReason?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TicketListingItem extends TicketListingSummary {
+  description: string
+  contact: string
+}
+
 export interface PostItem {
   id: string
   slug?: string

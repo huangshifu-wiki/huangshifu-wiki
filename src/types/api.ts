@@ -6,6 +6,9 @@ import type {
   LyricSearchItem,
   PostItem,
   SongItem,
+  TicketListingEventOption,
+  TicketListingItem,
+  TicketListingSummary,
   WikiItem,
 } from './entities'
 import type { Platform } from './common'
@@ -166,6 +169,21 @@ export interface EventDetailResponse {
 }
 
 export interface EventCreateResponse extends EventDetailResponse {}
+export interface TicketListingListResponse extends PaginationMeta {
+  listings: TicketListingSummary[]
+}
+
+export interface TicketListingDetailResponse {
+  listing: TicketListingItem
+}
+
+export interface TicketListingCreateResponse extends TicketListingDetailResponse {}
+
+export interface TicketListingMineResponse extends TicketListingListResponse {}
+
+export interface TicketListingEventsResponse {
+  events: TicketListingEventOption[]
+}
 
 export interface AdminEventDetailResponse {
   item: EventItem
@@ -639,9 +657,9 @@ export interface AdminBackupRestoreResponse {
   mediaReportError?: string
 }
 
-export type AdminReviewQueueType = 'wiki' | 'posts' | 'galleries'
+export type AdminReviewQueueType = 'wiki' | 'posts' | 'galleries' | 'tickets'
 
-export type AdminReviewItemType = 'wiki' | 'post' | 'gallery'
+export type AdminReviewItemType = 'wiki' | 'post' | 'gallery' | 'ticket'
 
 export type AdminReviewQueueItem = {
   id: string
@@ -652,6 +670,16 @@ export type AdminReviewQueueItem = {
   sectionName?: string
   content?: string
   description?: string
+  type?: 'offer' | 'request'
+  eventId?: string | null
+  customEventName?: string | null
+  eventName?: string
+  eventSlug?: string | null
+  eventLocation?: string | null
+  quantity?: number
+  ticketTier?: string
+  seat?: string
+  contact?: string
   copyright?: string | null
   tags?: string[]
   locationCode?: string | null
@@ -702,6 +730,7 @@ export interface AdminReviewQueueCountResponse {
     wiki: number
     posts: number
     galleries: number
+    tickets: number
   }
   total: number
 }

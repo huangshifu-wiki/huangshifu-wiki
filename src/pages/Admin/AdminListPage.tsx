@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Ticket,
   Trash2,
   XCircle,
 } from '@/src/components/icons'
@@ -46,10 +47,10 @@ type ListType =
   | 'wiki-categories'
   | 'posts'
   | 'galleries'
+  | 'ticket-listings'
   | 'events'
   | 'sections'
   | 'announcements'
-
 type ColumnKey =
   | 'details'
   | 'status'
@@ -134,6 +135,21 @@ const configMap: Record<ListType, ListConfig> = {
     ],
     hasCreate: false,
   },
+  'ticket-listings': {
+    title: '盘票管理',
+    icon: Ticket,
+    apiPath: 'ticket-listings',
+    columns: [
+      { key: 'details', label: '活动', className: 'min-w-[280px]' },
+      { key: 'status', label: '状态', className: 'min-w-[110px]' },
+      { key: 'owner', label: '作者', className: 'min-w-[140px]' },
+      { key: 'relations', label: '票务信息', className: 'min-w-[180px]' },
+      { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
+      { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
+    ],
+    hasCreate: false,
+  },
+
   events: {
     title: '活动管理',
     icon: Calendar,
@@ -222,6 +238,7 @@ const getItemHref = (type: ListType, item: AdminDataItem) => {
   if (type === 'posts' && item.slug) return `/forum/${item.slug}`
   if (type === 'galleries' && item.slug) return `/gallery/${item.slug}`
   if (type === 'events' && item.slug) return `/events/${item.slug}`
+  if (type === 'ticket-listings' && item.slug) return `/tickets/${item.slug}`
   return null
 }
 
@@ -268,8 +285,13 @@ const renderTagBadges = (tags: string[]) =>
 
 const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementType) => {
   const href = getItemHref(type, item)
-  const title = toText(item.title || item.displayName || item.name || item.slug || item.id)
-  const subtitle = item.content?.slice(0, 80) || item.description?.slice(0, 80) || ''
+  const title = toText(
+    item.title || item.eventName || item.displayName || item.name || item.slug || item.id
+  )
+  const subtitle =
+    type === 'ticket-listings'
+      ? `${item.type === 'offer' ? '出票' : '收票'} · ${item.quantity || 0}张 · ${item.ticketTier || '未填写票档'}`
+      : item.content?.slice(0, 80) || item.description?.slice(0, 80) || ''
 
   return (
     <div className="flex items-center gap-3">
@@ -314,6 +336,7 @@ const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementT
           {type === 'sections' && `ID: ${toText(item.id)}`}
           {type === 'wiki-categories' && `ID: ${toText(item.id)}`}
           {type === 'announcements' && `ID: ${toText(item.id)}`}
+          {type === 'ticket-listings' && `slug: ${toText(item.slug)}`}
         </p>
       </div>
     </div>
@@ -403,6 +426,15 @@ const renderMetrics = (type: ListType, item: AdminDataItem) => {
 }
 
 const renderRelations = (type: ListType, item: AdminDataItem) => {
+  if (type === 'ticket-listings') {
+    return (
+      <div className="space-y-1 text-xs text-text-muted">
+        <p>活动：{toText(item.eventName || item.customEventName, '未命名活动')}</p>
+        <p>类型：{item.type === 'offer' ? '出票' : '收票'}</p>
+        <p>座位：{toText(item.seat, '未填写')}</p>
+      </div>
+    )
+  }
   if (type === 'posts') {
     return (
       <div className="space-y-1 text-xs text-text-muted">
@@ -582,7 +614,8 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   }
 
   const handleDelete = async (id: string) => {
-    const requiresReason = type === 'wiki' || type === 'posts' || type === 'galleries'
+    const requiresReason =
+      type === 'wiki' || type === 'posts' || type === 'galleries' || type === 'ticket-listings'
     const reasonInput = requiresReason
       ? await dialog.prompt({
           title: '删除理由',

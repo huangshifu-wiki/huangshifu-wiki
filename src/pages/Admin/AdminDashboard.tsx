@@ -11,6 +11,7 @@ import {
   Megaphone,
   Lock,
   RefreshCw,
+  Ticket,
 } from '@/src/components/icons'
 import { apiGet } from '../../lib/apiClient'
 import { useAuth } from '../../context/AuthContext'
@@ -27,6 +28,7 @@ const cards = [
     path: '/admin/galleries',
     icon: ImageIcon,
   },
+  { key: 'ticket-listings', label: '盘票', path: '/admin/ticket-listings', icon: Ticket },
   { key: 'users', label: '用户', path: '/admin/users', icon: Users },
   { key: 'sections', label: '版块', path: '/admin/sections', icon: Layers },
   {

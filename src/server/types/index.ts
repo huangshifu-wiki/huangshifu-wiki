@@ -9,11 +9,26 @@ import type { LyricType } from '../../lib/lrcParser'
 
 type UserStatus = 'active' | 'banned'
 type ContentStatus = 'draft' | 'pending' | 'published' | 'rejected'
+type TicketListingType = 'offer' | 'request'
 type WikiBranchStatus = 'draft' | 'pending_review' | 'merged' | 'rejected' | 'conflict'
 type WikiPullRequestStatus = 'open' | 'merged' | 'rejected'
 type FavoriteTargetType = 'wiki' | 'post' | 'music' | 'gallery'
-type ModerationTargetType = 'wiki' | 'post' | 'gallery' | 'comment'
 type NotificationType = 'reply' | 'like' | 'review_result' | 'mention'
+type ModerationTargetType =
+  | 'wiki'
+  | 'post'
+  | 'gallery'
+  | 'comment'
+  | 'music'
+  | 'album'
+  | 'event'
+  | 'announcement'
+  | 'section'
+  | 'imageMap'
+  | 'wikiCategory'
+  | 'config'
+  | 'user'
+  | 'ticketListing'
 type BrowsingTargetType = 'wiki' | 'post' | 'music'
 type PostSortType = 'latest' | 'hot' | 'recommended'
 
@@ -310,6 +325,7 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
 export type {
   UserStatus,
   ContentStatus,
+  TicketListingType,
   WikiBranchStatus,
   WikiPullRequestStatus,
   WikiRelationType,

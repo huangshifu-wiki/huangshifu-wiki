@@ -8,6 +8,7 @@ import {
   MessageCircle,
   MessageSquare,
   Shield,
+  Ticket,
   Settings,
 } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
@@ -125,6 +126,15 @@ export const MobileMenu = ({
                   >
                     <MessageSquare size={16} />
                     <span>我的评论</span>
+                  </NavLink>
+                  <NavLink
+                    to="/settings/content?tab=tickets"
+                    onClick={onClose}
+                    data-pressable
+                    className={accountMenuStyles.menuAction}
+                  >
+                    <Ticket size={16} />
+                    <span>我的盘票</span>
                   </NavLink>
                   <NavLink
                     to={`/users/${user.publicId}/history`}

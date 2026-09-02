@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, RotateCw } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { apiPut } from '../../lib/apiClient'
+import { apiGet, apiPut } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
@@ -69,6 +69,31 @@ const AdminReviewWorkbench = () => {
 
   const currentIndex = getCurrentItemIndex(items, currentKey)
   const currentItem = currentIndex >= 0 ? items[currentIndex] : null
+  const [ticketPreviewItem, setTicketPreviewItem] = useState<AdminReviewQueueMergedItem | null>(
+    null
+  )
+
+  useEffect(() => {
+    if (currentItem?.reviewType !== 'ticket') {
+      setTicketPreviewItem(null)
+      return
+    }
+    const controller = new AbortController()
+    setTicketPreviewItem(null)
+    void apiGet<{ item: AdminReviewQueueMergedItem }>(
+      `/api/admin/ticket-listings/${currentItem.reviewId}`,
+      undefined,
+      undefined,
+      controller.signal
+    )
+      .then(({ item }) => {
+        if (!controller.signal.aborted) setTicketPreviewItem({ ...currentItem, ...item })
+      })
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [currentItem?.reviewId, currentItem?.reviewType])
+
+  const previewItem = ticketPreviewItem || currentItem
   const isFirst = currentIndex <= 0
   const isLast = currentIndex < 0 || currentIndex >= items.length - 1
 
@@ -143,7 +168,10 @@ const AdminReviewWorkbench = () => {
         confirmText: '驳回',
         variant: 'warning',
         multiline: true,
-        maxLength: CONTENT_LIMITS.post.reviewNote,
+        maxLength:
+          currentItem.reviewType === 'ticket'
+            ? CONTENT_LIMITS.ticketListing.reviewNote
+            : CONTENT_LIMITS.post.reviewNote,
       })
       if (input === null) return
 
@@ -152,8 +180,16 @@ const AdminReviewWorkbench = () => {
         show('驳回原因不能为空', { variant: 'error' })
         return
       }
-      if (note.length > CONTENT_LIMITS.post.reviewNote) {
-        show(`驳回原因不能超过${CONTENT_LIMITS.post.reviewNote}个字符`, { variant: 'error' })
+      if (
+        note.length >
+        (currentItem.reviewType === 'ticket'
+          ? CONTENT_LIMITS.ticketListing.reviewNote
+          : CONTENT_LIMITS.post.reviewNote)
+      ) {
+        show(
+          `驳回原因不能超过${currentItem.reviewType === 'ticket' ? CONTENT_LIMITS.ticketListing.reviewNote : CONTENT_LIMITS.post.reviewNote}个字符`,
+          { variant: 'error' }
+        )
         return
       }
     }
@@ -270,7 +306,7 @@ const AdminReviewWorkbench = () => {
       ) : loadError && !currentItem ? (
         <LoadErrorState error={loadError} onRetry={() => void loadQueue(currentKey)} />
       ) : currentItem ? (
-        <AdminReviewContentPreview item={currentItem} />
+        <AdminReviewContentPreview item={previewItem || currentItem} />
       ) : (
         <div className="bg-surface border border-border rounded py-20 px-6 text-center">
           <p className="text-lg font-semibold text-text-primary tracking-[0.08em]">

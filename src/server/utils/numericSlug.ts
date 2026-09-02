@@ -7,6 +7,7 @@ const CONTENT_SLUG_LOCK_KEYS = {
   Gallery: 901004,
   MusicTrack: 901005,
   Album: 901006,
+  TicketListing: 901007,
 } as const
 
 type NumericSlugTable = keyof typeof CONTENT_SLUG_LOCK_KEYS

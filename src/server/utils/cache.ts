@@ -158,6 +158,9 @@ export function invalidateMusicContentCaches() {
   enhancedCache.invalidateByPrefix('album_list:')
   enhancedCache.invalidateByPrefix('search:')
 }
+export function invalidateTicketListingCaches() {
+  enhancedCache.invalidateByPrefix('ticket_listing_list:')
+}
 
 export const CACHE_KEYS = {
   ANNOUNCEMENT_LATEST: 'announcement:latest',

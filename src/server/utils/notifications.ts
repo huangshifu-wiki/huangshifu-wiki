@@ -65,6 +65,13 @@ async function enrichNotificationPayload(payload: Record<string, unknown>) {
     })
     if (gallery) next.targetSlug = gallery.slug
   }
+  if (targetType === 'ticketListing' && targetId && !next.targetSlug) {
+    const listing = await prisma.ticketListing.findUnique({
+      where: { id: targetId },
+      select: { slug: true },
+    })
+    if (listing) next.targetSlug = listing.slug
+  }
 
   if (postId && !next.postSlug) {
     const post = await prisma.post.findUnique({ where: { id: postId }, select: { slug: true } })

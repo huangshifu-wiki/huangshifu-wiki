@@ -9,6 +9,7 @@ const ROUTE_SKELETON_VARIANTS: Array<{
   { basePath: '/music', variant: 'music' },
   { basePath: '/gallery', variant: 'gallery' },
   { basePath: '/events', variant: 'events' },
+  { basePath: '/tickets', variant: 'events' },
   { basePath: '/wiki', variant: 'wiki' },
   { basePath: '/forum', variant: 'forum' },
 ]

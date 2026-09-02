@@ -25,6 +25,7 @@ export {
 } from './post.schema'
 export { galleryDeleteSchema } from './gallery.schema'
 export { eventWriteSchema } from './event.schema'
+export { ticketListingWriteSchema } from './ticket-listing.schema'
 export {
   backupCreateSchema,
   backupNoteSchema,

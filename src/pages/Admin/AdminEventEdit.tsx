@@ -882,6 +882,7 @@ const AdminEventEdit = () => {
       }
       invalidateApiCacheByPrefix('/api/events')
       invalidateApiCacheByPrefix('/api/admin/events')
+      invalidateApiCacheByPrefix('/api/ticket-listings')
       show('活动已保存', { variant: 'success' })
       navigate('/admin/events', { replace: true })
     } catch (error) {

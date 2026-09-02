@@ -68,6 +68,16 @@ export const CONTENT_LIMITS = {
     externalLinks: 20,
     imageName: 255,
   },
+  ticketListing: {
+    customEventName: 200,
+    ticketTier: 100,
+    seat: 200,
+    quantity: 10000,
+    description: 500 * 1024,
+    contact: 100 * 1024,
+    reviewNote: 1000,
+  },
+
   announcement: {
     content: 5000,
     link: 2048,
