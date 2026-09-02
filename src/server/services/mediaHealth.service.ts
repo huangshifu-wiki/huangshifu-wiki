@@ -1,10 +1,12 @@
 import fs from 'fs/promises'
 import path from 'path'
+import { Prisma } from '@prisma/client'
 import type { PrismaClient } from '@prisma/client'
 import { buildUploadPublicUrl, resolveUploadPathByStorageKey } from '../uploadPath'
-import { isUploadSessionExpired, safeDeleteUploadFileByStorageKey } from '../utils/upload'
+import { isUploadSessionExpired } from '../utils/upload'
 import { CleanupTrigger, variantCleanup } from './variantCleanup.service'
 import { extractStorageKeyFromUploadUrl, normalizeStorageKey } from './mediaRestoreReport.service'
+import { getMediaRetiredAt } from './mediaConstants'
 
 export type MediaHealthScanMode = 'strict' | 'business'
 export type MediaHealthRecordType = 'mediaAsset' | 'imageMap'
@@ -58,6 +60,13 @@ export type MediaHealthScanResult = {
   }
   missingLocalFiles: MediaHealthMissingLocalFile[]
   unusedMediaRecords: MediaHealthUnusedRecord[]
+  unboundImageMaps: Array<{ id: string; localUrl: string }>
+  unboundMediaAssets: Array<{ id: string; storageKey: string | null; publicUrl: string | null }>
+  unreferencedClaims: string[]
+  sharedImageMaps: Array<{ id: string; claimCount: number }>
+  activeUploadSessions: Array<{ id: string; expiresAt: string }>
+  retiredMedia: Array<{ id: string; retiredAt: string }>
+  externalObjectsPendingManualCleanup: Array<{ id: string; url: string }>
 }
 
 export type MediaHealthCleanupTarget = {
@@ -76,11 +85,12 @@ export type MediaHealthCleanupResult = {
 
 type ReferenceMap = Map<string, MediaHealthReference[]>
 
-type ReferenceIndex = {
+export type MediaReferenceIndex = {
   storageKeys: ReferenceMap
   mediaAssetIds: ReferenceMap
   urls: ReferenceMap
 }
+type ReferenceIndex = MediaReferenceIndex
 
 type MediaAssetReferenceTarget = {
   id: string
@@ -210,9 +220,10 @@ async function collectBusinessReferences(prisma: PrismaClient) {
   const [users, galleryImages, events, eventPosters, songCovers, albumCovers] = await Promise.all([
     prisma.user.findMany({
       where: { photoURL: { not: null }, deletedAt: null },
-      select: { uid: true, photoURL: true },
+      select: { uid: true, photoURL: true, photoAssetId: true },
     }),
     prisma.galleryImage.findMany({
+      where: { gallery: { deletedAt: null } },
       select: { id: true, url: true, assetId: true },
     }),
     prisma.event.findMany({
@@ -224,9 +235,11 @@ async function collectBusinessReferences(prisma: PrismaClient) {
       select: { id: true, url: true, assetId: true },
     }),
     prisma.songCover.findMany({
+      where: { song: { deletedAt: null } },
       select: { id: true, storageKey: true, publicUrl: true, thumbnailUrl: true, assetId: true },
     }),
     prisma.albumCover.findMany({
+      where: { album: { deletedAt: null } },
       select: { id: true, storageKey: true, publicUrl: true, thumbnailUrl: true, assetId: true },
     }),
   ])
@@ -236,6 +249,11 @@ async function collectBusinessReferences(prisma: PrismaClient) {
       source: 'User',
       id: item.uid,
       field: 'photoURL',
+    })
+    addMediaAssetReference(references, item.photoAssetId, {
+      source: 'User',
+      id: item.uid,
+      field: 'photoAssetId',
     })
   }
   for (const item of galleryImages) {
@@ -470,7 +488,7 @@ async function collectCurrentTextReferences(prisma: PrismaClient, references: Re
   )
 }
 
-function collectReferences(prisma: PrismaClient, mode: MediaHealthScanMode) {
+export function collectReferences(prisma: PrismaClient, mode: MediaHealthScanMode) {
   return mode === 'business' ? collectBusinessReferences(prisma) : collectStrictReferences(prisma)
 }
 
@@ -582,15 +600,13 @@ export async function scanMediaHealth(
       where: { status: { not: 'deleted' } },
       select: {
         id: true,
+        imageMapId: true,
         storageKey: true,
         publicUrl: true,
         fileName: true,
-        session: {
-          select: {
-            status: true,
-            expiresAt: true,
-          },
-        },
+        status: true,
+        session: { select: { status: true, expiresAt: true } },
+        imageMap: { select: { localUrl: true, s3Url: true, externalUrl: true } },
       },
       orderBy: { createdAt: 'desc' },
     }),
@@ -602,6 +618,11 @@ export async function scanMediaHealth(
         externalUrl: true,
         s3Url: true,
         thumbnailUrl: true,
+        retiredAt: true,
+        mediaAssets: {
+          where: { status: { not: 'deleted' } },
+          select: { id: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     }),
@@ -609,35 +630,57 @@ export async function scanMediaHealth(
 
   const missingLocalFiles: MediaHealthMissingLocalFile[] = []
   const unusedMediaRecords: MediaHealthUnusedRecord[] = []
+  const unboundMediaAssets: MediaHealthScanResult['unboundMediaAssets'] = []
+  const unreferencedClaims: string[] = []
 
   for (const asset of mediaAssets) {
     const refs = refsForAsset(asset, references)
-    const storageKey = normalizeStorageKey(asset.storageKey) || asset.storageKey
-    const fileState = await existsByStorageKey(storageKey, options.uploadDir)
+    const localUrl = asset.imageMap?.localUrl || asset.publicUrl
+    const storageKey = normalizeStorageKey(localUrl) || normalizeStorageKey(asset.storageKey)
+    const hasLocalStorage = Boolean(extractStorageKeyFromUploadUrl(localUrl || ''))
+    const fileState =
+      storageKey && hasLocalStorage
+        ? await existsByStorageKey(storageKey, options.uploadDir)
+        : {
+            exists: Boolean(asset.imageMap?.s3Url || asset.imageMap?.externalUrl),
+            expectedPath: '',
+          }
     const blockedReasons = buildAssetBlockReasons(asset, refs)
     const canCleanup = blockedReasons.length === 0
 
-    if (!fileState.exists) {
+    if (!asset.imageMapId) {
+      unboundMediaAssets.push({
+        id: asset.id,
+        storageKey: asset.storageKey,
+        publicUrl: asset.publicUrl,
+      })
+    }
+    if (asset.session?.status === 'open') {
+      // The session itself is reported below; this keeps an unreferenced active claim visible.
+      unreferencedClaims.push(asset.id)
+    }
+    if (refs.length === 0 && asset.status !== 'deleted') unreferencedClaims.push(asset.id)
+
+    if (hasLocalStorage && !fileState.exists) {
       missingLocalFiles.push({
         recordType: 'mediaAsset',
         id: asset.id,
-        storageKey,
-        publicUrl: buildUploadPublicUrl(storageKey),
+        storageKey: storageKey || '',
+        publicUrl: localUrl || '',
         expectedPath: fileState.expectedPath,
-        label: asset.fileName || storageKey,
+        label: asset.fileName || storageKey || asset.id,
         references: refs,
         canCleanup,
         blockedReasons,
       })
     }
-
     if (refs.length === 0) {
       unusedMediaRecords.push({
         recordType: 'mediaAsset',
         id: asset.id,
-        storageKey,
-        publicUrl: asset.publicUrl,
-        label: asset.fileName || storageKey,
+        storageKey: storageKey || undefined,
+        publicUrl: asset.publicUrl || undefined,
+        label: asset.fileName || storageKey || asset.id,
         canCleanup,
         blockedReasons,
       })
@@ -650,34 +693,56 @@ export async function scanMediaHealth(
     const fileState = storageKey
       ? await existsByStorageKey(storageKey, options.uploadDir)
       : { exists: true, expectedPath: '' }
-    const canCleanup = refs.length === 0
+    const claimCount = imageMap.mediaAssets?.length || 0
+    const canCleanup = refs.length === 0 && claimCount === 0
 
-    if (storageKey && !fileState.exists) {
-      missingLocalFiles.push({
-        recordType: 'imageMap',
-        id: imageMap.id,
-        storageKey,
-        publicUrl: buildUploadPublicUrl(storageKey),
-        expectedPath: fileState.expectedPath,
-        label: imageMap.localUrl,
-        references: refs,
-        canCleanup,
-        blockedReasons: canCleanup ? [] : ['referenced'],
-      })
-    }
-
-    if (refs.length === 0) {
-      unusedMediaRecords.push({
-        recordType: 'imageMap',
-        id: imageMap.id,
-        storageKey: storageKey || undefined,
-        localUrl: imageMap.localUrl,
-        label: imageMap.localUrl,
-        canCleanup: true,
-        blockedReasons: [],
-      })
+    if (claimCount === 0) {
+      if (storageKey && !fileState.exists) {
+        missingLocalFiles.push({
+          recordType: 'imageMap',
+          id: imageMap.id,
+          storageKey,
+          publicUrl: imageMap.localUrl,
+          expectedPath: fileState.expectedPath,
+          label: imageMap.localUrl,
+          references: refs,
+          canCleanup,
+          blockedReasons: canCleanup ? [] : ['referenced'],
+        })
+      }
+      if (refs.length === 0) {
+        unusedMediaRecords.push({
+          recordType: 'imageMap',
+          id: imageMap.id,
+          storageKey: storageKey || undefined,
+          localUrl: imageMap.localUrl,
+          label: imageMap.localUrl,
+          canCleanup,
+          blockedReasons: canCleanup ? [] : ['referenced'],
+        })
+      }
     }
   }
+
+  const activeSessionRows = prisma.uploadSession?.findMany
+    ? await prisma.uploadSession.findMany({
+        where: { status: 'open' },
+        select: { id: true, expiresAt: true },
+      })
+    : []
+  const activeUploadSessions = activeSessionRows.map((session) => ({
+    id: session.id,
+    expiresAt: session.expiresAt.toISOString(),
+  }))
+  const sharedImageMaps = imageMaps
+    .filter((imageMap) => (imageMap.mediaAssets?.length || 0) > 1)
+    .map((imageMap) => ({ id: imageMap.id, claimCount: imageMap.mediaAssets?.length || 0 }))
+  const retiredMedia = imageMaps
+    .filter((imageMap) => imageMap.retiredAt)
+    .map((imageMap) => ({ id: imageMap.id, retiredAt: imageMap.retiredAt!.toISOString() }))
+  const externalObjectsPendingManualCleanup = imageMaps
+    .filter((imageMap) => imageMap.externalUrl)
+    .map((imageMap) => ({ id: imageMap.id, url: imageMap.externalUrl! }))
 
   return limitScanDetails(
     {
@@ -686,16 +751,31 @@ export async function scanMediaHealth(
       summary: buildSummary(missingLocalFiles, unusedMediaRecords),
       missingLocalFiles,
       unusedMediaRecords,
+      unboundImageMaps: imageMaps
+        .filter((imageMap) => (imageMap.mediaAssets?.length || 0) === 0)
+        .map((imageMap) => ({ id: imageMap.id, localUrl: imageMap.localUrl })),
+      unboundMediaAssets,
+      unreferencedClaims: [...new Set(unreferencedClaims)],
+      sharedImageMaps,
+      activeUploadSessions,
+      retiredMedia,
+      externalObjectsPendingManualCleanup,
     },
     detailLimit
   )
 }
 
-async function cleanupMediaAsset(prisma: PrismaClient, id: string, references: ReferenceIndex) {
+async function cleanupMediaAsset(
+  prisma: PrismaClient,
+  id: string,
+  references: ReferenceIndex,
+  mode: MediaHealthScanMode
+) {
   const asset = await prisma.mediaAsset.findUnique({
     where: { id },
     select: {
       id: true,
+      imageMapId: true,
       storageKey: true,
       publicUrl: true,
       status: true,
@@ -711,32 +791,74 @@ async function cleanupMediaAsset(prisma: PrismaClient, id: string, references: R
       reasons: ['already_deleted'] as MediaHealthBlockReason[],
     }
   }
-
   const blockedReasons = buildAssetBlockReasons(asset, refsForAsset(asset, references))
-  if (blockedReasons.length > 0) {
-    return { success: false, skipped: true, reasons: blockedReasons }
-  }
+  if (blockedReasons.length > 0) return { success: false, skipped: true, reasons: blockedReasons }
 
-  await safeDeleteUploadFileByStorageKey(asset.storageKey)
-  await prisma.mediaAsset.update({ where: { id }, data: { status: 'deleted' } })
-  return { success: true, skipped: false, reasons: [] as MediaHealthBlockReason[] }
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw(Prisma.sql`SELECT id FROM "MediaAsset" WHERE id = ${id} FOR UPDATE`)
+    const lockedAsset = await tx.mediaAsset.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        imageMapId: true,
+        storageKey: true,
+        publicUrl: true,
+        status: true,
+        session: { select: { status: true, expiresAt: true } },
+      },
+    })
+    if (!lockedAsset || lockedAsset.status === 'deleted') {
+      return {
+        success: false,
+        skipped: true,
+        reasons: [lockedAsset ? 'already_deleted' : 'not_found'] as MediaHealthBlockReason[],
+      }
+    }
+    const freshReferences = await collectReferences(prisma, mode)
+    const freshBlockedReasons = buildAssetBlockReasons(
+      lockedAsset,
+      refsForAsset(lockedAsset, freshReferences)
+    )
+    if (freshBlockedReasons.length > 0) {
+      return { success: false, skipped: true, reasons: freshBlockedReasons }
+    }
+    await tx.mediaAsset.updateMany({
+      where: { id, status: { not: 'deleted' } },
+      data: { status: 'deleted' },
+    })
+    if (lockedAsset.imageMapId) {
+      const activeClaims = await tx.mediaAsset.count({
+        where: { imageMapId: lockedAsset.imageMapId, status: { in: ['uploaded', 'ready'] } },
+      })
+      if (activeClaims === 0) {
+        await tx.imageMap.updateMany({
+          where: { id: lockedAsset.imageMapId, deletedAt: null },
+          data: { retiredAt: getMediaRetiredAt() },
+        })
+      }
+    }
+    return { success: true, skipped: false, reasons: [] as MediaHealthBlockReason[] }
+  })
 }
 
 async function cleanupImageMap(
   prisma: PrismaClient,
   id: string,
   deletedBy: string | null,
-  references: ReferenceIndex
+  references: ReferenceIndex,
+  mode: MediaHealthScanMode
 ) {
   const imageMap = await prisma.imageMap.findUnique({
     where: { id },
     select: {
       id: true,
+      md5: true,
       localUrl: true,
       externalUrl: true,
       s3Url: true,
       thumbnailUrl: true,
       deletedAt: true,
+      retiredAt: true,
     },
   })
   if (!imageMap)
@@ -748,32 +870,65 @@ async function cleanupImageMap(
       reasons: ['already_deleted'] as MediaHealthBlockReason[],
     }
   }
-
   if (refsForImageMap(imageMap, references).length > 0) {
     return { success: false, skipped: true, reasons: ['referenced'] as MediaHealthBlockReason[] }
   }
 
-  const sharedAssetCount = await prisma.mediaAsset.count({
-    where: { publicUrl: imageMap.localUrl, status: { not: 'deleted' } },
-  })
-  if (sharedAssetCount > 0) {
-    return {
-      success: false,
-      skipped: true,
-      reasons: ['shared_image_map'] as MediaHealthBlockReason[],
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw(
+      Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${imageMap.md5}, 0))`
+    )
+    const lockedImageMap = await tx.imageMap.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        md5: true,
+        localUrl: true,
+        externalUrl: true,
+        s3Url: true,
+        thumbnailUrl: true,
+        deletedAt: true,
+        retiredAt: true,
+      },
+    })
+    if (!lockedImageMap || lockedImageMap.deletedAt) {
+      return {
+        success: false,
+        skipped: true,
+        reasons: [lockedImageMap ? 'already_deleted' : 'not_found'] as MediaHealthBlockReason[],
+      }
     }
-  }
-
-  const cleanupResult = await variantCleanup.cleanupByImageMapId(id, CleanupTrigger.ON_DELETE)
-  if (cleanupResult.skipped) {
-    return { success: false, skipped: true, reasons: ['processing'] as MediaHealthBlockReason[] }
-  }
-
-  await prisma.imageMap.update({
-    where: { id },
-    data: { deletedAt: new Date(), deletedBy },
+    const freshReferences = await collectReferences(prisma, mode)
+    if (refsForImageMap(lockedImageMap, freshReferences).length > 0) {
+      return { success: false, skipped: true, reasons: ['referenced'] as MediaHealthBlockReason[] }
+    }
+    const activeClaims = await tx.mediaAsset.count({
+      where: { imageMapId: lockedImageMap.id, status: { in: ['uploaded', 'ready'] } },
+    })
+    if (activeClaims > 0) {
+      return {
+        success: false,
+        skipped: true,
+        reasons: ['shared_image_map'] as MediaHealthBlockReason[],
+      }
+    }
+    const cleanupResult = await variantCleanup.cleanupByImageMapId(
+      lockedImageMap.id,
+      CleanupTrigger.ON_DELETE
+    )
+    if (cleanupResult.skipped) {
+      return { success: false, skipped: true, reasons: ['processing'] as MediaHealthBlockReason[] }
+    }
+    await tx.imageMap.updateMany({
+      where: { id: lockedImageMap.id, deletedAt: null },
+      data: {
+        deletedAt: new Date(),
+        deletedBy,
+        retiredAt: lockedImageMap.retiredAt || getMediaRetiredAt(),
+      },
+    })
+    return { success: true, skipped: false, reasons: [] as MediaHealthBlockReason[] }
   })
-  return { success: true, skipped: false, reasons: [] as MediaHealthBlockReason[] }
 }
 
 export async function cleanupMediaHealthRecords(
@@ -786,12 +941,17 @@ export async function cleanupMediaHealthRecords(
 ): Promise<MediaHealthCleanupResult[]> {
   const results: MediaHealthCleanupResult[] = []
   const references = await collectReferences(prisma, options.mode || 'strict')
-
   for (const target of options.targets) {
     const result =
       target.recordType === 'mediaAsset'
-        ? await cleanupMediaAsset(prisma, target.id, references)
-        : await cleanupImageMap(prisma, target.id, options.deletedBy, references)
+        ? await cleanupMediaAsset(prisma, target.id, references, options.mode || 'strict')
+        : await cleanupImageMap(
+            prisma,
+            target.id,
+            options.deletedBy,
+            references,
+            options.mode || 'strict'
+          )
 
     results.push({
       recordType: target.recordType,

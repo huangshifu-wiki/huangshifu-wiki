@@ -450,6 +450,14 @@ export async function getPresignedDeleteUrl(key: string, expiresIn?: number): Pr
   }
 }
 
+export async function deleteS3Object(key: string): Promise<void> {
+  const keyValidation = validateObjectKey(key)
+  if (!keyValidation.valid) throw new Error(`对象键验证失败: ${keyValidation.error}`)
+  const bucket = getPublicBucketConfig()
+  const fullKey = bucket.prefix ? `${bucket.prefix}${key}` : key
+  await getS3ClientWrite().send(new DeleteObjectCommand({ Bucket: bucket.name, Key: fullKey }))
+}
+
 export function getPublicConfig(): S3PublicConfig {
   const enabled = isS3Enabled()
   const endpointConfig = getEndpointConfig()

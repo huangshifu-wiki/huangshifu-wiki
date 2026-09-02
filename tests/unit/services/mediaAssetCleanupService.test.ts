@@ -1,156 +1,151 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mockMediaAssetFindUnique = vi.fn()
-const mockMediaAssetFindMany = vi.fn()
-const mockMediaAssetUpdate = vi.fn()
-const mockGalleryImageFindFirst = vi.fn()
-const mockEventFindFirst = vi.fn()
-const mockEventPosterFindFirst = vi.fn()
-const mockSongCoverFindFirst = vi.fn()
-const mockAlbumCoverFindFirst = vi.fn()
-const mockImageMapFindMany = vi.fn()
-const mockImageMapUpdate = vi.fn()
-const mockSafeDeleteUploadFileByStorageKey = vi.fn()
-const mockSafeDeleteUploadFileByUrl = vi.fn()
-const mockVariantCleanupByImageMapId = vi.fn()
+const mockReleaseMediaAsset = vi.hoisted(() => vi.fn())
+const mockCollectMediaReferences = vi.hoisted(() => vi.fn())
+const mockIsMediaReferenced = vi.hoisted(() => vi.fn())
+const mockMediaAssetFindUnique = vi.hoisted(() => vi.fn())
+const mockMediaAssetFindFirst = vi.hoisted(() => vi.fn())
+const mockImageMapFindFirst = vi.hoisted(() => vi.fn())
+const mockImageMapFindUnique = vi.hoisted(() => vi.fn())
+const mockImageMapUpdateMany = vi.hoisted(() => vi.fn())
+const mockMediaAssetCount = vi.hoisted(() => vi.fn())
+const mockExecuteRaw = vi.hoisted(() => vi.fn())
+const mockTransaction = vi.hoisted(() => vi.fn())
+const mockGetMediaRetiredAt = vi.hoisted(() => vi.fn(() => new Date()))
 
-vi.mock('../../../src/server/prisma', () => ({
-  prisma: {
-    mediaAsset: {
-      findUnique: mockMediaAssetFindUnique,
-      findMany: mockMediaAssetFindMany,
-      update: mockMediaAssetUpdate,
-    },
-    galleryImage: {
-      findFirst: mockGalleryImageFindFirst,
-    },
-    event: {
-      findFirst: mockEventFindFirst,
-    },
-    eventPoster: {
-      findFirst: mockEventPosterFindFirst,
-    },
-    songCover: {
-      findFirst: mockSongCoverFindFirst,
-    },
-    albumCover: {
-      findFirst: mockAlbumCoverFindFirst,
-    },
-    imageMap: {
-      findMany: mockImageMapFindMany,
-      update: mockImageMapUpdate,
-    },
-  },
+vi.mock('../../../src/server/services/mediaAssetService', () => ({
+  releaseMediaAsset: mockReleaseMediaAsset,
+  collectMediaReferences: mockCollectMediaReferences,
+  isMediaReferenced: mockIsMediaReferenced,
+  getMediaRetiredAt: mockGetMediaRetiredAt,
 }))
 
-vi.mock('../../../src/server/utils', () => ({
-  buildUploadPublicUrl: (storageKey: string) => `/uploads/${storageKey}`,
-  safeDeleteUploadFileByStorageKey: mockSafeDeleteUploadFileByStorageKey,
-  safeDeleteUploadFileByUrl: mockSafeDeleteUploadFileByUrl,
-  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
-}))
+const mockPrisma = {
+  mediaAsset: {
+    findUnique: mockMediaAssetFindUnique,
+    findFirst: mockMediaAssetFindFirst,
+    count: mockMediaAssetCount,
+  },
+  imageMap: {
+    findFirst: mockImageMapFindFirst,
+    findUnique: mockImageMapFindUnique,
+    updateMany: mockImageMapUpdateMany,
+  },
+  $executeRaw: mockExecuteRaw,
+  $transaction: mockTransaction,
+}
 
-vi.mock('../../../src/server/services/variantCleanup.service', () => ({
-  CleanupTrigger: {
-    ON_DELETE: 'on_delete',
-  },
-  variantCleanup: {
-    cleanupByImageMapId: mockVariantCleanupByImageMapId,
-  },
-}))
+vi.mock('../../../src/server/prisma', () => ({ prisma: mockPrisma }))
 
 beforeEach(() => {
   vi.clearAllMocks()
-
+  mockReleaseMediaAsset.mockResolvedValue({ released: true, imageMapId: 'map-1' })
+  mockCollectMediaReferences.mockResolvedValue({
+    assetIds: new Set(),
+    imageMapIds: new Set(),
+    urls: new Set(),
+    storageKeys: new Set(),
+  })
+  mockIsMediaReferenced.mockReturnValue(false)
   mockMediaAssetFindUnique.mockResolvedValue({
     id: 'asset-1',
-    storageKey: 'galleries/test.jpg',
-    publicUrl: '/uploads/galleries/test.jpg',
+    imageMapId: 'map-1',
+    storageKey: 'gallery/test.jpg',
+    publicUrl: '/uploads/gallery/test.jpg',
+    status: 'ready',
+    imageMap: {
+      localUrl: '/uploads/gallery/test.jpg',
+      s3Url: null,
+      externalUrl: null,
+      variantStatus: 'completed',
+    },
   })
-  mockGalleryImageFindFirst.mockResolvedValue(null)
-  mockEventFindFirst.mockResolvedValue(null)
-  mockEventPosterFindFirst.mockResolvedValue(null)
-  mockSongCoverFindFirst.mockResolvedValue(null)
-  mockAlbumCoverFindFirst.mockResolvedValue(null)
-  mockMediaAssetFindMany.mockResolvedValue([])
-  mockImageMapFindMany.mockResolvedValue([
-    { id: 'image-map-1', localUrl: '/uploads/galleries/test.jpg' },
-  ])
-  mockImageMapUpdate.mockResolvedValue({ id: 'image-map-1' })
-  mockMediaAssetUpdate.mockResolvedValue({ id: 'asset-1', status: 'deleted' })
-  mockSafeDeleteUploadFileByStorageKey.mockResolvedValue(undefined)
-  mockSafeDeleteUploadFileByUrl.mockResolvedValue(undefined)
-  mockVariantCleanupByImageMapId.mockResolvedValue({ success: true })
+  mockMediaAssetFindFirst.mockResolvedValue(null)
+  mockImageMapFindFirst.mockResolvedValue(null)
+  mockImageMapFindUnique.mockResolvedValue({
+    id: 'map-1',
+    md5: '0123456789abcdef0123456789abcdef',
+    localUrl: '/uploads/legacy.jpg',
+    s3Url: null,
+    externalUrl: null,
+    variantStatus: 'completed',
+  })
+  mockMediaAssetCount.mockResolvedValue(0)
+  mockImageMapUpdateMany.mockResolvedValue({ count: 1 })
+  mockTransaction.mockImplementation(async (callback) =>
+    callback({
+      $executeRaw: mockExecuteRaw,
+      mediaAsset: { count: mockMediaAssetCount },
+      imageMap: {
+        findUnique: mockImageMapFindUnique,
+        updateMany: mockImageMapUpdateMany,
+      },
+    })
+  )
 })
 
 describe('mediaAssetCleanupService', () => {
-  it('资产仍被业务引用时不删除原图和变体', async () => {
-    mockGalleryImageFindFirst.mockResolvedValue({ id: 'gallery-image-1' })
-
+  it('只释放逻辑 claim，不立即删除共享物理媒体', async () => {
     const { cleanupUnusedMediaAssetById } =
       await import('../../../src/server/services/mediaAssetCleanupService')
 
     const result = await cleanupUnusedMediaAssetById('asset-1')
 
-    expect(result.skippedReason).toBe('still_referenced')
-    expect(mockSafeDeleteUploadFileByStorageKey).not.toHaveBeenCalled()
-    expect(mockVariantCleanupByImageMapId).not.toHaveBeenCalled()
-    expect(mockMediaAssetUpdate).not.toHaveBeenCalled()
-  })
-
-  it('资产被活动封面或海报引用时不删除', async () => {
-    mockEventFindFirst.mockResolvedValue({ id: 'event-1' })
-    mockEventPosterFindFirst.mockResolvedValue({ id: 'event-poster-1' })
-
-    const { cleanupUnusedMediaAssetById } =
-      await import('../../../src/server/services/mediaAssetCleanupService')
-
-    const result = await cleanupUnusedMediaAssetById('asset-1')
-
-    expect(result.skippedReason).toBe('still_referenced')
-    expect(mockSafeDeleteUploadFileByStorageKey).not.toHaveBeenCalled()
-    expect(mockMediaAssetUpdate).not.toHaveBeenCalled()
-  })
-
-  it('资产无人引用时删除本地原图和变体，并软删除 ImageMap、标记资产已删除', async () => {
-    const { cleanupUnusedMediaAssetById } =
-      await import('../../../src/server/services/mediaAssetCleanupService')
-
-    const result = await cleanupUnusedMediaAssetById('asset-1')
-
-    expect(result.deletedImageMapIds).toEqual(['image-map-1'])
-    expect(result.markedAssetDeleted).toBe(true)
-    expect(mockSafeDeleteUploadFileByStorageKey).toHaveBeenCalledWith('galleries/test.jpg')
-    expect(mockVariantCleanupByImageMapId).toHaveBeenCalledWith('image-map-1', 'on_delete')
-    expect(mockImageMapUpdate).toHaveBeenCalledWith({
-      where: { id: 'image-map-1' },
-      data: { deletedAt: expect.any(Date), deletedBy: null },
-    })
-    expect(mockMediaAssetUpdate).toHaveBeenCalledWith({
-      where: { id: 'asset-1' },
-      data: { status: 'deleted' },
+    expect(mockReleaseMediaAsset).toHaveBeenCalledWith('asset-1')
+    expect(result).toMatchObject({
+      assetId: 'asset-1',
+      markedAssetDeleted: true,
+      deletedOriginalFile: false,
+      deletedImageMapIds: [],
     })
   })
 
-  it('变体正在生成时保留 ImageMap，等待后续清理', async () => {
-    mockVariantCleanupByImageMapId.mockResolvedValue({
-      success: false,
-      skipped: true,
-      skippedReason: 'processing',
-    })
+  it('找不到 claim 时不登记物理删除', async () => {
+    mockMediaAssetFindUnique.mockResolvedValue(null)
+    const { cleanupUnusedMediaAssetById } =
+      await import('../../../src/server/services/mediaAssetCleanupService')
 
+    const result = await cleanupUnusedMediaAssetById('missing')
+
+    expect(result.skippedReason).toBe('asset_not_found')
+    expect(mockReleaseMediaAsset).not.toHaveBeenCalled()
+  })
+
+  it('重复释放已删除 claim 保持幂等', async () => {
+    mockMediaAssetFindUnique.mockResolvedValue({
+      id: 'asset-1',
+      imageMapId: 'map-1',
+      storageKey: null,
+      publicUrl: null,
+      status: 'deleted',
+      imageMap: null,
+    })
     const { cleanupUnusedMediaAssetById } =
       await import('../../../src/server/services/mediaAssetCleanupService')
 
     const result = await cleanupUnusedMediaAssetById('asset-1')
 
-    expect(result.skippedReason).toBe('processing')
-    expect(mockSafeDeleteUploadFileByStorageKey).toHaveBeenCalledWith('galleries/test.jpg')
-    expect(mockVariantCleanupByImageMapId).toHaveBeenCalledWith('image-map-1', 'on_delete')
-    expect(mockImageMapUpdate).not.toHaveBeenCalled()
-    expect(mockMediaAssetUpdate).toHaveBeenCalledWith({
-      where: { id: 'asset-1' },
-      data: { status: 'deleted' },
+    expect(mockReleaseMediaAsset).toHaveBeenCalledWith('asset-1')
+    expect(result.markedAssetDeleted).toBe(false)
+  })
+
+  it('无 claim 的历史 URL 仅登记延迟回收', async () => {
+    mockImageMapFindFirst.mockResolvedValue({
+      id: 'map-1',
+      localUrl: '/uploads/legacy.jpg',
+      s3Url: null,
+      externalUrl: null,
+      variantStatus: 'completed',
+    })
+    const { cleanupUntrackedUploadImageByUrl } =
+      await import('../../../src/server/services/mediaAssetCleanupService')
+
+    const result = await cleanupUntrackedUploadImageByUrl('/uploads/legacy.jpg')
+
+    expect(result).toMatchObject({ deletedOriginalFile: false, deletedImageMapIds: [] })
+    expect(mockImageMapUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'map-1', retiredAt: null },
+      data: { retiredAt: expect.any(Date) },
     })
   })
 })

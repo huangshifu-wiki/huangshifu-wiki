@@ -232,19 +232,6 @@ export async function collectReferencedStorageKeys(prisma: PrismaClient) {
     })
   }
 
-  for (const item of imageMaps) {
-    addReference(references, item.localUrl, {
-      source: 'ImageMap',
-      id: item.id,
-      field: 'localUrl',
-    })
-    addReference(references, item.thumbnailUrl, {
-      source: 'ImageMap',
-      id: item.id,
-      field: 'thumbnailUrl',
-    })
-  }
-
   for (const item of users) {
     addReference(references, item.photoURL, {
       source: 'User',

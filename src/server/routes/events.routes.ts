@@ -16,25 +16,31 @@ import {
   toEventListResponse,
   invalidateTicketListingCaches,
   isNumericSlug,
+  logger,
 } from '../utils'
-import { syncGalleryImageToImageMapWithVariant } from '../services/galleryImageSyncService'
 import {
   cleanupUnusedMediaAssetById,
   cleanupUntrackedUploadImageByUrl,
 } from '../services/mediaAssetCleanupService'
+import {
+  assertUploadSessionAssets,
+  getCanonicalMediaUrl,
+  getReadyAssetsForOwner,
+  MediaAssetRequestError,
+  releaseMediaAsset,
+} from '../services/mediaAssetService'
+import { getReadyAssetForOwner } from '../services/mediaAssetService'
 import type { EventWriteInput } from '../schemas/event.schema'
 
 const router = createRouter()
 
 const eventInclude = {
-  coverAsset: true,
+  coverAsset: { include: { imageMap: true } },
   createdBy: { select: { displayName: true } },
   updatedBy: { select: { displayName: true } },
   posters: {
-    include: {
-      asset: true,
-    },
     orderBy: { sortOrder: 'asc' as const },
+    include: { asset: { include: { imageMap: true } } },
   },
 }
 
@@ -48,67 +54,6 @@ function deriveEventSortFields(timeSlots: EventWriteInput['timeSlots']) {
     sortStart: values[0] || null,
     sortEnd: values[values.length - 1] || null,
   }
-}
-
-async function resolveAsset(
-  assetId: string | null | undefined,
-  ownerUid: string,
-  preservedAssetId?: string | null
-) {
-  if (!assetId) return null
-  return prisma.mediaAsset.findFirst({
-    where: {
-      id: assetId,
-      status: 'ready',
-      OR: [{ ownerUid }, ...(assetId === preservedAssetId ? [{ id: assetId }] : [])],
-    },
-  })
-}
-
-async function cleanupRemovedAssetReferences(
-  removed: Array<{ assetId: string | null; url?: string | null }>
-) {
-  const assetIds = [...new Set(removed.map((item) => item.assetId).filter(isString))]
-  const urlsWithoutAsset = [
-    ...new Set(
-      removed
-        .filter((item) => !item.assetId)
-        .map((item) => item.url)
-        .filter(isString)
-    ),
-  ]
-
-  await Promise.all(
-    assetIds
-      .map((assetId) => cleanupUnusedMediaAssetById(assetId))
-      .concat(urlsWithoutAsset.map((url) => cleanupUntrackedUploadImageByUrl(url)))
-  )
-}
-
-function isString(value: string | null | undefined): value is string {
-  return typeof value === 'string' && value.length > 0
-}
-
-function parseEventTagQuery(value: unknown) {
-  if (typeof value !== 'string') return ''
-  const tag = value.trim()
-  return tag.length > CONTENT_LIMITS.event.tag ? null : tag
-}
-
-function parseEventSortOrder(value: unknown): Prisma.SortOrder {
-  return value === 'asc' ? 'asc' : 'desc'
-}
-
-async function syncAssetsToImageMap(assetIds: string[]) {
-  const uniqueIds = [...new Set(assetIds.filter(Boolean))]
-  if (uniqueIds.length === 0) return
-  const assets = await prisma.mediaAsset.findMany({
-    where: { id: { in: uniqueIds }, status: 'ready' },
-    select: { publicUrl: true, storageKey: true },
-  })
-  await Promise.all(
-    assets.map((asset) => syncGalleryImageToImageMapWithVariant(asset.publicUrl, asset.storageKey))
-  )
 }
 
 async function buildPosterCreateData(
@@ -125,42 +70,41 @@ async function buildPosterCreateData(
     .map((poster) => poster.assetId)
 
   if (new Set(existingIds).size !== existingIds.length) {
-    throw new Error('海报列表包含重复图片')
+    throw new MediaAssetRequestError(400, '海报列表包含重复图片')
   }
   if (new Set(assetIds).size !== assetIds.length) {
-    throw new Error('海报列表包含重复资源')
+    throw new MediaAssetRequestError(400, '海报列表包含重复资源')
   }
 
-  const [existingPosters, assets] = await Promise.all([
+  const existingPosters =
     existingIds.length && currentEventId
-      ? tx.eventPoster.findMany({
+      ? await tx.eventPoster.findMany({
           where: { id: { in: existingIds }, eventId: currentEventId },
+          select: {
+            id: true,
+            assetId: true,
+            url: true,
+            name: true,
+            asset: { select: { imageMapId: true } },
+          },
         })
-      : Promise.resolve([]),
-    assetIds.length
-      ? tx.mediaAsset.findMany({
-          where: { id: { in: assetIds }, ownerUid, status: 'ready' },
-        })
-      : Promise.resolve([]),
-  ])
-
+      : []
   if (existingPosters.length !== existingIds.length) {
-    throw new Error('海报列表包含无效图片')
-  }
-  if (assets.length !== assetIds.length) {
-    throw new Error('海报列表包含无效或无权限的资源')
+    throw new MediaAssetRequestError(400, '海报列表包含无效图片')
   }
 
+  const assetMap = new Map(
+    (await getReadyAssetsForOwner(tx, assetIds, ownerUid)).map((asset) => [asset.id, asset])
+  )
   const posterMap = new Map(existingPosters.map((poster) => [poster.id, poster]))
-  const assetMap = new Map(assets.map((asset) => [asset.id, asset]))
-
   const createData = posters.map((poster, index) => {
     if ('imageId' in poster) {
       const existing = posterMap.get(poster.imageId)
-      if (!existing) throw new Error('海报列表包含无效图片')
+      if (!existing) throw new MediaAssetRequestError(400, '海报列表包含无效图片')
       return {
         id: existing.id,
         assetId: existing.assetId,
+        imageMapId: existing.asset?.imageMapId || `legacy:${existing.id}`,
         url: existing.url,
         name: existing.name,
         sortOrder: index,
@@ -168,23 +112,51 @@ async function buildPosterCreateData(
     }
 
     const asset = assetMap.get(poster.assetId)
-    if (!asset) throw new Error('海报列表包含无效或无权限的资源')
+    if (!asset) throw new MediaAssetRequestError(400, '海报列表包含无效或无权限的资源')
     return {
       assetId: asset.id,
-      url: asset.publicUrl,
-      name: asset.fileName || `poster-${index + 1}`,
+      imageMapId: asset.imageMapId,
+      url: getCanonicalMediaUrl(asset),
+      name: `poster-${index + 1}`,
       sortOrder: index,
     }
   })
 
-  const referenceKeys = createData.map((poster) =>
-    poster.assetId ? `asset:${poster.assetId}` : `url:${poster.url}`
-  )
-  if (new Set(referenceKeys).size !== referenceKeys.length) {
-    throw new Error('海报列表包含重复资源')
+  if (new Set(createData.map((poster) => poster.imageMapId)).size !== createData.length) {
+    throw new MediaAssetRequestError(400, '海报列表包含重复图片内容')
   }
+  return createData.map(({ imageMapId: _imageMapId, ...poster }) => poster)
+}
+function isString(value: string | null | undefined): value is string {
+  return typeof value === 'string' && value.length > 0
+}
 
-  return createData
+function parseEventTagQuery(value: unknown) {
+  if (typeof value !== 'string') return ''
+  const tag = value.trim()
+  return tag.length > CONTENT_LIMITS.event.tag ? null : tag
+}
+
+function parseEventSortOrder(value: unknown): Prisma.SortOrder {
+  return value === 'asc' ? 'asc' : 'desc'
+}
+
+async function cleanupRemovedAssetReferences(
+  removed: Array<{ assetId: string | null; url?: string | null }>
+) {
+  const assetIds = [...new Set(removed.map((item) => item.assetId).filter(isString))]
+  const urlsWithoutAsset = [
+    ...new Set(
+      removed
+        .filter((item) => !item.assetId)
+        .map((item) => item.url)
+        .filter(isString)
+    ),
+  ]
+  await Promise.all([
+    ...assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)),
+    ...urlsWithoutAsset.map((url) => cleanupUntrackedUploadImageByUrl(url)),
+  ])
 }
 
 router.get(
@@ -267,57 +239,54 @@ router.post(
   requireAdmin,
   validateBody(eventWriteSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const input = req.body as EventWriteInput
-    const coverAsset = await resolveAsset(input.coverAssetId, req.authUser!.uid)
-    if (input.coverAssetId && !coverAsset) {
-      res.status(400).json({ error: '封面资源无效或无权限' })
-      return
-    }
-    const sortFields = deriveEventSortFields(input.timeSlots)
-
-    let createdAssetIds: string[] = []
-    const event = await prisma.$transaction(async (tx) => {
-      const slug = await allocateNumericSlug(tx, 'Event')
-      const posterCreateData = await buildPosterCreateData(input.posters, req.authUser!.uid, tx)
-      createdAssetIds = posterCreateData
-        .map((poster) => poster.assetId)
-        .filter((id): id is string => Boolean(id))
-      const created = await tx.event.create({
-        data: {
-          slug,
-          title: input.title,
-          location: input.location,
-          content: input.content,
-          timeSlots: input.timeSlots,
-          ticketPrices: input.ticketPrices,
-          saleTimes: input.saleTimes,
-          lineup: input.lineup,
-          tags: input.tags,
-          externalLinks: input.externalLinks,
-          relatedLinks: input.relatedLinks,
-          ...sortFields,
-          coverAssetId: coverAsset?.id || null,
-          coverUrl: coverAsset?.publicUrl || null,
-          coverName: coverAsset?.fileName || null,
-          createdByUid: req.authUser!.uid,
-          updatedByUid: req.authUser!.uid,
-          posters: {
-            create: posterCreateData,
+    try {
+      const input = req.body as EventWriteInput
+      const sortFields = deriveEventSortFields(input.timeSlots)
+      const event = await prisma.$transaction(async (tx) => {
+        const coverAsset = input.coverAssetId
+          ? await getReadyAssetForOwner(tx, input.coverAssetId, req.authUser!.uid)
+          : null
+        const posterCreateData = await buildPosterCreateData(input.posters, req.authUser!.uid, tx)
+        const assetIds = [
+          ...(coverAsset?.id ? [coverAsset.id] : []),
+          ...posterCreateData.map((poster) => poster.assetId).filter(isString),
+        ]
+        if (input.uploadSessionId) {
+          await assertUploadSessionAssets(tx, input.uploadSessionId, req.authUser!.uid, assetIds)
+        }
+        const slug = await allocateNumericSlug(tx, 'Event')
+        return tx.event.create({
+          data: {
+            slug,
+            title: input.title,
+            location: input.location,
+            content: input.content,
+            timeSlots: input.timeSlots,
+            ticketPrices: input.ticketPrices,
+            saleTimes: input.saleTimes,
+            lineup: input.lineup,
+            tags: input.tags,
+            externalLinks: input.externalLinks,
+            relatedLinks: input.relatedLinks,
+            ...sortFields,
+            coverAssetId: coverAsset?.id || null,
+            coverUrl: coverAsset ? getCanonicalMediaUrl(coverAsset) : null,
+            coverName: coverAsset?.fileName || null,
+            createdByUid: req.authUser!.uid,
+            updatedByUid: req.authUser!.uid,
+            posters: { create: posterCreateData },
           },
-        },
-        include: eventInclude,
+          include: eventInclude,
+        })
       })
-      return created
-    })
-
-    await syncAssetsToImageMap([
-      ...(coverAsset?.id ? [coverAsset.id] : []),
-      ...createdAssetIds,
-    ]).catch((error) => {
-      console.error('Sync event images to ImageMap error:', error)
-    })
-
-    res.status(201).json({ event: await toEventResponse(event) })
+      res.status(201).json({ event: await toEventResponse(event) })
+    } catch (error) {
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      throw error
+    }
   })
 )
 
@@ -326,107 +295,90 @@ router.put(
   requireAdmin,
   validateBody(eventWriteSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const input = req.body as EventWriteInput
-    const current = await prisma.event.findUnique({
-      where: { id: req.params.id },
-      include: { posters: true },
-    })
-    if (!current || current.deletedAt) {
-      res.status(404).json({ error: '活动不存在' })
-      return
-    }
-
-    const coverAsset = await resolveAsset(
-      input.coverAssetId,
-      req.authUser!.uid,
-      current.coverAssetId
-    )
-    if (input.coverAssetId && !coverAsset) {
-      res.status(400).json({ error: '封面资源无效或无权限' })
-      return
-    }
-    const sortFields = deriveEventSortFields(input.timeSlots)
-    const nextCoverReference = {
-      assetId: coverAsset?.id || null,
-      url: coverAsset?.publicUrl || null,
-    }
-
-    let nextPosterReferences: Array<{ assetId: string | null; url: string }> = []
-    const event = await prisma.$transaction(async (tx) => {
-      const posterCreateData = await buildPosterCreateData(
-        input.posters,
-        req.authUser!.uid,
-        tx,
-        current.id
-      )
-      nextPosterReferences = posterCreateData.map((poster) => ({
-        assetId: poster.assetId,
-        url: poster.url,
-      }))
-
-      await tx.eventPoster.deleteMany({ where: { eventId: current.id } })
-      return tx.event.update({
-        where: { id: current.id },
-        data: {
-          title: input.title,
-          location: input.location,
-          content: input.content,
-          timeSlots: input.timeSlots,
-          ticketPrices: input.ticketPrices,
-          saleTimes: input.saleTimes,
-          lineup: input.lineup,
-          tags: input.tags,
-          externalLinks: input.externalLinks,
-          relatedLinks: input.relatedLinks,
-          ...sortFields,
-          coverAssetId: nextCoverReference.assetId,
-          coverUrl: nextCoverReference.url,
-          coverName: coverAsset?.fileName || null,
-          updatedByUid: req.authUser!.uid,
-          posters: {
-            create: posterCreateData,
-          },
-        },
-        include: eventInclude,
+    try {
+      const input = req.body as EventWriteInput
+      const current = await prisma.event.findUnique({
+        where: { id: req.params.id },
+        include: { posters: true },
       })
-    })
-
-    const nextPosterAssetIds = new Set(
-      nextPosterReferences.map((poster) => poster.assetId).filter(isString)
-    )
-    const nextPosterUrlsWithoutAsset = new Set(
-      nextPosterReferences
-        .filter((poster) => !poster.assetId)
-        .map((poster) => poster.url)
-        .filter(isString)
-    )
-    const removedPosterAssets = current.posters
-      .filter((poster) =>
-        poster.assetId
-          ? !nextPosterAssetIds.has(poster.assetId)
-          : !nextPosterUrlsWithoutAsset.has(poster.url)
-      )
-      .map((poster) => ({ assetId: poster.assetId, url: poster.url }))
-    const removedCoverAsset =
-      current.coverAssetId !== nextCoverReference.assetId ||
-      current.coverUrl !== nextCoverReference.url
-        ? [{ assetId: current.coverAssetId, url: current.coverUrl }]
-        : []
-
-    await cleanupRemovedAssetReferences([...removedPosterAssets, ...removedCoverAsset]).catch(
-      (error) => {
-        console.error('Cleanup removed event images error:', error)
+      if (!current || current.deletedAt) {
+        res.status(404).json({ error: '活动不存在' })
+        return
       }
-    )
-    await syncAssetsToImageMap([
-      ...(coverAsset?.id ? [coverAsset.id] : []),
-      ...nextPosterAssetIds,
-    ]).catch((error) => {
-      console.error('Sync event images to ImageMap error:', error)
-    })
+      const sortFields = deriveEventSortFields(input.timeSlots)
+      const event = await prisma.$transaction(async (tx) => {
+        const coverAsset = input.coverAssetId
+          ? await getReadyAssetForOwner(tx, input.coverAssetId, req.authUser!.uid)
+          : null
+        const posterCreateData = await buildPosterCreateData(
+          input.posters,
+          req.authUser!.uid,
+          tx,
+          current.id
+        )
+        const assetIds = [
+          ...(coverAsset?.id ? [coverAsset.id] : []),
+          ...posterCreateData.map((poster) => poster.assetId).filter(isString),
+        ]
+        if (input.uploadSessionId) {
+          await assertUploadSessionAssets(tx, input.uploadSessionId, req.authUser!.uid, assetIds)
+        }
+        await tx.eventPoster.deleteMany({ where: { eventId: current.id } })
+        return tx.event.update({
+          where: { id: current.id },
+          data: {
+            title: input.title,
+            location: input.location,
+            content: input.content,
+            timeSlots: input.timeSlots,
+            ticketPrices: input.ticketPrices,
+            saleTimes: input.saleTimes,
+            lineup: input.lineup,
+            tags: input.tags,
+            externalLinks: input.externalLinks,
+            relatedLinks: input.relatedLinks,
+            ...sortFields,
+            coverAssetId: coverAsset?.id || null,
+            coverUrl: coverAsset ? getCanonicalMediaUrl(coverAsset) : null,
+            coverName: coverAsset?.fileName || null,
+            updatedByUid: req.authUser!.uid,
+            posters: { create: posterCreateData },
+          },
+          include: eventInclude,
+        })
+      })
 
-    invalidateTicketListingCaches()
-    res.json({ event: await toEventResponse(event) })
+      const nextPosterAssetIds = new Set(
+        event.posters.map((poster) => poster.assetId).filter(isString)
+      )
+      const nextPosterUrlsWithoutAsset = new Set(
+        event.posters.filter((poster) => !poster.assetId).map((poster) => poster.url)
+      )
+      const removedPosterAssets = current.posters
+        .filter((poster) =>
+          poster.assetId
+            ? !nextPosterAssetIds.has(poster.assetId)
+            : !nextPosterUrlsWithoutAsset.has(poster.url)
+        )
+        .map((poster) => ({ assetId: poster.assetId, url: poster.url }))
+      const removedCoverAsset =
+        current.coverAssetId !== event.coverAssetId || current.coverUrl !== event.coverUrl
+          ? [{ assetId: current.coverAssetId, url: current.coverUrl }]
+          : []
+
+      await cleanupRemovedAssetReferences([...removedPosterAssets, ...removedCoverAsset]).catch(
+        (error) =>
+          logger.error({ err: error, eventId: current.id }, 'Cleanup removed event images error')
+      )
+      invalidateTicketListingCaches()
+      res.json({ event: await toEventResponse(event) })
+    } catch (error) {
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      throw error
+    }
   })
 )
 
@@ -436,7 +388,12 @@ router.delete(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const event = await prisma.event.findUnique({
       where: { id: req.params.id },
-      select: { id: true, deletedAt: true },
+      select: {
+        id: true,
+        deletedAt: true,
+        coverAssetId: true,
+        posters: { select: { assetId: true } },
+      },
     })
     if (!event || event.deletedAt) {
       res.status(404).json({ error: '活动不存在' })
@@ -458,6 +415,17 @@ router.delete(
         },
       })
     })
+    const assetIds = [
+      ...(event.coverAssetId ? [event.coverAssetId] : []),
+      ...event.posters.map((poster) => poster.assetId).filter(isString),
+    ]
+    await Promise.all(
+      [...new Set(assetIds)].map((assetId) =>
+        releaseMediaAsset(assetId).catch((error) =>
+          console.error('Release deleted event media asset error:', error)
+        )
+      )
+    )
 
     invalidateTicketListingCaches()
     res.json({ success: true })

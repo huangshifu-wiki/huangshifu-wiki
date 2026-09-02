@@ -59,6 +59,7 @@ function userToApiUser(user: {
   email: string
   displayName: string
   photoURL: string | null
+  photoAssetId?: string | null
   wechatOpenId?: string | null
   role: PrismaUserRole
   status: UserStatus
@@ -75,6 +76,7 @@ function userToApiUser(user: {
     email: user.email,
     displayName: user.displayName,
     photoURL: user.photoURL,
+    photoAssetId: user.photoAssetId ?? null,
     wechatBound: Boolean(user.wechatOpenId),
     role: user.role,
     status: user.status,

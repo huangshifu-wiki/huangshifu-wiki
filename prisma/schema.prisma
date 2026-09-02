@@ -175,6 +175,7 @@ model User {
   passwordHash  String
   displayName   String
   photoURL      String?
+  photoAssetId  String?
   wechatOpenId  String?        @unique
   wechatUnionId String?
   role          UserRole       @default(user)
@@ -216,9 +217,11 @@ model User {
   browsingHistories BrowsingHistory[]
   uploadSessions UploadSession[]
   mediaAssets   MediaAsset[]
+  photoAsset    MediaAsset?    @relation("UserPhotoAsset", fields: [photoAssetId], references: [id], onDelete: SetNull)
   editLocks     EditLock[]
   emailVerificationTokens EmailVerificationToken[]
   ticketListings TicketListing[] @relation("UserTicketListings")
+  @@index([photoAssetId])
 
   @@index([status, createdAt])
   @@index([wechatUnionId])
@@ -736,27 +739,32 @@ model UploadSession {
 }
 
 model MediaAsset {
-  id         String          @id @default(cuid())
-  ownerUid   String
-  sessionId  String?
-  storageKey String          @unique
-  publicUrl  String
-  fileName   String
-  mimeType   String
-  sizeBytes  Int
-  status     MediaAssetStatus @default(ready)
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  owner      User            @relation(fields: [ownerUid], references: [uid], onDelete: Cascade)
-  session    UploadSession?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  galleryImages GalleryImage[] @relation("GalleryImageAsset")
-  eventCovers Event[]         @relation("EventCoverAsset")
-  eventPosters EventPoster[]  @relation("EventPosterAsset")
-  songCovers SongCover[]     @relation("SongCoverAsset")
-  albumCovers AlbumCover[]   @relation("AlbumCoverAsset")
+  id            String          @id @default(cuid())
+  ownerUid      String
+  sessionId     String?
+  imageMapId    String?
+  storageKey    String?
+  publicUrl     String?
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  status        MediaAssetStatus @default(ready)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  owner         User            @relation(fields: [ownerUid], references: [uid], onDelete: Cascade)
+  session       UploadSession?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  imageMap      ImageMap?       @relation(fields: [imageMapId], references: [id], onDelete: Restrict)
+  photoUsers    User[]          @relation("UserPhotoAsset")
+  galleryImages GalleryImage[]  @relation("GalleryImageAsset")
+  eventCovers   Event[]         @relation("EventCoverAsset")
+  eventPosters  EventPoster[]   @relation("EventPosterAsset")
+  songCovers    SongCover[]     @relation("SongCoverAsset")
+  albumCovers   AlbumCover[]    @relation("AlbumCoverAsset")
 
   @@index([ownerUid, createdAt])
   @@index([sessionId])
+  @@index([imageMapId])
+  @@index([status])
 }
 
 model GalleryImage {
@@ -1005,7 +1013,7 @@ model SongCover {
   id                  String        @id @default(cuid())
   songDocId           String
   assetId             String?
-  storageKey          String        @unique
+  storageKey          String
   publicUrl           String
   thumbnailUrl        String?
   variantStatus       VariantStatus @default(pending)
@@ -1027,7 +1035,7 @@ model AlbumCover {
   id                  String        @id @default(cuid())
   albumDocId          String
   assetId             String?
-  storageKey          String        @unique
+  storageKey          String
   publicUrl           String
   thumbnailUrl        String?
   variantStatus       VariantStatus @default(pending)
@@ -1092,22 +1100,26 @@ model MusicPlatformConfig {
 }
 
 model ImageMap {
-  id            String        @id
-  md5           String        @unique
-  localUrl      String
-  externalUrl   String?
-  s3Url         String?
-  storageType   StorageType   @default(local)
-  blurhash      String?
-  thumbhash     String?
-  thumbnailUrl  String?
-  variantStatus VariantStatus @default(pending)
+  id              String          @id
+  md5             String          @unique
+  localUrl        String
+  externalUrl     String?
+  s3Url           String?
+  s3Key           String?
+  storageType     StorageType     @default(local)
+  blurhash        String?
+  thumbhash       String?
+  thumbnailUrl    String?
+  variantStatus   VariantStatus   @default(pending)
   cloudSyncStatus CloudSyncStatus @default(pending)
-  deletedAt     DateTime?
-  deletedBy     String?
-  createdAt     DateTime      @default(now())
+  deletedAt       DateTime?
+  deletedBy       String?
+  retiredAt       DateTime?
+  createdAt       DateTime        @default(now())
+  mediaAssets     MediaAsset[]
 
   @@index([deletedAt])
+  @@index([retiredAt])
 }
 
 model SiteConfig {

@@ -1,6 +1,7 @@
 import type { Router } from 'express'
 import { createRouter } from '../utils/typed-router'
-import { requireAuth, requireAdmin, requireActiveUser, isAdminRole } from '../middleware/auth'
+import { Prisma } from '@prisma/client'
+import { requireAuth, requireAdmin } from '../middleware/auth'
 import {
   prisma,
   resolveUploadPathByUrl,
@@ -9,10 +10,17 @@ import {
   createPaginationMeta,
 } from '../utils'
 import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService'
-import { getS3BaseUrl, getPublicConfig } from '../s3/s3Service'
+import { getPublicConfig } from '../s3/s3Service'
 import fs from 'fs'
 import path from 'path'
 import type { AuthenticatedRequest } from '../types'
+import {
+  collectMediaReferences,
+  ensureImageMapStorage,
+  getMediaRetiredAt,
+  isMediaReferenced,
+  MediaAssetRequestError,
+} from '../services/mediaAssetService'
 
 const router = createRouter()
 
@@ -21,10 +29,14 @@ const router = createRouter()
  * The stored storageType may be stale; always derive from real data.
  */
 function inferStorageType(item: {
+  localUrl: string
   s3Url: string | null
   externalUrl: string | null
   storageType: string
 }): 'local' | 's3' | 'external' {
+  if (item.storageType === 'external' && item.externalUrl) return 'external'
+  if (item.storageType === 's3' && item.s3Url) return 's3'
+  if (item.storageType === 'local' && item.localUrl) return 'local'
   if (item.s3Url) return 's3'
   if (item.externalUrl) return 'external'
   return 'local'
@@ -154,7 +166,7 @@ router.get('/stats', requireAuth, requireAdmin, async (req, res) => {
 router.post('/import', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { items, mode } = req.body as {
-      items: Array<{
+      items?: Array<{
         id?: string
         md5?: string
         localUrl?: string
@@ -162,89 +174,91 @@ router.post('/import', requireAuth, requireAdmin, async (req, res) => {
         s3Url?: string
         storageType?: 'local' | 'external' | 's3'
       }>
-      mode: 'update' | 'create' | 'upsert'
+      mode?: 'update' | 'create' | 'upsert'
     }
-
-    if (!Array.isArray(items) || items.length === 0) {
-      res.status(400).json({ error: '缺少导入数据' })
+    if (!Array.isArray(items) || !items.length || !mode) {
+      res.status(400).json({ error: '缺少导入数据或模式' })
       return
     }
 
-    const results = {
-      success: 0,
-      failed: 0,
-      errors: [] as string[],
-    }
-
+    const results = { success: 0, failed: 0, errors: [] as string[] }
     for (const item of items) {
       try {
-        if (item.storageType === 's3' && !item.s3Url) {
-          results.failed++
-          results.errors.push(`S3 存储类型需要提供 s3Url: ${JSON.stringify(item)}`)
-          continue
+        const md5 = item.md5?.toLowerCase()
+        if (!md5 || !/^[a-f0-9]{32}$/.test(md5)) {
+          throw new Error('md5 必须是 32 位十六进制字符串')
         }
+        if (typeof item.localUrl !== 'string' || !item.localUrl.trim()) {
+          throw new Error('localUrl 不能为空')
+        }
+        if (item.storageType === 's3' && !item.s3Url) throw new Error('S3 存储类型需要提供 s3Url')
+        if (item.storageType === 'external' && !item.externalUrl) {
+          throw new Error('外部存储类型需要提供 externalUrl')
+        }
+        if (mode !== 'upsert' && !item.id) throw new Error('该模式需要提供 id')
 
-        if (mode === 'upsert' && item.md5) {
-          const existing = await prisma.imageMap.findUnique({
-            where: { md5: item.md5 },
+        if (mode === 'create') {
+          const conflict = await prisma.imageMap.findFirst({
+            where: { OR: [{ id: item.id }, { md5 }] },
+            select: { id: true },
           })
-
-          if (existing) {
-            await prisma.imageMap.update({
-              where: { id: existing.id },
-              data: {
-                ...(item.localUrl !== undefined && { localUrl: item.localUrl || null }),
-                ...(item.externalUrl !== undefined && { externalUrl: item.externalUrl || null }),
-                ...(item.s3Url !== undefined && { s3Url: item.s3Url || null }),
-                ...(item.storageType !== undefined && { storageType: item.storageType }),
-              },
-            })
-          } else if (item.id) {
-            await prisma.imageMap.create({
-              data: {
-                id: item.id,
-                md5: item.md5 || crypto.randomUUID(),
-                ...(item.localUrl && { localUrl: item.localUrl }),
-                ...(item.externalUrl && { externalUrl: item.externalUrl }),
-                ...(item.s3Url && { s3Url: item.s3Url }),
-                ...(item.storageType && { storageType: item.storageType }),
-              },
-            })
-          }
-          results.success++
-        } else if (mode === 'update' && item.id) {
-          await prisma.imageMap.update({
-            where: { id: item.id },
-            data: {
-              ...(item.localUrl !== undefined && { localUrl: item.localUrl || null }),
-              ...(item.externalUrl !== undefined && { externalUrl: item.externalUrl || null }),
-              ...(item.s3Url !== undefined && { s3Url: item.s3Url || null }),
-              ...(item.storageType !== undefined && { storageType: item.storageType }),
-            },
-          })
-          results.success++
-        } else if (mode === 'create' && item.id && item.md5) {
+          if (conflict) throw new Error(`create 冲突：${conflict.id}`)
           await prisma.imageMap.create({
             data: {
-              id: item.id,
-              md5: item.md5,
-              ...(item.localUrl && { localUrl: item.localUrl }),
-              ...(item.externalUrl && { externalUrl: item.externalUrl }),
-              ...(item.s3Url && { s3Url: item.s3Url }),
-              ...(item.storageType && { storageType: item.storageType }),
+              id: item.id!,
+              md5,
+              localUrl: item.localUrl.trim(),
+              externalUrl: item.externalUrl || null,
+              s3Url: item.s3Url || null,
+              storageType: item.storageType || 'local',
             },
           })
-          results.success++
+        } else if (mode === 'update') {
+          const existing = await prisma.imageMap.findUnique({ where: { id: item.id! } })
+          if (!existing) throw new Error(`记录不存在：${item.id}`)
+          if (existing.md5 !== md5) throw new Error('md5 与现有记录不匹配')
+          await prisma.imageMap.update({
+            where: { id: item.id! },
+            data: {
+              localUrl: item.localUrl.trim(),
+              externalUrl: item.externalUrl || null,
+              s3Url: item.s3Url || null,
+              storageType: item.storageType || existing.storageType,
+              deletedAt: null,
+              deletedBy: null,
+              retiredAt: null,
+            },
+          })
         } else {
-          results.failed++
-          results.errors.push(`数据格式错误：${JSON.stringify(item)}`)
+          await prisma.imageMap.upsert({
+            where: { md5 },
+            update: {
+              localUrl: item.localUrl.trim(),
+              externalUrl: item.externalUrl || null,
+              s3Url: item.s3Url || null,
+              ...(item.storageType ? { storageType: item.storageType } : {}),
+              deletedAt: null,
+              deletedBy: null,
+              retiredAt: null,
+            },
+            create: {
+              id: item.id || crypto.randomUUID(),
+              md5,
+              localUrl: item.localUrl.trim(),
+              externalUrl: item.externalUrl || null,
+              s3Url: item.s3Url || null,
+              storageType: item.storageType || 'local',
+            },
+          })
         }
-      } catch (err) {
+        results.success++
+      } catch (error) {
         results.failed++
-        results.errors.push(`处理失败：${JSON.stringify(item)} - ${(err as Error).message}`)
+        results.errors.push(
+          `${JSON.stringify(item)}：${error instanceof Error ? error.message : '未知错误'}`
+        )
       }
     }
-
     res.json(results)
   } catch (error) {
     console.error('Import image maps error:', error)
@@ -342,7 +356,7 @@ router.get('/:id', async (req, res) => {
 })
 
 // POST /api/image-maps - Create image map
-router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
+router.post('/', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { id, md5, localUrl, externalUrl, s3Url, storageType } = req.body as {
       id?: string
@@ -352,100 +366,55 @@ router.post('/', requireAuth, requireActiveUser, async (req: AuthenticatedReques
       s3Url?: string
       storageType?: 'local' | 'external' | 's3'
     }
+    if (!id || !md5 || !/^[a-f0-9]{32}$/i.test(md5) || !localUrl?.trim()) {
+      res.status(400).json({ error: 'id、32 位 md5 和非空 localUrl 为必填字段' })
+      return
+    }
+    if (storageType === 's3' && !s3Url) {
+      res.status(400).json({ error: 'S3 存储类型需要提供 s3Url' })
+      return
+    }
+    if (storageType === 'external' && !externalUrl) {
+      res.status(400).json({ error: '外部存储类型需要提供 externalUrl' })
+      return
+    }
 
-    if (!id || !md5) {
-      res.status(400).json({ error: '缺少必要字段' })
+    const existing = await prisma.imageMap.findFirst({
+      where: { OR: [{ id }, { md5: md5.toLowerCase() }] },
+      select: { id: true, md5: true },
+    })
+    if (existing) {
+      res.status(409).json({ error: '图片映射已存在，请使用管理员导入或更新接口' })
       return
     }
 
     let blurhash: string | undefined
-    let thumbhash: string | undefined
-
-    // Try to generate blurhash from local file path first
     const filePath = resolveUploadPathByUrl(localUrl)
     if (filePath && isBlurhashEnabled() && shouldAutoGenerate()) {
       try {
-        console.log('[ImageMap] Auto-generating blurhash from local file:', filePath)
-
         blurhash = await generateBlurhashFromFile(filePath)
-
-        if (blurhash) {
-          console.log('[ImageMap] Blurhash generated:', blurhash.substring(0, 20) + '...')
-        }
-      } catch (hashError) {
-        console.error('[ImageMap] Failed to generate blurhash from local file:', hashError)
+      } catch (error) {
+        console.error('[ImageMap] Failed to generate blurhash:', error)
       }
     }
-
-    const existing = await prisma.imageMap.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        md5: true,
-        localUrl: true,
-        s3Url: true,
-        externalUrl: true,
-        storageType: true,
-      },
-    })
-    if (existing) {
-      if (existing.md5 !== md5) {
-        res.status(409).json({ error: '图片映射已存在且与当前图片不匹配' })
-        return
-      }
-
-      if (!isAdminRole(req.authUser?.role)) {
-        res.status(403).json({ error: '需要管理员权限' })
-        return
-      }
-
-      const item = await prisma.imageMap.update({
-        where: { id },
-        data: {
-          ...(localUrl !== undefined && { localUrl: localUrl || null }),
-          ...(externalUrl !== undefined && { externalUrl: externalUrl || null }),
-          ...(s3Url !== undefined && { s3Url: s3Url || null }),
-          ...(storageType !== undefined && { storageType }),
-          ...(blurhash !== undefined && { blurhash: blurhash || null }),
-          ...(thumbhash !== undefined && { thumbhash: thumbhash || null }),
-        },
-      })
-
-      res.json({
-        item: {
-          ...item,
-          createdAt: item.createdAt.toISOString(),
-        },
-      })
-      return
-    }
-
     const item = await prisma.imageMap.create({
       data: {
         id,
-        md5,
-        ...(localUrl && { localUrl }),
-        ...(externalUrl && { externalUrl }),
-        ...(s3Url && { s3Url }),
-        ...(storageType && { storageType }),
-        ...(blurhash && { blurhash }),
-        ...(thumbhash && { thumbhash }),
+        md5: md5.toLowerCase(),
+        localUrl: localUrl.trim(),
+        externalUrl: externalUrl || null,
+        s3Url: s3Url || null,
+        storageType: storageType || 'local',
+        ...(blurhash ? { blurhash } : {}),
       },
     })
-
-    res.status(201).json({
-      item: {
-        ...item,
-        createdAt: item.createdAt.toISOString(),
-      },
-    })
+    res.status(201).json({ item: normalizeImageMap(item) })
   } catch (error) {
     console.error('Create image map error:', error)
     res.status(500).json({ error: '保存图片映射失败' })
   }
 })
 
-// PATCH /api/image-maps/:id - Update image map
 router.patch('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { localUrl, externalUrl, s3Url, storageType, blurhash, thumbhash } = req.body as {
@@ -456,104 +425,163 @@ router.patch('/:id', requireAuth, requireAdmin, async (req, res) => {
       blurhash?: string | null
       thumbhash?: string | null
     }
+    if (localUrl !== undefined && !localUrl?.trim()) {
+      res.status(400).json({ error: 'localUrl 不能为空' })
+      return
+    }
 
-    const item = await prisma.imageMap.update({
-      where: { id: req.params.id },
-      data: {
-        ...(localUrl !== undefined && { localUrl: localUrl || null }),
-        ...(externalUrl !== undefined && { externalUrl: externalUrl || null }),
-        ...(s3Url !== undefined && { s3Url: s3Url || null }),
-        ...(storageType !== undefined && { storageType }),
-        ...(blurhash !== undefined && { blurhash: blurhash || null }),
-        ...(thumbhash !== undefined && { thumbhash: thumbhash || null }),
-      },
+    const item = await prisma.$transaction(async (tx) => {
+      let existing = await tx.imageMap.findUnique({ where: { id: req.params.id } })
+      if (!existing) throw new MediaAssetRequestError(404, '图片映射不存在')
+      const changesPhysicalStorage =
+        localUrl !== undefined ||
+        externalUrl !== undefined ||
+        s3Url !== undefined ||
+        storageType !== undefined
+      if (changesPhysicalStorage) {
+        await tx.$executeRaw(
+          Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${existing.md5}, 0))`
+        )
+        existing = await tx.imageMap.findUnique({ where: { id: existing.id } })
+        if (!existing) throw new MediaAssetRequestError(404, '图片映射不存在')
+        const effectiveLocalUrl = localUrl === undefined ? existing.localUrl : localUrl.trim()
+        const effectiveS3Url = s3Url === undefined ? existing.s3Url : s3Url || null
+        const effectiveExternalUrl =
+          externalUrl === undefined ? existing.externalUrl : externalUrl || null
+        const effectiveStorageType = storageType || existing.storageType
+        if (effectiveStorageType === 's3' && !effectiveS3Url) {
+          throw new MediaAssetRequestError(400, 'S3 存储类型需要提供 s3Url')
+        }
+        if (effectiveStorageType === 'external' && !effectiveExternalUrl) {
+          throw new MediaAssetRequestError(400, '外部存储类型需要提供 externalUrl')
+        }
+        if (effectiveStorageType === 'local' && !effectiveLocalUrl) {
+          throw new MediaAssetRequestError(400, '本地存储类型需要提供 localUrl')
+        }
+        const [activeClaims, references] = await Promise.all([
+          tx.mediaAsset.count({
+            where: { imageMapId: existing.id, status: { in: ['uploaded', 'ready'] } },
+          }),
+          collectMediaReferences(),
+        ])
+        if (
+          activeClaims > 0 ||
+          isMediaReferenced(references, {
+            urls: [existing.localUrl, existing.s3Url, existing.externalUrl],
+          }) ||
+          existing.variantStatus === 'processing'
+        ) {
+          throw new MediaAssetRequestError(
+            409,
+            '图片映射仍有引用、活跃资源或变体任务，不能修改存储位置'
+          )
+        }
+        return tx.imageMap.update({
+          where: { id: existing.id },
+          data: {
+            localUrl: effectiveLocalUrl,
+            s3Url: effectiveS3Url,
+            externalUrl: effectiveExternalUrl,
+            storageType: effectiveStorageType,
+            ...(blurhash !== undefined ? { blurhash: blurhash || null } : {}),
+            ...(thumbhash !== undefined ? { thumbhash: thumbhash || null } : {}),
+          },
+        })
+      }
+      return tx.imageMap.update({
+        where: { id: existing.id },
+        data: {
+          ...(blurhash !== undefined ? { blurhash: blurhash || null } : {}),
+          ...(thumbhash !== undefined ? { thumbhash: thumbhash || null } : {}),
+        },
+      })
     })
-
-    res.json({
-      item: normalizeImageMap(item),
-    })
+    res.json({ item: normalizeImageMap(item) })
   } catch (error) {
+    if (error instanceof MediaAssetRequestError) {
+      res.status(error.statusCode).json({ error: error.message })
+      return
+    }
     console.error('Update image map error:', error)
     res.status(500).json({ error: '更新图片映射失败' })
   }
 })
 
-// DELETE /api/image-maps/:id - Delete image map
 router.delete('/:id', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const existing = await prisma.imageMap.findUnique({
-      where: { id: req.params.id },
-      select: { id: true, deletedAt: true },
-    })
-
-    if (!existing || existing.deletedAt) {
-      res.status(404).json({ error: '图片映射不存在' })
-      return
-    }
-
     await prisma.$transaction(async (tx) => {
+      const existing = await tx.imageMap.findUnique({ where: { id: req.params.id } })
+      if (!existing || existing.deletedAt) {
+        throw new MediaAssetRequestError(404, '图片映射不存在')
+      }
+      await tx.$executeRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${existing.md5}, 0))`
+      )
+      const locked = await tx.imageMap.findUnique({ where: { id: existing.id } })
+      if (!locked || locked.deletedAt) {
+        throw new MediaAssetRequestError(404, '图片映射不存在')
+      }
+      const [activeClaims, references] = await Promise.all([
+        tx.mediaAsset.count({
+          where: { imageMapId: locked.id, status: { in: ['uploaded', 'ready'] } },
+        }),
+        collectMediaReferences(),
+      ])
+      if (
+        activeClaims > 0 ||
+        isMediaReferenced(references, {
+          urls: [locked.localUrl, locked.s3Url, locked.externalUrl],
+        }) ||
+        locked.variantStatus === 'processing'
+      ) {
+        throw new MediaAssetRequestError(409, '图片映射仍有引用、活跃资源或变体任务，不能删除')
+      }
       await tx.imageMap.update({
-        where: { id: req.params.id },
-        data: softDeleteData(req.authUser!.uid),
+        where: { id: locked.id },
+        data: { ...softDeleteData(req.authUser!.uid), retiredAt: getMediaRetiredAt() },
       })
       await tx.moderationLog.create({
         data: {
           targetType: 'imageMap',
-          targetId: req.params.id,
+          targetId: locked.id,
           action: 'delete',
           operatorUid: req.authUser!.uid,
           note: null,
         },
       })
     })
-
     res.json({ success: true })
   } catch (error) {
+    if (error instanceof MediaAssetRequestError) {
+      res.status(error.statusCode).json({ error: error.message })
+      return
+    }
     console.error('Delete image map error:', error)
     res.status(500).json({ error: '删除图片映射失败' })
   }
 })
 
-// POST /api/image-maps/:id/refresh-blurhash - Refresh blurhash for specific image map
 router.post('/:id/refresh-blurhash', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { id } = req.params
-
-    const imageMap = await prisma.imageMap.findUnique({
-      where: { id },
-    })
-
+    const imageMap = await prisma.imageMap.findUnique({ where: { id: req.params.id } })
     if (!imageMap) {
       res.status(404).json({ error: '图片映射不存在' })
       return
     }
-
-    // Use localUrl to generate blurhash from local file
     const filePath = resolveUploadPathByUrl(imageMap.localUrl)
-
     if (!filePath) {
       res.status(400).json({ error: '没有可用的本地图片路径' })
       return
     }
-
     try {
-      console.log('[Refresh Blurhash] Refreshing blurhash from local file:', filePath)
-
       const blurhash = await generateBlurhashFromFile(filePath)
-
       const updatedItem = await prisma.imageMap.update({
-        where: { id },
-        data: {
-          ...(blurhash && { blurhash }),
-        },
+        where: { id: imageMap.id },
+        data: blurhash ? { blurhash } : {},
       })
-
-      res.json({
-        success: true,
-        item: normalizeImageMap(updatedItem),
-      })
-    } catch (hashError) {
-      console.error('[Refresh Blurhash] Failed to generate blurhash:', hashError)
+      res.json({ success: true, item: normalizeImageMap(updatedItem) })
+    } catch (error) {
+      console.error('[Refresh Blurhash] Failed:', error)
       res.status(500).json({ error: '生成 blurhash 失败' })
     }
   } catch (error) {
@@ -617,14 +645,6 @@ router.post('/migrate-to-s3', requireAuth, requireAdmin, async (req, res) => {
           continue
         }
 
-        // Read the file
-        const fileBuffer = await fs.promises.readFile(filePath)
-
-        // Generate object key from localUrl
-        const relativePath = imageMap.localUrl!.slice('/uploads/'.length)
-        const objectKey = `images/${relativePath}`
-
-        // Detect content type from extension
         const ext = path.extname(filePath).toLowerCase()
         const contentTypeMap: Record<string, string> = {
           '.jpg': 'image/jpeg',
@@ -635,17 +655,16 @@ router.post('/migrate-to-s3', requireAuth, requireAdmin, async (req, res) => {
           '.bmp': 'image/bmp',
         }
         const contentType = contentTypeMap[ext] || 'application/octet-stream'
-
-        // Upload to S3
-        const { uploadFileToS3 } = await import('../utils')
-        const s3Result = await uploadFileToS3(filePath, objectKey, contentType)
-
-        if (!s3Result.success || !s3Result.url) {
-          errors.push(`S3 上传失败: ${imageMap.id} - ${s3Result.error}`)
+        const syncResult = await ensureImageMapStorage(imageMap.id, 's3', {
+          sourceFilePath: filePath,
+          sourceFileName: path.basename(filePath),
+          sourceMimeType: contentType,
+        })
+        if (syncResult.errors.length > 0) {
+          errors.push(`S3 上传失败: ${imageMap.id} - ${syncResult.errors.join('; ')}`)
           continue
         }
 
-        // Generate blurhash from local file
         let blurhash: string | undefined
         if (isBlurhashEnabled() && shouldAutoGenerate()) {
           try {
@@ -657,17 +676,9 @@ router.post('/migrate-to-s3', requireAuth, requireAdmin, async (req, res) => {
             )
           }
         }
-
-        // Update the ImageMap with s3Url and blurhash
-        await prisma.imageMap.update({
-          where: { id: imageMap.id },
-          data: {
-            s3Url: s3Result.url,
-            storageType: 's3',
-            ...(blurhash && { blurhash }),
-          },
-        })
-
+        if (blurhash) {
+          await prisma.imageMap.update({ where: { id: imageMap.id }, data: { blurhash } })
+        }
         processed.push(processed.length + 1)
         console.log(`[Migrate to S3] Processed ${processed.length}/${total}:`, imageMap.id)
       } catch (err) {

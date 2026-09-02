@@ -219,6 +219,12 @@ const CONFIG_GROUPS: ConfigGroup[] = [
         description: '取值范围 10000–3600000',
         type: 'number',
       },
+      {
+        key: 'mediaCleanupIntervalMs',
+        label: '媒体清理间隔（毫秒）',
+        description: '取值范围 10000–3600000',
+        type: 'number',
+      },
     ],
   },
   {

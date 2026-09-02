@@ -54,6 +54,10 @@ import { registerAdminVariantsRoutes } from './src/server/routes/admin.variants.
 import { registerAdminMediaHealthRoutes } from './src/server/routes/admin.media-health.routes'
 import { cloudSyncService } from './src/server/services/cloudSyncService'
 import { variantGenerator } from './src/server/services/variantGenerator'
+import {
+  cleanupExpiredUploadSessions,
+  garbageCollectRetiredMedia,
+} from './src/server/services/mediaLifecycle.service'
 import { rateLimitConfigService } from './src/server/services/rateLimitConfig.service'
 import { runtimeConfigService } from './src/server/services/runtimeConfig.service'
 import { secretsConfigService } from './src/server/services/secretsConfig.service'
@@ -390,6 +394,11 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     res.status(400).json({ error: err.message })
     return
   }
+  const statusCode = (err as Error & { statusCode?: unknown }).statusCode
+  if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) {
+    res.status(statusCode).json({ error: err.message })
+    return
+  }
 
   logger.error({ err: err }, 'Unhandled server error')
   res.status(500).json({ error: '服务器内部错误' })
@@ -504,6 +513,22 @@ async function startServer() {
       import('./src/server/vector/clipEmbedding').then(({ warmup }) => warmup()).catch(() => {})
     }
 
+    // 媒体生命周期清理：递归 setTimeout，间隔随运行时配置即时生效
+    let mediaLifecycleTimer: NodeJS.Timeout | null = null
+    const scheduleMediaLifecycle = () => {
+      mediaLifecycleTimer = setTimeout(async () => {
+        try {
+          await cleanupExpiredUploadSessions(100)
+          await garbageCollectRetiredMedia(100)
+        } catch (error) {
+          logger.error({ err: error }, 'Media lifecycle cleanup failed')
+        } finally {
+          scheduleMediaLifecycle()
+        }
+      }, runtimeConfigService.getConfig().mediaCleanupIntervalMs)
+    }
+    scheduleMediaLifecycle()
+
     // 编辑锁清理：递归 setTimeout，间隔随运行时配置即时生效
     let editLockCleanupTimer: NodeJS.Timeout | null = null
     const scheduleEditLockCleanup = () => {
@@ -532,6 +557,9 @@ async function startServer() {
         Promise.allSettled([prisma.$disconnect()]).then(() => {
           if (editLockCleanupTimer) {
             clearTimeout(editLockCleanupTimer)
+          }
+          if (mediaLifecycleTimer) {
+            clearTimeout(mediaLifecycleTimer)
           }
           logger.info('Graceful shutdown complete')
           process.exit(0)

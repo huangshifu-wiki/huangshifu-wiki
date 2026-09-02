@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import crypto from 'node:crypto'
 import request from 'supertest'
 import { app } from '../../server'
 import { prisma, createTestGallery, createTestUser } from './setup'
@@ -30,11 +31,11 @@ async function cleanupGalleryEventDateData() {
   await prisma.gallery.deleteMany({
     where: { title: { startsWith: GALLERY_TITLE_PREFIX } },
   })
-  await prisma.imageMap.deleteMany({
-    where: { localUrl: { startsWith: PUBLIC_URL_PREFIX } },
-  })
   await prisma.mediaAsset.deleteMany({
     where: { storageKey: { startsWith: STORAGE_KEY_PREFIX } },
+  })
+  await prisma.imageMap.deleteMany({
+    where: { localUrl: { startsWith: PUBLIC_URL_PREFIX } },
   })
   await prisma.user.deleteMany({
     where: { email: { startsWith: 'roi_gallery_event_date_' } },
@@ -43,11 +44,17 @@ async function cleanupGalleryEventDateData() {
 
 async function createTestImageAsset(ownerUid: string, suffix: string) {
   const fileName = `gallery-event-date-${suffix}.jpg`
+  const storageKey = `${STORAGE_KEY_PREFIX}${fileName}`
+  const md5 = crypto.createHash('md5').update(storageKey).digest('hex')
+  const imageMap = await prisma.imageMap.create({
+    data: { id: `map-${suffix}`, md5, localUrl: `${PUBLIC_URL_PREFIX}${fileName}` },
+  })
 
   return prisma.mediaAsset.create({
     data: {
       ownerUid,
-      storageKey: `${STORAGE_KEY_PREFIX}${fileName}`,
+      imageMapId: imageMap.id,
+      storageKey,
       publicUrl: `${PUBLIC_URL_PREFIX}${fileName}`,
       fileName,
       mimeType: 'image/jpeg',

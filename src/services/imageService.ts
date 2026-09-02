@@ -1,6 +1,6 @@
-import { apiGet, apiPost, apiUpload } from '../lib/apiClient'
-import { calculateFileMd5Hex, md5HexToBase64 } from '../utils/fileMd5'
-import type { UploadSessionResponse, UploadFileResponse } from '../types/api'
+import { apiDelete, apiGet, apiPost, apiUpload } from '../lib/apiClient'
+import { calculateFileMd5Hex } from '../utils/fileMd5'
+import type { UploadFileResponse } from '../types/api'
 
 export interface ImageMap {
   id: string
@@ -78,12 +78,15 @@ export interface UploadImageOptions {
 
 export interface UploadImageResult {
   assetId: string
+  imageMapId: string
   url: string
   localUrl?: string
   s3Url?: string
   externalUrl?: string
   storageType: 'local' | 's3' | 'external'
-  md5?: string
+  md5: string
+  reused: boolean
+  status: 'uploaded' | 'ready' | 'deleted'
   blurhash?: string
 }
 
@@ -279,193 +282,6 @@ export const getImageUrlWithMeta = async (
   return null
 }
 
-/**
- * 通过会话模式上传图片到 CDN
- * 使用上传会话流程：创建会话 -> 上传文件 -> 完成会话
- */
-/** @deprecated 请使用 uploadImageWithStrategy 替代 */
-export const uploadImageToCDNs = async (file: File): Promise<string> => {
-  const md5 = await calculateFileMd5Hex(file)
-
-  // 检查是否已存在相同 MD5 的图片
-  const listResponse = await apiGet<{ items: ImageMap[] }>('/api/image-maps', { md5 })
-  const existingItems = listResponse.items || []
-
-  if (existingItems.length > 0) {
-    return existingItems[0].id
-  }
-
-  // 创建上传会话
-  const sessionResponse = await apiPost<UploadSessionResponse>('/api/uploads/sessions', {})
-  const sessionId = sessionResponse.session.id
-
-  // 上传文件到会话
-  const formData = new FormData()
-  formData.append('file', file)
-
-  const uploadData = await apiUpload<UploadFileResponse>(
-    `/api/uploads/sessions/${sessionId}/files`,
-    formData
-  )
-  const assetId = uploadData.asset.id
-
-  // 完成会话
-  await apiPost(`/api/uploads/sessions/${sessionId}/finalize`)
-
-  return assetId
-}
-
-export const uploadToS3 = async (
-  file: File
-): Promise<{ id: string; s3Url: string; key: string }> => {
-  const md5 = await calculateFileMd5Hex(file)
-
-  const listResponse = await apiGet<{ items: ImageMap[] }>('/api/image-maps', { md5 })
-  const existingItems = listResponse.items || []
-
-  if (existingItems.length > 0) {
-    const existing = existingItems[0]
-    if (existing.s3Url) {
-      return {
-        id: existing.id,
-        s3Url: existing.s3Url,
-        key: existing.s3Url.split('/').pop() || existing.id,
-      }
-    }
-  }
-
-  const filename = `${md5}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-  const contentMd5 = md5HexToBase64(md5)
-
-  const presignResponse = await apiGet<{
-    uploadUrl: string
-    key: string
-    expiresIn: number
-  }>('/api/s3/presign-upload', {
-    filename,
-    contentType: file.type,
-    contentMd5,
-    bucket: 'private',
-  })
-
-  // 注意：此处保留 fetch，因为是直接上传到外部 S3 的 presigned URL，不是 API 调用
-  // presigned URL 是 AWS S3 的签名 URL，需要使用 PUT 方法直接上传文件到 S3
-  const uploadResponse = await fetch(presignResponse.uploadUrl, {
-    method: 'PUT',
-    body: file,
-    headers: {
-      'Content-Type': file.type,
-      'Content-MD5': contentMd5,
-    },
-  })
-
-  if (!uploadResponse.ok) {
-    const errorText = await uploadResponse.text().catch(() => '')
-    throw new Error(
-      `S3 upload failed with status ${uploadResponse.status}${errorText ? `: ${errorText}` : ''}`
-    )
-  }
-
-  const configResponse = await apiGet<{
-    enabled: boolean
-    endpoint: string
-    bucket: string
-    publicDomain?: string
-    region: string
-  }>('/api/s3/config')
-
-  let s3Url: string
-  if (configResponse.publicDomain) {
-    s3Url = `${configResponse.publicDomain}/${presignResponse.key}`
-  } else {
-    s3Url = `${configResponse.endpoint}/${configResponse.bucket}/${presignResponse.key}`
-  }
-
-  const imageId = Math.random().toString(36).substring(7)
-
-  if (existingItems.length > 0) {
-    // 更新已存在的图片映射
-    await apiPost('/api/image-maps', {
-      id: existingItems[0].id,
-      md5,
-      s3Url,
-      storageType: 's3',
-    })
-    return {
-      id: existingItems[0].id,
-      s3Url,
-      key: presignResponse.key,
-    }
-  }
-
-  // 通过会话模式上传到本地作为备份
-  const sessionResponse = await apiPost<UploadSessionResponse>('/api/uploads/sessions', {})
-  const sessionId2 = sessionResponse.session.id
-
-  const formData = new FormData()
-  formData.append('file', file)
-
-  let localUrl: string | undefined
-  try {
-    const uploadData = await apiUpload<UploadFileResponse>(
-      `/api/uploads/sessions/${sessionId2}/files`,
-      formData
-    )
-    localUrl = uploadData.tripleStorage?.localUrl || uploadData.asset.publicUrl
-    // 完成会话
-    await apiPost(`/api/uploads/sessions/${sessionId2}/finalize`)
-  } catch (error) {
-    console.error('Failed to upload backup to local storage:', error)
-    // 本地备份上传失败不影响 S3 上传结果
-  }
-
-  // 创建图片映射记录
-  await apiPost('/api/image-maps', {
-    id: imageId,
-    md5,
-    ...(localUrl && { localUrl }),
-    s3Url,
-    storageType: 's3',
-  })
-
-  return {
-    id: imageId,
-    s3Url,
-    key: presignResponse.key,
-  }
-}
-
-export const uploadImage = async (
-  file: File,
-  preferredStorage?: 'local' | 's3'
-): Promise<{ id: string; url: string; storageType: 'local' | 's3' }> => {
-  try {
-    if (preferredStorage === 's3' || preferredStorage === undefined) {
-      try {
-        const s3Result = await uploadToS3(file)
-        return {
-          id: s3Result.id,
-          url: s3Result.s3Url,
-          storageType: 's3',
-        }
-      } catch (s3Error) {
-        console.error('S3 upload failed, falling back to local:', s3Error)
-      }
-    }
-
-    const imageId = await uploadImageToCDNs(file)
-    const urls = await getImageUrl(imageId)
-    return {
-      id: imageId,
-      url: urls[0] || '',
-      storageType: 'local',
-    }
-  } catch (error) {
-    console.error('Image upload failed:', error)
-    throw error
-  }
-}
-
 export const getImageUrl = async (imageId: string): Promise<string[]> => {
   try {
     const response = await apiGet<{ item: ImageMap }>(`/api/image-maps/${imageId}`)
@@ -528,87 +344,87 @@ export const uploadImageWithStrategy = async (
   file: File,
   options: UploadImageOptions = {}
 ): Promise<UploadImageResult> => {
-  const { type = 'general', onProgress, signal, reuseExisting = true } = options
-
-  // 获取当前存储策略
+  const { onProgress, signal, reuseExisting = true } = options
   const preference = await getImagePreference()
 
   if (reuseExisting) {
     const existing = await findExistingImageMapForFile(file)
-    if (existing) {
+    if (existing && (existing.localUrl || existing.s3Url || existing.externalUrl)) {
+      const reuseResponse = await apiPost<{
+        asset: UploadFileResponse['asset']
+        storageErrors?: string[]
+      }>(
+        '/api/uploads/assets/reuse',
+        {
+          imageMapId: existing.id,
+          fileName: file.name,
+          mimeType: file.type || 'image/jpeg',
+          sizeBytes: file.size,
+        },
+        signal
+      )
       const resolved = await resolveImageUrl(existing, preference)
       return {
-        assetId: '',
-        url: resolved.url || existing.localUrl,
+        assetId: reuseResponse.asset.id,
+        imageMapId: reuseResponse.asset.imageMapId,
+        url: resolved.url || existing.localUrl || existing.s3Url || existing.externalUrl || '',
         localUrl: existing.localUrl,
         s3Url: existing.s3Url,
         externalUrl: existing.externalUrl,
-        storageType: resolved.storageType || existing.storageType || 'local',
+        storageType: resolved.storageType,
         md5: existing.md5,
-        blurhash: existing.blurhash,
+        reused: true,
+        status: 'ready',
       }
     }
   }
 
-  // 根据策略决定是否启用三重存储
   const useTripleStorage = preference.strategy === 's3' || preference.strategy === 'external'
+  let sessionId: string | null = null
+  try {
+    const sessionResponse = await apiPost<{ session: UploadFileResponse['session'] }>(
+      '/api/uploads/sessions',
+      {}
+    )
+    sessionId = sessionResponse.session.id
 
-  // 创建上传会话
-  const sessionResponse = await apiPost<UploadSessionResponse>('/api/uploads/sessions', {})
-  const sessionId = sessionResponse.session.id
+    const formData = new FormData()
+    formData.append('file', file)
+    const uploadPath = `/api/uploads/sessions/${sessionId}/files${
+      useTripleStorage ? '?tripleStorage=true' : ''
+    }`
+    const data = await apiUpload<UploadFileResponse>(uploadPath, formData, { signal, onProgress })
+    await apiPost(`/api/uploads/sessions/${sessionId}/finalize`, undefined, signal)
 
-  const formData = new FormData()
-  formData.append('file', file)
-
-  // 构建 URL，可选启用三重存储模式
-  const uploadPath = `/api/uploads/sessions/${sessionId}/files${
-    useTripleStorage ? '?tripleStorage=true' : ''
-  }`
-
-  const data = await apiUpload<{
-    asset: { id: string; publicUrl: string; md5?: string }
-    tripleStorage?: { localUrl: string; s3Url?: string; externalUrl?: string }
-  }>(uploadPath, formData, { signal, onProgress })
-
-  // 完成会话
-  await apiPost(`/api/uploads/sessions/${sessionId}/finalize`)
-
-  // 如果启用了三重存储，返回所有 URL
-  if (useTripleStorage && data.tripleStorage) {
-    const { localUrl, s3Url, externalUrl } = data.tripleStorage
-
-    let selectedUrl: string
-    switch (preference.strategy) {
-      case 'external':
-        selectedUrl = externalUrl || s3Url || localUrl
-        break
-      case 's3':
-        selectedUrl = s3Url || externalUrl || localUrl
-        break
-      case 'local':
-      default:
-        selectedUrl = localUrl
-        break
-    }
+    const localUrl = data.tripleStorage?.localUrl || data.asset.publicUrl || undefined
+    const s3Url = data.tripleStorage?.s3Url
+    const externalUrl = data.tripleStorage?.externalUrl
+    let selectedUrl = localUrl || ''
+    if (preference.strategy === 's3') selectedUrl = s3Url || externalUrl || localUrl || ''
+    if (preference.strategy === 'external') selectedUrl = externalUrl || s3Url || localUrl || ''
 
     return {
       assetId: data.asset.id,
+      imageMapId: data.asset.imageMapId,
       url: selectedUrl,
       localUrl,
       s3Url,
       externalUrl,
-      storageType: preference.strategy,
+      storageType:
+        s3Url && preference.strategy === 's3'
+          ? 's3'
+          : externalUrl && preference.strategy === 'external'
+            ? 'external'
+            : 'local',
       md5: data.asset.md5,
+      reused: data.asset.reused,
+      status: 'ready',
     }
-  }
-
-  // 否则返回默认 URL
-  return {
-    assetId: data.asset.id,
-    url: data.asset.publicUrl,
-    localUrl: data.asset.publicUrl,
-    storageType: 'local',
-    md5: data.asset.md5,
+  } catch (error) {
+    if (sessionId) {
+      await apiDelete(`/api/uploads/sessions/${sessionId}`).catch(() => undefined)
+    }
+    throw error
   }
 }
 

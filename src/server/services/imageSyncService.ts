@@ -4,12 +4,10 @@
  */
 
 import { prisma } from '../prisma'
-import { secretsConfigService } from './secretsConfig.service'
-import { uploadFileToS3, uploadToSuperbed, resolveUploadPathByUrl } from '../utils'
-import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService'
+import { runtimeConfigService } from './runtimeConfig.service'
+import { ensureImageMapStorage } from './mediaAssetService'
 import { getPublicConfig } from '../s3/s3Service'
-import fs from 'fs'
-import path from 'path'
+import { secretsConfigService } from './secretsConfig.service'
 
 export interface SyncProgress {
   id: string
@@ -84,180 +82,6 @@ export function cleanupOldSyncTasks(): void {
 }
 
 /**
- * 同步单张图片到S3
- */
-async function syncImageToS3(imageMap: {
-  id: string
-  localUrl: string
-  s3Url: string | null
-  blurhash: string | null
-}): Promise<{ success: boolean; error?: string; s3Url?: string }> {
-  try {
-    console.log(`[ImageSync] 开始同步图片到S3: ${imageMap.id}, localUrl: ${imageMap.localUrl}`)
-
-    // 如果已经有S3 URL，跳过
-    if (imageMap.s3Url) {
-      console.log(`[ImageSync] 图片已有S3 URL，跳过: ${imageMap.id}`)
-      return { success: true, s3Url: imageMap.s3Url }
-    }
-
-    const filePath = resolveUploadPathByUrl(imageMap.localUrl)
-    if (!filePath) {
-      console.error(`[ImageSync] 无法解析本地路径: ${imageMap.localUrl}`)
-      return { success: false, error: `无法解析本地路径: ${imageMap.localUrl}` }
-    }
-
-    console.log(`[ImageSync] 解析到文件路径: ${filePath}`)
-
-    if (!fs.existsSync(filePath)) {
-      console.error(`[ImageSync] 本地文件不存在: ${filePath}`)
-      return { success: false, error: `本地文件不存在: ${filePath}` }
-    }
-
-    console.log(`[ImageSync] 文件存在，开始上传: ${filePath}`)
-
-    // 检测文件类型
-    const ext = path.extname(filePath).toLowerCase()
-    const contentTypeMap: Record<string, string> = {
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.webp': 'image/webp',
-      '.gif': 'image/gif',
-      '.bmp': 'image/bmp',
-    }
-    const contentType = contentTypeMap[ext] || 'application/octet-stream'
-
-    // 生成S3对象键
-    const relativePath = imageMap.localUrl.slice('/uploads/'.length)
-    const objectKey = `images/${relativePath}`
-
-    // 上传到S3
-    console.log(`[ImageSync] 上传文件到S3: ${objectKey}, contentType: ${contentType}`)
-    const s3Result = await uploadFileToS3(filePath, objectKey, contentType)
-    console.log(`[ImageSync] S3上传结果:`, s3Result)
-
-    if (!s3Result.success || !s3Result.url) {
-      console.error(`[ImageSync] S3上传失败: ${s3Result.error}`)
-      return { success: false, error: s3Result.error || 'S3上传失败' }
-    }
-
-    // 生成blurhash（如果还没有）
-    let blurhash = imageMap.blurhash
-    if (!blurhash && isBlurhashEnabled() && shouldAutoGenerate()) {
-      try {
-        blurhash = await generateBlurhashFromFile(filePath)
-      } catch (e) {
-        console.warn(`[ImageSync] Blurhash生成失败: ${imageMap.id}`, e)
-      }
-    }
-
-    // 更新数据库
-    console.log(`[ImageSync] 更新ImageMap: ${imageMap.id}, s3Url: ${s3Result.url}`)
-    try {
-      await prisma.imageMap.update({
-        where: { id: imageMap.id },
-        data: {
-          s3Url: s3Result.url,
-          storageType: 's3',
-          ...(blurhash && { blurhash }),
-        },
-      })
-      console.log(`[ImageSync] ImageMap更新成功: ${imageMap.id}`)
-    } catch (dbError) {
-      console.error(`[ImageSync] ImageMap更新失败: ${imageMap.id}`, dbError)
-      return {
-        success: false,
-        error: `数据库更新失败: ${dbError instanceof Error ? dbError.message : '未知错误'}`,
-      }
-    }
-
-    return { success: true, s3Url: s3Result.url }
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : '未知错误'
-    return { success: false, error: errorMsg }
-  }
-}
-
-/**
- * 同步单张图片到外部图床（Superbed）
- */
-async function syncImageToExternal(imageMap: {
-  id: string
-  localUrl: string
-  externalUrl: string | null
-  s3Url: string | null
-  blurhash: string | null
-}): Promise<{ success: boolean; error?: string; externalUrl?: string }> {
-  try {
-    // 如果已经有外部URL，跳过
-    if (imageMap.externalUrl) {
-      return { success: true, externalUrl: imageMap.externalUrl }
-    }
-
-    const filePath = resolveUploadPathByUrl(imageMap.localUrl)
-    if (!filePath) {
-      return { success: false, error: `无法解析本地路径: ${imageMap.localUrl}` }
-    }
-
-    if (!fs.existsSync(filePath)) {
-      return { success: false, error: `本地文件不存在: ${filePath}` }
-    }
-
-    const superbedToken = secretsConfigService.getSecrets().superbedApiToken
-    if (!superbedToken) {
-      return { success: false, error: 'Superbed API Token 未配置' }
-    }
-
-    // 检测文件类型
-    const ext = path.extname(filePath).toLowerCase()
-    const contentTypeMap: Record<string, string> = {
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.webp': 'image/webp',
-      '.gif': 'image/gif',
-      '.bmp': 'image/bmp',
-    }
-    const contentType = contentTypeMap[ext] || 'application/octet-stream'
-
-    const fileName = path.basename(filePath)
-
-    // 上传到Superbed
-    const superbedResult = await uploadToSuperbed(filePath, fileName, contentType, superbedToken)
-
-    if (!superbedResult.success || !superbedResult.url) {
-      return { success: false, error: superbedResult.error || '外部图床上传失败' }
-    }
-
-    // 生成blurhash（如果还没有）
-    let blurhash = imageMap.blurhash
-    if (!blurhash && isBlurhashEnabled() && shouldAutoGenerate()) {
-      try {
-        blurhash = await generateBlurhashFromFile(filePath)
-      } catch (e) {
-        console.warn(`[ImageSync] Blurhash生成失败: ${imageMap.id}`, e)
-      }
-    }
-
-    // 更新数据库
-    await prisma.imageMap.update({
-      where: { id: imageMap.id },
-      data: {
-        externalUrl: superbedResult.url,
-        storageType: 'external',
-        ...(blurhash && { blurhash }),
-      },
-    })
-
-    return { success: true, externalUrl: superbedResult.url }
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : '未知错误'
-    return { success: false, error: errorMsg }
-  }
-}
-
-/**
  * 执行图片同步任务
  */
 export async function executeSyncTask(taskId: string): Promise<void> {
@@ -279,9 +103,8 @@ export async function executeSyncTask(taskId: string): Promise<void> {
     // 获取需要同步的图片
     const whereClause =
       task.strategy === 's3'
-        ? { s3Url: null as null, deletedAt: null }
-        : { externalUrl: null as null, deletedAt: null }
-
+        ? { s3Url: null as null, deletedAt: null, retiredAt: null }
+        : { externalUrl: null as null, deletedAt: null, retiredAt: null }
     const imageMaps = await prisma.imageMap.findMany({
       where: whereClause,
       orderBy: { createdAt: 'asc' },
@@ -304,23 +127,12 @@ export async function executeSyncTask(taskId: string): Promise<void> {
       await Promise.all(
         batch.map(async (imageMap) => {
           try {
-            let result
-            if (task.strategy === 's3') {
-              result = await syncImageToS3(imageMap)
-            } else {
-              result = await syncImageToExternal({
-                ...imageMap,
-                externalUrl: imageMap.externalUrl,
-              })
-            }
-
-            if (result.success) {
-              task.succeeded++
-            } else {
+            const result = await ensureImageMapStorage(imageMap.id, task.strategy)
+            if (result.errors.length > 0) {
               task.failed++
-              if (result.error) {
-                task.errors.push(`[${imageMap.id}] ${result.error}`)
-              }
+              task.errors.push(`[${imageMap.id}] ${result.errors.join('; ')}`)
+            } else {
+              task.succeeded++
             }
           } catch (error) {
             task.failed++

@@ -32,6 +32,7 @@ export interface RuntimeConfig {
   qdrantTimeoutMs: number
   imageEmbeddingBatchSize: number
   editLockCleanupIntervalMs: number
+  mediaCleanupIntervalMs: number
   // 变体生成
   variantMaxConcurrent: number
   variantTaskTimeoutMs: number
@@ -85,6 +86,7 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   qdrantTimeoutMs: 2000,
   imageEmbeddingBatchSize: 100,
   editLockCleanupIntervalMs: 90000,
+  mediaCleanupIntervalMs: 90000,
   variantMaxConcurrent: 3,
   variantTaskTimeoutMs: 30000,
   variantQueueMaxWaitMs: 300000,
@@ -130,6 +132,7 @@ const NUMBER_LIMITS: Record<string, [number, number]> = {
   qdrantTimeoutMs: [100, 30000],
   imageEmbeddingBatchSize: [1, 2000],
   editLockCleanupIntervalMs: [10000, 3_600_000],
+  mediaCleanupIntervalMs: [10000, 3_600_000],
   variantMaxConcurrent: [1, 32],
   variantTaskTimeoutMs: [1000, 600_000],
   variantQueueMaxWaitMs: [1000, 86_400_000],

@@ -53,6 +53,7 @@ vi.mock('../../src/server/utils/remoteImageAsset', () => ({
   localizeImageUrlAsMediaAsset: mockLocalizeImageUrlAsMediaAsset,
 }))
 
+vi.mock('../../src/server/prisma', () => ({ prisma: mockPrisma }))
 vi.mock('../../src/server/services/variantGenerator', () => ({
   variantGenerator: {
     enqueue: mockEnqueue,
@@ -77,9 +78,18 @@ describe('music cover localization', () => {
     mockResolveLyric.mockResolvedValue('')
     mockPrisma.mediaAsset.findUnique.mockResolvedValue({
       id: 'asset-1',
+      ownerUid: 'music-test-owner',
       storageKey: 'music-covers/songs/cover.jpg',
       publicUrl: '/uploads/music-covers/songs/cover.jpg',
       status: 'ready',
+      imageMap: {
+        id: 'map-1',
+        md5: '0123456789abcdef0123456789abcdef',
+        localUrl: '/uploads/music-covers/songs/cover.jpg',
+        s3Url: null,
+        externalUrl: null,
+        deletedAt: null,
+      },
     })
     mockPrisma.songCover.count.mockResolvedValue(0)
     mockPrisma.albumCover.count.mockResolvedValue(0)
@@ -98,12 +108,22 @@ describe('music cover localization', () => {
     })
     mockPrisma.$transaction.mockImplementation(async (callback) => {
       const tx = {
+        $executeRaw: vi.fn(),
+        mediaAsset: {
+          findUnique: vi.fn().mockImplementation((args) => mockPrisma.mediaAsset.findUnique(args)),
+        },
         songCover: {
-          create: vi.fn().mockResolvedValue({ id: 'cover-1' }),
+          count: vi.fn().mockResolvedValue(0),
+          create: vi
+            .fn()
+            .mockResolvedValue({ id: 'cover-1', storageKey: 'music-covers/songs/cover.jpg' }),
           updateMany: vi.fn(),
         },
         albumCover: {
-          create: vi.fn().mockResolvedValue({ id: 'album-cover-1' }),
+          create: vi.fn().mockResolvedValue({
+            id: 'album-cover-1',
+            storageKey: 'music-covers/albums/album.jpg',
+          }),
           updateMany: vi.fn(),
         },
         musicTrack: {
@@ -131,8 +151,15 @@ describe('music cover localization', () => {
 
   it('creates song covers without thumbnailUrl and enqueues async generation', async () => {
     const tx = {
+      $executeRaw: vi.fn(),
+      mediaAsset: {
+        findUnique: vi.fn().mockImplementation((args) => mockPrisma.mediaAsset.findUnique(args)),
+      },
       songCover: {
-        create: vi.fn().mockResolvedValue({ id: 'cover-1' }),
+        count: vi.fn().mockResolvedValue(0),
+        create: vi
+          .fn()
+          .mockResolvedValue({ id: 'cover-1', storageKey: 'music-covers/songs/cover.jpg' }),
         updateMany: vi.fn(),
       },
       musicTrack: {
@@ -161,13 +188,29 @@ describe('music cover localization', () => {
   it('localizes remote album covers and enqueues albumCover thumbnail generation', async () => {
     mockPrisma.mediaAsset.findUnique.mockResolvedValue({
       id: 'asset-1',
+      ownerUid: 'music-test-owner',
       storageKey: 'music-covers/albums/album.jpg',
       publicUrl: '/uploads/music-covers/albums/album.jpg',
       status: 'ready',
+      imageMap: {
+        id: 'map-album-1',
+        md5: 'fedcba9876543210fedcba9876543210',
+        localUrl: '/uploads/music-covers/albums/album.jpg',
+        s3Url: null,
+        externalUrl: null,
+        deletedAt: null,
+      },
     })
     const tx = {
+      $executeRaw: vi.fn(),
+      mediaAsset: {
+        findUnique: vi.fn().mockImplementation((args) => mockPrisma.mediaAsset.findUnique(args)),
+      },
       albumCover: {
-        create: vi.fn().mockResolvedValue({ id: 'album-cover-1' }),
+        count: vi.fn().mockResolvedValue(0),
+        create: vi
+          .fn()
+          .mockResolvedValue({ id: 'album-cover-1', storageKey: 'music-covers/albums/album.jpg' }),
         updateMany: vi.fn(),
       },
       album: {

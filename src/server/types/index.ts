@@ -188,6 +188,7 @@ interface ApiUser {
   email: string
   displayName: string
   photoURL: string | null
+  photoAssetId?: string | null
   wechatBound: boolean
   role: PrismaUserRole
   status: UserStatus

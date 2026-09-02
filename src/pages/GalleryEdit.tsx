@@ -479,6 +479,8 @@ const GalleryEdit = () => {
 
     setSavingMode(status)
     let redirectTarget: string | null = null
+    let pendingSessionId: string | null = null
+    const uploadedAssetIds = new Set<string>()
 
     try {
       const pendingImages = currentDraft.images.filter(
@@ -491,7 +493,7 @@ const GalleryEdit = () => {
         setUploading(true)
         const imageTaskByMd5 = new Map<
           string,
-          Promise<{ imageRef: { url: string; name: string }; assetId?: string }>
+          Promise<{ imageRef: { url: string; name: string }; assetId: string }>
         >()
         let sessionId: string | null = null
         let sessionPromise: Promise<string> | null = null
@@ -503,6 +505,7 @@ const GalleryEdit = () => {
               maxFiles: pendingImages.length,
             }).then((sessionData) => {
               sessionId = sessionData.session.id
+              pendingSessionId = sessionId
               return sessionId
             })
           }
@@ -518,9 +521,22 @@ const GalleryEdit = () => {
           if (!imageTask) {
             imageTask = (async () => {
               const existing = await findExistingImageMapByMd5(md5)
-              if (existing) {
+              if (existing && (existing.localUrl || existing.s3Url || existing.externalUrl)) {
+                const claim = await apiPost<{ asset: UploadFileResponse['asset'] }>(
+                  '/api/uploads/assets/reuse',
+                  {
+                    imageMapId: existing.id,
+                    fileName: file.name,
+                    mimeType: file.type || 'image/jpeg',
+                    sizeBytes: file.size,
+                  }
+                )
                 return {
-                  imageRef: { url: existing.localUrl, name: image.name || file.name },
+                  assetId: claim.asset.id,
+                  imageRef: {
+                    url: existing.localUrl || existing.s3Url || existing.externalUrl || '',
+                    name: image.name || file.name,
+                  },
                 }
               }
 
@@ -528,7 +544,7 @@ const GalleryEdit = () => {
               return {
                 assetId: uploadResult.asset.id,
                 imageRef: {
-                  url: uploadResult.tripleStorage?.localUrl || uploadResult.asset.publicUrl,
+                  url: uploadResult.tripleStorage?.localUrl || uploadResult.asset.publicUrl || '',
                   name: uploadResult.asset.fileName || image.name || file.name,
                 },
               }
@@ -537,30 +553,28 @@ const GalleryEdit = () => {
           }
 
           const result = await imageTask
-          if (result.assetId) {
-            assetIdByClientId.set(image.clientId, result.assetId)
-          }
+          assetIdByClientId.set(image.clientId, result.assetId)
+          uploadedAssetIds.add(result.assetId)
           imageUrlByClientId.set(image.clientId, result.imageRef)
         }
 
         await runInBatches(pendingImages, UPLOAD_BATCH_SIZE, processPendingImage)
-
-        if (sessionId) {
-          await apiPost(`/api/uploads/sessions/${sessionId}/finalize`)
-        }
+        if (sessionId) await apiPost(`/api/uploads/sessions/${sessionId}/finalize`)
       }
-
       const imagesPayload = currentDraft.images
         .map((image) =>
           image.isPending
-            ? isCreating
-              ? imageUrlByClientId.get(image.clientId)
-              : assetIdByClientId.has(image.clientId)
-                ? { assetId: assetIdByClientId.get(image.clientId) }
-                : imageUrlByClientId.get(image.clientId)
+            ? assetIdByClientId.has(image.clientId)
+              ? { assetId: assetIdByClientId.get(image.clientId)! }
+              : imageUrlByClientId.get(image.clientId)
             : { imageId: image.id }
         )
-        .filter((image) => image && ('imageId' in image || 'assetId' in image || 'url' in image))
+        .filter(
+          (
+            image
+          ): image is { imageId: string } | { assetId: string } | { url: string; name: string } =>
+            Boolean(image)
+        )
       const galleryMetadataPayload = {
         title: currentDraft.title,
         description: currentDraft.description,
@@ -575,7 +589,7 @@ const GalleryEdit = () => {
       if (isCreating) {
         const created = await apiPost<GalleryCreateResponse>('/api/galleries', {
           ...galleryMetadataPayload,
-          images: imagesPayload.filter((image) => image && 'url' in image),
+          images: imagesPayload,
         })
 
         const savedGallery = created.gallery
@@ -584,6 +598,8 @@ const GalleryEdit = () => {
         }
 
         releasePendingImageUrls(currentDraft.images)
+        pendingSessionId = null
+        uploadedAssetIds.clear()
         if (savedGallery.status === 'published') {
           show(t('gallery.galleryPublished'))
         } else if (savedGallery.status === 'pending') {
@@ -604,6 +620,8 @@ const GalleryEdit = () => {
         })
         const savedGallery = result.gallery
         releasePendingImageUrls(currentDraft.images)
+        pendingSessionId = null
+        uploadedAssetIds.clear()
         setGallery(savedGallery)
         applyDraft(createDraftFromGallery(savedGallery))
 
@@ -619,6 +637,14 @@ const GalleryEdit = () => {
         redirectTarget = `/gallery/${getGalleryPublicId(savedGallery)}`
       }
     } catch (error) {
+      if (pendingSessionId) {
+        await apiDelete(`/api/uploads/sessions/${pendingSessionId}`).catch(() => undefined)
+      }
+      await Promise.all(
+        [...uploadedAssetIds].map((assetId) =>
+          apiDelete(`/api/uploads/assets/${assetId}`).catch(() => undefined)
+        )
+      )
       console.error('Save gallery error:', error)
       show(
         status === 'draft'
@@ -626,7 +652,6 @@ const GalleryEdit = () => {
           : t(isAdmin ? 'gallery.publishFailed' : 'gallery.submitReviewFailed'),
         { variant: 'error' }
       )
-    } finally {
       setUploading(false)
       setSavingMode(null)
     }

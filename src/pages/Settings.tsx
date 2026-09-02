@@ -76,6 +76,7 @@ type PublicProfileForm = {
   signature: string
   bio: string
   photoURL: string
+  photoAssetId: string | null
 }
 
 type EmailForm = {
@@ -224,6 +225,7 @@ const Settings = () => {
     signature: '',
     bio: '',
     photoURL: '',
+    photoAssetId: null,
   })
   const [emailForm, setEmailForm] = useState<EmailForm>({
     newEmail: '',
@@ -284,14 +286,17 @@ const Settings = () => {
       signature: profile?.signature || '',
       bio: profile?.bio || '',
       photoURL: profile?.photoURL || user.photoURL || '',
+      photoAssetId: user.photoAssetId || profile?.photoAssetId || null,
     })
   }, [
     profile?.bio,
     profile?.displayName,
     profile?.photoURL,
+    profile?.photoAssetId,
     profile?.signature,
     user?.displayName,
     user?.email,
+    user?.photoAssetId,
     user?.photoURL,
     user?.uid,
   ])
@@ -490,10 +495,14 @@ const Settings = () => {
   const canSendEmailVerification =
     emailVerificationConfig.enabled && !user.emailVerified && hasDeliverableEmail
 
-  const handleAvatarSuccess = async (photoURL: string) => {
-    setProfileForm((current) => ({ ...current, photoURL }))
+  const handleAvatarSuccess = async (result: { assetId: string; url: string }) => {
+    setProfileForm((current) => ({
+      ...current,
+      photoURL: result.url,
+      photoAssetId: result.assetId,
+    }))
     try {
-      await apiPatch('/api/users/me', { photoURL })
+      await apiPatch('/api/users/me', { photoURL: result.url, photoAssetId: result.assetId })
       await refreshAuth()
       show('头像更新成功')
     } catch (error) {
@@ -525,6 +534,7 @@ const Settings = () => {
         signature: profileForm.signature.trim(),
         bio: profileForm.bio.trim(),
         photoURL: profileForm.photoURL,
+        photoAssetId: profileForm.photoAssetId,
       })
       await refreshAuth()
       show('公开资料已保存')

@@ -569,12 +569,19 @@ type GalleryInput = {
     assetId?: string | null
     asset?: {
       id: string
-      publicUrl: string
+      publicUrl: string | null
       fileName: string
       mimeType: string
       sizeBytes: number
       status: string
-      storageKey: string
+      storageKey: string | null
+      imageMap?: {
+        localUrl: string
+        externalUrl: string | null
+        s3Url: string | null
+        thumbnailUrl: string | null
+        variantStatus: VariantStatus | null
+      } | null
     } | null
   }[]
 }
@@ -587,13 +594,15 @@ type GalleryImageMapEntry = {
   variantStatus: VariantStatus | null
 }
 
+function getAttachedImageMap(image: GalleryInput['images'][number]) {
+  return image.asset?.imageMap || null
+}
+
 function resolveGalleryImageLocalUrl(image: GalleryInput['images'][number]) {
-  if (image.asset?.storageKey) {
-    return `/uploads/${image.asset.storageKey}`
-  }
-  if (image.url?.startsWith('/uploads/')) {
-    return image.url
-  }
+  const imageMap = getAttachedImageMap(image)
+  if (imageMap?.localUrl) return imageMap.localUrl
+  if (image.asset?.storageKey) return `/uploads/${image.asset.storageKey}`
+  if (image.url?.startsWith('/uploads/')) return image.url
   return null
 }
 
@@ -601,17 +610,11 @@ function resolveImageUrl(
   image: GalleryInput['images'][number],
   imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
 ) {
+  const attachedMap = getAttachedImageMap(image)
+  if (attachedMap?.localUrl) return attachedMap.localUrl
   let url = image.asset?.publicUrl || image.url
   const localUrl = resolveGalleryImageLocalUrl(image)
-
-  if (localUrl) {
-    const imageMap = imageMapByLocalUrl.get(localUrl)
-
-    if (imageMap) {
-      url = imageMap.localUrl || url
-    }
-  }
-
+  if (localUrl) url = imageMapByLocalUrl.get(localUrl)?.localUrl || url
   return url
 }
 
@@ -619,45 +622,33 @@ function resolveThumbnailUrl(
   image: GalleryInput['images'][number],
   imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
 ): string | null {
+  const attachedMap = getAttachedImageMap(image)
+  if (attachedMap?.thumbnailUrl) return attachedMap.thumbnailUrl
   const localUrl = resolveGalleryImageLocalUrl(image)
-  if (localUrl) {
-    const imageMap = imageMapByLocalUrl.get(localUrl)
-
-    if (imageMap?.thumbnailUrl) {
-      return imageMap.thumbnailUrl
-    }
-  }
-
-  return null
+  return localUrl ? imageMapByLocalUrl.get(localUrl)?.thumbnailUrl || null : null
 }
 
 function resolveThumbnailStatus(
   image: GalleryInput['images'][number],
   imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
 ): VariantStatus | null {
+  const attachedMap = getAttachedImageMap(image)
+  if (attachedMap?.variantStatus) return attachedMap.variantStatus
   const localUrl = resolveGalleryImageLocalUrl(image)
-  if (!localUrl) return null
-  return imageMapByLocalUrl.get(localUrl)?.variantStatus ?? null
+  return localUrl ? (imageMapByLocalUrl.get(localUrl)?.variantStatus ?? null) : null
 }
 
 export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?: string) {
   void storageStrategy
 
-  const localUrls: string[] = []
-  for (const img of gallery.images) {
-    const localUrl = resolveGalleryImageLocalUrl(img)
-    if (localUrl) {
-      localUrls.push(localUrl)
-    }
-  }
-
+  const localUrls = gallery.images
+    .filter((image) => !getAttachedImageMap(image))
+    .map(resolveGalleryImageLocalUrl)
+    .filter((url): url is string => Boolean(url))
   const imageMaps =
     localUrls.length > 0
       ? await prisma.imageMap.findMany({
-          where: {
-            deletedAt: null,
-            localUrl: { in: localUrls },
-          },
+          where: { deletedAt: null, localUrl: { in: localUrls } },
           select: {
             localUrl: true,
             externalUrl: true,
@@ -667,9 +658,7 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
           },
         })
       : []
-
   const imageMapByLocalUrl = new Map(imageMaps.map((im) => [im.localUrl, im]))
-
   return {
     id: gallery.id,
     slug: gallery.slug || gallery.id,
@@ -805,12 +794,19 @@ type EventImageInput = {
   assetId?: string | null
   asset?: {
     id: string
-    publicUrl: string
+    publicUrl: string | null
     fileName: string
     mimeType: string
     sizeBytes: number
     status: string
-    storageKey: string
+    storageKey: string | null
+    imageMap?: {
+      localUrl: string
+      externalUrl: string | null
+      s3Url: string | null
+      thumbnailUrl: string | null
+      variantStatus: VariantStatus | null
+    } | null
   } | null
 }
 
@@ -1085,6 +1081,7 @@ export function toUserResponse(user: {
   email: string
   displayName: string
   photoURL: string | null
+  photoAssetId?: string | null
   role: PrismaUserRole
   status: UserStatus
   banReason: string | null
@@ -1100,6 +1097,7 @@ export function toUserResponse(user: {
 }) {
   return {
     ...user,
+    photoAssetId: user.photoAssetId ?? null,
     emailVerified: Boolean(user.emailVerifiedAt),
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : null,
     isDeleted: Boolean(user.deletedAt),

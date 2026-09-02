@@ -26,8 +26,7 @@ import {
   allocateNumericSlug,
   isNumericSlug,
 } from '../utils'
-import { cleanupUnusedMediaAssetById } from '../services/mediaAssetCleanupService'
-import { deleteMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
+import { MediaAssetRequestError, releaseMediaAsset } from '../services/mediaAssetService'
 import type { AuthenticatedRequest } from '../types'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 
@@ -59,10 +58,9 @@ async function deleteAlbumCoverById(albumDocId: string, coverId: string) {
   if (!cover) return false
 
   await prisma.albumCover.delete({ where: { id: cover.id } })
-  await deleteMusicCoverThumbnail(cover.thumbnailUrl)
 
   if (cover.assetId) {
-    await cleanupUnusedMediaAssetById(cover.assetId)
+    await releaseMediaAsset(cover.assetId)
   }
 
   const remaining = await prisma.albumCover.findMany({
@@ -672,7 +670,7 @@ router.post('/:docId/covers', requireAdmin, async (req, res) => {
       return
     }
 
-    const cover = await addAlbumCoverFromAsset(albumDocId, assetId, isDefault)
+    const cover = await addAlbumCoverFromAsset(albumDocId, assetId, isDefault, req.authUser!.uid)
 
     res.status(201).json({
       cover: {
@@ -687,6 +685,10 @@ router.post('/:docId/covers', requireAdmin, async (req, res) => {
     })
     invalidateMusicContentCaches()
   } catch (error) {
+    if (error instanceof MediaAssetRequestError) {
+      res.status(error.statusCode).json({ error: error.message })
+      return
+    }
     console.error('Create album cover error:', error)
     res.status(500).json({ error: '添加专辑封面失败' })
   }
@@ -724,8 +726,8 @@ router.delete(
       invalidateMusicContentCaches()
       res.json({ success: true, deleted })
     } catch (error) {
-      console.error('Batch delete album covers error:', error)
-      res.status(500).json({ error: '批量删除专辑封面失败' })
+      console.error('Delete album covers error:', error)
+      res.status(500).json({ error: '删除专辑封面失败' })
     }
   }
 )

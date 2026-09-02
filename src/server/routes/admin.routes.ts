@@ -77,7 +77,6 @@ import {
   cleanupUnusedMediaAssetById,
   cleanupUntrackedUploadImageByUrl,
 } from '../services/mediaAssetCleanupService'
-import { deleteMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
 import {
   generateMediaRestoreReport,
   isMediaRestoreReportFilename,
@@ -102,7 +101,8 @@ import {
   switchWikiStorage,
 } from '../wiki/markdownLinkUpdater'
 import { isSensitiveWord, containsSensitive } from '../../lib/sensitiveWordFilter'
-import { variantCleanup, CleanupTrigger } from '../services/variantCleanup.service'
+import { collectMediaReferences, isMediaReferenced } from '../services/mediaAssetService'
+import { getMediaRetiredAt } from '../services/mediaConstants'
 import {
   deleteImageEmbeddingPointsBySource,
   deleteTextEmbeddingPointsBySource,
@@ -774,10 +774,6 @@ async function permanentlyDeleteAlbumByDocId(
 
   const assetIds = [...new Set(album.covers.map((cover) => cover.assetId).filter(isString))]
   const coversWithoutAsset = album.covers.filter((cover) => !cover.assetId)
-  const thumbnailUrls = album.covers
-    .map((cover) => cover.thumbnailUrl)
-    .filter((url): url is string => Boolean(url))
-
   await prisma.$transaction(async (tx) => {
     await tx.musicTrack.updateMany({
       where: { coverAlbumDocId: docId },
@@ -801,7 +797,6 @@ async function permanentlyDeleteAlbumByDocId(
   await Promise.all(
     coversWithoutAsset.map((cover) => cleanupUntrackedUploadImageByUrl(cover.publicUrl))
   )
-  await Promise.all(thumbnailUrls.map((url) => deleteMusicCoverThumbnail(url)))
 
   return 'deleted'
 }
@@ -809,20 +804,34 @@ async function permanentlyDeleteAlbumByDocId(
 async function permanentlyDeleteImageMapById(id: string, operatorUid: string) {
   const existing = await prisma.imageMap.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, localUrl: true, s3Url: true, externalUrl: true, variantStatus: true },
   })
   if (!existing) return false
-
-  await variantCleanup.cleanupByImageMapId(id, CleanupTrigger.ON_DELETE)
+  const [activeClaims, references] = await Promise.all([
+    prisma.mediaAsset.count({ where: { imageMapId: id, status: { in: ['uploaded', 'ready'] } } }),
+    collectMediaReferences(),
+  ])
+  if (
+    activeClaims > 0 ||
+    isMediaReferenced(references, {
+      urls: [existing.localUrl, existing.s3Url, existing.externalUrl],
+    }) ||
+    existing.variantStatus === 'processing'
+  ) {
+    return false
+  }
   await prisma.$transaction(async (tx) => {
-    await tx.imageMap.delete({ where: { id } })
+    await tx.imageMap.update({
+      where: { id },
+      data: { retiredAt: getMediaRetiredAt() },
+    })
     await tx.moderationLog.create({
       data: {
         targetType: 'imageMap',
         targetId: id,
         action: 'permanentDelete',
         operatorUid,
-        note: null,
+        note: '已登记延迟物理回收',
       },
     })
   })

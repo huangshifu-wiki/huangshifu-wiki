@@ -137,21 +137,26 @@ export interface UploadFileResponse {
     status: 'open' | 'finalized' | 'expired'
     uploadedFiles: number
     maxFiles: number
+    expiresAt?: string
   }
   asset: {
     id: string
-    publicUrl: string
-    storageKey?: string
+    imageMapId: string
+    publicUrl: string | null
+    storageKey: string | null
     fileName: string
     mimeType: string
     sizeBytes: number
-    md5?: string
+    md5: string
+    status: 'uploaded' | 'ready' | 'deleted'
+    reused: boolean
   }
   tripleStorage?: {
     localUrl: string
     s3Url?: string
     externalUrl?: string
   }
+  storageErrors?: string[]
 }
 
 export interface GalleryCreateResponse {
@@ -331,6 +336,7 @@ export interface RuntimeAdminConfig {
   qdrantTimeoutMs: number
   imageEmbeddingBatchSize: number
   editLockCleanupIntervalMs: number
+  mediaCleanupIntervalMs: number
   variantMaxConcurrent: number
   variantTaskTimeoutMs: number
   variantQueueMaxWaitMs: number
@@ -450,6 +456,7 @@ export interface UserUpdateRequest {
   signature?: string
   bio?: string
   photoURL?: string | null
+  photoAssetId?: string | null
   preferences?: Record<string, unknown>
 }
 

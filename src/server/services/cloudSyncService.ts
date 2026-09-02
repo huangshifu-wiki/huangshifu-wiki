@@ -11,10 +11,8 @@
 import { prisma } from '../prisma'
 import { runtimeConfigService } from './runtimeConfig.service'
 import { secretsConfigService } from './secretsConfig.service'
-import { uploadFileToS3, uploadsDir } from '../utils'
+import { ensureImageMapStorage } from './mediaAssetService'
 import { logger } from '../utils/logger'
-import fs from 'fs'
-import path from 'path'
 
 export interface CloudSyncTask {
   imageMapId: string
@@ -214,135 +212,42 @@ export class CloudSyncService {
       },
       '[CloudSync] Processing'
     )
-
     try {
       if (task.strategy === 'local') {
-        await prisma.imageMap.update({
+        await prisma.imageMap.updateMany({
           where: { id: task.imageMapId },
           data: { cloudSyncStatus: 'skipped' },
         })
-        console.log(`[CloudSync] ⏭️ Skipped (Local strategy): ${task.imageMapId}`)
         return
       }
 
-      if (task.strategy === 's3') {
-        await this.syncToS3(task)
-      } else if (task.strategy === 'external') {
-        await this.syncToLskyPro(task)
-      }
-
+      const result = await ensureImageMapStorage(task.imageMapId, task.strategy, {
+        sourceFilePath: task.filePath,
+        sourceFileName: task.fileName,
+        sourceMimeType: task.mimeType,
+      })
+      if (result.errors.length > 0) throw new Error(result.errors.join('; '))
+      await prisma.imageMap.updateMany({
+        where: { id: task.imageMapId, deletedAt: null },
+        data: { cloudSyncStatus: 'completed' },
+      })
       logger.info({ imageMapId: task.imageMapId }, '[CloudSync] Completed')
     } catch (error) {
       logger.error({ err: error, imageMapId: task.imageMapId }, '[CloudSync] Failed')
-
       if (task.retryCount < task.maxRetries) {
-        const delay = Math.pow(2, task.retryCount) * 1000
-        logger.debug(
-          { delay, attempt: task.retryCount + 1, maxRetries: task.maxRetries },
-          '[CloudSync] Retrying'
-        )
-
         task.retryCount++
+        const delay = Math.pow(2, task.retryCount - 1) * 1000
         setTimeout(() => {
           this.queue.unshift(task)
           this.processNext()
         }, delay)
       } else {
-        console.error(`[CloudSync] 💀 Gave up after ${task.maxRetries} retries`)
-
-        await prisma.imageMap.update({
+        await prisma.imageMap.updateMany({
           where: { id: task.imageMapId },
           data: { cloudSyncStatus: 'failed' },
         })
       }
     }
-  }
-
-  /**
-   * 同步到 S3
-   */
-  private async syncToS3(task: CloudSyncTask): Promise<void> {
-    // 使用基于 ImageMap ID 的稳定命名空间，避免同名文件互相覆盖
-    const ext = path.extname(task.filePath)
-    const storageKey = `sync/${task.imageMapId}/${Date.now()}${ext}`
-    const result = await uploadFileToS3(task.filePath, storageKey, task.mimeType)
-
-    if (result.success && result.url) {
-      await prisma.imageMap.update({
-        where: { id: task.imageMapId },
-        data: {
-          s3Url: result.url,
-          cloudSyncStatus: 'completed',
-        },
-      })
-      console.log(`[CloudSync] ✅ S3 upload completed: ${result.url}`)
-    } else {
-      throw new Error('S3 upload failed')
-    }
-  }
-
-  /**
-   * 同步到 Lsky Pro+
-   */
-  private async syncToLskyPro(task: CloudSyncTask): Promise<void> {
-    if (!this.lskyConfig) {
-      throw new Error('Lsky Pro+ 未配置，无法执行 External 策略同步')
-    }
-
-    const config = this.lskyConfig
-    const FormData = (await import('form-data')).default
-
-    const formData = new FormData()
-    formData.append('file', await fs.promises.readFile(task.filePath), {
-      filename: task.fileName,
-      contentType: task.mimeType,
-    })
-
-    if (config.strategyId) {
-      formData.append('strategy_id', config.strategyId)
-    }
-
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), config.timeout)
-
-    const response = await fetch(`${config.baseUrl}/api/v2/upload`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.token}`,
-        ...formData.getHeaders(),
-      },
-      body: formData as unknown as BodyInit,
-      signal: controller.signal,
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Lsky Pro+ API error: ${response.status} ${errorText}`)
-    }
-
-    const data = await response.json()
-
-    let uploadedUrl: string | undefined
-
-    if (data.data?.url) {
-      uploadedUrl = data.data.url
-    } else if (data.url) {
-      uploadedUrl = data.url
-    }
-
-    if (!uploadedUrl) {
-      throw new Error('Lsky Pro+ response missing URL')
-    }
-
-    await prisma.imageMap.update({
-      where: { id: task.imageMapId },
-      data: {
-        externalUrl: uploadedUrl,
-        cloudSyncStatus: 'completed',
-      },
-    })
-
-    logger.info({ uploadedUrl }, '[CloudSync] Lsky Pro+ upload completed')
   }
 
   /**
@@ -362,24 +267,12 @@ export class CloudSyncService {
       })
       return
     }
-
-    if (strategy === 'external' && !this.isLskyProAvailable()) {
-      logger.warn(
-        '[CloudSync] External strategy selected but Lsky Pro+ not configured, downgrading to Local'
-      )
-      await prisma.imageMap.update({
-        where: { id: imageMapId },
-        data: {
-          storageType: 'local',
-          cloudSyncStatus: 'skipped',
-        },
-      })
-      return
+    if (strategy !== 's3' && strategy !== 'external') {
+      throw new Error(`Unsupported cloud storage strategy: ${strategy}`)
     }
-
     await this.enqueue({
       imageMapId,
-      strategy: strategy as 's3' | 'external',
+      strategy,
       filePath,
       fileName,
       mimeType,

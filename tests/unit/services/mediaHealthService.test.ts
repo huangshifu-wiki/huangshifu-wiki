@@ -37,17 +37,19 @@ function findMany(name: string, data: Record<string, unknown[]>) {
 }
 
 function createPrismaMock(data: Record<string, unknown[]> = {}) {
-  return {
+  const prisma = {
     mediaAsset: {
       findMany: findMany('mediaAsset', data),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       count: vi.fn().mockResolvedValue(0),
     },
     imageMap: {
       findMany: findMany('imageMap', data),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     user: { findMany: findMany('user', data) },
     galleryImage: { findMany: findMany('galleryImage', data) },
@@ -64,7 +66,11 @@ function createPrismaMock(data: Record<string, unknown[]> = {}) {
     wikiPullRequestComment: { findMany: findMany('wikiPullRequestComment', data) },
     wikiPullRequest: { findMany: findMany('wikiPullRequest', data) },
     announcement: { findMany: findMany('announcement', data) },
+    $executeRaw: vi.fn(),
+    $transaction: vi.fn(),
   }
+  prisma.$transaction.mockImplementation(async (callback) => callback(prisma))
+  return prisma
 }
 
 const tempDirs: string[] = []
@@ -78,7 +84,7 @@ function createUploadDir() {
 function createMediaAsset(overrides: Record<string, unknown> = {}) {
   return {
     id: 'asset-1',
-    storageKey: 'gallery/missing.jpg',
+    imageMapId: 'map-1',
     publicUrl: '/uploads/gallery/missing.jpg',
     fileName: 'missing.jpg',
     status: 'ready',
@@ -274,10 +280,13 @@ describe('mediaHealth.service', () => {
     })
     prisma.mediaAsset.findUnique.mockResolvedValue({
       id: 'asset-1',
+      imageMapId: 'map-1',
       storageKey: 'gallery/missing.jpg',
+      publicUrl: '/uploads/gallery/missing.jpg',
       status: 'ready',
+      session: null,
     })
-    prisma.mediaAsset.update.mockResolvedValue({ id: 'asset-1', status: 'deleted' })
+    prisma.mediaAsset.updateMany.mockResolvedValue({ count: 1 })
 
     const result = await cleanupMediaHealthRecords(prisma as never, {
       mode: 'strict',
@@ -288,9 +297,10 @@ describe('mediaHealth.service', () => {
     expect(result).toEqual([
       expect.objectContaining({ recordType: 'mediaAsset', id: 'asset-1', success: true }),
     ])
-    expect(mockSafeDeleteUploadFileByStorageKey).toHaveBeenCalledWith('gallery/missing.jpg')
-    expect(prisma.mediaAsset.update).toHaveBeenCalledWith({
-      where: { id: 'asset-1' },
+    expect(mockSafeDeleteUploadFileByStorageKey).not.toHaveBeenCalled()
+    expect(mockVariantCleanupByImageMapId).not.toHaveBeenCalled()
+    expect(prisma.mediaAsset.updateMany).toHaveBeenCalledWith({
+      where: { id: 'asset-1', status: { not: 'deleted' } },
       data: { status: 'deleted' },
     })
   })

@@ -9,7 +9,7 @@ import { isBackdropClick } from '../utils/modal'
 interface AvatarCropModalProps {
   open: boolean
   onClose: () => void
-  onSuccess: (photoURL: string) => void
+  onSuccess: (result: Pick<UploadImageResult, 'assetId' | 'url'>) => void
 }
 
 // 限制头像最大输出边长（足以覆盖 2x DPR 的 256 显示），避免超大 canvas 浪费内存
@@ -118,7 +118,7 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
         return
       }
       const result: UploadImageResult = await uploadAvatar(blob)
-      onSuccess(result.url)
+      onSuccess({ assetId: result.assetId, url: result.url })
       handleClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : '上传失败')

@@ -14,6 +14,7 @@ export interface User {
   email: string
   displayName: string
   photoURL: string | null
+  photoAssetId?: string | null
   wechatBound?: boolean
   role: 'user' | 'admin' | 'super_admin'
   status: 'active' | 'banned'

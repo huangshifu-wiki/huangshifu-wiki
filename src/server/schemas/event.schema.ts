@@ -101,6 +101,7 @@ export const eventWriteSchema = z.object({
   externalLinks: createEventLinksSchema(),
   relatedLinks: createEventLinksSchema(),
   coverAssetId: z.string().trim().min(1).nullable().optional(),
+  uploadSessionId: z.string().trim().min(1).optional(),
   posters: z.array(imageInstructionSchema).optional().default([]),
 })
 

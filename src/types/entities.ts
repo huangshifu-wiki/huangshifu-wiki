@@ -6,6 +6,7 @@ export interface UserProfile {
   publicId: string
   displayName: string
   photoURL: string
+  photoAssetId?: string | null
   email: string | null
   role: AdminRole
   status: UserStatus

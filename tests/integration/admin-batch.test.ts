@@ -127,7 +127,7 @@ describe('Admin batch operations API', () => {
     expect(await prisma.galleryImage.count({ where: { galleryId: gallery.id } })).toBe(1)
   })
 
-  it('appends duplicate gallery asset ids as separate images', async () => {
+  it('拒绝追加重复 gallery asset id', async () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const gallery = await createTestGallery({
       title: `Admin Batch Gallery Duplicate Append ${suffix}`,
@@ -155,13 +155,12 @@ describe('Admin batch operations API', () => {
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({ assetIds: [asset.id, asset.id] })
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(400)
     const appended = await prisma.galleryImage.findMany({
       where: { galleryId: gallery.id, assetId: asset.id },
       orderBy: { sortOrder: 'asc' },
     })
-    expect(appended).toHaveLength(2)
-    expect(appended.map((image) => image.sortOrder)).toEqual([0, 1])
+    expect(appended).toHaveLength(0)
   })
 
   it('batch deletes song and album covers with default cover fallback', async () => {

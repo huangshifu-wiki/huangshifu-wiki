@@ -9,19 +9,21 @@ import { createRouter } from '../utils/typed-router'
 import {
   createUploadSessionExpiresAt,
   isUploadSessionExpired,
-  getUploadFileStorageKey,
-  buildUploadPublicUrl,
   validateUploadedImage,
-  uploadFileToS3,
-  uploadToSuperbed,
   deleteFromSuperbed,
   safeDeleteUploadFileByStorageKey,
   logger,
+  toUploadSessionResponse,
 } from '../utils'
+import {
+  createAssetClaimForImageMap,
+  createOrReuseUploadedAsset,
+  MediaAssetRequestError,
+  releaseMediaAsset,
+  rollbackUploadSessionSlot,
+} from '../services/mediaAssetService'
 import { variantGenerator } from '../services/variantGenerator'
 import { secretsConfigService } from '../services/secretsConfig.service'
-import { isBlurhashEnabled, shouldAutoGenerate, generateBlurhashFromFile } from '../blurhashService'
-import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import crypto from 'crypto'
@@ -128,9 +130,6 @@ router.post(
   })
 )
 
-/**
- * GET /api/uploads/sessions/:sessionId - 获取会话状态
- */
 router.get(
   '/sessions/:sessionId',
   requireAuth,
@@ -138,42 +137,27 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
       const { sessionId } = req.params
-
-      const session = await prisma.uploadSession.findUnique({
-        where: { id: sessionId },
-      })
-
+      const session = await prisma.uploadSession.findUnique({ where: { id: sessionId } })
       if (!session) {
         res.status(404).json({ error: '上传会话不存在' })
         return
       }
-
       if (session.ownerUid !== req.authUser!.uid) {
         res.status(403).json({ error: '无权访问该会话' })
         return
       }
 
-      // 检查会话是否过期
-      let status = session.status
-      if (status !== 'finalized' && isUploadSessionExpired(session.expiresAt)) {
-        status = 'expired'
-        await prisma.uploadSession.update({
-          where: { id: session.id },
+      let current = session
+      if (current.status !== 'finalized' && isUploadSessionExpired(current.expiresAt)) {
+        current = await prisma.uploadSession.update({
+          where: { id: current.id },
           data: { status: 'expired' },
         })
       }
 
-      res.json({
-        session: {
-          id: session.id,
-          ownerUid: session.ownerUid,
-          status,
-          expiresAt: session.expiresAt.toISOString(),
-          uploadedFiles: session.uploadedFiles,
-        },
-      })
+      res.json({ session: toUploadSessionResponse(current) })
     } catch (error) {
-      console.error('Get upload session error:', error)
+      logger.error({ err: error }, 'Get upload session error')
       res.status(500).json({ error: '获取上传会话失败' })
     }
   })
@@ -189,334 +173,104 @@ router.post(
   uploadLimiter,
   upload.single('file'),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    try {
-      const { sessionId } = req.params
-      const { tripleStorage } = req.query as { tripleStorage?: string }
-      const file = req.file
+    const file = req.file
+    const { sessionId } = req.params
+    let createdAssetId: string | undefined
+    let cleanedUp = false
 
+    const cleanupTempFile = async () => {
+      if (!file || cleanedUp) return
+      cleanedUp = true
+      await safeDeleteUploadFileByStorageKey(file.filename).catch((error) =>
+        logger.debug({ err: error }, 'Temp file cleanup failed')
+      )
+    }
+
+    try {
       if (!file) {
         res.status(400).json({ error: '请上传文件' })
         return
       }
 
-      // 验证会话
-      const session = await prisma.uploadSession.findUnique({
-        where: { id: sessionId },
-        select: {
-          id: true,
-          ownerUid: true,
-          status: true,
-          expiresAt: true,
-          maxFiles: true,
-          uploadedFiles: true,
-        },
+      const { mimeType } = await validateUploadedImage(file)
+      const result = await createOrReuseUploadedAsset({
+        ownerUid: req.authUser!.uid,
+        tempFilePath: file.path,
+        originalFileName: file.originalname,
+        mimeType,
+        sizeBytes: file.size,
+        sessionId,
       })
+      createdAssetId = result.assetId
 
-      const cleanupFile = () => {
-        if (req.file) {
-          safeDeleteUploadFileByStorageKey(req.file.filename).catch((err) =>
-            logger.debug({ err }, 'Temp file cleanup failed')
+      if (result.localFilePath) {
+        try {
+          await variantGenerator.enqueue({
+            targetType: 'imageMap',
+            targetId: result.imageMapId,
+            localFilePath: result.localFilePath,
+            priority: 'normal',
+          })
+        } catch (error) {
+          await releaseMediaAsset(result.assetId, req.authUser!.uid).catch((releaseError) =>
+            logger.error(
+              { err: releaseError, assetId: result.assetId },
+              'Failed to release upload claim'
+            )
           )
+          if (sessionId) await rollbackUploadSessionSlot(sessionId)
+          await cleanupTempFile()
+          res.status(500).json({ error: '上传后处理失败，媒体资源已释放' })
+          return
         }
       }
 
+      const session = await prisma.uploadSession.findUnique({ where: { id: sessionId } })
       if (!session) {
-        cleanupFile()
+        await releaseMediaAsset(result.assetId, req.authUser!.uid)
         res.status(404).json({ error: '上传会话不存在' })
         return
       }
 
-      if (session.ownerUid !== req.authUser!.uid) {
-        cleanupFile()
-        res.status(403).json({ error: '无权访问该会话' })
-        return
-      }
-
-      if (session.status === 'expired' || isUploadSessionExpired(session.expiresAt)) {
-        if (session.status !== 'expired') {
-          await prisma.uploadSession.update({
-            where: { id: session.id },
-            data: { status: 'expired' },
-          })
-        }
-        cleanupFile()
-        res.status(410).json({ error: '上传会话已过期，请重新创建会话' })
-        return
-      }
-
-      if (session.status !== 'open') {
-        cleanupFile()
-        res.status(400).json({ error: '会话状态不正确' })
-        return
-      }
-
-      // 验证图片
-      const { mimeType } = await validateUploadedImage(file)
-
-      // 获取存储策略
-      const useTripleStorage = tripleStorage === 'true'
-      const preferenceConfig = await prisma.siteConfig.findUnique({
-        where: { key: 'image_preference' },
-      })
-      const preference = (preferenceConfig?.value as {
-        strategy?: 'local' | 's3' | 'external'
-      }) || {
-        strategy: 'local',
-      }
-
-      // 创建媒体资源记录
-      const storageKey = getUploadFileStorageKey(file)
-      const publicUrl = buildUploadPublicUrl(storageKey)
-
-      // 计算 MD5 并检查重复
-      const fileBuffer = await fs.promises.readFile(file.path)
-      const imageMd5 = crypto.createHash('md5').update(fileBuffer).digest('hex')
-      const newImageMapId = `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
-
-      const [asset, imageMap] = await prisma.$transaction(async (tx) => {
-        const reservedSlot = await tx.uploadSession.updateMany({
-          where: {
-            id: session.id,
-            ownerUid: req.authUser!.uid,
-            status: 'open',
-            expiresAt: { gt: new Date() },
-            uploadedFiles: { lt: session.maxFiles },
-          },
-          data: {
-            uploadedFiles: { increment: 1 },
-          },
-        })
-
-        if (reservedSlot.count !== 1) {
-          const currentSession = await tx.uploadSession.findUnique({
-            where: { id: session.id },
-            select: {
-              ownerUid: true,
-              status: true,
-              expiresAt: true,
-              uploadedFiles: true,
-              maxFiles: true,
-            },
-          })
-
-          if (!currentSession) {
-            throw new UploadSessionRequestError(404, '上传会话不存在')
-          }
-
-          if (currentSession.ownerUid !== req.authUser!.uid) {
-            throw new UploadSessionRequestError(403, '无权访问该会话')
-          }
-
-          if (
-            currentSession.status === 'expired' ||
-            isUploadSessionExpired(currentSession.expiresAt)
-          ) {
-            throw new UploadSessionRequestError(410, '上传会话已过期，请重新创建会话')
-          }
-
-          if (currentSession.status !== 'open') {
-            throw new UploadSessionRequestError(400, '会话状态不正确')
-          }
-
-          throw new UploadSessionRequestError(400, '已达到最大上传数量限制')
-        }
-
-        // 创建媒体资源记录
-        const newAsset = await tx.mediaAsset.create({
-          data: {
-            ownerUid: req.authUser!.uid,
-            storageKey,
-            publicUrl,
-            fileName: file.originalname,
-            mimeType,
-            sizeBytes: file.size,
-            status: 'ready',
-            sessionId: session.id,
-          },
-        })
-
-        const nextImageMap = await tx.imageMap.upsert({
-          where: { md5: imageMd5 },
-          update: {
-            deletedAt: null,
-            deletedBy: null,
-          },
-          create: {
-            id: newImageMapId,
-            md5: imageMd5,
-            localUrl: publicUrl,
-            s3Url: null,
-            externalUrl: null,
-            storageType: 'local',
-          },
-          select: { id: true },
-        })
-
-        return [newAsset, nextImageMap] as const
-      })
-      const imageId = imageMap.id
-      const isNewImageMap = imageId === newImageMapId
-
-      // 构建响应
-      const response: {
-        asset: {
-          id: string
-          fileName: string
-          mimeType: string
-          sizeBytes: number
-          publicUrl: string
-          storageKey: string
-        }
-        tripleStorage?: {
-          localUrl: string
-          s3Url?: string
-          externalUrl?: string
-        }
-      } = {
-        asset: {
-          id: asset.id,
-          fileName: file.originalname,
-          mimeType,
-          sizeBytes: file.size,
-          publicUrl,
-          storageKey,
-        },
-      }
-
-      // 处理三重存储
-      if (useTripleStorage) {
-        const localUrl = publicUrl
-        let s3Url: string | undefined
-        let externalUrl: string | undefined
-
-        // 上传到 S3
-        if (preference.strategy === 's3' || preference.strategy === 'external') {
-          try {
-            const filePath = path.join(uploadsDir, file.filename)
-            const s3Result = await uploadFileToS3(filePath, storageKey, mimeType)
-            if (s3Result.success && s3Result.url) {
-              s3Url = s3Result.url
-
-              let blurhash: string | undefined
-              if (isBlurhashEnabled() && shouldAutoGenerate()) {
-                try {
-                  const absolutePath = path.join(uploadsDir, file.filename)
-                  blurhash = await generateBlurhashFromFile(absolutePath)
-                  if (blurhash) {
-                    console.log(
-                      '[Upload] Blurhash generated for S3 upload:',
-                      blurhash.substring(0, 20) + '...'
-                    )
-                  }
-                } catch (blurhashError) {
-                  console.error('[Upload] Failed to generate blurhash:', blurhashError)
-                }
-              }
-
-              // 仅对新创建的 ImageMap 更新 S3 URL，已有 ImageMap 保留原始数据
-              if (isNewImageMap) {
-                try {
-                  await prisma.imageMap.update({
-                    where: { id: imageId },
-                    data: {
-                      s3Url,
-                      ...(blurhash && { blurhash }),
-                      storageType: preference.strategy,
-                    },
-                  })
-                } catch (imageMapError) {
-                  console.error('Update ImageMap failed:', imageMapError)
-                }
-              }
-            }
-          } catch (s3Error) {
-            console.error('Upload to S3 failed:', s3Error)
-          }
-        }
-
-        // 上传到外部图床 (Superbed)
-        if (preference.strategy === 'external') {
-          const superbedToken = secretsConfigService.getSecrets().superbedApiToken
-
-          if (!superbedToken) {
-            console.warn('[Upload] Superbed API Token not configured, skipping external upload')
-          } else {
-            try {
-              const filePath = path.join(uploadsDir, file.filename)
-              const superbedResult = await uploadToSuperbed(
-                filePath,
-                file.originalname,
-                mimeType,
-                superbedToken
-              )
-              if (superbedResult.success && superbedResult.url) {
-                externalUrl = superbedResult.url
-              }
-            } catch (externalError) {
-              console.error('Upload to Superbed failed:', externalError)
-            }
-          }
-        }
-
-        // 如果 S3 上传失败或未执行，仅对新创建的 ImageMap 更新信息
-        if (!s3Url && isNewImageMap) {
-          try {
-            await prisma.imageMap.update({
-              where: { id: imageId },
-              data: {
-                ...(externalUrl && { externalUrl }),
-                storageType: preference.strategy,
+      const response = {
+        session: toUploadSessionResponse(session),
+        asset: result.asset,
+        ...(req.query.tripleStorage === 'true'
+          ? {
+              tripleStorage: {
+                localUrl: result.localUrl,
+                ...(result.s3Url ? { s3Url: result.s3Url } : {}),
+                ...(result.externalUrl ? { externalUrl: result.externalUrl } : {}),
               },
-            })
-          } catch (imageMapError) {
-            console.error('Update ImageMap failed:', imageMapError)
-          }
-        }
-
-        response.tripleStorage = {
-          localUrl,
-          s3Url,
-          externalUrl,
-        }
+            }
+          : {}),
+        storageErrors: result.storageErrors,
       }
-
-      try {
-        await variantGenerator.enqueue({
-          targetType: 'imageMap',
-          targetId: imageId,
-          localFilePath: file.path,
-          priority: 'normal',
-        })
-      } catch (error) {
-        console.error('[Upload] Failed to enqueue variant generation:', error)
-      }
-
       res.status(201).json(response)
     } catch (error) {
-      // 清理上传的文件
-      if (req.file) {
-        await safeDeleteUploadFileByStorageKey(req.file.filename).catch((err) =>
-          logger.debug({ err }, 'Temp file cleanup failed')
+      if (createdAssetId) {
+        await releaseMediaAsset(createdAssetId, req.authUser!.uid).catch((releaseError) =>
+          logger.error(
+            { err: releaseError, assetId: createdAssetId },
+            'Failed to release upload claim'
+          )
+        )
+        await rollbackUploadSessionSlot(sessionId).catch((rollbackError) =>
+          logger.debug({ err: rollbackError, sessionId }, 'Upload session slot rollback failed')
         )
       }
+      await cleanupTempFile()
 
-      if (error instanceof UploadSessionRequestError) {
+      if (error instanceof MediaAssetRequestError) {
         res.status(error.statusCode).json({ error: error.message })
         return
       }
-
-      console.error('Upload file to session error:', error)
-
       const message = error instanceof Error ? error.message : '上传文件失败'
-      if (
-        message.includes('图片') ||
-        message.includes('文件') ||
-        message.includes('超过') ||
-        message.includes('已达到最大上传数量限制')
-      ) {
+      if (message.includes('图片') || message.includes('文件') || message.includes('超过')) {
         res.status(400).json({ error: message })
         return
       }
+      logger.error({ err: error }, 'Upload file to session error')
       res.status(500).json({ error: '上传文件失败' })
     }
   })
@@ -532,48 +286,118 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
       const { sessionId } = req.params
-
-      const session = await prisma.uploadSession.findUnique({
-        where: { id: sessionId },
-      })
-
-      if (!session) {
-        res.status(404).json({ error: '上传会话不存在' })
-        return
-      }
-
-      if (session.ownerUid !== req.authUser!.uid) {
-        res.status(403).json({ error: '无权操作该会话' })
-        return
-      }
-
-      if (session.status === 'expired' || isUploadSessionExpired(session.expiresAt)) {
-        if (session.status !== 'expired') {
-          await prisma.uploadSession.update({
-            where: { id: session.id },
-            data: { status: 'expired' },
-          })
+      const finalizedSession = await prisma.$transaction(async (tx) => {
+        const session = await tx.uploadSession.findUnique({ where: { id: sessionId } })
+        if (!session) throw new MediaAssetRequestError(404, '上传会话不存在')
+        if (session.ownerUid !== req.authUser!.uid) {
+          throw new MediaAssetRequestError(403, '无权操作该会话')
         }
-        res.status(410).json({ error: '上传会话已过期' })
+        if (session.status === 'finalized') return session
+        if (session.status === 'expired' || isUploadSessionExpired(session.expiresAt)) {
+          if (session.status !== 'expired') {
+            await tx.uploadSession.update({
+              where: { id: session.id },
+              data: { status: 'expired' },
+            })
+          }
+          throw new MediaAssetRequestError(410, '上传会话已过期')
+        }
+        if (session.uploadedFiles < 1) {
+          throw new MediaAssetRequestError(400, '不能完成空上传会话')
+        }
+
+        const updated = await tx.uploadSession.updateMany({
+          where: {
+            id: session.id,
+            ownerUid: req.authUser!.uid,
+            status: 'open',
+            expiresAt: { gt: new Date() },
+            uploadedFiles: { gt: 0 },
+          },
+          data: { status: 'finalized' },
+        })
+        if (updated.count !== 1) throw new MediaAssetRequestError(409, '上传会话状态已变化')
+
+        await tx.mediaAsset.updateMany({
+          where: { sessionId: session.id, status: 'uploaded' },
+          data: { status: 'ready' },
+        })
+        return tx.uploadSession.findUniqueOrThrow({ where: { id: session.id } })
+      })
+
+      res.json({ session: toUploadSessionResponse(finalizedSession) })
+    } catch (error) {
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      logger.error({ err: error }, 'Finalize upload session error')
+      res.status(500).json({ error: '完成上传会话失败' })
+    }
+  })
+)
+
+router.post(
+  '/assets/reuse',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const body = req.body as {
+        imageMapId?: unknown
+        fileName?: unknown
+        mimeType?: unknown
+        sizeBytes?: unknown
+      }
+      if (
+        typeof body.imageMapId !== 'string' ||
+        !body.imageMapId.trim() ||
+        typeof body.fileName !== 'string' ||
+        !body.fileName.trim() ||
+        typeof body.mimeType !== 'string' ||
+        !ALLOWED_UPLOAD_MIME_TYPES.has(body.mimeType.toLowerCase()) ||
+        !Number.isInteger(body.sizeBytes) ||
+        Number(body.sizeBytes) < 1 ||
+        Number(body.sizeBytes) > UPLOAD_MAX_FILE_SIZE_BYTES
+      ) {
+        res.status(400).json({ error: '复用媒体资源参数不合法' })
         return
       }
 
-      // 更新会话状态为 finalized
-      await prisma.uploadSession.update({
-        where: { id: session.id },
-        data: { status: 'finalized' },
+      const result = await createAssetClaimForImageMap({
+        ownerUid: req.authUser!.uid,
+        imageMapId: body.imageMapId.trim(),
+        fileName: body.fileName.trim(),
+        mimeType: body.mimeType.toLowerCase(),
+        sizeBytes: Number(body.sizeBytes),
       })
-
-      res.json({
-        session: {
-          id: session.id,
-          status: 'finalized',
-          uploadedFiles: session.uploadedFiles,
-        },
-      })
+      res.status(201).json({ asset: result.asset, storageErrors: result.storageErrors })
     } catch (error) {
-      console.error('Finalize upload session error:', error)
-      res.status(500).json({ error: '完成上传会话失败' })
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      logger.error({ err: error }, 'Reuse media asset error')
+      res.status(500).json({ error: '复用媒体资源失败' })
+    }
+  })
+)
+
+router.delete(
+  '/assets/:assetId',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      await releaseMediaAsset(req.params.assetId, req.authUser!.uid)
+      res.json({ success: true })
+    } catch (error) {
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      logger.error({ err: error, assetId: req.params.assetId }, 'Release media asset error')
+      res.status(500).json({ error: '释放媒体资源失败' })
     }
   })
 )
@@ -588,29 +412,44 @@ router.delete(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
       const { sessionId } = req.params
+      const assetIds = await prisma.$transaction(async (tx) => {
+        const session = await tx.uploadSession.findUnique({
+          where: { id: sessionId },
+          select: { id: true, ownerUid: true, status: true, assets: { select: { id: true } } },
+        })
+        if (!session) throw new MediaAssetRequestError(404, '上传会话不存在')
+        if (session.ownerUid !== req.authUser!.uid) {
+          throw new MediaAssetRequestError(403, '无权操作该会话')
+        }
+        if (session.status === 'finalized') {
+          throw new MediaAssetRequestError(409, '已完成的上传会话不能取消')
+        }
+        if (session.status !== 'open' && session.status !== 'expired') {
+          throw new MediaAssetRequestError(409, '会话状态不正确')
+        }
 
-      const session = await prisma.uploadSession.findUnique({
-        where: { id: sessionId },
+        await tx.mediaAsset.updateMany({
+          where: { sessionId: session.id, status: { not: 'deleted' } },
+          data: { status: 'deleted' },
+        })
+        await tx.uploadSession.delete({ where: { id: session.id } })
+        return session.assets.map((asset) => asset.id)
       })
 
-      if (!session) {
-        res.status(404).json({ error: '上传会话不存在' })
-        return
-      }
-
-      if (session.ownerUid !== req.authUser!.uid) {
-        res.status(403).json({ error: '无权操作该会话' })
-        return
-      }
-
-      // 删除会话（级联删除关联的媒体资源）
-      await prisma.uploadSession.delete({
-        where: { id: session.id },
-      })
-
+      await Promise.all(
+        assetIds.map((assetId) =>
+          releaseMediaAsset(assetId, req.authUser!.uid).catch((error) => {
+            logger.error({ err: error, assetId }, 'Failed to retire cancelled upload claim')
+          })
+        )
+      )
       res.json({ success: true })
     } catch (error) {
-      console.error('Delete upload session error:', error)
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      logger.error({ err: error }, 'Delete upload session error')
       res.status(500).json({ error: '删除上传会话失败' })
     }
   })

@@ -49,8 +49,7 @@ import {
 import type { SongDuplicateStrategy } from '../utils'
 import { parseMusicUrl } from '../music/musicUrlParser'
 import { getMusicResourcePreview, searchMusicResources } from '../music/metingService'
-import { cleanupUnusedMediaAssetById } from '../services/mediaAssetCleanupService'
-import { deleteMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
+import { MediaAssetRequestError, releaseMediaAsset } from '../services/mediaAssetService'
 import { enqueueMusicTextEmbeddingsDeferred } from '../vector/textEmbeddingSync'
 import type { AuthenticatedRequest, ContentStatus } from '../types'
 import { Prisma } from '@prisma/client'
@@ -194,10 +193,9 @@ async function deleteSongCoverById(docId: string, coverId: string) {
   if (!cover) return false
 
   await prisma.songCover.delete({ where: { id: cover.id } })
-  await deleteMusicCoverThumbnail(cover.thumbnailUrl)
 
   if (cover.assetId) {
-    await cleanupUnusedMediaAssetById(cover.assetId)
+    await releaseMediaAsset(cover.assetId)
   }
 
   const remaining = await prisma.songCover.findMany({
@@ -1299,7 +1297,7 @@ router.post(
         return
       }
 
-      const cover = await addSongCoverFromAsset(songDocId, assetId, isDefault)
+      const cover = await addSongCoverFromAsset(songDocId, assetId, isDefault, req.authUser!.uid)
 
       res.status(201).json({
         cover: {
@@ -1313,6 +1311,10 @@ router.post(
         },
       })
     } catch (error) {
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
       console.error('Create song cover error:', error)
       res.status(500).json({ error: '添加歌曲封面失败' })
     }

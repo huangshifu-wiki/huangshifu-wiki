@@ -232,11 +232,8 @@ export class VariantGenerator {
    * 启动队列处理器
    */
   private startQueueProcessor(): void {
-    this.processInterval = setInterval(() => {
-      if (!this.isProcessing) {
-        this.processNext()
-      }
-    }, 500)
+    this.processInterval = setInterval(() => this.processNext(), 500)
+    this.processNext()
   }
 
   stop() {
@@ -249,26 +246,21 @@ export class VariantGenerator {
   /**
    * 处理下一个任务
    */
-  private async processNext(): Promise<void> {
-    if (this.processing.size >= getVariantConfig().variantMaxConcurrent) return
-    if (this.queue.length === 0) return
-
-    const task = this.queue.shift()!
-    const taskKey = this.getTaskKey(task)
-    this.processing.add(taskKey)
-    this.isProcessing = true
-
-    try {
-      await this.processTask(task)
-    } catch (error) {
-      console.error('[Variant] ❌ Task processing error:', error)
-    } finally {
-      this.processing.delete(taskKey)
-      this.isProcessing = false
-
-      if (this.queue.length > 0 || this.processing.size < getVariantConfig().variantMaxConcurrent) {
-        setTimeout(() => this.processNext(), 100)
-      }
+  private processNext(): void {
+    const maxConcurrent = getVariantConfig().variantMaxConcurrent
+    while (this.processing.size < maxConcurrent && this.queue.length > 0) {
+      const task = this.queue.shift()!
+      const taskKey = this.getTaskKey(task)
+      if (this.processing.has(taskKey)) continue
+      this.processing.add(taskKey)
+      this.isProcessing = true
+      void this.processTask(task)
+        .catch((error) => console.error('[Variant] ❌ Task processing error:', error))
+        .finally(() => {
+          this.processing.delete(taskKey)
+          this.isProcessing = this.processing.size > 0
+          this.processNext()
+        })
     }
   }
 
@@ -484,37 +476,38 @@ export class VariantGenerator {
   ): Promise<void> {
     if (task.targetType === 'imageMap') {
       const variant = variants.get('1080h')
-
-      await prisma.imageMap.update({
-        where: { id: task.targetId },
-        data: {
-          thumbnailUrl: variant?.path || null,
-          variantStatus: 'completed',
-        },
+      const updated = await prisma.imageMap.updateMany({
+        where: { id: task.targetId, variantStatus: 'processing' },
+        data: { thumbnailUrl: variant?.path || null, variantStatus: 'completed' },
       })
+      if (updated.count !== 1) throw new Error('变体目标状态已变化')
       return
     }
 
     const thumbnailUrl = variants.get('thumb')?.path || null
-
-    // 先读旧 URL：成功后删除被替换的旧缩略图，避免 force 重建产生孤儿文件
     const previousThumbnailUrl = await this.readCoverThumbnailUrl(task.targetType, task.targetId)
-
     try {
-      await this.updateCover(task.targetType, task.targetId, {
+      const data = {
         thumbnailUrl,
-        variantStatus: 'completed',
+        variantStatus: 'completed' as const,
         variantGeneratedAt: new Date(),
         lastError: null,
-      })
-    } catch (error) {
-      // 写库失败：清理本次生成的未引用文件后重抛，交给重试逻辑
-      if (thumbnailUrl) {
-        await deleteMusicCoverThumbnail(thumbnailUrl)
       }
+      const updated =
+        task.targetType === 'songCover'
+          ? await prisma.songCover.updateMany({
+              where: { id: task.targetId, variantStatus: 'processing' },
+              data,
+            })
+          : await prisma.albumCover.updateMany({
+              where: { id: task.targetId, variantStatus: 'processing' },
+              data,
+            })
+      if (updated.count !== 1) throw new Error('变体目标状态已变化')
+    } catch (error) {
+      if (thumbnailUrl) await deleteMusicCoverThumbnail(thumbnailUrl)
       throw error
     }
-
     if (previousThumbnailUrl && previousThumbnailUrl !== thumbnailUrl) {
       await deleteMusicCoverThumbnail(previousThumbnailUrl)
     }
@@ -546,15 +539,26 @@ export class VariantGenerator {
    */
   private async markAsProcessing(task: VariantTask): Promise<void> {
     if (task.targetType === 'imageMap') {
-      await prisma.imageMap.update({
-        where: { id: task.targetId },
+      const updated = await prisma.imageMap.updateMany({
+        where: { id: task.targetId, variantStatus: { in: ['pending', 'failed'] } },
         data: { variantStatus: 'processing' },
       })
-    } else {
-      await this.updateCover(task.targetType, task.targetId, {
-        variantStatus: 'processing',
-      })
+      if (updated.count !== 1) throw new Error('变体目标状态已变化')
+      return
     }
+    if (task.targetType === 'songCover') {
+      const updated = await prisma.songCover.updateMany({
+        where: { id: task.targetId, variantStatus: { in: ['pending', 'failed'] } },
+        data: { variantStatus: 'processing' },
+      })
+      if (updated.count !== 1) throw new Error('变体目标状态已变化')
+      return
+    }
+    const updated = await prisma.albumCover.updateMany({
+      where: { id: task.targetId, variantStatus: { in: ['pending', 'failed'] } },
+      data: { variantStatus: 'processing' },
+    })
+    if (updated.count !== 1) throw new Error('变体目标状态已变化')
   }
 
   /**
@@ -566,14 +570,19 @@ export class VariantGenerator {
     reason: string
   ): Promise<void> {
     if (targetType === 'imageMap') {
-      await prisma.imageMap.update({
-        where: { id: targetId },
-        data: { variantStatus: 'failed' as const },
+      await prisma.imageMap.updateMany({
+        where: { id: targetId, variantStatus: { in: ['pending', 'processing'] } },
+        data: { variantStatus: 'failed' },
+      })
+    } else if (targetType === 'songCover') {
+      await prisma.songCover.updateMany({
+        where: { id: targetId, variantStatus: { in: ['pending', 'processing'] } },
+        data: { variantStatus: 'failed', lastError: reason },
       })
     } else {
-      await this.updateCover(targetType, targetId, {
-        variantStatus: 'failed',
-        lastError: reason,
+      await prisma.albumCover.updateMany({
+        where: { id: targetId, variantStatus: { in: ['pending', 'processing'] } },
+        data: { variantStatus: 'failed', lastError: reason },
       })
     }
 

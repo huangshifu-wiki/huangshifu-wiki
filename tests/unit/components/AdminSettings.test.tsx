@@ -58,6 +58,7 @@ const runtimeConfig: RuntimeAdminConfig = {
   qdrantTimeoutMs: 2000,
   imageEmbeddingBatchSize: 100,
   editLockCleanupIntervalMs: 90000,
+  mediaCleanupIntervalMs: 90000,
   variantMaxConcurrent: 3,
   variantTaskTimeoutMs: 30000,
   variantQueueMaxWaitMs: 300000,

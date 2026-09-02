@@ -210,9 +210,7 @@ export async function uploadFileToS3(
 
     const fileBuffer = await fs.promises.readFile(filePath)
 
-    // S3 Key 应该是原始字符串，不需要 encodeURIComponent
-    // AWS SDK 会自动处理 UTF-8 字符
-    const s3Key = objectKey
+    const s3Key = config.prefix ? `${config.prefix}${objectKey}` : objectKey
 
     await s3Client.send(
       new PutObjectCommand({

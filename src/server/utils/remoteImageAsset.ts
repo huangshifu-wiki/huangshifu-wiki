@@ -3,9 +3,14 @@ import path from 'path'
 import sharp from 'sharp'
 
 import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
-import { buildUploadPublicUrl, createUploadStorageInfo } from '../uploadPath'
+import {
+  buildUploadPublicUrl,
+  createUploadStorageInfo,
+  extractStorageKeyFromUploadUrl,
+} from '../uploadPath'
 import { ALLOWED_IMAGE_EXTENSIONS, ALLOWED_IMAGE_MIME_TYPES } from '../types'
 import { prisma, uploadsDir } from './config'
+import { createOrReuseUploadedAsset } from '../services/mediaAssetService'
 
 type LocalizedImageAsset = {
   assetId: string
@@ -140,10 +145,7 @@ export async function findReadyMediaAssetByPublicUrl(
   publicUrl: string
 ): Promise<LocalizedImageAsset | null> {
   const asset = await prisma.mediaAsset.findFirst({
-    where: {
-      publicUrl,
-      status: 'ready',
-    },
+    where: { publicUrl, status: 'ready' },
     select: {
       id: true,
       storageKey: true,
@@ -151,15 +153,19 @@ export async function findReadyMediaAssetByPublicUrl(
       fileName: true,
       mimeType: true,
       sizeBytes: true,
+      imageMap: {
+        select: { localUrl: true, externalUrl: true, s3Url: true },
+      },
     },
   })
-
   if (!asset) return null
 
+  const canonicalUrl = asset.imageMap?.localUrl || asset.publicUrl || publicUrl
+  const canonicalStorageKey = extractStorageKeyFromUploadUrl(canonicalUrl) || asset.storageKey || ''
   return {
     assetId: asset.id,
-    storageKey: asset.storageKey,
-    publicUrl: asset.publicUrl,
+    storageKey: canonicalStorageKey,
+    publicUrl: canonicalUrl,
     fileName: asset.fileName,
     mimeType: asset.mimeType,
     sizeBytes: asset.sizeBytes,
@@ -194,34 +200,20 @@ export async function localizeImageUrlAsMediaAsset(
   await fs.writeFile(absolutePath, buffer)
 
   try {
-    const publicUrl = buildUploadPublicUrl(storageInfo.storageKey)
-    const asset = await prisma.mediaAsset.create({
-      data: {
-        ownerUid,
-        storageKey: storageInfo.storageKey,
-        publicUrl,
-        fileName: normalizedName,
-        mimeType,
-        sizeBytes: buffer.length,
-        status: 'ready',
-      },
-      select: {
-        id: true,
-        storageKey: true,
-        publicUrl: true,
-        fileName: true,
-        mimeType: true,
-        sizeBytes: true,
-      },
+    const result = await createOrReuseUploadedAsset({
+      ownerUid,
+      tempFilePath: absolutePath,
+      originalFileName: normalizedName,
+      mimeType,
+      sizeBytes: buffer.length,
     })
-
     return {
-      assetId: asset.id,
-      storageKey: asset.storageKey,
-      publicUrl: asset.publicUrl,
-      fileName: asset.fileName,
-      mimeType: asset.mimeType,
-      sizeBytes: asset.sizeBytes,
+      assetId: result.assetId,
+      storageKey: result.storageKey || storageInfo.storageKey,
+      publicUrl: result.publicUrl || buildUploadPublicUrl(storageInfo.storageKey),
+      fileName: result.fileName,
+      mimeType: result.mimeType,
+      sizeBytes: result.sizeBytes,
     }
   } catch (error) {
     await fs.unlink(absolutePath).catch(() => undefined)

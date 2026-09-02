@@ -27,6 +27,7 @@ import type {
   PlayUrlCacheValue,
 } from '../types'
 import { parseMusicUrl, type MusicPlatform as ParsedMusicPlatform } from '../music/musicUrlParser'
+import { getMediaStorageSnapshot, getReadyAssetForOwner } from '../services/mediaAssetService'
 import {
   getMusicResourcePreview,
   getMusicTrackMetadata,
@@ -747,35 +748,35 @@ export async function applyAlbumTracksToRelations(
   if (db === prisma) await prisma.$transaction((tx) => sync(tx))
   else await sync(db)
 }
+async function getReadyCoverAsset(
+  tx: Prisma.TransactionClient,
+  assetId: string,
+  ownerUid?: string
+) {
+  const resolvedOwnerUid =
+    ownerUid ||
+    (await tx.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerUid: true } }))
+      ?.ownerUid
+  if (!resolvedOwnerUid) throw new Error('媒体资源不存在')
+  return getReadyAssetForOwner(tx, assetId, resolvedOwnerUid)
+}
 
 export async function addSongCoverFromAsset(
   songDocId: string,
   assetId: string,
-  markDefault = false
+  markDefault = false,
+  ownerUid?: string
 ) {
-  const asset = await prisma.mediaAsset.findUnique({
-    where: { id: assetId },
-    select: {
-      id: true,
-      storageKey: true,
-      publicUrl: true,
-      status: true,
-    },
-  })
-
-  if (!asset || asset.status !== 'ready') {
-    throw new Error('媒体资源不存在或不可用')
-  }
-
-  const currentCount = await prisma.songCover.count({ where: { songDocId } })
-
   const cover = await prisma.$transaction(async (tx) => {
+    const asset = await getReadyCoverAsset(tx, assetId, ownerUid)
+    const snapshot = getMediaStorageSnapshot(asset)
+    const currentCount = await tx.songCover.count({ where: { songDocId } })
     const cover = await tx.songCover.create({
       data: {
         songDocId,
         assetId: asset.id,
-        storageKey: asset.storageKey,
-        publicUrl: asset.publicUrl,
+        storageKey: snapshot.storageKey,
+        publicUrl: snapshot.publicUrl,
         sortOrder: currentCount,
         isDefault: markDefault,
       },
@@ -783,74 +784,53 @@ export async function addSongCoverFromAsset(
 
     if (markDefault) {
       await tx.songCover.updateMany({
-        where: {
-          songDocId,
-          id: { not: cover.id },
-          isDefault: true,
-        },
-        data: {
-          isDefault: false,
-        },
+        where: { songDocId, id: { not: cover.id }, isDefault: true },
+        data: { isDefault: false },
       })
       await tx.musicTrack.update({
         where: { docId: songDocId },
-        data: {
-          coverId: cover.id,
-          coverAlbumDocId: null,
-        },
+        data: { coverId: cover.id, coverAlbumDocId: null },
       })
     }
-
     return cover
   })
 
-  await enqueueMusicCoverThumbnail('songCover', cover.id, asset.storageKey)
-
+  await enqueueMusicCoverThumbnail('songCover', cover.id, cover.storageKey)
   return cover
 }
 
 export async function addSongCoverFromUrl(
   songDocId: string,
   publicUrl: string,
-  markDefault = false
+  markDefault = false,
+  ownerUid?: string
 ) {
   const url = publicUrl.trim()
   if (!url) return null
   const asset = await localizeImageUrlAsMediaAsset(url, {
     namespace: 'music-covers/songs',
     fallbackName: `${songDocId}.jpg`,
+    ...(ownerUid ? { ownerUid } : {}),
   })
-  return addSongCoverFromAsset(songDocId, asset.assetId, markDefault)
+  return addSongCoverFromAsset(songDocId, asset.assetId, markDefault, ownerUid)
 }
 
 export async function addAlbumCoverFromAsset(
   albumDocId: string,
   assetId: string,
-  markDefault = false
+  markDefault = false,
+  ownerUid?: string
 ) {
-  const asset = await prisma.mediaAsset.findUnique({
-    where: { id: assetId },
-    select: {
-      id: true,
-      storageKey: true,
-      publicUrl: true,
-      status: true,
-    },
-  })
-
-  if (!asset || asset.status !== 'ready') {
-    throw new Error('媒体资源不存在或不可用')
-  }
-
-  const currentCount = await prisma.albumCover.count({ where: { albumDocId } })
-
   const cover = await prisma.$transaction(async (tx) => {
+    const asset = await getReadyCoverAsset(tx, assetId, ownerUid)
+    const snapshot = getMediaStorageSnapshot(asset)
+    const currentCount = await tx.albumCover.count({ where: { albumDocId } })
     const cover = await tx.albumCover.create({
       data: {
         albumDocId,
         assetId: asset.id,
-        storageKey: asset.storageKey,
-        publicUrl: asset.publicUrl,
+        storageKey: snapshot.storageKey,
+        publicUrl: snapshot.publicUrl,
         sortOrder: currentCount,
         isDefault: markDefault,
       },
@@ -858,43 +838,32 @@ export async function addAlbumCoverFromAsset(
 
     if (markDefault) {
       await tx.albumCover.updateMany({
-        where: {
-          albumDocId,
-          id: { not: cover.id },
-          isDefault: true,
-        },
-        data: {
-          isDefault: false,
-        },
+        where: { albumDocId, id: { not: cover.id }, isDefault: true },
+        data: { isDefault: false },
       })
-      await tx.album.update({
-        where: { docId: albumDocId },
-        data: {
-          coverId: cover.id,
-        },
-      })
+      await tx.album.update({ where: { docId: albumDocId }, data: { coverId: cover.id } })
     }
-
     return cover
   })
 
-  await enqueueMusicCoverThumbnail('albumCover', cover.id, asset.storageKey)
-
+  await enqueueMusicCoverThumbnail('albumCover', cover.id, cover.storageKey)
   return cover
 }
 
 export async function addAlbumCoverFromUrl(
   albumDocId: string,
   publicUrl: string,
-  markDefault = false
+  markDefault = false,
+  ownerUid?: string
 ) {
   const url = publicUrl.trim()
   if (!url) return null
   const asset = await localizeImageUrlAsMediaAsset(url, {
     namespace: 'music-covers/albums',
     fallbackName: `${albumDocId}.jpg`,
+    ...(ownerUid ? { ownerUid } : {}),
   })
-  return addAlbumCoverFromAsset(albumDocId, asset.assetId, markDefault)
+  return addAlbumCoverFromAsset(albumDocId, asset.assetId, markDefault, ownerUid)
 }
 
 async function maybeAddImportedSongCover(songDocId: string, coverUrl: string, markDefault = true) {

@@ -39,7 +39,6 @@ import {
   toGalleryListResponse,
   toWikiResponse,
   parseFavoriteType,
-  safeDeleteUploadFileByUrl,
   parsePagination,
   createPaginationMeta,
   logger,
@@ -48,6 +47,11 @@ import {
   validateUserDisplayName,
   isUserPublicId,
 } from '../utils'
+import {
+  getReadyAssetForOwner,
+  MediaAssetRequestError,
+  releaseMediaAsset,
+} from '../services/mediaAssetService'
 import { runtimeConfigService } from '../services/runtimeConfig.service'
 import type { AuthenticatedRequest, UserStatus } from '../types'
 
@@ -781,6 +785,7 @@ router.get(
           signature: true,
           bio: true,
           photoURL: true,
+          photoAssetId: true,
           role: true,
           status: true,
           banReason: true,
@@ -813,7 +818,14 @@ router.patch(
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const { displayName, signature, bio, preferences, photoURL } = req.body
+      const { displayName, signature, bio, preferences, photoURL, photoAssetId } = req.body as {
+        displayName?: unknown
+        signature?: unknown
+        bio?: unknown
+        preferences?: unknown
+        photoURL?: unknown
+        photoAssetId?: unknown
+      }
       const updateData: Record<string, unknown> = {}
 
       if (displayName !== undefined) {
@@ -858,25 +870,39 @@ router.patch(
         }
       }
 
-      // 头像处理：校验 URL，并在变更时同步历史评论 / 帖子作者头像快照
       let normalizedPhotoUrl: string | null | undefined
-      let oldPhotoURL: string | null = null
-      if (photoURL !== undefined) {
-        if (!ensureTextLimit(res, photoURL, '头像地址', CONTENT_LIMITS.profile.photoURL)) {
+      let normalizedPhotoAssetId: string | null | undefined
+      if (photoURL !== undefined || photoAssetId !== undefined) {
+        if (photoURL === undefined) {
+          res.status(400).json({ error: '头像 URL 与资源 ID 必须同时提交' })
           return
         }
+        if (!ensureTextLimit(res, photoURL, '头像地址', CONTENT_LIMITS.profile.photoURL)) return
         normalizedPhotoUrl = normalizePhotoUrl(photoURL)
-        if (photoURL && photoURL !== '' && normalizedPhotoUrl === null) {
+        if (photoURL && normalizedPhotoUrl === null) {
           res.status(400).json({ error: '头像地址不合法' })
           return
         }
-        // 读取旧头像，便于在替换后清理已经无人引用的旧文件
-        const existing = await prisma.user.findUnique({
-          where: { uid: req.authUser!.uid },
-          select: { photoURL: true },
-        })
-        oldPhotoURL = existing?.photoURL || null
+        if (
+          photoAssetId !== undefined &&
+          photoAssetId !== null &&
+          typeof photoAssetId !== 'string'
+        ) {
+          res.status(400).json({ error: '头像资源 ID 不合法' })
+          return
+        }
+        normalizedPhotoAssetId =
+          typeof photoAssetId === 'string' && photoAssetId.trim() ? photoAssetId.trim() : null
+        if (normalizedPhotoUrl?.startsWith('/uploads/') && !normalizedPhotoAssetId) {
+          res.status(400).json({ error: '本站头像必须提交拥有的媒体资源 ID' })
+          return
+        }
+        if (!normalizedPhotoUrl && normalizedPhotoAssetId) {
+          res.status(400).json({ error: '清除头像时不能提交媒体资源 ID' })
+          return
+        }
         updateData.photoURL = normalizedPhotoUrl
+        updateData.photoAssetId = normalizedPhotoAssetId
       }
 
       if (Object.keys(updateData).length === 0) {
@@ -884,31 +910,50 @@ router.patch(
         return
       }
 
-      const user = await prisma.user.update({
-        where: { uid: req.authUser!.uid },
-        data: updateData,
-      })
-      // 关键：authMiddleware 缓存了 ApiUser，不清就要等 5 分钟 TTL 才生效，导致刷新后看到旧头像/旧昵称
-      clearUserCache(req.authUser!.uid)
-
-      // 替换头像后，旧的本地上传文件不再被引用，安全删除
-      if (photoURL !== undefined && oldPhotoURL !== normalizedPhotoUrl) {
-        if (
-          oldPhotoURL &&
-          oldPhotoURL.startsWith('/uploads/') &&
-          oldPhotoURL !== normalizedPhotoUrl
-        ) {
-          await safeDeleteUploadFileByUrl(oldPhotoURL).catch((err) =>
-            logger.debug({ err }, 'Operation cleanup failed')
-          )
+      const { user, oldPhotoAssetId } = await prisma.$transaction(async (tx) => {
+        const existing = await tx.user.findUnique({
+          where: { uid: req.authUser!.uid },
+          select: { photoAssetId: true },
+        })
+        if (normalizedPhotoAssetId) {
+          const asset = await getReadyAssetForOwner(tx, normalizedPhotoAssetId, req.authUser!.uid)
+          const allowedUrls = [
+            asset.imageMap.localUrl,
+            asset.imageMap.externalUrl,
+            asset.imageMap.s3Url,
+          ]
+          if (!normalizedPhotoUrl || !allowedUrls.includes(normalizedPhotoUrl)) {
+            throw new MediaAssetRequestError(400, '头像 URL 与媒体资源不匹配')
+          }
         }
+        const user = await tx.user.update({
+          where: { uid: req.authUser!.uid },
+          data: updateData,
+        })
+        return { user, oldPhotoAssetId: existing?.photoAssetId || null }
+      })
+
+      clearUserCache(req.authUser!.uid)
+      if (
+        normalizedPhotoAssetId !== undefined &&
+        oldPhotoAssetId &&
+        oldPhotoAssetId !== normalizedPhotoAssetId
+      ) {
+        await releaseMediaAsset(oldPhotoAssetId, req.authUser!.uid).catch((error) =>
+          logger.error(
+            { err: error, assetId: oldPhotoAssetId },
+            'Failed to release old avatar claim'
+          )
+        )
       }
-      // 注：评论的作者昵称/头像现在通过 author 关系实时 JOIN 获取，
-      // 不再需要 updateMany 同步快照字段。
 
       res.json({ user: userToApiUser(user) })
     } catch (error) {
-      console.error('Update user profile error:', error)
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      logger.error({ err: error }, 'Update user profile error')
       res.status(500).json({ error: '更新用户资料失败' })
     }
   })
@@ -920,40 +965,38 @@ router.delete(
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      // 获取旧头像 URL，用于注销后清理本地文件
-      const existing = await prisma.user.findUnique({
-        where: { uid: req.authUser!.uid },
-        select: { photoURL: true },
+      const oldPhotoAssetId = await prisma.$transaction(async (tx) => {
+        const existing = await tx.user.findUnique({
+          where: { uid: req.authUser!.uid },
+          select: { photoAssetId: true },
+        })
+        await tx.user.update({
+          where: { uid: req.authUser!.uid },
+          data: {
+            displayName: '已注销用户',
+            photoURL: null,
+            photoAssetId: null,
+            signature: '',
+            bio: '',
+            status: 'banned',
+            banReason: '用户主动注销',
+          },
+        })
+        return existing?.photoAssetId || null
       })
 
-      // Soft delete or account deletion logic
-      await prisma.user.update({
-        where: { uid: req.authUser!.uid },
-        data: {
-          displayName: '已注销用户',
-          photoURL: null,
-          signature: '',
-          bio: '',
-          status: 'banned',
-          banReason: '用户主动注销',
-        },
-      })
       clearUserCache(req.authUser!.uid)
-
-      // 注：评论的作者昵称/头像通过 author 关系实时 JOIN 获取，
-      // 注销时 User.displayName 已置为 "已注销用户"、photoURL 已置 null，
-      // 历史评论会自动反映这些更新，不需要再额外 updateMany。
-
-      // 物理删除旧头像文件，防止留下孤儿文件
-      if (existing?.photoURL && existing.photoURL.startsWith('/uploads/')) {
-        await safeDeleteUploadFileByUrl(existing.photoURL).catch((err) =>
-          logger.debug({ err }, 'Operation cleanup failed')
+      if (oldPhotoAssetId) {
+        await releaseMediaAsset(oldPhotoAssetId, req.authUser!.uid).catch((error) =>
+          logger.error(
+            { err: error, assetId: oldPhotoAssetId },
+            'Failed to release account avatar claim'
+          )
         )
       }
-
       res.json({ success: true })
     } catch (error) {
-      console.error('Delete account error:', error)
+      logger.error({ err: error }, 'Delete account error')
       res.status(500).json({ error: '注销账户失败' })
     }
   })

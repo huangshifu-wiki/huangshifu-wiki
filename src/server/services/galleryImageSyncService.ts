@@ -1,288 +1,91 @@
-/**
- * 图集图片与 ImageMap 同步服务
- * 将图集上传的图片自动同步到 ImageMap 表，使其能在图片管理系统中统一管理
- */
-
 import { prisma } from '../prisma'
-import { calculateFileMD5 } from '../utils/hash'
-import { uploadsDir } from '../utils'
+import { resolveUploadPathByUrl } from '../utils/upload'
+import { resolveUploadPathByStorageKey } from '../uploadPath'
+import { uploadsDir } from '../utils/config'
+import { syncAssetToImageMap } from './mediaAssetService'
 import { variantGenerator } from './variantGenerator'
-import path from 'path'
-import fs from 'fs'
 
 /**
- * 将 storageKey 转换为绝对文件路径
+ * 历史 URL 同步入口。新上传不经过这里；没有 MediaAsset 的历史记录交由 reconcile 脚本处理。
  */
-function storageKeyToAbsoluteFile(storageKey: string): string | null {
-  if (!storageKey || typeof storageKey !== 'string') {
-    return null
-  }
+export async function syncGalleryImageToImageMap(publicUrl: string, storageKey: string) {
+  const existing = await prisma.imageMap.findFirst({ where: { localUrl: publicUrl } })
+  if (existing) return existing.id
 
-  // 防止路径遍历
-  const normalizedKey = path.normalize(storageKey)
-  if (
-    normalizedKey.startsWith('..') ||
-    normalizedKey.includes('..\\') ||
-    normalizedKey.includes('../')
-  ) {
-    return null
-  }
-
-  const resolvedBase = path.resolve(uploadsDir)
-  const resolvedTarget = path.resolve(resolvedBase, normalizedKey)
-
-  // 路径遍历保护
-  const baseWithSep = resolvedBase.endsWith(path.sep) ? resolvedBase : resolvedBase + path.sep
-  if (!resolvedTarget.startsWith(baseWithSep) && resolvedTarget !== resolvedBase) {
-    return null
-  }
-
-  return resolvedTarget
+  const asset = await prisma.mediaAsset.findFirst({
+    where: {
+      status: 'ready',
+      OR: [{ publicUrl }, { storageKey }],
+    },
+    select: { id: true },
+  })
+  return asset ? syncAssetToImageMap(asset.id) : null
 }
 
-/**
- * 将 publicUrl 转换为本地文件路径
- */
-function publicUrlToAbsoluteFile(publicUrl: string): string | null {
-  if (!publicUrl || typeof publicUrl !== 'string') {
-    return null
-  }
-
-  // 处理 /uploads/ 开头的 URL
-  if (!publicUrl.startsWith('/uploads/')) {
-    return null
-  }
-
-  const relativePath = publicUrl.slice('/uploads/'.length)
-  if (!relativePath) {
-    return null
-  }
-
-  const resolvedBase = path.resolve(uploadsDir)
-  const resolvedTarget = path.resolve(resolvedBase, relativePath)
-
-  // 路径遍历保护
-  const baseWithSep = resolvedBase.endsWith(path.sep) ? resolvedBase : resolvedBase + path.sep
-  if (!resolvedTarget.startsWith(baseWithSep) && resolvedTarget !== resolvedBase) {
-    return null
-  }
-
-  return resolvedTarget
-}
-
-function shouldEnqueueVariant(imageMap: { thumbnailUrl: string | null; variantStatus: string }) {
-  return !imageMap.thumbnailUrl && imageMap.variantStatus !== 'completed'
-}
-
-async function enqueueVariantIfNeeded(
-  imageMap: {
-    id: string
-    thumbnailUrl: string | null
-    variantStatus: string
-  },
-  filePath: string,
-  priority: 'high' | 'normal' | 'low' = 'normal'
-) {
-  if (!shouldEnqueueVariant(imageMap)) return
-
-  try {
-    await variantGenerator.enqueue({
-      targetType: 'imageMap',
-      targetId: imageMap.id,
-      localFilePath: filePath,
-      priority,
-    })
-    console.log('[GalleryImageSync] 已入队缩略图生成任务:', imageMap.id)
-  } catch (error) {
-    console.error('[GalleryImageSync] 缩略图任务入队失败:', error)
-  }
-}
-
-/**
- * 同步单个图集图片到 ImageMap
- * @param publicUrl 图片的公开 URL (如 /uploads/galleries/xxx.jpg)
- * @param storageKey 存储键 (如 galleries/xxx.jpg)
- * @returns 创建的 ImageMap ID 或 null
- */
-export async function syncGalleryImageToImageMap(
-  publicUrl: string,
-  storageKey: string,
-  options: {
-    enqueueVariant?: boolean
-  } = {}
-): Promise<string | null> {
-  try {
-    // 获取文件路径
-    const filePath = storageKeyToAbsoluteFile(storageKey) || publicUrlToAbsoluteFile(publicUrl)
-
-    if (!filePath) {
-      console.warn('[GalleryImageSync] 无法解析文件路径:', { publicUrl, storageKey })
-      return null
-    }
-
-    // 检查文件是否存在
-    if (!fs.existsSync(filePath)) {
-      console.warn('[GalleryImageSync] 文件不存在:', filePath)
-      return null
-    }
-
-    // 计算 MD5
-    const md5 = await calculateFileMD5(filePath)
-
-    // 使用 publicUrl 作为 localUrl
-    const localUrl = publicUrl
-
-    // 检查是否已存在相同的 MD5
-    const existing = await prisma.imageMap.findUnique({
-      where: { md5 },
-    })
-
-    if (existing && !existing.deletedAt) {
-      console.log('[GalleryImageSync] ImageMap 记录已存在 (MD5 匹配):', existing.id)
-      if (options.enqueueVariant) {
-        await enqueueVariantIfNeeded(existing, filePath)
-      }
-      return existing.id
-    }
-
-    // 检查是否已存在相同的 localUrl
-    const existingByUrl = await prisma.imageMap.findFirst({
-      where: { localUrl, deletedAt: null },
-    })
-
-    if (existingByUrl) {
-      console.log('[GalleryImageSync] ImageMap 记录已存在 (URL 匹配):', existingByUrl.id)
-      if (options.enqueueVariant) {
-        await enqueueVariantIfNeeded(existingByUrl, filePath)
-      }
-      return existingByUrl.id
-    }
-
-    // 创建新的 ImageMap 记录
-    const imageMap = await prisma.imageMap.create({
-      data: {
-        id: crypto.randomUUID(),
-        md5,
-        localUrl,
-        storageType: 'local',
-      },
-    })
-
-    console.log('[GalleryImageSync] 成功创建 ImageMap 记录:', imageMap.id)
-
-    if (options.enqueueVariant) {
-      await enqueueVariantIfNeeded(imageMap, filePath)
-    }
-
-    return imageMap.id
-  } catch (error) {
-    console.error('[GalleryImageSync] 同步失败:', error)
-    return null
-  }
-}
-
-/**
- * 同步单个图集图片到 ImageMap，并立即入队缩略图生成任务
- */
-export function syncGalleryImageToImageMapWithVariant(
+export async function syncGalleryImageToImageMapWithVariant(
   publicUrl: string,
   storageKey: string
 ): Promise<string | null> {
-  return syncGalleryImageToImageMap(publicUrl, storageKey, { enqueueVariant: true })
+  const imageMapId = await syncGalleryImageToImageMap(publicUrl, storageKey)
+  if (!imageMapId) return null
+
+  const imageMap = await prisma.imageMap.findUnique({
+    where: { id: imageMapId },
+    select: { id: true, localUrl: true, thumbnailUrl: true, variantStatus: true },
+  })
+  if (!imageMap || imageMap.thumbnailUrl || imageMap.variantStatus === 'completed')
+    return imageMapId
+  const filePath =
+    resolveUploadPathByUrl(imageMap.localUrl) ||
+    resolveUploadPathByStorageKey(storageKey, uploadsDir)
+  if (!filePath) return imageMapId
+  await variantGenerator.enqueue({
+    targetType: 'imageMap',
+    targetId: imageMap.id,
+    localFilePath: filePath,
+    priority: 'normal',
+  })
+  return imageMapId
 }
 
-/**
- * 批量同步图集图片到 ImageMap
- * @param images 图片信息数组
- * @returns 成功同步的数量
- */
 export async function batchSyncGalleryImagesToImageMap(
   images: Array<{ publicUrl: string; storageKey: string }>
-): Promise<number> {
+) {
   let successCount = 0
-
   for (const image of images) {
-    const result = await syncGalleryImageToImageMap(image.publicUrl, image.storageKey)
-    if (result) {
-      successCount++
-    }
+    if (await syncGalleryImageToImageMap(image.publicUrl, image.storageKey)) successCount++
   }
-
   return successCount
 }
 
-/**
- * 同步 MediaAsset 到 ImageMap
- * 用于将已存在的 MediaAsset 记录同步到 ImageMap
- * @param assetId MediaAsset ID
- * @returns 创建的 ImageMap ID 或 null
- */
-export async function syncMediaAssetToImageMap(assetId: string): Promise<string | null> {
+export async function syncMediaAssetToImageMap(assetId: string) {
   try {
-    const asset = await prisma.mediaAsset.findUnique({
-      where: { id: assetId },
-    })
-
-    if (!asset) {
-      console.warn('[GalleryImageSync] MediaAsset 不存在:', assetId)
-      return null
-    }
-
-    return await syncGalleryImageToImageMap(asset.publicUrl, asset.storageKey)
+    return await syncAssetToImageMap(assetId)
   } catch (error) {
     console.error('[GalleryImageSync] 同步 MediaAsset 失败:', error)
     return null
   }
 }
 
-/**
- * 同步所有未同步的 MediaAsset 到 ImageMap
- * 用于历史数据迁移
- * @returns 同步结果统计
- */
-export async function syncAllMediaAssetsToImageMap(): Promise<{
-  total: number
-  success: number
-  failed: number
-  errors: string[]
-}> {
-  const result = {
-    total: 0,
-    success: 0,
-    failed: 0,
-    errors: [] as string[],
-  }
-
-  try {
-    // 获取所有 MediaAsset
-    const assets = await prisma.mediaAsset.findMany({
-      where: { status: 'ready' },
-    })
-
-    result.total = assets.length
-
-    for (const asset of assets) {
-      try {
-        const imageMapId = await syncGalleryImageToImageMap(asset.publicUrl, asset.storageKey)
-        if (imageMapId) {
-          result.success++
-        } else {
-          result.failed++
-          result.errors.push(`同步失败: ${asset.id}`)
-        }
-      } catch (error) {
+export async function syncAllMediaAssetsToImageMap() {
+  const assets = await prisma.mediaAsset.findMany({
+    where: { status: 'ready', imageMapId: null },
+    select: { id: true },
+  })
+  const result = { total: assets.length, success: 0, failed: 0, errors: [] as string[] }
+  for (const asset of assets) {
+    try {
+      if (await syncMediaAssetToImageMap(asset.id)) result.success++
+      else {
         result.failed++
-        const errorMsg = error instanceof Error ? error.message : '未知错误'
-        result.errors.push(`同步失败 ${asset.id}: ${errorMsg}`)
+        result.errors.push(`同步失败: ${asset.id}`)
       }
+    } catch (error) {
+      result.failed++
+      result.errors.push(
+        `同步失败 ${asset.id}: ${error instanceof Error ? error.message : '未知错误'}`
+      )
     }
-
-    console.log('[GalleryImageSync] 批量同步完成:', result)
-    return result
-  } catch (error) {
-    console.error('[GalleryImageSync] 批量同步失败:', error)
-    const errorMsg = error instanceof Error ? error.message : '未知错误'
-    result.errors.push(`批量同步失败: ${errorMsg}`)
-    return result
   }
+  return result
 }

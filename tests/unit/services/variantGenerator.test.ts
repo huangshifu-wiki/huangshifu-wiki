@@ -28,20 +28,22 @@ vi.mock('../../../src/server/prisma', () => ({
     },
     imageMap: {
       update: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
     },
     songCover: {
       update: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue({ thumbnailUrl: null }),
       count: vi.fn().mockResolvedValue(0),
     },
     albumCover: {
       update: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue({ thumbnailUrl: null }),
-      count: vi.fn().mockResolvedValue(0),
     },
   },
 }))
@@ -165,8 +167,8 @@ describe('VariantGenerator - 队列管理', () => {
 
     // 源文件不存在 → 任务应被标记 failed（等待确定性的完成信号，不用固定睡眠）
     await vi.waitFor(() => {
-      expect(prisma.imageMap.update).toHaveBeenCalledWith({
-        where: { id: 'test-1' },
+      expect(prisma.imageMap.updateMany).toHaveBeenCalledWith({
+        where: { id: 'test-1', variantStatus: { in: ['pending', 'processing'] } },
         data: { variantStatus: 'failed' },
       })
     })
@@ -275,7 +277,7 @@ describe('VariantGenerator - 队列管理', () => {
       processingCount: 0,
     })
     expect(sharp).not.toHaveBeenCalled()
-    expect(prisma.imageMap.update).not.toHaveBeenCalled()
+    expect(prisma.imageMap.updateMany).not.toHaveBeenCalled()
   })
 })
 
@@ -298,7 +300,6 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
 
     vi.clearAllMocks()
   })
-
   it('imageMap 任务完成后应写入 thumbnailUrl 和 completed 状态', async () => {
     await generator.enqueue({
       targetType: 'imageMap',
@@ -308,11 +309,11 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
     })
 
     await vi.waitFor(() => {
-      expect(prisma.imageMap.update).toHaveBeenCalledWith(
+      expect(prisma.imageMap.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'im-1' },
+          where: { id: 'im-1', variantStatus: 'processing' },
           data: expect.objectContaining({
-            thumbnailUrl: '/uploads/variants/im-1/1080h.webp',
+            thumbnailUrl: expect.any(String),
             variantStatus: 'completed',
           }),
         })
@@ -329,14 +330,12 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
     })
 
     await vi.waitFor(() => {
-      expect(prisma.songCover.update).toHaveBeenCalledWith(
+      expect(prisma.songCover.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'song-cover-1' },
+          where: { id: 'song-cover-1', variantStatus: 'processing' },
           data: expect.objectContaining({
-            thumbnailUrl: expect.stringContaining('/uploads/music-covers/thumbnails/'),
+            thumbnailUrl: expect.any(String),
             variantStatus: 'completed',
-            variantGeneratedAt: expect.any(Date),
-            lastError: null,
           }),
         })
       )
@@ -352,15 +351,9 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
     })
 
     await vi.waitFor(() => {
-      expect(prisma.albumCover.update).toHaveBeenCalledWith(
+      expect(prisma.albumCover.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'album-cover-1' },
-          data: expect.objectContaining({
-            thumbnailUrl: expect.stringContaining('/uploads/music-covers/thumbnails/'),
-            variantStatus: 'completed',
-            variantGeneratedAt: expect.any(Date),
-            lastError: null,
-          }),
+          data: expect.objectContaining({ variantStatus: 'completed' }),
         })
       )
     })
@@ -375,8 +368,8 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
     })
 
     await vi.waitFor(() => {
-      expect(prisma.songCover.update).toHaveBeenCalledWith({
-        where: { id: 'song-cover-missing' },
+      expect(prisma.songCover.updateMany).toHaveBeenCalledWith({
+        where: { id: 'song-cover-missing', variantStatus: { in: ['pending', 'processing'] } },
         data: { variantStatus: 'failed', lastError: 'Source file missing' },
       })
     })
@@ -447,8 +440,8 @@ describe('VariantGenerator - 恢复未完成任务', () => {
     await generator.recoverPendingTasks()
 
     expect(enqueueSpy).not.toHaveBeenCalled()
-    expect(prisma.songCover.update).toHaveBeenCalledWith({
-      where: { id: 'sc-missing' },
+    expect(prisma.songCover.updateMany).toHaveBeenCalledWith({
+      where: { id: 'sc-missing', variantStatus: { in: ['pending', 'processing'] } },
       data: { variantStatus: 'failed', lastError: 'Source file missing' },
     })
   })

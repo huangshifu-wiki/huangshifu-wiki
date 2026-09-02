@@ -15,14 +15,10 @@ import {
   normalizeOptionalDateOnlyString,
   normalizeGalleryWriteStatus,
   canViewGallery,
-  createUploadSessionExpiresAt,
-  isUploadSessionExpired,
-  safeDeleteUploadFileByStorageKey,
-  uploadFileToS3,
-  uploadFileToExternal,
   toCommentResponse,
   toGalleryResponse,
   toGalleryListResponse,
+  logger,
   enhancedCache,
   fetchGalleryCommentsForResponse,
   resolveCommentReplyTarget,
@@ -40,13 +36,18 @@ import {
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
 import { prisma } from '../prisma'
-import { syncGalleryImageToImageMapWithVariant } from '../services/galleryImageSyncService'
 import { runtimeConfigService } from '../services/runtimeConfig.service'
 import {
   cleanupUnusedMediaAssetById,
   cleanupUntrackedUploadImageByUrl,
 } from '../services/mediaAssetCleanupService'
-
+import {
+  assertUploadSessionAssets,
+  getCanonicalMediaUrl,
+  getReadyAssetsForOwner,
+  MediaAssetRequestError,
+} from '../services/mediaAssetService'
+import type { ReadyMediaAsset } from '../services/mediaAssetService'
 function isGalleryAdminOnly(): boolean {
   return runtimeConfigService.getConfig().galleryAdminOnly
 }
@@ -697,7 +698,7 @@ router.post(
         title?: string
         description?: string
         tags?: string[]
-        images?: { url: string; name: string }[]
+        images?: Array<{ assetId?: string; url?: string; name?: string }>
         assetIds?: string[]
         uploadSessionId?: string
         locationCode?: string
@@ -713,7 +714,6 @@ router.post(
         return
       }
 
-      const normalizedAssetIds = parseAssetIdList(assetIds)
       const normalizedCopyright =
         copyright !== undefined
           ? typeof copyright === 'string'
@@ -732,7 +732,26 @@ router.post(
         return
       }
 
-      if (normalizedAssetIds.length > 0) {
+      const rawImages = Array.isArray(images) ? images : []
+      const imageAssetIds = rawImages
+        .map((image) => (typeof image?.assetId === 'string' ? image.assetId.trim() : ''))
+        .filter(Boolean)
+      const normalizedAssetIds = parseAssetIdList(assetIds)
+      const requestedAssetIds = normalizedAssetIds.length ? normalizedAssetIds : imageAssetIds
+
+      if (requestedAssetIds.length > 0) {
+        if (new Set(requestedAssetIds).size !== requestedAssetIds.length) {
+          throw new MediaAssetRequestError(400, '图片列表包含重复资源')
+        }
+        if (rawImages.length > 0 && imageAssetIds.length !== rawImages.length) {
+          throw new MediaAssetRequestError(400, '图片列表包含无效资源')
+        }
+
+        const namesByAssetId = new Map(
+          rawImages
+            .filter((image) => typeof image?.assetId === 'string' && image.assetId.trim())
+            .map((image) => [image.assetId!.trim(), image.name?.trim() || ''])
+        )
         const finalTitle = typeof title === 'string' && title.trim() ? title.trim() : '默认图集'
         const finalDescription = typeof description === 'string' ? description.trim() : ''
         const finalTags = normalizeTagList(tags)
@@ -741,59 +760,20 @@ router.post(
           req.authUser!
         )
 
-        const assets = await prisma.mediaAsset.findMany({
-          where: {
-            id: { in: normalizedAssetIds },
-            ownerUid: req.authUser!.uid,
-            status: 'ready',
-          },
-          orderBy: { createdAt: 'asc' },
-        })
-
-        if (assets.length !== normalizedAssetIds.length) {
-          res.status(400).json({ error: '包含无效或无权限的图片资源' })
-          return
-        }
-
-        if (uploadSessionId && typeof uploadSessionId === 'string') {
-          const session = await prisma.uploadSession.findUnique({
-            where: { id: uploadSessionId },
-            select: {
-              id: true,
-              ownerUid: true,
-              status: true,
-              expiresAt: true,
-            },
-          })
-
-          if (!session || session.ownerUid !== req.authUser!.uid) {
-            res.status(400).json({ error: '上传会话不存在' })
-            return
+        const { gallery } = await prisma.$transaction(async (tx) => {
+          if (uploadSessionId) {
+            await assertUploadSessionAssets(
+              tx,
+              uploadSessionId,
+              req.authUser!.uid,
+              requestedAssetIds
+            )
           }
-
-          if (session.status === 'expired' || isUploadSessionExpired(session.expiresAt)) {
-            if (session.status !== 'expired') {
-              await prisma.uploadSession.update({
-                where: { id: session.id },
-                data: { status: 'expired' },
-              })
-            }
-            res.status(410).json({ error: '上传会话已过期，请重新上传' })
-            return
-          }
-
-          if (session.status !== 'finalized') {
-            res.status(400).json({ error: '请先完成上传会话' })
-            return
-          }
-        }
-
-        const assetsById = new Map(assets.map((asset) => [asset.id, asset]))
-        const orderedAssets = normalizedAssetIds
-          .map((id) => assetsById.get(id))
-          .filter((asset): asset is (typeof assets)[number] => Boolean(asset))
-
-        const gallery = await prisma.$transaction(async (tx) => {
+          const orderedAssets = await getReadyAssetsForOwner(
+            tx,
+            requestedAssetIds,
+            req.authUser!.uid
+          )
           const slug = await allocateNumericSlug(tx, 'Gallery')
           const created = await tx.gallery.create({
             data: {
@@ -804,15 +784,15 @@ router.post(
               authorName: req.authUser!.displayName,
               tags: finalTags,
               eventDate: normalizedEventDate,
-              locationCode: locationCode || null,
-              locationDetail: locationDetail || null,
+              locationCode: locationCode?.trim() || null,
+              locationDetail: locationDetail?.trim() || null,
               copyright: normalizedCopyright,
               ...galleryStatusData(nextStatus),
               images: {
                 create: orderedAssets.map((asset, index) => ({
                   assetId: asset.id,
-                  url: asset.publicUrl,
-                  name: asset.fileName || `image-${index + 1}`,
+                  url: getCanonicalMediaUrl(asset),
+                  name: namesByAssetId.get(asset.id) || asset.fileName || `image-${index + 1}`,
                   sortOrder: index,
                 })),
               },
@@ -820,45 +800,23 @@ router.post(
             include: {
               images: {
                 orderBy: { sortOrder: 'asc' },
-                include: {
-                  asset: true,
-                },
+                include: { asset: { include: { imageMap: true } } },
               },
             },
           })
           const submissionLog = gallerySubmissionLogData(created.id, nextStatus, req.authUser!)
-          if (submissionLog) {
-            await tx.moderationLog.create({ data: submissionLog })
-          }
-          return created
+          if (submissionLog) await tx.moderationLog.create({ data: submissionLog })
+          return { gallery: created }
         })
-
-        try {
-          await enqueueGalleryImageEmbeddings(
-            prisma,
-            gallery.images.map((image) => image.id)
-          )
-        } catch (error) {
-          console.error('Enqueue gallery image embeddings error:', error)
-        }
-
-        try {
-          for (const asset of orderedAssets) {
-            await syncGalleryImageToImageMapWithVariant(asset.publicUrl, asset.storageKey)
-          }
-        } catch (error) {
-          console.error('Sync gallery images to ImageMap error:', error)
-        }
 
         res.status(201).json({ gallery: await toGalleryResponse(gallery) })
         return
       }
 
-      if (!images || !Array.isArray(images) || images.length === 0) {
+      if (!rawImages.length) {
         res.status(400).json({ error: '图集至少需要一张图片' })
         return
       }
-
       const normalizedTitle = typeof title === 'string' && title.trim() ? title.trim() : '默认图集'
       const normalizedDescription = typeof description === 'string' ? description.trim() : ''
       const normalizedTags = normalizeTagList(tags)
@@ -866,56 +824,50 @@ router.post(
         req.body as Record<string, unknown>,
         req.authUser!
       )
-
-      const normalizedImages = images
+      const normalizedImages = rawImages
         .map((image, index) => {
-          if (!image || typeof image.url !== 'string') {
-            return null
-          }
+          if (!image || typeof image.url !== 'string') return null
           const url = image.url.trim()
-          if (!url || !url.startsWith('/uploads/')) {
-            return null
-          }
-          const fallbackName = `image-${index + 1}`
-          const name =
-            typeof image.name === 'string' && image.name.trim() ? image.name.trim() : fallbackName
+          if (!url || !url.startsWith('/uploads/')) return null
+          const name = image.name?.trim() || `image-${index + 1}`
           if (
             url.length > CONTENT_LIMITS.gallery.imageUrl ||
             name.length > CONTENT_LIMITS.gallery.imageName
           ) {
             return null
           }
-          return {
-            url,
-            name,
-          }
+          return { url, name }
         })
         .filter((item): item is { url: string; name: string } => Boolean(item))
-
-      if (!normalizedImages.length || normalizedImages.length !== images.length) {
+      if (normalizedImages.length !== rawImages.length) {
         res.status(400).json({ error: '图片地址不合法，请重新上传' })
         return
       }
 
       const fallbackAssets = await prisma.mediaAsset.findMany({
         where: {
+          ownerUid: req.authUser!.uid,
           status: 'ready',
-          publicUrl: {
-            in: normalizedImages.map((item) => item.url),
-          },
+          publicUrl: { in: normalizedImages.map((image) => image.url) },
         },
-        select: {
-          id: true,
-          publicUrl: true,
-        },
+        select: { id: true, publicUrl: true },
       })
-      const assetByUrl = new Map(fallbackAssets.map((item) => [item.publicUrl, item.id]))
+      const assetByUrl = new Map(fallbackAssets.map((asset) => [asset.publicUrl, asset.id]))
       if (assetByUrl.size !== normalizedImages.length) {
-        res.status(400).json({ error: '图片地址未关联本站媒体资源，请重新上传' })
+        res.status(400).json({ error: '图片地址未关联当前用户的媒体资源，请重新上传' })
+        return
+      }
+      const fallbackAssetIds = normalizedImages.map((image) => assetByUrl.get(image.url)!)
+      if (new Set(fallbackAssetIds).size !== fallbackAssetIds.length) {
+        res.status(400).json({ error: '图片列表包含重复资源' })
         return
       }
 
       const gallery = await prisma.$transaction(async (tx) => {
+        if (uploadSessionId) {
+          await assertUploadSessionAssets(tx, uploadSessionId, req.authUser!.uid, fallbackAssetIds)
+        }
+        const orderedAssets = await getReadyAssetsForOwner(tx, fallbackAssetIds, req.authUser!.uid)
         const slug = await allocateNumericSlug(tx, 'Gallery')
         const created = await tx.gallery.create({
           data: {
@@ -926,15 +878,15 @@ router.post(
             authorName: req.authUser!.displayName,
             tags: normalizedTags,
             eventDate: normalizedEventDate,
-            locationCode: locationCode || null,
-            locationDetail: locationDetail || null,
+            locationCode: locationCode?.trim() || null,
+            locationDetail: locationDetail?.trim() || null,
             copyright: normalizedCopyright,
             ...galleryStatusData(nextStatus),
             images: {
-              create: normalizedImages.map((image, index) => ({
-                assetId: assetByUrl.get(image.url)!,
-                url: image.url,
-                name: image.name,
+              create: orderedAssets.map((asset, index) => ({
+                assetId: asset.id,
+                url: getCanonicalMediaUrl(asset),
+                name: normalizedImages[index].name,
                 sortOrder: index,
               })),
             },
@@ -942,47 +894,32 @@ router.post(
           include: {
             images: {
               orderBy: { sortOrder: 'asc' },
-              include: {
-                asset: true,
-              },
+              include: { asset: { include: { imageMap: true } } },
             },
           },
         })
         const submissionLog = gallerySubmissionLogData(created.id, nextStatus, req.authUser!)
-        if (submissionLog) {
-          await tx.moderationLog.create({ data: submissionLog })
-        }
+        if (submissionLog) await tx.moderationLog.create({ data: submissionLog })
         return created
       })
-
       try {
         await enqueueGalleryImageEmbeddings(
           prisma,
           gallery.images.map((image) => image.id)
         )
       } catch (error) {
-        console.error('Enqueue gallery image embeddings error:', error)
+        logger.error(
+          { err: error, galleryId: gallery.id },
+          'Enqueue gallery image embeddings error'
+        )
       }
-
-      try {
-        for (const asset of fallbackAssets) {
-          const assetRecord = await prisma.mediaAsset.findUnique({
-            where: { id: asset.id },
-          })
-          if (assetRecord) {
-            await syncGalleryImageToImageMapWithVariant(
-              assetRecord.publicUrl,
-              assetRecord.storageKey
-            )
-          }
-        }
-      } catch (error) {
-        console.error('Sync gallery images to ImageMap error:', error)
-      }
-
       res.status(201).json({ gallery: await toGalleryResponse(gallery) })
     } catch (error) {
-      console.error('Create gallery error:', error)
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      logger.error({ err: error }, 'Create gallery error')
       res.status(500).json({ error: '创建图集失败' })
     }
   })
@@ -1102,6 +1039,8 @@ router.patch(
           }
           return null
         }) ?? undefined
+      const uploadSessionId =
+        typeof req.body?.uploadSessionId === 'string' ? req.body.uploadSessionId.trim() : ''
 
       const data: {
         title?: string
@@ -1198,6 +1137,7 @@ router.patch(
               id: true,
               assetId: true,
               url: true,
+              asset: { select: { imageMapId: true } },
             },
           })
 
@@ -1220,51 +1160,55 @@ router.patch(
           if (new Set(assetIdsInPayload).size !== assetIdsInPayload.length) {
             throw new Error('图片列表包含重复资源')
           }
-
-          const assets: Array<{ id: string; publicUrl: string; fileName: string | null }> =
-            assetIdsInPayload.length
-              ? await tx.mediaAsset.findMany({
-                  select: {
-                    id: true,
-                    publicUrl: true,
-                    fileName: true,
-                  },
-                  where: {
-                    id: { in: assetIdsInPayload },
-                    ownerUid: req.authUser!.uid,
-                    status: 'ready',
-                  },
-                })
-              : []
-          if (assets.length !== assetIdsInPayload.length) {
-            throw new Error('图片列表包含无效或无权限的资源')
-          }
-          const assetMap = new Map(assets.map((asset) => [asset.id, asset]))
-
           const urlsInPayload = validatedInstructions
             .filter(
               (item): item is { kind: 'url'; url: string; name: string } => item?.kind === 'url'
             )
             .map((item) => item.url)
-          const urlAssets: Array<{ id: string; publicUrl: string; fileName: string | null }> =
-            urlsInPayload.length
-              ? await tx.mediaAsset.findMany({
-                  select: {
-                    id: true,
-                    publicUrl: true,
-                    fileName: true,
-                  },
-                  where: {
-                    status: 'ready',
-                    publicUrl: {
-                      in: urlsInPayload,
-                    },
-                  },
-                })
-              : []
-          const assetByUrl = new Map(urlAssets.map((asset) => [asset.publicUrl, asset]))
+          const urlRows = urlsInPayload.length
+            ? await tx.mediaAsset.findMany({
+                select: { id: true, publicUrl: true },
+                where: {
+                  ownerUid: req.authUser!.uid,
+                  status: 'ready',
+                  publicUrl: { in: urlsInPayload },
+                },
+              })
+            : []
+          const allAssetIds = [...assetIdsInPayload, ...urlRows.map((row) => row.id)]
+          const assetMap = new Map<string, ReadyMediaAsset>()
+          const readyAssets = await getReadyAssetsForOwner(tx, allAssetIds, req.authUser!.uid)
+          for (const asset of readyAssets) assetMap.set(asset.id, asset)
+          const assetByUrl = new Map<string, ReadyMediaAsset>()
+          for (const row of urlRows) {
+            const asset = assetMap.get(row.id)
+            if (asset && row.publicUrl) assetByUrl.set(row.publicUrl, asset)
+          }
           if (assetByUrl.size !== urlsInPayload.length) {
-            throw new Error('图片地址未关联本站媒体资源，请重新上传')
+            throw new MediaAssetRequestError(400, '图片地址未关联当前用户的媒体资源，请重新上传')
+          }
+          if (uploadSessionId) {
+            await assertUploadSessionAssets(tx, uploadSessionId, req.authUser!.uid, [
+              ...assetIdsInPayload,
+              ...[...assetByUrl.values()].map((asset) => asset.id),
+            ])
+          }
+
+          const finalImageMapIds = validatedInstructions.map((instruction) => {
+            if (instruction.kind === 'existing') {
+              return (
+                existingImageMap.get(instruction.imageId)?.asset?.imageMapId ||
+                `legacy:${instruction.imageId}`
+              )
+            }
+            if (instruction.kind === 'asset') return assetMap.get(instruction.assetId)?.imageMapId
+            return assetByUrl.get(instruction.url)?.imageMapId
+          })
+          if (
+            finalImageMapIds.some((id) => !id) ||
+            new Set(finalImageMapIds).size !== finalImageMapIds.length
+          ) {
+            throw new MediaAssetRequestError(400, '图片列表包含重复图片内容')
           }
 
           const keptIds = new Set(existingIdsInPayload)
@@ -1301,7 +1245,7 @@ router.patch(
                 data: {
                   galleryId: req.params.id,
                   assetId: asset.id,
-                  url: asset.publicUrl,
+                  url: getCanonicalMediaUrl(asset),
                   name: instruction.name || asset.fileName || `image-${index + 1}`,
                   sortOrder: index,
                 },
@@ -1319,7 +1263,7 @@ router.patch(
               data: {
                 galleryId: req.params.id,
                 assetId: asset.id,
-                url: asset.publicUrl,
+                url: getCanonicalMediaUrl(asset),
                 name: asset.fileName || `image-${index + 1}`,
                 sortOrder: index,
               },
@@ -1361,6 +1305,10 @@ router.patch(
 
       res.json({ gallery: await toGalleryResponse(updated) })
     } catch (error) {
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
       console.error('Update gallery error:', error)
       if (
         error instanceof Error &&
@@ -1561,21 +1509,12 @@ router.post(
 
       const gallery = await prisma.gallery.findUnique({
         where: { id: req.params.id },
-        include: {
-          images: {
-            select: {
-              id: true,
-              sortOrder: true,
-            },
-          },
-        },
+        select: { id: true, authorUid: true },
       })
-
       if (!gallery) {
         res.status(404).json({ error: '图集不存在' })
         return
       }
-
       if (!canManageGallery(gallery, req.authUser)) {
         res.status(403).json({ error: '无权限编辑该图集' })
         return
@@ -1586,103 +1525,95 @@ router.post(
         res.status(400).json({ error: '请提供至少一个图片资源' })
         return
       }
-
+      if (new Set(assetIds).size !== assetIds.length) {
+        res.status(400).json({ error: '图片列表包含重复资源' })
+        return
+      }
       const uploadSessionId =
         typeof req.body?.uploadSessionId === 'string' ? req.body.uploadSessionId.trim() : ''
-      if (uploadSessionId) {
-        const session = await prisma.uploadSession.findUnique({
-          where: { id: uploadSessionId },
+
+      const updated = await prisma.$transaction(async (tx) => {
+        if (uploadSessionId) {
+          await assertUploadSessionAssets(tx, uploadSessionId, req.authUser!.uid, assetIds)
+        }
+        const lockedGallery = await tx.gallery.findUnique({
+          where: { id: gallery.id },
           select: {
             id: true,
-            ownerUid: true,
-            status: true,
-            expiresAt: true,
+            images: {
+              select: {
+                id: true,
+                sortOrder: true,
+                assetId: true,
+                asset: { select: { imageMapId: true } },
+              },
+            },
           },
         })
-        if (!session || session.ownerUid !== req.authUser!.uid) {
-          res.status(400).json({ error: '上传会话不存在' })
-          return
+        if (!lockedGallery) throw new MediaAssetRequestError(404, '图集不存在')
+
+        const existingAssetIds = new Set(
+          lockedGallery.images
+            .map((image) => image.assetId)
+            .filter((id): id is string => Boolean(id))
+        )
+        if (assetIds.some((assetId) => existingAssetIds.has(assetId))) {
+          throw new MediaAssetRequestError(400, '图片列表包含已存在的资源')
         }
-        if (session.status === 'expired' || isUploadSessionExpired(session.expiresAt)) {
-          if (session.status !== 'expired') {
-            await prisma.uploadSession.update({
-              where: { id: session.id },
-              data: { status: 'expired' },
-            })
+        const existingImageMapIds = new Set(
+          lockedGallery.images
+            .map((image) => image.asset?.imageMapId)
+            .filter((id): id is string => Boolean(id))
+        )
+        const orderedAssets = await getReadyAssetsForOwner(tx, assetIds, req.authUser!.uid)
+        for (const asset of orderedAssets) {
+          if (existingImageMapIds.has(asset.imageMapId)) {
+            throw new MediaAssetRequestError(400, '图片列表包含已存在的相同图片内容')
           }
-          res.status(410).json({ error: '上传会话已过期，请重新上传' })
-          return
         }
-        if (session.status !== 'finalized') {
-          res.status(400).json({ error: '请先完成上传会话' })
-          return
-        }
-      }
 
-      const uniqueAssetIds = [...new Set(assetIds)]
-      const assets = await prisma.mediaAsset.findMany({
-        where: {
-          id: { in: uniqueAssetIds },
-          ownerUid: req.authUser!.uid,
-          status: 'ready',
-        },
-        orderBy: { createdAt: 'asc' },
-      })
-
-      if (assets.length !== uniqueAssetIds.length) {
-        res.status(400).json({ error: '包含无效或无权限的图片资源' })
-        return
-      }
-
-      const assetMap = new Map(assets.map((asset) => [asset.id, asset]))
-      const orderedAssets = assetIds
-        .map((id) => assetMap.get(id))
-        .filter((asset): asset is (typeof assets)[number] => Boolean(asset))
-      const baseSortOrder = gallery.images.length
-        ? Math.max(...gallery.images.map((item) => item.sortOrder)) + 1
-        : 0
-
-      await prisma.gallery.update({
-        where: { id: gallery.id },
-        data: {
-          images: {
-            create: orderedAssets.map((asset, index) => ({
-              assetId: asset.id,
-              url: asset.publicUrl,
-              name: asset.fileName || `image-${baseSortOrder + index + 1}`,
-              sortOrder: baseSortOrder + index,
-            })),
+        const baseSortOrder = lockedGallery.images.length
+          ? Math.max(...lockedGallery.images.map((image) => image.sortOrder)) + 1
+          : 0
+        return tx.gallery.update({
+          where: { id: lockedGallery.id },
+          data: {
+            images: {
+              create: orderedAssets.map((asset, index) => ({
+                assetId: asset.id,
+                url: getCanonicalMediaUrl(asset),
+                name: asset.fileName || `image-${baseSortOrder + index + 1}`,
+                sortOrder: baseSortOrder + index,
+              })),
+            },
           },
-        },
+          include: {
+            images: {
+              orderBy: { sortOrder: 'asc' },
+              include: { asset: { include: { imageMap: true } } },
+            },
+          },
+        })
       })
 
-      const updated = await fetchGalleryForResponse(gallery.id)
-
-      if (updated) {
-        try {
-          await enqueueGalleryImageEmbeddings(
-            prisma,
-            updated.images.map((image) => image.id)
-          )
-        } catch (error) {
-          console.error('Enqueue gallery image embeddings error:', error)
-        }
-
-        try {
-          for (const asset of orderedAssets) {
-            await syncGalleryImageToImageMapWithVariant(asset.publicUrl, asset.storageKey)
-          }
-        } catch (error) {
-          console.error('Sync gallery images to ImageMap error:', error)
-        }
-
-        res.json({ gallery: await toGalleryResponse(updated) })
+      try {
+        await enqueueGalleryImageEmbeddings(
+          prisma,
+          updated.images.map((image) => image.id)
+        )
+      } catch (error) {
+        logger.error(
+          { err: error, galleryId: updated.id },
+          'Enqueue gallery image embeddings error'
+        )
+      }
+      res.json({ gallery: await toGalleryResponse(updated) })
+    } catch (error) {
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
         return
       }
-
-      res.status(404).json({ error: '图集不存在' })
-    } catch (error) {
-      console.error('Append gallery images error:', error)
+      logger.error({ err: error }, 'Append gallery images error')
       res.status(500).json({ error: '追加图集图片失败' })
     }
   })
