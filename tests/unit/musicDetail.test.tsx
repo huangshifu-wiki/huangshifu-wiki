@@ -2,7 +2,7 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { apiGet } from '../../src/lib/apiClient'
 import MusicDetail from '../../src/pages/MusicDetail'
@@ -138,5 +138,95 @@ describe('MusicDetail 来源面板布局契约', () => {
     expect(await screen.findByRole('heading', { name: '歌曲信息' })).toBeInTheDocument()
     expect(screen.queryByText('主来源')).not.toBeInTheDocument()
     expect(screen.queryByText('其他来源')).not.toBeInTheDocument()
+  })
+})
+
+describe('MusicDetail SEO 元数据', () => {
+  const resetHead = () => {
+    document.head.querySelectorAll('[data-hsf-seo]').forEach((el) => el.remove())
+    document.title = ''
+  }
+
+  const getMeta = (key: string) =>
+    document.querySelector<HTMLMetaElement>(`meta[data-hsf-seo="${key}"]`)
+
+  const getCanonical = () =>
+    document.querySelector<HTMLLinkElement>('link[data-hsf-seo="canonical"]')
+
+  beforeEach(() => {
+    resetHead()
+    vi.clearAllMocks()
+  })
+
+  it('成功加载后输出 index、canonical 与 MusicRecording JSON-LD', async () => {
+    mockedApiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/music/song-1')
+        return {
+          song: {
+            ...createSong([]),
+            cover: '/uploads/cover.png',
+            album: '测试专辑',
+            description: '**歌曲简介** 正文',
+            releaseDate: '2023-05-01',
+            durationMs: 225000,
+          },
+        } as never
+      if (path === '/api/music/song-1/posts') return { posts: [] } as never
+      throw new Error(`unexpected apiGet path: ${path}`)
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/music/song-1']}>
+        <Routes>
+          <Route path="/music/:songId" element={<MusicDetail />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByRole('heading', { name: '歌曲信息' })).toBeInTheDocument()
+
+    expect(document.title).toBe('测试歌曲｜歌曲信息与歌词｜黄诗扶 Wiki')
+    expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
+      'index,follow'
+    )
+    expect(getCanonical()?.getAttribute('href')).toBe('http://localhost:3000/music/song-1')
+    expect(getMeta('og:type')?.getAttribute('content')).toBe('music.song')
+    expect(getMeta('og:image')?.getAttribute('content')).toBe(
+      'http://localhost:3000/uploads/cover.png'
+    )
+
+    const jsonLd = JSON.parse(
+      document.querySelector('script[data-hsf-seo="jsonld"]')?.textContent ?? 'null'
+    )
+    expect(jsonLd).toMatchObject({
+      '@type': 'MusicRecording',
+      name: '测试歌曲',
+      byArtist: longArtist,
+      inAlbum: { '@type': 'MusicAlbum', name: '测试专辑' },
+      datePublished: '2023-05-01',
+      image: 'http://localhost:3000/uploads/cover.png',
+      duration: 'PT3M45S',
+    })
+  })
+
+  it('加载失败后输出 noindex,follow', async () => {
+    mockedApiGet.mockRejectedValue(new Error('offline'))
+
+    render(
+      <MemoryRouter initialEntries={['/music/song-1']}>
+        <Routes>
+          <Route path="/music/:songId" element={<MusicDetail />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+
+    expect(document.title).toBe('歌曲不存在｜黄诗扶 Wiki')
+    expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
+      'noindex,follow'
+    )
+    expect(getCanonical()?.getAttribute('href')).toBe('http://localhost:3000/music/song-1')
+    expect(document.querySelector('script[data-hsf-seo="jsonld"]')).toBeNull()
   })
 })

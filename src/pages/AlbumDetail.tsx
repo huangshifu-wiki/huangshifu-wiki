@@ -13,8 +13,17 @@ import { SmartImage } from '../components/SmartImage'
 import { CoverPlaceholder } from '../components/CoverPlaceholder'
 import { Lightbox } from '../components/Lightbox'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
+import { toDateValue } from '../lib/dateUtils'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { isPlayableSong } from '../lib/musicPlayback'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
 import { LoadErrorState } from '@/src/components/ui'
 import type { MusicExternalSource } from '../types/entities'
 
@@ -45,12 +54,35 @@ type AlbumResponse = {
     cover: string
     coverThumbnail?: string
     description?: string | null
+    releaseDate?: string | null
     tracks: SongItem[]
   }
 }
 
 const compareTracks = (a: SongItem, b: SongItem) =>
   (a.discNumber || 0) - (b.discNumber || 0) || (a.trackOrder || 0) - (b.trackOrder || 0)
+
+// JSON-LD 只使用详情 API 已返回的字段
+const buildAlbumJsonLd = (
+  album: NonNullable<AlbumResponse['album']>,
+  url: string
+): Record<string, unknown> => {
+  const jsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'MusicAlbum',
+    name: album.title,
+    url,
+    byArtist: album.artist,
+    numTracks: album.tracks.length,
+  }
+  if (album.cover) {
+    jsonLd.image = toAbsoluteSeoUrl(album.cover)
+  }
+  if (toDateValue(album.releaseDate)) {
+    jsonLd.datePublished = album.releaseDate
+  }
+  return jsonLd
+}
 
 const AlbumDetail = () => {
   const { albumId } = useParams()
@@ -180,6 +212,31 @@ const AlbumDetail = () => {
     }
     show('复制链接失败，请稍后重试', { variant: 'error' })
   }
+
+  // SEO 元数据：加载中/失败不可索引，成功后输出专辑详情与 MusicAlbum JSON-LD
+  const albumPath = `/album/${albumId}`
+  const albumSeoMetadata: SeoMetadata = album
+    ? {
+        title: `${album.title}｜专辑曲目与介绍｜${SEO_SITE_NAME}`,
+        description: summarizeSeoText(
+          album.description,
+          `${album.artist}的专辑，共 ${album.tracks.length} 首歌曲。`
+        ),
+        canonicalPath: albumPath,
+        robots: 'index,follow',
+        ogType: 'music.album',
+        ogImage: album.cover || album.coverThumbnail || undefined,
+        ogImageAlt: album.title,
+        jsonLd: buildAlbumJsonLd(album, toAbsoluteSeoUrl(albumPath)),
+      }
+    : loading
+      ? getDetailFallbackSeo({ canonicalPath: albumPath, title: SEO_SITE_NAME })
+      : getDetailFallbackSeo({
+          canonicalPath: albumPath,
+          title: `专辑不存在｜${SEO_SITE_NAME}`,
+          description: '当前专辑不存在或已被删除。',
+        })
+  useSeo(albumSeoMetadata)
 
   if (loadError && !album) {
     return (

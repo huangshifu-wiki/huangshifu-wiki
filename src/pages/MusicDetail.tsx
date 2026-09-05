@@ -29,10 +29,19 @@ import { LyricsDisplay } from '../components/LyricsDisplay'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { getPlatformExternalUrl } from '../lib/musicPlatformUrls'
+import { toDateValue } from '../lib/dateUtils'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { formatTime } from '../lib/formatUtils'
 import { isPlayableSong } from '../lib/musicPlayback'
 import { parseLyrics } from '../lib/lrcParser'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
 import type { MusicExternalSource } from '../types/entities'
 
 const SourceLink = ({ source }: { source: MusicExternalSource }) => {
@@ -104,6 +113,43 @@ type PostItem = {
 
 const COVER_FILTER = 'brightness(0.96) saturate(0.92)'
 
+// 时长毫秒转 ISO 8601 时长（PT3M45S），用于 JSON-LD
+const formatIsoDuration = (durationMs: number): string => {
+  const totalSeconds = Math.round(durationMs / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  let value = 'PT'
+  if (hours > 0) value += `${hours}H`
+  if (minutes > 0) value += `${minutes}M`
+  if (seconds > 0 || (hours === 0 && minutes === 0)) value += `${seconds}S`
+  return value
+}
+
+// JSON-LD 只输出数据库确实存在且格式有效的字段
+const buildMusicRecordingJsonLd = (song: SongItem, url: string): Record<string, unknown> => {
+  const jsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'MusicRecording',
+    name: song.title,
+    url,
+    byArtist: formatMusicCredits(song.artists, '未知歌手'),
+  }
+  if (song.album) {
+    jsonLd.inAlbum = { '@type': 'MusicAlbum', name: song.album }
+  }
+  if (toDateValue(song.releaseDate)) {
+    jsonLd.datePublished = song.releaseDate
+  }
+  if (song.cover) {
+    jsonLd.image = toAbsoluteSeoUrl(song.cover)
+  }
+  if (typeof song.durationMs === 'number' && song.durationMs > 0) {
+    jsonLd.duration = formatIsoDuration(song.durationMs)
+  }
+  return jsonLd
+}
+
 const formatDate = (value: string | null | undefined) => {
   if (!value) return '刚刚'
   const parsed = new Date(value)
@@ -173,6 +219,33 @@ const MusicDetail = () => {
   useEffect(() => {
     void fetchData()
   }, [songId])
+
+  // SEO 元数据：加载中/失败不可索引，成功后输出歌曲详情与 MusicRecording JSON-LD
+  const songPath = `/music/${songId}`
+  const songSeoMetadata: SeoMetadata = song
+    ? {
+        title: `${song.title}｜歌曲信息与歌词｜${SEO_SITE_NAME}`,
+        description: summarizeSeoText(
+          [song.title, formatMusicCredits(song.artists, '未知歌手'), song.album, song.description]
+            .filter(Boolean)
+            .join('，'),
+          `${song.title}，黄诗扶 Wiki 歌曲资料。`
+        ),
+        canonicalPath: songPath,
+        robots: 'index,follow',
+        ogType: 'music.song',
+        ogImage: song.cover || song.coverThumbnail || undefined,
+        ogImageAlt: song.title,
+        jsonLd: buildMusicRecordingJsonLd(song, toAbsoluteSeoUrl(songPath)),
+      }
+    : loading
+      ? getDetailFallbackSeo({ canonicalPath: songPath, title: SEO_SITE_NAME })
+      : getDetailFallbackSeo({
+          canonicalPath: songPath,
+          title: `歌曲不存在｜${SEO_SITE_NAME}`,
+          description: '当前歌曲不存在或已被删除。',
+        })
+  useSeo(songSeoMetadata)
 
   const customPlatformLinks = song?.customPlatformLinks || []
 

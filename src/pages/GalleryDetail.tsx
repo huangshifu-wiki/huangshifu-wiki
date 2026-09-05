@@ -26,6 +26,14 @@ import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
 import { getErrorMessage } from '../lib/errorHandler'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import { useI18n } from '../lib/i18n'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
 import { formatDateOnly, formatDateTime } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
@@ -259,6 +267,41 @@ const GalleryDetail = () => {
     () => (gallery?.images || []).map(toDisplayImage),
     [gallery?.images]
   )
+
+  // SEO 元数据：加载中/失败/未发布不可索引，成功后输出图集详情与 ImageGallery JSON-LD
+  const galleryPath = `/gallery/${galleryId}`
+  const galleryDescription = gallery
+    ? summarizeSeoText(gallery.description, `${gallery.title}，黄诗扶 Wiki 图集资料。`)
+    : ''
+  const galleryImageUrls = images
+    .map((image) => toAbsoluteSeoUrl(image.originalUrl || image.url))
+    .filter(Boolean)
+  const gallerySeoMetadata: SeoMetadata = gallery
+    ? {
+        title: `${gallery.title}｜黄诗扶图集`,
+        description: galleryDescription,
+        canonicalPath: galleryPath,
+        robots: isGalleryPublished ? 'index,follow' : 'noindex,follow',
+        ogType: 'article',
+        ogImage: galleryImageUrls[0],
+        ogImageAlt: gallery.title,
+        jsonLd: {
+          '@context': 'https://schema.org',
+          '@type': 'ImageGallery',
+          name: gallery.title,
+          description: galleryDescription,
+          url: toAbsoluteSeoUrl(galleryPath),
+          image: galleryImageUrls,
+        },
+      }
+    : loading
+      ? getDetailFallbackSeo({ canonicalPath: galleryPath, title: SEO_SITE_NAME })
+      : getDetailFallbackSeo({
+          canonicalPath: galleryPath,
+          title: `图集不存在｜${SEO_SITE_NAME}`,
+          description: '当前图集不存在或尚未发布。',
+        })
+  useSeo(gallerySeoMetadata)
 
   const canManage = Boolean(
     user &&

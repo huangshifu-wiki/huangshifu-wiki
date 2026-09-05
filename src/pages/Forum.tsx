@@ -65,6 +65,14 @@ import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { validateMaxLength, validateRequiredText, validateTags } from '../lib/clientValidation'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import MentionTextarea from '../components/MentionTextarea'
 import MentionText from '../components/MentionText'
@@ -514,6 +522,38 @@ const PostDetail = () => {
       window.clearTimeout(clearTimer)
     }
   }, [comments, location.hash])
+
+  // SEO 元数据：加载中/失败/未公开发布不可索引，公开已发布帖子才 index
+  const postPath = `/forum/${postId}`
+  const postSeoDescription = post
+    ? summarizeSeoText(post.content, `${post.title}，黄诗扶 Wiki 社区讨论。`)
+    : ''
+  const postSeoMetadata: SeoMetadata =
+    post && (!post.status || post.status === 'published')
+      ? {
+          title: `${post.title}｜${SEO_SITE_NAME} 社区`,
+          description: postSeoDescription,
+          canonicalPath: postPath,
+          robots: 'index,follow',
+          ogType: 'article',
+          jsonLd: {
+            '@context': 'https://schema.org',
+            '@type': 'Article',
+            headline: post.title,
+            description: postSeoDescription,
+            mainEntityOfPage: toAbsoluteSeoUrl(`/forum/${post.slug || post.id}`),
+            ...(post.createdAt ? { datePublished: post.createdAt } : {}),
+            ...(post.updatedAt ? { dateModified: post.updatedAt } : {}),
+          },
+        }
+      : loading
+        ? getDetailFallbackSeo({ canonicalPath: postPath, title: SEO_SITE_NAME })
+        : getDetailFallbackSeo({
+            canonicalPath: postPath,
+            title: `帖子不存在｜${SEO_SITE_NAME}`,
+            description: '当前帖子不存在、尚未发布或已被删除。',
+          })
+  useSeo(postSeoMetadata)
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault()

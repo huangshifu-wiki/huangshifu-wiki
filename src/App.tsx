@@ -14,7 +14,9 @@ import { SiteFooterContent } from './components/SiteFooter'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PageSkeleton } from './components/PageSkeleton'
 import { RouteGuard } from './components/RouteGuard'
+import { Seo } from './components/Seo'
 import { clsx } from 'clsx'
+import { getStaticRouteSeo } from './lib/seo'
 import { loginWithWeChat } from './lib/auth'
 import {
   clearMiniProgramLoginParams,
@@ -62,6 +64,8 @@ const MainLayout = () => {
   const { isOnline } = useNetworkStatus()
   const location = useLocation()
   const path = location.pathname
+  // 布局级 SEO：详情路径返回 null，由详情组件自行管理元数据
+  const layoutSeo = getStaticRouteSeo(path, location.search)
   const [setupStatus, setSetupStatus] = React.useState<SetupStatus | null>(null)
   const [setupStatusLoaded, setSetupStatusLoaded] = React.useState(false)
 
@@ -105,9 +109,12 @@ const MainLayout = () => {
 
   if (path === '/setup') {
     return (
-      <Suspense fallback={<PageSkeleton />}>
-        <Setup />
-      </Suspense>
+      <>
+        {layoutSeo && <Seo metadata={layoutSeo} />}
+        <Suspense fallback={<PageSkeleton />}>
+          <Setup />
+        </Suspense>
+      </>
     )
   }
 
@@ -121,14 +128,18 @@ const MainLayout = () => {
 
   if (path === '/admin' || path.startsWith('/admin/')) {
     return (
-      <Suspense fallback={<PageSkeleton />}>
-        <AdminRoutes />
-      </Suspense>
+      <>
+        {layoutSeo && <Seo metadata={layoutSeo} />}
+        <Suspense fallback={<PageSkeleton />}>
+          <AdminRoutes />
+        </Suspense>
+      </>
     )
   }
 
   return (
     <div className="min-h-screen flex flex-col">
+      {layoutSeo && <Seo metadata={layoutSeo} />}
       {!isOnline && (
         <div
           className="bg-amber-500 text-white text-center py-1.5 px-4 text-sm font-medium fixed top-0 left-0 right-0 z-[300]"

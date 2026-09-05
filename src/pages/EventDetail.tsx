@@ -7,8 +7,16 @@ import { CoverPlaceholder } from '../components/CoverPlaceholder'
 import { Lightbox } from '../components/Lightbox'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { apiGet } from '../lib/apiClient'
-import { formatDateTime } from '../lib/dateUtils'
+import { formatDateTime, toDateValue } from '../lib/dateUtils'
 import { formatEventTicketPrices, formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
 import type { EventDetailResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
 import { Button, LoadErrorState } from '@/src/components/ui'
@@ -21,6 +29,32 @@ type EventPosterImage = {
 }
 
 const COVER_FILTER = 'brightness(0.97) saturate(0.92)'
+
+// JSON-LD：只有 sortStart 能解析为有效日期时才输出 startDate，不猜测活动时间
+const buildEventJsonLd = (
+  event: EventItem,
+  url: string,
+  description: string,
+  coverUrl: string
+): Record<string, unknown> => {
+  const jsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: event.title,
+    url,
+    description,
+  }
+  if (coverUrl) {
+    jsonLd.image = toAbsoluteSeoUrl(coverUrl)
+  }
+  if (event.location) {
+    jsonLd.location = event.location
+  }
+  if (toDateValue(event.sortStart)) {
+    jsonLd.startDate = event.sortStart
+  }
+  return jsonLd
+}
 
 const SectionHeading = ({ children }: { children: React.ReactNode }) => (
   <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold tracking-[0.1em] text-text-primary">
@@ -135,6 +169,37 @@ const EventDetail = () => {
     setLightboxIndex(index)
     setLightboxOpen(true)
   }
+
+  // SEO 元数据：加载中/失败不可索引，成功后输出活动详情与 Event JSON-LD
+  const eventPath = `/events/${slug}`
+  const eventCoverUrl = event ? getEventCoverSrc(event) : ''
+  const eventDescription = event
+    ? summarizeSeoText(event.content, `${event.location || '未知地点'}的活动记录，黄诗扶 Wiki。`)
+    : ''
+  const eventSeoMetadata: SeoMetadata = event
+    ? {
+        title: `${event.title}｜黄诗扶活动记录`,
+        description: eventDescription,
+        canonicalPath: eventPath,
+        robots: 'index,follow',
+        ogType: 'article',
+        ogImage: eventCoverUrl || undefined,
+        ogImageAlt: event.title,
+        jsonLd: buildEventJsonLd(
+          event,
+          toAbsoluteSeoUrl(eventPath),
+          eventDescription,
+          eventCoverUrl
+        ),
+      }
+    : loading
+      ? getDetailFallbackSeo({ canonicalPath: eventPath, title: SEO_SITE_NAME })
+      : getDetailFallbackSeo({
+          canonicalPath: eventPath,
+          title: `活动不存在｜${SEO_SITE_NAME}`,
+          description: '当前活动不存在或已被删除。',
+        })
+  useSeo(eventSeoMetadata)
 
   if (loadError && !event) {
     return (

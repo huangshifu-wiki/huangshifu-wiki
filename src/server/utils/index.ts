@@ -311,3 +311,15 @@ export {
 // === 已有独立模块（保持原导出方式）===
 export * from './cache'
 export { calculateFileMD5, calculateBufferMD5 } from './hash'
+
+// === SEO（robots / sitemap / 文档 X-Robots-Tag）===
+export {
+  PUBLIC_SITE_URL_ENV,
+  getPublicSiteUrl,
+  escapeXml,
+  buildSitemapXml,
+  buildSitemapIndexXml,
+  getRobotsDirective,
+  isDocumentPath,
+} from './seo'
+export type { SitemapEntry } from './seo'

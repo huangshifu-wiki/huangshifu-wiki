@@ -48,6 +48,7 @@ import { registerS3Routes } from './src/server/routes/s3.routes'
 import { registerMusicSongRoutes } from './src/server/routes/music-song.routes'
 import { registerUploadRoutes } from './src/server/routes/uploads.routes'
 import { registerSetupRoutes } from './src/server/routes/setup.routes'
+import { registerSeoRoutes } from './src/server/routes/seo.routes'
 import { UPLOAD_MAX_FILE_SIZE_MB } from './src/lib/uploadLimits'
 import { registerAdminSystemRoutes } from './src/server/routes/admin.system.routes'
 import { registerAdminVariantsRoutes } from './src/server/routes/admin.variants.routes'
@@ -68,6 +69,7 @@ import {
   shouldBypassProductionStaticHtml,
   SPA_FALLBACK_PATH,
 } from './src/server/utils/htmlShell'
+import { getRobotsDirective, isDocumentPath } from './src/server/utils'
 import type { AuthenticatedRequest } from './src/server/types'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -267,6 +269,19 @@ app.use(
     threshold: 1024,
   })
 )
+
+// SEO 路由（robots.txt / sitemap.xml）必须在静态资源与 SPA fallback 之前注册，
+// 否则生产环境会被 dist/index.html 抢先响应这些路径
+registerSeoRoutes(app)
+
+// 文档响应附加 X-Robots-Tag，在首个 SPA 壳返回时保护私有页与筛选页；
+// 详情资源是否存在仍由客户端详情 SEO 处理（本站不引入 SSR）
+app.use((req, res, next) => {
+  if (isDocumentPath(req.path)) {
+    res.setHeader('X-Robots-Tag', getRobotsDirective(req.path, Object.keys(req.query).length > 0))
+  }
+  next()
+})
 
 // 生产环境静态资源服务 - 必须在 compression 之后
 if (process.env.NODE_ENV === 'production') {

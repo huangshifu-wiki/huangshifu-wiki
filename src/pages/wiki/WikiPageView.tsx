@@ -25,6 +25,14 @@ import { apiGet, apiPost } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { formatDate } from '../../lib/dateUtils'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../../lib/seo'
+import type { SeoMetadata } from '../../lib/seo'
 import { buildMiniRelationGraphData } from '../../lib/wikiRelationGraph'
 import { getWikiRelationDisplayTitle } from '../../lib/wikiRelationDisplay'
 import { getWikiSubmitButtonText } from '../../lib/wikiWriteText'
@@ -115,6 +123,37 @@ const WikiPageView = () => {
   const [relationGraph, setRelationGraph] = useState<RelationGraphData | null>(null)
   const [resolvedRelations, setResolvedRelations] = useState<WikiRelationResolved[]>([])
   const [showGraph, setShowGraph] = useState(false)
+
+  // SEO 元数据：加载中/失败不可索引，成功且已发布才 index
+  const wikiPagePath = `/wiki/${slug}`
+  const wikiPageDescription = page
+    ? summarizeSeoText(page.content, `${page.title}，黄诗扶 Wiki 百科资料。`)
+    : ''
+  const wikiSeoMetadata: SeoMetadata = page
+    ? {
+        title: `${page.title}｜${SEO_SITE_NAME}`,
+        description: wikiPageDescription,
+        canonicalPath: wikiPagePath,
+        robots: page.status && page.status !== 'published' ? 'noindex,follow' : 'index,follow',
+        ogType: 'article',
+        jsonLd: {
+          '@context': 'https://schema.org',
+          '@type': 'Article',
+          headline: page.title,
+          description: wikiPageDescription,
+          mainEntityOfPage: toAbsoluteSeoUrl(wikiPagePath),
+          ...(page.createdAt ? { datePublished: page.createdAt } : {}),
+          ...(page.updatedAt ? { dateModified: page.updatedAt } : {}),
+        },
+      }
+    : loading
+      ? getDetailFallbackSeo({ canonicalPath: wikiPagePath, title: SEO_SITE_NAME })
+      : getDetailFallbackSeo({
+          canonicalPath: wikiPagePath,
+          title: `百科页面不存在｜${SEO_SITE_NAME}`,
+          description: '当前百科页面不存在或尚未发布。',
+        })
+  useSeo(wikiSeoMetadata)
 
   const fetchPage = async () => {
     setLoading(true)

@@ -6,6 +6,8 @@ import { SearchBox } from '../components/search/SearchBox'
 import { SearchFilters } from '../components/search/SearchFilters'
 import { SearchResults } from '../components/search/SearchResults'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
+import { Seo } from '../components/Seo'
+import { SEARCH_SEO_METADATA } from '../lib/seo'
 
 const Search: React.FC = () => {
   const { preferences, setViewMode } = useUserPreferences()
@@ -42,6 +44,7 @@ const Search: React.FC = () => {
 
   return (
     <div className="gufeng-search-page mobile-page-shell">
+      <Seo metadata={SEARCH_SEO_METADATA} />
       <div className="mobile-page-container search-page">
         <header className="mobile-page-header">
           <div className="mobile-page-titlebar">
