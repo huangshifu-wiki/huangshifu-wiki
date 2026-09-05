@@ -1,4 +1,3 @@
-import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { AdminLayout } from '../../components/admin/AdminLayout'
 import { RouteGuard } from '../../components/RouteGuard'
@@ -15,6 +14,7 @@ import AdminEventEdit from './AdminEventEdit'
 import AdminDiskMonitor from './AdminDiskMonitor'
 import AdminVariantManager from './AdminVariantManager'
 import AdminSettings from './AdminSettings'
+import AdminMaintenance from './AdminMaintenance'
 import NotFound from '../NotFound'
 import { usePublicFeatures } from '../../hooks/usePublicFeatures'
 
@@ -78,6 +78,7 @@ export const AdminRoutes = () => (
       <Route path="markdown_links" element={<AdminToolPage type="markdown_links" />} />
       <Route path="disk-monitor" element={<AdminDiskMonitor />} />
       <Route path="variant-manager" element={<AdminVariantManager />} />
+      <Route path="maintenance" element={<AdminMaintenance />} />
       <Route
         path="settings"
         element={

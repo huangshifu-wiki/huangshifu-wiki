@@ -10,8 +10,6 @@ USE_DOCKER="${USE_DOCKER:-0}"
 PULL_LATEST="${PULL_LATEST:-0}"
 SKIP_SEED="${SKIP_SEED:-0}"
 INSTALL_MODE="${INSTALL_MODE:-ci}"
-ENABLE_VECTOR_SYNC="${ENABLE_VECTOR_SYNC:-1}"
-VECTOR_SYNC_LIMIT="${VECTOR_SYNC_LIMIT:-100}"
 DB_PASSWORD="${DB_PASSWORD:-}"
 USE_CHINA_MIRROR="${USE_CHINA_MIRROR:-}"
 
@@ -207,7 +205,6 @@ fi
 
 if [[ "$USE_DOCKER" == "1" ]]; then
   require_cmd docker
-  require_cmd docker compose
   log "Docker mode enabled"
 
   log "starting Docker services (postgres + qdrant)"
@@ -237,7 +234,7 @@ if [[ "$USE_DOCKER" == "1" ]]; then
 
   log "waiting for app to be healthy"
   for i in {1..60}; do
-    if curl -fsS "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null 2>&1; then
+    if curl -fsS "http://127.0.0.1:${APP_PORT}/healthz" >/dev/null 2>&1; then
       log "app is healthy"
       break
     fi
@@ -301,12 +298,6 @@ fi
 log "building frontend"
 npm run build
 
-if [[ "$ENABLE_VECTOR_SYNC" == "1" ]]; then
-  log "running initial embedding sync batch (limit=${VECTOR_SYNC_LIMIT})"
-  npm run embeddings:sync -- --limit="$VECTOR_SYNC_LIMIT" || warn "embedding sync failed, continue deployment"
-else
-  log "skip embedding sync (ENABLE_VECTOR_SYNC=$ENABLE_VECTOR_SYNC)"
-fi
 
 if is_port_in_use "$APP_PORT"; then
   warn "port ${APP_PORT} is already in use"

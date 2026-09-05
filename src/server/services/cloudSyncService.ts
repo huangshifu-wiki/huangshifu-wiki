@@ -46,12 +46,17 @@ interface CloudSyncServiceOptions {
 }
 
 export class CloudSyncService {
+  private getTaskKey(task: Pick<CloudSyncTask, 'imageMapId' | 'strategy'>) {
+    return `${task.imageMapId}:${task.strategy}`
+  }
   private queue: CloudSyncTask[] = []
   private processing = new Set<string>()
+  private queued = new Set<string>()
   private syncInterval: NodeJS.Timeout | null = null
+  private stopped = false
+  private retryTimers = new Set<NodeJS.Timeout>()
   private lskyConfig: LskyProConfig | null = null
   private lskyValidationState: 'unknown' | 'valid' | 'invalid' = 'unknown'
-  private isProcessing = false
 
   constructor(options: CloudSyncServiceOptions = {}) {
     if (options.autoStart === false) {
@@ -134,12 +139,16 @@ export class CloudSyncService {
   async enqueue(
     task: Omit<CloudSyncTask, 'retryCount' | 'maxRetries' | 'createdAt'>
   ): Promise<void> {
+    if (this.stopped) return
+    const taskKey = this.getTaskKey(task)
+    if (this.processing.has(taskKey) || this.queued.has(taskKey)) return
     const fullTask: CloudSyncTask = {
       ...task,
       retryCount: 0,
       maxRetries: runtimeConfigService.getConfig().cloudSyncMaxRetries,
       createdAt: new Date(),
     }
+    this.queued.add(taskKey)
 
     if (task.priority === 'high') {
       this.queue.unshift(fullTask)
@@ -158,45 +167,42 @@ export class CloudSyncService {
    * 启动队列处理器
    */
   private startQueueProcessor(): void {
-    this.syncInterval = setInterval(() => {
-      if (!this.isProcessing) {
-        this.processNext()
-      }
-    }, 1000)
+    this.stopped = false
+    this.syncInterval = setInterval(() => this.processNext(), 1000)
   }
 
   stop() {
+    this.stopped = true
     if (this.syncInterval) {
       clearInterval(this.syncInterval)
       this.syncInterval = null
     }
+    for (const timer of this.retryTimers) clearTimeout(timer)
+    this.retryTimers.clear()
+    this.queue.length = 0
+    this.queued.clear()
   }
 
   /**
    * 处理下一个任务
    */
-  private async processNext(): Promise<void> {
-    if (this.processing.size >= runtimeConfigService.getConfig().cloudSyncMaxConcurrent) return
-    if (this.queue.length === 0) return
+  private processNext(): void {
+    if (this.stopped) return
 
-    const task = this.queue.shift()!
-    this.processing.add(task.imageMapId)
-    this.isProcessing = true
+    const maxConcurrent = runtimeConfigService.getConfig().cloudSyncMaxConcurrent
+    while (this.processing.size < maxConcurrent && this.queue.length > 0) {
+      const task = this.queue.shift()!
+      const taskKey = this.getTaskKey(task)
+      this.queued.delete(taskKey)
+      if (this.processing.has(taskKey)) continue
 
-    try {
-      await this.processTask(task)
-    } catch (error) {
-      console.error(`[CloudSync] ❌ Task processing error:`, error)
-    } finally {
-      this.processing.delete(task.imageMapId)
-      this.isProcessing = false
-
-      if (
-        this.queue.length > 0 ||
-        this.processing.size < runtimeConfigService.getConfig().cloudSyncMaxConcurrent
-      ) {
-        setTimeout(() => this.processNext(), 100)
-      }
+      this.processing.add(taskKey)
+      void this.processTask(task)
+        .catch((error) => console.error(`[CloudSync] ❌ Task processing error:`, error))
+        .finally(() => {
+          this.processing.delete(taskKey)
+          this.processNext()
+        })
     }
   }
 
@@ -227,23 +233,25 @@ export class CloudSyncService {
         sourceMimeType: task.mimeType,
       })
       if (result.errors.length > 0) throw new Error(result.errors.join('; '))
-      await prisma.imageMap.updateMany({
-        where: { id: task.imageMapId, deletedAt: null },
-        data: { cloudSyncStatus: 'completed' },
-      })
       logger.info({ imageMapId: task.imageMapId }, '[CloudSync] Completed')
     } catch (error) {
       logger.error({ err: error, imageMapId: task.imageMapId }, '[CloudSync] Failed')
+      if (this.stopped) return
       if (task.retryCount < task.maxRetries) {
         task.retryCount++
         const delay = Math.pow(2, task.retryCount - 1) * 1000
-        setTimeout(() => {
+        const taskKey = this.getTaskKey(task)
+        this.queued.add(taskKey)
+        let retryTimer: NodeJS.Timeout
+        retryTimer = setTimeout(() => {
+          this.retryTimers.delete(retryTimer)
           this.queue.unshift(task)
           this.processNext()
         }, delay)
+        this.retryTimers.add(retryTimer)
       } else {
         await prisma.imageMap.updateMany({
-          where: { id: task.imageMapId },
+          where: { id: task.imageMapId, cloudSyncStatus: { not: 'failed' } },
           data: { cloudSyncStatus: 'failed' },
         })
       }

@@ -413,7 +413,7 @@ NODE_ENV=production npx tsx server.ts
 验证健康检查：
 
 ```bash
-curl http://127.0.0.1:3003/api/health
+curl http://127.0.0.1:3003/healthz
 # 返回: {"status":"ok"}
 ```
 
@@ -507,20 +507,18 @@ USE_PM2=0 ./scripts/deploy.sh         # 不使用 PM2
 
 环境变量：
 
-| 变量                 | 默认值            | 说明                       |
-| -------------------- | ----------------- | -------------------------- |
-| `APP_NAME`           | `huangshifu-wiki` | PM2 进程名                 |
-| `APP_PORT`           | `3003`            | 健康检查端口               |
-| `ENV_FILE`           | `.env`            | 环境文件路径               |
-| `INSTALL_MODE`       | `ci`              | 依赖安装模式               |
-| `ENABLE_VECTOR_SYNC` | `1`               | 部署时自动执行图片向量同步 |
-| `VECTOR_SYNC_LIMIT`  | `100`             | 向量同步批次大小           |
+| 变量           | 默认值            | 说明         |
+| -------------- | ----------------- | ------------ |
+| `APP_NAME`     | `huangshifu-wiki` | PM2 进程名   |
+| `APP_PORT`     | `3003`            | 健康检查端口 |
+| `ENV_FILE`     | `.env`            | 环境文件路径 |
+| `INSTALL_MODE` | `ci`              | 依赖安装模式 |
 
 ---
 
 ## 11. 上线后验证清单
 
-- [ ] `https://your-domain.com/api/health` 返回 `{"status":"ok"}`
+- [ ] `https://your-domain.com/healthz` 返回 `{"status":"ok"}`
 - [ ] 前端可访问首页，静态资源加载正常
 - [ ] 可以注册/登录
 - [ ] 管理员账号可进入后台
@@ -533,7 +531,6 @@ USE_PM2=0 ./scripts/deploy.sh         # 不使用 PM2
 - [ ] 图片语义搜索可用（`/api/search` + `mode=vector`）
 - [ ] 文本语义搜索可用（`/api/search` + `mode=hybrid`，需管理后台开启文本向量索引）
 - [ ] 管理后台向量管理页面可查看图片/文本嵌入状态
-- [ ] 小程序 WebView 可打开首页（`miniprogram-webview`）
 - [ ] 小程序 WebView 可打开首页（`miniprogram-webview`）
 - [ ] 小程序首次进入可自动登录（`wx.login code` -> `/api/auth/wechat/login`）
 - [ ] 小程序中可完成浏览 Wiki、发帖、评论闭环（`/api/mp/wiki`、`/api/mp/posts`、`/api/mp/comments`）
@@ -693,7 +690,6 @@ npm ci
 npm run db:generate
 npm run db:deploy
 npm run build
-npm run embeddings:sync -- --limit=100
 pm2 restart huangshifu-wiki --update-env
 pm2 save
 ```
@@ -705,17 +701,11 @@ pm2 save
 > curl -X POST http://127.0.0.1:3003/api/embeddings/text/enqueue \
 >   -H "Content-Type: application/json" \
 >   -d '{"limit": 100}'
-> ```
-
-# 批量同步文本嵌入
-
-curl -X POST http://127.0.0.1:3003/api/embeddings/text/sync \
-
-> -H "Content-Type: application/json" \
->  -d '{"limit": 100}'
 >
-> ```
->
+> # 批量同步文本嵌入
+> curl -X POST http://127.0.0.1:3003/api/embeddings/text/sync \
+>   -H "Content-Type: application/json" \
+>   -d '{"limit": 100}'
 > ```
 
 发布后检查迁移状态：

@@ -41,6 +41,25 @@ function inferStorageType(item: {
   if (item.externalUrl) return 'external'
   return 'local'
 }
+function isStorageType(value: unknown): value is 'local' | 's3' | 'external' {
+  return value === 'local' || value === 's3' || value === 'external'
+}
+
+function assertStorageTypeConsistency(input: {
+  storageType: unknown
+  localUrl: string
+  externalUrl: string | null | undefined
+  s3Url: string | null | undefined
+}) {
+  if (!isStorageType(input.storageType)) throw new Error('storageType 不合法')
+  if (!input.localUrl.trim()) throw new Error('localUrl 不能为空')
+  if (input.storageType === 's3' && !input.s3Url) {
+    throw new Error('S3 存储类型需要提供 s3Url')
+  }
+  if (input.storageType === 'external' && !input.externalUrl) {
+    throw new Error('外部存储类型需要提供 externalUrl')
+  }
+}
 
 /**
  * Normalize an ImageMap record for API responses.
@@ -180,6 +199,10 @@ router.post('/import', requireAuth, requireAdmin, async (req, res) => {
       res.status(400).json({ error: '缺少导入数据或模式' })
       return
     }
+    if (mode !== 'update' && mode !== 'create' && mode !== 'upsert') {
+      res.status(400).json({ error: '导入模式无效' })
+      return
+    }
 
     const results = { success: 0, failed: 0, errors: [] as string[] }
     for (const item of items) {
@@ -191,9 +214,14 @@ router.post('/import', requireAuth, requireAdmin, async (req, res) => {
         if (typeof item.localUrl !== 'string' || !item.localUrl.trim()) {
           throw new Error('localUrl 不能为空')
         }
-        if (item.storageType === 's3' && !item.s3Url) throw new Error('S3 存储类型需要提供 s3Url')
-        if (item.storageType === 'external' && !item.externalUrl) {
-          throw new Error('外部存储类型需要提供 externalUrl')
+        const requestedStorageType = item.storageType === undefined ? 'local' : item.storageType
+        if (mode !== 'update') {
+          assertStorageTypeConsistency({
+            storageType: requestedStorageType,
+            localUrl: item.localUrl,
+            externalUrl: item.externalUrl,
+            s3Url: item.s3Url,
+          })
         }
         if (mode !== 'upsert' && !item.id) throw new Error('该模式需要提供 id')
 
@@ -210,20 +238,28 @@ router.post('/import', requireAuth, requireAdmin, async (req, res) => {
               localUrl: item.localUrl.trim(),
               externalUrl: item.externalUrl || null,
               s3Url: item.s3Url || null,
-              storageType: item.storageType || 'local',
+              storageType: requestedStorageType,
             },
           })
         } else if (mode === 'update') {
           const existing = await prisma.imageMap.findUnique({ where: { id: item.id! } })
           if (!existing) throw new Error(`记录不存在：${item.id}`)
           if (existing.md5 !== md5) throw new Error('md5 与现有记录不匹配')
+          const storageType =
+            item.storageType === undefined ? existing.storageType : item.storageType
+          assertStorageTypeConsistency({
+            storageType,
+            localUrl: item.localUrl,
+            externalUrl: item.externalUrl,
+            s3Url: item.s3Url,
+          })
           await prisma.imageMap.update({
             where: { id: item.id! },
             data: {
               localUrl: item.localUrl.trim(),
               externalUrl: item.externalUrl || null,
               s3Url: item.s3Url || null,
-              storageType: item.storageType || existing.storageType,
+              storageType,
               deletedAt: null,
               deletedBy: null,
               retiredAt: null,
@@ -236,7 +272,7 @@ router.post('/import', requireAuth, requireAdmin, async (req, res) => {
               localUrl: item.localUrl.trim(),
               externalUrl: item.externalUrl || null,
               s3Url: item.s3Url || null,
-              ...(item.storageType ? { storageType: item.storageType } : {}),
+              ...(item.storageType !== undefined ? { storageType: item.storageType } : {}),
               deletedAt: null,
               deletedBy: null,
               retiredAt: null,
@@ -247,7 +283,7 @@ router.post('/import', requireAuth, requireAdmin, async (req, res) => {
               localUrl: item.localUrl.trim(),
               externalUrl: item.externalUrl || null,
               s3Url: item.s3Url || null,
-              storageType: item.storageType || 'local',
+              storageType: requestedStorageType,
             },
           })
         }
@@ -366,25 +402,19 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthenticatedRequest, re
       s3Url?: string
       storageType?: 'local' | 'external' | 's3'
     }
-    if (!id || !md5 || !/^[a-f0-9]{32}$/i.test(md5) || !localUrl?.trim()) {
+    if (!id || !md5 || !/^[a-f0-9]{32}$/i.test(md5) || typeof localUrl !== 'string') {
       res.status(400).json({ error: 'id、32 位 md5 和非空 localUrl 为必填字段' })
       return
     }
-    if (storageType === 's3' && !s3Url) {
-      res.status(400).json({ error: 'S3 存储类型需要提供 s3Url' })
-      return
-    }
-    if (storageType === 'external' && !externalUrl) {
-      res.status(400).json({ error: '外部存储类型需要提供 externalUrl' })
-      return
-    }
-
-    const existing = await prisma.imageMap.findFirst({
-      where: { OR: [{ id }, { md5: md5.toLowerCase() }] },
-      select: { id: true, md5: true },
-    })
-    if (existing) {
-      res.status(409).json({ error: '图片映射已存在，请使用管理员导入或更新接口' })
+    try {
+      assertStorageTypeConsistency({
+        storageType: storageType === undefined ? 'local' : storageType,
+        localUrl,
+        externalUrl,
+        s3Url,
+      })
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : '存储参数不合法' })
       return
     }
 
@@ -404,12 +434,16 @@ router.post('/', requireAuth, requireAdmin, async (req: AuthenticatedRequest, re
         localUrl: localUrl.trim(),
         externalUrl: externalUrl || null,
         s3Url: s3Url || null,
-        storageType: storageType || 'local',
+        storageType: storageType === undefined ? 'local' : storageType,
         ...(blurhash ? { blurhash } : {}),
       },
     })
     res.status(201).json({ item: normalizeImageMap(item) })
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      res.status(409).json({ error: '图片映射已存在，请使用管理员导入或更新接口' })
+      return
+    }
     console.error('Create image map error:', error)
     res.status(500).json({ error: '保存图片映射失败' })
   }
@@ -425,7 +459,7 @@ router.patch('/:id', requireAuth, requireAdmin, async (req, res) => {
       blurhash?: string | null
       thumbhash?: string | null
     }
-    if (localUrl !== undefined && !localUrl?.trim()) {
+    if (localUrl !== undefined && (typeof localUrl !== 'string' || !localUrl.trim())) {
       res.status(400).json({ error: 'localUrl 不能为空' })
       return
     }
@@ -448,15 +482,19 @@ router.patch('/:id', requireAuth, requireAdmin, async (req, res) => {
         const effectiveS3Url = s3Url === undefined ? existing.s3Url : s3Url || null
         const effectiveExternalUrl =
           externalUrl === undefined ? existing.externalUrl : externalUrl || null
-        const effectiveStorageType = storageType || existing.storageType
-        if (effectiveStorageType === 's3' && !effectiveS3Url) {
-          throw new MediaAssetRequestError(400, 'S3 存储类型需要提供 s3Url')
-        }
-        if (effectiveStorageType === 'external' && !effectiveExternalUrl) {
-          throw new MediaAssetRequestError(400, '外部存储类型需要提供 externalUrl')
-        }
-        if (effectiveStorageType === 'local' && !effectiveLocalUrl) {
-          throw new MediaAssetRequestError(400, '本地存储类型需要提供 localUrl')
+        const effectiveStorageType = storageType === undefined ? existing.storageType : storageType
+        try {
+          assertStorageTypeConsistency({
+            storageType: effectiveStorageType,
+            localUrl: effectiveLocalUrl,
+            externalUrl: effectiveExternalUrl,
+            s3Url: effectiveS3Url,
+          })
+        } catch (error) {
+          throw new MediaAssetRequestError(
+            400,
+            error instanceof Error ? error.message : '存储参数不合法'
+          )
         }
         const [activeClaims, references] = await Promise.all([
           tx.mediaAsset.count({
@@ -467,6 +505,7 @@ router.patch('/:id', requireAuth, requireAdmin, async (req, res) => {
         if (
           activeClaims > 0 ||
           isMediaReferenced(references, {
+            imageMapId: existing.id,
             urls: [existing.localUrl, existing.s3Url, existing.externalUrl],
           }) ||
           existing.variantStatus === 'processing'
@@ -530,6 +569,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: AuthenticatedReques
       if (
         activeClaims > 0 ||
         isMediaReferenced(references, {
+          imageMapId: locked.id,
           urls: [locked.localUrl, locked.s3Url, locked.externalUrl],
         }) ||
         locked.variantStatus === 'processing'

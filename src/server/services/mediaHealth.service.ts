@@ -88,14 +88,22 @@ type ReferenceMap = Map<string, MediaHealthReference[]>
 export type MediaReferenceIndex = {
   storageKeys: ReferenceMap
   mediaAssetIds: ReferenceMap
+  imageMapIds: ReferenceMap
   urls: ReferenceMap
 }
 type ReferenceIndex = MediaReferenceIndex
 
 type MediaAssetReferenceTarget = {
   id: string
-  storageKey: string
-  publicUrl: string
+  imageMapId: string | null
+  storageKey: string | null
+  publicUrl: string | null
+  imageMap: {
+    localUrl: string
+    externalUrl: string | null
+    s3Url: string | null
+    thumbnailUrl: string | null
+  } | null
   session: {
     status: string
     expiresAt: Date
@@ -114,6 +122,7 @@ function createReferenceIndex(): ReferenceIndex {
   return {
     storageKeys: new Map(),
     mediaAssetIds: new Map(),
+    imageMapIds: new Map(),
     urls: new Map(),
   }
 }
@@ -221,26 +230,32 @@ async function collectBusinessReferences(prisma: PrismaClient) {
     prisma.user.findMany({
       where: { photoURL: { not: null }, deletedAt: null },
       select: { uid: true, photoURL: true, photoAssetId: true },
+      orderBy: { uid: 'asc' },
     }),
     prisma.galleryImage.findMany({
       where: { gallery: { deletedAt: null } },
       select: { id: true, url: true, assetId: true },
+      orderBy: { id: 'asc' },
     }),
     prisma.event.findMany({
       where: { deletedAt: null },
       select: { id: true, coverUrl: true, coverAssetId: true },
+      orderBy: { id: 'asc' },
     }),
     prisma.eventPoster.findMany({
       where: { event: { deletedAt: null } },
       select: { id: true, url: true, assetId: true },
+      orderBy: { id: 'asc' },
     }),
     prisma.songCover.findMany({
       where: { song: { deletedAt: null } },
       select: { id: true, storageKey: true, publicUrl: true, thumbnailUrl: true, assetId: true },
+      orderBy: { id: 'asc' },
     }),
     prisma.albumCover.findMany({
       where: { album: { deletedAt: null } },
       select: { id: true, storageKey: true, publicUrl: true, thumbnailUrl: true, assetId: true },
+      orderBy: { id: 'asc' },
     }),
   ])
 
@@ -266,18 +281,6 @@ async function collectBusinessReferences(prisma: PrismaClient) {
       source: 'GalleryImage',
       id: item.id,
       field: 'assetId',
-    })
-  }
-  for (const item of events) {
-    addUrlFieldReference(references, item.coverUrl, {
-      source: 'Event',
-      id: item.id,
-      field: 'coverUrl',
-    })
-    addMediaAssetReference(references, item.coverAssetId, {
-      source: 'Event',
-      id: item.id,
-      field: 'coverAssetId',
     })
   }
   for (const item of eventPosters) {
@@ -337,6 +340,22 @@ async function collectBusinessReferences(prisma: PrismaClient) {
     })
   }
 
+  const referencedAssetIds = [...references.mediaAssetIds.keys()]
+  if (referencedAssetIds.length) {
+    const referencedAssets = await prisma.mediaAsset.findMany({
+      where: { id: { in: referencedAssetIds }, imageMapId: { not: null } },
+      select: { id: true, imageMapId: true },
+      orderBy: { id: 'asc' },
+    })
+    for (const asset of referencedAssets) {
+      addReferenceToMap(references.imageMapIds, asset.imageMapId, asset.imageMapId, {
+        source: 'MediaAsset',
+        id: asset.id,
+        field: 'imageMapId',
+      })
+    }
+  }
+
   await collectCurrentTextReferences(prisma, references)
   return references
 }
@@ -345,25 +364,34 @@ async function collectStrictReferences(prisma: PrismaClient) {
   const references = await collectBusinessReferences(prisma)
   const pageSize = 500
 
-  const [wikiEmbeddings, postEmbeddings] = await Promise.all([
-    prisma.wikiImageEmbedding.findMany({ select: { id: true, imageUrl: true } }),
-    prisma.postImageEmbedding.findMany({ select: { id: true, imageUrl: true } }),
+  await Promise.all([
+    collectPagedText(
+      (skip) =>
+        prisma.wikiImageEmbedding.findMany({
+          skip,
+          take: pageSize,
+          select: { id: true, imageUrl: true },
+          orderBy: { id: 'asc' },
+        }),
+      references,
+      pageSize,
+      ['imageUrl'],
+      (row, field) => ({ source: 'WikiImageEmbedding', id: row.id, field: String(field) })
+    ),
+    collectPagedText(
+      (skip) =>
+        prisma.postImageEmbedding.findMany({
+          skip,
+          take: pageSize,
+          select: { id: true, imageUrl: true },
+          orderBy: { id: 'asc' },
+        }),
+      references,
+      pageSize,
+      ['imageUrl'],
+      (row, field) => ({ source: 'PostImageEmbedding', id: row.id, field: String(field) })
+    ),
   ])
-
-  for (const item of wikiEmbeddings) {
-    addUrlFieldReference(references, item.imageUrl, {
-      source: 'WikiImageEmbedding',
-      id: item.id,
-      field: 'imageUrl',
-    })
-  }
-  for (const item of postEmbeddings) {
-    addUrlFieldReference(references, item.imageUrl, {
-      source: 'PostImageEmbedding',
-      id: item.id,
-      field: 'imageUrl',
-    })
-  }
 
   await collectPagedText(
     (skip) =>
@@ -378,7 +406,6 @@ async function collectStrictReferences(prisma: PrismaClient) {
     ['content'],
     (row, field) => ({ source: 'WikiRevision', id: row.id, field: String(field) })
   )
-
   return references
 }
 
@@ -429,7 +456,6 @@ async function collectCurrentTextReferences(prisma: PrismaClient, references: Re
     ['content'],
     (row, field) => ({ source: 'Event', id: row.id, field: String(field) })
   )
-
   await collectPagedText(
     (skip) =>
       prisma.postComment.findMany({
@@ -496,11 +522,23 @@ function refsForAsset(asset: MediaAssetReferenceTarget, references: ReferenceInd
   const keys = uniqueStrings([
     normalizeStorageKey(asset.storageKey),
     normalizeStorageKey(asset.publicUrl),
+    normalizeStorageKey(asset.imageMap?.localUrl),
+    normalizeStorageKey(asset.imageMap?.externalUrl),
+    normalizeStorageKey(asset.imageMap?.s3Url),
+    normalizeStorageKey(asset.imageMap?.thumbnailUrl),
   ])
-  return [
+  const urls = uniqueStrings([
+    asset.imageMap?.localUrl,
+    asset.imageMap?.externalUrl,
+    asset.imageMap?.s3Url,
+    asset.imageMap?.thumbnailUrl,
+  ])
+  return uniqueReferences([
+    ...(asset.imageMapId ? references.imageMapIds.get(asset.imageMapId) || [] : []),
     ...keys.flatMap((key) => references.storageKeys.get(key) || []),
+    ...urls.flatMap((url) => references.urls.get(normalizeReferenceUrl(url)!) || []),
     ...(references.mediaAssetIds.get(asset.id) || []),
-  ]
+  ])
 }
 
 function refsForImageMap(imageMap: ImageMapReferenceTarget, references: ReferenceIndex) {
@@ -518,6 +556,7 @@ function refsForImageMap(imageMap: ImageMapReferenceTarget, references: Referenc
   ])
 
   const refs = [
+    ...(references.imageMapIds.get(imageMap.id) || []),
     ...keys.flatMap((key) => references.storageKeys.get(key) || []),
     ...urls.flatMap((url) => references.urls.get(normalizeReferenceUrl(url)!) || []),
   ]
@@ -543,7 +582,9 @@ function buildAssetBlockReasons(
   return reasons
 }
 
-async function existsByStorageKey(storageKey: string, uploadDir: string) {
+type MediaFileState = { exists: boolean; expectedPath: string }
+
+async function existsByStorageKey(storageKey: string, uploadDir: string): Promise<MediaFileState> {
   const filePath = resolveUploadPathByStorageKey(storageKey, uploadDir)
   if (!filePath) return { exists: false, expectedPath: path.join(uploadDir, storageKey) }
 
@@ -594,7 +635,14 @@ export async function scanMediaHealth(
   const detailLimit =
     options.limit === undefined ? undefined : Math.max(1, Math.min(options.limit, 1000))
   const references = await collectReferences(prisma, mode)
-
+  const fileStateCache = new Map<string, MediaFileState>()
+  const getFileState = async (storageKey: string): Promise<MediaFileState> => {
+    const cached = fileStateCache.get(storageKey)
+    if (cached) return cached
+    const state = await existsByStorageKey(storageKey, options.uploadDir)
+    fileStateCache.set(storageKey, state)
+    return state
+  }
   const [mediaAssets, imageMaps] = await Promise.all([
     prisma.mediaAsset.findMany({
       where: { status: { not: 'deleted' } },
@@ -606,7 +654,9 @@ export async function scanMediaHealth(
         fileName: true,
         status: true,
         session: { select: { status: true, expiresAt: true } },
-        imageMap: { select: { localUrl: true, s3Url: true, externalUrl: true } },
+        imageMap: {
+          select: { localUrl: true, s3Url: true, externalUrl: true, thumbnailUrl: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     }),
@@ -640,7 +690,7 @@ export async function scanMediaHealth(
     const hasLocalStorage = Boolean(extractStorageKeyFromUploadUrl(localUrl || ''))
     const fileState =
       storageKey && hasLocalStorage
-        ? await existsByStorageKey(storageKey, options.uploadDir)
+        ? await getFileState(storageKey)
         : {
             exists: Boolean(asset.imageMap?.s3Url || asset.imageMap?.externalUrl),
             expectedPath: '',
@@ -655,11 +705,9 @@ export async function scanMediaHealth(
         publicUrl: asset.publicUrl,
       })
     }
-    if (asset.session?.status === 'open') {
-      // The session itself is reported below; this keeps an unreferenced active claim visible.
+    if (asset.session?.status === 'open' || refs.length === 0) {
       unreferencedClaims.push(asset.id)
     }
-    if (refs.length === 0 && asset.status !== 'deleted') unreferencedClaims.push(asset.id)
 
     if (hasLocalStorage && !fileState.exists) {
       missingLocalFiles.push({
@@ -691,7 +739,7 @@ export async function scanMediaHealth(
     const refs = refsForImageMap(imageMap, references)
     const storageKey = extractStorageKeyFromUploadUrl(imageMap.localUrl)
     const fileState = storageKey
-      ? await existsByStorageKey(storageKey, options.uploadDir)
+      ? await getFileState(storageKey)
       : { exists: true, expectedPath: '' }
     const claimCount = imageMap.mediaAssets?.length || 0
     const canCleanup = refs.length === 0 && claimCount === 0
@@ -741,7 +789,7 @@ export async function scanMediaHealth(
     .filter((imageMap) => imageMap.retiredAt)
     .map((imageMap) => ({ id: imageMap.id, retiredAt: imageMap.retiredAt!.toISOString() }))
   const externalObjectsPendingManualCleanup = imageMaps
-    .filter((imageMap) => imageMap.externalUrl)
+    .filter((imageMap) => imageMap.retiredAt && imageMap.externalUrl)
     .map((imageMap) => ({ id: imageMap.id, url: imageMap.externalUrl! }))
 
   return limitScanDetails(
@@ -779,6 +827,9 @@ async function cleanupMediaAsset(
       storageKey: true,
       publicUrl: true,
       status: true,
+      imageMap: {
+        select: { localUrl: true, s3Url: true, externalUrl: true, thumbnailUrl: true },
+      },
       session: { select: { status: true, expiresAt: true } },
     },
   })
@@ -804,6 +855,9 @@ async function cleanupMediaAsset(
         storageKey: true,
         publicUrl: true,
         status: true,
+        imageMap: {
+          select: { localUrl: true, s3Url: true, externalUrl: true, thumbnailUrl: true },
+        },
         session: { select: { status: true, expiresAt: true } },
       },
     })

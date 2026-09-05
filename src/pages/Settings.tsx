@@ -35,7 +35,7 @@ import {
   PROFILE_SIGNATURE_MAX_LENGTH,
   WIKI_MAX_CONTENT_SIZE,
 } from '../lib/contentLimits'
-import { apiGet, apiPatch, apiPost, apiPut, apiRequest } from '../lib/apiClient'
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiRequest } from '../lib/apiClient'
 import { getErrorMessage } from '../lib/errorHandler'
 import { formatDateOnly } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
@@ -496,16 +496,28 @@ const Settings = () => {
     emailVerificationConfig.enabled && !user.emailVerified && hasDeliverableEmail
 
   const handleAvatarSuccess = async (result: { assetId: string; url: string }) => {
+    const previousAvatar = {
+      photoURL: profileForm.photoURL,
+      photoAssetId: profileForm.photoAssetId,
+    }
     setProfileForm((current) => ({
       ...current,
       photoURL: result.url,
       photoAssetId: result.assetId,
     }))
+    let profileSaved = false
     try {
       await apiPatch('/api/users/me', { photoURL: result.url, photoAssetId: result.assetId })
+      profileSaved = true
       await refreshAuth()
       show('头像更新成功')
     } catch (error) {
+      if (!profileSaved) {
+        setProfileForm((current) => ({ ...current, ...previousAvatar }))
+        await apiDelete(`/api/uploads/assets/${result.assetId}`).catch((cleanupError) =>
+          console.error('Error releasing unsaved avatar asset:', cleanupError)
+        )
+      }
       console.error('Error saving avatar:', error)
       show(getErrorMessage(error, '头像保存失败，请稍后重试'), { variant: 'error' })
     }

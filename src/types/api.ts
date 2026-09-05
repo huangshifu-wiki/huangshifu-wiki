@@ -12,9 +12,12 @@ import type {
   WikiItem,
 } from './entities'
 import type { Platform } from './common'
-
 export interface ApiResponse<T> {
   data: T
+}
+
+export interface ApiSuccessResponse<T> extends ApiResponse<T> {
+  success: boolean
 }
 
 export interface PaginationMeta {
@@ -787,4 +790,75 @@ export interface TextSearchResponse {
   total: number
   query: string
   minScore: number
+}
+
+export type MediaMaintenanceMode = 'dry-run' | 'apply'
+export type MediaMaintenanceType = 'all' | 'gallery' | 'song' | 'album'
+export type MediaMaintenanceOperation =
+  | 'scan'
+  | 'reconcile'
+  | 'bind-legacy'
+  | 'localize'
+  | 'repair-thumbnails'
+  | 'orphans/preview'
+  | 'orphans/delete'
+export type MediaMaintenanceResultMode = MediaMaintenanceMode | 'strict' | 'business'
+
+export interface MediaMaintenanceDetail {
+  id: string
+  status: 'processed' | 'skipped' | 'failed'
+  reason?: string
+  type?: MediaMaintenanceType
+}
+
+export interface MediaMaintenanceBatchResult {
+  operation: MediaMaintenanceOperation
+  mode: MediaMaintenanceResultMode
+  type: MediaMaintenanceType
+  scanned: number
+  processed: number
+  skipped: number
+  failed: number
+  nextCursor: string | null
+  hasMore: boolean
+  details: MediaMaintenanceDetail[]
+  queued?: number
+  alreadyQueued?: number
+  skippedMissingSource?: number
+  conflicts?: number
+}
+
+export interface MediaMaintenanceScanResult extends MediaMaintenanceBatchResult {
+  counts: {
+    unboundMediaAssets: number
+    legacyUrlOnlyRecords: number
+    missingThumbnails: number
+    remoteCandidates: number
+    orphanFiles: number
+    orphanBytes: number
+    sharedImageMaps: number
+    activeUploadSessions: number
+    missingLocalFiles: number
+    retiredMedia: number
+  }
+  health: MediaHealthScanResult
+}
+
+export interface MediaMaintenanceOrphanEntry {
+  storageKey: string
+  sizeBytes: number
+  mtimeMs: number
+  sha256: string
+}
+
+export interface MediaMaintenanceOrphanPreview extends MediaMaintenanceBatchResult {
+  previewToken: string
+  storageKeys: string[]
+  entries: MediaMaintenanceOrphanEntry[]
+  totalBytes: number
+  includeVariants: boolean
+}
+export interface MediaMaintenanceOrphanDelete extends MediaMaintenanceBatchResult {
+  deletedBytes: number
+  deletedKeys: string[]
 }

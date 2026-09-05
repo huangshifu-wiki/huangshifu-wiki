@@ -182,21 +182,22 @@ export function resolveAlbumCoverThumbnailUrl(album: Parameters<typeof resolveAl
   )
 }
 
-async function enqueueMusicCoverThumbnail(
+export async function enqueueMusicCoverThumbnail(
   targetType: 'songCover' | 'albumCover',
   coverId: string,
-  storageKey: string
-) {
-  const localFilePath = resolveUploadPathByStorageKey(storageKey, uploadsDir)
+  storageKey: string,
+  uploadDir = uploadsDir
+): Promise<boolean> {
+  const localFilePath = resolveUploadPathByStorageKey(storageKey, uploadDir)
   if (!localFilePath) {
     console.warn(
       `[Music] Cannot resolve cover source file for ${targetType} ${coverId}: ${storageKey}`
     )
-    return
+    return false
   }
 
   try {
-    await variantGenerator.enqueue({
+    return await variantGenerator.enqueue({
       targetType,
       targetId: coverId,
       localFilePath,
@@ -204,6 +205,7 @@ async function enqueueMusicCoverThumbnail(
     })
   } catch (error) {
     console.error(`[Music] Enqueue cover thumbnail failed for ${targetType} ${coverId}:`, error)
+    return false
   }
 }
 
@@ -753,12 +755,7 @@ async function getReadyCoverAsset(
   assetId: string,
   ownerUid?: string
 ) {
-  const resolvedOwnerUid =
-    ownerUid ||
-    (await tx.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerUid: true } }))
-      ?.ownerUid
-  if (!resolvedOwnerUid) throw new Error('媒体资源不存在')
-  return getReadyAssetForOwner(tx, assetId, resolvedOwnerUid)
+  return getReadyAssetForOwner(tx, assetId, ownerUid)
 }
 
 export async function addSongCoverFromAsset(
@@ -775,8 +772,9 @@ export async function addSongCoverFromAsset(
       data: {
         songDocId,
         assetId: asset.id,
-        storageKey: snapshot.storageKey,
+        storageKey: snapshot.storageKey || '',
         publicUrl: snapshot.publicUrl,
+        variantStatus: snapshot.storageKey ? 'pending' : 'completed',
         sortOrder: currentCount,
         isDefault: markDefault,
       },
@@ -794,8 +792,7 @@ export async function addSongCoverFromAsset(
     }
     return cover
   })
-
-  await enqueueMusicCoverThumbnail('songCover', cover.id, cover.storageKey)
+  if (cover.storageKey) await enqueueMusicCoverThumbnail('songCover', cover.id, cover.storageKey)
   return cover
 }
 
@@ -829,8 +826,9 @@ export async function addAlbumCoverFromAsset(
       data: {
         albumDocId,
         assetId: asset.id,
-        storageKey: snapshot.storageKey,
+        storageKey: snapshot.storageKey || '',
         publicUrl: snapshot.publicUrl,
+        variantStatus: snapshot.storageKey ? 'pending' : 'completed',
         sortOrder: currentCount,
         isDefault: markDefault,
       },
@@ -846,7 +844,7 @@ export async function addAlbumCoverFromAsset(
     return cover
   })
 
-  await enqueueMusicCoverThumbnail('albumCover', cover.id, cover.storageKey)
+  if (cover.storageKey) await enqueueMusicCoverThumbnail('albumCover', cover.id, cover.storageKey)
   return cover
 }
 

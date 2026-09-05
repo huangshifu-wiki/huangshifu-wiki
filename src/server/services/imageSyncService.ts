@@ -3,6 +3,7 @@
  * 当切换存储策略时，自动将本地图片同步到目标存储（S3/外部图床）
  */
 
+import { setTimeout as delay } from 'node:timers/promises'
 import { prisma } from '../prisma'
 import { runtimeConfigService } from './runtimeConfig.service'
 import { ensureImageMapStorage } from './mediaAssetService'
@@ -29,12 +30,10 @@ const syncTasks = new Map<string, SyncProgress>()
  * 获取或创建同步任务
  */
 export function getOrCreateSyncTask(strategy: 's3' | 'external'): SyncProgress {
-  const existing = Array.from(syncTasks.values()).find(
-    (task) => task.strategy === strategy && task.status !== 'completed' && task.status !== 'failed'
-  )
-
-  if (existing) {
-    return existing
+  for (const task of syncTasks.values()) {
+    if (task.strategy === strategy && task.status !== 'completed' && task.status !== 'failed') {
+      return task
+    }
   }
 
   const task: SyncProgress = {
@@ -64,9 +63,13 @@ export function getSyncTask(taskId: string): SyncProgress | undefined {
  * 获取最新的同步任务
  */
 export function getLatestSyncTask(): SyncProgress | undefined {
-  const tasks = Array.from(syncTasks.values())
-  if (tasks.length === 0) return undefined
-  return tasks.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0]
+  let latest: SyncProgress | undefined
+  for (const task of syncTasks.values()) {
+    if (!latest || task.startedAt.getTime() > latest.startedAt.getTime()) {
+      latest = task
+    }
+  }
+  return latest
 }
 
 /**
@@ -76,14 +79,26 @@ export function cleanupOldSyncTasks(): void {
   const tasks = Array.from(syncTasks.entries())
   if (tasks.length <= 10) return
 
-  const sorted = tasks.sort((a, b) => b[1].startedAt.getTime() - a[1].startedAt.getTime())
-  const toDelete = sorted.slice(10)
-  toDelete.forEach(([id]) => syncTasks.delete(id))
+  const active = tasks.filter(([, task]) => task.status === 'pending' || task.status === 'running')
+  const finished = tasks
+    .filter(([, task]) => task.status === 'completed' || task.status === 'failed')
+    .sort((a, b) => b[1].startedAt.getTime() - a[1].startedAt.getTime())
+  const retained = new Set([
+    ...active.map(([id]) => id),
+    ...finished.slice(0, Math.max(0, 10 - active.length)).map(([id]) => id),
+  ])
+  for (const [id] of tasks) {
+    if (!retained.has(id)) syncTasks.delete(id)
+  }
 }
 
 /**
  * 执行图片同步任务
  */
+function isSyncCancelled(task: SyncProgress) {
+  return task.status === 'failed'
+}
+
 export async function executeSyncTask(taskId: string): Promise<void> {
   const task = syncTasks.get(taskId)
   if (!task) {
@@ -100,29 +115,41 @@ export async function executeSyncTask(taskId: string): Promise<void> {
   console.log(`[ImageSync] 开始同步任务: ${taskId}, 策略: ${task.strategy}`)
 
   try {
-    // 获取需要同步的图片
     const whereClause =
       task.strategy === 's3'
         ? { s3Url: null as null, deletedAt: null, retiredAt: null }
-        : { externalUrl: null as null, deletedAt: null, retiredAt: null }
-    const imageMaps = await prisma.imageMap.findMany({
-      where: whereClause,
-      orderBy: { createdAt: 'asc' },
-    })
+        : {
+            OR: [{ externalUrl: null as null }, { s3Url: null as null }],
+            deletedAt: null,
+            retiredAt: null,
+          }
 
-    task.total = imageMaps.length
+    // Count first so the task can report progress without loading every ID into memory.
+    const total = await prisma.imageMap.count({ where: whereClause })
+    task.total = total
     console.log(`[ImageSync] 找到 ${task.total} 张需要同步的图片`)
 
-    if (imageMaps.length === 0) {
+    if (total === 0) {
       task.status = 'completed'
       task.completedAt = new Date()
+      cleanupOldSyncTasks()
       return
     }
 
-    // 批量处理，每批10张
+    // Use the primary-key cursor instead of offset pagination because syncing updates the filter fields.
     const batchSize = 10
-    for (let i = 0; i < imageMaps.length; i += batchSize) {
-      const batch = imageMaps.slice(i, i + batchSize)
+    let cursorId: string | undefined
+    for (;;) {
+      if (isSyncCancelled(task)) return
+      const pageWhere = cursorId ? { AND: [whereClause, { id: { gt: cursorId } }] } : whereClause
+      const batch = await prisma.imageMap.findMany({
+        where: pageWhere,
+        select: { id: true },
+        orderBy: { id: 'asc' },
+        take: batchSize,
+      })
+      if (batch.length === 0) break
+      cursorId = batch[batch.length - 1].id
 
       await Promise.all(
         batch.map(async (imageMap) => {
@@ -141,6 +168,7 @@ export async function executeSyncTask(taskId: string): Promise<void> {
           }
         })
       )
+      if (isSyncCancelled(task)) return
 
       task.processed += batch.length
       console.log(`[ImageSync] 进度: ${task.processed}/${task.total}`)
@@ -150,12 +178,12 @@ export async function executeSyncTask(taskId: string): Promise<void> {
         task.errors = task.errors.slice(-100)
       }
 
-      // 小延迟，避免过载
-      if (i + batchSize < imageMaps.length) {
-        await new Promise((resolve) => setTimeout(resolve, 100))
-      }
+      if (task.processed >= task.total) break
+
+      await delay(100)
     }
 
+    if (isSyncCancelled(task)) return
     task.status = 'completed'
     task.completedAt = new Date()
 
@@ -175,6 +203,7 @@ export async function executeSyncTask(taskId: string): Promise<void> {
     const errorMsg = error instanceof Error ? error.message : '未知错误'
     task.errors.push(`[任务执行失败] ${errorMsg}`)
     console.error(`[ImageSync] 任务失败: ${taskId}`, error)
+    cleanupOldSyncTasks()
   }
 }
 

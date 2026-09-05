@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import {
   type LucideIcon,
@@ -91,6 +91,7 @@ const toolsNav: AdminNavItem[] = [
   { id: 'markdown_links', label: '链接更新', path: '/admin/markdown_links', icon: LinkIcon },
   { id: 'disk-monitor', label: '磁盘监控', path: '/admin/disk-monitor', icon: HardDrive },
   { id: 'variant-manager', label: '变体管理', path: '/admin/variant-manager', icon: RefreshCw },
+  { id: 'maintenance', label: '媒体维护', path: '/admin/maintenance', icon: RefreshCw },
 ]
 
 const settingsNav: AdminNavItem[] = [
@@ -174,7 +175,6 @@ const readCollapsedGroups = (): Set<string> => {
 }
 
 const NavGroup = ({
-  groupId,
   title,
   items,
   currentPath,
@@ -185,7 +185,6 @@ const NavGroup = ({
   onToggleCollapsed,
   showReviewDot = false,
 }: {
-  groupId: string
   title: string
   items: AdminNavItem[]
   currentPath: string
@@ -367,7 +366,6 @@ export const AdminLayout = () => {
             </div>
 
             <NavGroup
-              groupId="content"
               title="内容管理"
               items={contentNav}
               currentPath={currentPath}
@@ -379,7 +377,6 @@ export const AdminLayout = () => {
             />
 
             <NavGroup
-              groupId="operations"
               title="运营管理"
               items={operationNav}
               currentPath={currentPath}
@@ -392,7 +389,6 @@ export const AdminLayout = () => {
             />
 
             <NavGroup
-              groupId="tools"
               title="系统工具"
               items={visibleToolsNav}
               currentPath={currentPath}
@@ -405,7 +401,6 @@ export const AdminLayout = () => {
 
             {visibleSettingsNav.length > 0 && (
               <NavGroup
-                groupId="settings"
                 title="设置"
                 items={visibleSettingsNav}
                 currentPath={currentPath}

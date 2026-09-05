@@ -31,7 +31,7 @@ function emptyResult(): MediaLifecycleResult {
 
 export async function cleanupExpiredUploadSessions(limit = 100, now = new Date()) {
   const sessions = await prisma.uploadSession.findMany({
-    where: { status: 'open', expiresAt: { lt: now } },
+    where: { status: { in: ['open', 'expired'] }, expiresAt: { lt: now } },
     select: { id: true, assets: { select: { id: true } } },
     orderBy: { expiresAt: 'asc' },
     take: Math.max(1, Math.min(limit, 500)),
@@ -43,7 +43,7 @@ export async function cleanupExpiredUploadSessions(limit = 100, now = new Date()
     try {
       await prisma.$transaction(async (tx) => {
         const updated = await tx.uploadSession.updateMany({
-          where: { id: session.id, status: 'open', expiresAt: { lt: now } },
+          where: { id: session.id, status: { in: ['open', 'expired'] }, expiresAt: { lt: now } },
           data: { status: 'expired' },
         })
         if (updated.count !== 1) return
@@ -52,7 +52,26 @@ export async function cleanupExpiredUploadSessions(limit = 100, now = new Date()
           data: { status: 'deleted' },
         })
       })
-      for (const asset of session.assets) await releaseMediaAsset(asset.id)
+
+      let releaseFailed = false
+      for (const asset of session.assets) {
+        try {
+          await releaseMediaAsset(asset.id)
+        } catch (error) {
+          releaseFailed = true
+          result.errors.push(
+            `${session.id}/${asset.id}: ${error instanceof Error ? error.message : '未知错误'}`
+          )
+          logger.error(
+            { err: error, sessionId: session.id, assetId: asset.id },
+            'Expired asset release failed'
+          )
+        }
+      }
+      if (releaseFailed) {
+        result.failed++
+        continue
+      }
       await prisma.uploadSession.deleteMany({ where: { id: session.id, status: 'expired' } })
       result.succeeded++
     } catch (error) {
@@ -80,7 +99,6 @@ export async function garbageCollectRetiredMedia(limit = 100, now = new Date()) 
     take: Math.max(1, Math.min(limit, 500)),
   })
   const result = emptyResult()
-  const references = await collectMediaReferences()
 
   for (const candidate of maps) {
     result.processed++
@@ -92,15 +110,31 @@ export async function garbageCollectRetiredMedia(limit = 100, now = new Date()) 
         await tx.$executeRaw(
           Prisma.sql`SELECT id FROM "ImageMap" WHERE id = ${candidate.id} FOR UPDATE`
         )
-        const imageMap = await tx.imageMap.findUnique({ where: { id: candidate.id } })
+        const imageMap = await tx.imageMap.findUnique({
+          where: { id: candidate.id },
+          select: {
+            id: true,
+            md5: true,
+            s3Key: true,
+            s3Url: true,
+            externalUrl: true,
+            thumbnailUrl: true,
+            localUrl: true,
+            variantStatus: true,
+            deletedAt: true,
+            retiredAt: true,
+          },
+        })
         if (!imageMap) return { kind: 'missing' as const }
         if (!imageMap.retiredAt || imageMap.retiredAt > now) return { kind: 'skip' as const }
+        const references = await collectMediaReferences()
         const activeClaims = await tx.mediaAsset.count({
           where: { imageMapId: imageMap.id, status: { in: ['uploaded', 'ready'] } },
         })
         if (
           activeClaims > 0 ||
           isMediaReferenced(references, {
+            imageMapId: imageMap.id,
             urls: [imageMap.localUrl, imageMap.s3Url, imageMap.externalUrl, imageMap.thumbnailUrl],
           }) ||
           imageMap.variantStatus === 'processing'
@@ -121,13 +155,15 @@ export async function garbageCollectRetiredMedia(limit = 100, now = new Date()) 
         }
         if (imageMap.s3Url && !imageMap.s3Key) {
           const message = 'S3 对象键未知，保留远端记录待人工处理'
-          await tx.imageMap.update({ where: { id: imageMap.id }, data: { retiredAt: null } })
           return { kind: 'preserved' as const, externalUrl: null, error: message }
         }
         if (imageMap.s3Key) await deleteS3Object(imageMap.s3Key)
         if (imageMap.externalUrl) {
-          await tx.imageMap.update({ where: { id: imageMap.id }, data: { retiredAt: null } })
-          return { kind: 'preserved' as const, externalUrl: imageMap.externalUrl, error: null }
+          return {
+            kind: 'preserved' as const,
+            externalUrl: imageMap.externalUrl,
+            error: null,
+          }
         }
         await tx.mediaAsset.updateMany({
           where: { imageMapId: imageMap.id, status: 'deleted' },

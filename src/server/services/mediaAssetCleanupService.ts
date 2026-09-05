@@ -16,40 +16,17 @@ export interface MediaAssetCleanupResult {
   markedAssetDeleted: boolean
   skippedReason?: 'asset_not_found' | 'still_referenced' | 'shared_image_map' | 'processing'
 }
+const CLEANUP_ASSET_SELECT = { id: true } as const
+type CleanupAsset = Prisma.MediaAssetGetPayload<{ select: typeof CLEANUP_ASSET_SELECT }>
 
-export async function cleanupUnusedMediaAssetById(
-  assetId: string
-): Promise<MediaAssetCleanupResult> {
-  const asset = await prisma.mediaAsset.findUnique({
-    where: { id: assetId },
-    select: {
-      id: true,
-      imageMapId: true,
-      publicUrl: true,
-      storageKey: true,
-      status: true,
-      imageMap: { select: { localUrl: true, externalUrl: true, s3Url: true, variantStatus: true } },
-    },
-  })
-  if (!asset) {
-    return {
-      assetId,
-      localUrls: [],
-      deletedImageMapIds: [],
-      deletedOriginalFile: false,
-      markedAssetDeleted: false,
-      skippedReason: 'asset_not_found',
-    }
-  }
-
+async function releaseLoadedMediaAsset(asset: CleanupAsset): Promise<MediaAssetCleanupResult> {
   try {
     const release = await releaseMediaAsset(asset.id)
+    const localUrls = release.localUrls
     if (!release.released) {
       return {
-        assetId,
-        localUrls: [asset.publicUrl, asset.imageMap?.localUrl].filter((value): value is string =>
-          Boolean(value)
-        ),
+        assetId: asset.id,
+        localUrls,
         deletedImageMapIds: [],
         deletedOriginalFile: false,
         markedAssetDeleted: false,
@@ -58,39 +35,35 @@ export async function cleanupUnusedMediaAssetById(
       }
     }
     return {
-      assetId,
-      localUrls: [asset.publicUrl, asset.imageMap?.localUrl].filter((value): value is string =>
-        Boolean(value)
-      ),
+      assetId: asset.id,
+      localUrls,
       deletedImageMapIds: [],
       deletedOriginalFile: false,
-      markedAssetDeleted: asset.status !== 'deleted',
+      markedAssetDeleted: release.markedAssetDeleted,
     }
   } catch (error) {
-    logger.error({ err: error, assetId }, 'Failed to release media asset')
+    logger.error({ err: error, assetId: asset.id }, 'Failed to release media asset')
     throw error
   }
 }
 
+export async function cleanupUnusedMediaAssetById(
+  assetId: string
+): Promise<MediaAssetCleanupResult> {
+  return releaseLoadedMediaAsset({ id: assetId })
+}
 export async function cleanupUntrackedUploadImageByUrl(
   url: string
 ): Promise<MediaAssetCleanupResult> {
   const asset = await prisma.mediaAsset.findFirst({
     where: { OR: [{ publicUrl: url }, { storageKey: url }], status: { not: 'deleted' } },
-    select: { id: true },
+    select: CLEANUP_ASSET_SELECT,
   })
-  if (asset) return cleanupUnusedMediaAssetById(asset.id)
+  if (asset) return releaseLoadedMediaAsset(asset)
 
   const imageMap = await prisma.imageMap.findFirst({
     where: { OR: [{ localUrl: url }, { s3Url: url }, { externalUrl: url }] },
-    select: {
-      id: true,
-      md5: true,
-      localUrl: true,
-      s3Url: true,
-      externalUrl: true,
-      variantStatus: true,
-    },
+    select: { id: true, md5: true },
   })
   if (!imageMap) {
     return {
@@ -106,25 +79,31 @@ export async function cleanupUntrackedUploadImageByUrl(
     await tx.$executeRaw(
       Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${imageMap.md5}, 0))`
     )
-    const locked = await tx.imageMap.findUnique({ where: { id: imageMap.id } })
+    const locked = await tx.imageMap.findUnique({
+      where: { id: imageMap.id },
+      select: {
+        id: true,
+        localUrl: true,
+        s3Url: true,
+        externalUrl: true,
+        variantStatus: true,
+      },
+    })
     if (!locked) return { skippedReason: 'asset_not_found' as const }
-    const [activeClaims, references] = await Promise.all([
-      tx.mediaAsset.count({
-        where: { imageMapId: locked.id, status: { in: ['uploaded', 'ready'] } },
-      }),
-      collectMediaReferences(),
-    ])
     if (locked.variantStatus === 'processing') return { skippedReason: 'processing' as const }
+    const activeClaims = await tx.mediaAsset.count({
+      where: { imageMapId: locked.id, status: { in: ['uploaded', 'ready'] } },
+    })
+    if (activeClaims > 0) return { skippedReason: 'shared_image_map' as const }
+
+    const references = await collectMediaReferences()
     if (
-      activeClaims > 0 ||
       isMediaReferenced(references, {
+        imageMapId: locked.id,
         urls: [locked.localUrl, locked.s3Url, locked.externalUrl],
       })
     ) {
-      return {
-        skippedReason:
-          activeClaims > 0 ? ('shared_image_map' as const) : ('still_referenced' as const),
-      }
+      return { skippedReason: 'still_referenced' as const }
     }
     await tx.imageMap.updateMany({
       where: { id: locked.id, retiredAt: null },

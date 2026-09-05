@@ -114,20 +114,35 @@ describe('VariantGenerator - 初始化与配置', () => {
     expect(prisma.imageMap.findMany).toHaveBeenCalledWith({
       where: {
         deletedAt: null,
-        variantStatus: { in: ['pending', 'processing'] },
+        OR: [
+          { variantStatus: { in: ['pending', 'processing'] } },
+          { variantStatus: 'completed', thumbnailUrl: null },
+        ],
       },
+      select: {
+        id: true,
+        localUrl: true,
+        mediaAssets: {
+          where: { status: { in: ['uploaded', 'ready'] } },
+          select: { storageKey: true, publicUrl: true },
+          orderBy: { id: 'asc' },
+        },
+      },
+      orderBy: { id: 'asc' },
       take: 100,
     })
     expect(prisma.songCover.findMany).toHaveBeenCalledWith({
       where: {
         variantStatus: { in: ['pending', 'processing'] },
       },
+      orderBy: { id: 'asc' },
       take: 100,
     })
     expect(prisma.albumCover.findMany).toHaveBeenCalledWith({
       where: {
         variantStatus: { in: ['pending', 'processing'] },
       },
+      orderBy: { id: 'asc' },
       take: 100,
     })
   })
@@ -167,10 +182,12 @@ describe('VariantGenerator - 队列管理', () => {
 
     // 源文件不存在 → 任务应被标记 failed（等待确定性的完成信号，不用固定睡眠）
     await vi.waitFor(() => {
-      expect(prisma.imageMap.updateMany).toHaveBeenCalledWith({
-        where: { id: 'test-1', variantStatus: { in: ['pending', 'processing'] } },
-        data: { variantStatus: 'failed' },
-      })
+      expect(prisma.imageMap.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'test-1' }),
+          data: { variantStatus: 'failed' },
+        })
+      )
     })
   })
 
@@ -256,6 +273,30 @@ describe('VariantGenerator - 队列管理', () => {
       processingCount: 0,
     })
   })
+  it('upgrades an existing queued task when maintenance claims its row', async () => {
+    const module = await import('../../../src/server/services/variantGenerator')
+    const VariantGenerator = module.VariantGenerator
+    const queuedOnlyGenerator = new VariantGenerator({ autoStart: false, processOnEnqueue: false })
+    try {
+      const task = {
+        targetType: 'imageMap' as const,
+        targetId: 'upgrade-claim',
+        localFilePath: '/tmp/upgrade-claim.jpg',
+        priority: 'low' as const,
+      }
+      expect(await queuedOnlyGenerator.enqueue(task)).toBe(true)
+      expect(await queuedOnlyGenerator.enqueueClaimed(task)).toBe(false)
+      const queue = (
+        queuedOnlyGenerator as unknown as {
+          queue: Array<{ databaseClaimed?: boolean }>
+        }
+      ).queue
+      expect(queue).toHaveLength(1)
+      expect(queue[0].databaseClaimed).toBe(true)
+    } finally {
+      queuedOnlyGenerator.stop()
+    }
+  })
 
   it('禁用入队即处理时只应保留队列任务', async () => {
     const module = await import('../../../src/server/services/variantGenerator')
@@ -278,6 +319,57 @@ describe('VariantGenerator - 队列管理', () => {
     })
     expect(sharp).not.toHaveBeenCalled()
     expect(prisma.imageMap.updateMany).not.toHaveBeenCalled()
+  })
+  it('clears processing when a claimed task exceeds queue wait', async () => {
+    const module = await import('../../../src/server/services/variantGenerator')
+    const VariantGenerator = module.VariantGenerator
+    const queuedOnlyGenerator = new VariantGenerator({ autoStart: false, processOnEnqueue: false })
+    try {
+      await queuedOnlyGenerator.enqueueClaimed({
+        targetType: 'imageMap',
+        targetId: 'claimed-timeout',
+        localFilePath: '/tmp/claimed-timeout.jpg',
+        priority: 'normal',
+      })
+      const internals = queuedOnlyGenerator as unknown as {
+        queue: Array<{ createdAt: Date }>
+        processNext: () => void
+      }
+      internals.queue[0].createdAt = new Date(0)
+      internals.processNext()
+      await vi.waitFor(() => {
+        expect(prisma.imageMap.updateMany).toHaveBeenCalledWith({
+          where: { id: 'claimed-timeout', variantStatus: { in: ['pending', 'processing'] } },
+          data: { variantStatus: 'failed' },
+        })
+      })
+    } finally {
+      queuedOnlyGenerator.stop()
+    }
+  })
+
+  it('clears processing when a claimed task source disappears', async () => {
+    const module = await import('../../../src/server/services/variantGenerator')
+    const VariantGenerator = module.VariantGenerator
+    const queuedOnlyGenerator = new VariantGenerator({ autoStart: false, processOnEnqueue: false })
+    try {
+      await queuedOnlyGenerator.enqueueClaimed({
+        targetType: 'imageMap',
+        targetId: 'claimed-missing-source',
+        localFilePath: path.join(TEST_UPLOADS_DIR, 'missing/claimed.jpg'),
+        priority: 'normal',
+      })
+      const internals = queuedOnlyGenerator as unknown as { processNext: () => void }
+      internals.processNext()
+      await vi.waitFor(() => {
+        expect(prisma.imageMap.updateMany).toHaveBeenCalledWith({
+          where: { id: 'claimed-missing-source', variantStatus: { in: ['pending', 'processing'] } },
+          data: { variantStatus: 'failed' },
+        })
+      })
+    } finally {
+      queuedOnlyGenerator.stop()
+    }
   })
 })
 
@@ -311,7 +403,10 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
     await vi.waitFor(() => {
       expect(prisma.imageMap.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'im-1', variantStatus: 'processing' },
+          where: expect.objectContaining({
+            id: 'im-1',
+            variantStatus: 'processing',
+          }),
           data: expect.objectContaining({
             thumbnailUrl: expect.any(String),
             variantStatus: 'completed',
@@ -332,7 +427,11 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
     await vi.waitFor(() => {
       expect(prisma.songCover.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'song-cover-1', variantStatus: 'processing' },
+          where: expect.objectContaining({
+            id: 'song-cover-1',
+            thumbnailUrl: null,
+            variantStatus: 'processing',
+          }),
           data: expect.objectContaining({
             thumbnailUrl: expect.any(String),
             variantStatus: 'completed',
@@ -369,7 +468,7 @@ describe('VariantGenerator - 任务处理（按类型分发）', () => {
 
     await vi.waitFor(() => {
       expect(prisma.songCover.updateMany).toHaveBeenCalledWith({
-        where: { id: 'song-cover-missing', variantStatus: { in: ['pending', 'processing'] } },
+        where: { id: 'song-cover-missing', variantStatus: { in: ['pending'] } },
         data: { variantStatus: 'failed', lastError: 'Source file missing' },
       })
     })
@@ -504,4 +603,54 @@ describe('VariantGenerator - URL 转换工具', () => {
 
 afterAll(() => {
   fs.rmSync(TEST_UPLOADS_DIR, { recursive: true, force: true })
+})
+
+describe('VariantGenerator - 历史缺失缩略图', () => {
+  it('completed 且 thumbnailUrl 为空时完成 pending 到 completed 的真实链路', async () => {
+    await runtimeConfigService.init()
+    await runtimeConfigService.updateConfig({
+      variantMaxConcurrent: 1,
+      variantTaskTimeoutMs: 30000,
+      variantQueueMaxWaitMs: 300000,
+      variantMaxRetries: 0,
+      variantSharpMemoryLimitMb: 512,
+    })
+    process.env.UPLOADS_PATH = TEST_UPLOADS_DIR
+    // 该测试需在设置 UPLOADS_PATH 后加载模块，验证运行时路径配置。
+    const module = await import('../../../src/server/services/variantGenerator')
+    const generator = new module.VariantGenerator({ autoStart: false })
+    const sourcePath = path.join(TEST_UPLOADS_DIR, 'legacy-source.jpg')
+    await fs.promises.mkdir(TEST_UPLOADS_DIR, { recursive: true })
+    await fs.promises.writeFile(sourcePath, 'source')
+
+    const getStateUpdates = () =>
+      vi.mocked(prisma.imageMap.updateMany).mock.calls.map(([args]) => ({
+        variantStatus:
+          typeof args.data.variantStatus === 'string' ? args.data.variantStatus : undefined,
+        thumbnailUrl:
+          typeof args.data.thumbnailUrl === 'string' || args.data.thumbnailUrl === null
+            ? args.data.thumbnailUrl
+            : undefined,
+      }))
+
+    await generator.enqueue({
+      targetType: 'imageMap',
+      targetId: 'legacy-map',
+      localFilePath: sourcePath,
+      priority: 'normal',
+    })
+
+    await vi.waitFor(() => {
+      expect(getStateUpdates()).toEqual(
+        expect.arrayContaining([
+          { variantStatus: 'processing', thumbnailUrl: undefined },
+          expect.objectContaining({ variantStatus: 'completed', thumbnailUrl: expect.any(String) }),
+        ])
+      )
+    })
+    expect(
+      await fs.promises.access(path.join(TEST_UPLOADS_DIR, 'variants', 'legacy-map', '1080h.webp'))
+    ).toBeUndefined()
+    generator.stop()
+  })
 })

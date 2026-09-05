@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   RefreshCw,
   Image,
-  Trash2,
-  RotateCcw,
   Loader2,
   CheckCircle,
   AlertTriangle,
@@ -75,13 +73,6 @@ export const AdminVariantManager: React.FC = () => {
     skipped: number
     errors: number
   } | null>(null)
-  const [cleaning, setCleaning] = useState(false)
-  const [cleanupResult, setCleanupResult] = useState<{
-    type: string
-    freedSpace: number
-    deletedCount: number
-    errorsCount: number
-  } | null>(null)
   const dialog = useDialog()
 
   const fetchStats = useCallback(async (options: { clearError?: boolean } = {}) => {
@@ -92,16 +83,15 @@ export const AdminVariantManager: React.FC = () => {
       }
       const [statsData, cleanupData] = await Promise.all([
         apiGet<{ success: boolean; data: VariantStats }>('/api/admin/variants/stats'),
-        apiGet<{ success: boolean; data: CleanupStats }>('/api/admin/cleanup/stats').catch(() => ({
-          success: false,
-          data: null as any,
-        })),
+        apiGet<{ success: boolean; data: CleanupStats }>('/api/admin/variants/cleanup/stats').catch(
+          () => ({ success: false, data: null as CleanupStats | null })
+        ),
       ])
       if (!statsData.success) {
         throw new Error('获取变体统计失败')
       }
       setVariantStats(statsData.data)
-      if (cleanupData.success) setCleanupStats(cleanupData.data)
+      if (cleanupData.success && cleanupData.data) setCleanupStats(cleanupData.data)
     } catch (err) {
       console.error('Failed to fetch stats:', err)
       setError(err instanceof Error ? err.message : '网络错误')
@@ -126,6 +116,7 @@ export const AdminVariantManager: React.FC = () => {
       variant: scope === 'all' ? 'danger' : 'warning',
     })
     if (!confirmed) return
+    setError(null)
     try {
       setRebuilding(true)
       setRebuildResult(null)
@@ -155,6 +146,7 @@ export const AdminVariantManager: React.FC = () => {
       variant: 'warning',
     })
     if (!confirmed) return
+    setError(null)
     try {
       setCoverRebuilding(true)
       setCoverRebuildResult(null)
@@ -188,118 +180,6 @@ export const AdminVariantManager: React.FC = () => {
     }
   }
 
-  const handleCleanupOrphaned = async () => {
-    const confirmed = await dialog.confirm({
-      title: '清理孤儿变体',
-      message: '确定要清理所有孤儿变体文件吗？',
-      confirmText: '清理',
-      variant: 'warning',
-    })
-    if (!confirmed) return
-    try {
-      setCleaning(true)
-      setCleanupResult(null)
-      const data = await apiPost<{
-        success: boolean
-        data: { freedSpace: number; deletedCount: number; errorsCount: number }
-      }>('/api/admin/cleanup/orphaned')
-      if (data.success) {
-        setCleanupResult({
-          type: 'orphaned',
-          freedSpace: data.data.freedSpace,
-          deletedCount: data.data.deletedCount,
-          errorsCount: data.data.errorsCount,
-        })
-        setTimeout(() => fetchStats(), 1000)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '清理失败')
-    } finally {
-      setCleaning(false)
-    }
-  }
-
-  const handleCleanupFailed = async () => {
-    const confirmed = await dialog.confirm({
-      title: '清理失败变体',
-      message: '确定要清理所有失败的变体文件吗？',
-      confirmText: '清理',
-      variant: 'warning',
-    })
-    if (!confirmed) return
-    try {
-      setCleaning(true)
-      setCleanupResult(null)
-      const data = await apiPost<{
-        success: boolean
-        data: { freedSpace: number; deletedCount: number; errorsCount: number }
-      }>('/api/admin/cleanup/failed')
-      if (data.success) {
-        setCleanupResult({
-          type: 'failed',
-          freedSpace: data.data.freedSpace,
-          deletedCount: data.data.deletedCount,
-          errorsCount: data.data.errorsCount,
-        })
-        setTimeout(() => fetchStats(), 1000)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '清理失败')
-    } finally {
-      setCleaning(false)
-    }
-  }
-
-  const handleCleanupAll = async () => {
-    const confirmed = await dialog.confirm({
-      title: '全量清理',
-      message: '确定要执行全量清理吗？这将同时清理孤儿文件和失败残留。',
-      confirmText: '清理',
-      variant: 'danger',
-    })
-    if (!confirmed) return
-    try {
-      setCleaning(true)
-      setCleanupResult(null)
-      const data = await apiPost<{
-        success: boolean
-        data: { totalFreedBytes: number; totalDeletedFiles: number; totalErrors: number }
-      }>('/api/admin/cleanup/all')
-      if (data.success) {
-        setCleanupResult({
-          type: 'all',
-          freedSpace: data.data.totalFreedBytes,
-          deletedCount: data.data.totalDeletedFiles,
-          errorsCount: data.data.totalErrors,
-        })
-        setTimeout(() => fetchStats(), 1500)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '全量清理失败')
-    } finally {
-      setCleaning(false)
-    }
-  }
-
-  const formatBytes = (bytes: number): string => {
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  }
-
-  /**
-   * 变体管理按钮说明：
-   * - 刷新：重新拉取当前变体生成队列和清理统计，不修改数据。
-   * - 补全缺失：只处理没有缩略图或状态仍为 pending 的图片，适合历史图片补生成变体。
-   * - 重建失败：只把 variantStatus = failed 的图片重新加入生成队列。
-   * - 全部重建：当前前端未传 force: true，后端实际只处理 variantStatus != completed 的图片，
-   *   不会覆盖所有已完成变体；若要真正强制重建所有变体，需要同步调整请求参数和提示文案。
-   * - 开始重建：按当前选中的范围提交后台生成任务，实际生成进度看等待处理、正在处理、今日完成和今日失败。
-   * - 清理孤儿文件：删除 uploads/variants/ 中找不到对应 ImageMap 数据库记录的变体目录或文件。
-   * - 清理失败残留：清理生成失败后留下的残缺变体文件，用于释放空间并避免影响后续重试。
-   * - 全量清理：同时执行清理孤儿文件和清理失败残留。
-   * - 错误提示里的垃圾桶按钮：只关闭当前错误提示，不会删除任何文件。
-   */
   const scopeOptions = [
     { value: 'missing', label: '补全缺失', desc: '仅处理没有变体的图片' },
     { value: 'failed', label: '重建失败', desc: '仅处理生成失败的图片' },
@@ -461,6 +341,7 @@ export const AdminVariantManager: React.FC = () => {
           {scopeOptions.map((opt) => (
             <button
               key={opt.value}
+              disabled={rebuilding || coverRebuilding}
               onClick={() => setRebuildScope(opt.value)}
               className={clsx(
                 'px-3 py-1.5 rounded text-xs font-medium transition-all',
@@ -480,7 +361,7 @@ export const AdminVariantManager: React.FC = () => {
 
         <button
           onClick={() => handleRebuildVariants(rebuildScope)}
-          disabled={rebuilding}
+          disabled={rebuilding || coverRebuilding}
           className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
         >
           {rebuilding ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
@@ -582,7 +463,7 @@ export const AdminVariantManager: React.FC = () => {
 
           <button
             onClick={handleRebuildMusicCovers}
-            disabled={coverRebuilding}
+            disabled={coverRebuilding || rebuilding}
             className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
           >
             {coverRebuilding ? <Loader2 size={14} className="animate-spin" /> : <Music size={14} />}
@@ -623,77 +504,6 @@ export const AdminVariantManager: React.FC = () => {
           )}
         </div>
       )}
-
-      <div className="bg-surface border border-border rounded p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Trash2 size={16} className="text-text-muted" />
-          <h3 className="text-sm font-semibold text-text-secondary">变体清理</h3>
-        </div>
-        <p className="text-xs text-text-muted mb-4">清理无效或多余的变体文件以释放磁盘空间</p>
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={handleCleanupOrphaned}
-            disabled={cleaning}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all disabled:opacity-50"
-          >
-            <Trash2 size={14} /> 清理孤儿文件
-          </button>
-          <button
-            onClick={handleCleanupFailed}
-            disabled={cleaning}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-border theme-status-error text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
-          >
-            <XCircle size={14} /> 清理失败残留
-          </button>
-          <button
-            onClick={handleCleanupAll}
-            disabled={cleaning}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
-          >
-            <RotateCcw size={14} /> 全量清理
-          </button>
-        </div>
-
-        {cleaning && (
-          <div className="mt-4 flex items-center gap-2 text-sm text-text-muted">
-            <Loader2 size={14} className="animate-spin" />
-            <span>正在清理，请稍候...</span>
-          </div>
-        )}
-
-        {cleanupResult && (
-          <div className="mt-4 p-3 rounded theme-bg-warning-soft border theme-border-warning-soft">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle size={16} className="text-brand-gold" />
-              <p className="text-sm font-medium text-text-primary">清理完成</p>
-              <span className="px-2 py-0.5 theme-tag text-[10px] font-medium rounded">
-                {cleanupResult.type}
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              <div>
-                <span className="text-text-muted">释放空间</span>
-                <p className="font-medium theme-text-success">
-                  {formatBytes(cleanupResult.freedSpace)}
-                </p>
-              </div>
-              <div>
-                <span className="text-text-muted">删除文件</span>
-                <p className="font-medium text-text-primary">{cleanupResult.deletedCount}</p>
-              </div>
-              <div>
-                <span className="text-text-muted">错误数量</span>
-                <p
-                  className={`font-medium ${cleanupResult.errorsCount > 0 ? 'theme-text-error' : 'text-text-primary'}`}
-                >
-                  {cleanupResult.errorsCount}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   )
 }

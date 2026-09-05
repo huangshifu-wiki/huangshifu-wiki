@@ -52,6 +52,7 @@ import { UPLOAD_MAX_FILE_SIZE_MB } from './src/lib/uploadLimits'
 import { registerAdminSystemRoutes } from './src/server/routes/admin.system.routes'
 import { registerAdminVariantsRoutes } from './src/server/routes/admin.variants.routes'
 import { registerAdminMediaHealthRoutes } from './src/server/routes/admin.media-health.routes'
+import { registerAdminMediaMaintenanceRoutes } from './src/server/routes/admin.media-maintenance.routes'
 import { cloudSyncService } from './src/server/services/cloudSyncService'
 import { variantGenerator } from './src/server/services/variantGenerator'
 import {
@@ -261,9 +262,6 @@ app.use(
       if (/\bimage\/|\/pdf$|\.gz$|\.br$|\.zip$/i.test(contentType)) {
         return false
       }
-      if (/\bjavascript\b|\bcss\b/i.test(contentType)) {
-        ;(req as unknown as Record<string, unknown>)._customCompressionLevel = 9
-      }
       return compression.filter(req, res)
     },
     threshold: 1024,
@@ -369,6 +367,7 @@ if (isSemanticSearchEnabled()) {
 registerAdminSystemRoutes(app)
 registerAdminVariantsRoutes(app)
 registerAdminMediaHealthRoutes(app)
+registerAdminMediaMaintenanceRoutes(app)
 registerAdminRoutes(app)
 registerNotificationsRoutes(app)
 registerFavoritesRoutes(app)
@@ -405,8 +404,9 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 })
 
 async function startServer() {
+  const isProduction = process.env.NODE_ENV === 'production'
   const port = await findAvailablePort(DEFAULT_PORT)
-  const hmrPort = await findAvailablePort(DEFAULT_HMR_PORT, '127.0.0.1')
+  const hmrPort = isProduction ? null : await findAvailablePort(DEFAULT_HMR_PORT, '127.0.0.1')
   if (port !== DEFAULT_PORT) {
     logger.warn(
       {
@@ -416,7 +416,7 @@ async function startServer() {
       'Preferred port is busy, falling back to next available port'
     )
   }
-  if (hmrPort !== DEFAULT_HMR_PORT) {
+  if (hmrPort !== null && hmrPort !== DEFAULT_HMR_PORT) {
     logger.warn(
       {
         requestedPort: DEFAULT_HMR_PORT,
@@ -429,8 +429,6 @@ async function startServer() {
   app.use((_req, res, next) => {
     const nonce = crypto.randomBytes(16).toString('base64')
     res.locals.nonce = nonce
-
-    const isProduction = process.env.NODE_ENV === 'production'
 
     const directives: string[] = [
       "default-src 'self'",
@@ -451,8 +449,7 @@ async function startServer() {
     res.setHeader('Content-Security-Policy', directives.join('; '))
     next()
   })
-
-  if (process.env.NODE_ENV !== 'production') {
+  if (!isProduction) {
     const { createServer: createViteServer } = await import('vite')
     const vite = await createViteServer({
       server: {
@@ -460,8 +457,8 @@ async function startServer() {
         strictPort: false,
         hmr: {
           host: '127.0.0.1',
-          port: hmrPort,
-          clientPort: hmrPort,
+          port: hmrPort!,
+          clientPort: hmrPort!,
         },
       },
       appType: 'custom',
@@ -509,7 +506,7 @@ async function startServer() {
     logger.info(`Server running on http://localhost:${port}`)
 
     // Avoid noisy startup failures in development when local model cache is incomplete.
-    if (process.env.NODE_ENV === 'production' && isSemanticSearchEnabled()) {
+    if (isProduction && isSemanticSearchEnabled()) {
       import('./src/server/vector/clipEmbedding').then(({ warmup }) => warmup()).catch(() => {})
     }
 

@@ -113,16 +113,7 @@ router.post(
         },
       })
 
-      res.status(201).json({
-        session: {
-          id: session.id,
-          ownerUid: session.ownerUid,
-          status: session.status,
-          expiresAt: session.expiresAt.toISOString(),
-          maxFiles: session.maxFiles,
-          uploadedFiles: session.uploadedFiles,
-        },
-      })
+      res.status(201).json({ session: toUploadSessionResponse(session) })
     } catch (error) {
       console.error('Create upload session error:', error)
       res.status(500).json({ error: '创建上传会话失败' })
@@ -227,7 +218,16 @@ router.post(
 
       const session = await prisma.uploadSession.findUnique({ where: { id: sessionId } })
       if (!session) {
-        await releaseMediaAsset(result.assetId, req.authUser!.uid)
+        await releaseMediaAsset(result.assetId, req.authUser!.uid).catch((releaseError) =>
+          logger.error(
+            { err: releaseError, assetId: result.assetId },
+            'Failed to release upload claim'
+          )
+        )
+        await rollbackUploadSessionSlot(sessionId).catch((rollbackError) =>
+          logger.debug({ err: rollbackError, sessionId }, 'Upload session slot rollback failed')
+        )
+        await cleanupTempFile()
         res.status(404).json({ error: '上传会话不存在' })
         return
       }

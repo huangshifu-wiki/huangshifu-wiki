@@ -561,32 +561,11 @@ type GalleryInput = {
   createdAt: Date
   updatedAt: Date
   location?: { code: string; name: string; fullName: string } | null
-  images: {
-    id: string
-    url: string
-    name: string
-    sortOrder: number
-    assetId?: string | null
-    asset?: {
-      id: string
-      publicUrl: string | null
-      fileName: string
-      mimeType: string
-      sizeBytes: number
-      status: string
-      storageKey: string | null
-      imageMap?: {
-        localUrl: string
-        externalUrl: string | null
-        s3Url: string | null
-        thumbnailUrl: string | null
-        variantStatus: VariantStatus | null
-      } | null
-    } | null
-  }[]
+  images: MediaImageInput[]
 }
 
 type GalleryImageMapEntry = {
+  id?: string
   localUrl: string
   externalUrl: string | null
   s3Url: string | null
@@ -594,62 +573,104 @@ type GalleryImageMapEntry = {
   variantStatus: VariantStatus | null
 }
 
-function getAttachedImageMap(image: GalleryInput['images'][number]) {
-  return image.asset?.imageMap || null
+type MediaImageInput = {
+  id: string
+  url: string
+  name: string
+  sortOrder: number
+  assetId?: string | null
+  asset?: {
+    id?: string
+    imageMapId?: string | null
+    publicUrl: string | null
+    fileName: string
+    mimeType: string
+    sizeBytes: number
+    status: string
+    storageKey: string | null
+    imageMap?: GalleryImageMapEntry | null
+  } | null
 }
 
-function resolveGalleryImageLocalUrl(image: GalleryInput['images'][number]) {
-  const imageMap = getAttachedImageMap(image)
+type ImageMapLookupInput = Pick<MediaImageInput, 'url' | 'asset'>
+
+type GalleryImageMapLookup = {
+  byId: Map<string, GalleryImageMapEntry>
+  byLocalUrl: Map<string, GalleryImageMapEntry>
+}
+
+function getAttachedImageMap(image: ImageMapLookupInput, lookup: GalleryImageMapLookup) {
+  return (
+    image.asset?.imageMap ||
+    (image.asset?.imageMapId ? lookup.byId.get(image.asset.imageMapId) : null)
+  )
+}
+
+function resolveGalleryImageLocalUrl(image: ImageMapLookupInput, lookup: GalleryImageMapLookup) {
+  const imageMap = getAttachedImageMap(image, lookup)
   if (imageMap?.localUrl) return imageMap.localUrl
   if (image.asset?.storageKey) return `/uploads/${image.asset.storageKey}`
-  if (image.url?.startsWith('/uploads/')) return image.url
+  if (image.url.startsWith('/uploads/')) return image.url
   return null
 }
 
-function resolveImageUrl(
-  image: GalleryInput['images'][number],
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
-) {
-  const attachedMap = getAttachedImageMap(image)
+function resolveImageUrl(image: ImageMapLookupInput, lookup: GalleryImageMapLookup) {
+  const attachedMap = getAttachedImageMap(image, lookup)
   if (attachedMap?.localUrl) return attachedMap.localUrl
   let url = image.asset?.publicUrl || image.url
-  const localUrl = resolveGalleryImageLocalUrl(image)
-  if (localUrl) url = imageMapByLocalUrl.get(localUrl)?.localUrl || url
+  const localUrl = resolveGalleryImageLocalUrl(image, lookup)
+  if (localUrl) url = lookup.byLocalUrl.get(localUrl)?.localUrl || url
   return url
 }
 
 function resolveThumbnailUrl(
-  image: GalleryInput['images'][number],
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
+  image: ImageMapLookupInput,
+  lookup: GalleryImageMapLookup
 ): string | null {
-  const attachedMap = getAttachedImageMap(image)
+  const attachedMap = getAttachedImageMap(image, lookup)
   if (attachedMap?.thumbnailUrl) return attachedMap.thumbnailUrl
-  const localUrl = resolveGalleryImageLocalUrl(image)
-  return localUrl ? imageMapByLocalUrl.get(localUrl)?.thumbnailUrl || null : null
+  const localUrl = resolveGalleryImageLocalUrl(image, lookup)
+  return localUrl ? lookup.byLocalUrl.get(localUrl)?.thumbnailUrl || null : null
 }
 
 function resolveThumbnailStatus(
-  image: GalleryInput['images'][number],
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
+  image: ImageMapLookupInput,
+  lookup: GalleryImageMapLookup
 ): VariantStatus | null {
-  const attachedMap = getAttachedImageMap(image)
+  const attachedMap = getAttachedImageMap(image, lookup)
   if (attachedMap?.variantStatus) return attachedMap.variantStatus
-  const localUrl = resolveGalleryImageLocalUrl(image)
-  return localUrl ? (imageMapByLocalUrl.get(localUrl)?.variantStatus ?? null) : null
+  const localUrl = resolveGalleryImageLocalUrl(image, lookup)
+  return localUrl ? (lookup.byLocalUrl.get(localUrl)?.variantStatus ?? null) : null
 }
 
-export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?: string) {
-  void storageStrategy
-
-  const localUrls = gallery.images
-    .filter((image) => !getAttachedImageMap(image))
-    .map(resolveGalleryImageLocalUrl)
-    .filter((url): url is string => Boolean(url))
+async function loadImageMaps(images: ImageMapLookupInput[]): Promise<GalleryImageMapLookup> {
+  const imageMapIds = [
+    ...new Set(
+      images.map((image) => image.asset?.imageMapId).filter((id): id is string => Boolean(id))
+    ),
+  ]
+  const localUrls = [
+    ...new Set(
+      images
+        .filter((image) => !image.asset?.imageMap)
+        .map((image) =>
+          image.asset?.storageKey ? `/uploads/${image.asset.storageKey}` : image.url
+        )
+        .filter((url): url is string => Boolean(url && url.startsWith('/uploads/')))
+    ),
+  ]
+  const where =
+    imageMapIds.length && localUrls.length
+      ? { deletedAt: null, OR: [{ id: { in: imageMapIds } }, { localUrl: { in: localUrls } }] }
+      : imageMapIds.length
+        ? { deletedAt: null, id: { in: imageMapIds } }
+        : { deletedAt: null, localUrl: { in: localUrls } }
   const imageMaps =
-    localUrls.length > 0
+    imageMapIds.length || localUrls.length
       ? await prisma.imageMap.findMany({
-          where: { deletedAt: null, localUrl: { in: localUrls } },
+          where,
           select: {
+            id: true,
             localUrl: true,
             externalUrl: true,
             s3Url: true,
@@ -658,7 +679,31 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
           },
         })
       : []
-  const imageMapByLocalUrl = new Map(imageMaps.map((im) => [im.localUrl, im]))
+  return {
+    byId: new Map(imageMaps.map((imageMap) => [imageMap.id, imageMap])),
+    byLocalUrl: new Map(imageMaps.map((imageMap) => [imageMap.localUrl, imageMap])),
+  }
+}
+
+function toGalleryImageResponse(image: MediaImageInput, imageMapLookup: GalleryImageMapLookup) {
+  const thumbnailUrl = resolveThumbnailUrl(image, imageMapLookup)
+  return {
+    id: image.id,
+    assetId: image.assetId || image.asset?.id || null,
+    url: thumbnailUrl || '',
+    originalUrl: resolveImageUrl(image, imageMapLookup),
+    thumbnailUrl,
+    thumbnailStatus: resolveThumbnailStatus(image, imageMapLookup),
+    name: image.asset?.fileName || image.name,
+    mimeType: image.asset?.mimeType || null,
+    sizeBytes: image.asset?.sizeBytes || null,
+  }
+}
+
+function toGalleryResponseWithImageMaps(
+  gallery: GalleryInput,
+  imageMapLookup: GalleryImageMapLookup
+) {
   return {
     id: gallery.id,
     slug: gallery.slug || gallery.id,
@@ -692,123 +737,22 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
     updatedAt: gallery.updatedAt.toISOString(),
     images: gallery.images
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((image) => ({
-        id: image.id,
-        assetId: image.assetId || image.asset?.id || null,
-        url: resolveThumbnailUrl(image, imageMapByLocalUrl) || '',
-        originalUrl: resolveImageUrl(image, imageMapByLocalUrl),
-        thumbnailUrl: resolveThumbnailUrl(image, imageMapByLocalUrl),
-        thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
-        name: image.asset?.fileName || image.name,
-        mimeType: image.asset?.mimeType || null,
-        sizeBytes: image.asset?.sizeBytes || null,
-      })),
+      .map((image) => toGalleryImageResponse(image, imageMapLookup)),
   }
 }
 
-export async function toGalleryListResponse(galleries: GalleryInput[], storageStrategy?: string) {
+export async function toGalleryResponse(gallery: GalleryInput) {
+  const imageMapLookup = await loadImageMaps(gallery.images)
+  return toGalleryResponseWithImageMaps(gallery, imageMapLookup)
+}
+
+export async function toGalleryListResponse(galleries: GalleryInput[]) {
   if (galleries.length === 0) return []
-  void storageStrategy
-
-  const allLocalUrls: string[] = []
-  for (const gallery of galleries) {
-    for (const img of gallery.images) {
-      const localUrl = resolveGalleryImageLocalUrl(img)
-      if (localUrl) {
-        allLocalUrls.push(localUrl)
-      }
-    }
-  }
-
-  const imageMaps =
-    allLocalUrls.length > 0
-      ? await prisma.imageMap.findMany({
-          where: {
-            deletedAt: null,
-            localUrl: { in: allLocalUrls },
-          },
-          select: {
-            localUrl: true,
-            externalUrl: true,
-            s3Url: true,
-            thumbnailUrl: true,
-            variantStatus: true,
-          },
-        })
-      : []
-
-  const imageMapByLocalUrl = new Map(imageMaps.map((im) => [im.localUrl, im]))
-
-  return galleries.map((gallery) => ({
-    id: gallery.id,
-    slug: gallery.slug || gallery.id,
-    title: gallery.title,
-    description: gallery.description,
-    authorUid: gallery.authorUid,
-    authorPublicId: gallery.author?.publicId || null,
-    authorName: gallery.authorName,
-    tags: serializeTags(gallery.tags),
-    eventDate: gallery.eventDate ?? null,
-    locationCode: gallery.locationCode || null,
-    locationName: gallery.location?.fullName || null,
-    locationDetail: gallery.locationDetail || null,
-    copyright: gallery.copyright || null,
-    status: gallery.status,
-    reviewNote: gallery.reviewNote ?? null,
-    reviewedBy: gallery.reviewedBy ?? null,
-    reviewedAt: gallery.reviewedAt ? gallery.reviewedAt.toISOString() : null,
-    published: gallery.published,
-    publishedAt: gallery.publishedAt ? gallery.publishedAt.toISOString() : null,
-    likesCount: gallery.likesCount ?? 0,
-    dislikesCount: gallery.dislikesCount ?? 0,
-    favoritesCount: gallery.favoritesCount ?? 0,
-    likedByMe: Boolean(gallery.likedByMe),
-    dislikedByMe: Boolean(gallery.dislikedByMe),
-    favoritedByMe: Boolean(gallery.favoritedByMe),
-    isDeleted: Boolean(gallery.deletedAt),
-    deletedAt: gallery.deletedAt ? gallery.deletedAt.toISOString() : null,
-    deletedBy: gallery.deletedBy ?? null,
-    createdAt: gallery.createdAt.toISOString(),
-    updatedAt: gallery.updatedAt.toISOString(),
-    images: gallery.images
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((image) => ({
-        id: image.id,
-        assetId: image.assetId || image.asset?.id || null,
-        url: resolveThumbnailUrl(image, imageMapByLocalUrl) || '',
-        originalUrl: resolveImageUrl(image, imageMapByLocalUrl),
-        thumbnailUrl: resolveThumbnailUrl(image, imageMapByLocalUrl),
-        thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
-        name: image.asset?.fileName || image.name,
-        mimeType: image.asset?.mimeType || null,
-        sizeBytes: image.asset?.sizeBytes || null,
-      })),
-  }))
+  const imageMapLookup = await loadImageMaps(galleries.flatMap((gallery) => gallery.images))
+  return galleries.map((gallery) => toGalleryResponseWithImageMaps(gallery, imageMapLookup))
 }
 
-type EventImageInput = {
-  id: string
-  url: string
-  name: string
-  sortOrder: number
-  assetId?: string | null
-  asset?: {
-    id: string
-    publicUrl: string | null
-    fileName: string
-    mimeType: string
-    sizeBytes: number
-    status: string
-    storageKey: string | null
-    imageMap?: {
-      localUrl: string
-      externalUrl: string | null
-      s3Url: string | null
-      thumbnailUrl: string | null
-      variantStatus: VariantStatus | null
-    } | null
-  } | null
-}
+type EventImageInput = MediaImageInput
 
 type EventInput = {
   id: string
@@ -856,47 +800,14 @@ function resolveEventCoverImage(event: EventInput): EventImageInput | null {
   }
 }
 
-function collectEventImageMaps(events: EventInput[]) {
-  const localUrls: string[] = []
-  for (const event of events) {
-    const cover = resolveEventCoverImage(event)
-    if (cover) {
-      const coverLocalUrl = resolveGalleryImageLocalUrl(cover)
-      if (coverLocalUrl) localUrls.push(coverLocalUrl)
-    }
-    for (const poster of event.posters) {
-      const localUrl = resolveGalleryImageLocalUrl(poster)
-      if (localUrl) localUrls.push(localUrl)
-    }
-  }
-  return localUrls
+function getEventImages(event: EventInput): EventImageInput[] {
+  const cover = resolveEventCoverImage(event)
+  return cover ? [cover, ...event.posters] : event.posters
 }
 
-async function loadImageMapsByLocalUrl(localUrls: string[]) {
-  if (localUrls.length === 0) return new Map<string, GalleryImageMapEntry>()
-  const uniqueLocalUrls = [...new Set(localUrls)]
-  const imageMaps = await prisma.imageMap.findMany({
-    where: {
-      deletedAt: null,
-      localUrl: { in: uniqueLocalUrls },
-    },
-    select: {
-      localUrl: true,
-      externalUrl: true,
-      s3Url: true,
-      thumbnailUrl: true,
-      variantStatus: true,
-    },
-  })
-  return new Map(imageMaps.map((im) => [im.localUrl, im]))
-}
-
-function toEventPosterResponse(
-  image: EventImageInput,
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
-) {
-  const thumbnailUrl = resolveThumbnailUrl(image, imageMapByLocalUrl)
-  const originalUrl = resolveImageUrl(image, imageMapByLocalUrl)
+function toEventPosterResponse(image: EventImageInput, imageMapLookup: GalleryImageMapLookup) {
+  const thumbnailUrl = resolveThumbnailUrl(image, imageMapLookup)
+  const originalUrl = resolveImageUrl(image, imageMapLookup)
 
   return {
     id: image.id,
@@ -904,17 +815,14 @@ function toEventPosterResponse(
     url: thumbnailUrl || originalUrl,
     originalUrl,
     thumbnailUrl,
-    thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
+    thumbnailStatus: resolveThumbnailStatus(image, imageMapLookup),
     name: image.asset?.fileName || image.name,
   }
 }
 
-function toEventResponseWithImageMaps(
-  event: EventInput,
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
-) {
+function toEventResponseWithImageMaps(event: EventInput, imageMapLookup: GalleryImageMapLookup) {
   const cover = resolveEventCoverImage(event)
-  const coverResponse = cover ? toEventPosterResponse(cover, imageMapByLocalUrl) : null
+  const coverResponse = cover ? toEventPosterResponse(cover, imageMapLookup) : null
 
   return {
     id: event.id,
@@ -947,19 +855,19 @@ function toEventResponseWithImageMaps(
     updatedAt: event.updatedAt.toISOString(),
     posters: [...event.posters]
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((poster) => toEventPosterResponse(poster, imageMapByLocalUrl)),
+      .map((poster) => toEventPosterResponse(poster, imageMapLookup)),
   }
 }
 
 export async function toEventResponse(event: EventInput) {
-  const imageMapByLocalUrl = await loadImageMapsByLocalUrl(collectEventImageMaps([event]))
-  return toEventResponseWithImageMaps(event, imageMapByLocalUrl)
+  const imageMapLookup = await loadImageMaps(getEventImages(event))
+  return toEventResponseWithImageMaps(event, imageMapLookup)
 }
 
 export async function toEventListResponse(events: EventInput[]) {
   if (events.length === 0) return []
-  const imageMapByLocalUrl = await loadImageMapsByLocalUrl(collectEventImageMaps(events))
-  return events.map((event) => toEventResponseWithImageMaps(event, imageMapByLocalUrl))
+  const imageMapLookup = await loadImageMaps(events.flatMap(getEventImages))
+  return events.map((event) => toEventResponseWithImageMaps(event, imageMapLookup))
 }
 
 export function toMusicResponse(
@@ -1135,8 +1043,8 @@ export function toMediaAssetResponse(asset: {
   id: string
   ownerUid: string
   sessionId: string | null
-  storageKey: string
-  publicUrl: string
+  storageKey: string | null
+  publicUrl: string | null
   fileName: string
   mimeType: string
   sizeBytes: number

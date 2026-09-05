@@ -2,16 +2,13 @@
  * 管理后台 API - 变体管理
  *
  * 功能：
- * 1. 孤儿文件清理
- * 2. 失败变体清理
- * 3. 批量变体重建
- * 4. 清理统计
+ * 1. 批量变体重建
+ * 2. 变体统计
  */
 
 import { Router } from 'express'
 import { prisma } from '../prisma'
 import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/auth'
-import { variantCleanup, CleanupTrigger } from '../services/variantCleanup.service'
 import { variantGenerator } from '../services/variantGenerator'
 import { resolveUploadPathByStorageKey } from '../uploadPath'
 import { resolveUploadPathByUrl } from '../utils'
@@ -24,113 +21,6 @@ const __dirname = path.dirname(__filename)
 
 const uploadsDir = process.env.UPLOADS_PATH || path.join(__dirname, '..', '..', '..', 'uploads')
 const router = Router()
-
-// ============================================================================
-// 🧹 变体清理 API
-// ============================================================================
-
-/**
- * POST /api/admin/variants/cleanup/orphaned - 清理孤儿文件
- */
-router.post('/cleanup/orphaned', requireAuth, requireAdmin, async (_req, res) => {
-  try {
-    console.log('[Admin/Variants] Starting orphaned variants cleanup...')
-
-    const result = await variantCleanup.cleanupOrphanedVariants()
-
-    res.json({
-      success: result.success,
-      message: 'Orphaned variants cleanup completed',
-      data: {
-        freedSpace: result.totalFreedBytes,
-        freedSpaceFormatted: result.totalFreedFormatted,
-        deletedCount: result.deletedFiles.length,
-        errorsCount: result.errors.length,
-        executionTimeMs: result.executionTimeMs,
-      },
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('[Admin/Variants] Orphaned cleanup error:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Failed to cleanup orphaned variants',
-    })
-  }
-})
-
-/**
- * POST /api/admin/variants/cleanup/failed - 清理失败残留
- */
-router.post('/cleanup/failed', requireAuth, requireAdmin, async (_req, res) => {
-  try {
-    const result = await variantCleanup.cleanupFailedVariants()
-
-    res.json({
-      success: result.success,
-      message: 'Failed variants cleanup completed',
-      data: {
-        freedSpace: result.totalFreedBytes,
-        freedSpaceFormatted: result.totalFreedFormatted,
-        deletedCount: result.deletedFiles.length,
-        errorsCount: result.errors.length,
-        executionTimeMs: result.executionTimeMs,
-      },
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('[Admin/Variants] Failed cleanup error:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Failed to cleanup failed variants',
-    })
-  }
-})
-
-/**
- * POST /api/admin/variants/cleanup/all - 全量清理（孤儿 + 失败）
- */
-router.post('/cleanup/all', requireAuth, requireAdmin, async (_req, res) => {
-  try {
-    const results = await variantCleanup.batchCleanup([
-      CleanupTrigger.SCHEDULED,
-      CleanupTrigger.ON_FAILURE,
-    ])
-
-    let totalFreedBytes = 0
-    let totalDeleted = 0
-    let totalErrors = 0
-
-    results.forEach((result) => {
-      totalFreedBytes += result.totalFreedBytes
-      totalDeleted += result.deletedFiles.length
-      totalErrors += result.errors.length
-    })
-
-    res.json({
-      success: true,
-      message: 'Full cleanup completed',
-      data: {
-        totalFreedBytes,
-        totalFreedFormatted: formatBytes(totalFreedBytes),
-        totalDeletedFiles: totalDeleted,
-        totalErrors,
-        details: Object.fromEntries(results),
-      },
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('[Admin/Variants] Full cleanup error:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Full cleanup failed',
-    })
-  }
-})
-
-// ============================================================================
-// 🔄 批量变体重建 API
-// ============================================================================
 
 interface RebuildRequest {
   type?: 'imageMap' | 'songCover' | 'albumCover' | 'all'
@@ -157,28 +47,23 @@ type RebuildTargetType = (typeof REBUILD_TYPES)[number]
 
 function buildVariantWhereClause(scope: string, force: boolean): Record<string, unknown> {
   const whereClause: Record<string, unknown> = {}
-
   switch (scope) {
     case 'all':
-      if (!force) {
-        whereClause.variantStatus = { not: 'completed' }
-      }
+      whereClause.variantStatus = force ? { not: 'processing' } : { in: ['pending', 'failed'] }
       break
-
     case 'failed':
       whereClause.variantStatus = 'failed'
       break
-
     case 'missing':
-      whereClause.OR = [{ thumbnailUrl: null }, { variantStatus: 'pending' }]
+      whereClause.AND = [
+        { NOT: { variantStatus: 'processing' } },
+        { OR: [{ thumbnailUrl: null }, { variantStatus: 'pending' }] },
+      ]
       break
-
     case 'outdated':
       whereClause.variantStatus = 'completed'
-      // TODO: 需要增加 generatedAt 字段才能支持此功能
       break
   }
-
   return whereClause
 }
 
@@ -188,19 +73,14 @@ async function queueRebuildForType(
   batchSize: number,
   dryRun: boolean,
   force: boolean
-): Promise<{
-  totalScanned: number
-  queuedForRebuild: number
-  skipped: number
-  errors: number
-}> {
-  const baseWhere = type === 'imageMap' ? { deletedAt: null } : {}
-  const whereClause = { ...baseWhere, ...buildVariantWhereClause(scope, force) }
-
-  if (type === 'imageMap') {
-    return queueImageMapRebuild(whereClause, batchSize, dryRun)
+): Promise<{ totalScanned: number; queuedForRebuild: number; skipped: number; errors: number }> {
+  const whereClause = {
+    ...(type === 'imageMap' ? { deletedAt: null } : {}),
+    ...buildVariantWhereClause(scope, force),
   }
-  return queueCoverRebuild(type, whereClause, batchSize, dryRun)
+  return type === 'imageMap'
+    ? queueImageMapRebuild(whereClause, batchSize, dryRun)
+    : queueCoverRebuild(type, whereClause, batchSize, dryRun)
 }
 
 async function queueImageMapRebuild(
@@ -221,6 +101,7 @@ async function queueImageMapRebuild(
   for (let offset = 0; offset < totalCount; offset += batchSize) {
     const batch = await prisma.imageMap.findMany({
       where: whereClause,
+      orderBy: { id: 'asc' },
       take: batchSize,
       skip: offset,
       select: { id: true, localUrl: true },
@@ -256,14 +137,15 @@ async function queueImageMapRebuild(
         continue
       }
 
-      await variantGenerator.enqueue({
+      const accepted = await variantGenerator.enqueue({
         targetType: 'imageMap',
         targetId: record.id,
         localFilePath,
         priority: 'low',
       })
 
-      processedCount++
+      if (accepted) processedCount++
+      else skippedCount++
     } catch (error) {
       console.error(`[Admin] Error queuing imageMap:${record.id}:`, error)
       errorCount++
@@ -301,12 +183,14 @@ async function queueCoverRebuild(
       type === 'songCover'
         ? await prisma.songCover.findMany({
             where: whereClause,
+            orderBy: { id: 'asc' },
             take: batchSize,
             skip: offset,
             select: { id: true, storageKey: true },
           })
         : await prisma.albumCover.findMany({
             where: whereClause,
+            orderBy: { id: 'asc' },
             take: batchSize,
             skip: offset,
             select: { id: true, storageKey: true },
@@ -342,14 +226,15 @@ async function queueCoverRebuild(
         continue
       }
 
-      await variantGenerator.enqueue({
+      const accepted = await variantGenerator.enqueue({
         targetType: type,
         targetId: record.id,
         localFilePath,
         priority: 'low',
       })
 
-      processedCount++
+      if (accepted) processedCount++
+      else skippedCount++
     } catch (error) {
       console.error(`[Admin] Error queuing ${type}:${record.id}:`, error)
       errorCount++
@@ -401,6 +286,19 @@ router.post(
           error: `Invalid scope: ${scope}. Must be one of: all, failed, missing, outdated`,
         })
       }
+      if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 1000) {
+        return res.status(400).json({
+          success: false,
+          error: 'batchSize must be an integer between 1 and 1000',
+        })
+      }
+
+      if (typeof dryRun !== 'boolean' || typeof force !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          error: 'dryRun and force must be boolean values',
+        })
+      }
 
       console.log(
         `[Admin] Starting variant rebuild: type=${type}, scope=${scope}, ` +
@@ -424,7 +322,8 @@ router.post(
 
       if (totalScanned === 0) {
         return res.json({
-          jobId: `dry-run-${Date.now()}`,
+          success: true,
+          jobId: `${dryRun ? 'dry-run' : 'rebuild'}-${Date.now()}`,
           status: 'completed' as const,
           summary: {
             totalScanned: 0,
@@ -485,7 +384,8 @@ router.get('/rebuild-status/:jobId', requireAuth, requireAdmin, (req, res) => {
   res.json({
     success: true,
     jobId,
-    status: stats.processingCount > 0 ? 'processing' : 'completed',
+    status:
+      stats.processingCount > 0 ? 'processing' : stats.queueLength > 0 ? 'queued' : 'completed',
     queueLength: stats.queueLength,
     processingCount: stats.processingCount,
     completedToday: stats.completedToday,
@@ -506,7 +406,9 @@ router.get('/cleanup/stats', requireAuth, requireAdmin, async (_req, res) => {
     const [totalImages, failedImages, completedImages] = await Promise.all([
       prisma.imageMap.count({ where: { deletedAt: null } }),
       prisma.imageMap.count({ where: { deletedAt: null, variantStatus: 'failed' } }),
-      prisma.imageMap.count({ where: { deletedAt: null, variantStatus: 'completed' } }),
+      prisma.imageMap.count({
+        where: { deletedAt: null, variantStatus: 'completed', thumbnailUrl: { not: null } },
+      }),
     ])
 
     let orphanedCount = 0
@@ -552,12 +454,6 @@ router.get('/cleanup/stats', requireAuth, requireAdmin, async (_req, res) => {
 // ============================================================================
 // 工具函数
 // ============================================================================
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-}
 
 export { registerAdminVariantsRoutes }
 

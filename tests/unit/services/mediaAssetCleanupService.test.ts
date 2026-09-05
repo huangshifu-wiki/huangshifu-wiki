@@ -39,7 +39,12 @@ vi.mock('../../../src/server/prisma', () => ({ prisma: mockPrisma }))
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockReleaseMediaAsset.mockResolvedValue({ released: true, imageMapId: 'map-1' })
+  mockReleaseMediaAsset.mockResolvedValue({
+    released: true,
+    imageMapId: 'map-1',
+    localUrls: ['/uploads/gallery/test.jpg'],
+    markedAssetDeleted: true,
+  })
   mockCollectMediaReferences.mockResolvedValue({
     assetIds: new Set(),
     imageMapIds: new Set(),
@@ -101,24 +106,27 @@ describe('mediaAssetCleanupService', () => {
   })
 
   it('找不到 claim 时不登记物理删除', async () => {
-    mockMediaAssetFindUnique.mockResolvedValue(null)
+    mockReleaseMediaAsset.mockResolvedValueOnce({
+      released: false,
+      reason: 'asset_not_found',
+      localUrls: [],
+      markedAssetDeleted: false,
+    })
     const { cleanupUnusedMediaAssetById } =
       await import('../../../src/server/services/mediaAssetCleanupService')
 
     const result = await cleanupUnusedMediaAssetById('missing')
 
     expect(result.skippedReason).toBe('asset_not_found')
-    expect(mockReleaseMediaAsset).not.toHaveBeenCalled()
+    expect(mockReleaseMediaAsset).toHaveBeenCalledWith('missing')
   })
 
   it('重复释放已删除 claim 保持幂等', async () => {
-    mockMediaAssetFindUnique.mockResolvedValue({
-      id: 'asset-1',
+    mockReleaseMediaAsset.mockResolvedValueOnce({
+      released: true,
       imageMapId: 'map-1',
-      storageKey: null,
-      publicUrl: null,
-      status: 'deleted',
-      imageMap: null,
+      localUrls: [],
+      markedAssetDeleted: false,
     })
     const { cleanupUnusedMediaAssetById } =
       await import('../../../src/server/services/mediaAssetCleanupService')

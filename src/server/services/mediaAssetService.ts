@@ -16,6 +16,7 @@ import { uploadsDir } from '../utils/config'
 import { getStorageKeyFromFilePath } from '../uploadPath'
 import { secretsConfigService } from './secretsConfig.service'
 import { logger } from '../utils/logger'
+import { calculateFileMD5 } from '../utils/hash'
 import { collectReferences } from './mediaHealth.service'
 import type { MediaReferenceIndex } from './mediaHealth.service'
 import { normalizeStorageKey } from './mediaRestoreReport.service'
@@ -100,12 +101,11 @@ export async function collectMediaReferences(
 ): Promise<MediaReferenceCollection> {
   return collectReferences(client, 'strict')
 }
-
 export function isMediaReferenced(
   references: MediaReferenceCollection,
   target: MediaReferenceTarget
 ): boolean {
-  if (target.assetId && references.mediaAssetIds.has(target.assetId)) return true
+  if (target.imageMapId && references.imageMapIds.has(target.imageMapId)) return true
   if (target.urls?.some((url) => Boolean(url && references.urls.has(url.trim())))) {
     return true
   }
@@ -137,9 +137,33 @@ const IMAGE_MAP_SELECT = {
   variantStatus: true,
   cloudSyncStatus: true,
   deletedAt: true,
+  deletedBy: true,
   retiredAt: true,
 } as const
+export type LocalImageMap = Prisma.ImageMapGetPayload<{ select: typeof IMAGE_MAP_SELECT }>
 
+export async function ensureImageMapForLocalFile(
+  filePath: string,
+  localUrl: string,
+  client: PrismaClient = prisma
+): Promise<LocalImageMap> {
+  const md5 = await calculateFileMD5(filePath)
+  return client.$transaction(async (tx) => {
+    await lockImageContent(tx, md5)
+    return tx.imageMap.upsert({
+      where: { md5 },
+      update: { deletedAt: null, deletedBy: null, retiredAt: null },
+      create: { id: crypto.randomUUID(), md5, localUrl, storageType: 'local' },
+      select: IMAGE_MAP_SELECT,
+    })
+  })
+}
+
+export async function lockImageMap(tx: TransactionClient, imageMapId: string) {
+  await tx.$executeRaw(Prisma.sql`
+    SELECT id FROM "ImageMap" WHERE id = ${imageMapId} FOR UPDATE
+  `)
+}
 const ASSET_SELECT = {
   id: true,
   ownerUid: true,
@@ -161,8 +185,8 @@ export function getMediaStorageSnapshot(asset: ReadyMediaAsset) {
   const storageKey =
     asset.storageKey ||
     (asset.imageMap?.localUrl ? extractStorageKeyFromUploadUrl(asset.imageMap.localUrl) : null)
-  if (!publicUrl || !storageKey) throw new MediaAssetRequestError(409, '媒体资源缺少可用存储位置')
-  return { publicUrl, storageKey }
+  if (!publicUrl) throw new MediaAssetRequestError(409, '媒体资源缺少可用存储位置')
+  return { publicUrl, storageKey: storageKey || null }
 }
 
 function isStorageStrategy(value: unknown): value is MediaStorageStrategy {
@@ -178,7 +202,7 @@ async function getConfiguredStorageStrategy(client: PrismaClient = prisma) {
   return isStorageStrategy(strategy) ? strategy : 'local'
 }
 
-async function lockImageContent(tx: TransactionClient, md5: string) {
+export async function lockImageContent(tx: TransactionClient, md5: string) {
   await tx.$executeRaw(Prisma.sql`
     SELECT pg_advisory_xact_lock(hashtextextended(${md5}, 0))
   `)
@@ -384,7 +408,7 @@ export async function createOrReuseUploadedAsset(
   input: CreateOrReuseUploadedAssetInput
 ): Promise<MediaAssetResult> {
   const strategy = input.storageStrategy || (await getConfiguredStorageStrategy())
-  const md5 = await calculateFileMd5FromPath(input.tempFilePath)
+  const md5 = await calculateFileMD5(input.tempFilePath)
   const temporaryStorageKey = getStorageKeyFromFilePath(input.tempFilePath, uploadsDir)
   if (!temporaryStorageKey) {
     throw new MediaAssetRequestError(400, '上传文件路径无效')
@@ -392,6 +416,7 @@ export async function createOrReuseUploadedAsset(
   const temporaryUrl = buildUploadPublicUrl(temporaryStorageKey)
   let imageMapWasReused = false
   let result: MediaAssetResult
+  let createdAssetId: string | null = null
 
   try {
     const created = await prisma.$transaction(async (tx) => {
@@ -442,6 +467,7 @@ export async function createOrReuseUploadedAsset(
 
       return { asset, imageMap }
     })
+    createdAssetId = created.asset.id
 
     const storage = await ensureImageMapStorage(created.imageMap.id, strategy, {
       sourceFilePath: input.tempFilePath,
@@ -475,7 +501,20 @@ export async function createOrReuseUploadedAsset(
     )
     return result
   } catch (error) {
-    await fs.unlink(input.tempFilePath).catch(() => undefined)
+    if (createdAssetId) {
+      await releaseMediaAsset(createdAssetId, input.ownerUid).catch((cleanupError) =>
+        logger.error({ err: cleanupError, assetId: createdAssetId }, '上传失败后的媒体资源释放失败')
+      )
+      if (input.sessionId) {
+        await rollbackUploadSessionSlot(input.sessionId).catch((cleanupError) =>
+          logger.error(
+            { err: cleanupError, sessionId: input.sessionId },
+            '上传失败后的会话槽位回滚失败'
+          )
+        )
+      }
+    }
+    if (!imageMapWasReused) await fs.unlink(input.tempFilePath).catch(() => undefined)
     throw error
   } finally {
     if (imageMapWasReused) {
@@ -485,9 +524,10 @@ export async function createOrReuseUploadedAsset(
 }
 
 export async function createAssetClaimForImageMap(
-  input: CreateAssetClaimInput
+  input: CreateAssetClaimInput,
+  client: PrismaClient = prisma
 ): Promise<MediaAssetResult> {
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await client.$transaction(async (tx) => {
     let imageMap = await tx.imageMap.findUnique({
       where: { id: input.imageMapId },
       select: IMAGE_MAP_SELECT,
@@ -504,7 +544,9 @@ export async function createAssetClaimForImageMap(
     if (!imageMap || imageMap.deletedAt || !hasAvailableStorage(imageMap)) {
       throw new MediaAssetRequestError(410, '图片映射不存在或没有可用存储位置')
     }
-    await tx.imageMap.update({ where: { id: imageMap.id }, data: { retiredAt: null } })
+    if (imageMap.retiredAt !== null) {
+      await tx.imageMap.update({ where: { id: imageMap.id }, data: { retiredAt: null } })
+    }
     const existing = await tx.mediaAsset.findFirst({
       where: {
         ownerUid: input.ownerUid,
@@ -564,11 +606,11 @@ export async function createAssetClaimForImageMap(
 export async function getReadyAssetForOwner(
   tx: TransactionClient,
   assetId: string,
-  ownerUid: string
+  ownerUid?: string
 ) {
   await tx.$executeRaw(Prisma.sql`SELECT id FROM "MediaAsset" WHERE id = ${assetId} FOR UPDATE`)
   const asset = await tx.mediaAsset.findUnique({ where: { id: assetId }, select: ASSET_SELECT })
-  if (!asset || asset.ownerUid !== ownerUid) {
+  if (!asset || (ownerUid && asset.ownerUid !== ownerUid)) {
     throw new MediaAssetRequestError(403, '无权使用该媒体资源')
   }
   if (asset.status !== 'ready' || !asset.imageMap || asset.imageMap.deletedAt) {
@@ -606,48 +648,60 @@ export async function getReadyAssetsForOwner(
   return uniqueAssetIds.map((assetId) => assetById.get(assetId)!)
 }
 
-export async function syncAssetToImageMap(assetId: string): Promise<string | null> {
-  const asset = await prisma.mediaAsset.findUnique({
+export async function syncAssetToImageMap(
+  assetId: string,
+  client: PrismaClient = prisma
+): Promise<string | null> {
+  const asset = await client.mediaAsset.findUnique({
     where: { id: assetId },
     select: {
       id: true,
-      ownerUid: true,
       imageMapId: true,
       storageKey: true,
       publicUrl: true,
-      fileName: true,
-      mimeType: true,
-      sizeBytes: true,
       status: true,
     },
   })
-  if (!asset) return null
+  if (!asset || asset.status === 'deleted') return null
   if (asset.imageMapId) return asset.imageMapId
 
   const filePath = getLocalFilePath(asset.publicUrl, asset.storageKey)
   if (!filePath) return null
-  const md5 = await calculateFileMd5FromPath(filePath)
+  const md5 = await calculateFileMD5(filePath)
   const localUrl =
-    asset.publicUrl || (asset.storageKey ? buildUploadPublicUrl(asset.storageKey) : null)
-  if (!localUrl) return null
+    (asset.publicUrl && resolveUploadPathByUrl(asset.publicUrl) ? asset.publicUrl : null) ||
+    (asset.storageKey ? buildUploadPublicUrl(asset.storageKey) : asset.publicUrl)
 
-  return prisma.$transaction(async (tx) => {
+  return client.$transaction(async (tx) => {
     await lockImageContent(tx, md5)
+    const currentAsset = await tx.mediaAsset.findUnique({
+      where: { id: asset.id },
+      select: { imageMapId: true, status: true },
+    })
+    if (!currentAsset || currentAsset.status === 'deleted') return null
+    if (currentAsset.imageMapId) return currentAsset.imageMapId
+
     const imageMap = await tx.imageMap.upsert({
       where: { md5 },
       update: { deletedAt: null, deletedBy: null, retiredAt: null },
       create: { id: crypto.randomUUID(), md5, localUrl, storageType: 'local' },
       select: IMAGE_MAP_SELECT,
     })
-    await tx.mediaAsset.update({
-      where: { id: asset.id },
+    const updated = await tx.mediaAsset.updateMany({
+      where: { id: asset.id, imageMapId: null, status: { not: 'deleted' } },
       data: {
         imageMapId: imageMap.id,
         storageKey: getSnapshotStorageKey(imageMap.localUrl),
         publicUrl: imageMap.localUrl,
       },
     })
-    return imageMap.id
+    if (updated.count === 1) return imageMap.id
+
+    const concurrentAsset = await tx.mediaAsset.findUnique({
+      where: { id: asset.id },
+      select: { imageMapId: true },
+    })
+    return concurrentAsset?.imageMapId || null
   })
 }
 
@@ -667,7 +721,10 @@ export function ensureImageMapStorage(
     sourceMimeType?: string
   } = {}
 ): Promise<EnsureImageMapStorageResult> {
-  const flightKey = `${imageMapId}:${strategy}:${options.sourceFilePath ? 'with-source' : 'without-source'}`
+  const flightKey =
+    strategy === 'local'
+      ? `${imageMapId}:${strategy}:${options.sourceFilePath || ''}`
+      : `${imageMapId}:${strategy}`
   const pending = storageEnsureFlights.get(flightKey)
   if (pending) return pending
 
@@ -690,41 +747,50 @@ async function ensureImageMapStorageInternal(
     sourceMimeType?: string
   }
 ): Promise<EnsureImageMapStorageResult> {
-  const imageMap = await prisma.imageMap.findUnique({
+  const errors: string[] = []
+  const initial = await prisma.imageMap.findUnique({
     where: { id: imageMapId },
     select: IMAGE_MAP_SELECT,
   })
-  if (!imageMap) throw new MediaAssetRequestError(404, '图片映射不存在')
+  if (!initial) throw new MediaAssetRequestError(404, '图片映射不存在')
 
-  const errors: string[] = []
-  const canonicalPath = getLocalFilePath(
-    imageMap.localUrl,
-    getSnapshotStorageKey(imageMap.localUrl)
-  )
+  const canonicalPath = getLocalFilePath(initial.localUrl, getSnapshotStorageKey(initial.localUrl))
   let sourcePath = canonicalPath
   const sourceFilePath = options.sourceFilePath
-  const sourceAvailable = sourceFilePath ? await fileExists(sourceFilePath) : false
+  const fileExistsCache = new Map<string, boolean>()
+  const checkFileExists = async (filePath: string | null) => {
+    if (!filePath) return false
+    const cached = fileExistsCache.get(filePath)
+    if (cached !== undefined) return cached
+    const exists = await fileExists(filePath)
+    fileExistsCache.set(filePath, exists)
+    return exists
+  }
+  const sourceAvailable = await checkFileExists(sourceFilePath || null)
+  const canonicalAvailable = await checkFileExists(canonicalPath)
   if (
-    sourceAvailable &&
     canonicalPath &&
-    path.resolve(sourceFilePath) !== path.resolve(canonicalPath)
+    sourceFilePath &&
+    path.resolve(sourceFilePath) !== path.resolve(canonicalPath) &&
+    !canonicalAvailable &&
+    sourceAvailable
   ) {
-    if (!(await fileExists(canonicalPath))) {
-      await fs.mkdir(path.dirname(canonicalPath), { recursive: true })
-      await fs.copyFile(sourceFilePath, canonicalPath)
+    await fs.mkdir(path.dirname(canonicalPath), { recursive: true })
+    try {
+      await fs.copyFile(sourceFilePath, canonicalPath, fs.constants.COPYFILE_EXCL)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
     }
   }
   if (!sourcePath && sourceAvailable) sourcePath = sourceFilePath
   const sourceFileName =
-    options.sourceFileName ||
-    path.basename(getSnapshotStorageKey(imageMap.localUrl) || imageMap.md5)
+    options.sourceFileName || path.basename(getSnapshotStorageKey(initial.localUrl) || initial.md5)
   const sourceMimeType = options.sourceMimeType || 'application/octet-stream'
-  const canUpload = sourcePath ? await fileExists(sourcePath) : false
-  const s3ObjectKey = imageMap.s3Key || makeS3ObjectKey(imageMap.md5, sourceFileName)
-
-  let s3Url = imageMap.s3Url
-  let externalUrl = imageMap.externalUrl
-  let s3Key = imageMap.s3Key
+  const canUpload = Boolean(sourcePath && (canonicalAvailable || sourceAvailable))
+  const s3ObjectKey = initial.s3Key || makeS3ObjectKey(initial.md5, sourceFileName)
+  let s3Url: string | null = initial.s3Url
+  let externalUrl: string | null = initial.externalUrl
+  let s3Key: string | null = initial.s3Key
 
   if ((strategy === 's3' || strategy === 'external') && !s3Url) {
     if (!canUpload || !sourcePath) {
@@ -748,48 +814,58 @@ async function ensureImageMapStorageInternal(
       errors.push('外部图床上传失败：没有可用本地源文件')
     } else {
       const result = await uploadToSuperbed(sourcePath, sourceFileName, sourceMimeType, token)
-      if (result.success && result.url) {
-        externalUrl = result.url
-      } else {
-        errors.push(`外部图床上传失败：${result.error || '未知错误'}`)
-      }
+      if (result.success && result.url) externalUrl = result.url
+      else errors.push(`外部图床上传失败：${result.error || '未知错误'}`)
     }
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    await lockImageContent(tx, imageMap.md5)
-    const current = await tx.imageMap.findUnique({
-      where: { id: imageMapId },
-      select: IMAGE_MAP_SELECT,
-    })
-    if (!current) throw new MediaAssetRequestError(404, '图片映射不存在')
-    const finalS3Url = current.s3Url || s3Url
-    const finalExternalUrl = current.externalUrl || externalUrl
-    const finalS3Key = current.s3Key || (finalS3Url === s3Url ? s3Key : null)
-    const nextStorageType = inferStorageType(
-      { localUrl: current.localUrl, s3Url: finalS3Url, externalUrl: finalExternalUrl },
-      strategy
-    )
-    return tx.imageMap.update({
-      where: { id: current.id },
-      data: {
-        ...(finalS3Url !== current.s3Url ? { s3Url: finalS3Url } : {}),
-        ...(finalExternalUrl !== current.externalUrl ? { externalUrl: finalExternalUrl } : {}),
-        ...(finalS3Key !== current.s3Key ? { s3Key: finalS3Key } : {}),
-        storageType: nextStorageType,
-        deletedAt: null,
-        deletedBy: null,
-        retiredAt: null,
-      },
-      select: IMAGE_MAP_SELECT,
-    })
-  })
-  if (errors.length > 0) {
-    logger.warn({ imageMapId, strategy, errors }, '部分媒体存储位置同步失败')
-  }
-  return { imageMap: updated, errors }
-}
+  return prisma
+    .$transaction(async (tx) => {
+      await lockImageContent(tx, initial.md5)
+      const current = await tx.imageMap.findUnique({
+        where: { id: imageMapId },
+        select: IMAGE_MAP_SELECT,
+      })
+      if (!current) throw new MediaAssetRequestError(404, '图片映射不存在')
 
+      const mergedS3Url = current.s3Url || s3Url
+      const mergedExternalUrl = current.externalUrl || externalUrl
+      const mergedS3Key = current.s3Key || s3Key
+      const nextStorageType = inferStorageType(
+        { localUrl: current.localUrl, s3Url: mergedS3Url, externalUrl: mergedExternalUrl },
+        strategy
+      )
+      const nextCloudSyncStatus =
+        strategy === 'local' ? 'skipped' : errors.length > 0 ? 'failed' : 'completed'
+      if (
+        mergedS3Url === current.s3Url &&
+        mergedExternalUrl === current.externalUrl &&
+        mergedS3Key === current.s3Key &&
+        nextStorageType === current.storageType &&
+        nextCloudSyncStatus === current.cloudSyncStatus &&
+        current.deletedAt === null &&
+        current.deletedBy === null &&
+        current.retiredAt === null
+      ) {
+        return current
+      }
+      return tx.imageMap.update({
+        where: { id: imageMapId },
+        data: {
+          ...(mergedS3Url !== current.s3Url ? { s3Url: mergedS3Url } : {}),
+          ...(mergedExternalUrl !== current.externalUrl ? { externalUrl: mergedExternalUrl } : {}),
+          ...(mergedS3Key !== current.s3Key ? { s3Key: mergedS3Key } : {}),
+          storageType: nextStorageType,
+          cloudSyncStatus: nextCloudSyncStatus,
+          deletedAt: null,
+          deletedBy: null,
+          retiredAt: null,
+        },
+        select: IMAGE_MAP_SELECT,
+      })
+    })
+    .then((imageMap) => ({ imageMap, errors }))
+}
 export async function releaseMediaAsset(assetId: string, ownerUid?: string) {
   const now = new Date()
   const retiredAt = getMediaRetiredAt(now)
@@ -804,20 +880,67 @@ export async function releaseMediaAsset(assetId: string, ownerUid?: string) {
         publicUrl: true,
         storageKey: true,
         status: true,
+        imageMap: {
+          select: {
+            md5: true,
+            localUrl: true,
+            externalUrl: true,
+            s3Url: true,
+            thumbnailUrl: true,
+          },
+        },
       },
     })
-    if (!asset) return { released: false, reason: 'asset_not_found' as const }
+    if (!asset) return { released: false, reason: 'asset_not_found' as const, localUrls: [] }
+    const localUrls = [asset.publicUrl, asset.imageMap?.localUrl].filter((value): value is string =>
+      Boolean(value)
+    )
+    const markedAssetDeleted = asset.status !== 'deleted'
     if (ownerUid && asset.ownerUid !== ownerUid) {
       throw new MediaAssetRequestError(403, '无权释放该媒体资源')
     }
-    if (!asset.imageMapId) {
+    if (!asset.imageMapId || !asset.imageMap) {
       if (asset.status !== 'deleted') {
         await tx.mediaAsset.update({ where: { id: asset.id }, data: { status: 'deleted' } })
       }
-      return { released: true, imageMapId: null }
+      return {
+        released: true,
+        imageMapId: asset.imageMapId,
+        retiredAt: null,
+        localUrls,
+        markedAssetDeleted,
+      }
     }
-    const references = await collectMediaReferences()
 
+    await lockImageContent(tx, asset.imageMap.md5)
+    await tx.$executeRaw(
+      Prisma.sql`SELECT id FROM "ImageMap" WHERE id = ${asset.imageMapId} FOR UPDATE`
+    )
+    const imageMap = await tx.imageMap.findUnique({
+      where: { id: asset.imageMapId },
+      select: {
+        id: true,
+        deletedAt: true,
+        localUrl: true,
+        externalUrl: true,
+        s3Url: true,
+        thumbnailUrl: true,
+      },
+    })
+    if (!imageMap) {
+      if (asset.status !== 'deleted') {
+        await tx.mediaAsset.update({ where: { id: asset.id }, data: { status: 'deleted' } })
+      }
+      return {
+        released: true,
+        imageMapId: asset.imageMapId,
+        retiredAt: null,
+        localUrls,
+        markedAssetDeleted,
+      }
+    }
+
+    const references = await collectMediaReferences()
     const remainingClaims = await tx.mediaAsset.count({
       where: {
         imageMapId: asset.imageMapId,
@@ -827,7 +950,14 @@ export async function releaseMediaAsset(assetId: string, ownerUid?: string) {
     })
     const externallyReferenced = isMediaReferenced(references, {
       assetId: asset.id,
-      urls: [asset.publicUrl],
+      imageMapId: asset.imageMapId,
+      urls: [
+        asset.publicUrl,
+        imageMap.localUrl,
+        imageMap.s3Url,
+        imageMap.externalUrl,
+        imageMap.thumbnailUrl,
+      ],
       storageKeys: [asset.storageKey],
     })
     if (externallyReferenced) {
@@ -839,12 +969,15 @@ export async function releaseMediaAsset(assetId: string, ownerUid?: string) {
         reason: 'still_referenced' as const,
         imageMapId: asset.imageMapId,
         retiredAt: null,
+        localUrls,
+        markedAssetDeleted: false,
       }
     }
+
     if (asset.status !== 'deleted') {
       await tx.mediaAsset.update({ where: { id: asset.id }, data: { status: 'deleted' } })
     }
-    if (remainingClaims === 0) {
+    if (remainingClaims === 0 && !imageMap.deletedAt) {
       await tx.imageMap.updateMany({
         where: { id: asset.imageMapId, deletedAt: null },
         data: { retiredAt },
@@ -853,7 +986,9 @@ export async function releaseMediaAsset(assetId: string, ownerUid?: string) {
     return {
       released: true,
       imageMapId: asset.imageMapId,
-      retiredAt: remainingClaims === 0 ? retiredAt : null,
+      retiredAt: remainingClaims === 0 && !imageMap.deletedAt ? retiredAt : null,
+      localUrls,
+      markedAssetDeleted,
     }
   })
 }
@@ -863,12 +998,6 @@ export async function rollbackUploadSessionSlot(sessionId: string) {
     where: { id: sessionId, status: 'open', uploadedFiles: { gt: 0 } },
     data: { uploadedFiles: { decrement: 1 } },
   })
-}
-
-async function calculateFileMd5FromPath(filePath: string) {
-  const { createHash } = await import('node:crypto')
-  const buffer = await fs.readFile(filePath)
-  return createHash('md5').update(buffer).digest('hex')
 }
 
 async function fileExists(filePath: string) {

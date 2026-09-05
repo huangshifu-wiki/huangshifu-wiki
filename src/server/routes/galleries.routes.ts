@@ -774,6 +774,11 @@ router.post(
             requestedAssetIds,
             req.authUser!.uid
           )
+          if (
+            new Set(orderedAssets.map((asset) => asset.imageMapId)).size !== orderedAssets.length
+          ) {
+            throw new MediaAssetRequestError(400, '图片列表包含重复图片内容')
+          }
           const slug = await allocateNumericSlug(tx, 'Gallery')
           const created = await tx.gallery.create({
             data: {
@@ -1566,10 +1571,12 @@ router.post(
             .filter((id): id is string => Boolean(id))
         )
         const orderedAssets = await getReadyAssetsForOwner(tx, assetIds, req.authUser!.uid)
-        for (const asset of orderedAssets) {
-          if (existingImageMapIds.has(asset.imageMapId)) {
-            throw new MediaAssetRequestError(400, '图片列表包含已存在的相同图片内容')
-          }
+        const requestedImageMapIds = orderedAssets.map((asset) => asset.imageMapId)
+        if (
+          new Set(requestedImageMapIds).size !== requestedImageMapIds.length ||
+          requestedImageMapIds.some((imageMapId) => existingImageMapIds.has(imageMapId))
+        ) {
+          throw new MediaAssetRequestError(400, '图片列表包含已存在的相同图片内容')
         }
 
         const baseSortOrder = lockedGallery.images.length
