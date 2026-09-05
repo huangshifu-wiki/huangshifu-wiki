@@ -598,7 +598,9 @@ export const AdminMaintenance = () => {
           <Images size={24} className="shrink-0 text-brand-gold" aria-hidden="true" />
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-[0.12em] text-text-primary">媒体维护</h1>
-            <p className="mt-1 text-sm text-text-muted">检查并修复图片关系、缩略图和无引用文件。（这块除了GPT估计tm只有零个人懂现在）</p>
+            <p className="mt-1 text-sm text-text-muted">
+              检查并修复图片关系、缩略图和无引用文件。（这块除了GPT估计tm只有零个人懂现在）
+            </p>
           </div>
         </div>
         <Button
