@@ -234,6 +234,8 @@ describe('matchBackLabel', () => {
     expect(matchBackLabel('/forum/abc')).toBeNull()
     expect(matchBackLabel('/users/u1/favorites')).toBe('返回收藏')
     expect(matchBackLabel('/users/u1')).toBe('返回个人主页')
+    expect(matchBackLabel('/more')).toBe('返回更多')
+    expect(matchBackLabel('/more/')).toBe('返回更多')
     expect(matchBackLabel('/')).toBe('返回首页')
     expect(matchBackLabel('/wiki/foo')).toBe('返回页面')
     expect(matchBackLabel('/wiki')).toBe('返回百科列表')

@@ -22,6 +22,7 @@ const ORIGIN_BACK_LABELS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^\/gallery\/?$/, '返回图集列表'],
   [/^\/forum\/?$/, '返回论坛列表'],
   [/^\/users\//, '返回个人主页'],
+  [/^\/more\/?$/, '返回更多'],
   [/^\/wiki\/[^/]+$/, '返回页面'],
   [/^\/wiki$/, '返回百科列表'],
 ]

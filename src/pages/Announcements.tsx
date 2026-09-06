@@ -1,8 +1,9 @@
 import React, { useCallback, useState } from 'react'
-import { ChevronLeft, Megaphone } from '@/src/components/icons'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Megaphone } from '@/src/components/icons'
+import { useSearchParams } from 'react-router-dom'
 import { apiGet } from '../lib/apiClient'
 import { getErrorMessage } from '../lib/errorHandler'
+import { SmartBackLink } from '../components/SmartBackLink'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import Pagination from '../components/Pagination'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
@@ -118,13 +119,11 @@ const Announcements = () => {
   return (
     <div className="mobile-page-shell">
       <div className="mobile-page-container max-w-[900px]">
-        <Link
-          to="/"
+        <SmartBackLink
+          fallbackTo="/more"
+          fallbackLabel="返回更多"
           className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-6"
-        >
-          <ChevronLeft size={16} />
-          返回首页
-        </Link>
+        />
 
         <div className="mobile-page-titlebar mb-6">
           <div>
