@@ -11,7 +11,6 @@ import {
 import {
   buildSitemapIndexXml,
   buildSitemapXml,
-  escapeXml,
   getPublicSiteUrl,
   getRobotsDirective,
   isDocumentPath,
@@ -136,11 +135,7 @@ describe('getPublicSiteUrl', () => {
   })
 })
 
-describe('escapeXml 与 sitemap XML 构建', () => {
-  it('转义 XML 保留字符', () => {
-    expect(escapeXml(`a&b<c>"d'e`)).toBe('a&amp;b&lt;c&gt;&quot;d&apos;e')
-  })
-
+describe('sitemap XML 构建', () => {
   it('urlset 输出转义 loc 与 ISO lastmod，且不带 query/hash', () => {
     const entries: SitemapEntry[] = [
       { path: '/wiki/a&b?x=1#top', lastmod: new Date('2024-01-02T03:04:05.000Z') },

@@ -584,33 +584,6 @@ export async function syncTextEmbeddingBatch(
   return { processed: candidates.length, succeeded, failed }
 }
 
-export async function deleteTextEmbeddingsForSource(
-  prisma: PrismaClient,
-  sourceType: string,
-  sourceId: string
-): Promise<void> {
-  const chunks = await prisma.textEmbeddingChunk.findMany({
-    where: { sourceType, sourceId },
-    select: { id: true, qdrantPointId: true },
-  })
-
-  for (const chunk of chunks) {
-    if (chunk.qdrantPointId) {
-      try {
-        await deleteTextEmbeddingPoint(chunk.qdrantPointId)
-      } catch (error) {
-        console.warn(
-          `[TextEmbeddingSync] 删除 Qdrant 点失败: pointId=${chunk.qdrantPointId}, error=${(error as Error).message}`
-        )
-      }
-    }
-  }
-
-  await prisma.textEmbeddingChunk.deleteMany({
-    where: { sourceType, sourceId },
-  })
-}
-
 export async function retryFailedTextEmbeddings(
   prisma: PrismaClient,
   options: { limit?: number; sourceType?: TextEmbeddingSourceType } = {}

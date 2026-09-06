@@ -9,7 +9,7 @@ import { isProductionRuntime } from './runtimeEnv'
 export { EmailVerificationPurpose }
 
 export const EMAIL_VERIFICATION_CONFIG_KEY = 'email_verification'
-export const EMAIL_VERIFICATION_TOKEN_BYTES = 32
+const EMAIL_VERIFICATION_TOKEN_BYTES = 32
 
 export type EmailVerificationConfig = {
   enabled: boolean
@@ -37,14 +37,9 @@ export type EmailVerificationAdminConfig = Omit<EmailVerificationConfig, 'smtpPa
   smtpPassSet: boolean
 }
 
-export type EmailVerificationConfigUpdate = Partial<EmailVerificationConfig>
+type EmailVerificationConfigUpdate = Partial<EmailVerificationConfig>
 
-export type EmailVerificationConfigResponse = {
-  success: boolean
-  config: EmailVerificationAdminConfig
-}
-
-export type EmailVerificationErrorCode =
+type EmailVerificationErrorCode =
   | 'INVALID_TOKEN'
   | 'TOKEN_EXPIRED'
   | 'MAIL_NOT_CONFIGURED'

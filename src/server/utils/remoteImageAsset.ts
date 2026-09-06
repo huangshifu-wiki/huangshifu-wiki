@@ -144,7 +144,7 @@ async function downloadRemoteImageBuffer(url: URL) {
   }
 }
 
-export async function findReadyMediaAssetByPublicUrl(
+async function findReadyMediaAssetByPublicUrl(
   publicUrl: string
 ): Promise<LocalizedImageAsset | null> {
   const asset = await prisma.mediaAsset.findFirst({

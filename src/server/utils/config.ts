@@ -10,7 +10,7 @@ export { prisma }
 import { enhancedCache, CACHE_KEYS } from './cache'
 import { runtimeConfigService } from '../services/runtimeConfig.service'
 import { isWechatLoginMockEnabled } from './runtimeEnv'
-import type { MusicPlatform, PlayUrlCacheValue } from '../types'
+import type { MusicPlatform } from '../types'
 
 // axios 默认配置
 axios.defaults.timeout = parseInt(process.env.AXIOS_DEFAULT_TIMEOUT || '15000', 10)
@@ -32,7 +32,6 @@ fs.mkdirSync(backupsDir, { recursive: true })
 // 环境变量常量（秘密与部署配置）
 export const BACKUP_PASSWORD = process.env.BACKUP_PASSWORD || ''
 export const WECHAT_LOGIN_MOCK = isWechatLoginMockEnabled()
-export const playUrlCache = new Map<string, PlayUrlCacheValue>()
 
 // 音乐平台默认列表
 export const DEFAULT_MUSIC_PLATFORMS: MusicPlatform[] = [

@@ -306,14 +306,6 @@ type WikiPullRequestWithRelations = {
 
 const WIKI_RELATION_SCAN_LIMIT = 800
 const MUSIC_SECTION_ID = 'music'
-const EDIT_LOCK_COLLECTION_ALLOWLIST = new Set([
-  'songs',
-  'albums',
-  'galleries',
-  'activities',
-  'wiki',
-  'posts',
-])
 const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'])
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
@@ -362,7 +354,6 @@ export type {
 export {
   WIKI_RELATION_SCAN_LIMIT,
   MUSIC_SECTION_ID,
-  EDIT_LOCK_COLLECTION_ALLOWLIST,
   ALLOWED_IMAGE_EXTENSIONS,
   ALLOWED_IMAGE_MIME_TYPES,
 }

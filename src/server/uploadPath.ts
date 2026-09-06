@@ -35,11 +35,6 @@ export function createUploadStorageInfo(
   return { storageKey, absoluteDir, fileName }
 }
 
-export function createLegacyUploadFileName(originalName: string) {
-  const ext = path.extname(originalName).toLowerCase()
-  return `${crypto.randomUUID()}${ext || ''}`
-}
-
 export function buildUploadPublicUrl(storageKey: string) {
   const normalized = storageKey.replace(/\\/g, '/').replace(/^\/+/, '')
   const encoded = normalized

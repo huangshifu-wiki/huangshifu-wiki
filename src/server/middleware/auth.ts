@@ -13,9 +13,9 @@ const JWT_SECRET = process.env.JWT_SECRET
 const AUTH_COOKIE_NAME = 'hsf_token'
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 export const AUTH_SESSION_DAYS = 90
-export const AUTH_SESSION_TTL_SECONDS = AUTH_SESSION_DAYS * 24 * 60 * 60
-export const AUTH_SESSION_TTL_MS = AUTH_SESSION_DAYS * ONE_DAY_MS
-export const AUTH_REFRESH_THRESHOLD_SECONDS = 30 * 24 * 60 * 60
+const AUTH_SESSION_TTL_SECONDS = AUTH_SESSION_DAYS * 24 * 60 * 60
+const AUTH_SESSION_TTL_MS = AUTH_SESSION_DAYS * ONE_DAY_MS
+const AUTH_REFRESH_THRESHOLD_SECONDS = 30 * 24 * 60 * 60
 const IS_PROD = process.env.NODE_ENV === 'production'
 
 type CachedAuthUser = {

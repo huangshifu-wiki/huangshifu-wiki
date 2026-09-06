@@ -50,24 +50,6 @@ describe('uploadPath', () => {
     })
   })
 
-  describe('createLegacyUploadFileName', () => {
-    it('generates filename with original extension', () => {
-      const name = uploadPath.createLegacyUploadFileName('document.pdf')
-      expect(name).toMatch(/\.pdf$/)
-    })
-
-    it('handles files without extension', () => {
-      const name = uploadPath.createLegacyUploadFileName('README')
-      expect(name.length).toBeGreaterThan(0)
-    })
-
-    it('generates unique names', () => {
-      const n1 = uploadPath.createLegacyUploadFileName('a.txt')
-      const n2 = uploadPath.createLegacyUploadFileName('a.txt')
-      expect(n1).not.toBe(n2)
-    })
-  })
-
   describe('buildUploadPublicUrl', () => {
     it('builds URL with /uploads/ prefix', () => {
       const url = uploadPath.buildUploadPublicUrl('wiki/2025/06/photo.jpg')

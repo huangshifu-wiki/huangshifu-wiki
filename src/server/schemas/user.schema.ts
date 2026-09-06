@@ -1,7 +1,5 @@
 import { z } from 'zod'
 
-import { passwordSchema } from './auth.schema'
-
 export const userEmailUpdateSchema = z.object({
   currentPassword: z.string({ error: '当前密码不能为空' }).min(1, '当前密码不能为空'),
   newEmail: z
@@ -23,9 +21,4 @@ export const userEmailUpdateSchema = z.object({
         })
       }
     }),
-})
-
-export const userPasswordUpdateSchema = z.object({
-  currentPassword: z.string({ error: '当前密码不能为空' }).min(1, '当前密码不能为空'),
-  newPassword: passwordSchema,
 })

@@ -9,7 +9,6 @@ export {
   DEFAULT_MUSIC_PLATFORMS,
   BACKUP_PASSWORD,
   WECHAT_LOGIN_MOCK,
-  playUrlCache,
   defaultUploadsDir,
   isSemanticSearchEnabled,
 } from './config'
@@ -43,8 +42,6 @@ export {
   parseFavoriteType,
   parseMusicPlatform,
   parseDisplayAlbumMode,
-  parseBrowsingTargetType,
-  parseModerationTargetType,
   normalizeModerationTargetType,
   parsePostSort,
   parsePagination,
@@ -57,7 +54,6 @@ export {
   nullableLimitedString,
   limitedStringArray,
   ensureTextLimit,
-  trimText,
 } from './textLimits'
 
 export { allocateNumericSlug, isNumericSlug, withNumericSlugTransaction } from './numericSlug'
@@ -68,23 +64,12 @@ export {
   buildUniqueDisplayNameFallback,
   normalizeDisplayNameFallback,
   validateUserDisplayName,
-  type DisplayNameValidationResult,
 } from './display-name'
 
 // === Wiki 关系引擎 ===
 export {
-  RELATION_LABEL_TO_TYPE,
-  normalizeWikiRelationType,
-  normalizeWikiRelationLabel,
-  normalizeWikiRelationList,
   normalizeWikiRelationListForWrite,
   serializeRelations,
-  relationTypeLabel,
-  relationIdentityKey,
-  buildWikiReverseRelationIndex,
-  buildResolvedWikiRelations,
-  buildWikiRelationGraph,
-  findWikiRelationCenterPage,
   buildWikiRelationBundle,
   clearWikiRelationCache,
 } from './wiki-relations'
@@ -99,18 +84,15 @@ export {
   buildWikiVisibilityWhere,
   buildPostVisibilityWhere,
   buildGalleryVisibilityWhere,
-  canManageWikiPullRequest,
 } from './authorization'
 export { fetchVisibleTagSuggestions } from './tagSuggestions'
 
 export {
   SOFT_DELETE_TABS,
-  isSoftDeleteTab,
   includeDeletedFromQuery,
   deletedAtFilter,
   softDeleteData,
   restoreDeleteData,
-  SELF_DELETE_REASON,
   normalizeDeleteReason,
   resolveDeleteReason,
 } from './soft-delete'
@@ -133,13 +115,11 @@ export {
   toEditLockResponse,
   toUserResponse,
   toUploadSessionResponse,
-  toMediaAssetResponse,
   toSongResponse,
   toAlbumResponse,
 } from './response-transformers'
 
 export {
-  buildCommentResponses,
   fetchPostCommentsForResponse,
   fetchPostCommentsPageForResponse,
   fetchGalleryCommentsForResponse,
@@ -148,7 +128,7 @@ export {
   deleteCommentLike,
 } from './comments'
 
-export { findReadyMediaAssetByPublicUrl, localizeImageUrlAsMediaAsset } from './remoteImageAsset'
+export { localizeImageUrlAsMediaAsset } from './remoteImageAsset'
 
 // === 音乐全链路 ===
 export {
@@ -157,16 +137,10 @@ export {
   resolveAlbumCoverUrl,
   resolveSongCoverThumbnailUrl,
   resolveAlbumCoverThumbnailUrl,
-  normalizeSongCustomPlatformLinkUrl,
   normalizeSongCustomPlatformLinks,
-  getPlatformSourceId,
-  buildPlaybackPlatformCandidates,
   normalizeMusicExternalSourceInputs,
   findDuplicateSongSources,
   findDuplicateAlbumSources,
-  clearExpiredPlayUrlCache,
-  getCachedPlayUrl,
-  setCachedPlayUrl,
   resolveMusicPlayUrl,
   normalizeMusicImportTracks,
   buildMusicMetadataFillUpdateData,
@@ -184,7 +158,7 @@ export {
   findMusicDocIdsByArtistPartial,
   ensureDisplayRelation,
 } from './music'
-export { diffImportTrackWithExisting, batchMatchAndDiffImportTracks } from './musicImportMatch'
+export { batchMatchAndDiffImportTracks } from './musicImportMatch'
 export type {
   DuplicateSongSourceWarning,
   DuplicateAlbumSourceWarning,
@@ -198,7 +172,6 @@ export type {
   SongImportExistingSongSummary,
   SongImportMatchResult,
   SongImportMatchSummary,
-  MusicImportTrackWithMeta,
 } from './musicImportMatch'
 
 // === 通知与用户行为 ===
@@ -211,14 +184,13 @@ export {
 } from './notifications'
 
 export {
-  resolveMentionTargetsForNames,
   resolveMentionTargetsForText,
   buildMentionTargetsByTextKey,
   notifyMentionUsers,
 } from './mentions'
 
 // === 帖子热度 ===
-export { calculatePostHotScore, refreshPostHotScore } from './post-scoring'
+export { calculatePostHotScore } from './post-scoring'
 
 // === 微信登录 ===
 export {
@@ -246,8 +218,6 @@ export {
 // === 文件上传与存储 ===
 export {
   normalizeTrackDiscPayload,
-  normalizeEditLockCollection,
-  normalizeEditLockRecordId,
   createUploadSessionExpiresAt,
   isUploadSessionExpired,
   buildUploadPublicUrl,
@@ -255,20 +225,15 @@ export {
   resolveUploadPathByUrl,
   extractStorageKeyFromUploadUrl,
   safeDeleteUploadFileByStorageKey,
-  safeDeleteUploadFileByUrl,
   uploadFileToS3,
-  uploadFileToExternal,
   uploadToSuperbed,
   deleteFromSuperbed,
   validateUploadedImage,
-  detectImageMimeType,
-  getUploadFileStorageKey,
 } from './upload'
 
 // === 备份与安全工具 ===
 export {
   parseDatabaseUrl,
-  verifyBackupPassword,
   sanitizeFilename,
   formatBackupTimestamp,
   formatFileSize,
@@ -310,13 +275,11 @@ export {
 
 // === 已有独立模块（保持原导出方式）===
 export * from './cache'
-export { calculateFileMD5, calculateBufferMD5 } from './hash'
+export { calculateFileMD5 } from './hash'
 
 // === SEO（robots / sitemap / 文档 X-Robots-Tag）===
 export {
-  PUBLIC_SITE_URL_ENV,
   getPublicSiteUrl,
-  escapeXml,
   buildSitemapXml,
   buildSitemapIndexXml,
   getRobotsDirective,

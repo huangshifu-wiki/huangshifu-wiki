@@ -17,16 +17,13 @@ vi.mock('@prisma/client', () => ({
 import {
   searchRegions,
   getRegionByCode,
-  getRegionTree,
   getProvinces,
   getCitiesByProvince,
   getDistrictsByCity,
-  getFullRegionPath,
   findMostCommonRegion,
   fuzzyMatchRegion,
   suggestRegions,
   type RegionSearchResult,
-  type RegionTreeNode,
 } from '../../src/server/location/locationService'
 
 describe('locationService', () => {
@@ -46,12 +43,6 @@ describe('locationService', () => {
     })
   })
 
-  describe('getRegionTree', () => {
-    it('is a function', () => {
-      expect(typeof getRegionTree).toBe('function')
-    })
-  })
-
   describe('getProvinces', () => {
     it('is a function', () => {
       expect(typeof getProvinces).toBe('function')
@@ -67,12 +58,6 @@ describe('locationService', () => {
   describe('getDistrictsByCity', () => {
     it('is a function', () => {
       expect(typeof getDistrictsByCity).toBe('function')
-    })
-  })
-
-  describe('getFullRegionPath', () => {
-    it('is a function', () => {
-      expect(typeof getFullRegionPath).toBe('function')
     })
   })
 
@@ -126,39 +111,6 @@ describe('locationService', () => {
       }
       expect(result.code).toBe('110000')
       expect(result.levelName).toBe('省级')
-    })
-  })
-
-  describe('RegionTreeNode type', () => {
-    it('accepts valid node', () => {
-      const node: RegionTreeNode = {
-        code: '110000',
-        name: '北京市',
-        fullName: '北京市',
-        level: 1,
-        levelName: '省级',
-      }
-      expect(node.code).toBe('110000')
-    })
-
-    it('accepts node with children', () => {
-      const node: RegionTreeNode = {
-        code: '110000',
-        name: '北京市',
-        fullName: '北京市',
-        level: 1,
-        levelName: '省级',
-        children: [
-          {
-            code: '110100',
-            name: '北京市',
-            fullName: '北京市',
-            level: 2,
-            levelName: '地级',
-          },
-        ],
-      }
-      expect(node.children).toHaveLength(1)
     })
   })
 })

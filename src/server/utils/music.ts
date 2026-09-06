@@ -211,7 +211,7 @@ export async function enqueueMusicCoverThumbnail(
 
 // ─── 自定义链接函数 ──────────────────────────────────────────────
 
-export function normalizeSongCustomPlatformLinkUrl(value: string) {
+function normalizeSongCustomPlatformLinkUrl(value: string) {
   const trimmed = value.trim()
   if (!trimmed) {
     return ''
@@ -279,7 +279,7 @@ export function normalizeSongCustomPlatformLinks(input: unknown): SongCustomPlat
 
 // ─── 平台解析函数 ────────────────────────────────────────────────
 
-export function getPlatformSourceId(
+function getPlatformSourceId(
   sources: Array<{ platform: MusicPlatform; sourceId: string; isPrimary?: boolean }>,
   platform: MusicPlatform
 ): string {
@@ -287,7 +287,7 @@ export function getPlatformSourceId(
   return source?.sourceId.trim() || ''
 }
 
-export function buildPlaybackPlatformCandidates(song: {
+function buildPlaybackPlatformCandidates(song: {
   externalSources?: Array<{ platform: MusicPlatform; isPrimary?: boolean }>
 }): MusicPlatform[] {
   const deduped = new Set<MusicPlatform>()
@@ -445,7 +445,7 @@ function isValidPlayUrl(url: string) {
   return true
 }
 
-export function clearExpiredPlayUrlCache() {
+function clearExpiredPlayUrlCache() {
   const prefix = `${CACHE_KEYS.MUSIC_PLAY_URL}:`
   const allKeys = enhancedCache.getNativeStats().keys as unknown as string[] | undefined
   if (!allKeys) {
@@ -463,7 +463,7 @@ export function clearExpiredPlayUrlCache() {
   }
 }
 
-export function getCachedPlayUrl(cacheKey: string) {
+function getCachedPlayUrl(cacheKey: string) {
   const enhancedKey = `${CACHE_KEYS.MUSIC_PLAY_URL}:${cacheKey}`
   const cached = enhancedCache.get<PlayUrlCacheValue>(enhancedKey)
   if (cached && cached.expiresAt > Date.now()) {
@@ -475,7 +475,7 @@ export function getCachedPlayUrl(cacheKey: string) {
   return null
 }
 
-export function setCachedPlayUrl(
+function setCachedPlayUrl(
   cacheKey: string,
   value: Omit<PlayUrlCacheValue, 'fetchedAt' | 'expiresAt'>
 ) {

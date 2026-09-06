@@ -29,7 +29,7 @@ const syncTasks = new Map<string, SyncProgress>()
 /**
  * 获取或创建同步任务
  */
-export function getOrCreateSyncTask(strategy: 's3' | 'external'): SyncProgress {
+function getOrCreateSyncTask(strategy: 's3' | 'external'): SyncProgress {
   for (const task of syncTasks.values()) {
     if (task.strategy === strategy && task.status !== 'completed' && task.status !== 'failed') {
       return task
@@ -99,7 +99,7 @@ function isSyncCancelled(task: SyncProgress) {
   return task.status === 'failed'
 }
 
-export async function executeSyncTask(taskId: string): Promise<void> {
+async function executeSyncTask(taskId: string): Promise<void> {
   const task = syncTasks.get(taskId)
   if (!task) {
     console.error(`[ImageSync] 任务不存在: ${taskId}`)

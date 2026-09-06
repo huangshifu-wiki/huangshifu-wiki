@@ -47,7 +47,7 @@ const router = Router()
 
 const SEARCH_PAGE_SIZE = 20
 const VECTOR_SCAN_BATCH_SIZE = 100
-export const RRF_K = 60
+const RRF_K = 60
 const MAX_MATCHED_LINES_PER_SONG = 30
 
 function makeSearchPage<T>(items: T[], total: number, pagination: { page: number; limit: number }) {
@@ -585,7 +585,7 @@ export function rrfScore(ranks: Array<number | undefined>): number {
   }, 0)
 }
 
-export async function fetchVectorSearchWithTimeout(
+async function fetchVectorSearchWithTimeout(
   q: string,
   _limit: number,
   minScore: number,

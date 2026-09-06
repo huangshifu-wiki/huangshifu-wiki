@@ -6,12 +6,7 @@
 import NodeCache from 'node-cache'
 import { runtimeConfigService } from '../services/runtimeConfig.service'
 
-export interface CacheEntry<T> {
-  value: T
-  expiresAt: number
-}
-
-export interface CacheStats {
+interface CacheStats {
   hits: number
   misses: number
   size: number
@@ -104,12 +99,6 @@ class EnhancedCache {
 
   getNativeStats(): NodeCache.Stats {
     return this.cache.getStats()
-  }
-
-  destroy(): void {
-    this.cache.close()
-    this.hits = 0
-    this.misses = 0
   }
 
   static generateKey(prefix: string, ...parts: (string | number | boolean | undefined)[]): string {

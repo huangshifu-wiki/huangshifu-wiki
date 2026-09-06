@@ -10,15 +10,6 @@ export interface RegionSearchResult {
   parentCode: string | null
 }
 
-export interface RegionTreeNode {
-  code: string
-  name: string
-  fullName: string
-  level: number
-  levelName: string
-  children?: RegionTreeNode[]
-}
-
 const LEVEL_NAMES: Record<number, string> = {
   1: '省级',
   2: '地级',
@@ -80,27 +71,6 @@ export async function getRegionByCode(code: string): Promise<RegionSearchResult 
   return formatRegion(region)
 }
 
-export async function getRegionTree(
-  parentCode: string | null = null,
-  maxDepth: number = 3
-): Promise<RegionTreeNode[]> {
-  const regions = await prisma.region.findMany({
-    where: {
-      parentCode,
-      level: { lte: maxDepth },
-    },
-    orderBy: { sortOrder: 'asc' },
-  })
-
-  return regions.map((region) => ({
-    code: region.code,
-    name: region.name,
-    fullName: region.fullName,
-    level: region.level,
-    levelName: LEVEL_NAMES[region.level] || `Level ${region.level}`,
-  }))
-}
-
 export async function getProvinces(): Promise<RegionSearchResult[]> {
   const regions = await prisma.region.findMany({
     where: { level: 1 },
@@ -122,19 +92,6 @@ export async function getDistrictsByCity(cityCode: string): Promise<RegionSearch
     where: { level: 3, parentCode: cityCode },
     orderBy: { sortOrder: 'asc' },
   })
-  return regions.map(formatRegion)
-}
-
-export async function getFullRegionPath(code: string): Promise<RegionSearchResult[]> {
-  const region = await prisma.region.findUnique({ where: { code } })
-  if (!region) return []
-
-  const pathCodes = region.path.split(',')
-  const regions = await prisma.region.findMany({
-    where: { code: { in: pathCodes } },
-    orderBy: { level: 'asc' },
-  })
-
   return regions.map(formatRegion)
 }
 

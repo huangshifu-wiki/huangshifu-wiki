@@ -108,19 +108,6 @@ async function resolveMentionTargetsForMatches(matches: MentionMatch[]) {
   )
 }
 
-export async function resolveMentionTargetsForNames(names: string[]) {
-  const usersByName = await findMentionUsersByNames(names)
-  const targets: MentionTarget[] = []
-
-  for (const users of usersByName.values()) {
-    if (users.length !== 1) continue
-    const user = users[0]
-    targets.push(toMentionTarget(user))
-  }
-
-  return targets
-}
-
 export async function resolveMentionTargetsForText(content: string) {
   return resolveMentionTargetsForMatches(extractMentionMatches(content))
 }

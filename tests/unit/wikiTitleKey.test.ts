@@ -4,7 +4,6 @@ import {
   buildLegacyDuplicateWikiTitleKey,
   getWikiUniqueConflictMessage,
   normalizeWikiTitleKey,
-  WIKI_TITLE_CONFLICT_MESSAGE,
 } from '../../src/server/wiki/wikiTitleKey'
 
 describe('wikiTitleKey', () => {
@@ -25,7 +24,7 @@ describe('wikiTitleKey', () => {
         code: 'P2002',
         meta: { target: ['titleKey'] },
       })
-    ).toBe(WIKI_TITLE_CONFLICT_MESSAGE)
+    ).toBe('该标题的百科已存在，请修改标题或编辑已有页面')
   })
 
   it('maps slug unique constraint errors to a conflict message', () => {

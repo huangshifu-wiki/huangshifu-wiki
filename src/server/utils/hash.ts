@@ -24,12 +24,3 @@ export async function calculateFileMD5(filePath: string): Promise<string> {
     })
   })
 }
-
-/**
- * 计算缓冲区的 MD5 哈希值
- * @param buffer 数据缓冲区
- * @returns MD5 哈希值（十六进制字符串）
- */
-export function calculateBufferMD5(buffer: Buffer): string {
-  return crypto.createHash('md5').update(buffer).digest('hex')
-}

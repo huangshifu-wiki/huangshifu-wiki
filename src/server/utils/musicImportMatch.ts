@@ -52,7 +52,7 @@ export interface SongImportMatchSummary {
   identicalCount: number
 }
 
-export type MusicImportTrackWithMeta = MusicImportTrack & {
+type MusicImportTrackWithMeta = MusicImportTrack & {
   durationMs?: number | null
   releaseDate?: string | null
   lyric?: string | null
@@ -109,7 +109,7 @@ function titleArtistKey(title: string, artists: string[]): string {
   return `${normalizeText(title)}:::${normalizeStringListInput(artists).join(':::')}`
 }
 
-export function diffImportTrackWithExisting(params: {
+function diffImportTrackWithExisting(params: {
   platform: MusicPlatform
   track: MusicImportTrackWithMeta
   existingSong: SongImportExistingSongSummary | null

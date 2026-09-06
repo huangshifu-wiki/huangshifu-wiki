@@ -2,7 +2,7 @@ import type { Request } from 'express'
 import { isPrivateSeoPath } from '../../lib/seoPrivatePaths'
 import { logger } from './logger'
 
-export const PUBLIC_SITE_URL_ENV = 'PUBLIC_SITE_URL'
+const PUBLIC_SITE_URL_ENV = 'PUBLIC_SITE_URL'
 
 // 生成站点根 URL：优先读取 PUBLIC_SITE_URL；未配置或非法时退回请求协议 + Host
 export const getPublicSiteUrl = (req: Request): string => {
@@ -25,7 +25,7 @@ export const getPublicSiteUrl = (req: Request): string => {
 }
 
 // 转义 XML 保留字符
-export const escapeXml = (value: string): string =>
+const escapeXml = (value: string): string =>
   value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

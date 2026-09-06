@@ -127,7 +127,7 @@ let hfReachabilityCache: boolean | null = null
 const HF_PROBE_URL = 'https://huggingface.co'
 const DEFAULT_HF_PROBE_TIMEOUT = 5000
 
-export async function probeHuggingFaceReachability(): Promise<boolean> {
+async function probeHuggingFaceReachability(): Promise<boolean> {
   if (hfReachabilityCache !== null) {
     return hfReachabilityCache
   }
@@ -163,10 +163,6 @@ export async function probeHuggingFaceReachability(): Promise<boolean> {
     hfReachabilityCache = false
     return false
   }
-}
-
-export function getHfReachability(): boolean | null {
-  return hfReachabilityCache
 }
 
 function findOnnxFiles(dir: string): string[] {

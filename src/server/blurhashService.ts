@@ -167,12 +167,6 @@ export async function generateBlurhashFromFile(filePath: string): Promise<string
   }
 }
 
-export async function generateThumbhashFromFile(_filePath: string): Promise<string | null> {
-  // Thumbhash generation is not prioritized; returning null as placeholder.
-  console.log('[Thumbhash] Thumbhash generation not yet implemented')
-  return null
-}
-
 export async function generateImageHashesFromFile(filePath: string): Promise<BlurhashResult> {
   const config = getBlurhashConfig()
   if (!config.enabled) {
@@ -203,21 +197,4 @@ export async function generateImageHashesFromFile(filePath: string): Promise<Blu
   }
 
   return result
-}
-
-export async function refreshImageHashesFromFile(filePath: string): Promise<BlurhashResult> {
-  const cacheKey = `hashes_file_${filePath}`
-  blurhashCache.delete(cacheKey)
-  blurhashCache.delete(`blurhash_file_${filePath}`)
-
-  return generateImageHashesFromFile(filePath)
-}
-
-export function clearBlurhashCache(): void {
-  blurhashCache.clear()
-  console.log('[Blurhash] Cache cleared')
-}
-
-export function getBlurhashCacheSize(): number {
-  return Math.floor(blurhashCache.size / 2)
 }

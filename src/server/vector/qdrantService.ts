@@ -350,31 +350,6 @@ export async function searchImageEmbeddingPoints(params: {
   }))
 }
 
-/**
- * 删除图片向量嵌入点
- */
-export async function deleteImageEmbeddingPoint(pointId: string) {
-  await ensureQdrantCollection()
-  const client = getQdrantClient()
-  const collectionName = getQdrantCollectionName()
-
-  await client.delete(collectionName, {
-    wait: true,
-    points: [pointId],
-  })
-}
-
-export async function healthCheck(): Promise<{ status: string; latencyMs: number }> {
-  const start = Date.now()
-  try {
-    const client = getQdrantClient()
-    await client.getCollections()
-    return { status: 'ok', latencyMs: Date.now() - start }
-  } catch (error) {
-    return { status: 'error', latencyMs: Date.now() - start }
-  }
-}
-
 export async function upsertTextEmbeddingPoint(params: {
   pointId: string
   vector: number[]

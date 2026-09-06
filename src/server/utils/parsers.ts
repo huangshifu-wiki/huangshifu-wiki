@@ -4,7 +4,6 @@ import type {
   ContentStatus,
   FavoriteTargetType,
   ModerationTargetType,
-  BrowsingTargetType,
   PostSortType,
   MusicPlatform,
   DisplayAlbumMode,
@@ -273,14 +272,7 @@ export function parseDisplayAlbumMode(value: unknown): DisplayAlbumMode | null {
   return null
 }
 
-export function parseBrowsingTargetType(value: unknown): BrowsingTargetType | null {
-  if (value === 'wiki' || value === 'post' || value === 'music') {
-    return value
-  }
-  return null
-}
-
-export function parseModerationTargetType(
+function parseModerationTargetType(
   value: unknown
 ): Extract<ModerationTargetType, 'wiki' | 'post' | 'gallery' | 'comment'> | null {
   if (value === 'wiki' || value === 'post' || value === 'gallery' || value === 'comment') {

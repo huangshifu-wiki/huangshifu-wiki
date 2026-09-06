@@ -102,8 +102,3 @@ export function buildGalleryVisibilityWhere(authUser?: ApiUser) {
     OR: [{ status: 'published' as ContentStatus }, { authorUid: authUser.uid }],
   }
 }
-
-export function canManageWikiPullRequest(pr: { createdByUid: string }, authUser: ApiUser) {
-  if (isAdminRole(authUser.role)) return true
-  return pr.createdByUid === authUser.uid
-}

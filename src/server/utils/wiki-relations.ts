@@ -16,14 +16,14 @@ import type {
 import { WIKI_RELATION_SCAN_LIMIT } from '../types'
 import { prisma } from './config'
 import { parseBoolean, normalizeWikiSlug } from './parsers'
-import { canViewWikiPage, buildWikiVisibilityWhere } from './authorization'
+import { buildWikiVisibilityWhere } from './authorization'
 import { EnhancedCache, enhancedCache } from './cache'
 
 // ---------------------------------------------------------------------------
 // 常量
 // ---------------------------------------------------------------------------
 
-export const RELATION_LABEL_TO_TYPE: Record<string, WikiRelationType> = Object.fromEntries(
+const RELATION_LABEL_TO_TYPE: Record<string, WikiRelationType> = Object.fromEntries(
   Object.entries(RELATION_TYPE_LABELS).map(([type, label]) => [label, type as WikiRelationType])
 )
 
@@ -31,7 +31,7 @@ export const RELATION_LABEL_TO_TYPE: Record<string, WikiRelationType> = Object.f
 // 关系规范化函数
 // ---------------------------------------------------------------------------
 
-export function normalizeWikiRelationType(value: unknown): WikiRelationType | null {
+function normalizeWikiRelationType(value: unknown): WikiRelationType | null {
   if (
     value === 'related_person' ||
     value === 'work_relation' ||
@@ -51,7 +51,7 @@ export function normalizeWikiRelationType(value: unknown): WikiRelationType | nu
   return null
 }
 
-export function normalizeWikiRelationLabel(value: unknown) {
+function normalizeWikiRelationLabel(value: unknown) {
   if (typeof value !== 'string') {
     return undefined
   }
@@ -62,10 +62,7 @@ export function normalizeWikiRelationLabel(value: unknown) {
   return normalized.slice(0, CONTENT_LIMITS.wiki.relationLabel)
 }
 
-export function normalizeWikiRelationList(
-  value: unknown,
-  sourceSlug?: string
-): WikiRelationRecord[] {
+function normalizeWikiRelationList(value: unknown, sourceSlug?: string): WikiRelationRecord[] {
   if (Array.isArray(value)) {
     return doNormalizeArray(value, sourceSlug)
   }
@@ -156,13 +153,11 @@ export function serializeRelations(value: unknown, sourceSlug?: string) {
 // 关系辅助函数
 // ---------------------------------------------------------------------------
 
-export function relationTypeLabel(type: WikiRelationType) {
+function relationTypeLabel(type: WikiRelationType) {
   return RELATION_TYPE_LABELS[type] || '自定义关系'
 }
 
-export function relationIdentityKey(
-  relation: Pick<WikiRelationRecord, 'type' | 'targetSlug' | 'label'>
-) {
+function relationIdentityKey(relation: Pick<WikiRelationRecord, 'type' | 'targetSlug' | 'label'>) {
   return `${relation.type}|${relation.targetSlug}|${(relation.label || '').toLowerCase()}`
 }
 
@@ -170,7 +165,7 @@ export function relationIdentityKey(
 // 关系构建函数
 // ---------------------------------------------------------------------------
 
-export function buildWikiReverseRelationIndex(pages: WikiRelationPageLite[]) {
+function buildWikiReverseRelationIndex(pages: WikiRelationPageLite[]) {
   const index = new Map<string, WikiReverseRelationEntry[]>()
 
   pages.forEach((page) => {
@@ -189,7 +184,7 @@ export function buildWikiReverseRelationIndex(pages: WikiRelationPageLite[]) {
   return index
 }
 
-export function buildResolvedWikiRelations(
+function buildResolvedWikiRelations(
   centerPage: WikiRelationPageLite,
   pageMap: Map<string, WikiRelationPageLite>,
   reverseIndex: Map<string, WikiReverseRelationEntry[]>
@@ -257,7 +252,7 @@ export function buildResolvedWikiRelations(
   })
 }
 
-export function buildWikiRelationGraph(
+function buildWikiRelationGraph(
   centerPage: WikiRelationPageLite,
   pageMap: Map<string, WikiRelationPageLite>,
   reverseIndex: Map<string, WikiReverseRelationEntry[]>
@@ -383,26 +378,6 @@ export function buildWikiRelationGraph(
     nodes,
     edges: filteredEdges,
   }
-}
-
-export async function findWikiRelationCenterPage(slug: string, authUser?: ApiUser) {
-  const centerPage = await prisma.wikiPage.findFirst({
-    where: { slug, deletedAt: null },
-    select: {
-      slug: true,
-      title: true,
-      category: true,
-      status: true,
-      lastEditorUid: true,
-      relations: true,
-    },
-  })
-
-  if (!centerPage || !canViewWikiPage(centerPage, authUser)) {
-    return null
-  }
-
-  return centerPage as WikiRelationPageLite
 }
 
 export function clearWikiRelationCache() {

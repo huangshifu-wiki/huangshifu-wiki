@@ -144,7 +144,7 @@ export function getS3ClientWrite(): S3Client {
   return s3ClientWrite
 }
 
-export function getS3ClientRead(): S3Client {
+function getS3ClientRead(): S3Client {
   if (!isS3Enabled()) {
     throw new Error('S3 存储未启用，请在管理后台启用 S3 存储')
   }
@@ -198,7 +198,7 @@ export function validateObjectKey(key: string): { valid: boolean; error?: string
   return { valid: true }
 }
 
-export function validateContentType(contentType: string | undefined): {
+function validateContentType(contentType: string | undefined): {
   valid: boolean
   error?: string
 } {
@@ -219,7 +219,7 @@ export function validateContentType(contentType: string | undefined): {
   return { valid: true }
 }
 
-export function validateFileSize(fileSize: number | undefined): { valid: boolean; error?: string } {
+function validateFileSize(fileSize: number | undefined): { valid: boolean; error?: string } {
   if (fileSize === undefined) {
     return { valid: true }
   }
@@ -238,7 +238,7 @@ export function validateFileSize(fileSize: number | undefined): { valid: boolean
   return { valid: true }
 }
 
-export function validateContentMd5(contentMd5: string | undefined): {
+function validateContentMd5(contentMd5: string | undefined): {
   valid: boolean
   error?: string
 } {
@@ -478,51 +478,6 @@ export function getPublicConfig(): S3PublicConfig {
   }
 }
 
-export function validateS3Config(): { valid: boolean; errors: string[] } {
-  const errors: string[] = []
-
-  if (!isS3Enabled()) {
-    return { valid: true, errors: [] }
-  }
-
-  const writeCreds = getWriteCredentials()
-  if (!writeCreds.accessKeyId) {
-    errors.push('S3 写入 AccessKey 未配置')
-  }
-  if (!writeCreds.secretAccessKey) {
-    errors.push('S3 写入 SecretKey 未配置')
-  }
-
-  const readCreds = getReadCredentials()
-  if (!readCreds.accessKeyId) {
-    errors.push('S3 读取 AccessKey 未配置')
-  }
-  if (!readCreds.secretAccessKey) {
-    errors.push('S3 读取 SecretKey 未配置')
-  }
-
-  const bucketConfig = getPublicBucketConfig()
-  if (!bucketConfig.name) {
-    errors.push('S3 公有桶名称未配置')
-  }
-
-  const endpointConfig = getEndpointConfig()
-  if (!endpointConfig.url) {
-    errors.push('S3 端点 URL 未配置')
-  }
-
-  if (errors.length > 0) {
-    console.warn('[S3] 配置验证失败:', errors)
-  } else {
-    console.log('[S3] 配置验证通过')
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  }
-}
-
 export function getS3BaseUrl(): string {
   const publicDomain = runtimeConfigService.getConfig().s3PublicDomain
   if (publicDomain) {
@@ -547,8 +502,4 @@ export function getS3BaseUrl(): string {
   }
 
   return baseUrl
-}
-
-export function getS3Client() {
-  return getS3ClientWrite()
 }

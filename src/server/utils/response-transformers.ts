@@ -1039,34 +1039,6 @@ export function toUploadSessionResponse(session: {
   }
 }
 
-export function toMediaAssetResponse(asset: {
-  id: string
-  ownerUid: string
-  sessionId: string | null
-  storageKey: string | null
-  publicUrl: string | null
-  fileName: string
-  mimeType: string
-  sizeBytes: number
-  status: string
-  createdAt: Date
-  updatedAt: Date
-}) {
-  return {
-    id: asset.id,
-    ownerUid: asset.ownerUid,
-    sessionId: asset.sessionId,
-    storageKey: asset.storageKey,
-    url: asset.publicUrl,
-    fileName: asset.fileName,
-    mimeType: asset.mimeType,
-    sizeBytes: asset.sizeBytes,
-    status: asset.status,
-    createdAt: asset.createdAt.toISOString(),
-    updatedAt: asset.updatedAt.toISOString(),
-  }
-}
-
 export function toSongResponse(
   song: MusicTrackWithRelations,
   options?: { favoritedByMe?: boolean; excludeLyric?: boolean; excludeDescription?: boolean }

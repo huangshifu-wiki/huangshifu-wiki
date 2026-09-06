@@ -19,7 +19,7 @@ const __dirname = path.dirname(__filename)
 
 export const defaultUploadsDir =
   process.env.UPLOADS_PATH || path.join(__dirname, '..', '..', '..', 'uploads')
-export const defaultBackupsDir =
+const defaultBackupsDir =
   process.env.NODE_ENV === 'test'
     ? path.join(os.tmpdir(), 'huangshifu-wiki-test-backups')
     : path.join(__dirname, '..', '..', '..', 'backups')

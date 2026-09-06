@@ -487,22 +487,6 @@ describe('qdrantService', () => {
     })
   })
 
-  describe('deleteImageEmbeddingPoint', () => {
-    it('deletes embedding point by id', async () => {
-      const { deleteImageEmbeddingPoint } = await import('../../src/server/vector/qdrantService')
-
-      await deleteImageEmbeddingPoint('point-123')
-
-      expect(qdrantClientInstanceMock.delete).toHaveBeenCalledWith(
-        'hsf_image_embeddings',
-        expect.objectContaining({
-          wait: true,
-          points: ['point-123'],
-        })
-      )
-    })
-  })
-
   describe('deleteTextEmbeddingPointsBySource', () => {
     it('deletes all points matching source with single page', async () => {
       qdrantClientInstanceMock.scroll.mockResolvedValueOnce({

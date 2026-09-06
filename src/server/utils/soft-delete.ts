@@ -17,10 +17,6 @@ export const SOFT_DELETE_TABS = [
 
 export type SoftDeleteTab = (typeof SOFT_DELETE_TABS)[number]
 
-export function isSoftDeleteTab(value: string): value is SoftDeleteTab {
-  return SOFT_DELETE_TABS.includes(value as SoftDeleteTab)
-}
-
 export function includeDeletedFromQuery(query: AuthenticatedRequest['query']) {
   return parseBoolean(firstString(query.includeDeleted), false)
 }
@@ -41,7 +37,7 @@ export const restoreDeleteData = {
   deletedBy: null,
 } as const
 
-export const SELF_DELETE_REASON = '自行删除'
+const SELF_DELETE_REASON = '自行删除'
 
 export function normalizeDeleteReason(input: unknown) {
   return typeof input === 'string' ? input.trim() : ''

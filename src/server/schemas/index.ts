@@ -10,7 +10,7 @@ export {
   passwordSchema,
   setupInitializeSchema,
 } from './auth.schema'
-export { userEmailUpdateSchema, userPasswordUpdateSchema } from './user.schema'
+export { userEmailUpdateSchema } from './user.schema'
 export {
   wikiCreateSchema,
   wikiUpdateSchema,

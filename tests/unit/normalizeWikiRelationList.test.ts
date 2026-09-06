@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   buildWikiRelationBundle,
   clearWikiRelationCache,
-  normalizeWikiRelationList,
+  serializeRelations,
   normalizeWikiRelationListForWrite,
 } from '../../src/server/utils/wiki-relations'
 import type { WikiRelationPageLite } from '../../src/server/types'
@@ -34,7 +34,7 @@ const validRelation2 = {
   bidirectional: false,
 }
 
-describe('normalizeWikiRelationList', () => {
+describe('serializeRelations', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
@@ -43,27 +43,27 @@ describe('normalizeWikiRelationList', () => {
   })
 
   it('returns empty array for null input', () => {
-    expect(normalizeWikiRelationList(null)).toEqual([])
+    expect(serializeRelations(null)).toEqual([])
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
   it('returns empty array for undefined input', () => {
-    expect(normalizeWikiRelationList(undefined)).toEqual([])
+    expect(serializeRelations(undefined)).toEqual([])
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
   it('returns empty array for empty array input', () => {
-    expect(normalizeWikiRelationList([])).toEqual([])
+    expect(serializeRelations([])).toEqual([])
   })
 
   it('normalizes a valid relation array (happy path)', () => {
-    const result = normalizeWikiRelationList([validRelation])
+    const result = serializeRelations([validRelation])
     expect(result).toHaveLength(1)
     expect(result[0]).toEqual(validRelation)
   })
 
   it('normalizes multiple valid relations', () => {
-    const result = normalizeWikiRelationList([validRelation, validRelation2])
+    const result = serializeRelations([validRelation, validRelation2])
     expect(result).toHaveLength(2)
     expect(result[0]).toEqual(validRelation)
     expect(result[1]).toEqual(validRelation2)
@@ -71,7 +71,7 @@ describe('normalizeWikiRelationList', () => {
 
   it('rescues JSON string input and returns normalized relations', () => {
     const jsonString = JSON.stringify([validRelation, validRelation2])
-    const result = normalizeWikiRelationList(jsonString)
+    const result = serializeRelations(jsonString)
     expect(result).toHaveLength(2)
     expect(result[0].type).toBe('related_person')
     expect(result[0].targetSlug).toBe('target-page')
@@ -80,31 +80,31 @@ describe('normalizeWikiRelationList', () => {
   })
 
   it('returns empty array for invalid JSON string', () => {
-    const result = normalizeWikiRelationList('not-json-at-all')
+    const result = serializeRelations('not-json-at-all')
     expect(result).toEqual([])
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
   it('returns empty array for JSON string that parses to non-array', () => {
-    const result = normalizeWikiRelationList('{"type":"related_person"}')
+    const result = serializeRelations('{"type":"related_person"}')
     expect(result).toEqual([])
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
   it('returns empty array for empty JSON string', () => {
-    const result = normalizeWikiRelationList('')
+    const result = serializeRelations('')
     expect(result).toEqual([])
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
   it('returns empty array for whitespace-only string', () => {
-    const result = normalizeWikiRelationList('   ')
+    const result = serializeRelations('   ')
     expect(result).toEqual([])
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
   it('warns and returns empty for numeric input', () => {
-    const result = normalizeWikiRelationList(42)
+    const result = serializeRelations(42)
     expect(result).toEqual([])
     expect(warnSpy).toHaveBeenCalledTimes(1)
     expect(warnSpy).toHaveBeenCalledWith(
@@ -114,7 +114,7 @@ describe('normalizeWikiRelationList', () => {
   })
 
   it('warns and returns empty for boolean input', () => {
-    const result = normalizeWikiRelationList(true)
+    const result = serializeRelations(true)
     expect(result).toEqual([])
     expect(warnSpy).toHaveBeenCalledTimes(1)
     expect(warnSpy).toHaveBeenCalledWith(
@@ -124,7 +124,7 @@ describe('normalizeWikiRelationList', () => {
   })
 
   it('warns and returns empty for plain object input', () => {
-    const result = normalizeWikiRelationList({ type: 'related_person' })
+    const result = serializeRelations({ type: 'related_person' })
     expect(result).toEqual([])
     expect(warnSpy).toHaveBeenCalledTimes(1)
     expect(warnSpy).toHaveBeenCalledWith(
@@ -135,21 +135,21 @@ describe('normalizeWikiRelationList', () => {
 
   it('filters self-referencing relations when sourceSlug is provided', () => {
     const selfRef = { ...validRelation, targetSlug: 'my-page' }
-    const result = normalizeWikiRelationList([selfRef, validRelation2], 'my-page')
+    const result = serializeRelations([selfRef, validRelation2], 'my-page')
     expect(result).toHaveLength(1)
     expect(result[0].targetSlug).toBe('another-page')
   })
 
   it('deduplicates relations by type+targetSlug+label key', () => {
     const dup = { ...validRelation }
-    const result = normalizeWikiRelationList([validRelation, dup])
+    const result = serializeRelations([validRelation, dup])
     expect(result).toHaveLength(1)
   })
 
   it('deduplicates case-insensitively on label', () => {
     const r1 = { ...validRelation, label: 'Colleague' }
     const r2 = { ...validRelation, label: 'colleague' }
-    const result = normalizeWikiRelationList([r1, r2])
+    const result = serializeRelations([r1, r2])
     expect(result).toHaveLength(1)
   })
 
@@ -160,36 +160,36 @@ describe('normalizeWikiRelationList', () => {
       label: `label-${i}`,
       bidirectional: true,
     }))
-    const result = normalizeWikiRelationList(manyRelations)
+    const result = serializeRelations(manyRelations)
     expect(result).toHaveLength(80)
   })
 
   it('filters out invalid type values', () => {
     const invalid = [{ ...validRelation, type: 'invalid_type' }]
-    const result = normalizeWikiRelationList(invalid)
+    const result = serializeRelations(invalid)
     expect(result).toHaveLength(0)
   })
 
   it('filters out missing targetSlug', () => {
     const noTarget = [{ ...validRelation, targetSlug: '' }]
-    const result = normalizeWikiRelationList(noTarget)
+    const result = serializeRelations(noTarget)
     expect(result).toHaveLength(0)
   })
 
   it('filters out non-object items in array', () => {
-    const result = normalizeWikiRelationList([null, 42, 'string', validRelation])
+    const result = serializeRelations([null, 42, 'string', validRelation])
     expect(result).toHaveLength(1)
   })
 
   it('defaults bidirectional to true when not specified', () => {
     const noBidirectional = { type: 'related_person', targetSlug: 'target' }
-    const result = normalizeWikiRelationList([noBidirectional])
+    const result = serializeRelations([noBidirectional])
     expect(result[0].bidirectional).toBe(true)
   })
 
   it('trims and limits label to 60 chars', () => {
     const longLabel = { ...validRelation, label: 'a'.repeat(100) }
-    const result = normalizeWikiRelationList([longLabel])
+    const result = serializeRelations([longLabel])
     expect(result[0].label).toHaveLength(60)
   })
 })

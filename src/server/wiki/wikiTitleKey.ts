@@ -2,7 +2,7 @@ export function normalizeWikiTitleKey(title: string) {
   return title.trim()
 }
 
-export const WIKI_TITLE_CONFLICT_MESSAGE = '该标题的百科已存在，请修改标题或编辑已有页面'
+const WIKI_TITLE_CONFLICT_MESSAGE = '该标题的百科已存在，请修改标题或编辑已有页面'
 
 export function buildLegacyDuplicateWikiTitleKey(title: string, slug: string) {
   return `${normalizeWikiTitleKey(title)} [${slug}]`
