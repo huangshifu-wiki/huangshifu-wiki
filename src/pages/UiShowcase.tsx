@@ -176,6 +176,7 @@ const UiShowcase = () => {
               <Spinner size="sm" label="小型加载中" />
               <Spinner label="标准加载中" />
               <Spinner size="lg" label="大型加载中" />
+              <Spinner variant="tail" size="lg" label="拖尾加载中" />
             </Panel>
           </div>
           <Panel>

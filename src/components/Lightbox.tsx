@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ZoomIn, ZoomOut, Maximize, ChevronLeft, ChevronRight, X } from '@/src/components/icons'
+import { Spinner } from '@/src/components/ui'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import { getFitScale as getFitScaleUtil, computeNextScale } from '../utils/lightbox'
 import { isBackdropClick } from '../utils/modal'
@@ -392,6 +393,13 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
             <ChevronRight size={28} />
           </button>
         </>
+      )}
+
+      {/* Loading indicator */}
+      {isImageLoading && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <Spinner variant="tail" className="h-10 w-10 text-white" />
+        </div>
       )}
 
       {/* Image container */}

@@ -67,14 +67,28 @@ export interface SpinnerProps {
   className?: string
   label?: string
   size?: keyof typeof spinnerSizeClasses
+  /** icon: 旋转图标（默认）；tail: conic-gradient 拖尾圆环，颜色跟随 currentColor */
+  variant?: 'icon' | 'tail'
 }
 
-export const Spinner = ({ className, label = '加载中', size = 'md' }: SpinnerProps) => (
+export const Spinner = ({
+  className,
+  label = '加载中',
+  size = 'md',
+  variant = 'icon',
+}: SpinnerProps) => (
   <span role="status" aria-label={label} className="inline-flex items-center">
-    <Loader2
-      className={cn(spinnerSizeClasses[size], 'animate-spin', className)}
-      aria-hidden="true"
-    />
+    {variant === 'tail' ? (
+      <span
+        className={cn(spinnerSizeClasses[size], 'spinner-tail', className)}
+        aria-hidden="true"
+      />
+    ) : (
+      <Loader2
+        className={cn(spinnerSizeClasses[size], 'animate-spin', className)}
+        aria-hidden="true"
+      />
+    )}
     <span className="sr-only">{label}</span>
   </span>
 )

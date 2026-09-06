@@ -71,6 +71,17 @@ describe('UI 设计系统', () => {
     expect(statuses[1].querySelector('svg')).toHaveClass('h-7', 'w-7')
   })
 
+  it('Spinner tail 变体渲染拖尾圆环并支持 className 覆盖尺寸', () => {
+    render(<Spinner variant="tail" size="lg" label="拖尾加载中" className="h-10 w-10" />)
+
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('拖尾加载中')
+    const ring = status.querySelector('.spinner-tail')
+    expect(ring).toBeInTheDocument()
+    expect(ring).toHaveClass('h-10', 'w-10')
+    expect(ring?.querySelector('svg')).toBeNull()
+  })
+
   it('LoadErrorState 显示错误信息并支持重试', () => {
     const onRetry = vi.fn()
     render(

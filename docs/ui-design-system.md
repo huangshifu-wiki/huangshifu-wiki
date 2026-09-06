@@ -28,7 +28,7 @@ Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`�
 ## 加载状态
 
 - 页面代码分片或首屏数据请求使用布局匹配的 `PageSkeleton`；`default` 旋转圈只用于没有确定布局的全局 fallback。
-- 已有内容刷新时保留旧内容，使用 `Spinner` 或 `aria-busy` 标记刷新，不用整页骨架覆盖已可读内容。
+- 已有内容刷新时保留旧内容，使用 `Spinner` 或 `aria-busy` 标记刷新，不用整页骨架覆盖已可读内容。`Spinner` 提供 `icon`（默认）与 `tail`（conic-gradient 拖尾圆环）两种变体，`tail` 颜色跟随 `currentColor`，适合深色遮罩等特殊背景。
 - 状态顺序固定为加载中、错误、成功空态/成功内容；请求未完成或失败时不得显示业务空态。
 - 接口失败使用 `LoadErrorState`，错误信息使用 `role="alert"`，可重试请求必须提供“重新加载”操作。
 - 操作按钮、上传进度和弹窗内部请求使用控件级 `Button.loading`/`Spinner`，不触发页面级加载状态。
