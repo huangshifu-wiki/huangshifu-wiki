@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -185,7 +185,8 @@ describe('MusicDetail SEO 元数据', () => {
 
     expect(await screen.findByRole('heading', { name: '歌曲信息' })).toBeInTheDocument()
 
-    expect(document.title).toBe('测试歌曲｜歌曲信息与歌词｜黄诗扶 Wiki')
+    // title 由 useSeo 的 useEffect 异步写入，需要等待 effect flush
+    await waitFor(() => expect(document.title).toBe('测试歌曲｜歌曲信息与歌词｜黄诗扶 Wiki'))
     expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
       'index,follow'
     )
@@ -222,7 +223,7 @@ describe('MusicDetail SEO 元数据', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
 
-    expect(document.title).toBe('歌曲不存在｜黄诗扶 Wiki')
+    await waitFor(() => expect(document.title).toBe('歌曲不存在｜黄诗扶 Wiki'))
     expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
       'noindex,follow'
     )
