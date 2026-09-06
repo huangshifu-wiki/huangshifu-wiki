@@ -638,7 +638,8 @@ router.post(
       let collection: { docId: string; title: string } | null = null
       let albumListChanged = false
 
-      if (tracksPayload.length) {
+      // 单曲导入不建专辑：歌曲只保留平台返回的专辑名字段，专辑实体仅由专辑/歌单链接导入创建
+      if (tracksPayload.length && parsed.type !== 'song') {
         const existingAlbumSources = await prisma.musicExternalSource.findMany({
           where: {
             resourceType: 'album',

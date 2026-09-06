@@ -78,6 +78,10 @@ describe('Music Import Diff API - 歌曲导入预检与Diff比对集成测试', 
   })
 
   afterEach(async () => {
+    // 正常单曲导入不建专辑；此处兜底防止回归时脏专辑跨用例残留
+    await prisma.album.deleteMany({
+      where: { externalSources: { some: { sourceId: TEST_SOURCE_ID } } },
+    })
     await prisma.musicExternalSource.deleteMany({
       where: { sourceId: TEST_SOURCE_ID },
     })
@@ -156,5 +160,35 @@ describe('Music Import Diff API - 歌曲导入预检与Diff比对集成测试', 
     })
     expect(updated?.title).toBe(TEST_SONG_TITLE)
     expect(updated?.album).toBe('精修专辑')
+  })
+
+  it('imports a single song url without creating an album entity', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const importRes = await agent
+      .post('/api/music/import')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        url: `https://music.163.com/#/song?id=${TEST_SOURCE_ID}`,
+        duplicateStrategy: 'fill',
+        selectedSongIds: [TEST_SOURCE_ID],
+      })
+
+    expect(importRes.status).toBe(200)
+    expect(importRes.body.summary.imported).toBe(1)
+    expect(importRes.body.collection).toBeNull()
+
+    const albumSource = await prisma.musicExternalSource.findFirst({
+      where: { resourceType: 'album', sourceId: TEST_SOURCE_ID },
+    })
+    expect(albumSource).toBeNull()
+
+    const importedSong = await prisma.musicTrack.findFirst({
+      where: { title: TEST_SONG_TITLE },
+    })
+    expect(importedSong?.album).toBe('平台原始专辑')
   })
 })
