@@ -208,6 +208,29 @@ export const SEARCH_SEO_METADATA: SeoMetadata = {
   ogType: 'website',
 }
 
+// 二级工具页：可被跟随但不用索引
+const SECONDARY_NOINDEX_ROUTES: Record<string, { label: string; description: string }> = {
+  '/announcements': {
+    label: '公告',
+    description: '查看黄诗扶 Wiki 的最新公告与历史公告。',
+  },
+  '/more': {
+    label: '更多',
+    description: '黄诗扶 Wiki 的站点功能与信息入口。',
+  },
+}
+
+const buildSecondaryNoindexSeo = (pathname: string): SeoMetadata => {
+  const entry = SECONDARY_NOINDEX_ROUTES[pathname]
+  return {
+    title: `${entry.label}｜${SEO_SITE_NAME}`,
+    description: entry.description,
+    canonicalPath: pathname,
+    robots: 'noindex,follow',
+    ogType: 'website',
+  }
+}
+
 // 布局级静态路由元数据；详情路径返回 null，由详情组件自行管理
 export const getStaticRouteSeo = (pathname: string, search: string): SeoMetadata | null => {
   const normalized = normalizeCanonicalPath(pathname)
@@ -224,6 +247,10 @@ export const getStaticRouteSeo = (pathname: string, search: string): SeoMetadata
 
   if (normalized === '/search') {
     return SEARCH_SEO_METADATA
+  }
+
+  if (SECONDARY_NOINDEX_ROUTES[normalized]) {
+    return buildSecondaryNoindexSeo(normalized)
   }
 
   if (PUBLIC_LIST_ROUTES[normalized]) {

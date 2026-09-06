@@ -338,6 +338,7 @@ export interface AnnouncementItem {
   content: string
   link?: string | null
   createdAt: string
+  updatedAt: string
 }
 
 export interface NotificationItem {

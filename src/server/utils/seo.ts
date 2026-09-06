@@ -67,7 +67,9 @@ export const buildSitemapIndexXml = (pageCount: number, siteUrl: string): string
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${items.join('\n')}\n</sitemapindex>`
 }
 
-// 文档路径的 robots 指令：私有页 nofollow，筛选/搜索页 noindex，其余可索引
+// 文档路径的 robots 指令：私有页 nofollow，搜索/公告/更多等二级工具页 noindex，其余可索引
+const NOINDEX_DOCUMENT_PATHS = new Set(['/search', '/announcements', '/more'])
+
 export const getRobotsDirective = (
   pathname: string,
   hasQuery: boolean
@@ -76,7 +78,7 @@ export const getRobotsDirective = (
     return 'noindex, nofollow'
   }
 
-  if (hasQuery || pathname === '/search') {
+  if (hasQuery || NOINDEX_DOCUMENT_PATHS.has(pathname)) {
     return 'noindex, follow'
   }
 

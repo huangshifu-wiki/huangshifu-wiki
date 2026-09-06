@@ -2,8 +2,9 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Megaphone, X, ChevronRight } from '@/src/components/icons'
 import { motion, AnimatePresence } from 'motion/react'
 import { apiGet } from '../lib/apiClient'
+import { dismissAnnouncement, isAnnouncementDismissed } from '../lib/announcementDismissal'
 import type { AnnouncementItem } from '../types/entities'
-import { IconButton } from '@/src/components/ui'
+import { Button, IconButton } from '@/src/components/ui'
 
 export const AnnouncementBar = () => {
   const [isVisible, setIsVisible] = useState(true)
@@ -18,7 +19,10 @@ export const AnnouncementBar = () => {
           '/api/announcements/latest'
         )
         if (!cancelled) {
-          setAnnouncement(data.announcement || null)
+          const latest = data.announcement
+          setAnnouncement(
+            latest && !isAnnouncementDismissed(latest.id, latest.updatedAt) ? latest : null
+          )
         }
       } catch (error) {
         console.error('Fetch latest announcement failed:', error)
@@ -33,6 +37,13 @@ export const AnnouncementBar = () => {
       window.clearInterval(intervalId)
     }
   }, [])
+
+  const handleDismiss = () => {
+    if (announcement) {
+      dismissAnnouncement(announcement.id, announcement.updatedAt)
+    }
+    setIsVisible(false)
+  }
 
   useLayoutEffect(() => {
     const root = document.documentElement
@@ -75,29 +86,41 @@ export const AnnouncementBar = () => {
           className="py-2 px-4 relative overflow-hidden bg-[var(--color-theme-accent)] text-white"
         >
           <div className="max-w-7xl mx-auto flex items-center justify-center gap-3">
-            <Megaphone size={16} className="animate-bounce" />
-            <p className="text-sm font-bold truncate pr-8">{announcement.content}</p>
+            <Megaphone size={16} className="animate-bounce shrink-0" />
+            <p className="text-sm font-bold truncate pr-24">{announcement.content}</p>
             {announcement.link && (
               <a
                 href={announcement.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs font-bold hover:underline"
+                className="flex items-center gap-1 text-xs font-bold hover:underline shrink-0"
               >
                 立即查看 <ChevronRight size={14} />
               </a>
             )}
           </div>
-          <IconButton
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsVisible(false)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-black/10 hover:text-white"
-            aria-label="关闭公告"
-          >
-            <X size={16} />
-          </IconButton>
+          <div className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleDismiss}
+              className="h-auto min-h-0 px-2 py-1 text-xs text-white hover:bg-black/10 hover:text-white"
+              aria-label="不再显示此公告"
+            >
+              不再显示
+            </Button>
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsVisible(false)}
+              className="text-white hover:bg-black/10 hover:text-white"
+              aria-label="关闭公告"
+            >
+              <X size={16} />
+            </IconButton>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

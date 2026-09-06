@@ -1,6 +1,7 @@
 import type {
   AdminDataItem,
   AlbumItem,
+  AnnouncementItem,
   EventItem,
   GalleryItem,
   LyricSearchItem,
@@ -122,6 +123,10 @@ export interface NotificationsResponse extends PaginationMeta {
     createdAt: string
   }>
   unreadCount: number
+}
+
+export interface AnnouncementsResponse extends PaginationMeta {
+  announcements: AnnouncementItem[]
 }
 
 export interface UploadSessionResponse {

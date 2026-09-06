@@ -88,8 +88,10 @@ describe('getRobotsDirective', () => {
     expect(getRobotsDirective('/wiki/abc/prs/1', false)).toBe('noindex, nofollow')
   })
 
-  it('搜索页或带 query 的公开列表返回 noindex, follow', () => {
+  it('搜索页、公告页、更多页或带 query 的公开列表返回 noindex, follow', () => {
     expect(getRobotsDirective('/search', false)).toBe('noindex, follow')
+    expect(getRobotsDirective('/announcements', false)).toBe('noindex, follow')
+    expect(getRobotsDirective('/more', false)).toBe('noindex, follow')
     expect(getRobotsDirective('/events', true)).toBe('noindex, follow')
     expect(getRobotsDirective('/wiki', true)).toBe('noindex, follow')
   })
@@ -188,6 +190,19 @@ describe('getStaticRouteSeo', () => {
     expect(getStaticRouteSeo('/wiki', '?tag=演出')).toMatchObject({
       robots: 'noindex,follow',
       canonicalPath: '/wiki',
+    })
+  })
+
+  it('公告页与更多页 noindex,follow', () => {
+    expect(getStaticRouteSeo('/announcements', '')).toMatchObject({
+      title: `公告｜${SEO_SITE_NAME}`,
+      robots: 'noindex,follow',
+      canonicalPath: '/announcements',
+    })
+    expect(getStaticRouteSeo('/more', '')).toMatchObject({
+      title: `更多｜${SEO_SITE_NAME}`,
+      robots: 'noindex,follow',
+      canonicalPath: '/more',
     })
   })
 
