@@ -39,7 +39,7 @@ Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`�
 - Grid 或 Flex 中承载动态内容的容器必须允许收缩；使用 `min-w-0`，需要占满时同时使用 `w-full max-w-full`。
 - 用户可控或长度不确定的文本必须明确选择 `break-words`、`break-all`、`truncate` 或行数限制，不能依赖默认断行。
 - 文本与固定控件同行时，文本容器使用 `min-w-0`，固定控件使用 `shrink-0`；操作组空间不足时必须换行或纵向排列。
-- 横向滚动只能出现在标签栏、表格等明确的局部容器中，页面根节点不得产生横向滚动。
+- 横向滚动只能出现在小屏的标签栏、表格等明确的局部容器中，页面根节点不得产生横向滚动；桌面端表格应通过 `lg:min-w-0`、`text-wrap-anywhere` 等让内容换行适配容器宽度，不出现横向滚动。
 - 设置类页面使用 `SettingsSection`、`SettingRow` 和 `SegmentedControl` 组合。`SettingRow` 的 `stackOnMobile` 用于窄屏下需要独占一行的复杂控件。
 - 新增或修改响应式页面时，至少人工检查 320px、360px、390px、768px 和桌面宽度。
 

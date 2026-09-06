@@ -266,7 +266,7 @@ const renderTagsAndLocation = (item: AdminDataItem) => {
   return (
     <div className="space-y-2 text-xs">
       {renderTagBadges(tags)}
-      <p className="truncate text-text-muted">
+      <p className="line-clamp-1 text-wrap-anywhere text-text-muted">
         {toOptionalText(item.locationName) || toOptionalText(item.locationDetail) || '未设置位置'}
       </p>
     </div>
@@ -327,8 +327,12 @@ const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementT
           {item.isPinned && renderBadge('置顶', 'theme-status-warning')}
           {item.isDeleted && renderBadge('已删除', 'theme-status-error')}
         </p>
-        {subtitle && <p className="max-w-sm truncate text-xs text-text-muted">{subtitle}</p>}
-        <p className="truncate text-[11px] text-text-muted">
+        {subtitle && (
+          <p className="max-w-sm line-clamp-1 text-wrap-anywhere text-xs text-text-muted">
+            {subtitle}
+          </p>
+        )}
+        <p className="line-clamp-1 text-wrap-anywhere text-[11px] text-text-muted">
           {type === 'wiki' && `slug: ${toText(item.slug)}`}
           {type === 'posts' && `ID: ${toText(item.id)}`}
           {type === 'galleries' && `ID: ${toText(item.id)}`}
@@ -452,12 +456,12 @@ const renderMedia = (item: AdminDataItem) => (
     {'posters' in item ? (
       <>
         <p>海报：{Array.isArray(item.posters) ? item.posters.length : 0}</p>
-        <p className="truncate">地点：{toText(item.location, '未填写')}</p>
+        <p className="line-clamp-1 text-wrap-anywhere">地点：{toText(item.location, '未填写')}</p>
       </>
     ) : (
       <>
         <p>图片：{getImages(item).length}</p>
-        <p className="truncate">版权：{toText(item.copyright, '未填写')}</p>
+        <p className="line-clamp-1 text-wrap-anywhere">版权：{toText(item.copyright, '未填写')}</p>
       </>
     )}
   </div>
@@ -863,7 +867,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     const isPending = Boolean(pendingAction)
 
     return (
-      <div className="flex items-center justify-start gap-2">
+      <div className="flex flex-wrap items-center justify-start gap-2">
         {isPending && pendingAction !== 'toggle' && (
           <Button
             variant={pendingAction === 'restore' ? 'success' : 'danger'}
@@ -1170,7 +1174,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                     <th
                       key={col.key}
                       className={clsx(
-                        'px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted',
+                        'px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted lg:min-w-0',
                         col.className
                       )}
                     >
@@ -1201,7 +1205,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                           <td
                             key={col.key}
                             className={clsx(
-                              'px-5 py-4 align-top',
+                              'text-wrap-anywhere px-5 py-4 align-top',
                               col.key === 'actions' && 'text-left'
                             )}
                           >

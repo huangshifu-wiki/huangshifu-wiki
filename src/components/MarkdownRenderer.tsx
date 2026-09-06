@@ -270,12 +270,18 @@ const markdownComponents: Components = {
     </thead>
   ),
   th: ({ children, node: _node, ...props }) => (
-    <th {...props} className="border border-[var(--book-ink-line)] px-4 py-3 text-left font-bold">
+    <th
+      {...props}
+      className="border border-[var(--book-ink-line)] px-4 py-3 text-left align-top font-bold text-wrap-anywhere"
+    >
       {children}
     </th>
   ),
   td: ({ children, node: _node, ...props }) => (
-    <td {...props} className="border border-[var(--book-ink-line)] px-4 py-3">
+    <td
+      {...props}
+      className="border border-[var(--book-ink-line)] px-4 py-3 align-top text-wrap-anywhere"
+    >
       {children}
     </td>
   ),

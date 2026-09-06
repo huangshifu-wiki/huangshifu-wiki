@@ -730,9 +730,9 @@ const SongTable = ({
                 src={song.coverThumbnail || song.cover}
                 alt={`${text(song.title)} 封面`}
               />
-              <div>
-                <p className="flex min-w-0 items-center gap-1.5 font-medium text-text-primary">
-                  <span className="truncate">
+              <div className="min-w-0">
+                <p className="flex flex-wrap items-center gap-1.5 font-medium text-text-primary">
+                  <span className="min-w-0 line-clamp-1 text-wrap-anywhere">
                     {song.slug && !song.isDeleted ? (
                       <Link
                         to={`/music/${song.slug}`}
@@ -748,7 +748,7 @@ const SongTable = ({
                     {song.isDeleted && <span className="theme-text-error">（已删除）</span>}
                   </span>
                   {tags?.length ? (
-                    <span className="flex flex-shrink-0 items-center gap-1">
+                    <span className="flex min-w-0 flex-wrap items-center gap-1">
                       {tags.map((tag) => (
                         <span
                           key={tag}
@@ -773,7 +773,7 @@ const SongTable = ({
                 sources.map((source) => (
                   <span
                     key={`${source.platform}:${source.sourceId}`}
-                    className="rounded bg-surface-alt px-2 py-1 text-[11px] text-brand-gold"
+                    className="break-all rounded bg-surface-alt px-2 py-1 text-[11px] text-brand-gold"
                   >
                     {source.platform}: {source.sourceId}
                   </span>
@@ -861,7 +861,7 @@ const AlbumTable = ({
                 src={album.coverThumbnail || album.cover}
                 alt={`${text(album.title)} 封面`}
               />
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium text-text-primary">
                   {album.slug && !album.isDeleted ? (
                     <Link
@@ -891,7 +891,7 @@ const AlbumTable = ({
                 sources.map((source) => (
                   <span
                     key={`${source.platform}:${source.sourceId}`}
-                    className="rounded bg-surface-alt px-2 py-1 text-[11px] text-brand-gold"
+                    className="break-all rounded bg-surface-alt px-2 py-1 text-[11px] text-brand-gold"
                   >
                     {source.platform}: {source.sourceId}
                   </span>
@@ -936,7 +936,7 @@ const ResourceTable = ({
 }) => (
   <div className="overflow-hidden rounded border border-border bg-surface">
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[980px] border-collapse text-left">
+      <table className="w-full min-w-[980px] border-collapse text-left text-wrap-anywhere lg:min-w-0">
         <thead>
           <tr className="border-b border-border bg-surface-alt">
             {headers.map((header) => (

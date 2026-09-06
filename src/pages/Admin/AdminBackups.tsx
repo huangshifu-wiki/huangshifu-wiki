@@ -475,9 +475,11 @@ const AdminBackups = () => {
             backups.map((backup) => (
               <tr key={backup.filename} className="hover:bg-surface-alt transition-colors">
                 <td className="px-5 py-4">
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <Database size={16} className="text-text-muted shrink-0" />
-                    <span className="text-sm font-medium text-text-primary">{backup.filename}</span>
+                    <span className="min-w-0 break-all text-sm font-medium text-text-primary">
+                      {backup.filename}
+                    </span>
                   </div>
                 </td>
                 <td className="px-5 py-4 text-sm text-text-secondary max-w-[280px]">
