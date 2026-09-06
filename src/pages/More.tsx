@@ -1,4 +1,4 @@
-import { ChevronRight, Megaphone, Search, Settings } from '@/src/components/icons'
+import { ChevronRight, Megaphone, Search, Settings, Ticket } from '@/src/components/icons'
 import { Link } from 'react-router-dom'
 
 interface MoreEntry {
@@ -14,6 +14,12 @@ const MORE_ENTRIES: MoreEntry[] = [
     label: '公告',
     description: '查看站点最新公告与历史公告',
     Icon: Megaphone,
+  },
+  {
+    to: '/tickets',
+    label: '盘票',
+    description: '浏览与发布演出票转让求购信息',
+    Icon: Ticket,
   },
   {
     to: '/search',

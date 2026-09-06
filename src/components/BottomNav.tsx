@@ -7,7 +7,6 @@ import {
   Calendar,
   Search,
   Home,
-  Ticket,
   Ellipsis,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
@@ -18,7 +17,6 @@ export const BottomNav = () => {
     { to: '/music', icon: Music, label: '音乐' },
     { to: '/gallery', icon: ImageIcon, label: '画廊' },
     { to: '/events', icon: Calendar, label: '游记' },
-    { to: '/tickets', icon: Ticket, label: '盘票' },
     { to: '/wiki', icon: Book, label: '百科' },
     { to: '/forum', icon: MessageSquare, label: '论坛' },
     { to: '/search', icon: Search, label: '搜索' },
