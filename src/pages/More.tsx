@@ -44,31 +44,25 @@ const More = () => {
           </div>
         </header>
 
-        <nav aria-label="更多功能入口" className="shared-ink-list">
-          {MORE_ENTRIES.map(({ to, label, description, Icon }) => (
-            <Link
-              key={to}
-              to={to}
-              data-press-feedback="state"
-              className="group relative flex items-center gap-4 rounded px-3 py-4 transition-all duration-300 hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)]">
-                <Icon size={18} className="text-brand-gold" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[0.975rem] font-semibold tracking-[0.04em] text-text-primary transition-colors group-hover:text-brand-gold">
-                  {label}
-                </span>
-                <span className="mt-0.5 block text-[0.75rem] tracking-[0.04em] text-text-muted">
-                  {description}
-                </span>
-              </span>
-              <ChevronRight
-                size={16}
-                className="shrink-0 text-text-muted transition-colors group-hover:text-brand-gold"
-              />
-            </Link>
-          ))}
+        <nav aria-label="更多功能入口">
+          <ul className="bg-surface border border-border rounded overflow-hidden">
+            {MORE_ENTRIES.map(({ to, label, description, Icon }) => (
+              <li key={to} className="border-b border-border last:border-b-0">
+                <Link
+                  to={to}
+                  className="flex items-center gap-4 px-4 py-4 transition-colors hover:bg-surface-alt sm:px-6"
+                  data-pressable
+                >
+                  <Icon size={20} className="text-brand-gold shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-text-primary">{label}</span>
+                    <span className="block text-xs text-text-muted mt-0.5">{description}</span>
+                  </span>
+                  <ChevronRight size={16} className="text-text-muted shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
         </nav>
       </div>
     </div>
