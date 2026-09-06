@@ -2,7 +2,7 @@ import express from 'express'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { prismaMock } = vi.hoisted(() => {
+const { prismaMock, mockLogger } = vi.hoisted(() => {
   const createModel = () => ({ findMany: vi.fn() })
   return {
     prismaMock: {
@@ -13,10 +13,15 @@ const { prismaMock } = vi.hoisted(() => {
       musicTrack: createModel(),
       album: createModel(),
     },
+    mockLogger: {
+      error: vi.fn(),
+    },
   }
 })
 
 vi.mock('../../src/server/prisma', () => ({ prisma: prismaMock, default: prismaMock }))
+
+vi.mock('../../src/server/utils/logger', () => ({ logger: mockLogger }))
 
 import { registerSeoRoutes } from '../../src/server/routes/seo.routes'
 import { enhancedCache } from '../../src/server/utils/cache'
@@ -120,6 +125,7 @@ describe('服务端 SEO 路由', () => {
 
       expect(response.body).toEqual({ error: '服务器内部错误' })
       expect(response.text).not.toContain('<urlset')
+      expect(mockLogger.error).toHaveBeenCalled()
     })
   })
 
