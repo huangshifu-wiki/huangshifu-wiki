@@ -10,32 +10,11 @@ import {
 import type { EventItem } from '../../types/entities'
 import type { ViewMode } from '../../types/userPreferences'
 import { EventCover } from './EventCover'
+import { EventDateOffset } from './EventDateOffset'
 
 interface EventCardProps {
   event: EventItem
   viewMode: ViewMode
-}
-
-const EventDateOffset = ({
-  dayOffset,
-  compact = false,
-}: {
-  dayOffset: number | null
-  compact?: boolean
-}) => {
-  if (dayOffset === null || dayOffset < 0) return null
-
-  return (
-    <span
-      className={clsx(
-        'shrink-0 font-semibold tabular-nums',
-        compact ? 'text-[0.6875rem]' : 'text-xs',
-        'theme-text-success'
-      )}
-    >
-      +{dayOffset}
-    </span>
-  )
 }
 
 const EventMeta = ({ event, compact = false }: { event: EventItem; compact?: boolean }) => {

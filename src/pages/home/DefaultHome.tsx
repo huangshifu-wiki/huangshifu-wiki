@@ -8,7 +8,8 @@ import { CoverPlaceholder } from '../../components/CoverPlaceholder'
 import { SiteFooterContent } from '../../components/SiteFooter'
 import { useMusic } from '../../context/MusicContext'
 import { apiGet } from '../../lib/apiClient'
-import { formatEventListDate, getEventCoverSrc } from '../../lib/eventFormat'
+import { formatEventListDate, getEventCoverSrc, getEventListDayOffset } from '../../lib/eventFormat'
+import { EventDateOffset } from '../../components/Events/EventDateOffset'
 import {
   getFirstGalleryImage,
   getGalleryThumbnailPlaceholderLabel,
@@ -207,6 +208,7 @@ function EventCover({ event }: { event: EventItem }) {
 
 function EventRow({ event }: { event: EventItem }) {
   const date = formatEventListDate(event.timeSlots)
+  const dayOffset = getEventListDayOffset(event.timeSlots)
 
   return (
     <Link to={`/events/${event.slug}`} className="home-list-item" data-press-feedback="state">
@@ -214,7 +216,9 @@ function EventRow({ event }: { event: EventItem }) {
         <EventCover event={event} />
       </div>
       <div className="home-list-info">
-        <div className="home-list-name">{event.title}</div>
+        <div className="home-list-name">
+          <EventDateOffset dayOffset={dayOffset} compact /> {event.title}
+        </div>
         <div className="home-list-meta">
           {date || '时间待定'}
           {event.location ? ` · ${event.location}` : ''}
@@ -390,7 +394,7 @@ export const DefaultHome = () => {
           const data = await apiGet<EventListResponse>('/api/events', {
             page: 1,
             limit: 4,
-            sortOrder: 'desc',
+            sortOrder: 'upcoming',
           })
           return { section, items: data.events || [] }
         }

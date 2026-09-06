@@ -137,8 +137,64 @@ function parseEventTagQuery(value: unknown) {
   return tag.length > CONTENT_LIMITS.event.tag ? null : tag
 }
 
-function parseEventSortOrder(value: unknown): Prisma.SortOrder {
-  return value === 'asc' ? 'asc' : 'desc'
+type EventListSortOrder = 'asc' | 'desc' | 'upcoming'
+
+function parseEventSortOrder(value: unknown): EventListSortOrder {
+  return value === 'asc' || value === 'upcoming' ? value : 'desc'
+}
+
+function getLocalTodayValue() {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
+}
+
+// upcoming 排序：未来按近到远，其次过去按近到远，无时间垫底；跨桶分页时用已耗尽的桶数量折算剩余 skip
+async function findEventsInUpcomingOrder(
+  where: Prisma.EventWhereInput,
+  skip: number,
+  take: number
+) {
+  const today = getLocalTodayValue()
+  const futureWhere = { ...where, sortStart: { gte: today } }
+  const pastWhere = { ...where, sortStart: { lt: today } }
+
+  const future = await prisma.event.findMany({
+    where: futureWhere,
+    include: eventInclude,
+    orderBy: [{ sortStart: 'asc' }, { createdAt: 'desc' }],
+    skip,
+    take,
+  })
+  if (future.length === take) return future
+
+  // 未填满时未来桶必然已耗尽：返回数大于 0 说明 futureCount = skip + 返回数，否则需查 count
+  const futureCount =
+    future.length > 0 ? skip + future.length : await prisma.event.count({ where: futureWhere })
+
+  const pastSkip = Math.max(0, skip - futureCount)
+  const past = await prisma.event.findMany({
+    where: pastWhere,
+    include: eventInclude,
+    orderBy: [{ sortStart: 'desc' }, { createdAt: 'desc' }],
+    skip: pastSkip,
+    take: take - future.length,
+  })
+  const merged = [...future, ...past]
+  if (merged.length === take) return merged
+
+  const pastCount =
+    past.length > 0 ? pastSkip + past.length : await prisma.event.count({ where: pastWhere })
+
+  const pending = await prisma.event.findMany({
+    where: { ...where, sortStart: null },
+    include: eventInclude,
+    orderBy: [{ createdAt: 'desc' }],
+    skip: Math.max(0, skip - futureCount - pastCount),
+    take: take - merged.length,
+  })
+  return [...merged, ...pending]
 }
 
 async function cleanupRemovedAssetReferences(
@@ -175,13 +231,15 @@ router.get(
     }
     const [total, events] = await Promise.all([
       prisma.event.count({ where }),
-      prisma.event.findMany({
-        where,
-        include: eventInclude,
-        orderBy: [{ sortStart: { sort: sortOrder, nulls: 'last' } }, { createdAt: 'desc' }],
-        skip,
-        take: limit,
-      }),
+      sortOrder === 'upcoming'
+        ? findEventsInUpcomingOrder(where, skip, limit)
+        : prisma.event.findMany({
+            where,
+            include: eventInclude,
+            orderBy: [{ sortStart: { sort: sortOrder, nulls: 'last' } }, { createdAt: 'desc' }],
+            skip,
+            take: limit,
+          }),
     ])
 
     res.json({

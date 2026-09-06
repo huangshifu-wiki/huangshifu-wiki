@@ -95,6 +95,46 @@ describe('Events API - 活动标签筛选', () => {
     ])
   })
 
+  function toSortStart(offsetDays: number) {
+    const date = new Date()
+    date.setDate(date.getDate() + offsetDays)
+    const month = `${date.getMonth() + 1}`.padStart(2, '0')
+    const day = `${date.getDate()}`.padStart(2, '0')
+    return `${date.getFullYear()}-${month}-${day}`
+  }
+
+  it('sortOrder=upcoming 先列未来（近到远），再列过去（近到远），无时间垫底', async () => {
+    await createEvent('Event Tags Test Future Far', ['排序'], null, toSortStart(10))
+    await createEvent('Event Tags Test Past Recent', ['排序'], null, toSortStart(-1))
+    await createEvent('Event Tags Test Future Near', ['排序'], null, toSortStart(1))
+    await createEvent('Event Tags Test Past Old', ['排序'], null, toSortStart(-10))
+    await createEvent('Event Tags Test No Time', ['排序'])
+    await createEvent('Event Tags Test Today', ['排序'], null, toSortStart(0))
+
+    const query = { tag: '排序', sortOrder: 'upcoming', limit: 2 }
+    const firstPage = await request(app)
+      .get('/api/events')
+      .query({ ...query, page: 1 })
+    const secondPage = await request(app)
+      .get('/api/events')
+      .query({ ...query, page: 2 })
+    const thirdPage = await request(app)
+      .get('/api/events')
+      .query({ ...query, page: 3 })
+
+    const titles = (response: { body: { events: Array<{ title: string }> } }) =>
+      response.body.events.map((event) => event.title)
+
+    expect(firstPage.status).toBe(200)
+    expect(firstPage.body.total).toBe(6)
+    expect(titles(firstPage)).toEqual(['Event Tags Test Today', 'Event Tags Test Future Near'])
+    expect(titles(secondPage)).toEqual([
+      'Event Tags Test Future Far',
+      'Event Tags Test Past Recent',
+    ])
+    expect(titles(thirdPage)).toEqual(['Event Tags Test Past Old', 'Event Tags Test No Time'])
+  })
+
   it('从未删除活动聚合可筛选标签', async () => {
     await createEvent('Event Tags Test Live', ['现场', '巡演'])
     await createEvent('Event Tags Test More Live', ['现场', '节日'])
