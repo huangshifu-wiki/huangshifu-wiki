@@ -141,8 +141,8 @@ export const PageSkeleton: React.FC<PageSkeletonProps> = ({ variant = 'default' 
           <SkeletonLine className="mb-5 h-9 w-full" />
           <div className="flex flex-col gap-0.5">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex items-center gap-4 border-b border-border py-4">
-                <SkeletonLine className="h-16 w-24 shrink-0 rounded" />
+              <div key={i} className="flex items-center gap-3 border-b border-border px-2.5 py-2.5">
+                <SkeletonLine className="h-[100px] w-[75px] shrink-0 rounded" />
                 <div className="min-w-0 flex-1 space-y-2">
                   <SkeletonLine className="h-4 w-2/3" />
                   <SkeletonLine className="h-3 w-1/3" />
