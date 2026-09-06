@@ -389,6 +389,7 @@ export const AdminUsers = () => {
         return
       }
     }
+    setEditLoading(true)
     try {
       const payload: {
         displayName: string

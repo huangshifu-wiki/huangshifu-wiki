@@ -632,6 +632,7 @@ export interface AdminBackupsResponse {
 
 export interface AdminBackupCreateResponse {
   backup: AdminBackup
+  removedFilenames?: string[]
 }
 
 export interface AdminBackupNoteResponse {

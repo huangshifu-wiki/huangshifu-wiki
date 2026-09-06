@@ -33,6 +33,7 @@ const WikiHistory = () => {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [selectedRevision, setSelectedRevision] = useState<WikiRevisionItem | null>(null)
+  const [rollingBackId, setRollingBackId] = useState<string | null>(null)
   const previewPresence = useFloatingPresence(Boolean(selectedRevision))
   const lastSelectedRevisionRef = useRef<WikiRevisionItem | null>(null)
   const [loadingRevision, setLoadingRevision] = useState(false)
@@ -102,17 +103,21 @@ const WikiHistory = () => {
       variant: 'warning',
     })
     if (!confirmed) return
+    if (rollingBackId) return
     if (isBanned) {
       show('账号已被封禁，无法回滚', { variant: 'error' })
       return
     }
 
+    setRollingBackId(revision.id)
     try {
       await apiPost(`/api/wiki/${slug}/rollback/${revision.id}`)
       navigate(`/wiki/${slug}`)
     } catch (e) {
       console.error('Rollback error:', e)
       show(getErrorMessage(e, '回滚失败'), { variant: 'error' })
+    } finally {
+      setRollingBackId(null)
     }
   }
 
@@ -177,9 +182,10 @@ const WikiHistory = () => {
                         </button>
                         <button
                           onClick={() => handleRollback(rev)}
-                          className="rounded border border-brand-gold/20 bg-surface px-4 py-2 text-xs font-bold text-brand-gold opacity-0 transition-all hover:bg-brand-gold hover:text-white group-hover:opacity-100"
+                          disabled={rollingBackId !== null}
+                          className="rounded border border-brand-gold/20 bg-surface px-4 py-2 text-xs font-bold text-brand-gold opacity-0 transition-all hover:bg-brand-gold hover:text-white group-hover:opacity-100 disabled:opacity-50"
                         >
-                          回滚到此版本
+                          {rollingBackId === rev.id ? '回滚中...' : '回滚到此版本'}
                         </button>
                       </div>
                     </div>
@@ -246,7 +252,8 @@ const WikiHistory = () => {
                     handleRollback(previewRevision)
                     setSelectedRevision(null)
                   }}
-                  className="px-8 py-3 theme-button-primary rounded font-bold transition-all"
+                  disabled={rollingBackId !== null}
+                  className="px-8 py-3 theme-button-primary rounded font-bold transition-all disabled:opacity-50"
                 >
                   回滚到此版本
                 </button>

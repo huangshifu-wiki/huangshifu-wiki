@@ -2287,12 +2287,20 @@ router.post(
  * ==========================
  */
 
+// pg_dump 耗时较长，拒绝并发创建备份
+let backupCreateInFlight = false
+
 // POST /api/admin/backup/create - Create backup
 router.post(
   '/backup/create',
   requireSuperAdmin,
   validateBody(backupCreateSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    if (backupCreateInFlight) {
+      res.status(409).json({ error: '已有备份正在创建，请稍后再试' })
+      return
+    }
+    backupCreateInFlight = true
     try {
       const { note = '' } = req.body as { note?: string }
       const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '')
@@ -2363,7 +2371,7 @@ router.post(
       const stat = await fs.promises.stat(zipFilePath)
       const savedNote = note.trim() ? await writeBackupNote(zipFilename, note) : ''
 
-      await cleanupOldBackups()
+      const removedFilenames = await cleanupOldBackups()
 
       res.json({
         backup: {
@@ -2373,6 +2381,7 @@ router.post(
           createdAt: new Date().toISOString(),
           note: savedNote,
         },
+        removedFilenames,
       })
     } catch (error) {
       logger.error({ err: error }, 'Create backup error')
@@ -2381,6 +2390,8 @@ router.post(
         return
       }
       res.status(500).json({ error: '创建备份失败，请查看服务器日志' })
+    } finally {
+      backupCreateInFlight = false
     }
   })
 )

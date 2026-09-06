@@ -525,8 +525,10 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [pendingActions, setPendingActions] = useState<
-    Record<string, 'delete' | 'restore' | 'permanentDelete'>
+    Record<string, 'delete' | 'restore' | 'permanentDelete' | 'toggle'>
   >({})
+  const [createSaving, setCreateSaving] = useState(false)
+  const [categorySaving, setCategorySaving] = useState(false)
   const [editingCategory, setEditingCategory] = useState<AdminDataItem | null>(null)
   const showDeleted = searchParams.get('includeDeleted') === 'true'
   const dialog = useDialog()
@@ -582,7 +584,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
 
   const setRowPendingAction = (
     id: string,
-    action: 'delete' | 'restore' | 'permanentDelete' | null
+    action: 'delete' | 'restore' | 'permanentDelete' | 'toggle' | null
   ) => {
     setPendingActions((prev) => {
       if (action) return { ...prev, [id]: action }
@@ -760,11 +762,13 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           validateUrl(newItem.link, 'link', '公告链接', CONTENT_LIMITS.announcement.link)
 
   const handleCreate = async () => {
+    if (createSaving) return
     const validationError = validateNewItem()
     if (validationError) {
       show(validationError.message, { variant: 'error' })
       return
     }
+    setCreateSaving(true)
     try {
       if (type === 'sections') {
         await apiPost('/api/sections', {
@@ -790,11 +794,14 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       await fetchData({ silent: true })
     } catch (e) {
       show(getErrorMessage(e, '创建失败'), { variant: 'error' })
+    } finally {
+      setCreateSaving(false)
     }
   }
 
   const handleUpdateWikiCategory = async () => {
     if (type !== 'wiki-categories' || !editingCategory?.id) return
+    if (categorySaving) return
     const validationError =
       validateRequiredText(editingCategory.name, 'name', '分类名称') ||
       (Number.isFinite(Number(editingCategory.order ?? 0)) &&
@@ -811,6 +818,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       show(validationError.message, { variant: 'error' })
       return
     }
+    setCategorySaving(true)
     try {
       await apiPatch(`${WIKI_CATEGORIES_ADMIN_PATH}/${editingCategory.id}`, {
         ...getWikiCategoryPayload(editingCategory),
@@ -821,10 +829,14 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       await fetchData({ silent: true })
     } catch (e) {
       show(getErrorMessage(e, '更新失败'), { variant: 'error' })
+    } finally {
+      setCategorySaving(false)
     }
   }
 
   const toggleAnnouncement = async (item: AdminDataItem) => {
+    if (!item.id || pendingActions[item.id]) return
+    setRowPendingAction(item.id, 'toggle')
     try {
       const result = await apiPatch<{ announcement: AdminDataItem }>(
         `/api/announcements/${item.id}`,
@@ -841,6 +853,8 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       await fetchData({ silent: true })
     } catch (e) {
       show(getErrorMessage(e, '更新失败'), { variant: 'error' })
+    } finally {
+      setRowPendingAction(item.id, null)
     }
   }
 
@@ -850,7 +864,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
 
     return (
       <div className="flex items-center justify-start gap-2">
-        {isPending && (
+        {isPending && pendingAction !== 'toggle' && (
           <Button
             variant={pendingAction === 'restore' ? 'success' : 'danger'}
             soft
@@ -868,6 +882,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           <Button
             onClick={() => toggleAnnouncement(item)}
             disabled={isPending}
+            loading={pendingAction === 'toggle'}
             variant="warning"
             soft
             size="sm"
@@ -1073,12 +1088,14 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                   />
                 </>
               )}
-              <button
+              <Button
                 onClick={handleCreate}
-                className="rounded bg-brand-gold-dark px-5 py-2 text-sm font-medium text-white transition-all hover:bg-brand-gold"
+                loading={createSaving}
+                loadingText="创建中..."
+                variant="primary"
               >
                 添加
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -1125,13 +1142,14 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                   label={<span className="text-text-secondary">仅管理员编辑</span>}
                 />
               </div>
-              <button
-                type="button"
+              <Button
                 onClick={() => void handleUpdateWikiCategory()}
-                className="rounded theme-button-primary px-4 py-2 text-sm transition-all"
+                loading={categorySaving}
+                loadingText="保存中..."
+                variant="primary"
               >
                 保存
-              </button>
+              </Button>
               <button
                 type="button"
                 onClick={() => setEditingCategory(null)}

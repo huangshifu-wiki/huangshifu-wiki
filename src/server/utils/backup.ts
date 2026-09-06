@@ -426,7 +426,8 @@ export function formatFileSize(bytes: number): string {
 
 // ─── 备份清理 ───────────────────────────────────────────────────────
 
-export async function cleanupOldBackups(skipFiles?: string[]): Promise<void> {
+export async function cleanupOldBackups(skipFiles?: string[]): Promise<string[]> {
+  const removed: string[] = []
   try {
     const backupFilenames = (await fs.promises.readdir(backupsDir)).filter(
       (f) => f.startsWith('backup_') && f.endsWith('.zip')
@@ -449,12 +450,14 @@ export async function cleanupOldBackups(skipFiles?: string[]): Promise<void> {
         if (sanitizeFilename(file.name)) {
           await deleteBackupNote(file.name)
         }
+        removed.push(file.name)
         console.log(`Cleaned up old backup: ${file.name}`)
       }
     }
   } catch (error) {
     console.error('Cleanup old backups error:', error)
   }
+  return removed
 }
 
 // ─── 加密 / 解密 ────────────────────────────────────────────────────

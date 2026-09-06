@@ -7,6 +7,7 @@ import {
   CheckCircle,
   XCircle,
   FileText,
+  Loader2,
   Settings,
   RefreshCw,
   Sparkles,
@@ -195,6 +196,9 @@ const AdminImages: React.FC = () => {
   const [mediaHealthLoading, setMediaHealthLoading] = useState(false)
   const [mediaHealthCleaning, setMediaHealthCleaning] = useState(false)
   const [selectedHealthItems, setSelectedHealthItems] = useState<string[]>([])
+  const [blurhashLoadingId, setBlurhashLoadingId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [savingPreference, setSavingPreference] = useState(false)
   const dialog = useDialog()
   const { show } = useToast()
 
@@ -308,6 +312,8 @@ const AdminImages: React.FC = () => {
   }
 
   const handleRefreshBlurhash = async (id: string) => {
+    if (blurhashLoadingId) return
+    setBlurhashLoadingId(id)
     try {
       const response = await apiPost<{ success: boolean; item: ImageMap }>(
         `/api/image-maps/${id}/refresh-blurhash`,
@@ -319,11 +325,14 @@ const AdminImages: React.FC = () => {
       }
     } catch (error) {
       show(getErrorMessage(error, '生成 Blurhash 失败'), { variant: 'error' })
+    } finally {
+      setBlurhashLoadingId(null)
     }
   }
 
   const handleUpdate = async () => {
-    if (!editingImage) return
+    if (!editingImage || saving) return
+    setSaving(true)
     try {
       const response = await apiPatch<{ item: ImageMap }>(`/api/image-maps/${editingImage.id}`, {
         localUrl: editingImage.localUrl || null,
@@ -337,10 +346,14 @@ const AdminImages: React.FC = () => {
       fetchStats()
     } catch (error) {
       show(getErrorMessage(error, '更新失败'), { variant: 'error' })
+    } finally {
+      setSaving(false)
     }
   }
 
   const handlePreferenceUpdate = async () => {
+    if (savingPreference) return
+    setSavingPreference(true)
     try {
       await apiPatch('/api/config/image-preference', preference)
       clearImagePreferenceCache()
@@ -348,6 +361,8 @@ const AdminImages: React.FC = () => {
       show('设置已保存', { variant: 'success' })
     } catch (error) {
       show(getErrorMessage(error, '保存设置失败'), { variant: 'error' })
+    } finally {
+      setSavingPreference(false)
     }
   }
 
@@ -726,10 +741,15 @@ const AdminImages: React.FC = () => {
                       {!image.blurhash && imageUrl && (
                         <button
                           onClick={() => handleRefreshBlurhash(image.id)}
-                          className="p-2 text-brand-gold hover:bg-brand-gold/10 rounded transition-all"
+                          disabled={blurhashLoadingId !== null}
+                          className="p-2 text-brand-gold hover:bg-brand-gold/10 rounded transition-all disabled:opacity-50"
                           title="生成 Blurhash"
                         >
-                          <Sparkles size={18} />
+                          {blurhashLoadingId === image.id ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <Sparkles size={18} />
+                          )}
                         </button>
                       )}
                       <button
@@ -871,9 +891,10 @@ const AdminImages: React.FC = () => {
                 </button>
                 <button
                   onClick={handleUpdate}
-                  className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all"
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
                 >
-                  保存修改
+                  {saving ? '保存中...' : '保存修改'}
                 </button>
               </div>
             </div>
@@ -948,9 +969,10 @@ const AdminImages: React.FC = () => {
                 </button>
                 <button
                   onClick={handlePreferenceUpdate}
-                  className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all"
+                  disabled={savingPreference}
+                  className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
                 >
-                  保存设置
+                  {savingPreference ? '保存中...' : '保存设置'}
                 </button>
               </div>
             </div>

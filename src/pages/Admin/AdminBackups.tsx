@@ -125,6 +125,7 @@ const AdminBackups = () => {
   }
 
   const handleCreate = async () => {
+    if (actionLoading) return
     const noteError = validateMaxLength(
       createNote,
       'note',
@@ -135,6 +136,7 @@ const AdminBackups = () => {
       show(noteError.message, { variant: 'error' })
       return
     }
+    setActionLoading('create')
     try {
       const body = createNote.trim() ? { note: createNote } : undefined
       const response = body
@@ -144,9 +146,12 @@ const AdminBackups = () => {
       closeDialog()
       setBackups((current) => [
         response.backup,
-        ...current.filter((item) => item.filename !== response.backup.filename),
+        ...current.filter(
+          (item) =>
+            item.filename !== response.backup.filename &&
+            !response.removedFilenames?.includes(item.filename)
+        ),
       ])
-      await fetchBackups(false)
     } catch (error) {
       show(getErrorMessage(error, '创建备份失败'), { variant: 'error' })
     } finally {
@@ -155,7 +160,7 @@ const AdminBackups = () => {
   }
 
   const handleUpdateNote = async () => {
-    if (!noteTarget) return
+    if (!noteTarget || actionLoading) return
     const noteError = validateMaxLength(
       editNote,
       'note',
@@ -166,6 +171,7 @@ const AdminBackups = () => {
       show(noteError.message, { variant: 'error' })
       return
     }
+    setActionLoading('note')
     try {
       const response = await apiPost<AdminBackupNoteResponse>(
         `/api/admin/backup/${encodeURIComponent(noteTarget)}/note`,
@@ -224,6 +230,7 @@ const AdminBackups = () => {
   }
 
   const handleRestore = async () => {
+    if (actionLoading) return
     if (!restoreFile) {
       show('请选择备份文件', { variant: 'error' })
       return
@@ -251,14 +258,13 @@ const AdminBackups = () => {
   }
 
   const handleDelete = async () => {
-    if (!deleteTarget) return
+    if (!deleteTarget || actionLoading) return
     setActionLoading('delete')
     try {
       await apiPost(`/api/admin/backup/${encodeURIComponent(deleteTarget)}/delete`)
       show('备份已删除')
       setBackups((current) => current.filter((item) => item.filename !== deleteTarget))
       closeDialog()
-      await fetchBackups(false)
     } catch (error) {
       show(getErrorMessage(error, '删除失败'), { variant: 'error' })
     } finally {
@@ -267,7 +273,7 @@ const AdminBackups = () => {
   }
 
   const handleRestoreExisting = async () => {
-    if (!restoreTarget) return
+    if (!restoreTarget || actionLoading) return
     setActionLoading('restore-existing')
     try {
       const response = await apiPost<AdminBackupRestoreResponse>(
