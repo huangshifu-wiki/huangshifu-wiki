@@ -569,48 +569,6 @@ router.get('/cloud-sync/stats', requireAuth, requireAdmin, async (_req, res) => 
   }
 })
 
-// ============================================================================
-// 📈 系统健康检查仪表盘
-// ============================================================================
-
-/**
- * GET /api/admin/system/dashboard - 系统总览仪表盘
- */
-router.get('/system/dashboard', requireAuth, requireAdmin, async (_req, res) => {
-  try {
-    const [diskStatus, variantStats, cloudSyncStats] = await Promise.all([
-      diskMonitor.getStatus() || diskMonitor.manualCheck(),
-      Promise.resolve(variantGenerator.getQueueStats()),
-      Promise.resolve(cloudSyncService.getQueueStats()),
-    ])
-
-    res.json({
-      success: true,
-      data: {
-        disk: {
-          ...diskStatus,
-          config: diskMonitor.getConfig(),
-        },
-        variants: variantStats,
-        cloudSync: {
-          ...cloudSyncStats,
-          lskyProAvailable: cloudSyncService.isLskyProAvailable(),
-        },
-        serverTime: new Date().toISOString(),
-        uptime: process.uptime(),
-        memoryUsage: process.memoryUsage(),
-      },
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('[Admin/Dashboard] Error:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get system dashboard',
-    })
-  }
-})
-
 export { registerAdminSystemRoutes }
 
 function registerAdminSystemRoutes(app: Router) {
