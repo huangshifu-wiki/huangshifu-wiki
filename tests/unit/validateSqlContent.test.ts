@@ -283,10 +283,10 @@ DROP SEQUENCE IF EXISTS public."User_id_seq";
     )
   })
 
-  it('should accept current and legacy backup filenames only', () => {
+  it('should accept current backup filenames only', () => {
     expect(sanitizeFilename('backup_2026-06-28_10-11-12.zip')).toBe(true)
     expect(sanitizeFilename('backup_2026-06-28_10-11-12-345.zip')).toBe(true)
-    expect(sanitizeFilename('backup_2026-06-28T10-11-12-345Z.zip')).toBe(true)
+    expect(sanitizeFilename('backup_2026-06-28T10-11-12-345Z.zip')).toBe(false)
     expect(sanitizeFilename('../backup_2026-06-28_10-11-12.zip')).toBe(false)
     expect(sanitizeFilename('backup_2026-06-28_10-11-12.sql')).toBe(false)
   })

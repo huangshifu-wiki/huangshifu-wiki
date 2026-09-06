@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { ZodError } from 'zod'
-import { backupCreateSchema, backupNoteSchema } from '../../src/server/schemas/admin.schema'
+import {
+  backupCreateSchema,
+  backupNoteSchema,
+  backupRestoreSchema,
+} from '../../src/server/schemas/admin.schema'
 import { CONTENT_LIMITS } from '../../src/lib/contentLimits'
 
 describe('admin backup schemas', () => {
@@ -32,5 +36,21 @@ describe('admin backup schemas', () => {
         note: 'a'.repeat(CONTENT_LIMITS.admin.backupNote + 1),
       })
     ).toThrow(ZodError)
+  })
+
+  it('should accept restore requests with confirm only', () => {
+    expect(backupRestoreSchema.parse({ confirm: true })).toEqual({ confirm: true })
+    expect(backupRestoreSchema.parse({ confirm: 'true' })).toEqual({ confirm: true })
+  })
+
+  it('should accept restore requests with an optional decrypt password', () => {
+    expect(backupRestoreSchema.parse({ confirm: true, password: 'old-secret' })).toEqual({
+      confirm: true,
+      password: 'old-secret',
+    })
+  })
+
+  it('should reject restore requests without confirm', () => {
+    expect(() => backupRestoreSchema.parse({ password: 'old-secret' })).toThrow(ZodError)
   })
 })

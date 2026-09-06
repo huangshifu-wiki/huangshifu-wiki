@@ -50,7 +50,7 @@ const AdminBackups = () => {
   const [dialog, setDialog] = useState<DialogType>(null)
   const [createNote, setCreateNote] = useState('')
   const [editNote, setEditNote] = useState('')
-  const [legacyPassword, setLegacyPassword] = useState('')
+  const [restorePassword, setRestorePassword] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [noteTarget, setNoteTarget] = useState<string | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<string | null>(null)
@@ -100,7 +100,7 @@ const AdminBackups = () => {
     setDialog(null)
     setCreateNote('')
     setEditNote('')
-    setLegacyPassword('')
+    setRestorePassword('')
     setDeleteTarget(null)
     setNoteTarget(null)
     setRestoreTarget(null)
@@ -233,8 +233,8 @@ const AdminBackups = () => {
       const formData = new FormData()
       formData.append('file', restoreFile)
       formData.append('confirm', 'true')
-      if (legacyPassword !== '') {
-        formData.append('legacyPassword', legacyPassword)
+      if (restorePassword !== '') {
+        formData.append('password', restorePassword)
       }
       const response = await apiUpload<AdminBackupRestoreResponse>(
         '/api/admin/backup/restore',
@@ -272,7 +272,7 @@ const AdminBackups = () => {
     try {
       const response = await apiPost<AdminBackupRestoreResponse>(
         `/api/admin/backup/${encodeURIComponent(restoreTarget)}/restore`,
-        { confirm: true, ...(legacyPassword !== '' ? { legacyPassword } : {}) }
+        { confirm: true, ...(restorePassword !== '' ? { password: restorePassword } : {}) }
       )
       handleRestoreSuccess(response)
       closeDialog()
@@ -286,7 +286,7 @@ const AdminBackups = () => {
 
   const openRestoreExistingDialog = (filename: string) => {
     setRestoreTarget(filename)
-    setLegacyPassword('')
+    setRestorePassword('')
     setDialog('restore-existing')
   }
 
@@ -645,13 +645,13 @@ const AdminBackups = () => {
             {(visibleDialog === 'restore' || visibleDialog === 'restore-existing') && (
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  旧备份解密密码（可选）
+                  备份解密密码（可选）
                 </label>
                 <input
                   type="password"
-                  value={legacyPassword}
-                  onChange={(e) => setLegacyPassword(e.target.value)}
-                  placeholder="仅旧加密备份需要"
+                  value={restorePassword}
+                  onChange={(e) => setRestorePassword(e.target.value)}
+                  placeholder="服务器密钥不匹配或未配置时填写"
                   className="w-full px-4 py-2.5 rounded border border-border text-sm focus:outline-none focus:border-brand-gold"
                   onKeyDown={(e) => {
                     if (actionLoading) return

@@ -2488,7 +2488,7 @@ function pipeDownloadFile(
 async function restoreDatabaseFromZip(
   zipFilePath: string,
   dbConfig: { host: string; port: string; user: string; password: string; database: string },
-  legacyPassword?: string,
+  restorePassword?: string,
   sourceBackupFilename?: string,
   restoreSource: MediaRestoreSource = { type: 'upload' }
 ): Promise<RestoreFromZipResult> {
@@ -2507,55 +2507,49 @@ async function restoreDatabaseFromZip(
     const metadataEntry = zipEntries.find((e) => e.entryName === BACKUP_METADATA_ENTRY)
     const metadata = parseBackupMetadata(metadataEntry?.getData())
 
-    if (metadata?.encrypted) {
-      if (!BACKUP_PASSWORD) {
+    if (!metadata) {
+      return {
+        success: false,
+        error: '备份文件缺少 backup-meta.json 元数据，仅支持 v2 格式备份',
+        statusCode: 400,
+      }
+    }
+
+    if (metadata.encrypted) {
+      const candidatePasswords = [BACKUP_PASSWORD, restorePassword].filter(
+        (candidate, index, candidates): candidate is string =>
+          Boolean(candidate) && candidates.indexOf(candidate) === index
+      )
+
+      if (candidatePasswords.length === 0) {
         return {
           success: false,
-          error: '服务器未配置 BACKUP_PASSWORD，无法恢复加密备份',
+          error: '服务器未配置 BACKUP_PASSWORD，且未提供解密密码，无法恢复加密备份',
           statusCode: 400,
         }
       }
-      try {
-        sqlContent = decryptBuffer(encryptedContent, BACKUP_PASSWORD)
-      } catch {
+
+      let decrypted: Buffer | null = null
+      for (const candidate of candidatePasswords) {
+        try {
+          decrypted = decryptBuffer(encryptedContent, candidate)
+          break
+        } catch {
+          // 尝试下一个候选密码
+        }
+      }
+
+      if (!decrypted) {
         return {
           success: false,
-          error: '备份文件无法用服务器密钥解密，请确认 BACKUP_PASSWORD 配置',
+          error: '备份解密失败，请确认服务器 BACKUP_PASSWORD 或所提供密码与备份加密时一致',
           statusCode: 400,
         }
       }
-    } else if (metadata) {
-      sqlContent = encryptedContent
+
+      sqlContent = decrypted
     } else {
-      const rawContent = encryptedContent.toString('utf-8')
-      if (rawContent.includes('PostgreSQL database dump') || rawContent.includes('pg_dump')) {
-        sqlContent = encryptedContent
-      } else {
-        const candidatePasswords = [BACKUP_PASSWORD, legacyPassword].filter(
-          (candidate, index, candidates): candidate is string =>
-            Boolean(candidate) && candidates.indexOf(candidate) === index
-        )
-
-        let decrypted: Buffer | null = null
-        for (const candidate of candidatePasswords) {
-          try {
-            decrypted = decryptBuffer(encryptedContent, candidate)
-            break
-          } catch {
-            // Try the next compatible legacy password source.
-          }
-        }
-
-        if (!decrypted) {
-          return {
-            success: false,
-            error: '旧备份文件已加密，请配置 BACKUP_PASSWORD 或提供旧备份解密密码',
-            statusCode: 400,
-          }
-        }
-
-        sqlContent = decrypted
-      }
+      sqlContent = encryptedContent
     }
   } catch (error) {
     logger.error({ err: error }, 'Failed to parse backup zip')
@@ -2707,7 +2701,7 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     req.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
     res.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
-    const { legacyPassword, confirm } = req.body as { legacyPassword?: string; confirm?: boolean }
+    const { password, confirm } = req.body as { password?: string; confirm?: boolean }
     const file = req.file
 
     if (!confirm) {
@@ -2728,7 +2722,7 @@ router.post(
     }
 
     try {
-      const result = await restoreDatabaseFromZip(file.path, dbConfig, legacyPassword, undefined, {
+      const result = await restoreDatabaseFromZip(file.path, dbConfig, password, undefined, {
         type: 'upload',
         filename: file.originalname,
       })
@@ -2758,7 +2752,7 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     req.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
     res.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
-    const { legacyPassword, confirm } = req.body as { legacyPassword?: string; confirm?: boolean }
+    const { password, confirm } = req.body as { password?: string; confirm?: boolean }
 
     if (!confirm) {
       res.status(400).json({ error: '恢复操作需要二次确认，请传入 confirm: true' })
@@ -2787,7 +2781,7 @@ router.post(
       return
     }
 
-    const result = await restoreDatabaseFromZip(filePath, dbConfig, legacyPassword, normalized, {
+    const result = await restoreDatabaseFromZip(filePath, dbConfig, password, normalized, {
       type: 'existing',
       filename: normalized,
     })
@@ -2840,14 +2834,8 @@ router.post(
   })
 )
 
-// GET /api/admin/backups - List backups
-router.get('/backups', requireSuperAdmin, asyncHandler(handleBackupList))
-
-// DELETE /api/admin/backup/:filename - Delete backup (legacy compatible)
+// POST /api/admin/backup/:filename/delete - Delete backup
 router.post('/backup/:filename/delete', requireSuperAdmin, asyncHandler(handleBackupDelete))
-
-// DELETE /api/admin/backups/:filename - Delete backup
-router.post('/backups/:filename/delete', requireSuperAdmin, asyncHandler(handleBackupDelete))
 
 router.post(
   '/wiki-categories',

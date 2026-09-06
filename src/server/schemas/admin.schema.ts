@@ -9,7 +9,7 @@ import {
 
 export const backupRestoreSchema = z.object({
   confirm: z.preprocess((value) => value === true || value === 'true', z.literal(true)),
-  legacyPassword: z.string().optional(),
+  password: z.string().optional(),
 })
 
 export const backupNoteSchema = z
