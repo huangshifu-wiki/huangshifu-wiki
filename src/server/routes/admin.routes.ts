@@ -2645,8 +2645,16 @@ async function restoreDatabaseFromZip(
   }
 
   // Execute restore
-  const tempSqlPath = path.join(backupsDir, `restore_${Date.now()}.sql`)
+  const restoreId = Date.now()
+  const tempSqlPath = path.join(backupsDir, `restore_${restoreId}.sql`)
+  const wipeSqlPath = path.join(backupsDir, `restore_${restoreId}_wipe.sql`)
   await fs.promises.writeFile(tempSqlPath, sqlContent)
+  // pg_dump --clean 只清理备份中已知的对象，目标库 schema 比备份新时（如备份后新增了表和外键）
+  // 残留的外键会阻塞主键删除，因此先重建 public schema 再重放备份
+  await fs.promises.writeFile(
+    wipeSqlPath,
+    'DROP SCHEMA IF EXISTS public CASCADE;\nCREATE SCHEMA public;\n'
+  )
 
   try {
     const psqlArgs = [
@@ -2662,6 +2670,8 @@ async function restoreDatabaseFromZip(
       '-v',
       'ON_ERROR_STOP=1',
       '-f',
+      wipeSqlPath,
+      '-f',
       tempSqlPath,
     ]
     const psqlEnv = { ...process.env, PGPASSWORD: dbConfig.password }
@@ -2675,9 +2685,14 @@ async function restoreDatabaseFromZip(
     if (isPostgresClientMissingError(psqlError)) {
       return { success: false, error: formatPostgresClientMissingError('psql'), statusCode: 500 }
     }
-    return { success: false, error: '恢复数据库失败，请查看服务器日志', statusCode: 500 }
+    return {
+      success: false,
+      error: '恢复数据库失败，数据库已回滚至恢复前状态，请查看服务器日志',
+      statusCode: 500,
+    }
   } finally {
     await fs.promises.unlink(tempSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'))
+    await fs.promises.unlink(wipeSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'))
   }
 
   try {
