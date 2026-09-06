@@ -278,7 +278,7 @@ const GalleryDetail = () => {
     .filter(Boolean)
   const gallerySeoMetadata: SeoMetadata = gallery
     ? {
-        title: `${gallery.title}｜黄诗扶图集`,
+        title: `${gallery.title}｜${SEO_SITE_NAME}`,
         description: galleryDescription,
         canonicalPath: galleryPath,
         robots: isGalleryPublished ? 'index,follow' : 'noindex,follow',

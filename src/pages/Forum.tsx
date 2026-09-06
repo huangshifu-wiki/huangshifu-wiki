@@ -531,7 +531,7 @@ const PostDetail = () => {
   const postSeoMetadata: SeoMetadata =
     post && (!post.status || post.status === 'published')
       ? {
-          title: `${post.title}｜${SEO_SITE_NAME} 社区`,
+          title: `${post.title}｜${SEO_SITE_NAME}`,
           description: postSeoDescription,
           canonicalPath: postPath,
           robots: 'index,follow',

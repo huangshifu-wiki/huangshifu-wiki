@@ -167,7 +167,7 @@ describe('getStaticRouteSeo', () => {
   it('首页与基础列表页可索引且 canonical 无 query', () => {
     const home = getStaticRouteSeo('/', '')
     expect(home).toMatchObject({
-      title: `${SEO_SITE_NAME}｜音乐作品、专辑、活动与百科资料`,
+      title: SEO_SITE_NAME,
       canonicalPath: '/',
       robots: 'index,follow',
       ogType: 'website',

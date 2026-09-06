@@ -178,7 +178,7 @@ const EventDetail = () => {
     : ''
   const eventSeoMetadata: SeoMetadata = event
     ? {
-        title: `${event.title}｜黄诗扶活动记录`,
+        title: `${event.title}｜${SEO_SITE_NAME}`,
         description: eventDescription,
         canonicalPath: eventPath,
         robots: 'index,follow',

@@ -186,7 +186,7 @@ describe('MusicDetail SEO 元数据', () => {
     expect(await screen.findByRole('heading', { name: '歌曲信息' })).toBeInTheDocument()
 
     // title 由 useSeo 的 useEffect 异步写入，需要等待 effect flush
-    await waitFor(() => expect(document.title).toBe('测试歌曲｜歌曲信息与歌词｜黄诗扶 Wiki'))
+    await waitFor(() => expect(document.title).toBe('测试歌曲｜黄诗扶 Wiki'))
     expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
       'index,follow'
     )

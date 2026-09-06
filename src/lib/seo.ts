@@ -189,10 +189,7 @@ const PUBLIC_LIST_ROUTES: Record<string, string> = {
 const buildListSeo = (pathname: string, robots: SeoRobots): SeoMetadata => {
   const label = PUBLIC_LIST_ROUTES[pathname]
   return {
-    title:
-      pathname === '/'
-        ? `${SEO_SITE_NAME}｜音乐作品、专辑、活动与百科资料`
-        : `${label}｜${SEO_SITE_NAME}`,
+    title: pathname === '/' ? SEO_SITE_NAME : `${label}｜${SEO_SITE_NAME}`,
     description: SEO_SITE_DESCRIPTION,
     canonicalPath: pathname,
     robots,

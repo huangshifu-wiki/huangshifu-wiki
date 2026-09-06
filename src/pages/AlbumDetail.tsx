@@ -217,7 +217,7 @@ const AlbumDetail = () => {
   const albumPath = `/album/${albumId}`
   const albumSeoMetadata: SeoMetadata = album
     ? {
-        title: `${album.title}｜专辑曲目与介绍｜${SEO_SITE_NAME}`,
+        title: `${album.title}｜${SEO_SITE_NAME}`,
         description: summarizeSeoText(
           album.description,
           `${album.artist}的专辑，共 ${album.tracks.length} 首歌曲。`

@@ -224,7 +224,7 @@ const MusicDetail = () => {
   const songPath = `/music/${songId}`
   const songSeoMetadata: SeoMetadata = song
     ? {
-        title: `${song.title}｜歌曲信息与歌词｜${SEO_SITE_NAME}`,
+        title: `${song.title}｜${SEO_SITE_NAME}`,
         description: summarizeSeoText(
           [song.title, formatMusicCredits(song.artists, '未知歌手'), song.album, song.description]
             .filter(Boolean)
