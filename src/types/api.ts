@@ -752,6 +752,95 @@ export interface AdminReviewQueueCountResponse {
 }
 
 // ============================================================================
+// 管理后台仪表盘
+// ============================================================================
+
+export interface AdminDashboardStats {
+  wiki: number
+  posts: number
+  galleries: number
+  users: number
+  music: number
+}
+
+export interface AdminDashboardReviewQueue {
+  status: 'pending'
+  counts: {
+    wiki: number
+    posts: number
+    galleries: number
+    tickets: number
+  }
+  total: number
+}
+
+export interface AdminDashboardDiskStatus {
+  totalSpaceGB: number
+  freeSpaceGB: number
+  usedSpaceGB: number
+  usagePercent: number
+  status: 'healthy' | 'warning' | 'critical'
+  lastChecked: string
+}
+
+export interface AdminDashboardVariantStats {
+  queueLength: number
+  processingCount: number
+  completedToday: number
+  failedToday: number
+  averageProcessingTime: number
+  timeoutCount: number
+}
+
+export interface AdminDashboardCloudSyncStats {
+  queueLength: number
+  processingCount: number
+  completedToday: number
+  failedToday: number
+  averageProcessingTime: number
+  available: boolean
+}
+
+export type AdminDashboardSubsystem<T> = { data: T } | { error: string }
+
+export interface AdminDashboardTrends {
+  days: number
+  granularity: 'day'
+  rangeStart: string
+  rangeEnd: string
+  dates: string[]
+  series: {
+    posts: number[]
+    galleries: number[]
+    wiki: number[]
+    users: number[]
+  }
+  totals: {
+    posts: number
+    galleries: number
+    wiki: number
+    users: number
+  }
+}
+
+export interface AdminDashboardOverview {
+  stats: AdminDashboardStats
+  reviewQueue: AdminDashboardReviewQueue
+  system: {
+    disk: AdminDashboardSubsystem<AdminDashboardDiskStatus>
+    variants: AdminDashboardSubsystem<AdminDashboardVariantStats>
+    cloudSync: AdminDashboardSubsystem<AdminDashboardCloudSyncStats>
+  }
+  trends: AdminDashboardTrends
+}
+
+export interface AdminDashboardResponse {
+  success: boolean
+  data: AdminDashboardOverview
+  timestamp: string
+}
+
+// ============================================================================
 // 文本语义搜索类型
 // ============================================================================
 

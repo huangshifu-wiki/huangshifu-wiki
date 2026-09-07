@@ -36,8 +36,35 @@ import {
   normalizeRuntimeConfigUpdate,
   runtimeConfigService,
 } from '../services/runtimeConfig.service'
+import { getDashboardOverview } from '../utils'
 
 const router = Router()
+
+// ============================================================================
+// 📊 仪表盘总览 API
+// ============================================================================
+
+/**
+ * GET /api/admin/dashboard - 管理后台总览（内容统计 + 审核队列 + 系统健康 + 新增趋势）
+ * 依赖本 router 在 server.ts 中先于 admin.routes.ts 的 /:tab 兜底路由挂载
+ */
+router.get('/dashboard', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    const data = await getDashboardOverview()
+
+    res.json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('[Admin/Dashboard] Error getting overview:', error)
+    res.status(500).json({
+      success: false,
+      error: '获取仪表盘数据失败',
+    })
+  }
+})
 
 // ============================================================================
 // 请求限流 API（支持动态配置）

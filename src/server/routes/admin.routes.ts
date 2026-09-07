@@ -2957,42 +2957,6 @@ router.patch(
   })
 )
 
-/**
- * ==========================
- * Admin Panel Stats & Data
- * ==========================
- */
-
-// GET /api/admin/stats - Get admin panel statistics
-router.get(
-  '/stats',
-  requireAdmin,
-  asyncHandler(async (_req, res) => {
-    try {
-      const [wikiCount, postCount, galleryCount, userCount, musicCount] = await Promise.all([
-        prisma.wikiPage.count({ where: { deletedAt: null } }),
-        prisma.post.count({ where: { deletedAt: null } }),
-        prisma.gallery.count({ where: { deletedAt: null } }),
-        prisma.user.count({ where: { deletedAt: null } }),
-        prisma.musicTrack.count({ where: { deletedAt: null } }),
-      ])
-
-      res.json({
-        stats: {
-          wiki: wikiCount,
-          posts: postCount,
-          galleries: galleryCount,
-          users: userCount,
-          music: musicCount,
-        },
-      })
-    } catch (error) {
-      logger.error({ err: error }, 'Fetch admin stats error')
-      res.status(500).json({ error: '获取统计数据失败' })
-    }
-  })
-)
-
 // GET /api/admin/:tab - Get admin data by tab
 router.get(
   '/:tab',

@@ -277,6 +277,9 @@ export {
 export * from './cache'
 export { calculateFileMD5 } from './hash'
 
+// === 管理后台仪表盘 ===
+export { getDashboardOverview } from './adminDashboardStats'
+
 // === SEO（robots / sitemap / 文档 X-Robots-Tag）===
 export {
   getPublicSiteUrl,
