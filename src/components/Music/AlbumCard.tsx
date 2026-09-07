@@ -39,7 +39,15 @@ const AlbumCard = React.memo(function AlbumCard({ album, viewMode = 'grid' }: Al
           <span className="block truncate text-[0.975rem] font-semibold tracking-[0.04em] text-text-primary transition-colors group-hover:text-brand-gold">
             {album.title}
           </span>
-          <p className="mt-0.5 truncate text-[0.8125rem] text-text-muted">{album.artist}</p>
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.8125rem] text-text-muted">
+            <span className="min-w-0 truncate">{album.artist}</span>
+            {album.releaseDate && (
+              <>
+                <span className="flex-shrink-0 text-text-muted/40">·</span>
+                <span className="flex-shrink-0 whitespace-nowrap">{album.releaseDate}</span>
+              </>
+            )}
+          </p>
           {album.description && (
             <p className="mt-1 line-clamp-2 text-[0.75rem] leading-relaxed text-text-muted/70">
               {album.description}
@@ -82,6 +90,9 @@ const AlbumCard = React.memo(function AlbumCard({ album, viewMode = 'grid' }: Al
           {album.title}
         </h3>
         <p className="mt-0.5 truncate text-[0.78rem] text-text-muted">{album.artist}</p>
+        {album.releaseDate && (
+          <p className="mt-0.5 truncate text-[0.72rem] text-text-muted/60">{album.releaseDate}</p>
+        )}
       </Link>
       <div className="mt-2">
         <Link
