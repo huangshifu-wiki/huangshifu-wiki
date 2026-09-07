@@ -32,6 +32,12 @@ import { CONTENT_LIMITS } from '../../lib/contentLimits'
 
 const router = createRouter()
 
+type AlbumListSortOrder = 'asc' | 'desc'
+
+function parseAlbumListSortOrder(value: unknown): AlbumListSortOrder {
+  return value === 'asc' || value === 'desc' ? value : 'desc'
+}
+
 function ensureAlbumTextLimits(
   res: Parameters<typeof ensureTextLimit>[0],
   input: Record<string, unknown>
@@ -103,6 +109,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 })
     const page = parseInteger(req.query.page, 1, { min: 1 })
     const skip = (page - 1) * limit
+    const sortOrder = parseAlbumListSortOrder(req.query.sortOrder)
 
     const where = {
       deletedAt: null,
@@ -110,7 +117,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     }
 
     if (!req.authUser) {
-      const cacheKey = `album_list:${platform || 'all'}:${page}:${limit}`
+      const cacheKey = `album_list:${platform || 'all'}:${sortOrder}:${page}:${limit}`
       const cached = enhancedCache.get(cacheKey)
       if (cached) {
         res.json(cached)
@@ -152,7 +159,11 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [
+          { releaseDate: { sort: sortOrder, nulls: 'last' } },
+          { createdAt: 'desc' },
+          { docId: 'asc' },
+        ],
         take: limit,
         skip,
       }),
@@ -168,7 +179,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     }
 
     if (!req.authUser) {
-      const cacheKey = `album_list:${platform || 'all'}:${page}:${limit}`
+      const cacheKey = `album_list:${platform || 'all'}:${sortOrder}:${page}:${limit}`
       enhancedCache.set(cacheKey, result, 120)
     }
 

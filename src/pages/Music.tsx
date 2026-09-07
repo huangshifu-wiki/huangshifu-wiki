@@ -15,7 +15,7 @@ import { useI18n } from '../lib/i18n'
 import { AlbumCard } from '../components/Music/AlbumCard'
 import { Spinner } from '@/src/components/ui'
 import { SongCard } from '../components/Music/SongCard'
-import { MusicFilters, type SortBy } from '../components/Music/MusicFilters'
+import { MusicFilters } from '../components/Music/MusicFilters'
 import { ListPageContentState, ListPageLoadingBoundary } from '../components/ListPageState'
 import { getListLoadState } from '../lib/listLoadState'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
@@ -49,7 +49,6 @@ const Music = () => {
   const { show } = useToast()
   const { t } = useI18n()
 
-  const [sortBy, setSortBy] = useState<SortBy>('releaseDate')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   const musicPagination = useRoutedPagination({
@@ -93,7 +92,6 @@ const Music = () => {
           limit: musicPagination.pageSize,
           page,
           includeInstrumentals: showAccompaniments,
-          sortBy,
           sortOrder,
           ...(tag ? { tag } : {}),
         },
@@ -106,7 +104,7 @@ const Music = () => {
         total: data.total || 0,
       }
     },
-    [musicPagination.pageSize, showAccompaniments, sortBy, sortOrder, tag]
+    [musicPagination.pageSize, showAccompaniments, sortOrder, tag]
   )
   const fetchAlbumPage = useCallback(
     async (page: number, signal?: AbortSignal) => {
@@ -115,6 +113,7 @@ const Music = () => {
         {
           limit: albumPagination.pageSize,
           page,
+          sortOrder,
         },
         undefined,
         signal
@@ -125,12 +124,12 @@ const Music = () => {
         total: data.total || 0,
       }
     },
-    [albumPagination.pageSize]
+    [albumPagination.pageSize, sortOrder]
   )
   const incrementalSongs = useIncrementalListLoader({
     enabled: isIncrementalMode,
     pageSize: musicPagination.pageSize,
-    resetKey: `songs:${showAccompaniments}:${sortBy}:${sortOrder}:${tag}`,
+    resetKey: `songs:${showAccompaniments}:${sortOrder}:${tag}`,
     fetchPage: fetchSongPage,
     getItemKey: (song) => song.docId,
     preserveItemsOnReset: true,
@@ -138,7 +137,7 @@ const Music = () => {
   const incrementalAlbums = useIncrementalListLoader({
     enabled: isIncrementalMode,
     pageSize: albumPagination.pageSize,
-    resetKey: 'albums',
+    resetKey: `albums:${sortOrder}`,
     fetchPage: fetchAlbumPage,
     getItemKey: (album) => album.docId,
   })
@@ -358,15 +357,11 @@ const Music = () => {
               <MusicFilters
                 activeTab={activeTab}
                 onTabChange={handleTabChange}
-                sortBy={sortBy}
-                onSortByChange={(value) => {
-                  setSortBy(value)
-                  musicPagination.setPage(1)
-                }}
                 sortOrder={sortOrder}
                 onSortOrderChange={(value) => {
                   setSortOrder(value)
                   musicPagination.setPage(1)
+                  albumPagination.setPage(1)
                 }}
                 showAccompaniments={showAccompaniments}
                 onShowAccompanimentsChange={(value) => {

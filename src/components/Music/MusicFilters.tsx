@@ -6,15 +6,12 @@ import { useI18n } from '../../lib/i18n'
 import { ViewModeSelector } from '../ViewModeSelector'
 import type { ViewMode } from '../../types/userPreferences'
 
-type SortBy = 'releaseDate' | 'title' | 'artist'
 type SortOrder = 'asc' | 'desc'
 type ActiveTab = 'music' | 'albums'
 
 interface MusicFiltersProps {
   activeTab: ActiveTab
   onTabChange: (tab: ActiveTab) => void
-  sortBy: SortBy
-  onSortByChange: (sortBy: SortBy) => void
   sortOrder: SortOrder
   onSortOrderChange: (order: SortOrder) => void
   showAccompaniments: boolean
@@ -28,8 +25,6 @@ interface MusicFiltersProps {
 const MusicFilters: React.FC<MusicFiltersProps> = ({
   activeTab,
   onTabChange,
-  sortBy,
-  onSortByChange,
   sortOrder,
   onSortOrderChange,
   showAccompaniments,
@@ -40,12 +35,6 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
   onViewModeChange,
 }) => {
   const { t } = useI18n()
-
-  const sortLabel = {
-    releaseDate: '时间',
-    title: '名称',
-    artist: '歌手',
-  } as const
 
   return (
     <div className="mobile-filterbar">
@@ -86,32 +75,17 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
         {viewMode && onViewModeChange && (
           <ViewModeSelector value={viewMode} onChange={onViewModeChange} size="sm" />
         )}
+        <span className="text-border/50">|</span>
+        <button
+          onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
+          data-press-feedback="ripple"
+          className="cursor-pointer p-0.5 transition-colors hover:text-brand-gold"
+          title={sortOrder === 'asc' ? t('music.sortOrder.asc') : t('music.sortOrder.desc')}
+        >
+          <ArrowUpDown size={12} />
+        </button>
         {activeTab === 'music' && (
           <>
-            <span className="text-border/50">|</span>
-            <div className="flex items-center gap-0.5">
-              {(['releaseDate', 'title', 'artist'] as SortBy[]).map((key) => (
-                <button
-                  key={key}
-                  onClick={() => onSortByChange(key)}
-                  data-press-feedback="inline"
-                  className={clsx(
-                    'cursor-pointer rounded px-1.5 py-0.5 transition-colors',
-                    sortBy === key ? 'font-medium text-text-primary' : 'hover:text-text-secondary'
-                  )}
-                >
-                  {sortLabel[key]}
-                </button>
-              ))}
-              <button
-                onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
-                data-press-feedback="ripple"
-                className="cursor-pointer p-0.5 transition-colors hover:text-brand-gold"
-                title={sortOrder === 'asc' ? t('music.sortOrder.asc') : t('music.sortOrder.desc')}
-              >
-                <ArrowUpDown size={12} />
-              </button>
-            </div>
             <span className="text-border/50">|</span>
             <label
               htmlFor="music-show-accompaniments"
@@ -141,4 +115,3 @@ const MusicFilters: React.FC<MusicFiltersProps> = ({
 }
 
 export { MusicFilters }
-export type { MusicFiltersProps, SortBy, SortOrder, ActiveTab, ViewMode }

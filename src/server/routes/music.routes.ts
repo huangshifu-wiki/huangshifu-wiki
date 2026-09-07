@@ -58,7 +58,6 @@ import { formatMusicCredits, normalizeStringListInput } from '../../lib/musicCre
 
 const router = createRouter()
 
-type MusicListSortBy = 'releaseDate' | 'title' | 'artist'
 type MusicListSortOrder = 'asc' | 'desc'
 
 async function maybeAddImportedAlbumCover(albumDocId: string, coverUrl: string) {
@@ -69,12 +68,6 @@ async function maybeAddImportedAlbumCover(albumDocId: string, coverUrl: string) 
     console.warn(`Import album cover failed for ${albumDocId}:`, error)
     return false
   }
-}
-
-function parseMusicListSortBy(value: unknown): MusicListSortBy {
-  if (value === 'createdAt' || value === 'releaseDate') return 'releaseDate'
-  if (value === 'title' || value === 'artist') return value
-  return 'releaseDate'
 }
 
 function parseMusicListSortOrder(value: unknown): MusicListSortOrder {
@@ -89,24 +82,6 @@ function buildReleaseDateOrderBy(
     { createdAt: 'desc' },
     { docId: 'asc' },
   ]
-}
-
-function compareMusicListRows(
-  a: { docId: string; title: string; artists: string[]; createdAt: Date },
-  b: { docId: string; title: string; artists: string[]; createdAt: Date },
-  sortBy: MusicListSortBy,
-  sortOrder: MusicListSortOrder
-) {
-  const direction = sortOrder === 'asc' ? 1 : -1
-  const result =
-    sortBy === 'artist'
-      ? formatMusicCredits(a.artists, '').localeCompare(formatMusicCredits(b.artists, ''), 'zh-CN')
-      : a.title.localeCompare(b.title, 'zh-CN')
-
-  if (result !== 0) return result * direction
-  const createdAtResult = b.createdAt.getTime() - a.createdAt.getTime()
-  if (createdAtResult !== 0) return createdAtResult
-  return a.docId.localeCompare(b.docId)
 }
 
 async function fetchAlbumTrackPage(albumDocId: string, skip: number, limit: number, tag = '') {
@@ -244,11 +219,10 @@ router.get(
       const page = parseInteger(req.query.page, 1, { min: 1 })
       const skip = (page - 1) * limit
       const includeInstrumentals = parseBoolean(req.query.includeInstrumentals, true)
-      const sortBy = parseMusicListSortBy(req.query.sortBy)
       const sortOrder = parseMusicListSortOrder(req.query.sortOrder)
 
       if (!req.authUser && !albumDocId) {
-        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortBy}:${sortOrder}:${tag || ''}`
+        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortOrder}:${tag || ''}`
         const cached = enhancedCache.get(cacheKey)
         if (cached) {
           res.json(cached)
@@ -274,31 +248,14 @@ router.get(
 
       const [songs, total] = albumDocId
         ? await fetchAlbumTrackPage(albumDocId, skip, limit, tag)
-        : sortBy === 'artist' || sortBy === 'title'
-          ? await (async () => {
-              const rows = await prisma.musicTrack.findMany({
-                where,
-                select: {
-                  docId: true,
-                  title: true,
-                  artists: true,
-                  createdAt: true,
-                },
-              })
-              const songDocIds = rows
-                .sort((a, b) => compareMusicListRows(a, b, sortBy, sortOrder))
-                .slice(skip, skip + limit)
-                .map((song) => song.docId)
-              return [await fetchSongsWithRelationsByDocIds(songDocIds), rows.length] as const
-            })()
-          : await Promise.all([
-              fetchSongsWithRelations(where, {
-                take: limit,
-                skip,
-                orderBy: buildReleaseDateOrderBy(sortOrder),
-              }),
-              prisma.musicTrack.count({ where }),
-            ])
+        : await Promise.all([
+            fetchSongsWithRelations(where, {
+              take: limit,
+              skip,
+              orderBy: buildReleaseDateOrderBy(sortOrder),
+            }),
+            prisma.musicTrack.count({ where }),
+          ])
 
       const favoritedMusicSet = new Set<string>()
       if (req.authUser && songs.length) {
@@ -325,7 +282,7 @@ router.get(
       }
 
       if (!req.authUser && !albumDocId) {
-        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortBy}:${sortOrder}:${tag || ''}`
+        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortOrder}:${tag || ''}`
         enhancedCache.set(cacheKey, result, 120)
       }
 
