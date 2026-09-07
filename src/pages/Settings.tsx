@@ -28,6 +28,8 @@ import MarkdownEditor from '../components/MarkdownEditor'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useToast } from '../components/Toast'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../utils/formDirty'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import {
@@ -88,6 +90,13 @@ type PasswordForm = {
   currentPassword: string
   newPassword: string
   confirmPassword: string
+}
+
+const EMPTY_EMAIL_FORM: EmailForm = { newEmail: '', currentPassword: '' }
+const EMPTY_PASSWORD_FORM: PasswordForm = {
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: '',
 }
 
 type SettingsSection = 'profile' | 'content' | 'privacy' | 'account' | 'appearance'
@@ -227,15 +236,8 @@ const Settings = () => {
     photoURL: '',
     photoAssetId: null,
   })
-  const [emailForm, setEmailForm] = useState<EmailForm>({
-    newEmail: '',
-    currentPassword: '',
-  })
-  const [passwordForm, setPasswordForm] = useState<PasswordForm>({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  })
+  const [emailForm, setEmailForm] = useState(EMPTY_EMAIL_FORM)
+  const [passwordForm, setPasswordForm] = useState(EMPTY_PASSWORD_FORM)
   const [isEmailEditorOpen, setIsEmailEditorOpen] = useState(false)
   const [isPasswordEditorOpen, setIsPasswordEditorOpen] = useState(false)
   const [avatarModalOpen, setAvatarModalOpen] = useState(false)
@@ -266,6 +268,14 @@ const Settings = () => {
   const [myGalleries, setMyGalleries] = useState<GalleryItem[]>([])
   const [myTicketListings, setMyTicketListings] = useState<TicketListingSummary[]>([])
   const [myComments, setMyComments] = useState<UserCommentItem[]>([])
+
+  // 基线在资料回填落定后建立，避免加载期误判为已修改；邮箱/密码面板以空表单为基线
+  const [profileBaseline, setProfileBaseline] = useState<PublicProfileForm | null>(null)
+  const isDirty =
+    (profileBaseline !== null && hasFormChanges(profileForm, profileBaseline)) ||
+    hasFormChanges(emailForm, EMPTY_EMAIL_FORM) ||
+    hasFormChanges(passwordForm, EMPTY_PASSWORD_FORM)
+  const guard = useUnsavedChangesGuard(isDirty)
   const hasPendingGalleryThumbnails = myGalleries.some(shouldWaitForGalleryThumbnail)
   const activeContentHasItems =
     activeContentTab === 'posts'
@@ -281,13 +291,15 @@ const Settings = () => {
   useEffect(() => {
     if (!user) return
 
-    setProfileForm({
+    const nextProfileForm = {
       displayName: profile?.displayName || user.displayName || '',
       signature: profile?.signature || '',
       bio: profile?.bio || '',
       photoURL: profile?.photoURL || user.photoURL || '',
       photoAssetId: user.photoAssetId || profile?.photoAssetId || null,
-    })
+    }
+    setProfileForm(nextProfileForm)
+    setProfileBaseline(nextProfileForm)
   }, [
     profile?.bio,
     profile?.displayName,
@@ -509,6 +521,7 @@ const Settings = () => {
     try {
       await apiPatch('/api/users/me', { photoURL: result.url, photoAssetId: result.assetId })
       profileSaved = true
+      guard.markClean()
       await refreshAuth()
       show('头像更新成功')
     } catch (error) {
@@ -548,6 +561,7 @@ const Settings = () => {
         photoURL: profileForm.photoURL,
         photoAssetId: profileForm.photoAssetId,
       })
+      guard.markClean()
       await refreshAuth()
       show('公开资料已保存')
     } catch (error) {
@@ -559,10 +573,7 @@ const Settings = () => {
   }
 
   const openEmailEditor = () => {
-    setEmailForm({
-      newEmail: '',
-      currentPassword: '',
-    })
+    setEmailForm(EMPTY_EMAIL_FORM)
     setIsEmailEditorOpen(true)
   }
 
@@ -591,6 +602,7 @@ const Settings = () => {
         newEmail: emailForm.newEmail.trim(),
         currentPassword: emailForm.currentPassword,
       })
+      guard.markClean()
       await refreshAuth()
       setEmailForm((current) => ({ ...current, currentPassword: '' }))
       setIsEmailEditorOpen(false)
@@ -624,21 +636,13 @@ const Settings = () => {
   }
 
   const openPasswordEditor = () => {
-    setPasswordForm({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    })
+    setPasswordForm(EMPTY_PASSWORD_FORM)
     setIsPasswordEditorOpen(true)
   }
 
   const closePasswordEditor = () => {
     setIsPasswordEditorOpen(false)
-    setPasswordForm({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    })
+    setPasswordForm(EMPTY_PASSWORD_FORM)
   }
 
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -662,6 +666,7 @@ const Settings = () => {
         currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword,
       })
+      guard.markClean()
       await refreshAuth()
       closePasswordEditor()
       show('密码已更新')

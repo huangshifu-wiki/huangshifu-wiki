@@ -33,6 +33,8 @@ import {
 } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
 import { useToast } from '../../components/Toast'
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../../utils/formDirty'
 import type {
   EmailVerificationAdminConfig,
   RegistrationConfig,
@@ -625,6 +627,14 @@ const AdminSettings = () => {
   const [secretsDirty, setSecretsDirty] = useState(false)
   const [secretsForm, setSecretsForm] = useState<Record<string, string | null>>({})
 
+  const [runtimeBaseline, setRuntimeBaseline] = useState<RuntimeAdminConfig | null>(null)
+  const isDirty =
+    (runtimeBaseline !== null &&
+      runtimeForm !== null &&
+      hasFormChanges(runtimeForm, runtimeBaseline)) ||
+    secretsDirty
+  const guard = useUnsavedChangesGuard(isDirty)
+
   const loadConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
       setLoading(true)
@@ -901,7 +911,9 @@ const AdminSettings = () => {
         NO_CACHE_OPTIONS
       )
       if (result.success) {
-        setRuntimeForm({ ...result.data })
+        const next = { ...result.data }
+        setRuntimeForm(next)
+        setRuntimeBaseline(next)
       } else {
         setRuntimeLoadError(new Error(result.error || '系统参数加载失败'))
       }
@@ -949,7 +961,9 @@ const AdminSettings = () => {
         runtimeForm
       )
       if (result.success) {
-        setRuntimeForm({ ...result.data })
+        const next = { ...result.data }
+        setRuntimeForm(next)
+        setRuntimeBaseline(next)
         setRuntimeSaveSuccess(true)
         setTimeout(() => setRuntimeSaveSuccess(false), 3000)
         return true

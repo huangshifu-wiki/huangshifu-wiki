@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
@@ -17,6 +17,18 @@ import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import { SmartBackLink } from '../../components/SmartBackLink'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
 import { TagInput } from '@/src/components/ui'
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../../utils/formDirty'
+
+interface BranchFormSnapshot {
+  title: string
+  category: string
+  eventDate: string
+  tags: string
+  content: string
+  prTitle: string
+  prDescription: string
+}
 
 const WikiBranchWorkspace = () => {
   const { slug } = useParams()
@@ -45,25 +57,56 @@ const WikiBranchWorkspace = () => {
   const [prTitle, setPrTitle] = useState('')
   const [prDescription, setPrDescription] = useState('')
 
-  const hydrateFromRevision = (
+  // 基线在回填完成后建立，避免加载期误判为已修改
+  const [baseline, setBaseline] = useState<BranchFormSnapshot | null>(null)
+  const isDirty = useMemo(
+    () =>
+      baseline !== null &&
+      hasFormChanges(
+        { title, category, eventDate, tags, content, prTitle, prDescription },
+        baseline
+      ),
+    [baseline, title, category, eventDate, tags, content, prTitle, prDescription]
+  )
+  const guard = useUnsavedChangesGuard(isDirty)
+
+  const fieldsFromRevision = (
     revision: WikiRevisionItem | null,
     fallbackPage: WikiItem | null
-  ) => {
+  ): Pick<BranchFormSnapshot, 'title' | 'category' | 'eventDate' | 'tags' | 'content'> => {
     if (revision) {
-      setTitle(revision.title || '')
-      setCategory(revision.category || fallbackPage?.category || '')
-      setEventDate(revision.eventDate || '')
-      setTags((revision.tags || []).join(', '))
-      setContent(revision.content || '')
-      return
+      return {
+        title: revision.title || '',
+        category: revision.category || fallbackPage?.category || '',
+        eventDate: revision.eventDate || '',
+        tags: (revision.tags || []).join(', '),
+        content: revision.content || '',
+      }
     }
     if (fallbackPage) {
-      setTitle(fallbackPage.title || '')
-      setCategory(fallbackPage.category || '')
-      setEventDate(fallbackPage.eventDate || '')
-      setTags((fallbackPage.tags || []).join(', '))
-      setContent(fallbackPage.content || '')
+      return {
+        title: fallbackPage.title || '',
+        category: fallbackPage.category || '',
+        eventDate: fallbackPage.eventDate || '',
+        tags: (fallbackPage.tags || []).join(', '),
+        content: fallbackPage.content || '',
+      }
     }
+    return { title: '', category: '', eventDate: '', tags: '', content: '' }
+  }
+
+  const hydrateWorkspace = (
+    fields: Pick<BranchFormSnapshot, 'title' | 'category' | 'eventDate' | 'tags' | 'content'>,
+    pr: { prTitle: string; prDescription: string }
+  ) => {
+    setTitle(fields.title)
+    setCategory(fields.category)
+    setEventDate(fields.eventDate)
+    setTags(fields.tags)
+    setContent(fields.content)
+    setPrTitle(pr.prTitle)
+    setPrDescription(pr.prDescription)
+    setBaseline({ ...fields, ...pr })
   }
 
   const fetchWorkspace = async () => {
@@ -82,9 +125,10 @@ const WikiBranchWorkspace = () => {
       if (!mine) {
         setOpenPr(null)
         setRevisions([])
-        hydrateFromRevision(null, currentPage)
-        setPrTitle(currentPage.title || '')
-        setPrDescription('')
+        hydrateWorkspace(fieldsFromRevision(null, currentPage), {
+          prTitle: currentPage.title || '',
+          prDescription: '',
+        })
         return
       }
 
@@ -102,13 +146,14 @@ const WikiBranchWorkspace = () => {
 
       setBranch(branchDetail.branch)
       setRevisions(revisionsData.revisions || [])
-      hydrateFromRevision(branchDetail.latestRevision, currentPage)
 
       const currentOpenPr =
         (prsOpen.pullRequests || []).find((item) => item.branchId === mine.id) || null
       setOpenPr(currentOpenPr)
-      setPrTitle(currentOpenPr?.title || currentPage.title || '')
-      setPrDescription(currentOpenPr?.description || '')
+      hydrateWorkspace(fieldsFromRevision(branchDetail.latestRevision, currentPage), {
+        prTitle: currentOpenPr?.title || currentPage.title || '',
+        prDescription: currentOpenPr?.description || '',
+      })
     } catch (error) {
       console.error('Fetch wiki branch workspace error:', error)
       setLoadError(error)

@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ToastProvider } from '../../../src/components/Toast'
+import { DialogProvider } from '../../../src/components/Dialog'
 import AdminSettings from '../../../src/pages/Admin/AdminSettings'
 import { apiGet, apiPatch, apiRequest } from '../../../src/lib/apiClient'
 import { DEFAULT_RATE_LIMIT_CONFIG } from '../../../src/lib/rateLimitConfig'
@@ -99,7 +100,9 @@ const secretsConfig: SecretsAdminConfig = {
 function renderPage() {
   return render(
     <ToastProvider>
-      <AdminSettings />
+      <DialogProvider>
+        <AdminSettings />
+      </DialogProvider>
     </ToastProvider>
   )
 }

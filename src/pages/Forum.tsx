@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Routes,
   Route,
@@ -55,6 +55,8 @@ import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { Spinner, TagInput } from '@/src/components/ui'
 import { useTagSuggestions } from '../hooks/useTagSuggestions'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../utils/formDirty'
 import { RouteGuard } from '../components/RouteGuard'
 import { CommentActionMenu } from '../components/CommentActionMenu'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
@@ -1354,6 +1356,14 @@ const PostEditor = () => {
   const { show } = useToast()
   const tagSuggestions = useTagSuggestions('post')
 
+  // 基线在默认版块/内容或编辑帖回填落定后建立，避免加载期误判为已修改
+  const [baseline, setBaseline] = useState<typeof formData | null>(null)
+  const isDirty = useMemo(
+    () => baseline !== null && hasFormChanges(formData, baseline),
+    [formData, baseline]
+  )
+  const guard = useUnsavedChangesGuard(isDirty)
+
   useEffect(() => {
     const fetchSections = async () => {
       try {
@@ -1377,6 +1387,17 @@ const PostEditor = () => {
           locationName: prev.locationName,
           locationCode: prev.locationCode,
         }))
+        setBaseline(
+          (prev) =>
+            prev ?? {
+              title: '',
+              section: defaultSection,
+              content: defaultContent,
+              tags: '',
+              locationName: null,
+              locationCode: null,
+            }
+        )
       } catch (error) {
         console.error('Error fetching sections:', error)
       }
@@ -1403,14 +1424,16 @@ const PostEditor = () => {
 
         setEditablePostAuthorUid(data.post.authorUid)
         setEditablePostId(data.post.id)
-        setFormData({
+        const nextFormData = {
           title: data.post.title,
           section: data.post.section,
           content: data.post.content,
           tags: (data.post.tags || []).join(', '),
           locationName: data.post.locationDetail || data.post.locationName || null,
           locationCode: data.post.locationCode || null,
-        })
+        }
+        setFormData(nextFormData)
+        setBaseline(nextFormData)
       } catch (error) {
         console.error('Error loading editable post:', error)
         show(getErrorMessage(error, t('forum.loadPostFailed')), { variant: 'error' })
@@ -1520,6 +1543,7 @@ const PostEditor = () => {
     }
 
     if (redirectTarget) {
+      guard.markClean()
       navigate(redirectTarget)
     }
   }

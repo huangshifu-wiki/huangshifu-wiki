@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -24,6 +24,8 @@ import { metadataCache } from '../../lib/metadataCache'
 import { splitTagsInput } from '../../lib/contentUtils'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../../utils/formDirty'
 import { getWikiSaveResultText } from '../../lib/wikiWriteText'
 import { Trash2 } from '@/src/components/icons'
 import WikiEditorForm from './WikiEditorForm'
@@ -33,6 +35,18 @@ import type { WikiItemWithRelations, WikiRelationRecord } from './types'
 import type { WikiPageMetadata } from '../../lib/wikiLinkParser'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 import { Button, Textarea } from '@/src/components/ui'
+
+const EMPTY_WIKI_FORM = {
+  title: '',
+  slug: '',
+  category: '',
+  content: '',
+  tags: '',
+  eventDate: '',
+  relations: [] as WikiRelationRecord[],
+  locationCode: '',
+  locationName: '',
+}
 
 const WikiEditor = () => {
   const { slug } = useParams()
@@ -44,22 +58,20 @@ const WikiEditor = () => {
   const { categories, canEditCategory } = useWikiCategories()
   const tagSuggestions = useTagSuggestions('wiki')
 
-  const [formData, setFormData] = useState({
-    title: '',
-    slug: '',
-    category: '',
-    content: '',
-    tags: '',
-    eventDate: '',
-    relations: [] as WikiRelationRecord[],
-    locationCode: '',
-    locationName: '',
-  })
+  const [formData, setFormData] = useState(EMPTY_WIKI_FORM)
   const [savingMode, setSavingMode] = useState<'draft' | 'pending' | null>(null)
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
   const { show } = useToast()
+
+  // 基线在回填/默认分类落定后建立，避免加载期误判为已修改
+  const [baseline, setBaseline] = useState<typeof EMPTY_WIKI_FORM | null>(null)
+  const isDirty = useMemo(
+    () => baseline !== null && hasFormChanges(formData, baseline),
+    [formData, baseline]
+  )
+  const guard = useUnsavedChangesGuard(isDirty)
 
   // 图谱预览状态（由子组件内部管理，此处保留 metadataMap）
   const [metadataMap, setMetadataMap] = useState<Map<string, WikiPageMetadata>>(new Map())
@@ -67,6 +79,7 @@ const WikiEditor = () => {
   useEffect(() => {
     if (isNew && categories.length && !categories.some((item) => item.id === formData.category)) {
       setFormData((prev) => ({ ...prev, category: categories[0].id }))
+      setBaseline((prev) => prev ?? { ...EMPTY_WIKI_FORM, category: categories[0].id })
     }
   }, [categories, formData.category, isNew])
 
@@ -76,7 +89,7 @@ const WikiEditor = () => {
         try {
           const response = await apiGet<{ page: WikiItemWithRelations }>(`/api/wiki/${slug}`)
           const data = response.page
-          setFormData({
+          const nextFormData = {
             title: data.title,
             slug: data.slug,
             category: data.category,
@@ -86,7 +99,9 @@ const WikiEditor = () => {
             relations: (data.relations as WikiRelationRecord[]) || [],
             locationCode: data.locationCode || '',
             locationName: data.locationDetail || data.locationName || '',
-          })
+          }
+          setFormData(nextFormData)
+          setBaseline(nextFormData)
         } catch (error) {
           console.error('Error fetching wiki page for edit:', error)
         }
@@ -182,6 +197,7 @@ const WikiEditor = () => {
         show(getWikiSaveResultText(t, data.page.status as 'draft' | 'pending' | 'published'), {
           variant: 'success',
         })
+        guard.markClean()
         navigate(`/wiki/${data.page.slug}`)
         return
       }
@@ -195,6 +211,7 @@ const WikiEditor = () => {
         variant: 'success',
       })
       invalidateApiCache(`GET|/api/wiki/${pageSlug}|`)
+      guard.markClean()
       navigate(`/wiki/${data.page.slug}`)
       return
     } catch (e) {
@@ -247,6 +264,7 @@ const WikiEditor = () => {
       invalidateApiCache(`GET|/api/wiki/${pageSlug}|`)
       invalidateApiCacheByPrefix('/api/wiki')
       show(t('wiki.deleteSuccess'), { variant: 'success' })
+      guard.markClean()
       navigate('/wiki')
     } catch (e) {
       console.error('Error deleting wiki page:', e)

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ChevronDown, Plus, Save, Send, Trash2 } from '@/src/components/icons'
 import { clsx } from 'clsx'
@@ -33,6 +33,8 @@ import {
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { splitTagsInput } from '../lib/contentUtils'
 import { useTagSuggestions } from '../hooks/useTagSuggestions'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../utils/formDirty'
 import { toLocalDateInputValue } from '../lib/dateUtils'
 import { useI18n } from '../lib/i18n'
 import { validateMaxLength, validateRequiredText, validateTags } from '../lib/clientValidation'
@@ -173,6 +175,14 @@ const GalleryEdit = () => {
   const draftRef = useRef<GalleryDraft | null>(null)
   const hasPendingThumbnails = shouldWaitForAnyGalleryThumbnail(gallery)
 
+  // 基线在加载完成后建立，避免加载期误判为已修改
+  const [baseline, setBaseline] = useState<GalleryDraft | null>(null)
+  const isDirty = useMemo(
+    () => draft !== null && baseline !== null && hasFormChanges(draft, baseline),
+    [draft, baseline]
+  )
+  const guard = useUnsavedChangesGuard(isDirty)
+
   const applyDraft = (
     updater: GalleryDraft | null | ((prev: GalleryDraft | null) => GalleryDraft | null)
   ) => {
@@ -205,12 +215,14 @@ const GalleryEdit = () => {
     const fetchGallery = async () => {
       if (!galleryId) {
         setGallery(null)
+        const empty = createEmptyDraft()
         applyDraft((prev) => {
           if (prev) {
             releasePendingImageUrls(prev.images)
           }
-          return createEmptyDraft()
+          return empty
         })
+        setBaseline(empty)
         setLoading(false)
         return
       }
@@ -218,12 +230,14 @@ const GalleryEdit = () => {
         setLoading(true)
         const data = await apiGet<GalleryDetailResponse>(`/api/galleries/${galleryId}`)
         setGallery(data.gallery)
+        const loadedDraft = createDraftFromGallery(data.gallery)
         applyDraft((prev) => {
           if (prev) {
             releasePendingImageUrls(prev.images)
           }
-          return createDraftFromGallery(data.gallery)
+          return loadedDraft
         })
+        setBaseline(loadedDraft)
       } catch (error) {
         console.error('Fetch editable gallery error:', error)
         setGallery(null)
@@ -256,6 +270,10 @@ const GalleryEdit = () => {
         if (!stopped) {
           setGallery((prev) => (prev ? { ...prev, images: data.gallery.images } : data.gallery))
           applyDraft((prev) =>
+            prev ? mergeServerImagesIntoDraft(prev, data.gallery.images) : prev
+          )
+          // 服务端缩略图变化不属于用户修改，基线同步合并避免误报
+          setBaseline((prev) =>
             prev ? mergeServerImagesIntoDraft(prev, data.gallery.images) : prev
           )
         }
@@ -657,6 +675,7 @@ const GalleryEdit = () => {
     }
 
     if (redirectTarget) {
+      guard.markClean()
       navigate(redirectTarget)
     }
   }
@@ -701,6 +720,7 @@ const GalleryEdit = () => {
       await apiDelete(`/api/galleries/${gallery.id}`, reason ? { reason } : {})
       invalidateApiCacheByPrefix('/api/galleries')
       show(t('gallery.galleryDeleted'), { variant: 'success' })
+      guard.markClean()
       navigate('/gallery')
     } catch (error) {
       console.error('Error deleting gallery:', error)

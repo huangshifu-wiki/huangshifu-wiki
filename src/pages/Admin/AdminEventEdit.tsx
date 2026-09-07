@@ -30,6 +30,7 @@ import { getErrorMessage } from '../../lib/errorHandler'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { splitTagsInput } from '../../lib/contentUtils'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
 import {
   EVENT_ALLOWED_IMAGE_TYPES,
   EVENT_IMAGE_ACCEPT,
@@ -59,6 +60,7 @@ import type {
 } from '../../types/entities'
 import { TagInput } from '@/src/components/ui'
 import { runInBatches } from '../../utils/asyncBatch'
+import { hasFormChanges } from '../../utils/formDirty'
 
 type EditablePoster = {
   clientId: string
@@ -355,6 +357,10 @@ const AdminEventEdit = () => {
   const [loading, setLoading] = useState(!isCreating)
   const [saving, setSaving] = useState(false)
   const [coverUpload, setCoverUpload] = useState<CoverUploadState | null>(null)
+  // 基线在加载/新建初始化后建立；上传中的封面也视为未保存修改
+  const [baseline, setBaseline] = useState<EventDraft | null>(null)
+  const isDirty = (baseline !== null && hasFormChanges(draft, baseline)) || coverUpload !== null
+  const guard = useUnsavedChangesGuard(isDirty)
   const [draggingPosterIndex, setDraggingPosterIndex] = useState<number | null>(null)
   const [jsonEditors, setJsonEditors] = useState(createJsonEditorStates)
   const coverInputRef = useRef<HTMLInputElement>(null)
@@ -390,7 +396,9 @@ const AdminEventEdit = () => {
 
   useEffect(() => {
     if (!eventId) {
-      setDraft(createEmptyDraft())
+      const next = createEmptyDraft()
+      setDraft(next)
+      setBaseline(next)
       setLoading(false)
       return
     }
@@ -399,7 +407,10 @@ const AdminEventEdit = () => {
     setLoading(true)
     apiGet<AdminEventDetailResponse>(`/api/admin/events/${eventId}`)
       .then((data) => {
-        if (!cancelled) setDraft(createDraftFromEvent(data.item))
+        if (cancelled) return
+        const next = createDraftFromEvent(data.item)
+        setDraft(next)
+        setBaseline(next)
       })
       .catch((error) => {
         console.error('Fetch event for edit failed:', error)
@@ -884,6 +895,7 @@ const AdminEventEdit = () => {
       invalidateApiCacheByPrefix('/api/admin/events')
       invalidateApiCacheByPrefix('/api/ticket-listings')
       show('活动已保存', { variant: 'success' })
+      guard.markClean()
       navigate('/admin/events', { replace: true })
     } catch (error) {
       show(getErrorMessage(error, '保存活动失败'), { variant: 'error' })
