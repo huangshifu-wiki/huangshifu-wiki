@@ -222,6 +222,10 @@ function deactivate(): void {
     window.setTimeout(() => {
       if (installed || !sentinelCurrent) return
       sentinelCurrent = false
+      // markClean 后的 navigate 走已还原的原始 push/replace，会覆盖哨兵条目并写入
+      // react-router 的全新 state（不含 GUARD_STATE_KEY）；此时哨兵已消失，
+      // 若仍 go(-1) 会把用户从目标页弹回编辑页（即"保存要点两次"的根因）
+      if (!isSentinelState(window.history.state)) return
       ignorePopCount += 1
       window.history.go(-1)
     }, 0)

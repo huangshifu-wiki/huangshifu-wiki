@@ -604,7 +604,9 @@ const Settings = () => {
       })
       guard.markClean()
       await refreshAuth()
-      setEmailForm((current) => ({ ...current, currentPassword: '' }))
+      // 整体重置而非只清密码：残留 newEmail 会让 isDirty 在 markClean 后又被还原，
+      // 守卫处于"脏但未安装"状态，后续站内离开将不再提示
+      setEmailForm(EMPTY_EMAIL_FORM)
       setIsEmailEditorOpen(false)
       show('邮箱已更新，可按需发送验证邮件', { duration: 4000 })
     } catch (error) {

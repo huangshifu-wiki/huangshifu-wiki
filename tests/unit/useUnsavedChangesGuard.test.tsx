@@ -1,6 +1,6 @@
 import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -33,6 +33,16 @@ const Harness = ({ when }: { when: boolean }) => {
       <button type="button" onClick={guard.markClean}>
         clean
       </button>
+      {/* 模拟保存成功流程：先解除守卫，再 replace 跳转列表页 */}
+      <button
+        type="button"
+        onClick={() => {
+          guard.markClean()
+          navigate('/list', { replace: true })
+        }}
+      >
+        save
+      </button>
     </div>
   )
 }
@@ -62,6 +72,9 @@ describe('useUnsavedChangesGuard', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    // 复位真实历史与模块级守卫状态：哨兵收缩是异步定时器 + popstate，只靠 beforeEach 会跨用例污染
+    window.history.replaceState({}, '', '/')
+    resetUnsavedChangesGuardForTests()
   })
 
   it('when=false 时导航不受拦截', async () => {
@@ -175,6 +188,44 @@ describe('useUnsavedChangesGuard', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(confirmMock).not.toHaveBeenCalled()
+  })
+
+  // MemoryRouter 的 navigator 与 window.history 无关，测不到哨兵收缩的真实副作用；
+  // 以下用例用 BrowserRouter 复现"保存后弹回编辑页"竞态
+  describe('哨兵收缩与真实浏览器历史', () => {
+    const renderWithRealHistory = async () => {
+      window.history.replaceState({}, '', '/edit')
+      render(
+        <BrowserRouter>
+          <Harness when={true} />
+        </BrowserRouter>
+      )
+      await waitFor(() => expect(isSentinelCurrentEntry()).toBe(true))
+    }
+
+    it('markClean 后 replace 导航：收缩定时器不再 go(-1)，用户停在目标页', async () => {
+      await renderWithRealHistory()
+      const goSpy = vi.spyOn(window.history, 'go').mockImplementation(() => {})
+
+      fireEvent.click(screen.getByRole('button', { name: 'save' }))
+
+      await waitFor(() => expect(screen.getByTestId('pathname').textContent).toBe('/list'))
+      // 等待 deactivate 排队的收缩定时器执行完毕
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(goSpy).not.toHaveBeenCalled()
+      expect(isSentinelCurrentEntry()).toBe(false)
+      expect(window.location.pathname).toBe('/list')
+    })
+
+    it('markClean 不导航：仍收缩哨兵（go(-1) 恰好一次）', async () => {
+      await renderWithRealHistory()
+      const goSpy = vi.spyOn(window.history, 'go').mockImplementation(() => {})
+
+      fireEvent.click(screen.getByRole('button', { name: 'clean' }))
+
+      await waitFor(() => expect(goSpy).toHaveBeenCalledTimes(1))
+      expect(goSpy).toHaveBeenCalledWith(-1)
+    })
   })
 })
 
