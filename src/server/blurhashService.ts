@@ -2,6 +2,8 @@ import fs from 'fs'
 import { encode } from 'blurhash'
 import sharp from 'sharp'
 import { runtimeConfigService } from './services/runtimeConfig.service'
+import { EnhancedCache } from './utils/cache'
+import { getSharpInputPixelLimit } from './utils/sharpSafe'
 
 export interface BlurhashConfig {
   enabled: boolean
@@ -33,32 +35,15 @@ export function shouldAutoGenerate(): boolean {
   return getBlurhashConfig().autoGenerate
 }
 
-const blurhashCache = new Map<string, BlurhashResult>()
-const BLURHASH_CACHE_TTL = 60 * 60 * 1000
-
-function getCachedBlurhash(key: string): BlurhashResult | null {
-  const cached = blurhashCache.get(key)
-  if (cached) {
-    const timestamp = blurhashCache.get(`_timestamp_${key}`)
-    if (timestamp && Date.now() - (timestamp as any) < BLURHASH_CACHE_TTL) {
-      return cached
-    }
-    blurhashCache.delete(key)
-    blurhashCache.delete(`_timestamp_${key}`)
-  }
-  return null
-}
-
-function setCachedBlurhash(key: string, result: BlurhashResult): void {
-  blurhashCache.set(key, result)
-  blurhashCache.set(`_timestamp_${key}`, Date.now() as any)
-}
+// blurhash 生成结果缓存：TTL 1 小时，容量跟随管理后台 cacheMaxKeys 配置
+const blurhashCache = new EnhancedCache({ stdTTL: 3600 })
 
 async function extractPixels(
   buffer: Buffer
 ): Promise<{ data: Uint8ClampedArray; width: number; height: number } | null> {
   try {
-    const metadata = await sharp(buffer).metadata()
+    const pixelLimit = getSharpInputPixelLimit()
+    const metadata = await sharp(buffer, { limitInputPixels: pixelLimit }).metadata()
 
     // Downsize very large images to keep encoding fast
     const MAX_DIMENSION = 100
@@ -74,7 +59,7 @@ async function extractPixels(
       }
     }
 
-    const { data, info } = await sharp(buffer)
+    const { data, info } = await sharp(buffer, { limitInputPixels: pixelLimit })
       .ensureAlpha()
       .removeAlpha()
       .resize(targetWidth, targetHeight, { fit: 'inside' })
@@ -145,10 +130,10 @@ export async function generateBlurhashFromFile(filePath: string): Promise<string
   }
 
   const cacheKey = `blurhash_file_${filePath}`
-  const cached = getCachedBlurhash(cacheKey)
-  if (cached?.blurhash) {
+  const cached = blurhashCache.get<string>(cacheKey)
+  if (cached) {
     console.log('[Blurhash] Using cached blurhash for:', filePath)
-    return cached.blurhash
+    return cached
   }
 
   try {
@@ -156,8 +141,7 @@ export async function generateBlurhashFromFile(filePath: string): Promise<string
     const blurhash = await generateBlurhashFromBuffer(buffer)
 
     if (blurhash) {
-      const result: BlurhashResult = { blurhash }
-      setCachedBlurhash(cacheKey, result)
+      blurhashCache.set(cacheKey, blurhash)
     }
 
     return blurhash
@@ -175,7 +159,7 @@ export async function generateImageHashesFromFile(filePath: string): Promise<Blu
   }
 
   const cacheKey = `hashes_file_${filePath}`
-  const cached = getCachedBlurhash(cacheKey)
+  const cached = blurhashCache.get<BlurhashResult>(cacheKey)
   if (cached) {
     console.log('[Blurhash] Using cached hashes for:', filePath)
     return cached
@@ -192,7 +176,7 @@ export async function generateImageHashesFromFile(filePath: string): Promise<Blu
     }
 
     if (Object.keys(result).length > 0) {
-      setCachedBlurhash(cacheKey, result)
+      blurhashCache.set(cacheKey, result)
     }
   }
 

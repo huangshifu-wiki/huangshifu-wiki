@@ -72,8 +72,14 @@ vi.mock('sharp', async () => {
     }),
   }
 
+  const mockSharpModule = vi.fn(() => mockSharp) as ReturnType<typeof vi.fn> &
+    Record<string, unknown>
+  // sharpSafe 顶层会调用 sharp.cache / sharp.concurrency，mock 需模拟真实模块表面
+  mockSharpModule.cache = vi.fn()
+  mockSharpModule.concurrency = vi.fn()
+
   return {
-    default: vi.fn(() => mockSharp),
+    default: mockSharpModule,
   }
 })
 

@@ -16,6 +16,12 @@ vi.mock('sharp', () => {
   }
 })
 
+// Mock sharpSafe：斩断其 runtimeConfigService→prisma 依赖，避免单测实例化真实 Prisma client
+vi.mock('../../../src/server/utils/sharpSafe', () => ({
+  getSharpInputPixelLimit: vi.fn(() => 25_000_000),
+  resolveSharpInputPixelLimit: vi.fn((hardCap: number) => hardCap),
+}))
+
 // Mock blurhashService
 vi.mock('../../../src/server/blurhashService', () => ({
   generateBlurhashFromBuffer: vi.fn().mockResolvedValue('LKH8O%_4'),

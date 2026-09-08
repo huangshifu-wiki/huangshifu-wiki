@@ -13,6 +13,8 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { execFileSync } from 'child_process'
+import sharp from 'sharp'
+import { getSharpInputPixelLimit } from '../utils/sharpSafe'
 
 const DEFAULT_MODEL_NAME = 'OFA-Sys/chinese-clip-vit-base-patch16'
 const DEFAULT_VECTOR_SIZE = 512
@@ -634,6 +636,29 @@ async function getTextTokenizer() {
   return textTokenizerPromise
 }
 
+// 嵌入输入最大边长：CLIP 模型输入 224px，1024px 已足够
+const EMBEDDING_IMAGE_MAX_SIDE = 1024
+
+// 嵌入前把图片控制在 CLIP 足够用的尺寸：已达标图片直接透传，避免有损再编码与重复解码；
+// 超大原图则预缩，避免 transformers 内置 sharp 无像素限制地解码
+async function prepareEmbeddingImageBuffer(imageBuffer: Buffer): Promise<Buffer> {
+  const pixelLimit = getSharpInputPixelLimit()
+  const metadata = await sharp(imageBuffer, { limitInputPixels: pixelLimit }).metadata()
+  if (
+    (metadata.width ?? Infinity) <= EMBEDDING_IMAGE_MAX_SIDE &&
+    (metadata.height ?? Infinity) <= EMBEDDING_IMAGE_MAX_SIDE
+  ) {
+    return imageBuffer
+  }
+  return sharp(imageBuffer, { limitInputPixels: pixelLimit })
+    .resize(EMBEDDING_IMAGE_MAX_SIDE, EMBEDDING_IMAGE_MAX_SIDE, {
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .webp({ quality: 85 })
+    .toBuffer()
+}
+
 export async function generateImageEmbedding(imageBuffer: Buffer) {
   if (!imageBuffer || imageBuffer.byteLength === 0) {
     throw new Error('图片内容为空，无法生成向量')
@@ -641,12 +666,13 @@ export async function generateImageEmbedding(imageBuffer: Buffer) {
 
   const startTime = Date.now()
   const extractor = await getImageExtractor()
+  const preparedBuffer = await prepareEmbeddingImageBuffer(imageBuffer)
   const tmpPath = path.join(
     os.tmpdir(),
     `embedding_${Date.now()}_${Math.random().toString(36).slice(2)}.tmp`
   )
   try {
-    await fs.promises.writeFile(tmpPath, imageBuffer)
+    await fs.promises.writeFile(tmpPath, preparedBuffer)
     const image = await RawImage.read(tmpPath)
     const output = await extractor(image, {
       pooling: 'mean',

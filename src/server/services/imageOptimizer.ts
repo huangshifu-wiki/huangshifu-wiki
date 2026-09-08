@@ -1,5 +1,6 @@
 import sharp from 'sharp'
 import { generateBlurhashFromBuffer } from '../blurhashService'
+import { getSharpInputPixelLimit } from '../utils/sharpSafe'
 
 // L-22: imageOptimizer 当前为单函数导出（optimizeImage），无批量调用入口
 // 如未来新增批量优化入口，建议引入 p-limit(concurrency=3) 控制并发
@@ -39,8 +40,9 @@ export async function optimizeImage(
   } = options
 
   const originalSize = inputBuffer.length
+  const pixelLimit = getSharpInputPixelLimit()
 
-  let pipeline = sharp(inputBuffer).resize(maxWidth, maxHeight, {
+  let pipeline = sharp(inputBuffer, { limitInputPixels: pixelLimit }).resize(maxWidth, maxHeight, {
     fit: 'inside',
     withoutEnlargement: true,
   })
@@ -64,7 +66,7 @@ export async function optimizeImage(
     }
   }
 
-  const metadata = await sharp(outputBuffer).metadata()
+  const metadata = await sharp(outputBuffer, { limitInputPixels: pixelLimit }).metadata()
 
   return {
     success: true,

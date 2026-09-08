@@ -57,6 +57,7 @@ export {
 } from './textLimits'
 
 export { allocateNumericSlug, isNumericSlug, withNumericSlugTransaction } from './numericSlug'
+export { getSharpInputPixelLimit, resolveSharpInputPixelLimit } from './sharpSafe'
 export { normalizeLyricStorage } from './lyrics'
 export { allocateUserPublicId, isUserPublicId } from './userPublicId'
 

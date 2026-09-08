@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import sharp from 'sharp'
+import { getSharpInputPixelLimit } from './sharpSafe'
 
 import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
 import {
@@ -200,7 +201,10 @@ export async function localizeImageUrlAsMediaAsset(
 
   const parsedUrl = normalizeRemoteImageUrl(trimmed)
   const { buffer, contentType } = await downloadRemoteImageBuffer(parsedUrl)
-  const metadata = await sharp(buffer, { animated: true }).metadata()
+  const metadata = await sharp(buffer, {
+    animated: true,
+    limitInputPixels: getSharpInputPixelLimit(),
+  }).metadata()
   const ext = normalizeExtension(metadata.format, getFileNameFromUrl(parsedUrl, 'image.jpg'))
   const mimeType = normalizeMimeType(metadata.format, contentType)
   const ownerUid = await resolveMediaAssetOwnerUid(options.ownerUid, options.requireOwner ?? false)

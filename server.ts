@@ -592,6 +592,16 @@ async function startServer() {
 await initSensitiveWords()
 
 if (!isTestEnv) {
+  // 未捕获的 rejection 只记录不退出：单个瞬时 native 异步错误不应打挂全站
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ err: reason }, 'Unhandled promise rejection')
+  })
+  // uncaughtException 后进程状态不可信，记录结构化日志后退出，交给容器重启兜底
+  process.on('uncaughtException', (err) => {
+    logger.error({ err }, 'Uncaught exception, exiting')
+    process.exit(1)
+  })
+
   startServer().catch((error) => {
     logger.error({ err: error }, 'Failed to start server')
     process.exit(1)

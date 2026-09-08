@@ -419,7 +419,8 @@ CI 使用 Node 22。
 - 向量模型：`IMAGE_EMBEDDING_*`、`TRANSFORMERS_*`（Qdrant 端点/集合/密钥已移至管理后台）
 - 上传与存储：`UPLOADS_PATH`
 - 地图（前端）：`VITE_AMAP_*`
-- 部署信号（Docker）：`ENABLE_SEMANTIC_SEARCH`（是否启动 Qdrant 容器）
+- 图片处理底层（须启动时生效，不可移入管理后台）：`SHARP_CONCURRENCY`（libvips 并发，默认 1）、`SHARP_MAX_INPUT_PIXELS`（输入像素硬闸，默认 25000000）
+- 部署信号（Docker）：`ENABLE_SEMANTIC_SEARCH`（是否启动 Qdrant 容器）；内存参数 `APP_MEM_LIMIT`（docker-compose.yml 插值）
 
 运行时行为参数（功能开关、上传会话、备份保留、Blurhash、缓存/搜索调优、变体、云同步、日志级别、S3 存储、向量检索、外部图床、磁盘监控）不在此列，已移至管理后台「系统参数」，存储于 `SiteConfig` 键 `runtime_config`（见 `src/server/services/runtimeConfig.service.ts`）。
 

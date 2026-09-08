@@ -87,7 +87,7 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   imageEmbeddingBatchSize: 100,
   editLockCleanupIntervalMs: 90000,
   mediaCleanupIntervalMs: 90000,
-  variantMaxConcurrent: 3,
+  variantMaxConcurrent: 1,
   variantTaskTimeoutMs: 30000,
   variantQueueMaxWaitMs: 300000,
   variantSharpMemoryLimitMb: 512,

@@ -16,6 +16,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { resolveUploadPathByUrl } from '../utils/upload'
+import { getSharpInputPixelLimit } from '../utils/sharpSafe'
 import {
   buildUploadPublicUrl,
   createUploadStorageInfo,
@@ -496,11 +497,11 @@ export class VariantGenerator {
   ): Promise<Map<string, VariantMetadata>> {
     const variants = new Map<string, VariantMetadata>()
     const generatedPaths = new Set<string>()
-    const maxPixels = (getVariantConfig().variantSharpMemoryLimitMb * 1024 * 1024) / 4
+    const pixelLimit = getSharpInputPixelLimit()
 
     try {
       const metadata = await sharp(task.localFilePath, {
-        limitInputPixels: maxPixels,
+        limitInputPixels: pixelLimit,
       }).metadata()
 
       console.log(
@@ -516,7 +517,9 @@ export class VariantGenerator {
         const variantPromises = this.imageMapVariantSpecs.map(async (spec) => {
           const outputPath = path.join(outputDir, `${spec.name}.webp`)
           generatedPaths.add(outputPath)
-          const result = await sharp(task.localFilePath)
+          const result = await sharp(task.localFilePath, {
+            limitInputPixels: pixelLimit,
+          })
             .resize(spec.maxWidth ?? undefined, spec.maxHeight ?? undefined, {
               fit: 'inside',
               withoutEnlargement: true,
@@ -554,7 +557,9 @@ export class VariantGenerator {
         )
         const outputPath = path.join(storageInfo.absoluteDir, storageInfo.fileName)
         generatedPaths.add(outputPath)
-        const result = await sharp(task.localFilePath)
+        const result = await sharp(task.localFilePath, {
+          limitInputPixels: pixelLimit,
+        })
           .resize(MUSIC_COVER_THUMBNAIL_SIZE, MUSIC_COVER_THUMBNAIL_SIZE, {
             fit: 'inside',
             withoutEnlargement: true,
@@ -591,9 +596,7 @@ export class VariantGenerator {
       await this.removeGeneratedFiles(generatedPaths)
       const reason = getErrorMessage(error)
       if (reason.includes('Input image exceeds pixel limit')) {
-        throw new Error(
-          `Image too large (max ${getVariantConfig().variantSharpMemoryLimitMb}MB memory limit)`
-        )
+        throw new Error(`Image too large (max ${getSharpInputPixelLimit()} pixels)`)
       }
       throw error
     }
