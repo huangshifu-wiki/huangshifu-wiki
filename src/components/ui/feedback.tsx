@@ -52,7 +52,10 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
               toast.variant === 'info' && 'border-brand-gold text-text-primary'
             )}
           >
-            <ToastPrimitive.Description>{toast.message}</ToastPrimitive.Description>
+            {/* Radix 在 Root 上内联 user-select: none，这里显式放开文案选择 */}
+            <ToastPrimitive.Description className="select-text">
+              {toast.message}
+            </ToastPrimitive.Description>
             <ToastPrimitive.Close asChild>
               <IconButton variant="ghost" size="sm" aria-label="关闭通知">
                 <X className="h-4 w-4" />
