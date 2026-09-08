@@ -1,7 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
 import sharp from 'sharp'
-import { getSharpInputPixelLimit } from './sharpSafe'
 
 import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
 import {
@@ -201,10 +200,9 @@ export async function localizeImageUrlAsMediaAsset(
 
   const parsedUrl = normalizeRemoteImageUrl(trimmed)
   const { buffer, contentType } = await downloadRemoteImageBuffer(parsedUrl)
-  const metadata = await sharp(buffer, {
-    animated: true,
-    limitInputPixels: getSharpInputPixelLimit(),
-  }).metadata()
+  // metadata 只做头部解析、不解码像素，无需像素限制；超限的合法大图也应正常落库，
+  // 后续变体/blurhash 各自优雅降级
+  const metadata = await sharp(buffer, { animated: true }).metadata()
   const ext = normalizeExtension(metadata.format, getFileNameFromUrl(parsedUrl, 'image.jpg'))
   const mimeType = normalizeMimeType(metadata.format, contentType)
   const ownerUid = await resolveMediaAssetOwnerUid(options.ownerUid, options.requireOwner ?? false)

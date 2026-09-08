@@ -29,3 +29,8 @@ export function getSharpInputPixelLimit(): number {
     runtimeConfigService.getConfig().variantSharpMemoryLimitMb
   )
 }
+
+// sharp 在打开输入（含 metadata 纯头部读取）时校验像素上限并抛出该错误
+export function isSharpPixelLimitError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Input image exceeds pixel limit')
+}

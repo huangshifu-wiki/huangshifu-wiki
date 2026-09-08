@@ -16,7 +16,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { resolveUploadPathByUrl } from '../utils/upload'
-import { getSharpInputPixelLimit } from '../utils/sharpSafe'
+import { getSharpInputPixelLimit, isSharpPixelLimitError } from '../utils/sharpSafe'
 import {
   buildUploadPublicUrl,
   createUploadStorageInfo,
@@ -594,8 +594,7 @@ export class VariantGenerator {
       return variants
     } catch (error) {
       await this.removeGeneratedFiles(generatedPaths)
-      const reason = getErrorMessage(error)
-      if (reason.includes('Input image exceeds pixel limit')) {
+      if (isSharpPixelLimitError(error)) {
         throw new Error(`Image too large (max ${getSharpInputPixelLimit()} pixels)`)
       }
       throw error

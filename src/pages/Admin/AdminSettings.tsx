@@ -255,7 +255,8 @@ const CONFIG_GROUPS: ConfigGroup[] = [
       {
         key: 'variantSharpMemoryLimitMb',
         label: '变体 Sharp 内存限制（MB）',
-        description: '取值范围 64–8192',
+        description:
+          '取值范围 64–8192；实际生效取本值与像素硬闸（默认 2500 万像素，约 96MB）的较小者，高于约 96 时被硬闸截断',
         type: 'number',
       },
       {

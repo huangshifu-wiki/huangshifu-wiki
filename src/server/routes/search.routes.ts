@@ -32,6 +32,7 @@ import {
   logger,
   isSemanticSearchEnabled,
   isSearchHotKeywordsEnabled,
+  isSharpPixelLimitError,
 } from '../utils'
 import { prisma } from '../prisma'
 import { runtimeConfigService } from '../services/runtimeConfig.service'
@@ -1671,6 +1672,10 @@ router.post(
         results: categoryPages.semantic,
       })
     } catch (error) {
+      if (isSharpPixelLimitError(error)) {
+        res.status(413).json({ error: '图片像素超过搜索上限，请压缩后重试' })
+        return
+      }
       logger.error({ err: error }, 'Image semantic search error')
       res.status(500).json({ error: '图片语义搜索失败' })
     } finally {
