@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -73,7 +73,8 @@ describe('EventDetail SEO 元数据', () => {
     renderDetail()
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
-    expect(document.title).toBe('活动不存在｜黄诗扶 Wiki')
+    // SEO 由 useEffect 写入 head，与 alert 的 DOM 变更不在同一时点，需等待生效
+    await waitFor(() => expect(document.title).toBe('活动不存在｜黄诗扶 Wiki'))
     expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
       'noindex,follow'
     )

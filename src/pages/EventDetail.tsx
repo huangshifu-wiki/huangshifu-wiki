@@ -176,6 +176,8 @@ const EventDetail = () => {
   const eventDescription = event
     ? summarizeSeoText(event.content, `${event.location || '未知地点'}的活动记录，黄诗扶 Wiki。`)
     : ''
+  // loadError 置位后立即切错误标题：错误 UI 条件是 loadError && !event，
+  // SEO 若只看 loading，会与 alert 分属两次渲染，标题短暂停留在默认值
   const eventSeoMetadata: SeoMetadata = event
     ? {
         title: `${event.title}｜${SEO_SITE_NAME}`,
@@ -192,13 +194,13 @@ const EventDetail = () => {
           eventCoverUrl
         ),
       }
-    : loading
-      ? getDetailFallbackSeo({ canonicalPath: eventPath, title: SEO_SITE_NAME })
-      : getDetailFallbackSeo({
+    : loadError || !loading
+      ? getDetailFallbackSeo({
           canonicalPath: eventPath,
           title: `活动不存在｜${SEO_SITE_NAME}`,
           description: '当前活动不存在或已被删除。',
         })
+      : getDetailFallbackSeo({ canonicalPath: eventPath, title: SEO_SITE_NAME })
   useSeo(eventSeoMetadata)
 
   if (loadError && !event) {
