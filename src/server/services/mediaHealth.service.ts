@@ -283,6 +283,19 @@ async function collectBusinessReferences(prisma: PrismaClient) {
       field: 'assetId',
     })
   }
+  // 活动封面必须登记进引用索引，否则 releaseMediaAsset 会把仍在使用的封面资源当垃圾释放
+  for (const item of events) {
+    addUrlFieldReference(references, item.coverUrl, {
+      source: 'Event',
+      id: item.id,
+      field: 'coverUrl',
+    })
+    addMediaAssetReference(references, item.coverAssetId, {
+      source: 'Event',
+      id: item.id,
+      field: 'coverAssetId',
+    })
+  }
   for (const item of eventPosters) {
     addUrlFieldReference(references, item.url, {
       source: 'EventPoster',

@@ -174,6 +174,23 @@ describe('mediaHealth.service', () => {
     })
   })
 
+  it('does not report event cover assets referenced by coverAssetId as unused', async () => {
+    const uploadDir = createUploadDir()
+    const prisma = createPrismaMock({
+      mediaAsset: [createMediaAsset()],
+      event: [{ id: 'event-1', coverUrl: '/uploads/gallery/missing.jpg', coverAssetId: 'asset-1' }],
+    })
+
+    const result = await scanMediaHealth(prisma as never, { uploadDir, mode: 'business' })
+
+    expect(result.summary.unusedMediaAssets).toBe(0)
+    expect(result.missingLocalFiles[0]).toMatchObject({
+      id: 'asset-1',
+      canCleanup: false,
+      blockedReasons: ['referenced'],
+    })
+  })
+
   it('blocks active upload session assets from cleanup', async () => {
     const uploadDir = createUploadDir()
     const prisma = createPrismaMock({
