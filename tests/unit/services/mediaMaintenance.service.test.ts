@@ -13,7 +13,6 @@ const mockEnqueue = vi.hoisted(() => vi.fn())
 const mockHasTask = vi.hoisted(() => vi.fn())
 const mockResolveUploadPathByUrl = vi.hoisted(() => vi.fn())
 const mockResolveUploadPathByStorageKey = vi.hoisted(() => vi.fn())
-const mockScanUploadFiles = vi.hoisted(() => vi.fn())
 
 vi.mock('../../../src/server/prisma', () => ({ prisma: {} }))
 vi.mock('../../../src/server/utils/upload', () => ({
@@ -127,6 +126,12 @@ async function createSourceFile() {
   return filePath
 }
 
+// 扫描按 mtimeMs > cutoff 排除新文件，而 stat.mtimeMs 是亚毫秒浮点、Date.now() 只到毫秒，
+// 刚写完的文件会随机被判成“还不够老”而从结果里消失，所以孤儿文件要显式改老
+async function ageFile(filePath: string, mtime = new Date(0)) {
+  await fs.utimes(filePath, mtime, mtime)
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockHasTask.mockReturnValue(false)
@@ -148,7 +153,6 @@ beforeEach(() => {
     imageMapIds: new Map(),
     urls: new Map(),
   })
-  mockScanUploadFiles.mockResolvedValue([])
 })
 
 afterEach(async () => {
@@ -607,10 +611,7 @@ describe('mediaMaintenance.service', () => {
     tempDirs.push(dir)
     const filePath = path.join(dir, 'orphan.jpg')
     await fs.writeFile(filePath, 'orphan')
-    const files = [
-      { storageKey: 'orphan.jpg', absolutePath: filePath, sizeBytes: 6, mtime: new Date(0) },
-    ]
-    mockScanUploadFiles.mockResolvedValue(files)
+    await ageFile(filePath)
     const client = createClient()
     client.mediaAsset.findMany.mockResolvedValue([])
     client.imageMap.findMany.mockResolvedValue([])
@@ -649,20 +650,13 @@ describe('mediaMaintenance.service', () => {
     tempDirs.push(dir)
     const existingPath = path.join(dir, 'existing.jpg')
     await fs.writeFile(existingPath, 'existing')
+    await ageFile(existingPath)
     const missingPath = path.join(dir, 'missing.jpg')
     await fs.writeFile(missingPath, 'missing')
+    await ageFile(missingPath)
     mockResolveUploadPathByStorageKey.mockImplementation((key: string, base: string) =>
       path.join(base, key)
     )
-    mockScanUploadFiles.mockResolvedValue([
-      { storageKey: 'existing.jpg', absolutePath: existingPath, sizeBytes: 8, mtime: new Date(0) },
-      {
-        storageKey: 'missing.jpg',
-        absolutePath: path.join(dir, 'missing.jpg'),
-        sizeBytes: 7,
-        mtime: new Date(0),
-      },
-    ])
     const client = createClient()
     client.mediaAsset.findMany.mockResolvedValue([])
     client.imageMap.findMany.mockResolvedValue([])
@@ -691,20 +685,13 @@ describe('mediaMaintenance.service', () => {
   it('supports preview and delete of a full 100-file batch with a bounded token', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'media-orphan-100-'))
     tempDirs.push(dir)
-    const files = await Promise.all(
+    await Promise.all(
       Array.from({ length: 100 }, async (_, index) => {
-        const storageKey = `orphan-${String(index).padStart(3, '0')}.jpg`
-        const absolutePath = path.join(dir, storageKey)
+        const absolutePath = path.join(dir, `orphan-${String(index).padStart(3, '0')}.jpg`)
         await fs.writeFile(absolutePath, `file-${index}`)
-        return {
-          storageKey,
-          absolutePath,
-          sizeBytes: Buffer.byteLength(`file-${index}`),
-          mtime: new Date(0),
-        }
+        await ageFile(absolutePath)
       })
     )
-    mockScanUploadFiles.mockResolvedValue(files)
     mockResolveUploadPathByStorageKey.mockImplementation((key: string, base: string) =>
       path.join(base, key)
     )
@@ -742,10 +729,7 @@ describe('mediaMaintenance.service', () => {
     tempDirs.push(dir)
     const filePath = path.join(dir, 'fingerprint.jpg')
     await fs.writeFile(filePath, 'before')
-    const files = [
-      { storageKey: 'fingerprint.jpg', absolutePath: filePath, sizeBytes: 6, mtime: new Date(0) },
-    ]
-    mockScanUploadFiles.mockResolvedValue(files)
+    await ageFile(filePath)
     mockResolveUploadPathByStorageKey.mockImplementation((key: string, base: string) =>
       path.join(base, key)
     )
@@ -764,14 +748,23 @@ describe('mediaMaintenance.service', () => {
       dir,
       'admin'
     )
-    await fs.writeFile(filePath, 'change')
+    // 同时改变字节数和 mtime，指纹比对不依赖文件系统的时间戳粒度
+    await fs.writeFile(filePath, 'changed')
+    await ageFile(filePath, new Date(1000))
     const result = await deleteOrphanMediaBatch(
       { previewToken: preview.previewToken, storageKeys: preview.storageKeys },
       client as never,
       dir,
       'admin'
     )
-    expect(result).toMatchObject({ processed: 0, skipped: 1, failed: 0 })
-    await expect(fs.readFile(filePath, 'utf8')).resolves.toBe('change')
+    expect(result).toMatchObject({
+      processed: 0,
+      skipped: 1,
+      failed: 0,
+      details: [
+        { id: 'fingerprint.jpg', status: 'skipped', reason: '文件已变化、不存在或未达到年龄限制' },
+      ],
+    })
+    await expect(fs.readFile(filePath, 'utf8')).resolves.toBe('changed')
   })
 })

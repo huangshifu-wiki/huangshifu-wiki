@@ -244,7 +244,7 @@ describe('搜索分页 URL 生命周期', () => {
     fail = true
     fireEvent.click(screen.getByRole('button', { name: '设置页码' }))
     await waitFor(() => expect(screen.getByTestId('wiki-error')).toHaveTextContent('百科分页失败'))
-    expect(screen.getByTestId('page')).toHaveTextContent('')
+    await waitFor(() => expect(screen.getByTestId('page')).toHaveTextContent(''))
     expect(screen.getByTestId('posts-items')).toHaveTextContent('post-1')
 
     fail = false
