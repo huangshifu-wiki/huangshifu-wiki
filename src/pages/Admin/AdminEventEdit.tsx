@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
@@ -30,6 +31,7 @@ import { getErrorMessage } from '../../lib/errorHandler'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { splitTagsInput } from '../../lib/contentUtils'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
+import { useFileDropZone } from '../../hooks/useFileDropZone'
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
 import {
   EVENT_ALLOWED_IMAGE_TYPES,
@@ -510,11 +512,7 @@ const AdminEventEdit = () => {
     })
   }
 
-  const handleCoverChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-
+  const startCoverUpload = async (file: File) => {
     let previewUrl = ''
     let controller: AbortController | null = null
     try {
@@ -590,6 +588,12 @@ const AdminEventEdit = () => {
         coverUploadControllerRef.current = null
       }
     }
+  }
+
+  const handleCoverChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (file) void startCoverUpload(file)
   }
 
   const uploadPoster = async ({
@@ -698,11 +702,7 @@ const AdminEventEdit = () => {
     }
   }
 
-  const handlePostersChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || [])
-    event.target.value = ''
-    if (!files.length) return
-
+  const appendPosterFiles = (files: File[]) => {
     const queued: QueuedPosterUpload[] = []
     const placeholders: EditablePoster[] = []
     const invalidMessages: string[] = []
@@ -736,6 +736,29 @@ const AdminEventEdit = () => {
       show(invalidMessages[0] || '部分图片无法上传', { variant: 'error' })
     }
   }
+
+  const handlePostersChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+    appendPosterFiles(files)
+  }
+
+  const handleDroppedFiles = (files: File[], zone: string | null) => {
+    if (zone === 'cover') {
+      if (files.length !== 1) {
+        show('封面区域一次只能拖入一张图片，多张请拖到其他区域上传为海报', { variant: 'error' })
+        return
+      }
+      void startCoverUpload(files[0])
+      return
+    }
+    appendPosterFiles(files)
+  }
+
+  const { isDraggingFiles, activeZone, rootHandlers } = useFileDropZone({
+    enabled: !saving,
+    onFiles: handleDroppedFiles,
+  })
 
   const reorderPosters = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex) return
@@ -913,7 +936,19 @@ const AdminEventEdit = () => {
     coverUpload && coverUpload.status !== 'error' ? coverUpload.previewUrl : draft.coverUrl
 
   return (
-    <BookEditorShell embedded>
+    <BookEditorShell embedded {...rootHandlers}>
+      {isDraggingFiles && activeZone !== 'cover'
+        ? createPortal(
+            <div className="pointer-events-none fixed inset-0 z-[1100] flex items-center justify-center bg-[color-mix(in_srgb,var(--color-bg-antique)_82%,transparent)] px-4">
+              <div className="w-full max-w-3xl rounded border-2 border-dashed border-brand-gold bg-[var(--book-panel-bg-strong)] px-8 py-12 text-center shadow-[var(--book-panel-shadow)]">
+                <p className="text-lg font-bold text-text-primary">松开鼠标上传为海报</p>
+                <p className="mt-2 text-sm text-text-muted">把单张图片拖到封面区域可上传为封面</p>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+
       <BookEditorHeader
         title={isCreating ? '新增活动' : '编辑活动'}
         description="维护活动正文、时间、票务、链接与图片资源，保存后回到活动管理。"
@@ -1154,7 +1189,14 @@ const AdminEventEdit = () => {
         </div>
 
         <aside className="grid min-w-0 gap-5 md:grid-cols-2 xl:block xl:space-y-5">
-          <section className={clsx('min-w-0 p-5', bookPanelClass)}>
+          <section
+            data-file-drop-zone="cover"
+            className={clsx(
+              'min-w-0 p-5',
+              bookPanelClass,
+              activeZone === 'cover' && '!border-dashed !border-brand-gold'
+            )}
+          >
             <h2 className="mb-4 flex items-center gap-2 text-[0.9375rem] font-semibold tracking-[0.08em] text-text-primary">
               <ImageIcon size={16} className="text-brand-gold" />
               封面
@@ -1175,6 +1217,12 @@ const AdminEventEdit = () => {
                   progress={coverUpload.progress}
                   status={coverUpload.status}
                 />
+              )}
+              {activeZone === 'cover' && (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 rounded border-2 border-dashed border-brand-gold bg-[var(--book-panel-bg-strong)]/85 text-center">
+                  <p className="text-sm font-bold text-text-primary">松开鼠标上传为封面</p>
+                  <p className="text-xs text-text-muted">封面只接收单张图片</p>
+                </div>
               )}
             </div>
             {coverUpload?.status === 'error' && (
@@ -1217,7 +1265,7 @@ const AdminEventEdit = () => {
               type="file"
               accept={EVENT_IMAGE_ACCEPT}
               className="hidden"
-              onChange={(event) => void handleCoverChange(event)}
+              onChange={handleCoverChange}
             />
           </section>
 
@@ -1294,7 +1342,7 @@ const AdminEventEdit = () => {
               multiple
               accept={EVENT_IMAGE_ACCEPT}
               className="hidden"
-              onChange={(event) => void handlePostersChange(event)}
+              onChange={handlePostersChange}
             />
           </section>
         </aside>

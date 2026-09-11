@@ -35,6 +35,7 @@ import {
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { splitTagsInput } from '../lib/contentUtils'
 import { useTagSuggestions } from '../hooks/useTagSuggestions'
+import { useFileDropZone } from '../hooks/useFileDropZone'
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { hasFormChanges } from '../utils/formDirty'
 import { toLocalDateInputValue } from '../lib/dateUtils'
@@ -146,9 +147,6 @@ const mergeServerImagesIntoDraft = (
   }
 }
 
-const hasDraggedFiles = (event: Pick<React.DragEvent<HTMLElement>, 'dataTransfer'>) =>
-  Array.from(event.dataTransfer?.types || []).includes('Files')
-
 const GalleryEdit = () => {
   const { galleryId } = useParams()
   const isCreating = !galleryId
@@ -168,7 +166,6 @@ const GalleryEdit = () => {
   const [deleteReason, setDeleteReason] = useState('')
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
-  const [pageDragDepth, setPageDragDepth] = useState(0)
   const [isGalleryAdminOnly, setIsGalleryAdminOnly] = useState(false)
   const [galleryAccessLoaded, setGalleryAccessLoaded] = useState(false)
 
@@ -435,31 +432,10 @@ const GalleryEdit = () => {
     handleReorder(sourceIndex, targetIndex)
   }
 
-  const handlePageDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!canManage || !hasDraggedFiles(event)) return
-    event.preventDefault()
-    setPageDragDepth((prev) => prev + 1)
-  }
-
-  const handlePageDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!canManage || !hasDraggedFiles(event)) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy'
-  }
-
-  const handlePageDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!canManage || !hasDraggedFiles(event)) return
-    event.preventDefault()
-    setPageDragDepth((prev) => Math.max(0, prev - 1))
-  }
-
-  const handlePageDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!canManage || !hasDraggedFiles(event)) return
-    event.preventDefault()
-    setPageDragDepth(0)
-    if (!event.dataTransfer.files?.length) return
-    appendPendingFiles(event.dataTransfer.files)
-  }
+  const { isDraggingFiles, rootHandlers } = useFileDropZone({
+    enabled: canManage,
+    onFiles: appendPendingFiles,
+  })
 
   const handleSave = async (status: 'draft' | 'pending') => {
     const currentDraft = draftRef.current
@@ -772,13 +748,8 @@ const GalleryEdit = () => {
       : t(isAdmin ? 'gallery.publishGallery' : 'gallery.submitReview')
 
   return (
-    <BookEditorShell
-      onDragEnter={handlePageDragEnter}
-      onDragOver={handlePageDragOver}
-      onDragLeave={handlePageDragLeave}
-      onDrop={handlePageDrop}
-    >
-      {pageDragDepth > 0
+    <BookEditorShell {...rootHandlers}>
+      {isDraggingFiles
         ? // portal 到 body：祖先 .mobile-page-container 的入场动画保留了 transform，
           // 会把 fixed 定位的包含块从视口劫持为该容器，导致提示无法在视口居中
           createPortal(
