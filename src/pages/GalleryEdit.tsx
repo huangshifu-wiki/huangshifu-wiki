@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ChevronDown, Plus, Save, Send, Trash2 } from '@/src/components/icons'
 import { clsx } from 'clsx'
@@ -777,14 +778,19 @@ const GalleryEdit = () => {
       onDragLeave={handlePageDragLeave}
       onDrop={handlePageDrop}
     >
-      {pageDragDepth > 0 ? (
-        <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-bg-antique)_82%,transparent)] px-4">
-          <div className="w-full max-w-3xl rounded border-2 border-dashed border-brand-gold bg-[var(--book-panel-bg-strong)] px-8 py-12 text-center shadow-[var(--book-panel-shadow)]">
-            <p className="text-lg font-bold text-text-primary">{t('gallery.dropToUpload')}</p>
-            <p className="mt-2 text-sm text-text-muted">{t('gallery.dropHint')}</p>
-          </div>
-        </div>
-      ) : null}
+      {pageDragDepth > 0
+        ? // portal 到 body：祖先 .mobile-page-container 的入场动画保留了 transform，
+          // 会把 fixed 定位的包含块从视口劫持为该容器，导致提示无法在视口居中
+          createPortal(
+            <div className="pointer-events-none fixed inset-0 z-[1100] flex items-center justify-center bg-[color-mix(in_srgb,var(--color-bg-antique)_82%,transparent)] px-4">
+              <div className="w-full max-w-3xl rounded border-2 border-dashed border-brand-gold bg-[var(--book-panel-bg-strong)] px-8 py-12 text-center shadow-[var(--book-panel-shadow)]">
+                <p className="text-lg font-bold text-text-primary">{t('gallery.dropToUpload')}</p>
+                <p className="mt-2 text-sm text-text-muted">{t('gallery.dropHint')}</p>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       <BookEditorHeader
         title={isCreating ? '上传新图集' : '编辑图集'}
