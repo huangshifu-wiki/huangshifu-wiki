@@ -4,6 +4,7 @@ import { Clock, User as UserIcon } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { formatDate, formatDateOnly } from '../../lib/dateUtils'
+import { summarizeSeoText } from '../../lib/seo'
 import type { GalleryItem } from '../../types/entities'
 import type { ViewMode } from '../../types/userPreferences'
 import { GalleryCover } from './GalleryCover'
@@ -87,7 +88,7 @@ export const GalleryCard = React.memo(function GalleryCard({
             <GalleryStatusBadge gallery={gallery} />
           </div>
           <p className="line-clamp-2 text-[0.8125rem] leading-relaxed text-text-muted/80">
-            {gallery.description || '暂无描述'}
+            {summarizeSeoText(gallery.description, '暂无描述')}
           </p>
           <div className="mt-2">
             <GalleryMeta gallery={gallery} />

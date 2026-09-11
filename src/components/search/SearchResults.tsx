@@ -14,6 +14,7 @@ import {
 import { VIEW_MODE_CONFIG } from '../../lib/viewModes'
 import type { ViewMode } from '../../types/userPreferences'
 import { formatDate } from '../../lib/dateUtils'
+import { summarizeSeoText } from '../../lib/seo'
 import type { SearchState } from '../../hooks/useSearchPage'
 import type { WikiItem, PostItem, GalleryItem, AlbumItem } from '../../types/entities'
 import { MixedSearchResultCard } from '../MixedSearchResultCard'
@@ -78,7 +79,7 @@ function galleryToConfig(
   return {
     id: gallery.id,
     title: gallery.title,
-    description: gallery.description || undefined,
+    description: summarizeSeoText(gallery.description, '', 80) || undefined,
     link: `/gallery/${gallery.slug || gallery.id}`,
     image: image?.thumbnailUrl || undefined,
     imagePlaceholder: shouldWaitForGalleryThumbnail(gallery) ? '生成中...' : undefined,

@@ -15,6 +15,7 @@ interface MarkdownEditorProps {
   enableWikiLinks?: boolean
   maxLength?: number
   variant?: 'default' | 'book'
+  id?: string
 }
 
 const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
@@ -26,6 +27,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   enableWikiLinks = false,
   maxLength,
   variant = 'default',
+  id,
 }) => {
   const { resolvedTheme } = useUserPreferences()
 
@@ -53,6 +55,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           ),
         }}
         textareaProps={{
+          id,
           placeholder,
           'aria-label': ariaLabel,
           maxLength,

@@ -17,6 +17,7 @@ import {
   bookSecondaryButtonClass,
 } from '../components/BookEditor'
 import { LocationTagInput } from '../components/LocationTagInput'
+import MarkdownEditor from '../components/MarkdownEditor'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
@@ -839,16 +840,17 @@ const GalleryEdit = () => {
                 />
               }
             >
-              <textarea
+              <MarkdownEditor
                 id="gallery-description"
                 value={draft.description}
-                onChange={(event) =>
-                  applyDraft((prev) => (prev ? { ...prev, description: event.target.value } : prev))
+                onChange={(description) =>
+                  applyDraft((prev) => (prev ? { ...prev, description } : prev))
                 }
+                height="240px"
+                variant="book"
                 maxLength={CONTENT_LIMITS.gallery.description}
                 placeholder={t('gallery.descriptionPlaceholder')}
-                rows={4}
-                className={`${bookInputClass} resize-none`}
+                ariaLabel={t('gallery.descriptionLabel')}
               />
             </BookFormField>
 

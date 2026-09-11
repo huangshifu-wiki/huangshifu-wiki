@@ -179,7 +179,13 @@ const renderGalleryPreview = (
             {getReviewTypeLabel(item)}
           </span>
         </div>
-        <p className="mt-2 text-text-secondary leading-relaxed">{item.description || '暂无描述'}</p>
+        {item.description ? (
+          <div className="prose mt-2 max-w-none font-body leading-relaxed text-text-secondary">
+            <MarkdownRenderer content={item.description} />
+          </div>
+        ) : (
+          <p className="mt-2 text-text-secondary leading-relaxed">暂无描述</p>
+        )}
         {item.copyright && <p className="text-xs text-text-muted mt-1">{item.copyright}</p>}
       </header>
 

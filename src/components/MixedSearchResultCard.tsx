@@ -7,6 +7,7 @@ import { CoverPlaceholder } from './CoverPlaceholder'
 import type { MixedSearchResult, ImageSourceType } from '../hooks/useSearch'
 import type { GalleryItem, WikiItem, PostItem } from '../types/entities'
 import { formatDate } from '../lib/dateUtils'
+import { summarizeSeoText } from '../lib/seo'
 import { getFirstGalleryImage, shouldWaitForGalleryThumbnail } from '../lib/galleryThumbnails'
 import type { ViewMode } from '../types/userPreferences'
 
@@ -110,7 +111,7 @@ export const MixedSearchResultCard = React.memo(
               {(data as GalleryItem | WikiItem | PostItem).title}
             </h3>
             <p className="mt-0.5 line-clamp-1 text-xs text-text-muted">
-              {sourceType === 'gallery' && (data as GalleryItem).description}
+              {gallery && summarizeSeoText(gallery.description, '', 80)}
               {sourceType === 'wiki' && (data as WikiItem).category}
               {sourceType === 'post' && (data as PostItem).section}
             </p>
@@ -169,7 +170,7 @@ export const MixedSearchResultCard = React.memo(
             {(data as GalleryItem | WikiItem | PostItem).title}
           </h3>
           <p className="mt-1 line-clamp-1 text-xs text-text-muted">
-            {sourceType === 'gallery' && ((data as GalleryItem).description || '暂无描述')}
+            {gallery && summarizeSeoText(gallery.description, '暂无描述', 80)}
             {sourceType === 'wiki' && (data as WikiItem).category}
             {sourceType === 'post' && (data as PostItem).section}
           </p>

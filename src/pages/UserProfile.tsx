@@ -21,6 +21,7 @@ import { apiGet, apiPatch } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { PROFILE_SIGNATURE_MAX_LENGTH } from '../lib/contentLimits'
 import { formatDateOnly } from '../lib/dateUtils'
+import { summarizeSeoText } from '../lib/seo'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import {
   shouldWaitForGalleryThumbnail,
@@ -740,7 +741,7 @@ export default function UserProfile() {
                             {gallery.title}
                           </p>
                           <p className="mt-1 line-clamp-1 text-xs text-text-muted">
-                            {gallery.description || '暂无描述'}
+                            {summarizeSeoText(gallery.description, '暂无描述')}
                           </p>
                           <p className="mt-1 text-xs text-text-muted">
                             {gallery.images?.length || 0} 张 ·{' '}

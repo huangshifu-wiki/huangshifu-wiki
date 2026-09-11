@@ -19,6 +19,7 @@ import { SmartImage } from '../components/SmartImage'
 import { Lightbox } from '../components/Lightbox'
 import { CharacterCount } from '../components/CharacterCount'
 import { CommentActionMenu } from '../components/CommentActionMenu'
+import MarkdownRenderer from '../components/MarkdownRenderer'
 import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
@@ -956,9 +957,15 @@ const GalleryDetail = () => {
           {gallery.status === 'rejected' && gallery.reviewNote ? (
             <p className="mt-2 text-sm theme-text-error">{gallery.reviewNote}</p>
           ) : null}
-          <p className="mt-3 max-w-3xl text-[0.95rem] leading-relaxed tracking-[0.03em] text-text-secondary">
-            {gallery.description || t('gallery.noDescription')}
-          </p>
+          {gallery.description ? (
+            <div className="prose mt-3 max-w-3xl font-body leading-relaxed text-text-secondary">
+              <MarkdownRenderer content={gallery.description} />
+            </div>
+          ) : (
+            <p className="mt-3 max-w-3xl text-[0.95rem] leading-relaxed tracking-[0.03em] text-text-secondary">
+              {t('gallery.noDescription')}
+            </p>
+          )}
           {gallery.copyright && <p className="mt-2 text-xs text-text-muted">{gallery.copyright}</p>}
 
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[0.8125rem] text-text-muted">
