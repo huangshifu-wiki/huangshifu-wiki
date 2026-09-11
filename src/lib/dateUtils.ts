@@ -49,6 +49,14 @@ export const formatDateOnly = (
   return parsed ? format(parsed, pattern) : fallback
 }
 
+const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+/** 返回中文星期（如「周六」）；日期无法解析时返回空串 */
+export const formatWeekday = (value: string | null | undefined): string => {
+  const parsed = toDateOnlyValue(value)
+  return parsed ? WEEKDAY_LABELS[parsed.getDay()] : ''
+}
+
 export const formatDateTime = (value: string | null | undefined, fallback = '刚刚'): string => {
   const parsed = toDateValue(value)
   return parsed ? format(parsed, 'yyyy-MM-dd HH:mm') : fallback

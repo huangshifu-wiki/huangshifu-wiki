@@ -1,19 +1,32 @@
-import { formatDate } from './dateUtils'
+import { formatDate, formatWeekday, toDateValue } from './dateUtils'
 import type { EventTicketPrice, EventTimeSlot } from '../types/entities'
 
 export const EVENT_IMAGE_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,image/bmp'
 export const EVENT_ALLOWED_IMAGE_TYPES = EVENT_IMAGE_ACCEPT.split(',')
 
-export function formatEventDateValue(value: string, type: EventTimeSlot['type']) {
-  if (!value) return ''
-  if (type === 'date') return value
-  return formatDate(value, 'yyyy-MM-dd HH:mm')
+type SlotParts = { dateText: string; timeText: string }
+
+// 拆出场次时间值实际展示的日期与时间；解析失败时整段兜底文本落在 dateText 上
+const getSlotParts = (value: string, type: EventTimeSlot['type']): SlotParts => {
+  if (!value || type === 'date') return { dateText: value, timeText: '' }
+  if (!toDateValue(value)) return { dateText: formatDate(value, 'yyyy-MM-dd HH:mm'), timeText: '' }
+  return { dateText: formatDate(value, 'yyyy-MM-dd'), timeText: formatDate(value, 'HH:mm') }
 }
 
+// 全角括号自带分隔，没有星期时才补回日期与时间之间的空格
+const renderSlotParts = ({ dateText, timeText }: SlotParts, weekday: string) =>
+  `${dateText}${weekday ? `（${weekday}）` : timeText ? ' ' : ''}${timeText}`
+
 export function formatEventTimeSlot(slot: EventTimeSlot) {
-  const start = formatEventDateValue(slot.start, slot.type)
-  const end = slot.end ? formatEventDateValue(slot.end, slot.type) : ''
-  return end && end !== start ? `${start} - ${end}` : start
+  const start = getSlotParts(slot.start, slot.type)
+  const end = slot.end ? getSlotParts(slot.end, slot.type) : null
+  const startText = renderSlotParts(start, formatWeekday(start.dateText))
+  if (!end || (end.dateText === start.dateText && end.timeText === start.timeText)) {
+    return startText
+  }
+  // 同一天只标一次星期，跨日区间两端都标
+  const sameDay = end.dateText === start.dateText
+  return `${startText} - ${renderSlotParts(end, sameDay ? '' : formatWeekday(end.dateText))}`
 }
 
 const getEventSlotDateValue = (slot: EventTimeSlot) => {
