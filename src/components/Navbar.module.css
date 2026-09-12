@@ -7,9 +7,6 @@
   background: transparent;
   container-type: inline-size;
   container-name: navbar;
-  transition:
-    background 0.4s ease,
-    box-shadow 0.4s ease;
 }
 
 /* 滚动与菜单展开共用同一块磨砂表面、同一个底色，切换状态时不会跳色 */
