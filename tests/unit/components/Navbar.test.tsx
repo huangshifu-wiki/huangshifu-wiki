@@ -113,23 +113,35 @@ describe('Navbar', () => {
     await waitFor(() => expect(menu).toHaveAttribute('data-state', 'closed'))
   })
 
-  it('已登录用户可见个人资料链接，退出登录调用登出请求', async () => {
+  it('已登录用户可见带头像昵称的个人资料入口，退出登录调用登出请求', async () => {
     mockUseAuth.mockReturnValue({
-      user: { publicId: 'u123' },
-      profile: { displayName: '测试用户' },
+      user: { publicId: 'u123', displayName: '测试用户', photoURL: 'https://cdn/avatar.png' },
+      profile: { displayName: '测试用户', photoURL: 'https://cdn/avatar.png' },
       loading: false,
     })
     const { container } = renderNavbar()
     const { user, menu } = await openMobileMenu(container)
 
-    expect(within(menu).getByRole('link', { name: '个人资料' })).toHaveAttribute(
-      'href',
-      '/users/u123'
-    )
+    const profileLink = within(menu).getByRole('link', { name: '测试用户的个人资料' })
+    expect(profileLink).toHaveAttribute('href', '/users/u123')
+    expect(profileLink.querySelector('img')).toHaveAttribute('src', 'https://cdn/avatar.png')
 
     await user.click(within(menu).getByRole('button', { name: '退出登录' }))
 
     await waitFor(() => expect(vi.mocked(logoutRequest)).toHaveBeenCalled())
+  })
+
+  it('用户没有头像时个人资料入口回落默认头像', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { publicId: 'u123', displayName: '测试用户', photoURL: '' },
+      profile: { displayName: '测试用户', photoURL: '' },
+      loading: false,
+    })
+    const { container } = renderNavbar()
+    const { menu } = await openMobileMenu(container)
+
+    const profileLink = within(menu).getByRole('link', { name: '测试用户的个人资料' })
+    expect(profileLink.querySelector('img')).toHaveAttribute('src', '/default-avatar.svg')
   })
 
   it('菜单内提交搜索后跳转到搜索页', async () => {

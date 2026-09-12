@@ -219,6 +219,23 @@
   background: color-mix(in srgb, var(--home-gold) 8%, transparent);
 }
 
+/* 账户入口的头像与昵称：昵称过长时省略号截断，保持两列等宽不撑破 */
+.siteMobileProfileAvatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border: 1px solid var(--home-border);
+  border-radius: 9999px;
+  object-fit: cover;
+}
+
+.siteMobileProfileName {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* 主题分段控件在菜单内的展示覆写：共享一个金色染色底座，整体成一段控件 */
 .siteMobileThemeGroup > div {
   gap: 0.25rem;

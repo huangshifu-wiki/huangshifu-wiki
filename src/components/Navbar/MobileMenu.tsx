@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { LogOut, Search as SearchIcon, UserRound } from '@/src/components/icons'
+import { LogOut, Search as SearchIcon } from '@/src/components/icons'
 import type { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import { useAuth } from '../../context/AuthContext'
+import { DEFAULT_AVATAR, handleAvatarError } from '../../lib/defaultAvatar'
 import { ThemeToggle } from '../ThemeToggle'
 import { NAV_LINK_ITEMS } from './NavLinks'
 import type { AuthMode } from './types'
@@ -30,10 +31,13 @@ export const MobileMenu = ({
   allowRegister,
 }: MobileMenuProps) => {
   const navigate = useNavigate()
-  const { user, loading } = useAuth()
+  const { user, profile, loading } = useAuth()
   const [query, setQuery] = useState('')
 
   if (!presence.mounted) return null
+
+  const displayName = profile?.displayName || user?.displayName || '游客'
+  const avatarSrc = profile?.photoURL || user?.photoURL || DEFAULT_AVATAR
 
   const submitSearch = (e: FormEvent) => {
     e.preventDefault()
@@ -92,11 +96,17 @@ export const MobileMenu = ({
                   <Button
                     asChild
                     variant="ghost"
-                    className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 flex-1 rounded-lg`}
+                    className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 min-w-0 flex-1 rounded-lg`}
                   >
-                    <Link to={`/users/${user.publicId}`}>
-                      <UserRound size={16} />
-                      <span>个人资料</span>
+                    <Link to={`/users/${user.publicId}`} aria-label={`${displayName}的个人资料`}>
+                      <img
+                        src={avatarSrc}
+                        alt=""
+                        className={styles.siteMobileProfileAvatar}
+                        referrerPolicy="no-referrer"
+                        onError={handleAvatarError}
+                      />
+                      <span className={styles.siteMobileProfileName}>{displayName}</span>
                     </Link>
                   </Button>
                   <Button
