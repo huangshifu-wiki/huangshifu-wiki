@@ -54,7 +54,7 @@
   --home-text-2: #706658;
   --home-text-3: #a89e8e;
   --home-border: rgba(138, 109, 47, 0.12);
-  --home-nav-bg: rgba(244, 239, 228, 0.95);
+  --home-nav-bg: rgba(244, 239, 228, 0.88);
   --home-hero-bg-image:
     radial-gradient(ellipse at 15% 80%, rgba(160, 64, 80, 0.04) 0%, transparent 50%),
     radial-gradient(ellipse at 85% 20%, rgba(138, 109, 47, 0.06) 0%, transparent 45%),
@@ -317,7 +317,7 @@ a.mention-highlight:hover {
   --home-text-2: #9e9488;
   --home-text-3: #5e564c;
   --home-border: rgba(201, 169, 110, 0.1);
-  --home-nav-bg: rgba(31, 26, 22, 0.95);
+  --home-nav-bg: rgba(31, 26, 22, 0.88);
   --home-hero-bg-image: #1f1a16;
   --home-hero-pattern-image: url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 0L40 20L20 40L0 20Z' fill='none' stroke='%23c9a96e' stroke-width='0.5'/%3E%3C/svg%3E");
   --home-title-shadow: 0 0 80px rgba(201, 169, 110, 0.12);
