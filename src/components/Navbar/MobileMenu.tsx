@@ -66,7 +66,7 @@ export const MobileMenu = ({
               placeholder="搜索"
               aria-label="搜索百科、帖子、图集、音乐或专辑"
               autoComplete="off"
-              className="w-full rounded-lg border-[var(--home-border)] bg-[color-mix(in_srgb,var(--home-nav-bg)_55%,transparent)] py-2.5 pl-10 pr-3 text-base text-[var(--home-text-1)] placeholder:text-[var(--home-text-3)] focus:border-[var(--home-gold)] focus:shadow-none"
+              className="w-full rounded-lg border border-transparent bg-[color-mix(in_srgb,var(--home-gold)_8%,transparent)] py-2.5 pl-10 pr-3 text-base text-[var(--home-text-1)] placeholder:text-[var(--home-text-3)] focus:border-[var(--home-gold)] focus:shadow-none"
             />
           </div>
         </form>

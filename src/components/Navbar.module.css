@@ -12,17 +12,13 @@
     box-shadow 0.4s ease;
 }
 
+/* 滚动与菜单展开共用同一块磨砂表面、同一个底色，切换状态时不会跳色 */
 .siteNav[data-scrolled='true'],
 .siteNav[data-menu-open='true'] {
   background: var(--home-nav-bg);
   box-shadow: 0 1px 0 var(--home-border);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-}
-
-/* 菜单展开时整条导航（栏 + 面板）是同一块磨砂表面，换用更不透明的底色保证菜单可读性 */
-.siteNav[data-menu-open='true'] {
-  background: var(--home-mobile-menu-bg);
 }
 
 .siteNavInner {
