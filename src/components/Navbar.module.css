@@ -272,8 +272,9 @@
     display: none;
   }
 
+  /* inline-flex 保留 IconButton 的 flex 居中；block 会让图标偏离碰撞箱中心 */
   .siteNavToggle {
-    display: block;
+    display: inline-flex;
   }
 
   /* grid 容器是 floating-expand 的 grid-template-rows 展开动画的前提；
