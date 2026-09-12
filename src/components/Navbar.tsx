@@ -11,6 +11,7 @@ import { NAV_LINK_ITEMS } from './Navbar/NavLinks'
 import { MobileMenu } from './Navbar/MobileMenu'
 import { NavbarSearchBox } from './Navbar/NavbarSearchBox'
 import { useDismissableLayer } from '../hooks/useClickOutside'
+import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import styles from './Navbar.module.css'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
 import { IconButton } from '@/src/components/ui'
@@ -25,6 +26,8 @@ export const Navbar = () => {
   const allowRegister = features.registrationEnabled
   const location = useLocation()
   const navRef = useRef<HTMLElement | null>(null)
+  // 菜单的挂载状态（关闭动画结束后才卸载），用于让整条导航在动画期间保持磨砂面板样式
+  const menuPresence = useFloatingPresence(isMenuOpen)
 
   // 路由变化后收起移动端菜单（点击菜单链接、提交搜索、前进/后退均覆盖）
   useEffect(() => {
@@ -67,6 +70,7 @@ export const Navbar = () => {
       ref={navRef}
       className={styles.siteNav}
       data-scrolled={isScrolled ? 'true' : 'false'}
+      data-menu-open={menuPresence.mounted ? 'true' : 'false'}
       role="navigation"
       aria-label="主导航"
     >
@@ -110,13 +114,14 @@ export const Navbar = () => {
             {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </IconButton>
         </div>
-        <MobileMenu
-          open={isMenuOpen}
-          onOpenAuth={openAuthModal}
-          onLogout={handleLogout}
-          allowRegister={allowRegister}
-        />
       </div>
+      <MobileMenu
+        open={isMenuOpen}
+        presence={menuPresence}
+        onOpenAuth={openAuthModal}
+        onLogout={handleLogout}
+        allowRegister={allowRegister}
+      />
 
       {
         <AuthModal

@@ -69,7 +69,7 @@ describe('Navbar', () => {
     mockUseAuth.mockReturnValue({ user: null, profile: null, loading: false })
   })
 
-  it('打开汉堡菜单时将菜单挂在响应式导航容器内', async () => {
+  it('打开汉堡菜单时菜单在导航栏盒内展开，整条导航切换为磨砂面板', async () => {
     const user = userEvent.setup()
     const { container } = render(
       <MemoryRouter>
@@ -77,14 +77,17 @@ describe('Navbar', () => {
       </MemoryRouter>
     )
 
+    const nav = screen.getByRole('navigation')
     expect(container.querySelector('[data-state]')).not.toBeInTheDocument()
+    expect(nav).toHaveAttribute('data-menu-open', 'false')
 
     await user.click(screen.getByRole('button', { name: '打开菜单' }))
 
     const mobileMenu = container.querySelector('[data-state]')
 
     expect(mobileMenu).toBeInTheDocument()
-    expect(mobileMenu?.parentElement).toBe(screen.getByRole('navigation').firstElementChild)
+    expect(mobileMenu?.parentElement).toBe(nav)
+    expect(nav).toHaveAttribute('data-menu-open', 'true')
   })
 
   it('菜单内展示全部主导航链接与主题切换', async () => {

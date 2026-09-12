@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { LogOut, Search as SearchIcon, UserRound } from '@/src/components/icons'
-import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import type { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import { useAuth } from '../../context/AuthContext'
 import { ThemeToggle } from '../ThemeToggle'
 import { NAV_LINK_ITEMS } from './NavLinks'
@@ -11,6 +11,7 @@ import styles from '../Navbar.module.css'
 
 interface MobileMenuProps {
   open: boolean
+  presence: ReturnType<typeof useFloatingPresence>
   onOpenAuth: (mode: AuthMode) => void
   onLogout: () => void | Promise<void>
   allowRegister: boolean
@@ -18,10 +19,16 @@ interface MobileMenuProps {
 
 /**
  * 移动端汉堡菜单：导航链接、搜索入口、主题切换与账户操作。
+ * 菜单在导航栏的盒内向下展开，与顶栏共享同一块磨砂表面，自身不带背景。
  * 菜单的关闭由 Navbar 统一处理（路由变化、Escape、点击外部），内部不各自实现。
  */
-export const MobileMenu = ({ open, onOpenAuth, onLogout, allowRegister }: MobileMenuProps) => {
-  const presence = useFloatingPresence(open)
+export const MobileMenu = ({
+  open,
+  presence,
+  onOpenAuth,
+  onLogout,
+  allowRegister,
+}: MobileMenuProps) => {
   const navigate = useNavigate()
   const { user, loading } = useAuth()
   const [query, setQuery] = useState('')

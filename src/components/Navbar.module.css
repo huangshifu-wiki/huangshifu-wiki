@@ -5,16 +5,24 @@
   right: 0;
   z-index: 1000;
   background: transparent;
+  container-type: inline-size;
+  container-name: navbar;
   transition:
     background 0.4s ease,
     box-shadow 0.4s ease;
 }
 
-.siteNav[data-scrolled='true'] {
+.siteNav[data-scrolled='true'],
+.siteNav[data-menu-open='true'] {
   background: var(--home-nav-bg);
   box-shadow: 0 1px 0 var(--home-border);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+}
+
+/* 菜单展开时整条导航（栏 + 面板）是同一块磨砂表面，换用更不透明的底色保证菜单可读性 */
+.siteNav[data-menu-open='true'] {
+  background: var(--home-mobile-menu-bg);
 }
 
 .siteNavInner {
@@ -25,8 +33,6 @@
   justify-content: space-between;
   gap: clamp(1rem, 3vw, 1.5rem);
   padding: 0 clamp(1.5rem, 5vw, 4rem);
-  container-type: inline-size;
-  container-name: navbar;
 }
 
 .siteNavLeft,
@@ -153,16 +159,9 @@
   outline-offset: 4px;
 }
 
+/* 菜单自身不带背景与模糊：它在导航栏盒内展开，与顶栏共享同一层磨砂表面，避免双层模糊产生接缝 */
 .siteMobileMenu {
   display: none;
-  position: absolute;
-  top: 64px;
-  left: 0;
-  right: 0;
-  background: var(--home-mobile-menu-bg);
-  border-bottom: 1px solid var(--home-border);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   /* 收起时禁止透明层拦截页面点击 */
   pointer-events: none;
 }
