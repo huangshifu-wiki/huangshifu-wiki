@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Menu, X } from '@/src/components/icons'
 import { logoutRequest } from '../lib/auth'
 import { HeaderUserControls } from './HeaderUserControls'
@@ -10,6 +10,7 @@ import type { AuthMode } from './Navbar/types'
 import { NAV_LINK_ITEMS } from './Navbar/NavLinks'
 import { MobileMenu } from './Navbar/MobileMenu'
 import { NavbarSearchBox } from './Navbar/NavbarSearchBox'
+import { useDismissableLayer } from '../hooks/useClickOutside'
 import styles from './Navbar.module.css'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
 import { IconButton } from '@/src/components/ui'
@@ -22,6 +23,16 @@ export const Navbar = () => {
   const { show } = useToast()
   const { features } = usePublicFeatures()
   const allowRegister = features.registrationEnabled
+  const location = useLocation()
+  const navRef = useRef<HTMLElement | null>(null)
+
+  // 路由变化后收起移动端菜单（点击菜单链接、提交搜索、前进/后退均覆盖）
+  useEffect(() => {
+    setIsMenuOpen(false)
+  }, [location.pathname, location.search, location.hash])
+
+  // Escape 与点击导航栏外部时关闭菜单；汉堡按钮在 nav 内，不会误触发
+  useDismissableLayer(navRef, () => setIsMenuOpen(false), isMenuOpen)
 
   useEffect(() => {
     const updateScrolled = () => {
@@ -37,6 +48,7 @@ export const Navbar = () => {
 
   const openAuthModal = (mode: AuthMode) => {
     setAuthInitialMode(mode === 'register' && !allowRegister ? 'login' : mode)
+    setIsMenuOpen(false)
     setAuthModalOpen(true)
   }
 
@@ -52,6 +64,7 @@ export const Navbar = () => {
 
   return (
     <nav
+      ref={navRef}
       className={styles.siteNav}
       data-scrolled={isScrolled ? 'true' : 'false'}
       role="navigation"
@@ -91,11 +104,18 @@ export const Navbar = () => {
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className={`${styles.siteNavToggle} mobile-touch-target`}
             aria-label={isMenuOpen ? '关闭菜单' : '打开菜单'}
+            aria-expanded={isMenuOpen}
+            aria-controls="site-mobile-menu"
           >
             {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </IconButton>
         </div>
-        <MobileMenu open={isMenuOpen} />
+        <MobileMenu
+          open={isMenuOpen}
+          onOpenAuth={openAuthModal}
+          onLogout={handleLogout}
+          allowRegister={allowRegister}
+        />
       </div>
 
       {
