@@ -11,6 +11,19 @@
 - 表单项使用 `Field` 包裹 Input、Textarea 或 Select，由 Field 统一生成 label、说明、错误与 `aria-describedby`。
 - 需要焦点管理、键盘导航或 Portal 的交互优先组合 Dialog、AlertDialog、DropdownMenu、Popover、Tooltip、Tabs 等组件，不自行实现行为内核。
 - `TagInput` 是受控多标签表单控件：`value` 为 `readonly string[]`、`onChange` 返回新数组，支持输入框聚焦显示候选、输入框失焦关闭候选、Enter 添加、令牌删除、候选 listbox 点选、Arrow/Escape 和 IME 保护；候选数组由业务层传入，组件不得请求 API。令牌删除操作必须使用带可读 `aria-label` 的 `IconButton`，输入控件保留 `id` 与外部 label 关联。
+- 新写的整屏工作区（编辑器全屏这类需要铺满视口的表面）使用 `FullscreenSurface`，不自行实现 `createPortal` + 焦点 + Escape + 滚动锁。祖先的 `transform`、`filter`、`backdrop-filter`、`will-change`、`contain` 会把 `position: fixed` 后代的包含块从视口改成该祖先，所以整屏表面必须挂到 `body`；共享样式里不得给页面容器或弹窗留下常驻 `transform`——居中改用 `inset-0` + `margin: auto`，关键帧含 `transform` 的入场动画 `animation-fill-mode` 只用 `backwards`（`both`/`forwards` 会在动画结束后继续保留最后一帧的 `transform`）。层叠上下文不改变包含块，但会决定谁盖住谁，见下表的 `z-index` 约定。
+
+## 浮层层级
+
+| 层级                  | 用途                                                          |
+| --------------------- | ------------------------------------------------------------- |
+| 120 / 121 / 130 / 140 | Dialog 遮罩与内容、DropdownMenu 与 Popover、Tooltip、返回顶部 |
+| 150 / 200 / 300       | 底部导航、全局播放条、公告条                                  |
+| 1000                  | 站点导航栏                                                    |
+| 1050                  | `FullscreenSurface` 整屏浮层                                  |
+| 1100 / 1200 / 10000   | Toast 与上传遮罩、地图选点、图片灯箱                          |
+
+新增浮层时按语义插入这条序列，让 Toast 和大图灯箱始终能盖在整屏工作区之上。
 
 ## 变体与 Token
 

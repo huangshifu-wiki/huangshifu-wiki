@@ -9,10 +9,10 @@ import React from 'react'
 import { IconButton } from './actions'
 import { cn } from './utils'
 
-const overlayClasses =
-  'fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] data-[state=open]:animate-in data-[state=closed]:animate-out'
+const overlayClasses = 'fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)]'
+// 居中不使用 translate：transform 会让弹窗内的 position: fixed 后代以弹窗为包含块，编辑器全屏会被裁在卡片里
 const contentClasses =
-  'fixed left-1/2 top-1/2 z-[121] max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] shadow-[var(--ui-floating-shadow)] focus:outline-none'
+  'fixed inset-0 z-[121] m-auto max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] shadow-[var(--ui-floating-shadow)] focus:outline-none'
 
 export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
@@ -76,6 +76,41 @@ export const DialogContent = React.forwardRef<
   )
 )
 DialogContent.displayName = 'DialogContent'
+
+export interface FullscreenSurfaceProps extends Omit<
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>,
+  'children'
+> {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  label: string
+  children: React.ReactNode
+}
+
+/**
+ * 整屏浮层。用于编辑器全屏等需要铺满视口、并盖住页面导航与其他弹窗的表面。
+ * 层级 1050：高于导航栏（1000），低于 Toast（1100）与灯箱（10000）。
+ */
+export const FullscreenSurface = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  FullscreenSurfaceProps
+>(({ open, onOpenChange, label, className, children, ...props }, ref) => (
+  <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+    <DialogPrimitive.Portal>
+      {/* Overlay 提供浮层打开期间的 body 滚动锁，不能省略 */}
+      <DialogPrimitive.Overlay className="fixed inset-0 bg-transparent" />
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn('fixed inset-0 z-[1050] bg-[var(--ui-floating-bg)]', className)}
+        {...props}
+      >
+        <DialogPrimitive.Title className="sr-only">{label}</DialogPrimitive.Title>
+        {children}
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
+  </DialogPrimitive.Root>
+))
+FullscreenSurface.displayName = 'FullscreenSurface'
 
 export const AlertDialog = AlertDialogPrimitive.Root
 export const AlertDialogTrigger = AlertDialogPrimitive.Trigger

@@ -1,3 +1,4 @@
+import React from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -14,6 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Field,
+  FullscreenSurface,
   Input,
   Popover,
   PopoverContent,
@@ -374,5 +376,56 @@ describe('UI 设计系统', () => {
     expect(screen.getByRole('button', { name: '分页模式' })).toHaveAttribute('aria-pressed', 'true')
     await user.click(screen.getByRole('button', { name: '分段加载' }))
     expect(onValueChange).toHaveBeenCalledWith('incremental')
+  })
+})
+
+describe('FullscreenSurface', () => {
+  it('脱离渲染容器铺满视口，Escape 回调请求关闭', async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    const { container } = render(
+      <FullscreenSurface open onOpenChange={onOpenChange} label="全屏编辑">
+        <Button>退出全屏</Button>
+      </FullscreenSurface>
+    )
+
+    const surface = screen.getByRole('dialog', { name: '全屏编辑' })
+    expect(container.contains(surface)).toBe(false)
+    expect(document.body.contains(surface)).toBe(true)
+    expect(surface).toHaveClass('fixed', 'inset-0', 'z-[1050]')
+
+    await user.keyboard('{Escape}')
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('嵌在 Dialog 内时焦点留在浮层，Escape 只关浮层不关外层弹窗', async () => {
+    const user = userEvent.setup()
+
+    const NestedDemo = () => {
+      const [formOpen, setFormOpen] = React.useState(true)
+      const [fullscreen, setFullscreen] = React.useState(false)
+      return (
+        <Dialog open={formOpen} onOpenChange={setFormOpen}>
+          <DialogContent title="编辑歌曲" description="表单弹窗">
+            <Button onClick={() => setFullscreen(true)}>全屏</Button>
+            <FullscreenSurface open={fullscreen} onOpenChange={setFullscreen} label="歌词编辑">
+              <Input aria-label="歌词" defaultValue="第一行" />
+            </FullscreenSurface>
+          </DialogContent>
+        </Dialog>
+      )
+    }
+
+    render(<NestedDemo />)
+    await user.click(screen.getByRole('button', { name: '全屏' }))
+
+    const input = screen.getByRole('textbox', { name: '歌词' })
+    await user.click(input)
+    // 外层弹窗的 trapped FocusScope 会被整屏浮层暂停，焦点不会被抢回弹窗
+    expect(document.activeElement).toBe(input)
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: '歌词编辑' })).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: '编辑歌曲' })).toBeInTheDocument()
   })
 })

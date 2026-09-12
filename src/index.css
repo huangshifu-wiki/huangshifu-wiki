@@ -1111,8 +1111,9 @@ img {
 .floating-overlay[data-state='open'] .floating-panel,
 .floating-panel[data-state='open'] {
   opacity: 1;
-  transform: translateY(0);
-  animation: floating-panel-enter 0.22s ease-out both;
+  /* 展开态不能留 translateY(0)：非 none 的 transform 会把面板内的 fixed 后代锁在本元素里 */
+  transform: none;
+  animation: floating-panel-enter 0.22s ease-out backwards;
 }
 
 @keyframes floating-overlay-enter {
@@ -1320,7 +1321,7 @@ a[href]:not([data-press-feedback='none']),
 }
 
 .back-to-top-button {
-  animation: back-to-top-fade-in 0.3s ease forwards;
+  animation: back-to-top-fade-in 0.3s ease backwards;
 }
 
 /* ========================================
@@ -1459,7 +1460,8 @@ a[href]:not([data-press-feedback='none']),
   width: min(1100px, 100%);
   margin-inline: auto;
   padding: 2.5rem 1.5rem calc(env(safe-area-inset-bottom) + 8rem);
-  animation: book-page-enter 0.48s ease both;
+  /* 只能用 backwards：both/forwards 会留下常驻 transform，容器内的 fixed 后代将不再以视口定位 */
+  animation: book-page-enter 0.48s ease backwards;
 }
 
 .mobile-page-header {
@@ -1762,7 +1764,7 @@ a[href]:not([data-press-feedback='none']),
 .mobile-grid > *,
 .space-y-3 > *,
 .space-y-4 > * {
-  animation: book-item-enter 0.42s ease both;
+  animation: book-item-enter 0.42s ease backwards;
 }
 
 .mobile-grid > *:nth-child(2),
@@ -1989,7 +1991,7 @@ a[href]:not([data-press-feedback='none']),
   position: relative;
   padding: 2rem;
   text-align: center;
-  animation: home-hero-in 1.2s ease both;
+  animation: home-hero-in 1.2s ease backwards;
 }
 
 .home-hero-title {
@@ -2000,7 +2002,7 @@ a[href]:not([data-press-feedback='none']),
   letter-spacing: 0.18em;
   line-height: 1.1;
   text-shadow: var(--home-title-shadow);
-  animation: home-hero-in 1.2s ease 0.35s both;
+  animation: home-hero-in 1.2s ease 0.35s backwards;
 }
 
 .home-hero-subtitle {
@@ -2009,7 +2011,7 @@ a[href]:not([data-press-feedback='none']),
   font-size: clamp(0.85rem, 2vw, 1.05rem);
   font-weight: 300;
   letter-spacing: 0.35em;
-  animation: home-hero-in 1.2s ease 0.5s both;
+  animation: home-hero-in 1.2s ease 0.5s backwards;
 }
 
 .home-hero-actions {
@@ -2017,7 +2019,7 @@ a[href]:not([data-press-feedback='none']),
   flex-wrap: wrap;
   justify-content: center;
   gap: 1rem;
-  animation: home-hero-in 1.2s ease 0.65s both;
+  animation: home-hero-in 1.2s ease 0.65s backwards;
 }
 
 .home-btn {

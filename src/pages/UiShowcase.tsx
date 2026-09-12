@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
   EmptyState,
   Field,
+  FullscreenSurface,
   IconButton,
   Input,
   Panel,
@@ -49,16 +50,27 @@ import {
   TooltipTrigger,
   useToast,
 } from '@/src/components/ui'
+import MarkdownEditor from '@/src/components/MarkdownEditor'
 
 const variants = ['primary', 'secondary', 'ghost', 'danger', 'warning', 'success', 'info'] as const
 
 const softVariants = ['secondary', 'danger', 'warning', 'success', 'info'] as const
+
+const DEMO_MARKDOWN = [
+  '# 山鬼',
+  '',
+  '若有人兮山之阿，被薜荔兮带女萝。',
+  '',
+  '既含睇兮又宜笑，子慕予兮善窈窕。',
+].join('\n')
 
 const UiShowcase = () => {
   const [dark, setDark] = useState(false)
   const [loadMode, setLoadMode] = useState('pagination')
   const { show } = useToast()
   const [demoTags, setDemoTags] = useState(['古风'])
+  const [fullscreenDemo, setFullscreenDemo] = useState(false)
+  const [demoMarkdown, setDemoMarkdown] = useState(DEMO_MARKDOWN)
 
   return (
     <div data-theme={dark ? 'dark' : 'default'} className="mobile-page-shell min-h-screen">
@@ -156,6 +168,17 @@ const UiShowcase = () => {
               <RadioGroupItem value="member" label="成员" />
             </RadioGroup>
           </div>
+        </ShowcaseSection>
+
+        <ShowcaseSection title="内容输入">
+          <MarkdownEditor
+            value={demoMarkdown}
+            onChange={setDemoMarkdown}
+            height="240px"
+            variant="book"
+            ariaLabel="展厅 Markdown 示例"
+            placeholder="试试工具栏右侧的全屏按钮"
+          />
         </ShowcaseSection>
 
         <ShowcaseSection title="展示与状态">
@@ -261,7 +284,22 @@ const UiShowcase = () => {
               </Tooltip>
             </TooltipProvider>
             <Button onClick={() => show('组件展厅通知', { duration: 3000 })}>Toast</Button>
+            <Button variant="secondary" onClick={() => setFullscreenDemo(true)}>
+              整屏浮层
+            </Button>
           </div>
+          <FullscreenSurface
+            open={fullscreenDemo}
+            onOpenChange={setFullscreenDemo}
+            label="整屏浮层示例"
+          >
+            <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
+              <p className="text-sm text-text-secondary">
+                铺满视口、锁定背景滚动，Escape 关闭并把焦点交还触发按钮。
+              </p>
+              <Button onClick={() => setFullscreenDemo(false)}>关闭</Button>
+            </div>
+          </FullscreenSurface>
           <Tabs defaultValue="one">
             <TabsList aria-label="示例标签页">
               <TabsTrigger value="one">条目</TabsTrigger>
