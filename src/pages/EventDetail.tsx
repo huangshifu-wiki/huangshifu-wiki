@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Calendar, ExternalLink, MapPin, Tag } from '@/src/components/icons'
+import { Calendar, MapPin, Tag } from '@/src/components/icons'
+import { ContentLinkList } from '../components/ContentLinkList'
 import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
 import { CoverPlaceholder } from '../components/CoverPlaceholder'
@@ -61,41 +62,6 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
     <span className="inline-block h-4 w-[3px] rounded-[1px] bg-brand-gold opacity-60" />
     {children}
   </h2>
-)
-
-const EventLinkPanel = ({
-  title,
-  emptyText,
-  links,
-}: {
-  title: string
-  emptyText: string
-  links: EventItem['externalLinks']
-}) => (
-  <div className="border-y border-[var(--book-ink-line)] py-5">
-    <div className="mb-3">
-      <SectionHeading>{title}</SectionHeading>
-    </div>
-    {links.length ? (
-      <div className="flex flex-col">
-        {links.map((link) => (
-          <a
-            key={link.url}
-            href={link.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-press-feedback="inline"
-            className="flex items-center gap-2.5 border-b border-[var(--book-ink-line)] py-2.5 text-sm text-text-secondary transition-all hover:pl-1 hover:text-brand-gold last:border-0"
-          >
-            <ExternalLink size={15} className="shrink-0 text-text-muted" />
-            {link.label}
-          </a>
-        ))}
-      </div>
-    ) : (
-      <p className="py-2 text-sm italic tracking-[0.06em] text-text-muted">{emptyText}</p>
-    )}
-  </div>
 )
 
 const EventDetail = () => {
@@ -424,10 +390,14 @@ const EventDetail = () => {
               )}
             </div>
 
-            <EventLinkPanel title="外部链接" emptyText="暂无外部链接" links={event.externalLinks} />
+            <ContentLinkList
+              title={<SectionHeading>外部链接</SectionHeading>}
+              emptyText="暂无外部链接"
+              links={event.externalLinks}
+            />
             {event.relatedLinks.length ? (
-              <EventLinkPanel
-                title="其他相关链接"
+              <ContentLinkList
+                title={<SectionHeading>其他相关链接</SectionHeading>}
                 emptyText="暂无其他相关链接"
                 links={event.relatedLinks}
               />

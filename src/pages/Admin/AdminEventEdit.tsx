@@ -25,10 +25,12 @@ import {
 import { PageSkeleton } from '../../components/PageSkeleton'
 import { SmartImage } from '../../components/SmartImage'
 import { CoverPlaceholder } from '../../components/CoverPlaceholder'
+import { LinkRowsEditor } from '../../components/LinkRowsEditor'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { normalizeContentLinks, validateContentLinks } from '../../lib/contentLinks'
 import { splitTagsInput } from '../../lib/contentUtils'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
 import { useFileDropZone } from '../../hooks/useFileDropZone'
@@ -39,12 +41,7 @@ import {
   getEventCoverSrc,
   isEventTicketPrice,
 } from '../../lib/eventFormat'
-import {
-  validateMaxLength,
-  validateRequiredText,
-  validateTags,
-  validateUrl,
-} from '../../lib/clientValidation'
+import { validateMaxLength, validateRequiredText, validateTags } from '../../lib/clientValidation'
 import { formatUploadLimitWithSize, UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
 import { uploadImageWithStrategy } from '../../services/imageService'
 import type {
@@ -53,7 +50,7 @@ import type {
   EventCreateResponse,
 } from '../../types/api'
 import type {
-  EventExternalLink,
+  ContentLink,
   EventItem,
   EventPosterItem,
   EventSaleTime,
@@ -120,8 +117,8 @@ type EventDraft = {
   saleTimes: EventSaleTime[]
   lineup: string[]
   tagsText: string
-  externalLinks: EventExternalLink[]
-  relatedLinks: EventExternalLink[]
+  externalLinks: ContentLink[]
+  relatedLinks: ContentLink[]
   coverAssetId: string | null
   coverUrl: string | null
   posters: EditablePoster[]
@@ -189,8 +186,8 @@ const createDraftFromEvent = (event: EventItem): EventDraft => ({
   saleTimes: event.saleTimes,
   lineup: event.lineup.length ? event.lineup : [''],
   tagsText: (event.tags || []).join(', '),
-  externalLinks: event.externalLinks || [],
-  relatedLinks: event.relatedLinks || [],
+  externalLinks: event.externalLinks,
+  relatedLinks: event.relatedLinks,
   coverAssetId: event.coverAssetId,
   coverUrl: getEventCoverSrc(event),
   posters: event.posters.map(toEditablePoster),
@@ -234,10 +231,6 @@ const normalizeSaleTimes = (items: EventSaleTime[]) =>
 
 const EVENT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const EVENT_DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
-const normalizeExternalLinks = (items: EventExternalLink[]) =>
-  items
-    .map((item) => ({ label: item.label.trim(), url: item.url.trim() }))
-    .filter((item) => item.label && item.url)
 
 const normalizeTimeSlots = (items: EventTimeSlot[]) =>
   items
@@ -320,7 +313,7 @@ const normalizeJsonLineup = (value: unknown): string[] => {
   return value.length ? value : ['']
 }
 
-const normalizeJsonExternalLinks = (value: unknown): EventExternalLink[] => {
+const normalizeJsonExternalLinks = (value: unknown): ContentLink[] => {
   if (!Array.isArray(value)) throw new Error('外部链接必须是数组')
   return value.map((item) => {
     if (!isRecord(item) || typeof item.label !== 'string' || typeof item.url !== 'string') {
@@ -856,18 +849,24 @@ const AdminEventEdit = () => {
       show('起售时间必须是有效日期时间', { variant: 'error' })
       return
     }
-    const invalidExternalLink = [...draft.externalLinks, ...draft.relatedLinks].find((link) => {
-      const label = link.label.trim()
-      const url = link.url.trim()
-      return (
-        !label ||
-        !url ||
-        label.length > CONTENT_LIMITS.event.externalLinkLabel ||
-        validateUrl(url, 'url', '链接', CONTENT_LIMITS.url) !== null
-      )
-    })
-    if (invalidExternalLink) {
-      show('外部链接必须填写名称并使用有效的 http/https URL', { variant: 'error' })
+    const linkRules = {
+      labelLimit: CONTENT_LIMITS.event.externalLinkLabel,
+      maxItems: CONTENT_LIMITS.event.externalLinks,
+      allowInternalPath: false,
+    }
+    const linksError =
+      validateContentLinks(draft.externalLinks, {
+        ...linkRules,
+        field: 'externalLinks',
+        label: '外部链接',
+      }) ||
+      validateContentLinks(draft.relatedLinks, {
+        ...linkRules,
+        field: 'relatedLinks',
+        label: '其他相关链接',
+      })
+    if (linksError) {
+      show(linksError.message, { variant: 'error' })
       return
     }
 
@@ -897,8 +896,8 @@ const AdminEventEdit = () => {
       saleTimes: normalizeSaleTimes(draft.saleTimes),
       lineup: normalizeStringList(draft.lineup),
       tags: splitTagsInput(draft.tagsText),
-      externalLinks: normalizeExternalLinks(draft.externalLinks),
-      relatedLinks: normalizeExternalLinks(draft.relatedLinks),
+      externalLinks: normalizeContentLinks(draft.externalLinks),
+      relatedLinks: normalizeContentLinks(draft.relatedLinks),
       coverAssetId: draft.coverAssetId,
       posters: draft.posters.flatMap<PosterSaveInstruction>((poster) => {
         if (poster.imageId) return [{ imageId: poster.imageId }]
@@ -1163,7 +1162,6 @@ const AdminEventEdit = () => {
 
           <EventLinksEditor
             title="外部链接"
-            deleteLabel="删除链接"
             field="externalLinks"
             values={draft.externalLinks}
             onChange={(externalLinks) => patchDraft({ externalLinks })}
@@ -1177,7 +1175,6 @@ const AdminEventEdit = () => {
           <EventLinksEditor
             title="其他相关链接"
             field="relatedLinks"
-            deleteLabel="删除相关链接"
             values={draft.relatedLinks}
             onChange={(relatedLinks) => patchDraft({ relatedLinks })}
             state={jsonEditors.relatedLinks}
@@ -1591,7 +1588,6 @@ const EventLinksEditor = ({
   title,
   field,
   values,
-  deleteLabel,
   onChange,
   state,
   getJsonText,
@@ -1601,61 +1597,32 @@ const EventLinksEditor = ({
 }: {
   title: string
   field: JsonField
-  values: EventExternalLink[]
-  deleteLabel: string
-  onChange: (values: EventExternalLink[]) => void
+  values: ContentLink[]
+  onChange: (values: ContentLink[]) => void
   state: JsonEditorState
   getJsonText: (field: JsonField) => string
   onOpenJson: (field: JsonField) => void
   onCloseJson: (field: JsonField) => void
   onApplyJson: (field: JsonField, text: string) => string | null
-}) => {
-  const appendItem = () => onChange([...values, { label: '', url: '' }])
-  const updateItem = (index: number, patch: Partial<EventExternalLink>) => {
-    onChange(
-      values.map((item, currentIndex) => (currentIndex === index ? { ...item, ...patch } : item))
-    )
-  }
-
-  return (
-    <JsonEditableSection
+}) => (
+  <JsonEditableSection
+    title={title}
+    field={field}
+    state={state}
+    getJsonText={getJsonText}
+    onOpenJson={onOpenJson}
+    onCloseJson={onCloseJson}
+    onApplyJson={onApplyJson}
+  >
+    <LinkRowsEditor
       title={title}
-      field={field}
-      state={state}
-      getJsonText={getJsonText}
-      onOpenJson={onOpenJson}
-      onCloseJson={onCloseJson}
-      onApplyJson={onApplyJson}
-    >
-      <ListHeader title={title} onAdd={appendItem} />
-      <div className="space-y-3">
-        {values.map((item, index) => (
-          <div
-            key={index}
-            className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-          >
-            <input
-              value={item.label}
-              onChange={(event) => updateItem(index, { label: event.target.value })}
-              placeholder="链接名称"
-              className={bookCompactInputClass}
-            />
-            <input
-              value={item.url}
-              onChange={(event) => updateItem(index, { url: event.target.value })}
-              placeholder="https://"
-              className={bookCompactInputClass}
-            />
-            <IconButton
-              label={deleteLabel}
-              onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
-            />
-          </div>
-        ))}
-      </div>
-    </JsonEditableSection>
-  )
-}
+      values={values}
+      labelMaxLength={CONTENT_LIMITS.event.externalLinkLabel}
+      urlPlaceholder="https://"
+      onChange={onChange}
+    />
+  </JsonEditableSection>
+)
 
 const StringListEditor = ({
   title,

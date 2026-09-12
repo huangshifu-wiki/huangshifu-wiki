@@ -3,8 +3,14 @@ import { createRouter } from '../utils/typed-router'
 import { requireAuth, requireActiveUser, requireAdmin, isAdminRole } from '../middleware/auth'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { galleryWriteLimiter } from '../middleware/rateLimiter'
-import { adminBatchGalleryImagesSchema, galleryDeleteSchema, validateBody } from '../schemas'
+import {
+  adminBatchGalleryImagesSchema,
+  galleryDeleteSchema,
+  galleryRelatedLinksSchema,
+  validateBody,
+} from '../schemas'
 import type { ApiUser, AuthenticatedRequest, ContentStatus } from '../types'
+import type { ContentLink } from '../../types/entities'
 import {
   serializeTags,
   normalizeTagList,
@@ -69,6 +75,20 @@ function ensureGalleryTextLimits(
     ensureTextLimit(res, input.locationDetail, '地点详情', CONTENT_LIMITS.gallery.locationDetail) &&
     ensureTextLimit(res, input.copyright, '版权信息', CONTENT_LIMITS.gallery.copyright)
   )
+}
+
+// 图集写入接口无法整体走 validateBody（它会用解析结果替换 req.body），因此对链接单独校验。
+// 返回 null 表示校验失败且已写出 400；空数组是合法的「清空链接」，不能按真值判断。
+function parseGalleryRelatedLinks(
+  res: Parameters<typeof ensureTextLimit>[0],
+  value: unknown
+): ContentLink[] | null {
+  const result = galleryRelatedLinksSchema.safeParse(value)
+  if (!result.success) {
+    res.status(400).json({ error: result.error.issues[0].message })
+    return null
+  }
+  return result.data
 }
 
 function canManageGallery(gallery: { authorUid: string }, authUser?: ApiUser) {
@@ -732,6 +752,9 @@ router.post(
         return
       }
 
+      const relatedLinks = parseGalleryRelatedLinks(res, req.body?.relatedLinks)
+      if (relatedLinks === null) return
+
       const rawImages = Array.isArray(images) ? images : []
       const imageAssetIds = rawImages
         .map((image) => (typeof image?.assetId === 'string' ? image.assetId.trim() : ''))
@@ -788,6 +811,7 @@ router.post(
               authorUid: req.authUser!.uid,
               authorName: req.authUser!.displayName,
               tags: finalTags,
+              relatedLinks,
               eventDate: normalizedEventDate,
               locationCode: locationCode?.trim() || null,
               locationDetail: locationDetail?.trim() || null,
@@ -882,6 +906,7 @@ router.post(
             authorUid: req.authUser!.uid,
             authorName: req.authUser!.displayName,
             tags: normalizedTags,
+            relatedLinks,
             eventDate: normalizedEventDate,
             locationCode: locationCode?.trim() || null,
             locationDetail: locationDetail?.trim() || null,
@@ -1002,6 +1027,11 @@ router.patch(
       ) {
         return
       }
+      // undefined = 本次不改链接；null = 校验失败（已返回 400）；数组 = 整体覆盖，含清空
+      const relatedLinks = Object.prototype.hasOwnProperty.call(req.body || {}, 'relatedLinks')
+        ? parseGalleryRelatedLinks(res, req.body.relatedLinks)
+        : undefined
+      if (relatedLinks === null) return
       const requestedStatus =
         req.body?.status !== undefined || req.body?.published !== undefined
           ? resolveGalleryRequestedStatus(
@@ -1051,6 +1081,7 @@ router.patch(
         title?: string
         description?: string
         tags?: string[]
+        relatedLinks?: ContentLink[]
         eventDate?: string | null
         locationCode?: string | null
         locationDetail?: string | null
@@ -1071,6 +1102,9 @@ router.patch(
       }
       if (tags !== undefined) {
         data.tags = tags
+      }
+      if (relatedLinks !== undefined) {
+        data.relatedLinks = relatedLinks
       }
       if (hasEventDate) {
         data.eventDate = eventDate ?? null

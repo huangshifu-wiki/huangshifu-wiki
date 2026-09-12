@@ -672,6 +672,7 @@ model Gallery {
   authorUid  String
   authorName String
   tags       Json?
+  relatedLinks Json     @default("[]")
   eventDate  String?
   locationCode  String?
   locationDetail String?

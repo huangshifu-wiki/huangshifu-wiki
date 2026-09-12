@@ -19,6 +19,7 @@ import { SmartImage } from '../components/SmartImage'
 import { Lightbox } from '../components/Lightbox'
 import { CharacterCount } from '../components/CharacterCount'
 import { CommentActionMenu } from '../components/CommentActionMenu'
+import { ContentLinkList } from '../components/ContentLinkList'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
@@ -1034,6 +1035,16 @@ const GalleryDetail = () => {
             ))}
           </div>
         </section>
+
+        {/* Related links */}
+        {gallery.relatedLinks.length ? (
+          <div className="mb-10">
+            <ContentLinkList
+              title={<SectionHeading>相关链接</SectionHeading>}
+              links={gallery.relatedLinks}
+            />
+          </div>
+        ) : null}
 
         {/* Comments */}
         {isGalleryPublished && (

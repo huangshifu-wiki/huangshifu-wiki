@@ -18,6 +18,7 @@ import {
   bookSecondaryButtonClass,
 } from '../components/BookEditor'
 import { LocationTagInput } from '../components/LocationTagInput'
+import { LinkRowsEditor } from '../components/LinkRowsEditor'
 import MarkdownEditor from '../components/MarkdownEditor'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { SmartBackLink } from '../components/SmartBackLink'
@@ -33,6 +34,7 @@ import {
   invalidateApiCacheByPrefix,
 } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
+import { normalizeContentLinks, validateContentLinks } from '../lib/contentLinks'
 import { splitTagsInput } from '../lib/contentUtils'
 import { useTagSuggestions } from '../hooks/useTagSuggestions'
 import { useFileDropZone } from '../hooks/useFileDropZone'
@@ -57,7 +59,7 @@ import type {
   UploadFileResponse,
   UploadSessionResponse,
 } from '../types/api'
-import type { GalleryImageItem, GalleryItem } from '../types/entities'
+import type { ContentLink, GalleryImageItem, GalleryItem } from '../types/entities'
 import { TagInput } from '@/src/components/ui'
 
 type EditableGalleryImage = GalleryImageItem & {
@@ -70,6 +72,7 @@ type GalleryDraft = {
   title: string
   description: string
   tagsText: string
+  relatedLinks: ContentLink[]
   eventDate: string
   locationName: string | null
   locationCode: string | null
@@ -112,6 +115,7 @@ const createDraftFromGallery = (gallery: GalleryItem): GalleryDraft => ({
   title: gallery.title || '',
   description: gallery.description || '',
   tagsText: gallery.tags.join(', '),
+  relatedLinks: gallery.relatedLinks,
   eventDate: gallery.eventDate || '',
   locationName: gallery.locationDetail || gallery.locationName || null,
   locationCode: gallery.locationCode || null,
@@ -123,6 +127,7 @@ const createEmptyDraft = (): GalleryDraft => ({
   title: '',
   description: '',
   tagsText: '',
+  relatedLinks: [],
   eventDate: toLocalDateInputValue(),
   locationName: null,
   locationCode: null,
@@ -442,7 +447,7 @@ const GalleryEdit = () => {
     if (!currentDraft || !canManage || savingMode || uploading) return
     if (!isCreating && (!gallery || !galleryId)) return
 
-    const titleError =
+    const validationError =
       validateRequiredText(currentDraft.title, 'title', '图集标题') ||
       validateMaxLength(currentDraft.title, 'title', '图集标题', CONTENT_LIMITS.gallery.title) ||
       validateMaxLength(
@@ -463,9 +468,16 @@ const GalleryEdit = () => {
         '标签',
         CONTENT_LIMITS.gallery.tags,
         CONTENT_LIMITS.gallery.tag
-      )
-    if (titleError) {
-      show(titleError.message, { variant: 'error' })
+      ) ||
+      validateContentLinks(currentDraft.relatedLinks, {
+        field: 'relatedLinks',
+        label: '相关链接',
+        labelLimit: CONTENT_LIMITS.gallery.relatedLinkLabel,
+        maxItems: CONTENT_LIMITS.gallery.relatedLinks,
+        allowInternalPath: true,
+      })
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
       return
     }
     if (currentDraft.images.length === 0) {
@@ -575,6 +587,7 @@ const GalleryEdit = () => {
         title: currentDraft.title,
         description: currentDraft.description,
         tags: splitTagsInput(currentDraft.tagsText),
+        relatedLinks: normalizeContentLinks(currentDraft.relatedLinks),
         eventDate: currentDraft.eventDate || null,
         locationCode: currentDraft.locationCode,
         locationDetail: currentDraft.locationName,
@@ -917,6 +930,18 @@ const GalleryEdit = () => {
               </BookFormField>
             </div>
           </div>
+        </BookEditorSection>
+
+        <BookEditorSection title="相关链接">
+          <LinkRowsEditor
+            title="相关链接"
+            values={draft.relatedLinks}
+            labelMaxLength={CONTENT_LIMITS.gallery.relatedLinkLabel}
+            urlPlaceholder="https:// 或 /gallery/1024"
+            onChange={(relatedLinks) =>
+              applyDraft((prev) => (prev ? { ...prev, relatedLinks } : prev))
+            }
+          />
         </BookEditorSection>
 
         <BookEditorSection title={t('gallery.imageCount', { count: draft.images.length })}>

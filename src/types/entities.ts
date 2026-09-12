@@ -240,6 +240,7 @@ export interface GalleryItem {
   authorPublicId?: string | null
   authorName: string
   tags: string[]
+  relatedLinks: ContentLink[]
   eventDate?: string | null
   locationCode: string | null
   locationName: string | null
@@ -287,7 +288,8 @@ export interface EventSaleTime {
   note?: string
 }
 
-export interface EventExternalLink {
+/** 内容页的可点击链接：url 为站外 http/https 地址，或以 / 开头的站内路径 */
+export type ContentLink = {
   label: string
   url: string
 }
@@ -313,8 +315,8 @@ export interface EventItem {
   saleTimes: EventSaleTime[]
   lineup: string[]
   tags: string[]
-  externalLinks: EventExternalLink[]
-  relatedLinks: EventExternalLink[]
+  externalLinks: ContentLink[]
+  relatedLinks: ContentLink[]
   sortStart: string | null
   sortEnd: string | null
   coverAssetId: string | null

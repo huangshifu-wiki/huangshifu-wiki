@@ -1,0 +1,1 @@
+ALTER TABLE "Gallery" ADD COLUMN "relatedLinks" JSONB NOT NULL DEFAULT '[]';

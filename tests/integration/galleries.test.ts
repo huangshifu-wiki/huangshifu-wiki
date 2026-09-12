@@ -153,6 +153,69 @@ describe('Galleries API eventDate handling', () => {
 
     expect(invalidResponse.status).toBe(400)
   })
+
+  it('创建图集时保存相关链接，站内路径和站外地址都接受', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const asset = await createTestImageAsset(adminUser.user.uid, `${suffix}-links`)
+    const relatedLinks = [
+      { label: '配套游记', url: '/events/259' },
+      { label: '站外报道', url: 'https://example.com/news' },
+    ]
+
+    const response = await agent
+      .post('/api/galleries')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: `${GALLERY_TITLE_PREFIX} Related Links ${suffix}`,
+        description: 'Create with related links',
+        assetIds: [asset.id],
+        relatedLinks,
+      })
+
+    expect(response.status).toBe(201)
+    expect(response.body.gallery.relatedLinks).toEqual(relatedLinks)
+  })
+
+  it('更新相关链接支持覆盖与清空，非法地址返回 400 且不改库', async () => {
+    const gallery = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Related Links Patch`,
+      authorUid: adminUser.user.uid,
+      authorName: adminUser.user.displayName,
+    })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const patch = (body: Record<string, unknown>) =>
+      agent.patch(`/api/galleries/${gallery.id}`).set('X-XSRF-TOKEN', xsrfToken).send(body)
+
+    const updated = await patch({ relatedLinks: [{ label: '另一个图集', url: '/gallery/1024' }] })
+    expect(updated.status).toBe(200)
+    expect(updated.body.gallery.relatedLinks).toEqual([
+      { label: '另一个图集', url: '/gallery/1024' },
+    ])
+
+    const rejected = await patch({ relatedLinks: [{ label: '坏链接', url: '//evil.com' }] })
+    expect(rejected.status).toBe(400)
+    const storedAfterRejection = await prisma.gallery.findUnique({
+      where: { id: gallery.id },
+      select: { relatedLinks: true },
+    })
+    expect(storedAfterRejection?.relatedLinks).toEqual([
+      { label: '另一个图集', url: '/gallery/1024' },
+    ])
+
+    const cleared = await patch({ relatedLinks: [] })
+    expect(cleared.status).toBe(200)
+    expect(cleared.body.gallery.relatedLinks).toEqual([])
+
+    const titleOnly = await patch({ title: `${GALLERY_TITLE_PREFIX} Related Links Renamed` })
+    expect(titleOnly.body.gallery.relatedLinks).toEqual([])
+  })
   it('按可见性聚合去重排序的画廊标签建议', async () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const viewer = await createTestUser({

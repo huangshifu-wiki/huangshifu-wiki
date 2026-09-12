@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { limitedString, limitedStringArray, optionalLimitedString } from '../utils/textLimits'
+import { createContentLinkListSchema } from './contentLink.schema'
 
 const localDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const localDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
@@ -42,20 +43,18 @@ const saleTimeSchema = z
     note: value.note?.trim() || undefined,
   }))
 
-const externalLinkSchema = z
-  .object({
-    label: limitedString('链接名称', CONTENT_LIMITS.event.externalLinkLabel)
-      .trim()
-      .min(1, '链接名称不能为空'),
-    url: z.string().trim().url('外部链接必须是有效 URL').max(CONTENT_LIMITS.url),
-  })
-  .transform((value) => ({
-    label: value.label,
-    url: value.url,
-  }))
-
-const createEventLinksSchema = () =>
-  z.array(externalLinkSchema).max(CONTENT_LIMITS.event.externalLinks).optional().default([])
+const eventLinkRules = {
+  labelLimit: CONTENT_LIMITS.event.externalLinkLabel,
+  maxItems: CONTENT_LIMITS.event.externalLinks,
+}
+const externalLinksSchema = createContentLinkListSchema({
+  ...eventLinkRules,
+  label: '外部链接',
+})
+const relatedLinksSchema = createContentLinkListSchema({
+  ...eventLinkRules,
+  label: '其他相关链接',
+})
 
 const ticketPriceSchema = z
   .object({
@@ -98,8 +97,8 @@ export const eventWriteSchema = z.object({
   tags: limitedStringArray('标签', CONTENT_LIMITS.event.tag, CONTENT_LIMITS.event.tags)
     .transform((items) => [...new Set(items?.map((item) => item.trim()).filter(Boolean) || [])])
     .default([]),
-  externalLinks: createEventLinksSchema(),
-  relatedLinks: createEventLinksSchema(),
+  externalLinks: externalLinksSchema,
+  relatedLinks: relatedLinksSchema,
   coverAssetId: z.string().trim().min(1).nullable().optional(),
   uploadSessionId: z.string().trim().min(1).optional(),
   posters: z.array(imageInstructionSchema).optional().default([]),

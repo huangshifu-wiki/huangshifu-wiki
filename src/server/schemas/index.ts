@@ -23,7 +23,7 @@ export {
   postDeleteSchema,
   postCommentSchema,
 } from './post.schema'
-export { galleryDeleteSchema } from './gallery.schema'
+export { galleryDeleteSchema, galleryRelatedLinksSchema } from './gallery.schema'
 export { eventWriteSchema } from './event.schema'
 export { ticketListingWriteSchema } from './ticket-listing.schema'
 export {

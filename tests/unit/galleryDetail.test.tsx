@@ -44,6 +44,7 @@ const gallery = {
   authorUid: 'user-1',
   authorName: '作者',
   tags: [],
+  relatedLinks: [],
   status: 'published',
   published: true,
   createdAt: '2025-01-01T00:00:00.000Z',
@@ -109,5 +110,46 @@ describe('GalleryDetail 图集描述渲染', () => {
 
     expect(await screen.findByText('暂无描述')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '出行记录' })).not.toBeInTheDocument()
+  })
+})
+
+describe('GalleryDetail 相关链接', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('站内路径走同页跳转，站外地址新窗口打开', async () => {
+    configureApi({
+      ...gallery,
+      relatedLinks: [
+        { label: '配套游记', url: '/events/259' },
+        { label: '站外报道', url: 'https://example.com/news' },
+      ],
+    })
+
+    renderDetail()
+
+    const internalLink = await screen.findByRole('link', { name: '配套游记' })
+    expect(internalLink).toHaveAttribute('href', '/events/259')
+    expect(internalLink).not.toHaveAttribute('target')
+
+    const externalLink = screen.getByRole('link', { name: '站外报道' })
+    expect(externalLink).toHaveAttribute('href', 'https://example.com/news')
+    expect(externalLink).toHaveAttribute('target', '_blank')
+    expect(externalLink).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('没有相关链接时不渲染相关链接面板', async () => {
+    configureApi(gallery)
+
+    renderDetail()
+
+    expect(await screen.findByRole('heading', { level: 1, name: '出行记录' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '相关链接' })).not.toBeInTheDocument()
   })
 })

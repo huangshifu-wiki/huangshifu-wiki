@@ -49,6 +49,8 @@ export const CONTENT_LIMITS = {
     reviewNote: 1000,
     imageName: 255,
     imageUrl: 2048,
+    relatedLinkLabel: 80,
+    relatedLinks: 20,
   },
   event: {
     title: 200,

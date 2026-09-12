@@ -540,6 +540,7 @@ type GalleryInput = {
   author?: { publicId?: string; displayName?: string | null } | null
   authorName: string
   tags: unknown
+  relatedLinks?: unknown
   eventDate?: string | null
   locationCode?: string | null
   locationDetail?: string | null
@@ -713,6 +714,7 @@ function toGalleryResponseWithImageMaps(
     authorPublicId: gallery.author?.publicId || null,
     authorName: gallery.authorName,
     tags: serializeTags(gallery.tags),
+    relatedLinks: arrayJson(gallery.relatedLinks),
     eventDate: gallery.eventDate ?? null,
     locationCode: gallery.locationCode || null,
     locationName: gallery.location?.fullName || null,
