@@ -167,6 +167,7 @@
   width: 100%;
   max-width: 720px;
   justify-self: center;
+  align-self: start;
   /* 纵向间距必须放在内部 body 上：网格项自身的 padding 会把 floating-expand 的
      0fr 轨道顶出残留高度，导致收起动画停在 40px 并在卸载时跳变 */
   padding: 0 clamp(1.5rem, 5vw, 4rem);
