@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { LogOut, Search as SearchIcon } from '@/src/components/icons'
-import type { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import type { FloatingPresence } from '../../hooks/useFloatingPresence'
 import { useAuth } from '../../context/AuthContext'
 import { DEFAULT_AVATAR, handleAvatarError } from '../../lib/defaultAvatar'
 import { ThemeToggle } from '../ThemeToggle'
@@ -12,7 +12,7 @@ import styles from '../Navbar.module.css'
 
 interface MobileMenuProps {
   open: boolean
-  presence: ReturnType<typeof useFloatingPresence>
+  presence: FloatingPresence
   onOpenAuth: (mode: AuthMode) => void
   onLogout: () => void | Promise<void>
   allowRegister: boolean
@@ -53,96 +53,98 @@ export const MobileMenu = ({
       aria-hidden={!open}
     >
       <div className={styles.siteMobileMenuInner}>
-        <form role="search" onSubmit={submitSearch} className={styles.siteMobileSearch}>
-          <div className="relative">
-            <Button
-              type="submit"
-              variant="ghost"
-              className="mobile-touch-target absolute left-1 top-1/2 -translate-y-1/2 p-1.5 text-[var(--home-text-2)] hover:bg-transparent hover:text-[var(--home-gold)]"
-              aria-label="搜索"
-            >
-              <SearchIcon size={16} />
-            </Button>
-            <Input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索"
-              aria-label="搜索百科、帖子、图集、音乐或专辑"
-              autoComplete="off"
-              className="w-full rounded-lg border border-transparent bg-[color-mix(in_srgb,var(--home-gold)_8%,transparent)] py-2.5 pl-10 pr-3 text-base text-[var(--home-text-1)] placeholder:text-[var(--home-text-3)] focus:border-[var(--home-gold)] focus:shadow-none"
-            />
+        <div className={styles.siteMobileMenuBody}>
+          <form role="search" onSubmit={submitSearch} className={styles.siteMobileSearch}>
+            <div className="relative">
+              <Button
+                type="submit"
+                variant="ghost"
+                className="mobile-touch-target absolute left-1 top-1/2 -translate-y-1/2 p-1.5 text-[var(--home-text-2)] hover:bg-transparent hover:text-[var(--home-gold)]"
+                aria-label="搜索"
+              >
+                <SearchIcon size={16} />
+              </Button>
+              <Input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索"
+                aria-label="搜索百科、帖子、图集、音乐或专辑"
+                autoComplete="off"
+                className="w-full rounded-lg border border-transparent bg-[color-mix(in_srgb,var(--home-gold)_8%,transparent)] py-2.5 pl-10 pr-3 text-base text-[var(--home-text-1)] placeholder:text-[var(--home-text-3)] focus:border-[var(--home-gold)] focus:shadow-none"
+              />
+            </div>
+          </form>
+
+          <div className={styles.siteMobileLinks}>
+            {NAV_LINK_ITEMS.map(({ to, label, Icon }) => (
+              <NavLink key={to} to={to} className={styles.siteMobileLink}>
+                <Icon size={16} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
           </div>
-        </form>
 
-        <div className={styles.siteMobileLinks}>
-          {NAV_LINK_ITEMS.map(({ to, label, Icon }) => (
-            <NavLink key={to} to={to} className={styles.siteMobileLink}>
-              <Icon size={16} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
-        </div>
+          <div className={`${styles.siteMobileTheme} ${styles.siteMobileThemeGroup}`}>
+            <ThemeToggle fullWidth />
+          </div>
 
-        <div className={`${styles.siteMobileTheme} ${styles.siteMobileThemeGroup}`}>
-          <ThemeToggle fullWidth />
-        </div>
-
-        {!loading && (
-          <div className={styles.siteMobileAccount}>
-            <div className="flex gap-3">
-              {user ? (
-                <>
-                  <Button
-                    asChild
-                    variant="ghost"
-                    className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 min-w-0 flex-1 rounded-lg`}
-                  >
-                    <Link to={`/users/${user.publicId}`} aria-label={`${displayName}的个人资料`}>
-                      <img
-                        src={avatarSrc}
-                        alt=""
-                        className={styles.siteMobileProfileAvatar}
-                        referrerPolicy="no-referrer"
-                        onError={handleAvatarError}
-                      />
-                      <span className={styles.siteMobileProfileName}>{displayName}</span>
-                    </Link>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => void onLogout()}
-                    className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 flex-1 rounded-lg`}
-                  >
-                    <LogOut size={16} />
-                    <span>退出登录</span>
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    type="button"
-                    onClick={() => onOpenAuth('login')}
-                    className="min-h-11 flex-1 rounded-lg"
-                  >
-                    登录
-                  </Button>
-                  {allowRegister && (
+          {!loading && (
+            <div className={styles.siteMobileAccount}>
+              <div className="flex gap-3">
+                {user ? (
+                  <>
+                    <Button
+                      asChild
+                      variant="ghost"
+                      className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 min-w-0 flex-1 rounded-lg`}
+                    >
+                      <Link to={`/users/${user.publicId}`} aria-label={`${displayName}的个人资料`}>
+                        <img
+                          src={avatarSrc}
+                          alt=""
+                          className={styles.siteMobileProfileAvatar}
+                          referrerPolicy="no-referrer"
+                          onError={handleAvatarError}
+                        />
+                        <span className={styles.siteMobileProfileName}>{displayName}</span>
+                      </Link>
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => onOpenAuth('register')}
+                      onClick={() => void onLogout()}
                       className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 flex-1 rounded-lg`}
                     >
-                      注册
+                      <LogOut size={16} />
+                      <span>退出登录</span>
                     </Button>
-                  )}
-                </>
-              )}
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      onClick={() => onOpenAuth('login')}
+                      className="min-h-11 flex-1 rounded-lg"
+                    >
+                      登录
+                    </Button>
+                    {allowRegister && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => onOpenAuth('register')}
+                        className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 flex-1 rounded-lg`}
+                      >
+                        注册
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

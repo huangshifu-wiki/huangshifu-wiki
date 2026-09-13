@@ -167,11 +167,17 @@
   width: 100%;
   max-width: 720px;
   justify-self: center;
-  padding: 1rem clamp(1.5rem, 5vw, 4rem) 1.5rem;
+  /* 纵向间距必须放在内部 body 上：网格项自身的 padding 会把 floating-expand 的
+     0fr 轨道顶出残留高度，导致收起动画停在 40px 并在卸载时跳变 */
+  padding: 0 clamp(1.5rem, 5vw, 4rem);
   /* 横屏等矮视口下菜单内部滚动，避免内容被视口裁掉 */
   max-height: calc(100vh - 64px - 2rem);
   max-height: calc(100dvh - 64px - 2rem);
   overflow-y: auto;
+}
+
+.siteMobileMenuBody {
+  padding: 1rem 0 1.5rem;
 }
 
 .siteMobileSearch {

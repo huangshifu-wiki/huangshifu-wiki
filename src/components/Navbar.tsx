@@ -27,7 +27,8 @@ export const Navbar = () => {
   const location = useLocation()
   const navRef = useRef<HTMLElement | null>(null)
   // 菜单的挂载状态（关闭动画结束后才卸载），用于让整条导航在动画期间保持磨砂面板样式
-  const menuPresence = useFloatingPresence(isMenuOpen)
+  // 180ms 与 .floating-expand 的过渡时长一致，避免动画结束后磨砂面板多留一截
+  const menuPresence = useFloatingPresence(isMenuOpen, 180)
 
   // 路由变化后收起移动端菜单（点击菜单链接、提交搜索、前进/后退均覆盖）
   useEffect(() => {
