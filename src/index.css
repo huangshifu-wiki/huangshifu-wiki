@@ -483,8 +483,7 @@ a.mention-highlight:hover {
 }
 
 .theme-button-primary {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent), var(--color-theme-accent);
+  background: var(--color-theme-accent);
   border: 1px solid color-mix(in srgb, var(--color-theme-accent) 84%, #2a2520);
   color: var(--color-theme-accent-contrast);
   box-shadow: var(--shadow-brand-soft);
