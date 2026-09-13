@@ -78,3 +78,5 @@ Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`�
 直接打开 Lightbox 的封面按钮必须同时使用 `data-press-feedback="ripple"` 与 `press-feedback-cover`；后者只把 `--color-theme-accent` 作为 `currentColor` 提供给共享 ripple，不负责 hover、遮罩或布局。
 
 封面图片的 hover 缩放与提示和按压 ripple 是独立状态；按压反馈不得依赖页面专属的整面色层，也不得在 Lightbox 内容、拖拽或手势区域添加反馈标记。
+
+反馈层是挂在 `body` 上的独立覆盖层，不随宿主浮层一起淡出：宿主收起（`data-state="closed"` 或 `aria-hidden="true"`）、按钮卸载或位移时都要立即清除，不能让动画残留在已消失的按钮上。

@@ -21,6 +21,9 @@ const getRipple = () => document.body.querySelector<HTMLElement>('.material-ripp
 
 const getStateLayer = () => document.body.querySelector<HTMLElement>('.material-state-layer')
 
+// 与 pressFeedback 的活动层检测周期保持一致
+const STALE_CHECK_INTERVAL = 16
+
 describe('pressFeedback', () => {
   let cleanup: (() => void) | undefined
 
@@ -543,6 +546,54 @@ describe('pressFeedback', () => {
     document.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     vi.advanceTimersByTime(0)
     expect(getSurface()).toBeNull()
+  })
+
+  it('宿主浮层收起时清理仍挂载在原位的动画层', () => {
+    vi.useFakeTimers()
+    const panel = document.createElement('div')
+    panel.dataset.state = 'open'
+    panel.setAttribute('aria-hidden', 'false')
+    const button = document.createElement('button')
+    button.dataset.pressable = ''
+    panel.append(button)
+    document.body.append(panel)
+    const rectSpy = vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
+      x: 10,
+      y: 120,
+      left: 10,
+      top: 120,
+      right: 110,
+      bottom: 160,
+      width: 100,
+      height: 40,
+      toJSON: () => ({}),
+    })
+
+    dispatchPointerDown(button, { clientX: 30, clientY: 130 })
+    panel.dataset.state = 'closed'
+    panel.setAttribute('aria-hidden', 'true')
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    vi.advanceTimersByTime(STALE_CHECK_INTERVAL)
+
+    expect(getSurface()).toBeNull()
+    rectSpy.mockRestore()
+  })
+
+  it('浮层保持展开时不打断按钮动画层', () => {
+    vi.useFakeTimers()
+    const panel = document.createElement('div')
+    panel.dataset.state = 'open'
+    panel.setAttribute('aria-hidden', 'false')
+    const button = document.createElement('button')
+    button.dataset.pressable = ''
+    panel.append(button)
+    document.body.append(panel)
+
+    dispatchPointerDown(button)
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    vi.advanceTimersByTime(STALE_CHECK_INTERVAL * 4)
+
+    expect(getSurface()).not.toBeNull()
   })
 
   it('在 React 事件结束后的提交阶段之后清理失效动画层', () => {

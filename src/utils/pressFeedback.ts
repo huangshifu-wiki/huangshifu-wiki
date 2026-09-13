@@ -8,6 +8,8 @@ const STALE_CHECK_INTERVAL = 16
 const CARD_FEEDBACK_MIN_HEIGHT = 64
 const CARD_FEEDBACK_MIN_AREA = 12_000
 const SURFACE_CLASS_PATTERN = /(?:^|:)(?:theme-(?:button|icon-button)|(?:home|lsky)-btn)/
+// 设计系统里浮层（汉堡菜单、下拉、弹窗）收起时的约定标记
+const COLLAPSED_HOST_SELECTOR = '[data-state="closed"], [aria-hidden="true"]'
 
 type PressFeedbackVariant = 'ripple' | 'state' | 'inline'
 
@@ -243,7 +245,8 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
 
   const removeStaleSurfaces = () => {
     activeSurfaces.forEach(({ element, elementRect: initialRect, remove }) => {
-      if (!element.isConnected) {
+      // 折叠面板靠 overflow 裁切与淡出让按钮消失，元素矩形和连接状态都不变，只能看宿主是否已收起
+      if (!element.isConnected || element.closest(COLLAPSED_HOST_SELECTOR)) {
         remove()
         return
       }
