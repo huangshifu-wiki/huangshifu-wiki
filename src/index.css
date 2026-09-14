@@ -2748,6 +2748,26 @@ a[href]:not([data-press-feedback='none']),
   line-height: 1.65;
 }
 
+.prose .markdown-plain-text {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  color: inherit;
+  font-family: inherit;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.prose .markdown-plain-text code {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: inherit;
+}
+
 .prose img {
   max-width: 100%;
   height: auto;

@@ -26,6 +26,9 @@ interface HastNode {
   tagName?: string
   properties?: Record<string, unknown>
   children?: HastNode[]
+  position?: {
+    start?: { offset?: number }
+  }
 }
 
 interface MdastNode {
@@ -192,7 +195,37 @@ const remarkMentions = (targets: MentionTarget[]) => (tree: MdastNode) => {
   walk(tree, [])
 }
 
+const PLAIN_TEXT_LANGUAGE_CLASSES: Record<string, true> = {
+  'language-plain': true,
+  'language-text': true,
+}
+
+const isPlainTextCode = (child: React.ReactNode, parentNode: HastNode): boolean => {
+  if (!React.isValidElement<{ className?: unknown }>(child) || child.type !== 'code') {
+    return false
+  }
+
+  // Fenced code gives the generated pre and code nodes the same source start; raw HTML does not.
+  const parentStart = parentNode.position?.start?.offset
+  const codeStart = parentNode.children?.[0]?.position?.start?.offset
+  if (typeof parentStart !== 'number' || parentStart !== codeStart) return false
+
+  const className = child.props.className
+  return (
+    typeof className === 'string' &&
+    className.split(/\s+/).some((token) => PLAIN_TEXT_LANGUAGE_CLASSES[token] === true)
+  )
+}
+
 const markdownComponents: Components = {
+  pre: ({ children, node, ...props }) => {
+    const childNodes = React.Children.toArray(children)
+    if (childNodes.length === 1 && node && isPlainTextCode(childNodes[0], node)) {
+      return <div className="markdown-plain-text">{children}</div>
+    }
+
+    return <pre {...props}>{children}</pre>
+  },
   iframe: ({
     src,
     width,

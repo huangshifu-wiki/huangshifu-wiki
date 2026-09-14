@@ -13,6 +13,20 @@
 - `TagInput` 是受控多标签表单控件：`value` 为 `readonly string[]`、`onChange` 返回新数组，支持输入框聚焦显示候选、输入框失焦关闭候选、Enter 添加、令牌删除、候选 listbox 点选、Arrow/Escape 和 IME 保护；候选数组由业务层传入，组件不得请求 API。令牌删除操作必须使用带可读 `aria-label` 的 `IconButton`，输入控件保留 `id` 与外部 label 关联。
 - 新写的整屏工作区（编辑器全屏这类需要铺满视口的表面）使用 `FullscreenSurface`，不自行实现 `createPortal` + 焦点 + Escape + 滚动锁。祖先的 `transform`、`filter`、`backdrop-filter`、`will-change`、`contain` 会把 `position: fixed` 后代的包含块从视口改成该祖先，所以整屏表面必须挂到 `body`；共享样式里不得给页面容器或弹窗留下常驻 `transform`——居中改用 `inset-0` + `margin: auto`，关键帧含 `transform` 的入场动画 `animation-fill-mode` 只用 `backwards`（`both`/`forwards` 会在动画结束后继续保留最后一帧的 `transform`）。层叠上下文不改变包含块，但会决定谁盖住谁，见下表的 `z-index` 约定。
 
+## Markdown 内容展示
+
+`MarkdownRenderer` 支持 `plain` 和 `text` 语言标记的围栏块。块内内容按普通正文显示，同时保留原始换行、连续空格和 Markdown 特殊字符；其他语言的代码块继续使用代码样式。
+
+````markdown
+```plain
+# 这不是标题
+*这不是斜体*
+[这不是链接](https://example.com)
+保留  连续空格
+下一行
+```
+````
+
 ## 浮层层级
 
 | 层级                  | 用途                                                          |
