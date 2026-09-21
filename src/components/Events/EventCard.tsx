@@ -18,7 +18,7 @@ interface EventCardProps {
 }
 
 const EventMeta = ({ event, compact = false }: { event: EventItem; compact?: boolean }) => {
-  const eventDate = formatEventListDate(event.timeSlots)
+  const eventDate = formatEventListDate(event.timeSlots, event.timeStatus)
 
   return (
     <div

@@ -227,6 +227,7 @@ describe('操作日志扩展（删除/恢复/配置/角色审计）', () => {
         title: 'Audit Event',
         location: '测试地点',
         content: '测试内容',
+        timeStatus: 'pending',
         createdByUid: uid,
       },
     })

@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AdminEventEdit from '../../src/pages/Admin/AdminEventEdit'
-import { apiGet } from '../../src/lib/apiClient'
+import { apiGet, apiPut } from '../../src/lib/apiClient'
 import { uploadImageWithStrategy } from '../../src/services/imageService'
 import type { UploadImageResult } from '../../src/services/imageService'
 import type { EventItem } from '../../src/types/entities'
@@ -40,6 +40,7 @@ const eventFixture: EventItem = {
   location: '',
   content: '',
   timeSlots: [],
+  timeStatus: 'pending',
   ticketPrices: [],
   saleTimes: [],
   lineup: [],
@@ -175,5 +176,45 @@ describe('活动编辑页拖拽上传', () => {
 
     expect(screen.queryByText(/松开鼠标/)).not.toBeInTheDocument()
     expect(uploadImageWithStrategy).not.toHaveBeenCalled()
+  })
+})
+
+describe('活动编辑页时间状态', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(apiGet).mockResolvedValue({ item: eventFixture } as never)
+    vi.mocked(apiPut).mockResolvedValue({} as never)
+  })
+
+  it('可以把待定活动切换为推迟并保存状态', async () => {
+    await renderPage()
+
+    fireEvent.change(screen.getByLabelText('时间状态'), { target: { value: 'postponed' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalledTimes(1))
+    const payload = vi.mocked(apiPut).mock.calls[0][1] as {
+      timeSlots: unknown[]
+      timeStatus: string | null
+    }
+    expect(payload.timeSlots).toEqual([])
+    expect(payload.timeStatus).toBe('postponed')
+  })
+
+  it('填写真实时间时清除时间状态', async () => {
+    const { container } = await renderPage()
+
+    fireEvent.change(screen.getByLabelText('时间状态'), { target: { value: '' } })
+    const timeInput = container.querySelector('input[type="datetime-local"]') as HTMLInputElement
+    fireEvent.change(timeInput, { target: { value: '2026-10-01T19:30' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalledTimes(1))
+    const payload = vi.mocked(apiPut).mock.calls[0][1] as {
+      timeSlots: unknown[]
+      timeStatus: string | null
+    }
+    expect(payload.timeSlots).toEqual([{ type: 'datetime', start: '2026-10-01T19:30' }])
+    expect(payload.timeStatus).toBeNull()
   })
 })

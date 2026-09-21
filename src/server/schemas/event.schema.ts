@@ -78,30 +78,53 @@ const imageInstructionSchema = z.union([
   z.object({ assetId: z.string().trim().min(1) }),
 ])
 
-export const eventWriteSchema = z.object({
-  title: limitedString('活动标题', CONTENT_LIMITS.event.title).trim().min(1, '活动标题不能为空'),
-  location: limitedString('活动地点', CONTENT_LIMITS.event.location).trim().optional().default(''),
-  content: limitedString('活动内容', CONTENT_LIMITS.event.content).optional().default(''),
-  timeSlots: z.array(timeSlotSchema).max(CONTENT_LIMITS.event.timeSlots).optional().default([]),
-  ticketPrices: z
-    .array(ticketPriceSchema)
-    .max(CONTENT_LIMITS.event.ticketPrices)
-    .optional()
-    .default([]),
-  saleTimes: z.array(saleTimeSchema).max(CONTENT_LIMITS.event.saleTimes).optional().default([]),
-  lineup: z
-    .array(limitedString('阵容', CONTENT_LIMITS.event.lineupItem).trim().min(1, '阵容不能为空'))
-    .max(CONTENT_LIMITS.event.lineup)
-    .optional()
-    .default([]),
-  tags: limitedStringArray('标签', CONTENT_LIMITS.event.tag, CONTENT_LIMITS.event.tags)
-    .transform((items) => [...new Set(items?.map((item) => item.trim()).filter(Boolean) || [])])
-    .default([]),
-  externalLinks: externalLinksSchema,
-  relatedLinks: relatedLinksSchema,
-  coverAssetId: z.string().trim().min(1).nullable().optional(),
-  uploadSessionId: z.string().trim().min(1).optional(),
-  posters: z.array(imageInstructionSchema).optional().default([]),
-})
+export const eventWriteSchema = z
+  .object({
+    title: limitedString('活动标题', CONTENT_LIMITS.event.title).trim().min(1, '活动标题不能为空'),
+    location: limitedString('活动地点', CONTENT_LIMITS.event.location)
+      .trim()
+      .optional()
+      .default(''),
+    content: limitedString('活动内容', CONTENT_LIMITS.event.content).optional().default(''),
+    timeSlots: z.array(timeSlotSchema).max(CONTENT_LIMITS.event.timeSlots).optional().default([]),
+    timeStatus: z.enum(['pending', 'postponed']).nullable().optional().default(null),
+    ticketPrices: z
+      .array(ticketPriceSchema)
+      .max(CONTENT_LIMITS.event.ticketPrices)
+      .optional()
+      .default([]),
+    saleTimes: z.array(saleTimeSchema).max(CONTENT_LIMITS.event.saleTimes).optional().default([]),
+    lineup: z
+      .array(limitedString('阵容', CONTENT_LIMITS.event.lineupItem).trim().min(1, '阵容不能为空'))
+      .max(CONTENT_LIMITS.event.lineup)
+      .optional()
+      .default([]),
+    tags: limitedStringArray('标签', CONTENT_LIMITS.event.tag, CONTENT_LIMITS.event.tags)
+      .transform((items) => [...new Set(items?.map((item) => item.trim()).filter(Boolean) || [])])
+      .default([]),
+    externalLinks: externalLinksSchema,
+    relatedLinks: relatedLinksSchema,
+    coverAssetId: z.string().trim().min(1).nullable().optional(),
+    uploadSessionId: z.string().trim().min(1).optional(),
+    posters: z.array(imageInstructionSchema).optional().default([]),
+  })
+  .superRefine((value, ctx) => {
+    const hasTimeSlots = value.timeSlots.length > 0
+    const hasTimeStatus = value.timeStatus !== null
+
+    if (!hasTimeSlots && !hasTimeStatus) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['timeStatus'],
+        message: '活动必须至少填写一个时间，或标记为待定/推迟',
+      })
+    } else if (hasTimeSlots && hasTimeStatus) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['timeStatus'],
+        message: '明确时间与待定/推迟状态不能同时设置',
+      })
+    }
+  })
 
 export type EventWriteInput = z.infer<typeof eventWriteSchema>

@@ -56,6 +56,7 @@ import type {
   EventSaleTime,
   EventTicketPrice,
   EventTimeSlot,
+  EventTimeStatus,
 } from '../../types/entities'
 import { TagInput } from '@/src/components/ui'
 import { runInBatches } from '../../utils/asyncBatch'
@@ -113,6 +114,7 @@ type EventDraft = {
   location: string
   content: string
   timeSlots: EventTimeSlot[]
+  timeStatus: EventTimeStatus | null
   ticketPrices: EditableTicketPrice[]
   saleTimes: EventSaleTime[]
   lineup: string[]
@@ -145,7 +147,8 @@ const createEmptyDraft = (): EventDraft => ({
   title: '',
   location: '',
   content: '',
-  timeSlots: [{ type: 'datetime', start: '', end: '' }],
+  timeSlots: [],
+  timeStatus: 'pending',
   ticketPrices: [createEmptyTicketPrice()],
   saleTimes: [],
   lineup: [''],
@@ -179,7 +182,8 @@ const createDraftFromEvent = (event: EventItem): EventDraft => ({
   title: event.title,
   location: event.location || '',
   content: event.content || '',
-  timeSlots: event.timeSlots.length ? event.timeSlots : [{ type: 'datetime', start: '', end: '' }],
+  timeSlots: event.timeStatus ? [] : event.timeSlots,
+  timeStatus: event.timeStatus ?? (event.timeSlots.length ? null : 'pending'),
   ticketPrices: event.ticketPrices.length
     ? event.ticketPrices.map(toEditableTicketPrice)
     : [createEmptyTicketPrice()],
@@ -472,7 +476,16 @@ const AdminEventEdit = () => {
   const applyJsonEditor = (field: JsonField, text: string) => {
     try {
       const value = JSON.parse(text) as unknown
-      patchDraft(JSON_FIELD_NORMALIZERS[field](value))
+      const patch = JSON_FIELD_NORMALIZERS[field](value)
+      if (field === 'timeSlots') {
+        const timeSlots = 'timeSlots' in patch ? (patch.timeSlots ?? []) : []
+        patchDraft({
+          ...patch,
+          timeStatus: timeSlots.length ? null : (draft.timeStatus ?? 'pending'),
+        })
+      } else {
+        patchDraft(patch)
+      }
       setJsonEditors((prev) => ({
         ...prev,
         [field]: { mode: 'form' },
@@ -777,6 +790,20 @@ const AdminEventEdit = () => {
     reorderPosters(sourceIndex, targetIndex)
   }
 
+  const updateTimeStatus = (timeStatus: EventTimeStatus | null) => {
+    if (timeStatus) {
+      patchDraft({ timeStatus, timeSlots: [] })
+      return
+    }
+
+    patchDraft({
+      timeStatus: null,
+      timeSlots: draft.timeSlots.length
+        ? draft.timeSlots
+        : [{ type: 'datetime', start: '', end: '' }],
+    })
+  }
+
   const updateTimeSlot = (index: number, patch: Partial<EventTimeSlot>) => {
     const next = draft.timeSlots.map((slot, currentIndex) =>
       currentIndex === index
@@ -787,7 +814,21 @@ const AdminEventEdit = () => {
           }
         : slot
     )
-    patchDraft({ timeSlots: next })
+    const hasTime = next.some((slot) => slot.start.trim())
+    const timeStatus = hasTime
+      ? null
+      : patch.start !== undefined
+        ? (draft.timeStatus ?? 'pending')
+        : draft.timeStatus
+    patchDraft({ timeSlots: next, timeStatus })
+  }
+
+  const removeTimeSlot = (index: number) => {
+    const timeSlots = draft.timeSlots.filter((_, currentIndex) => currentIndex !== index)
+    patchDraft({
+      timeSlots,
+      timeStatus: timeSlots.some((slot) => slot.start.trim()) ? null : 'pending',
+    })
   }
 
   const save = async () => {
@@ -798,6 +839,7 @@ const AdminEventEdit = () => {
       coverUpload?.status === 'error' ||
       draft.posters.some((poster) => poster.uploadStatus === 'error')
     const hasUnsavedPoster = draft.posters.some((poster) => !poster.imageId && !poster.assetId)
+    const normalizedTimeSlots = normalizeTimeSlots(draft.timeSlots)
     const validationError =
       validateRequiredText(draft.title, 'title', '活动标题') ||
       validateMaxLength(draft.title, 'title', '活动标题', CONTENT_LIMITS.event.title) ||
@@ -829,6 +871,14 @@ const AdminEventEdit = () => {
         : null)
     if (validationError) {
       show(validationError.message, { variant: 'error' })
+      return
+    }
+    if (!normalizedTimeSlots.length && !draft.timeStatus) {
+      show('活动必须至少填写一个时间，或标记为待定/推迟', { variant: 'error' })
+      return
+    }
+    if (normalizedTimeSlots.length && draft.timeStatus) {
+      show('明确时间与待定/推迟状态不能同时设置', { variant: 'error' })
       return
     }
     const invalidTimeSlot = draft.timeSlots.find((slot) => {
@@ -891,7 +941,8 @@ const AdminEventEdit = () => {
       title: draft.title.trim(),
       location: draft.location.trim(),
       content: draft.content,
-      timeSlots: normalizeTimeSlots(draft.timeSlots),
+      timeSlots: normalizedTimeSlots,
+      timeStatus: normalizedTimeSlots.length ? null : draft.timeStatus,
       ticketPrices: normalizeTicketPrices(draft.ticketPrices),
       saleTimes: normalizeSaleTimes(draft.saleTimes),
       lineup: normalizeStringList(draft.lineup),
@@ -1022,11 +1073,29 @@ const AdminEventEdit = () => {
             onCloseJson={closeJsonEditor}
             onApplyJson={applyJsonEditor}
           >
+            <label className="grid gap-1">
+              <span className="text-xs text-text-muted">时间状态</span>
+              <select
+                aria-label="时间状态"
+                value={draft.timeStatus ?? ''}
+                onChange={(event) =>
+                  updateTimeStatus(
+                    event.target.value === '' ? null : (event.target.value as EventTimeStatus)
+                  )
+                }
+                className={bookCompactInputClass}
+              >
+                <option value="">有明确时间</option>
+                <option value="pending">待定</option>
+                <option value="postponed">推迟</option>
+              </select>
+            </label>
             <ListHeader
               title="时间段"
               onAdd={() =>
                 patchDraft({
                   timeSlots: [...draft.timeSlots, { type: 'datetime', start: '', end: '' }],
+                  timeStatus: null,
                 })
               }
             />
@@ -1060,16 +1129,7 @@ const AdminEventEdit = () => {
                     onChange={(event) => updateTimeSlot(index, { end: event.target.value })}
                     className={bookCompactInputClass}
                   />
-                  <IconButton
-                    label="删除时间段"
-                    onClick={() =>
-                      patchDraft({
-                        timeSlots: draft.timeSlots.filter(
-                          (_, currentIndex) => currentIndex !== index
-                        ),
-                      })
-                    }
-                  />
+                  <IconButton label="删除时间段" onClick={() => removeTimeSlot(index)} />
                 </div>
               ))}
             </div>

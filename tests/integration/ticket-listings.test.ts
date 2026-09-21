@@ -71,6 +71,7 @@ describe('Ticket listings API', () => {
         title: `${TEST_PREFIX} Live`,
         location: '上海',
         content: '',
+        timeStatus: 'pending',
         createdByUid: admin.user.uid,
         updatedByUid: admin.user.uid,
       },

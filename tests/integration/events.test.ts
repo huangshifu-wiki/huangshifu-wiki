@@ -20,6 +20,25 @@ async function cleanupEventTestData() {
   })
 }
 
+function pickCookie(setCookieHeader: string | string[] | undefined, cookieName: string) {
+  const cookies = Array.isArray(setCookieHeader)
+    ? setCookieHeader
+    : setCookieHeader
+      ? [setCookieHeader]
+      : []
+  const targetCookie = cookies.find((cookie) => cookie?.startsWith(`${cookieName}=`))
+  return targetCookie?.split(';')[0].split('=')[1]
+}
+
+async function createAuthenticatedAgent(email: string, password: string) {
+  const agent = request.agent(app)
+  const loginResponse = await agent.post('/api/auth/login').send({ email, password })
+  expect(loginResponse.status).toBe(200)
+  const xsrfToken = pickCookie(loginResponse.headers['set-cookie'], 'XSRF-TOKEN')
+  expect(xsrfToken).toBeTruthy()
+  return { agent, xsrfToken: xsrfToken! }
+}
+
 describe('Events API - 活动标签筛选', () => {
   let adminUser: Awaited<ReturnType<typeof createTestUser>>
 
@@ -41,7 +60,8 @@ describe('Events API - 活动标签筛选', () => {
     title: string,
     tags: string[],
     deletedAt: Date | null = null,
-    sortStart: string | null = null
+    sortStart: string | null = null,
+    timeStatus: 'pending' | 'postponed' | null = sortStart ? null : 'pending'
   ) {
     return prisma.event.create({
       data: {
@@ -49,6 +69,8 @@ describe('Events API - 活动标签筛选', () => {
         title,
         location: '',
         content: '',
+        timeSlots: sortStart ? [{ type: 'date', start: sortStart }] : [],
+        timeStatus,
         tags,
         sortStart,
         createdByUid: adminUser.user.uid,
@@ -83,15 +105,40 @@ describe('Events API - 活动标签筛选', () => {
 
     expect(descResponse.status).toBe(200)
     expect(descResponse.body.events.map((event: { title: string }) => event.title)).toEqual([
+      'Event Tags Test Unknown Time',
       'Event Tags Test New',
       'Event Tags Test Old',
-      'Event Tags Test Unknown Time',
     ])
     expect(ascResponse.status).toBe(200)
     expect(ascResponse.body.events.map((event: { title: string }) => event.title)).toEqual([
+      'Event Tags Test Unknown Time',
       'Event Tags Test Old',
       'Event Tags Test New',
-      'Event Tags Test Unknown Time',
+    ])
+  })
+
+  it('待定和推迟活动始终排在有明确时间的活动之前', async () => {
+    await createEvent('Event Tags Test Priority Timed', ['优先级'], null, '2024-02-01')
+    await createEvent('Event Tags Test Priority Pending', ['优先级'], null, null, 'pending')
+    await createEvent('Event Tags Test Priority Postponed', ['优先级'], null, null, 'postponed')
+
+    const descResponse = await request(app).get('/api/events').query({ tag: '优先级' })
+    const ascResponse = await request(app)
+      .get('/api/events')
+      .query({ tag: '优先级', sortOrder: 'asc' })
+
+    const titles = (response: { body: { events: Array<{ title: string }> } }) =>
+      response.body.events.map((event) => event.title)
+
+    expect(titles(descResponse)).toEqual([
+      'Event Tags Test Priority Pending',
+      'Event Tags Test Priority Postponed',
+      'Event Tags Test Priority Timed',
+    ])
+    expect(titles(ascResponse)).toEqual([
+      'Event Tags Test Priority Pending',
+      'Event Tags Test Priority Postponed',
+      'Event Tags Test Priority Timed',
     ])
   })
 
@@ -127,12 +174,12 @@ describe('Events API - 活动标签筛选', () => {
 
     expect(firstPage.status).toBe(200)
     expect(firstPage.body.total).toBe(6)
-    expect(titles(firstPage)).toEqual(['Event Tags Test Today', 'Event Tags Test Future Near'])
+    expect(titles(firstPage)).toEqual(['Event Tags Test No Time', 'Event Tags Test Today'])
     expect(titles(secondPage)).toEqual([
+      'Event Tags Test Future Near',
       'Event Tags Test Future Far',
-      'Event Tags Test Past Recent',
     ])
-    expect(titles(thirdPage)).toEqual(['Event Tags Test Past Old', 'Event Tags Test No Time'])
+    expect(titles(thirdPage)).toEqual(['Event Tags Test Past Recent', 'Event Tags Test Past Old'])
   })
 
   it('从未删除活动聚合可筛选标签', async () => {
@@ -144,5 +191,40 @@ describe('Events API - 活动标签筛选', () => {
 
     expect(response.status).toBe(200)
     expect(response.body.tags).toEqual(['节日', '现场', '巡演'])
+  })
+  it('写入时间状态并拒绝缺少时间和状态的活动', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const pendingResponse = await agent
+      .post('/api/events')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ title: 'Event Tags Test Pending', timeStatus: 'pending' })
+      .expect(201)
+
+    expect(pendingResponse.body.event.timeStatus).toBe('pending')
+    expect(pendingResponse.body.event.sortStart).toBeNull()
+
+    const missingTimeResponse = await agent
+      .post('/api/events')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ title: 'Event Tags Test Missing Time' })
+
+    expect(missingTimeResponse.status).toBe(400)
+
+    const scheduledResponse = await agent
+      .post('/api/events')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: 'Event Tags Test Scheduled',
+        timeSlots: [{ type: 'date', start: '2026-10-01' }],
+        timeStatus: null,
+      })
+      .expect(201)
+
+    expect(scheduledResponse.body.event.timeStatus).toBeNull()
+    expect(scheduledResponse.body.event.timeSlots).toEqual([{ type: 'date', start: '2026-10-01' }])
   })
 })

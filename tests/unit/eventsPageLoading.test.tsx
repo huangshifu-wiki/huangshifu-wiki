@@ -41,6 +41,7 @@ const event = {
   location: '上海',
   content: '',
   timeSlots: [{ type: 'date', start: '2025-04-01' }],
+  timeStatus: null,
   ticketPrices: [],
   saleTimes: [],
   lineup: [],

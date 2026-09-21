@@ -30,6 +30,10 @@ enum ContentStatus {
   published
   rejected
 }
+enum EventTimeStatus {
+  pending
+  postponed
+}
 
 enum TicketListingType {
   offer
@@ -790,6 +794,7 @@ model Event {
   location     String
   content      String
   timeSlots    Json     @default("[]")
+  timeStatus   EventTimeStatus?
   ticketPrices Json     @default("[]")
   saleTimes    Json     @default("[]")
   lineup       Json     @default("[]")

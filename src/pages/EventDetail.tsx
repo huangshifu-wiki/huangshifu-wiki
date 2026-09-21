@@ -9,7 +9,12 @@ import { Lightbox } from '../components/Lightbox'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { apiGet } from '../lib/apiClient'
 import { formatDateTime, toDateValue } from '../lib/dateUtils'
-import { formatEventTicketPrices, formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
+import {
+  formatEventTicketPrices,
+  formatEventTimeSlot,
+  formatEventTimeStatus,
+  getEventCoverSrc,
+} from '../lib/eventFormat'
 import {
   getDetailFallbackSeo,
   SEO_SITE_NAME,
@@ -302,7 +307,7 @@ const EventDetail = () => {
                         <p key={`${slot.start}-${index}`}>{formatEventTimeSlot(slot)}</p>
                       ))
                     ) : (
-                      <p>时间待定</p>
+                      <p>{formatEventTimeStatus(event.timeStatus) || '时间待定'}</p>
                     )}
                   </div>
                 </div>

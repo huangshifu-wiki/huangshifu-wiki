@@ -3108,7 +3108,11 @@ router.get(
           prisma.event.findMany({
             where: activeWhere,
             include: adminEventInclude,
-            orderBy: [{ sortStart: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+            orderBy: [
+              { timeStatus: { sort: 'asc', nulls: 'last' } },
+              { sortStart: { sort: 'desc', nulls: 'last' } },
+              { createdAt: 'desc' },
+            ],
             take: limit,
             skip,
           }),

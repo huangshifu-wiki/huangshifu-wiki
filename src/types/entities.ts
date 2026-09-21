@@ -283,6 +283,8 @@ export interface EventTimeSlot {
   end?: string
 }
 
+export type EventTimeStatus = 'pending' | 'postponed'
+
 export interface EventSaleTime {
   time: string
   note?: string
@@ -311,6 +313,7 @@ export interface EventItem {
   location: string
   content: string
   timeSlots: EventTimeSlot[]
+  timeStatus: EventTimeStatus | null
   ticketPrices: unknown[]
   saleTimes: EventSaleTime[]
   lineup: string[]

@@ -25,11 +25,11 @@ import {
 import {
   assertUploadSessionAssets,
   getCanonicalMediaUrl,
+  getReadyAssetForOwner,
   getReadyAssetsForOwner,
   MediaAssetRequestError,
   releaseMediaAsset,
 } from '../services/mediaAssetService'
-import { getReadyAssetForOwner } from '../services/mediaAssetService'
 import type { EventWriteInput } from '../schemas/event.schema'
 
 const router = createRouter()
@@ -150,51 +150,69 @@ function getLocalTodayValue() {
   return `${now.getFullYear()}-${month}-${day}`
 }
 
-// upcoming 排序：未来按近到远，其次过去按近到远，无时间垫底；跨桶分页时用已耗尽的桶数量折算剩余 skip
+// 状态活动置顶；upcoming 模式再按未来、过去和无时间活动分页。
 async function findEventsInUpcomingOrder(
   where: Prisma.EventWhereInput,
   skip: number,
   take: number
 ) {
   const today = getLocalTodayValue()
-  const futureWhere = { ...where, sortStart: { gte: today } }
-  const pastWhere = { ...where, sortStart: { lt: today } }
+  const statusWhere = { ...where, timeStatus: { not: null } }
+  const futureWhere = { ...where, sortStart: { gte: today }, timeStatus: null }
+  const pastWhere = { ...where, sortStart: { lt: today }, timeStatus: null }
 
+  const statusEvents = await prisma.event.findMany({
+    where: statusWhere,
+    include: eventInclude,
+    orderBy: [{ timeStatus: 'asc' }, { createdAt: 'desc' }],
+    skip,
+    take,
+  })
+  if (statusEvents.length === take) return statusEvents
+
+  // 状态桶不足一页时，先折算其数量，再继续读取有明确时间的活动。
+  const statusCount =
+    statusEvents.length > 0
+      ? skip + statusEvents.length
+      : await prisma.event.count({ where: statusWhere })
+  const futureSkip = Math.max(0, skip - statusCount)
   const future = await prisma.event.findMany({
     where: futureWhere,
     include: eventInclude,
     orderBy: [{ sortStart: 'asc' }, { createdAt: 'desc' }],
-    skip,
-    take,
+    skip: futureSkip,
+    take: take - statusEvents.length,
   })
-  if (future.length === take) return future
+  const merged = [...statusEvents, ...future]
+  if (merged.length === take) return merged
 
-  // 未填满时未来桶必然已耗尽：返回数大于 0 说明 futureCount = skip + 返回数，否则需查 count
+  // 未填满时未来桶必然已耗尽：返回数大于 0 说明 futureCount = skip + 返回数，否则需查 count。
   const futureCount =
-    future.length > 0 ? skip + future.length : await prisma.event.count({ where: futureWhere })
+    future.length > 0
+      ? futureSkip + future.length
+      : await prisma.event.count({ where: futureWhere })
 
-  const pastSkip = Math.max(0, skip - futureCount)
+  const pastSkip = Math.max(0, futureSkip - futureCount)
   const past = await prisma.event.findMany({
     where: pastWhere,
     include: eventInclude,
     orderBy: [{ sortStart: 'desc' }, { createdAt: 'desc' }],
     skip: pastSkip,
-    take: take - future.length,
+    take: take - merged.length,
   })
-  const merged = [...future, ...past]
-  if (merged.length === take) return merged
+  const withPast = [...merged, ...past]
+  if (withPast.length === take) return withPast
 
   const pastCount =
     past.length > 0 ? pastSkip + past.length : await prisma.event.count({ where: pastWhere })
-
-  const pending = await prisma.event.findMany({
-    where: { ...where, sortStart: null },
+  const withoutTime = await prisma.event.findMany({
+    where: { ...where, sortStart: null, timeStatus: null },
     include: eventInclude,
     orderBy: [{ createdAt: 'desc' }],
-    skip: Math.max(0, skip - futureCount - pastCount),
-    take: take - merged.length,
+    skip: Math.max(0, skip - statusCount - futureCount - pastCount),
+    take: take - withPast.length,
   })
-  return [...merged, ...pending]
+  return [...withPast, ...withoutTime]
 }
 
 async function cleanupRemovedAssetReferences(
@@ -236,7 +254,11 @@ router.get(
         : prisma.event.findMany({
             where,
             include: eventInclude,
-            orderBy: [{ sortStart: { sort: sortOrder, nulls: 'last' } }, { createdAt: 'desc' }],
+            orderBy: [
+              { timeStatus: { sort: 'asc', nulls: 'last' } },
+              { sortStart: { sort: sortOrder, nulls: 'last' } },
+              { createdAt: 'desc' },
+            ],
             skip,
             take: limit,
           }),
@@ -320,6 +342,7 @@ router.post(
             location: input.location,
             content: input.content,
             timeSlots: input.timeSlots,
+            timeStatus: input.timeStatus,
             ticketPrices: input.ticketPrices,
             saleTimes: input.saleTimes,
             lineup: input.lineup,
@@ -389,8 +412,8 @@ router.put(
             location: input.location,
             content: input.content,
             timeSlots: input.timeSlots,
+            timeStatus: input.timeStatus,
             ticketPrices: input.ticketPrices,
-            saleTimes: input.saleTimes,
             lineup: input.lineup,
             tags: input.tags,
             externalLinks: input.externalLinks,

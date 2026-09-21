@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { formatEventTimeSlot } from '../../src/lib/eventFormat'
+import {
+  formatEventListDate,
+  formatEventTimeSlot,
+  formatEventTimeStatus,
+} from '../../src/lib/eventFormat'
 import type { EventTimeSlot } from '../../src/types/entities'
 
 const buildSlot = (type: EventTimeSlot['type'], start: string, end?: string): EventTimeSlot => ({
@@ -41,5 +45,22 @@ describe('formatEventTimeSlot', () => {
     expect(formatEventTimeSlot(buildSlot('datetime', '待定'))).toBe('刚刚')
     expect(formatEventTimeSlot(buildSlot('date', '待定'))).toBe('待定')
     expect(formatEventTimeSlot(buildSlot('datetime', ''))).toBe('')
+  })
+})
+
+describe('formatEventTimeStatus and formatEventListDate', () => {
+  it('formats pending and postponed status labels', () => {
+    expect(formatEventTimeStatus('pending')).toBe('待定')
+    expect(formatEventTimeStatus('postponed')).toBe('推迟')
+  })
+
+  it('uses status when an event has no time slots', () => {
+    expect(formatEventListDate([], 'pending')).toBe('待定')
+    expect(formatEventListDate([], 'postponed')).toBe('推迟')
+    expect(formatEventListDate([], null)).toBe('')
+  })
+
+  it('keeps real dates ahead of a time status', () => {
+    expect(formatEventListDate([buildSlot('date', '2024-06-15')], 'postponed')).toBe('2024-06-15')
   })
 })

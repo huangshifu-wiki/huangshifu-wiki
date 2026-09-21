@@ -207,7 +207,7 @@ function EventCover({ event }: { event: EventItem }) {
 }
 
 function EventRow({ event }: { event: EventItem }) {
-  const date = formatEventListDate(event.timeSlots)
+  const date = formatEventListDate(event.timeSlots, event.timeStatus)
   const dayOffset = getEventListDayOffset(event.timeSlots)
 
   return (

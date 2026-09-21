@@ -763,6 +763,7 @@ type EventInput = {
   location: string
   content: string
   timeSlots: unknown
+  timeStatus?: 'pending' | 'postponed' | null
   ticketPrices: unknown
   saleTimes: unknown
   lineup: unknown
@@ -833,6 +834,7 @@ function toEventResponseWithImageMaps(event: EventInput, imageMapLookup: Gallery
     location: event.location,
     content: event.content,
     timeSlots: arrayJson(event.timeSlots),
+    timeStatus: event.timeStatus ?? null,
     ticketPrices: arrayJson(event.ticketPrices),
     saleTimes: arrayJson(event.saleTimes),
     lineup: arrayJson(event.lineup),

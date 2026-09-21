@@ -1,8 +1,17 @@
 import { formatDate, formatWeekday, toDateValue } from './dateUtils'
-import type { EventTicketPrice, EventTimeSlot } from '../types/entities'
+import type { EventTicketPrice, EventTimeSlot, EventTimeStatus } from '../types/entities'
 
 export const EVENT_IMAGE_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,image/bmp'
 export const EVENT_ALLOWED_IMAGE_TYPES = EVENT_IMAGE_ACCEPT.split(',')
+
+const EVENT_TIME_STATUS_LABELS: Record<EventTimeStatus, string> = {
+  pending: '待定',
+  postponed: '推迟',
+}
+
+export function formatEventTimeStatus(status: EventTimeStatus | null | undefined) {
+  return status ? EVENT_TIME_STATUS_LABELS[status] || '' : ''
+}
 
 type SlotParts = { dateText: string; timeText: string }
 
@@ -37,9 +46,12 @@ const getEventSlotDateValue = (slot: EventTimeSlot) => {
 const getSortedEventSlotDates = (timeSlots: readonly EventTimeSlot[]) =>
   timeSlots.map(getEventSlotDateValue).filter(Boolean).sort()
 
-export function formatEventListDate(timeSlots: readonly EventTimeSlot[]) {
+export function formatEventListDate(
+  timeSlots: readonly EventTimeSlot[],
+  timeStatus: EventTimeStatus | null | undefined
+) {
   const dates = getSortedEventSlotDates(timeSlots)
-  if (!dates.length) return ''
+  if (!dates.length) return formatEventTimeStatus(timeStatus)
   return dates.length > 1 ? `${dates[0]} 等` : dates[0]
 }
 
