@@ -45,7 +45,7 @@ export const ConfirmModal = ({
         title={title}
         description={message}
         hideClose={cancelText === null}
-        maxWidthClassName="max-w-md overflow-hidden"
+        maxWidthClassName="max-w-md"
         onPointerDownOutside={(event) => {
           if (loading) event.preventDefault()
         }}

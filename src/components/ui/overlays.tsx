@@ -9,10 +9,10 @@ import React from 'react'
 import { IconButton } from './actions'
 import { cn } from './utils'
 
-const overlayClasses = 'fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)]'
+const overlayClasses = 'fixed inset-0 z-[1080] bg-[var(--ui-overlay-bg)]'
 // 居中不使用 translate：transform 会让弹窗内的 position: fixed 后代以弹窗为包含块，编辑器全屏会被裁在卡片里
 const contentClasses =
-  'fixed inset-0 z-[121] m-auto max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] shadow-[var(--ui-floating-shadow)] focus:outline-none'
+  'fixed inset-0 z-[1081] m-auto h-fit max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] shadow-[var(--ui-floating-shadow)] focus:outline-none'
 
 export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
