@@ -343,6 +343,9 @@ const WikiEditor = () => {
             className="mt-4 block text-sm font-medium text-text-secondary"
           >
             {t('wiki.deleteReasonLabel')}
+            <span className="ml-1 theme-text-error" aria-hidden="true">
+              *
+            </span>
           </label>
           <Textarea
             id="wiki-delete-reason"

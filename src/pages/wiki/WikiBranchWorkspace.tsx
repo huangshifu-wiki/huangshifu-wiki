@@ -483,7 +483,10 @@ const WikiBranchWorkspace = () => {
 
               <div>
                 <label className="text-xs font-bold uppercase tracking-widest text-brand-gold/60">
-                  内容
+                  内容{' '}
+                  <span className="theme-text-error" aria-hidden="true">
+                    *
+                  </span>
                 </label>
                 <textarea
                   value={content}
@@ -532,7 +535,10 @@ const WikiBranchWorkspace = () => {
                 <>
                   <div>
                     <label className="text-xs font-bold uppercase tracking-widest text-brand-gold/60">
-                      PR 标题
+                      PR 标题{' '}
+                      <span className="theme-text-error" aria-hidden="true">
+                        *
+                      </span>
                     </label>
                     <input
                       type="text"

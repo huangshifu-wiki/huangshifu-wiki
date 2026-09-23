@@ -102,8 +102,8 @@ const Setup = () => {
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label htmlFor="setup-email" className="sr-only">
-              管理员邮箱
+            <label htmlFor="setup-email" className="block text-sm text-text-secondary">
+              管理员邮箱 <span className="theme-text-error">*</span>
             </label>
             <Input
               id="setup-email"
@@ -119,8 +119,8 @@ const Setup = () => {
           </div>
 
           <div>
-            <label htmlFor="setup-display-name" className="sr-only">
-              显示名称
+            <label htmlFor="setup-display-name" className="block text-sm text-text-secondary">
+              显示名称 <span className="theme-text-error">*</span>
             </label>
             <Input
               id="setup-display-name"
@@ -138,8 +138,8 @@ const Setup = () => {
           </div>
 
           <div>
-            <label htmlFor="setup-password" className="sr-only">
-              登录密码
+            <label htmlFor="setup-password" className="block text-sm text-text-secondary">
+              登录密码 <span className="theme-text-error">*</span>
             </label>
             <Input
               id="setup-password"

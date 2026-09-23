@@ -61,7 +61,7 @@ const WikiEditorForm = React.memo(
                 className={bookInputClass}
               />
             </BookFormField>
-            <BookFormField label="分类" htmlFor="wiki-category">
+            <BookFormField label="分类" htmlFor="wiki-category" required>
               <select
                 id="wiki-category"
                 value={formData.category}

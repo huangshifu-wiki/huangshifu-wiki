@@ -889,7 +889,7 @@ const CreateDiscForm = ({
   if (!open) return null
   return (
     <div className="mt-3 space-y-3 border-t border-[var(--book-ink-line)] pt-3">
-      <Field label="Disc 编号">
+      <Field label="Disc 编号" required>
         <Input
           type="number"
           min={1}
@@ -900,7 +900,7 @@ const CreateDiscForm = ({
           placeholder="例如 2"
         />
       </Field>
-      <Field label="Disc 名称">
+      <Field label="Disc 名称" required>
         <Input
           value={name}
           maxLength={CONTENT_LIMITS.album.discName}

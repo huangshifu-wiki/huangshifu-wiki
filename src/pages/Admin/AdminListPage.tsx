@@ -1010,13 +1010,17 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               {type === 'sections' && (
                 <>
-                  <input
-                    type="text"
-                    placeholder="名称"
-                    value={newItem.name || ''}
-                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    <span>
+                      名称 <span className="theme-text-error">*</span>
+                    </span>
+                    <input
+                      type="text"
+                      value={newItem.name || ''}
+                      onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                      className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                    />
+                  </label>
                   <input
                     type="text"
                     placeholder="描述"
@@ -1035,20 +1039,28 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               )}
               {type === 'wiki-categories' && (
                 <>
-                  <input
-                    type="text"
-                    placeholder="分类 ID"
-                    value={newItem.id || ''}
-                    onChange={(e) => setNewItem({ ...newItem, id: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="名称"
-                    value={newItem.name || ''}
-                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    <span>
+                      分类 ID <span className="theme-text-error">*</span>
+                    </span>
+                    <input
+                      type="text"
+                      value={newItem.id || ''}
+                      onChange={(e) => setNewItem({ ...newItem, id: e.target.value })}
+                      className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    <span>
+                      名称 <span className="theme-text-error">*</span>
+                    </span>
+                    <input
+                      type="text"
+                      value={newItem.name || ''}
+                      onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                      className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                    />
+                  </label>
                   <input
                     type="text"
                     placeholder="描述"
@@ -1076,13 +1088,17 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               )}
               {type === 'announcements' && (
                 <>
-                  <input
-                    type="text"
-                    placeholder="公告内容"
-                    value={newItem.content || ''}
-                    onChange={(e) => setNewItem({ ...newItem, content: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none md:col-span-2"
-                  />
+                  <label className="grid gap-1 text-sm text-text-secondary md:col-span-2">
+                    <span>
+                      公告内容 <span className="theme-text-error">*</span>
+                    </span>
+                    <input
+                      type="text"
+                      value={newItem.content || ''}
+                      onChange={(e) => setNewItem({ ...newItem, content: e.target.value })}
+                      className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                    />
+                  </label>
                   <input
                     type="text"
                     placeholder="跳转链接 (可选)"

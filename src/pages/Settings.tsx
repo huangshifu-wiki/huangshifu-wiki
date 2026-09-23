@@ -1313,7 +1313,7 @@ const Settings = () => {
                       >
                         <label className="block">
                           <span className="mb-1 block text-xs font-medium text-text-muted">
-                            当前密码
+                            当前密码 <span className="theme-text-error">*</span>
                           </span>
                           <Input
                             type="password"
@@ -1330,7 +1330,7 @@ const Settings = () => {
                         </label>
                         <label className="block">
                           <span className="mb-1 block text-xs font-medium text-text-muted">
-                            新邮箱
+                            新邮箱 <span className="theme-text-error">*</span>
                           </span>
                           <Input
                             type="email"
@@ -1391,7 +1391,7 @@ const Settings = () => {
                       >
                         <label className="block">
                           <span className="mb-1 block text-xs font-medium text-text-muted">
-                            当前密码
+                            当前密码 <span className="theme-text-error">*</span>
                           </span>
                           <Input
                             type="password"
@@ -1412,7 +1412,7 @@ const Settings = () => {
                               htmlFor="settings-new-password"
                               className="text-xs font-medium text-text-muted"
                             >
-                              新密码
+                              新密码 <span className="theme-text-error">*</span>
                             </label>
                             <CharacterCount
                               current={passwordForm.newPassword.length}
@@ -1441,7 +1441,7 @@ const Settings = () => {
                               htmlFor="settings-confirm-password"
                               className="text-xs font-medium text-text-muted"
                             >
-                              确认新密码
+                              确认新密码 <span className="theme-text-error">*</span>
                             </label>
                             <CharacterCount
                               current={passwordForm.confirmPassword.length}

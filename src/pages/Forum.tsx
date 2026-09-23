@@ -1785,6 +1785,9 @@ const PostEditor = () => {
               className="mt-4 block text-sm font-medium text-text-secondary"
             >
               {t('forum.deleteReasonLabel')}
+              <span className="ml-1 theme-text-error" aria-hidden="true">
+                *
+              </span>
               <textarea
                 id="post-delete-reason"
                 value={deleteReason}

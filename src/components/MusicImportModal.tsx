@@ -383,7 +383,7 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
         <div className="space-y-6 overflow-y-auto px-5 py-4 md:px-6">
           <BookEditorSection title="资源链接" className="border-t-0 pt-0">
             <div className={`${bookPanelClass} p-4`}>
-              <BookFormField label="粘贴链接">
+              <BookFormField label="粘贴链接" required>
                 <div className="flex flex-col gap-2 md:flex-row">
                   <div className="relative flex-1">
                     <Link2

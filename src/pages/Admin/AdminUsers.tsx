@@ -690,7 +690,9 @@ export const AdminUsers = () => {
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-medium text-text-secondary">邮箱</span>
+            <span className="text-sm font-medium text-text-secondary">
+              邮箱 <span className="theme-text-error">*</span>
+            </span>
             <input
               type="email"
               value={editForm.email}

@@ -1029,20 +1029,28 @@ const AdminEventEdit = () => {
             }
           >
             <div className="grid gap-4">
-              <input
-                value={draft.title}
-                onChange={(event) => patchDraft({ title: event.target.value })}
-                maxLength={CONTENT_LIMITS.event.title}
-                placeholder="活动标题"
-                className={bookCompactInputClass}
-              />
-              <input
-                value={draft.location}
-                onChange={(event) => patchDraft({ location: event.target.value })}
-                maxLength={CONTENT_LIMITS.event.location}
-                placeholder="地点"
-                className={bookCompactInputClass}
-              />
+              <label className="grid gap-1">
+                <span className="text-xs text-text-muted">
+                  活动标题 <span className="theme-text-error">*</span>
+                </span>
+                <input
+                  value={draft.title}
+                  onChange={(event) => patchDraft({ title: event.target.value })}
+                  maxLength={CONTENT_LIMITS.event.title}
+                  placeholder="活动标题"
+                  className={bookCompactInputClass}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-text-muted">地点</span>
+                <input
+                  value={draft.location}
+                  onChange={(event) => patchDraft({ location: event.target.value })}
+                  maxLength={CONTENT_LIMITS.event.location}
+                  placeholder="地点"
+                  className={bookCompactInputClass}
+                />
+              </label>
               <TagInput
                 id="event-tags"
                 value={splitTagsInput(draft.tagsText)}

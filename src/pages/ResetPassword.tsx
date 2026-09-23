@@ -78,8 +78,8 @@ const ResetPassword = () => {
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label htmlFor="reset-password-new" className="sr-only">
-              新密码
+            <label htmlFor="reset-password-new" className="block text-sm text-text-secondary">
+              新密码 <span className="theme-text-error">*</span>
             </label>
             <Input
               id="reset-password-new"
@@ -99,8 +99,8 @@ const ResetPassword = () => {
           </div>
 
           <div>
-            <label htmlFor="reset-password-confirm" className="sr-only">
-              确认新密码
+            <label htmlFor="reset-password-confirm" className="block text-sm text-text-secondary">
+              确认新密码 <span className="theme-text-error">*</span>
             </label>
             <Input
               id="reset-password-confirm"

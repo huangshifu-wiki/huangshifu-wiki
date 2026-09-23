@@ -155,8 +155,8 @@ export const AuthForm = ({
         {authMode === 'wechat' ? (
           <>
             <div>
-              <label htmlFor="auth-wechat-code" className="sr-only">
-                {t('auth.labelWechatCode')}
+              <label htmlFor="auth-wechat-code" className="block text-sm text-text-secondary">
+                {t('auth.labelWechatCode')} <span className="theme-text-error">*</span>
               </label>
               <Input
                 id="auth-wechat-code"
@@ -187,8 +187,8 @@ export const AuthForm = ({
         ) : (
           <>
             <div>
-              <label htmlFor="auth-email" className="sr-only">
-                {t('auth.labelEmail')}
+              <label htmlFor="auth-email" className="block text-sm text-text-secondary">
+                {t('auth.labelEmail')} <span className="theme-text-error">*</span>
               </label>
               <Input
                 id="auth-email"
@@ -204,8 +204,8 @@ export const AuthForm = ({
             </div>
             {!isForgotPasswordMode && (
               <div>
-                <label htmlFor="auth-password" className="sr-only">
-                  {t('auth.labelPassword')}
+                <label htmlFor="auth-password" className="block text-sm text-text-secondary">
+                  {t('auth.labelPassword')} <span className="theme-text-error">*</span>
                 </label>
                 <Input
                   id="auth-password"
