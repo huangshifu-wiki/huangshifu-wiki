@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   Clock,
+  Edit3,
   ExternalLink,
   Heart,
   Link2,
@@ -15,7 +16,7 @@ import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
 import { apiGet } from '../lib/apiClient'
-import { LoadErrorState, Skeleton } from '@/src/components/ui'
+import { Button, LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useMusic } from '../context/MusicContext'
 import { useToast } from '../components/Toast'
@@ -43,6 +44,10 @@ import {
 } from '../lib/seo'
 import type { SeoMetadata } from '../lib/seo'
 import type { MusicExternalSource } from '../types/entities'
+
+const SongFormModal = lazy(() =>
+  import('../components/SongFormModal').then((module) => ({ default: module.SongFormModal }))
+)
 
 const SourceLink = ({ source }: { source: MusicExternalSource }) => {
   const label = `${source.platform} / ${source.sourceId}`
@@ -173,7 +178,9 @@ const MusicDetail = () => {
   const [lyricsExpanded, setLyricsExpanded] = useState(false)
   const [lyricsCopied, setLyricsCopied] = useState(false)
   const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
-  const { user } = useAuth()
+  const [editing, setEditing] = useState(false)
+  const requestRef = useRef(0)
+  const { user, isAdmin } = useAuth()
   const { currentSong, currentTime, setCurrentSong, setIsPlaying, setPlaylist } = useMusic()
   const { show } = useToast()
   const { t } = useI18n()
@@ -190,10 +197,12 @@ const MusicDetail = () => {
 
   const fetchData = async () => {
     if (!songId) return
+    const request = ++requestRef.current
     setLoading(true)
     setLoadError(null)
     try {
       const detail = await apiGet<SongDetailResponse>(`/api/music/${songId}`)
+      if (requestRef.current !== request) return
       const currentSong = detail.song || null
       setSong(currentSong)
       if (currentSong?.docId) {
@@ -201,23 +210,29 @@ const MusicDetail = () => {
           const postResult = await apiGet<{ posts: PostItem[] }>(
             `/api/music/${currentSong.docId}/posts`
           )
-          setPosts(postResult.posts || [])
+          if (requestRef.current === request) setPosts(postResult.posts || [])
         } catch (error) {
-          console.error('Fetch song related posts failed:', error)
+          if (requestRef.current === request)
+            console.error('Fetch song related posts failed:', error)
         }
       } else {
         setPosts([])
       }
     } catch (error) {
-      console.error('Fetch song detail failed:', error)
-      setLoadError(error)
+      if (requestRef.current === request) {
+        console.error('Fetch song detail failed:', error)
+        setLoadError(error)
+      }
     } finally {
-      setLoading(false)
+      if (requestRef.current === request) setLoading(false)
     }
   }
 
   useEffect(() => {
     void fetchData()
+    return () => {
+      requestRef.current += 1
+    }
   }, [songId])
 
   // SEO 元数据：加载中/失败不可索引，成功后输出歌曲详情与 MusicRecording JSON-LD
@@ -435,6 +450,18 @@ const MusicDetail = () => {
                   >
                     <Link2 size={14} /> 复制内链
                   </button>
+                  {isAdmin && (
+                    <Button
+                      type="button"
+                      onClick={() => setEditing(true)}
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<Edit3 size={14} />}
+                      className="min-h-0 bg-transparent px-4 py-2 text-[0.875rem] transition-all duration-300"
+                    >
+                      编辑
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -675,6 +702,17 @@ const MusicDetail = () => {
         initialIndex={0}
         onClose={() => setCoverLightboxOpen(false)}
       />
+      {isAdmin && editing && (
+        <Suspense fallback={<div role="status">编辑器加载中...</div>}>
+          <SongFormModal
+            open
+            mode="edit"
+            song={song}
+            onClose={() => setEditing(false)}
+            onSuccess={() => void fetchData()}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

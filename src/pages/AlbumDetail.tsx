@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Disc3, Play, Heart, Link2, ChevronDown, ChevronUp } from '@/src/components/icons'
+import { Disc3, Edit3, Play, Heart, Link2, ChevronDown, ChevronUp } from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
@@ -24,8 +24,12 @@ import {
   useSeo,
 } from '../lib/seo'
 import type { SeoMetadata } from '../lib/seo'
-import { LoadErrorState } from '@/src/components/ui'
+import { Button, LoadErrorState } from '@/src/components/ui'
 import type { MusicExternalSource } from '../types/entities'
+
+const AlbumFormModal = lazy(() =>
+  import('../components/AlbumFormModal').then((module) => ({ default: module.AlbumFormModal }))
+)
 
 type SongItem = {
   docId: string
@@ -54,6 +58,7 @@ type AlbumResponse = {
     cover: string
     coverThumbnail?: string
     description?: string | null
+    sources?: MusicExternalSource[]
     releaseDate?: string | null
     tracks: SongItem[]
   }
@@ -90,13 +95,18 @@ const AlbumDetail = () => {
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [retryNonce, setRetryNonce] = useState(0)
   const [album, setAlbum] = useState<AlbumResponse['album'] | null>(null)
+  const [editing, setEditing] = useState(false)
   const previousAlbumIdRef = useRef<string | undefined>(undefined)
   const [favoriting, setFavoriting] = useState<string | null>(null)
   const [descExpanded, setDescExpanded] = useState(false)
   const [descNeedExpand, setDescNeedExpand] = useState(false)
   const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
   const descRef = useRef<HTMLDivElement>(null)
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
+  const editableAlbum = useMemo(
+    () => (editing && album ? { ...album, description: album.description ?? undefined } : null),
+    [album, editing]
+  )
 
   useEffect(() => {
     if (descRef.current && !descExpanded) {
@@ -345,6 +355,18 @@ const AlbumDetail = () => {
               >
                 <Link2 size={15} /> 复制内链
               </button>
+              {isAdmin && (
+                <Button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  variant="secondary"
+                  size="md"
+                  leftIcon={<Edit3 size={15} />}
+                  className="border-border bg-transparent px-5 py-2.5 text-[0.9375rem] hover:border-brand-gold"
+                >
+                  编辑
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -479,6 +501,17 @@ const AlbumDetail = () => {
         initialIndex={0}
         onClose={() => setCoverLightboxOpen(false)}
       />
+      {isAdmin && editing && (
+        <Suspense fallback={<div role="status">编辑器加载中...</div>}>
+          <AlbumFormModal
+            open
+            mode="edit"
+            album={editableAlbum}
+            onClose={() => setEditing(false)}
+            onSuccess={() => setRetryNonce((value) => value + 1)}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

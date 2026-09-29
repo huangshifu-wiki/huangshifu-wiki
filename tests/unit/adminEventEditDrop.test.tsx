@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AdminEventEdit from '../../src/pages/Admin/AdminEventEdit'
-import { apiGet, apiPut } from '../../src/lib/apiClient'
+import { apiGet, apiPost, apiPut } from '../../src/lib/apiClient'
 import { uploadImageWithStrategy } from '../../src/services/imageService'
 import type { UploadImageResult } from '../../src/services/imageService'
 import type { EventItem } from '../../src/types/entities'
@@ -82,9 +82,12 @@ const textTransfer = { types: ['text/plain'] }
 
 const renderPage = async () => {
   const view = render(
-    <MemoryRouter initialEntries={['/admin/events/evt-1/edit']}>
+    <MemoryRouter initialEntries={['/admin/events']}>
       <Routes>
-        <Route path="/admin/events/:eventId/edit" element={<AdminEventEdit />} />
+        <Route
+          path="/admin/events"
+          element={<AdminEventEdit eventId="evt-1" onClose={vi.fn()} onSaved={vi.fn()} />}
+        />
       </Routes>
     </MemoryRouter>
   )
@@ -92,8 +95,7 @@ const renderPage = async () => {
   return view
 }
 
-const coverZone = (container: HTMLElement) =>
-  container.querySelector('[data-file-drop-zone="cover"]') as HTMLElement
+const coverZone = () => document.querySelector('[data-file-drop-zone="cover"]') as HTMLElement
 
 describe('活动编辑页拖拽上传', () => {
   beforeEach(() => {
@@ -114,10 +116,10 @@ describe('活动编辑页拖拽上传', () => {
   })
 
   it('单张图片拖到封面区域按封面上传', async () => {
-    const { container } = await renderPage()
+    await renderPage()
     const dataTransfer = filesTransfer('cover.png')
 
-    fireEvent.drop(coverZone(container), { dataTransfer })
+    fireEvent.drop(coverZone(), { dataTransfer })
 
     await waitFor(() => expect(uploadImageWithStrategy).toHaveBeenCalledTimes(1))
     expect(vi.mocked(uploadImageWithStrategy).mock.calls[0][0].name).toBe('cover.png')
@@ -126,9 +128,9 @@ describe('活动编辑页拖拽上传', () => {
   })
 
   it('多张图片拖到封面区域只提示，不上传', async () => {
-    const { container } = await renderPage()
+    await renderPage()
 
-    fireEvent.drop(coverZone(container), { dataTransfer: filesTransfer('a.png', 'b.png') })
+    fireEvent.drop(coverZone(), { dataTransfer: filesTransfer('a.png', 'b.png') })
 
     expect(uploadImageWithStrategy).not.toHaveBeenCalled()
     expect(toastShow).toHaveBeenCalledWith(
@@ -151,9 +153,9 @@ describe('活动编辑页拖拽上传', () => {
   })
 
   it('封面区就地提示，其他区域全屏提示', async () => {
-    const { container } = await renderPage()
+    await renderPage()
     const dataTransfer = filesTransfer('a.png')
-    const cover = coverZone(container)
+    const cover = coverZone()
 
     fireEvent.dragEnter(cover, { dataTransfer })
     fireEvent.dragOver(cover, { dataTransfer })
@@ -202,10 +204,10 @@ describe('活动编辑页时间状态', () => {
   })
 
   it('填写真实时间时清除时间状态', async () => {
-    const { container } = await renderPage()
+    await renderPage()
 
     fireEvent.change(screen.getByLabelText('时间状态'), { target: { value: '' } })
-    const timeInput = container.querySelector('input[type="datetime-local"]') as HTMLInputElement
+    const timeInput = document.querySelector('input[type="datetime-local"]') as HTMLInputElement
     fireEvent.change(timeInput, { target: { value: '2026-10-01T19:30' } })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
@@ -216,5 +218,32 @@ describe('活动编辑页时间状态', () => {
     }
     expect(payload.timeSlots).toEqual([{ type: 'datetime', start: '2026-10-01T19:30' }])
     expect(payload.timeStatus).toBeNull()
+  })
+})
+
+describe('新增活动路由', () => {
+  it('保持完整页面创建并在保存后返回活动管理', async () => {
+    vi.clearAllMocks()
+    vi.mocked(apiPost).mockResolvedValue({ event: eventFixture } as never)
+    render(
+      <MemoryRouter initialEntries={['/admin/events/new']}>
+        <Routes>
+          <Route path="/admin/events/new" element={<AdminEventEdit />} />
+          <Route path="/admin/events" element={<p>活动管理列表</p>} />
+        </Routes>
+      </MemoryRouter>
+    )
+    expect(screen.getByRole('heading', { name: '新增活动' })).toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText('活动标题'), {
+      target: { value: '新活动' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() =>
+      expect(apiPost).toHaveBeenCalledWith(
+        '/api/events',
+        expect.objectContaining({ title: '新活动' })
+      )
+    )
+    expect(await screen.findByText('活动管理列表')).toBeInTheDocument()
   })
 })

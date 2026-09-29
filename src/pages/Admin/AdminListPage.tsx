@@ -42,6 +42,8 @@ import type { AdminDataListResponse } from '../../types/api'
 import { Button, Checkbox, LinkButton, LoadErrorState } from '@/src/components/ui'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 
+const AdminEventEdit = React.lazy(() => import('./AdminEventEdit'))
+
 type ListType =
   | 'wiki'
   | 'wiki-categories'
@@ -534,6 +536,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const [createSaving, setCreateSaving] = useState(false)
   const [categorySaving, setCategorySaving] = useState(false)
   const [editingCategory, setEditingCategory] = useState<AdminDataItem | null>(null)
+  const [editingEventId, setEditingEventId] = useState<string | null>(null)
   const showDeleted = searchParams.get('includeDeleted') === 'true'
   const dialog = useDialog()
   const { show } = useToast()
@@ -907,15 +910,16 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           </Button>
         )}
         {type === 'events' && !item.isDeleted && !isPending && item.id && (
-          <LinkButton
-            to={`/admin/events/${item.id}/edit`}
+          <Button
+            type="button"
+            onClick={() => setEditingEventId(item.id)}
             variant="warning"
             soft
             size="sm"
             leftIcon={<Edit3 size={14} />}
           >
             编辑
-          </LinkButton>
+          </Button>
         )}
         {!isPending && item.isDeleted ? (
           <>
@@ -1267,6 +1271,18 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           />
         ) : null}
       </div>
+      {type === 'events' && editingEventId && (
+        <React.Suspense fallback={<div role="status">编辑器加载中...</div>}>
+          <AdminEventEdit
+            eventId={editingEventId}
+            onClose={() => setEditingEventId(null)}
+            onSaved={() => {
+              setEditingEventId(null)
+              void fetchData({ silent: true })
+            }}
+          />
+        </React.Suspense>
+      )}
     </>
   )
 }

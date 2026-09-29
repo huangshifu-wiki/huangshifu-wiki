@@ -11,6 +11,7 @@ interface FormModalProps {
   submitText?: string
   cancelText?: string
   loading?: boolean
+  submitDisabled?: boolean
   maxWidth?: string
 }
 
@@ -24,6 +25,7 @@ export const FormModal = ({
   submitText = '提交',
   cancelText = '取消',
   loading = false,
+  submitDisabled = false,
   maxWidth = 'max-w-md',
 }: FormModalProps) => {
   const content = (
@@ -34,7 +36,7 @@ export const FormModal = ({
           {cancelText}
         </Button>
         {onSubmit && (
-          <Button type="submit" loading={loading} loadingText="提交中...">
+          <Button type="submit" loading={loading} loadingText="提交中..." disabled={submitDisabled}>
             {submitText}
           </Button>
         )}
