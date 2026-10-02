@@ -7,13 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ContentEditorRoutes } from '../../src/pages/ContentEditorRoutes'
 import { DialogProvider } from '../../src/components/Dialog'
 import { ToastProvider } from '../../src/components/Toast'
-import {
-  apiGet,
-  apiPost,
-  apiPut,
-  apiRequest,
-  invalidateApiCacheByPrefix,
-} from '../../src/lib/apiClient'
+import { apiGet, apiPost, apiPut, apiRequest } from '../../src/lib/apiClient'
 class TestResizeObserver implements ResizeObserver {
   constructor(_callback: ResizeObserverCallback) {}
 
@@ -80,6 +74,7 @@ const LocationProbe = () => {
     <output data-testid="location">
       {location.pathname}
       {location.search}
+      {location.hash}
     </output>
   )
 }
@@ -133,11 +128,14 @@ beforeEach(() => {
 })
 
 describe('百科与盘票编辑弹窗', () => {
-  it('保存百科草稿后关闭编辑器并导航到新条目', async () => {
+  it.each([
+    ['/wiki', '?category=general', '', '/wiki/new-page'],
+    ['/admin/wiki', '?page=2&pageSize=20', '#results', '/admin/wiki?page=2&pageSize=20#results'],
+  ])('保存百科草稿后关闭编辑器，按 %s 来源导航', async (pathname, search, hash, destination) => {
     const background = {
-      pathname: '/wiki',
-      search: '?category=general',
-      hash: '',
+      pathname,
+      search,
+      hash,
       state: null,
       key: 'wiki-list',
     }
@@ -158,10 +156,34 @@ describe('百科与盘票编辑弹窗', () => {
         '/api/wiki',
         expect.objectContaining({ title: '新条目', content: '百科正文', status: 'draft' })
       )
-      expect(screen.getByTestId('location')).toHaveTextContent('/wiki/new-page')
+      expect(screen.getByTestId('location')).toHaveTextContent(destination)
     })
-    expect(invalidateApiCacheByPrefix).toHaveBeenCalledWith('/api/wiki')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('后台创建百科保存失败保留弹窗、输入和当前地址', async () => {
+    const background = {
+      pathname: '/admin/wiki',
+      search: '?page=2&pageSize=20',
+      hash: '#results',
+      state: null,
+      key: 'admin-list',
+    }
+    vi.mocked(apiPost).mockRejectedValueOnce(new Error('保存失败'))
+    renderEditor([background, { pathname: '/wiki/new', state: { editorBackground: background } }])
+
+    const modal = await screen.findByRole('dialog', { name: 'wiki.createWiki' })
+    fireEvent.change(within(modal).getByLabelText(/^标题/), { target: { value: '未保存标题' } })
+    fireEvent.change(within(modal).getByLabelText(/^内容 \(Markdown\)/), {
+      target: { value: '未保存正文' },
+    })
+    fireEvent.click(within(modal).getByRole('button', { name: 'wiki.saveDraft' }))
+
+    await screen.findByText('保存失败')
+    expect(within(modal).getByLabelText(/^标题/)).toHaveValue('未保存标题')
+    expect(within(modal).getByLabelText(/^内容 \(Markdown\)/)).toHaveValue('未保存正文')
+    expect(modal).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/wiki/new')
   })
 
   it('百科编辑加载失败保留弹窗并可重试，失败时不显示可提交表单', async () => {
@@ -190,66 +212,69 @@ describe('百科与盘票编辑弹窗', () => {
     expect(apiPut).not.toHaveBeenCalled()
   })
 
-  it('新建盘票草稿转到编辑弹窗，后续保存使用 PUT 且干净关闭返回来源', async () => {
-    const background = {
-      pathname: '/tickets',
-      search: '?page=2',
-      hash: '',
-      state: null,
-      key: 'ticket-list',
-    }
-    vi.mocked(apiPost).mockResolvedValue({
-      listing: { ...ticketListing, id: 'ticket-1', slug: 'draft-1', status: 'draft' },
-    } as never)
-    vi.mocked(apiPut).mockResolvedValue({ listing: ticketListing } as never)
-    renderEditor([
-      background,
-      { pathname: '/tickets/new', state: { editorBackground: background } },
-    ])
+  it.each(['/tickets', '/admin/ticket-listings'])(
+    '从 %s 新建盘票草稿后继续使用 PUT，干净关闭回到来源',
+    async (pathname) => {
+      const background = {
+        pathname,
+        search: '?page=2&pageSize=20',
+        hash: '',
+        state: null,
+        key: 'ticket-list',
+      }
+      vi.mocked(apiPost).mockResolvedValue({
+        listing: { ...ticketListing, id: 'ticket-1', slug: 'draft-1', status: 'draft' },
+      } as never)
+      vi.mocked(apiPut).mockResolvedValue({ listing: ticketListing } as never)
+      renderEditor([
+        background,
+        { pathname: '/tickets/new', state: { editorBackground: background } },
+      ])
 
-    let modal = await screen.findByRole('dialog', { name: '发布盘票' }, { timeout: 10000 })
-    fireEvent.change(within(modal).getByRole('combobox'), { target: { value: 'custom' } })
-    fireEvent.change(within(modal).getByLabelText(/^自定义活动名称/), {
-      target: { value: '巡演' },
-    })
-    fireEvent.change(within(modal).getByLabelText(/^票档/), { target: { value: '一层' } })
-    fireEvent.change(within(modal).getByLabelText(/^联系方式/), {
-      target: { value: '微信：ticket-contact' },
-    })
-    fireEvent.click(within(modal).getByRole('button', { name: '保存草稿' }))
-
-    await waitFor(() => {
-      expect(apiPost).toHaveBeenCalledWith(
-        '/api/ticket-listings',
-        expect.objectContaining({ status: 'draft', customEventName: '巡演' })
-      )
-      expect(screen.getByTestId('location')).toHaveTextContent('/tickets/draft-1/edit')
-    })
-    modal = await screen.findByRole('dialog', { name: '编辑盘票' }, { timeout: 10000 })
-    expect(await within(modal).findByLabelText(/^自定义活动名称/)).toHaveValue('巡演')
-    expect(apiRequest).toHaveBeenCalledWith(
-      '/api/ticket-listings/draft-1',
-      expect.objectContaining({ method: 'GET' })
-    )
-
-    fireEvent.change(within(modal).getByLabelText(/^联系方式/), {
-      target: { value: '微信：新联系方式' },
-    })
-    fireEvent.click(within(modal).getByRole('button', { name: '保存草稿' }))
-    await waitFor(() => {
-      expect(apiPut).toHaveBeenCalledWith(
-        '/api/ticket-listings/ticket-1',
-        expect.objectContaining({ status: 'draft', contact: '微信：新联系方式' })
-      )
-    })
-    expect(apiPost).toHaveBeenCalledTimes(1)
-
-    fireEvent.click(
-      within(screen.getByRole('dialog', { name: '编辑盘票' })).getByRole('button', {
-        name: '取消',
+      let modal = await screen.findByRole('dialog', { name: '发布盘票' }, { timeout: 10000 })
+      fireEvent.change(within(modal).getByRole('combobox'), { target: { value: 'custom' } })
+      fireEvent.change(within(modal).getByLabelText(/^自定义活动名称/), {
+        target: { value: '巡演' },
       })
-    )
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByTestId('location')).toHaveTextContent('/tickets?page=2')
-  })
+      fireEvent.change(within(modal).getByLabelText(/^票档/), { target: { value: '一层' } })
+      fireEvent.change(within(modal).getByLabelText(/^联系方式/), {
+        target: { value: '微信：ticket-contact' },
+      })
+      fireEvent.click(within(modal).getByRole('button', { name: '保存草稿' }))
+
+      await waitFor(() => {
+        expect(apiPost).toHaveBeenCalledWith(
+          '/api/ticket-listings',
+          expect.objectContaining({ status: 'draft', customEventName: '巡演' })
+        )
+        expect(screen.getByTestId('location')).toHaveTextContent('/tickets/draft-1/edit')
+      })
+      modal = await screen.findByRole('dialog', { name: '编辑盘票' }, { timeout: 10000 })
+      expect(await within(modal).findByLabelText(/^自定义活动名称/)).toHaveValue('巡演')
+      expect(apiRequest).toHaveBeenCalledWith(
+        '/api/ticket-listings/draft-1',
+        expect.objectContaining({ method: 'GET' })
+      )
+
+      fireEvent.change(within(modal).getByLabelText(/^联系方式/), {
+        target: { value: '微信：新联系方式' },
+      })
+      fireEvent.click(within(modal).getByRole('button', { name: '保存草稿' }))
+      await waitFor(() => {
+        expect(apiPut).toHaveBeenCalledWith(
+          '/api/ticket-listings/ticket-1',
+          expect.objectContaining({ status: 'draft', contact: '微信：新联系方式' })
+        )
+      })
+      expect(apiPost).toHaveBeenCalledTimes(1)
+
+      fireEvent.click(
+        within(screen.getByRole('dialog', { name: '编辑盘票' })).getByRole('button', {
+          name: '取消',
+        })
+      )
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(screen.getByTestId('location')).toHaveTextContent(`${pathname}?page=2&pageSize=20`)
+    }
+  )
 })

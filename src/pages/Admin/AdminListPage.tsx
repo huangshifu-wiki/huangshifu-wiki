@@ -76,6 +76,7 @@ type ListConfig = {
   apiPath: string
   columns: { key: ColumnKey; label: string; className?: string }[]
   hasCreate: boolean
+  editorBasePath?: string
 }
 
 const WIKI_CATEGORIES_ADMIN_PATH = '/api/admin/wiki-categories'
@@ -96,6 +97,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
+    editorBasePath: '/wiki',
   },
   'wiki-categories': {
     title: '百科分类',
@@ -124,6 +126,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
+    editorBasePath: '/forum',
   },
   galleries: {
     title: '图集管理',
@@ -139,6 +142,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
+    editorBasePath: '/gallery',
   },
   'ticket-listings': {
     title: '盘票管理',
@@ -153,6 +157,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
+    editorBasePath: '/tickets',
   },
 
   events: {
@@ -972,9 +977,22 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const renderActions = (item: AdminDataItem, rowId: string) => {
     const pendingAction = pendingActions[rowId]
     const isPending = Boolean(pendingAction)
+    const itemHref = cfg.editorBasePath ? getItemHref(type, item) : null
 
     return (
       <div className="flex flex-wrap items-center justify-start gap-2">
+        {itemHref && !item.isDeleted && !item.deletedAt && !isPending && (
+          <LinkButton
+            to={`${itemHref}/edit`}
+            state={{ editorBackground: location }}
+            variant="warning"
+            soft
+            size="sm"
+            leftIcon={<Edit3 size={14} />}
+          >
+            编辑
+          </LinkButton>
+        )}
         {isPending && pendingAction !== 'toggle' && (
           <Button
             variant={pendingAction === 'restore' ? 'success' : 'danger'}
@@ -1073,6 +1091,15 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             <Icon size={24} className="text-brand-gold" /> {cfg.title}
           </h1>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {cfg.editorBasePath && (
+              <LinkButton
+                to={`${cfg.editorBasePath}/new`}
+                state={{ editorBackground: location }}
+                leftIcon={<Plus size={14} />}
+              >
+                新增{cfg.title.replace(/管理$/, '')}
+              </LinkButton>
+            )}
             {type === 'events' && (
               <Link
                 to="/admin/events/new"

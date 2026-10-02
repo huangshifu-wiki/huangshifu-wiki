@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { getContentBackgroundLocation, getContentEditorRoute } from '../lib/contentEditorRoutes'
 import type { Location } from 'react-router-dom'
+import { invalidateApiCacheByPrefix } from '../lib/apiClient'
 
 export const useContentEditorNavigation = () => {
   const location = useLocation()
@@ -28,6 +29,26 @@ export const useContentEditorNavigation = () => {
           replace: true,
           state: hasEditorBackground ? { editorBackground: backgroundLocation } : null,
         })
+        return
+      }
+      if (
+        hasEditorBackground &&
+        /^\/admin\/(?:wiki|posts|galleries|ticket-listings|events)\/?$/.test(
+          backgroundLocation.pathname
+        )
+      ) {
+        invalidateApiCacheByPrefix(`/api${backgroundLocation.pathname.replace(/\/$/, '')}`)
+        const backgroundState = backgroundLocation.state
+        const savedState = {
+          ...(backgroundState !== null &&
+          typeof backgroundState === 'object' &&
+          !Array.isArray(backgroundState)
+            ? backgroundState
+            : {}),
+          editorSaved: true,
+        }
+        delete savedState.editorBackground
+        navigate(backgroundLocation, { replace: true, state: savedState })
         return
       }
       navigate(to, { replace: true, state: { editorSaved: true } })
