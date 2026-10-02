@@ -485,6 +485,22 @@ async function startServer() {
       },
       appType: 'custom',
     })
+    // public 中的 Markdown 显式声明 UTF-8，避免浏览器按本地默认编码显示中文。
+    const markdownMiddleware = express.static(path.join(process.cwd(), 'public'), {
+      index: false,
+      redirect: false,
+      setHeaders: (res) => {
+        res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
+        res.setHeader('Cache-Control', CACHE_CONTROL_REVALIDATE)
+      },
+    })
+    app.use((req, res, next) => {
+      if (req.path.toLowerCase().endsWith('.md')) {
+        markdownMiddleware(req, res, next)
+      } else {
+        next()
+      }
+    })
     app.use(vite.middlewares)
     app.get(SPA_FALLBACK_PATH, async (req: AuthenticatedRequest, res, next) => {
       try {
