@@ -1490,15 +1490,15 @@ router.get(
   requireAuth,
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    if (req.query.offset !== undefined) {
+      res.status(400).json({ error: '不再支持 offset 分页，请使用 page 和 limit' })
+      return
+    }
     try {
-      const { type, limit = '20', offset = '0' } = req.query
-      const userId = req.authUser!.uid
-
-      const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 100)
-      const offsetNum = Math.max(Number(offset) || 0, 0)
-
+      const { type } = req.query
+      const { limit, page, offset: skip } = parsePagination(req.query)
       const where: Record<string, unknown> = {
-        userUid: userId,
+        userUid: req.authUser!.uid,
       }
 
       // Filter by type if provided
@@ -1510,8 +1510,8 @@ router.get(
         prisma.browsingHistory.findMany({
           where,
           orderBy: { createdAt: 'desc' },
-          take: limitNum,
-          skip: offsetNum,
+          take: limit,
+          skip,
         }),
         prisma.browsingHistory.count({ where }),
       ])
@@ -1523,12 +1523,7 @@ router.get(
           targetId: item.targetId,
           createdAt: item.createdAt.toISOString(),
         })),
-        pagination: {
-          total,
-          limit: limitNum,
-          offset: offsetNum,
-          hasMore: offsetNum + limitNum < total,
-        },
+        ...createPaginationMeta(total, page, limit, histories.length),
       })
     } catch (error) {
       console.error('Get user history error:', error)
@@ -2246,9 +2241,7 @@ router.get(
           createdAt: item.createdAt.toISOString(),
           post: item.post ? toPostResponse(item.post) : null,
         })),
-        total,
-        page,
-        limit,
+        ...createPaginationMeta(total, page, limit, likedPosts.length),
       })
     } catch (error) {
       console.error('Fetch user likes error:', error)

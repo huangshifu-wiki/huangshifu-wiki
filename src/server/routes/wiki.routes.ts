@@ -367,9 +367,7 @@ mpWikiRouter.get('/', async (req: AuthenticatedRequest, res) => {
   res.setHeader('Expires', '0')
   try {
     const category = typeof req.query.category === 'string' ? req.query.category : 'all'
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100)
-    const page = Math.max(Number(req.query.page) || 1, 1)
-    const skip = (page - 1) * limit
+    const { limit, page, offset: skip } = parsePagination(req.query)
 
     const where = {
       ...buildWikiVisibilityWhere(req.authUser),
@@ -407,9 +405,7 @@ mpWikiRouter.get('/', async (req: AuthenticatedRequest, res) => {
         favoritesCount: page.favoritesCount,
         updatedAt: page.updatedAt.toISOString(),
       })),
-      total,
-      page,
-      limit,
+      ...createPaginationMeta(total, page, limit, pages.length),
     })
   } catch (error) {
     logger.error({ err: error }, 'Fetch mp wiki list error')

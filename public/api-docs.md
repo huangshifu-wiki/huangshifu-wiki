@@ -37,7 +37,7 @@ API 密钥不能创建/列出/撤销密钥，不能获取或退出网页登录�
 | Cookie-only | 有效网页登录 Cookie 与 CSRF；API 密钥不适用。                                    |
 | 条件服务    | 需要站点开关、Amap、SMTP、S3、向量库或外部音乐服务可用。                         |
 
-Express JSON 请求体上限 1 MiB；一般请求超时 30 秒，备份等长任务另有设置。分页不是统一包装：大多数列表返回 page/limit/total/totalPages/hasMore 的组合，用户历史使用 offset，有些资源没有分页。日期时间通常是 ISO 8601，日期字段通常是 YYYY-MM-DD；具体以逐接口响应字段为准。
+Express JSON 请求体上限 1 MiB；一般请求超时 30 秒，备份等长任务另有设置。普通页码列表使用顶层 total、page、limit、totalPages、hasMore 元数据，具体数组字段因接口而异；游标批处理保留 nextCursor/hasMore，不分页接口不含分页元数据。日期时间通常是 ISO 8601，日期字段通常是 YYYY-MM-DD；具体以逐接口响应字段为准。
 
 ### ID 对照
 
@@ -546,11 +546,11 @@ curl --fail-with-body -H 'Content-Type: application/json' \
 - PATCH /api/users/:userId：管理员修改普通用户；不可编辑自己或管理员。body 可选 displayName、signature、bio、email、emailVerified、newPassword，至少一项；邮件/密码 token 按变更作废。
 - PUT /api/users/:userId/reset-password：管理员重置他人密码；不能重置自己，管理员只可重置普通用户；body newPassword。
 - PUT /api/users/:userId/ban、PUT /api/users/:userId/unban：管理员对普通用户封禁/解封；封禁需要 reason 或 note；写用户封禁日志。
-- GET /api/users/me/history：需认证；query type=wiki|post|music、limit 默认 20/最大 100、offset 默认 0；返回 history 与 pagination。
+- GET /api/users/me/history：需认证；可选 query type=wiki|post|music 过滤、page 默认 1、limit 默认 20/最大 100；返回 history 与顶层统一分页元数据。offset 参数不再支持，传入返回 400。
 - GET /api/users/mentions：需认证；query q、limit 默认 8/范围 1–20；空 q 返回 {users:[]}。
 - GET /api/users/:userId/profile：路径 userId 实际传 publicId；公开 DTO 附 isSelf、canViewFavorites/canViewHistory 等。
 - GET /api/users/:userId/posts|galleries|wiki|comments|favorites|history：路径 userId 实际传 publicId。内容按目标可见性过滤；收藏/历史要用户公开偏好或本人/管理员权限。子资源 ID 仍遵循各自 ID 类型。各列表分页字段以逐接口条目为准。
-- GET /api/users/:userId/likes：需认证；用户只能看自己的点赞，管理员可查看他人。返回 likes、total、page、limit。
+- GET /api/users/:userId/likes：需认证；用户只能看自己的点赞，管理员可查看他人。返回 likes 与顶层统一分页元数据；total 统计全部点赞记录，帖子可见性过滤可能使 likes 数量少于 limit。
 
 ### 逐接口契约（39 项）
 
@@ -995,13 +995,13 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：读取 users / me / history；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query type=wiki|post|music required; limit integer default20 clamp1–100; offset integer default0 min0；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>history</code>、<code>pagination</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 获取历史记录失败。所有权、可见性、软删除和副作用见本章业务说明。
+- 参数契约：path 无 path 字段；query type?:wiki|post|music; page integer default1 min1; limit integer default20 clamp1–100；offset 不支持，传入返回 400；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
+- 成功响应：HTTP 200: <code>history</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
+- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: offset 参数不支持；HTTP 500: 获取历史记录失败。所有权、可见性、软删除和副作用见本章业务说明。
 - curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
 
 ```bash
-curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/me/history?type=wiki&limit=20&offset=0"
+curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/me/history?type=wiki&page=1&limit=20"
 ```
 
 <a id="api-get-api-users-mentions"></a>
@@ -1115,8 +1115,8 @@ curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/favorites?page=1&limit
 
 - 用途：读取 users / history；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。
-- 参数契约：path userId: required string path parameter；query type=wiki|post|music; page/limit or offset per handler; visibility controlled by viewer preference；body/multipart 此处理器不读取 JSON body；解析 schema user history visibility。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>history</code>、<code>nested DTO fields</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
+- 参数契约：path userId: required string path parameter；query type?:wiki|post|music; page integer default1 min1; limit integer default20 clamp1–100；visibility controlled by viewer preference；body/multipart 此处理器不读取 JSON body；解析 schema user history visibility。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
+- 成功响应：HTTP 200: <code>history</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
 - HTTP 状态/失败：200, 400, 403, 500。HTTP 400: 无效历史类型；HTTP 403: 无权查看该用户的浏览历史；HTTP 500: 获取用户浏览历史失败。所有权、可见性、软删除和副作用见本章业务说明。
 - curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
 
@@ -1130,8 +1130,8 @@ curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/history?type=wiki&page
 
 - 用途：读取 users / likes；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证。
-- 参数契约：path userId: required string path parameter；query limit: integer default 20 clamp 1–100 unless handler overrides；page: integer default 1 minimum 1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>likes</code>、<code>total</code>、<code>page</code>、<code>limit</code>；HTTP 403: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toPostResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
+- 参数契约：path userId: required string path parameter；query limit integer default20 clamp1–100; page integer default1 min1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
+- 成功响应：HTTP 200: <code>likes</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 403: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toPostResponse。可见性过滤可能使 likes 数量小于 limit；total 仍统计全部点赞记录。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
 - HTTP 状态/失败：200, 401, 403, 500。HTTP 403: 无权查看该用户的点赞记录；HTTP 500: 获取用户点赞失败。所有权、可见性、软删除和副作用见本章业务说明。
 - curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
 
@@ -1381,7 +1381,7 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_I
 
 帖子和图库使用不同的评论读取/创建路径，但 DELETE /api/posts/comments/:id、POST /api/posts/comments/:id/restore 和 POST/DELETE /api/posts/comments/:id/like 共用同一评论 ID，并同时处理两种评论。
 
-- GET /api/posts/:postId/comments：postId 是帖子内部 id；query page、limit；管理员传 includeDeleted=true 才会看删除记录。响应严格为 {comments,total,page,limit}，没有 totalPages/hasMore。
+- GET /api/posts/:postId/comments：postId 是帖子内部 id；query page、limit；管理员传 includeDeleted=true 才会看删除记录。响应为 {comments,total,page,limit,totalPages,hasMore}。
 - POST 同路径：认证且未封禁；body content 必填（1–5000字符），parentId 可省略/null（最多191字符）；只允许对 published 帖子评论。201 {comment}。
 - GET /api/galleries/:id/comments：图库内部 id；没有分页参数，响应只有 {comments}。图库不存在 404；不可见图库 403。
 - POST /api/galleries/:id/comments：body content 与可选 parentId；由 gallery handler 自行验证1–5000字符，不使用帖子 Zod schema。仅 published 图库允许评论；201 {comment}。
@@ -1427,7 +1427,7 @@ jq 用于从上一响应读取 ID 与构造安全 JSON。图库评论只需将 P
 - 用途：读取 posts / comments；目标资源与完整业务约束见第 6 章「评论」。
 - 权限：公开/可选身份。
 - 参数契约：path postId: required string path parameter；query page integer default1 min1; limit integer default20 clamp1–100; includeDeleted=true only for admin；body/multipart 此处理器不读取 JSON body；解析 schema post comments query。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>comments</code>、<code>total</code>、<code>page</code>、<code>limit</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
+- 成功响应：HTTP 200: <code>comments</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
 - HTTP 状态/失败：200, 400, 404, 500。HTTP 404: 帖子未找到；HTTP 500: 获取评论失败。所有权、可见性、软删除和副作用见本章业务说明。
 - curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
 
@@ -1535,7 +1535,7 @@ Wiki 常规读取以公开数字 slug 定位；编辑、删除及评论类资源
 - POST /api/wiki/pull-requests/:prId/merge、/reject：管理员；合并基础版本变化返回 409 并给出 conflictData；驳回需 note。
 - POST /api/wiki/branches/:branchId/resolve-conflict：PR 创建者或管理员，提交完整修订快照，更新 baseRevisionId 并清冲突标记。
 - POST /api/wiki/:slug/rollback/:revisionId：作者或管理员；按修订回滚并新建修订，普通用户产生 pending 状态。
-- GET /api/mp/wiki：独立小程序列表契约：query category/page/limit，limit 1–100 默认 20；响应 {items,total,page,limit}，字段与 Web Wiki 列表不同。
+- GET /api/mp/wiki：独立小程序列表契约：query category/page/limit，limit 1–100 默认 20；响应 {items,total,page,limit,totalPages,hasMore}，字段与 Web Wiki 列表不同。
 
 ### 逐接口契约（34 项）
 
@@ -1561,7 +1561,7 @@ curl --fail-with-body "$BASE_URL/api/wiki?category=all&page=1&pageSize=20"
 - 用途：读取 mp / wiki；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：公开/可选身份。
 - 参数契约：path 无 path 字段；query category?:string; page integer default1; limit integer1–100 default20；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>items</code>、<code>total</code>、<code>page</code>、<code>limit</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
+- 成功响应：HTTP 200: <code>items</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
 - HTTP 状态/失败：200, 400, 500。HTTP 500: 获取小程序百科失败。所有权、可见性、软删除和副作用见本章业务说明。
 - curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
 

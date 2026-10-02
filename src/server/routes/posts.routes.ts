@@ -23,6 +23,7 @@ import {
   notifyCommentReply,
   parsePagination,
   enhancedCache,
+  createPaginationMeta,
   fetchPostCommentsForResponse,
   fetchPostCommentsPageForResponse,
   resolveCommentReplyTarget,
@@ -191,11 +192,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
         likedByMe: likedPostSet.has(post.id),
         favoritedByMe: favoritedPostSet.has(post.id),
       })),
-      total,
-      page,
-      limit,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
-      hasMore: skip + posts.length < total,
+      ...createPaginationMeta(total, page, limit, posts.length),
     }
 
     if (!req.authUser && sort === 'latest') {
@@ -711,9 +708,7 @@ router.get('/:postId/comments', async (req: AuthenticatedRequest, res) => {
 
     res.json({
       comments,
-      total,
-      page,
-      limit,
+      ...createPaginationMeta(total, page, limit, comments.length),
     })
   } catch (error) {
     console.error('Fetch post comments error:', error)

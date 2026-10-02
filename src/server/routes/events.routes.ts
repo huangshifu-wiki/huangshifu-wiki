@@ -10,6 +10,7 @@ import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import {
   allocateNumericSlug,
   parsePagination,
+  createPaginationMeta,
   softDeleteData,
   restoreDeleteData,
   toEventResponse,
@@ -266,11 +267,7 @@ router.get(
 
     res.json({
       events: await toEventListResponse(events),
-      total,
-      page,
-      limit,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
-      hasMore: skip + events.length < total,
+      ...createPaginationMeta(total, page, limit, events.length),
     })
   })
 )

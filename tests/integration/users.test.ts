@@ -164,6 +164,210 @@ describe('Users API', () => {
     expect(bannedResponse.body.banReason).toBe('ROI banned')
   })
 
+  it('paginates personal browsing history with page metadata and rejects offset queries', async () => {
+    const createdAt = new Date('2025-01-01T00:00:00.000Z')
+    await prisma.browsingHistory.createMany({
+      data: [
+        { userUid: normalUser.user.uid, targetType: 'wiki', targetId: 'wiki-new', createdAt },
+        {
+          userUid: normalUser.user.uid,
+          targetType: 'post',
+          targetId: 'post-middle',
+          createdAt: new Date(createdAt.getTime() - 1_000),
+        },
+        {
+          userUid: normalUser.user.uid,
+          targetType: 'wiki',
+          targetId: 'wiki-old',
+          createdAt: new Date(createdAt.getTime() - 2_000),
+        },
+        {
+          userUid: adminUser.user.uid,
+          targetType: 'wiki',
+          targetId: 'other-user',
+          createdAt: new Date(createdAt.getTime() + 1_000),
+        },
+      ],
+    })
+
+    const firstPage = await request(app)
+      .get('/api/users/me/history')
+      .query({ page: 1, limit: 2 })
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(firstPage.status).toBe(200)
+    expect(firstPage.body.history.map((item: { targetId: string }) => item.targetId)).toEqual([
+      'wiki-new',
+      'post-middle',
+    ])
+    expect(firstPage.body).toMatchObject({
+      total: 3,
+      page: 1,
+      limit: 2,
+      totalPages: 2,
+      hasMore: true,
+    })
+    expect(firstPage.body).not.toHaveProperty('pagination')
+    expect(firstPage.body).not.toHaveProperty('offset')
+
+    const secondPage = await request(app)
+      .get('/api/users/me/history')
+      .query({ page: 2, limit: 2 })
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(secondPage.body.history.map((item: { targetId: string }) => item.targetId)).toEqual([
+      'wiki-old',
+    ])
+    expect(secondPage.body).toMatchObject({
+      total: 3,
+      page: 2,
+      limit: 2,
+      totalPages: 2,
+      hasMore: false,
+    })
+
+    const filtered = await request(app)
+      .get('/api/users/me/history')
+      .query({ type: 'wiki', page: 1, limit: 2 })
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(filtered.body.history.map((item: { targetId: string }) => item.targetId)).toEqual([
+      'wiki-new',
+      'wiki-old',
+    ])
+    expect(filtered.body).toMatchObject({
+      total: 2,
+      page: 1,
+      limit: 2,
+      totalPages: 1,
+      hasMore: false,
+    })
+
+    const emptyPage = await request(app)
+      .get('/api/users/me/history')
+      .query({ type: 'music', page: 1, limit: 2 })
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(emptyPage.body.history).toEqual([])
+    expect(emptyPage.body).toMatchObject({
+      total: 0,
+      page: 1,
+      limit: 2,
+      totalPages: 1,
+      hasMore: false,
+    })
+
+    const beyondLastPage = await request(app)
+      .get('/api/users/me/history')
+      .query({ page: 9, limit: 2 })
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(beyondLastPage.body.history).toEqual([])
+    expect(beyondLastPage.body).toMatchObject({
+      total: 3,
+      page: 9,
+      limit: 2,
+      totalPages: 2,
+      hasMore: false,
+    })
+
+    const legacyOffset = await request(app)
+      .get('/api/users/me/history')
+      .query({ offset: 0 })
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(legacyOffset.status).toBe(400)
+    expect(legacyOffset.body.error).toBe('不再支持 offset 分页，请使用 page 和 limit')
+
+    const mixedPagination = await request(app)
+      .get('/api/users/me/history')
+      .query({ page: 1, offset: 0 })
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(mixedPagination.status).toBe(400)
+  })
+
+  it('returns shared pagination metadata for own likes while filtering invisible posts', async () => {
+    const visiblePosts = await Promise.all(
+      [0, 1, 2].map((index) =>
+        createTestPost({
+          title: `ROI User Like Pagination ${index}`,
+          status: 'published',
+          authorUid: normalUser.user.uid,
+        })
+      )
+    )
+    const createdAt = new Date('2025-02-01T00:00:00.000Z')
+    await prisma.postLike.createMany({
+      data: visiblePosts.map((post, index) => ({
+        userUid: normalUser.user.uid,
+        postId: post.id,
+        createdAt: new Date(createdAt.getTime() + (2 - index) * 1_000),
+      })),
+    })
+
+    const endpoint = `/api/users/${normalUser.user.publicId}/likes`
+    const firstPage = await request(app)
+      .get(endpoint)
+      .query({ page: 1, limit: 2 })
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(firstPage.status).toBe(200)
+    expect(firstPage.body.likes.map((like: { post: { id: string } }) => like.post.id)).toEqual(
+      visiblePosts.slice(0, 2).map((post) => post.id)
+    )
+    expect(firstPage.body).toMatchObject({
+      total: 3,
+      page: 1,
+      limit: 2,
+      totalPages: 2,
+      hasMore: true,
+    })
+
+    const secondPage = await request(app)
+      .get(endpoint)
+      .query({ page: 2, limit: 2 })
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(secondPage.body.likes.map((like: { post: { id: string } }) => like.post.id)).toEqual([
+      visiblePosts[2].id,
+    ])
+    expect(secondPage.body).toMatchObject({
+      total: 3,
+      page: 2,
+      limit: 2,
+      totalPages: 2,
+      hasMore: false,
+    })
+
+    const forbiddenOtherUser = await request(app)
+      .get(`/api/users/${adminUser.user.publicId}/likes`)
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(forbiddenOtherUser.status).toBe(403)
+
+    await prisma.postLike.deleteMany({ where: { userUid: normalUser.user.uid } })
+    const hiddenPosts = await Promise.all(
+      [0, 1].map((index) =>
+        createTestPost({
+          title: `ROI User Like Hidden ${index}`,
+          status: 'draft',
+          authorUid: adminUser.user.uid,
+        })
+      )
+    )
+    await prisma.postLike.createMany({
+      data: [...visiblePosts.slice(0, 2), ...hiddenPosts].map((post, index) => ({
+        userUid: normalUser.user.uid,
+        postId: post.id,
+        createdAt: new Date(createdAt.getTime() + (3 - index) * 1_000),
+      })),
+    })
+
+    const filteredLastPage = await request(app)
+      .get(endpoint)
+      .query({ page: 2, limit: 2 })
+      .set('Authorization', `Bearer ${userToken}`)
+    expect(filteredLastPage.body.likes).toEqual([])
+    expect(filteredLastPage.body).toMatchObject({
+      total: 4,
+      page: 2,
+      limit: 2,
+      totalPages: 2,
+      hasMore: false,
+    })
+  })
+
   it('updates user profiles but rejects unsafe profile input', async () => {
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       normalUser.user.email,
