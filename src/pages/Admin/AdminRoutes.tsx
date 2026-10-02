@@ -10,7 +10,6 @@ import AdminUsers from './AdminUsers'
 import AdminLocks from './AdminLocks'
 import AdminLogs from './AdminLogs'
 import AdminToolPage from './AdminToolPage'
-import AdminEventEdit from './AdminEventEdit'
 import AdminDiskMonitor from './AdminDiskMonitor'
 import AdminVariantManager from './AdminVariantManager'
 import AdminSettings from './AdminSettings'
@@ -56,7 +55,6 @@ export const AdminRoutes = () => (
       <Route path="galleries" element={<AdminListPage type="galleries" />} />
       <Route path="ticket-listings" element={<AdminListPage type="ticket-listings" />} />
       <Route path="events" element={<AdminListPage type="events" />} />
-      <Route path="events/new" element={<AdminEventEdit />} />
       <Route path="sections" element={<AdminListPage type="sections" />} />
       <Route path="announcements" element={<AdminListPage type="announcements" />} />
       <Route path="users" element={<AdminUsers />} />

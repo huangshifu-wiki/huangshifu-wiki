@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import {
   Clock,
   Edit3,
@@ -170,6 +170,7 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
 
 const MusicDetail = () => {
   const { songId } = useParams()
+  const location = useLocation()
   const [song, setSong] = useState<SongItem | null>(null)
   const [posts, setPosts] = useState<PostItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -541,6 +542,7 @@ const MusicDetail = () => {
                 <SectionHeading>关联乐评</SectionHeading>
                 <Link
                   to={`/forum/new?musicDocId=${song.docId}&musicTitle=${encodeURIComponent(song.title)}`}
+                  state={{ editorBackground: location }}
                   data-pressable
                   data-press-feedback="state"
                   className="px-4 py-2 theme-button-primary rounded text-xs font-semibold transition-all"

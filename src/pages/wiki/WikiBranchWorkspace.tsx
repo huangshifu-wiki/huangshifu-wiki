@@ -4,6 +4,8 @@ import { ArrowLeft } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { clsx } from 'clsx'
 import { useToast } from '../../components/Toast'
+import { useDialog } from '../../components/Dialog'
+import { FormModal } from '../../components/Modal/FormModal'
 import { apiGet, apiPost, invalidateApiCacheByPrefix } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
 import { splitTagsInput } from '../../lib/contentUtils'
@@ -13,10 +15,18 @@ import { formatDate } from '../../lib/dateUtils'
 import type { WikiItem, WikiBranchItem, WikiRevisionItem, WikiPullRequestItem } from './types'
 import { getBranchStatusText } from './types'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
-import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
+import {
+  Button,
+  Input,
+  LoadErrorState,
+  Select,
+  Skeleton,
+  Spinner,
+  TagInput,
+  Textarea,
+} from '@/src/components/ui'
 import { SmartBackLink } from '../../components/SmartBackLink'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
-import { TagInput } from '@/src/components/ui'
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
 import { hasFormChanges } from '../../utils/formDirty'
 
@@ -38,6 +48,7 @@ const WikiBranchWorkspace = () => {
 
   const [page, setPage] = useState<WikiItem | null>(null)
   const [branch, setBranch] = useState<WikiBranchItem | null>(null)
+  const [branchDetailReady, setBranchDetailReady] = useState(false)
   const [revisions, setRevisions] = useState<WikiRevisionItem[]>([])
   const [openPr, setOpenPr] = useState<WikiPullRequestItem | null>(null)
 
@@ -47,7 +58,9 @@ const WikiBranchWorkspace = () => {
   const [savingRevision, setSavingRevision] = useState(false)
   const [creatingPr, setCreatingPr] = useState(false)
   const [resolvingConflict, setResolvingConflict] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
   const { show } = useToast()
+  const dialog = useDialog()
 
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('')
@@ -68,7 +81,7 @@ const WikiBranchWorkspace = () => {
       ),
     [baseline, title, category, eventDate, tags, content, prTitle, prDescription]
   )
-  const guard = useUnsavedChangesGuard(isDirty)
+  const guard = useUnsavedChangesGuard(editorOpen && isDirty)
 
   const fieldsFromRevision = (
     revision: WikiRevisionItem | null,
@@ -109,8 +122,9 @@ const WikiBranchWorkspace = () => {
     setBaseline({ ...fields, ...pr })
   }
 
-  const fetchWorkspace = async () => {
-    if (!slug || !user) return
+  const fetchWorkspace = async (): Promise<WikiBranchItem | null> => {
+    if (!slug || !user) return null
+    setBranchDetailReady(false)
     setLoading(true)
     setLoadError(null)
     try {
@@ -123,15 +137,15 @@ const WikiBranchWorkspace = () => {
       setBranch(mine)
 
       if (!mine) {
+        setBranchDetailReady(true)
         setOpenPr(null)
         setRevisions([])
         hydrateWorkspace(fieldsFromRevision(null, currentPage), {
           prTitle: currentPage.title || '',
           prDescription: '',
         })
-        return
+        return null
       }
-
       const [branchDetail, revisionsData, prsOpen] = await Promise.all([
         apiGet<{
           branch: WikiBranchItem
@@ -154,9 +168,12 @@ const WikiBranchWorkspace = () => {
         prTitle: currentOpenPr?.title || currentPage.title || '',
         prDescription: currentOpenPr?.description || '',
       })
+      setBranchDetailReady(true)
+      return branchDetail.branch
     } catch (error) {
       console.error('Fetch wiki branch workspace error:', error)
       setLoadError(error)
+      return null
     } finally {
       setLoading(false)
     }
@@ -165,6 +182,35 @@ const WikiBranchWorkspace = () => {
   useEffect(() => {
     fetchWorkspace()
   }, [slug, user?.uid])
+  const closeEditor = async (): Promise<boolean> => {
+    if (loading || savingRevision || creatingPr || resolvingConflict) return false
+
+    if (isDirty) {
+      const confirmed = await dialog.confirm({
+        title: '放弃修改？',
+        message: '当前修改尚未保存，关闭后将丢失这些更改。',
+        confirmText: '放弃修改',
+        variant: 'warning',
+      })
+      if (!confirmed) return false
+      if (baseline) hydrateWorkspace(baseline, baseline)
+      guard.markClean()
+    }
+
+    setEditorOpen(false)
+    return true
+  }
+
+  const openEditor = () => {
+    if (!branch || !branchDetailReady || !baseline || loading) return
+    hydrateWorkspace(baseline, baseline)
+    setEditorOpen(true)
+  }
+
+  const handleRefresh = async () => {
+    if (editorOpen && isDirty && !(await closeEditor())) return
+    await fetchWorkspace()
+  }
 
   const handleCreateBranch = async () => {
     if (!slug || !user || isBanned || creatingBranch) return
@@ -172,7 +218,8 @@ const WikiBranchWorkspace = () => {
       setCreatingBranch(true)
       await apiPost<{ branch: WikiBranchItem }>(`/api/wiki/${slug}/branches`)
       invalidateApiCacheByPrefix(`/api/wiki/${slug}`)
-      await fetchWorkspace()
+      const refreshedBranch = await fetchWorkspace()
+      if (refreshedBranch) setEditorOpen(true)
     } catch (error) {
       console.error('Create branch error:', error)
       show(getErrorMessage(error, '创建分支失败，请稍后重试'), { variant: 'error' })
@@ -361,7 +408,7 @@ const WikiBranchWorkspace = () => {
             </Link>
             {isAdmin && (
               <button
-                onClick={fetchWorkspace}
+                onClick={() => void handleRefresh()}
                 className="px-5 py-2 border border-border text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
               >
                 刷新
@@ -369,7 +416,7 @@ const WikiBranchWorkspace = () => {
             )}
           </div>
         </div>
-        {loadError && <LoadErrorState error={loadError} onRetry={() => void fetchWorkspace()} />}
+        {loadError && <LoadErrorState error={loadError} onRetry={() => void handleRefresh()} />}
         {loading && (
           <div className="flex justify-end">
             <Spinner size="sm" label="工作区刷新中" />
@@ -404,63 +451,136 @@ const WikiBranchWorkspace = () => {
               <span className="text-xs text-text-muted">
                 最近更新：{formatDate(branch.updatedAt, 'yyyy-MM-dd HH:mm')}
               </span>
+              <button
+                type="button"
+                onClick={openEditor}
+                disabled={loading || !branchDetailReady}
+                className="ml-auto px-5 py-2 border border-border text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                编辑分支
+              </button>
             </div>
           ) : (
             <div className="mt-5">
               <button
                 onClick={handleCreateBranch}
-                disabled={creatingBranch || isBanned}
+                disabled={creatingBranch || isBanned || loading}
                 className="px-6 py-2 theme-button-primary text-sm rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {creatingBranch ? '创建中...' : '创建我的分支'}
               </button>
             </div>
           )}
+          {openPr && (
+            <div className="mt-4 p-4 rounded border border-brand-gold/20 bg-brand-gold/10">
+              <p className="text-sm text-text-primary mb-2">当前已有一个进行中的 PR。</p>
+              <Link
+                to={`/wiki/${slug}/prs/${openPr.id}`}
+                className="text-sm font-bold text-brand-gold hover:underline"
+              >
+                查看 PR：{openPr.title}
+              </Link>
+            </div>
+          )}
         </div>
 
         {branch && (
-          <>
-            <div className="bg-surface rounded border border-border p-6 sm:p-8 space-y-5">
+          <div className="bg-surface rounded border border-border p-6 sm:p-8">
+            <h2 className="text-xl font-serif font-bold text-text-primary mb-4">分支修订历史</h2>
+            {revisions.length ? (
+              <div className="space-y-3">
+                {revisions.map((revision, index) => (
+                  <div
+                    key={revision.id}
+                    className="p-4 rounded bg-surface-alt/40 border border-border"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="min-w-0 text-sm font-bold text-text-primary line-clamp-1">
+                        {revision.title}
+                      </p>
+                      <span className="flex-shrink-0 text-[11px] text-text-muted">
+                        #{revisions.length - index}
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-muted mt-1">
+                      {revision.editorName} ·{' '}
+                      {formatDate(revision.createdAt, 'yyyy-MM-dd HH:mm:ss')}
+                    </p>
+                    <p className="text-xs text-text-muted mt-2 line-clamp-2">
+                      {(revision.content || '').slice(0, 160) || '无内容摘要'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-text-muted italic">暂无修订历史</p>
+            )}
+          </div>
+        )}
+
+        {branch && (
+          <FormModal
+            open={editorOpen}
+            onClose={() => void closeEditor()}
+            title="编辑百科分支"
+            maxWidth="max-w-6xl"
+            loading={savingRevision || creatingPr || resolvingConflict}
+          >
+            <div className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-widest text-brand-gold/60">
+                  <label
+                    htmlFor="wiki-branch-title"
+                    className="text-xs font-bold uppercase tracking-widest text-brand-gold/60"
+                  >
                     标题 <span className="theme-text-error">*</span>
                   </label>
-                  <input
+                  <Input
+                    id="wiki-branch-title"
                     type="text"
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
-                    className="theme-input w-full mt-1 px-4 py-3 rounded text-sm"
+                    className="mt-1"
+                    required
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-widest text-brand-gold/60">
+                  <label
+                    htmlFor="wiki-branch-category"
+                    className="text-xs font-bold uppercase tracking-widest text-brand-gold/60"
+                  >
                     分类 <span className="theme-text-error">*</span>
                   </label>
-                  <select
+                  <Select
+                    id="wiki-branch-category"
                     value={category}
                     onChange={(event) => setCategory(event.target.value)}
-                    className="theme-input w-full mt-1 px-4 py-3 rounded text-sm"
+                    className="mt-1"
+                    required
                   >
                     {categories.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-widest text-brand-gold/60">
+                  <label
+                    htmlFor="wiki-branch-event-date"
+                    className="text-xs font-bold uppercase tracking-widest text-brand-gold/60"
+                  >
                     事件日期
                   </label>
-                  <input
+                  <Input
+                    id="wiki-branch-event-date"
                     type="date"
                     value={eventDate}
                     onChange={(event) => setEventDate(event.target.value)}
-                    className="theme-input w-full mt-1 px-4 py-3 rounded text-sm"
+                    className="mt-1"
                   />
                 </div>
                 <div>
@@ -482,127 +602,100 @@ const WikiBranchWorkspace = () => {
               </div>
 
               <div>
-                <label className="text-xs font-bold uppercase tracking-widest text-brand-gold/60">
+                <label
+                  htmlFor="wiki-branch-content"
+                  className="text-xs font-bold uppercase tracking-widest text-brand-gold/60"
+                >
                   内容{' '}
                   <span className="theme-text-error" aria-hidden="true">
                     *
                   </span>
                 </label>
-                <textarea
+                <Textarea
+                  id="wiki-branch-content"
                   value={content}
                   onChange={(event) => setContent(event.target.value)}
                   rows={18}
-                  className="theme-input w-full mt-1 px-4 py-3 rounded font-mono text-sm"
+                  className="mt-1 font-mono"
+                  required
                 />
               </div>
 
               <div className="flex flex-wrap justify-end gap-3">
-                <button
-                  onClick={handleSaveRevision}
+                <Button
+                  onClick={() => void handleSaveRevision()}
                   disabled={savingRevision || isBanned}
-                  className="px-6 py-2 rounded theme-button-primary text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   {savingRevision ? '保存中...' : '保存分支版本'}
-                </button>
+                </Button>
                 {branch.status === 'conflict' && (
-                  <button
-                    onClick={handleResolveConflict}
+                  <Button
+                    variant="danger"
+                    onClick={() => void handleResolveConflict()}
                     disabled={resolvingConflict || isBanned}
-                    className="px-6 py-2 rounded theme-status-error text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {resolvingConflict ? '处理中...' : '解决冲突并重开 PR'}
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
 
-            <div className="bg-surface rounded border border-border p-6 sm:p-8 space-y-4">
+            <div className="space-y-4 border-t border-border pt-5">
               <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] flex items-center gap-2">
                 提交 Pull Request
               </h2>
 
               {openPr ? (
                 <div className="p-4 rounded border border-brand-gold/20 bg-brand-gold/10">
-                  <p className="text-sm text-text-primary mb-2">当前已有一个进行中的 PR。</p>
-                  <Link
-                    to={`/wiki/${slug}/prs/${openPr.id}`}
-                    className="text-sm font-bold text-brand-gold hover:underline"
-                  >
-                    查看 PR：{openPr.title}
-                  </Link>
+                  <p className="text-sm text-text-primary">
+                    当前已有一个进行中的 PR，请从工作区概要查看进度。
+                  </p>
                 </div>
               ) : (
                 <>
                   <div>
-                    <label className="text-xs font-bold uppercase tracking-widest text-brand-gold/60">
+                    <label
+                      htmlFor="wiki-branch-pr-title"
+                      className="text-xs font-bold uppercase tracking-widest text-brand-gold/60"
+                    >
                       PR 标题{' '}
                       <span className="theme-text-error" aria-hidden="true">
                         *
                       </span>
                     </label>
-                    <input
+                    <Input
+                      id="wiki-branch-pr-title"
                       type="text"
                       value={prTitle}
                       onChange={(event) => setPrTitle(event.target.value)}
-                      className="theme-input w-full mt-1 px-4 py-3 rounded text-sm"
+                      className="mt-1"
+                      required
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold uppercase tracking-widest text-brand-gold/60">
+                    <label
+                      htmlFor="wiki-branch-pr-description"
+                      className="text-xs font-bold uppercase tracking-widest text-brand-gold/60"
+                    >
                       说明（可选）
                     </label>
-                    <textarea
+                    <Textarea
+                      id="wiki-branch-pr-description"
                       value={prDescription}
                       onChange={(event) => setPrDescription(event.target.value)}
                       rows={4}
-                      className="theme-input w-full mt-1 px-4 py-3 rounded text-sm"
+                      className="mt-1"
                     />
                   </div>
                   <div className="flex justify-end">
-                    <button
-                      onClick={handleCreatePr}
-                      disabled={creatingPr || isBanned}
-                      className="px-6 py-2 rounded theme-button-primary text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
+                    <Button onClick={() => void handleCreatePr()} disabled={creatingPr || isBanned}>
                       {creatingPr ? '提交中...' : '创建 PR'}
-                    </button>
+                    </Button>
                   </div>
                 </>
               )}
             </div>
-
-            <div className="bg-surface rounded border border-border p-6 sm:p-8">
-              <h2 className="text-xl font-serif font-bold text-text-primary mb-4">分支修订历史</h2>
-              {revisions.length ? (
-                <div className="space-y-3">
-                  {revisions.map((revision, index) => (
-                    <div
-                      key={revision.id}
-                      className="p-4 rounded bg-surface-alt/40 border border-border"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="min-w-0 text-sm font-bold text-text-primary line-clamp-1">
-                          {revision.title}
-                        </p>
-                        <span className="flex-shrink-0 text-[11px] text-text-muted">
-                          #{revisions.length - index}
-                        </span>
-                      </div>
-                      <p className="text-xs text-text-muted mt-1">
-                        {revision.editorName} ·{' '}
-                        {formatDate(revision.createdAt, 'yyyy-MM-dd HH:mm:ss')}
-                      </p>
-                      <p className="text-xs text-text-muted mt-2 line-clamp-2">
-                        {(revision.content || '').slice(0, 160) || '无内容摘要'}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-text-muted italic">暂无修订历史</p>
-              )}
-            </div>
-          </>
+          </FormModal>
         )}
       </div>
     </div>

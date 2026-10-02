@@ -53,6 +53,10 @@
 | `src/components/search/` | 搜索框、筛选和结果卡片                                      |
 | `src/components/charts/` | ECharts 相关组件                                            |
 
+内容新建与编辑由 `src/pages/ContentEditorRoutes.tsx` 承载路由弹窗，使用 `contentEditorRoutes.ts` 和 `useContentEditorNavigation.ts` 保留来源页面、处理直达回退与保存后的详情刷新；个人设置和系统设置仍为独立页面。
+
+后台的 `/admin/*` 前缀由 `AdminRoutes` 匹配；`App` 的背景路由承载层使用根路径 `/*`，不重复消耗后台前缀。
+
 ## 关键配置
 
 | 文件                             | 说明                        |

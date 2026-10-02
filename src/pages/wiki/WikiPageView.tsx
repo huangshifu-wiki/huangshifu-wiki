@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useParams, useNavigate } from 'react-router-dom'
 import {
   Clock,
   ArrowLeft,
@@ -91,6 +91,7 @@ const SidebarHeading = ({ children }: { children: React.ReactNode }) => (
 const WikiPageView = () => {
   const { slug } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const [page, setPage] = useState<WikiItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
@@ -310,6 +311,7 @@ const WikiPageView = () => {
               {canEditPage && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/edit`}
+                  state={{ editorBackground: location }}
                   data-pressable
                   className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
                 >

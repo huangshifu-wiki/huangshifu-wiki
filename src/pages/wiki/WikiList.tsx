@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { Book, Plus } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { useUserPreferences } from '../../context/UserPreferencesContext'
@@ -23,6 +23,7 @@ import { useWikiCategories } from '../../hooks/useWikiCategories'
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 
 const WikiList = () => {
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const category = searchParams.get('category') || 'all'
   const tag = searchParams.get('tag')
@@ -150,6 +151,7 @@ const WikiList = () => {
                 {user && !isBanned && (
                   <Link
                     to="/wiki/new"
+                    state={{ editorBackground: location }}
                     data-pressable
                     className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
                   >

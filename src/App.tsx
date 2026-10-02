@@ -25,6 +25,8 @@ import {
 } from './lib/miniProgram'
 import { getSetupStatus, type SetupStatus } from './lib/setup'
 import { getRouteSkeletonVariant } from './lib/routeSkeleton'
+import { getContentBackgroundLocation } from './lib/contentEditorRoutes'
+import { ContentEditorRoutes } from './pages/ContentEditorRoutes'
 
 const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.default })))
 const Wiki = lazy(() => import('./pages/wiki').then((m) => ({ default: m.default })))
@@ -39,7 +41,6 @@ const EventDetail = lazy(() => import('./pages/EventDetail').then((m) => ({ defa
 const GalleryDetail = lazy(() =>
   import('./pages/GalleryDetail').then((m) => ({ default: m.default }))
 )
-const GalleryEdit = lazy(() => import('./pages/GalleryEdit').then((m) => ({ default: m.default })))
 const AlbumDetail = lazy(() => import('./pages/AlbumDetail').then((m) => ({ default: m.default })))
 const MusicDetail = lazy(() => import('./pages/MusicDetail').then((m) => ({ default: m.default })))
 const Search = lazy(() => import('./pages/Search').then((m) => ({ default: m.default })))
@@ -67,9 +68,12 @@ const MainLayout = () => {
   const { user } = useAuth()
   const { isOnline } = useNetworkStatus()
   const location = useLocation()
-  const path = location.pathname
+  const viewLocation = getContentBackgroundLocation(location)
+  const path = viewLocation.pathname
+  const backgroundState = viewLocation.state as { editorSaved?: boolean } | null
+  const backgroundRouteKey = backgroundState?.editorSaved ? viewLocation.key : 'content-page'
   // 布局级 SEO：详情路径返回 null，由详情组件自行管理元数据
-  const layoutSeo = getStaticRouteSeo(path, location.search)
+  const layoutSeo = getStaticRouteSeo(path, viewLocation.search)
   const [setupStatus, setSetupStatus] = React.useState<SetupStatus | null>(null)
   const [setupStatusLoaded, setSetupStatusLoaded] = React.useState(false)
 
@@ -135,8 +139,11 @@ const MainLayout = () => {
       <>
         {layoutSeo && <Seo metadata={layoutSeo} />}
         <Suspense fallback={<PageSkeleton />}>
-          <AdminRoutes />
+          <Routes key={backgroundRouteKey} location={viewLocation}>
+            <Route path="/*" element={<AdminRoutes />} />
+          </Routes>
         </Suspense>
+        <ContentEditorRoutes />
       </>
     )
   }
@@ -174,13 +181,11 @@ const MainLayout = () => {
       >
         <ErrorBoundary>
           <Suspense fallback={<PageSkeleton variant={getRouteSkeletonVariant(path)} />}>
-            <Routes>
+            <Routes key={backgroundRouteKey} location={viewLocation}>
               <Route path="/" element={<Home />} />
               <Route path="/wiki/*" element={<Wiki />} />
               <Route path="/forum/*" element={<Forum />} />
               <Route path="/gallery" element={<Gallery />} />
-              <Route path="/gallery/new" element={<GalleryEdit />} />
-              <Route path="/gallery/:galleryId/edit" element={<GalleryEdit />} />
               <Route path="/gallery/:galleryId" element={<GalleryDetail />} />
               <Route path="/events" element={<Events />} />
               <Route path="/events/:slug" element={<EventDetail />} />
@@ -212,6 +217,7 @@ const MainLayout = () => {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          <ContentEditorRoutes />
         </ErrorBoundary>
       </main>
       <GlobalMusicPlayer />

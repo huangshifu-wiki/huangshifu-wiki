@@ -222,7 +222,7 @@ describe('活动编辑页时间状态', () => {
 })
 
 describe('新增活动路由', () => {
-  it('保持完整页面创建并在保存后返回活动管理', async () => {
+  it('新增活动以弹窗创建并在保存后返回活动管理', async () => {
     vi.clearAllMocks()
     vi.mocked(apiPost).mockResolvedValue({ event: eventFixture } as never)
     render(
@@ -233,6 +233,7 @@ describe('新增活动路由', () => {
         </Routes>
       </MemoryRouter>
     )
+    expect(screen.getByRole('dialog', { name: '新增活动' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '新增活动' })).toBeInTheDocument()
     fireEvent.change(screen.getByPlaceholderText('活动标题'), {
       target: { value: '新活动' },

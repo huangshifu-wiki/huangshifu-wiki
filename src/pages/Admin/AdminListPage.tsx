@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import {
   Ban,
   Book,
@@ -39,7 +39,10 @@ import { SmartImage } from '../../components/SmartImage'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
 import type { AdminDataListResponse } from '../../types/api'
-import { Button, Checkbox, LinkButton, LoadErrorState } from '@/src/components/ui'
+import { Button, Checkbox, Input, LinkButton, LoadErrorState } from '@/src/components/ui'
+import { FormModal } from '../../components/Modal/FormModal'
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../../utils/formDirty'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 
 const AdminEventEdit = React.lazy(() => import('./AdminEventEdit'))
@@ -523,6 +526,7 @@ const invalidateWikiCategoryCaches = () => {
 }
 
 export const AdminListPage = ({ type }: { type: ListType }) => {
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const cfg = configMap[type]
   const Icon = cfg.icon
@@ -535,7 +539,10 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   >({})
   const [createSaving, setCreateSaving] = useState(false)
   const [categorySaving, setCategorySaving] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createBaseline, setCreateBaseline] = useState<Record<string, unknown> | null>(null)
   const [editingCategory, setEditingCategory] = useState<AdminDataItem | null>(null)
+  const [categoryBaseline, setCategoryBaseline] = useState<AdminDataItem | null>(null)
   const [editingEventId, setEditingEventId] = useState<string | null>(null)
   const showDeleted = searchParams.get('includeDeleted') === 'true'
   const dialog = useDialog()
@@ -552,6 +559,24 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const requestIdRef = useRef(0)
   const filterScopeRef = useRef(`${type}:${showDeleted}`)
   const [newItem, setNewItem] = useState<any>({})
+  const createClosePendingRef = useRef(false)
+  const categoryClosePendingRef = useRef(false)
+  const createSubmitPendingRef = useRef(false)
+  const categorySubmitPendingRef = useRef(false)
+  const createInitialItem = (listType: ListType): Record<string, unknown> =>
+    listType === 'sections'
+      ? { name: '', description: '', order: 0 }
+      : listType === 'wiki-categories'
+        ? { id: '', name: '', description: '', order: 0, requiresAdminEdit: false }
+        : { content: '', link: '', active: true }
+  const createDirty =
+    createOpen && createBaseline !== null && hasFormChanges(newItem, createBaseline)
+  const categoryDirty =
+    editingCategory !== null &&
+    categoryBaseline !== null &&
+    hasFormChanges(editingCategory, categoryBaseline)
+  const createGuard = useUnsavedChangesGuard(createDirty)
+  const categoryGuard = useUnsavedChangesGuard(categoryDirty)
 
   const invalidateCurrentDataCaches = () => {
     if (type === 'wiki-categories') {
@@ -608,6 +633,21 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     pagination.setPage(1)
     setTotal(undefined)
   }, [type, showDeleted])
+  useEffect(() => {
+    setCreateOpen(false)
+    setCreateBaseline(null)
+    setNewItem(createInitialItem(type))
+    setEditingCategory(null)
+    setCategoryBaseline(null)
+    setCreateSaving(false)
+    setCategorySaving(false)
+    createClosePendingRef.current = false
+    categoryClosePendingRef.current = false
+    createSubmitPendingRef.current = false
+    categorySubmitPendingRef.current = false
+    createGuard.markClean()
+    categoryGuard.markClean()
+  }, [type])
 
   useEffect(() => {
     void fetchData()
@@ -769,12 +809,13 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           validateUrl(newItem.link, 'link', '公告链接', CONTENT_LIMITS.announcement.link)
 
   const handleCreate = async () => {
-    if (createSaving) return
+    if (createSubmitPendingRef.current) return
     const validationError = validateNewItem()
     if (validationError) {
       show(validationError.message, { variant: 'error' })
       return
     }
+    createSubmitPendingRef.current = true
     setCreateSaving(true)
     try {
       if (type === 'sections') {
@@ -795,20 +836,24 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           active: newItem.active ?? true,
         })
       }
-      setNewItem({})
+      createGuard.markClean()
+      setCreateBaseline(null)
+      setCreateOpen(false)
+      setNewItem(createInitialItem(type))
       invalidateCurrentDataCaches()
       show('创建成功', { variant: 'success' })
       await fetchData({ silent: true })
     } catch (e) {
       show(getErrorMessage(e, '创建失败'), { variant: 'error' })
     } finally {
+      createSubmitPendingRef.current = false
       setCreateSaving(false)
     }
   }
 
   const handleUpdateWikiCategory = async () => {
     if (type !== 'wiki-categories' || !editingCategory?.id) return
-    if (categorySaving) return
+    if (categorySubmitPendingRef.current) return
     const validationError =
       validateRequiredText(editingCategory.name, 'name', '分类名称') ||
       (Number.isFinite(Number(editingCategory.order ?? 0)) &&
@@ -825,11 +870,14 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       show(validationError.message, { variant: 'error' })
       return
     }
+    categorySubmitPendingRef.current = true
     setCategorySaving(true)
     try {
       await apiPatch(`${WIKI_CATEGORIES_ADMIN_PATH}/${editingCategory.id}`, {
         ...getWikiCategoryPayload(editingCategory),
       })
+      categoryGuard.markClean()
+      setCategoryBaseline(null)
       setEditingCategory(null)
       invalidateCurrentDataCaches()
       show('更新成功', { variant: 'success' })
@@ -837,7 +885,63 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     } catch (e) {
       show(getErrorMessage(e, '更新失败'), { variant: 'error' })
     } finally {
+      categorySubmitPendingRef.current = false
       setCategorySaving(false)
+    }
+  }
+
+  const openCreateModal = () => {
+    const initial = createInitialItem(type)
+    setNewItem(initial)
+    setCreateBaseline(initial)
+    setCreateOpen(true)
+  }
+
+  const closeCreateModal = async () => {
+    if (createSaving || !createOpen || createClosePendingRef.current) return
+    createClosePendingRef.current = true
+    try {
+      if (createDirty) {
+        const confirmed = await dialog.confirm({
+          title: '放弃修改？',
+          message: '当前修改尚未保存，关闭后将丢失这些更改。',
+          confirmText: '放弃修改',
+          variant: 'warning',
+        })
+        if (!confirmed) return
+      }
+      createGuard.markClean()
+      setCreateBaseline(null)
+      setNewItem(createInitialItem(type))
+      setCreateOpen(false)
+    } finally {
+      createClosePendingRef.current = false
+    }
+  }
+
+  const openCategoryModal = (item: AdminDataItem) => {
+    setEditingCategory(item)
+    setCategoryBaseline(item)
+  }
+
+  const closeCategoryModal = async () => {
+    if (categorySaving || !editingCategory || categoryClosePendingRef.current) return
+    categoryClosePendingRef.current = true
+    try {
+      if (categoryDirty) {
+        const confirmed = await dialog.confirm({
+          title: '放弃修改？',
+          message: '当前修改尚未保存，关闭后将丢失这些更改。',
+          confirmText: '放弃修改',
+          variant: 'warning',
+        })
+        if (!confirmed) return
+      }
+      categoryGuard.markClean()
+      setCategoryBaseline(null)
+      setEditingCategory(null)
+    } finally {
+      categoryClosePendingRef.current = false
     }
   }
 
@@ -900,7 +1004,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         )}
         {type === 'wiki-categories' && !item.isDeleted && !isPending && (
           <Button
-            onClick={() => setEditingCategory(item)}
+            onClick={() => openCategoryModal(item)}
             variant="warning"
             soft
             size="sm"
@@ -972,6 +1076,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             {type === 'events' && (
               <Link
                 to="/admin/events/new"
+                state={{ editorBackground: location }}
                 data-pressable
                 className="inline-flex items-center rounded theme-button-primary px-4 py-2 text-sm transition-all"
               >
@@ -1007,78 +1112,106 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         )}
 
         {cfg.hasCreate && (
-          <div className="rounded border border-border bg-surface p-5">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
-              <Plus size={16} /> 新增
-            </h3>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="flex justify-end">
+            <Button onClick={openCreateModal} variant="primary" leftIcon={<Plus size={14} />}>
+              新增
+            </Button>
+          </div>
+        )}
+
+        {cfg.hasCreate && (
+          <FormModal
+            open={createOpen}
+            onClose={() => void closeCreateModal()}
+            title={
+              type === 'sections'
+                ? '新增版块'
+                : type === 'wiki-categories'
+                  ? '新增百科分类'
+                  : '新增公告'
+            }
+            onSubmit={(event) => {
+              event.preventDefault()
+              void handleCreate()
+            }}
+            submitText="创建"
+            cancelText="取消"
+            loading={createSaving}
+            maxWidth="max-w-2xl"
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {type === 'sections' && (
                 <>
                   <label className="grid gap-1 text-sm text-text-secondary">
-                    <span>
-                      名称 <span className="theme-text-error">*</span>
-                    </span>
-                    <input
-                      type="text"
+                    名称 <span className="theme-text-error">*</span>
+                    <Input
+                      aria-label="名称"
                       value={newItem.name || ''}
-                      onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                      className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                      onChange={(event) => setNewItem({ ...newItem, name: event.target.value })}
                     />
                   </label>
-                  <input
-                    type="text"
-                    placeholder="描述"
-                    value={newItem.description || ''}
-                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="number"
-                    placeholder="排序"
-                    value={newItem.order || 0}
-                    onChange={(e) => setNewItem({ ...newItem, order: Number(e.target.value) })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    描述
+                    <Input
+                      aria-label="描述"
+                      value={newItem.description || ''}
+                      onChange={(event) =>
+                        setNewItem({ ...newItem, description: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    排序
+                    <Input
+                      aria-label="排序"
+                      type="number"
+                      value={newItem.order ?? 0}
+                      onChange={(event) =>
+                        setNewItem({ ...newItem, order: Number(event.target.value) })
+                      }
+                    />
+                  </label>
                 </>
               )}
               {type === 'wiki-categories' && (
                 <>
                   <label className="grid gap-1 text-sm text-text-secondary">
-                    <span>
-                      分类 ID <span className="theme-text-error">*</span>
-                    </span>
-                    <input
-                      type="text"
+                    分类 ID <span className="theme-text-error">*</span>
+                    <Input
+                      aria-label="分类 ID"
                       value={newItem.id || ''}
-                      onChange={(e) => setNewItem({ ...newItem, id: e.target.value })}
-                      className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                      onChange={(event) => setNewItem({ ...newItem, id: event.target.value })}
                     />
                   </label>
                   <label className="grid gap-1 text-sm text-text-secondary">
-                    <span>
-                      名称 <span className="theme-text-error">*</span>
-                    </span>
-                    <input
-                      type="text"
+                    名称 <span className="theme-text-error">*</span>
+                    <Input
+                      aria-label="名称"
                       value={newItem.name || ''}
-                      onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                      className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                      onChange={(event) => setNewItem({ ...newItem, name: event.target.value })}
                     />
                   </label>
-                  <input
-                    type="text"
-                    placeholder="描述"
-                    value={newItem.description || ''}
-                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="number"
-                    placeholder="排序"
-                    value={newItem.order || 0}
-                    onChange={(e) => setNewItem({ ...newItem, order: Number(e.target.value) })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    描述
+                    <Input
+                      aria-label="描述"
+                      value={newItem.description || ''}
+                      onChange={(event) =>
+                        setNewItem({ ...newItem, description: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    排序
+                    <Input
+                      aria-label="排序"
+                      type="number"
+                      value={newItem.order ?? 0}
+                      onChange={(event) =>
+                        setNewItem({ ...newItem, order: Number(event.target.value) })
+                      }
+                    />
+                  </label>
                   <div className="rounded border border-border bg-surface-alt px-4 py-2">
                     <Checkbox
                       checked={Boolean(newItem.requiresAdminEdit)}
@@ -1093,67 +1226,73 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               {type === 'announcements' && (
                 <>
                   <label className="grid gap-1 text-sm text-text-secondary md:col-span-2">
-                    <span>
-                      公告内容 <span className="theme-text-error">*</span>
-                    </span>
-                    <input
-                      type="text"
+                    公告内容 <span className="theme-text-error">*</span>
+                    <Input
+                      aria-label="公告内容"
                       value={newItem.content || ''}
-                      onChange={(e) => setNewItem({ ...newItem, content: e.target.value })}
-                      className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                      onChange={(event) => setNewItem({ ...newItem, content: event.target.value })}
                     />
                   </label>
-                  <input
-                    type="text"
-                    placeholder="跳转链接 (可选)"
-                    value={newItem.link || ''}
-                    onChange={(e) => setNewItem({ ...newItem, link: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    跳转链接（可选）
+                    <Input
+                      aria-label="跳转链接（可选）"
+                      value={newItem.link || ''}
+                      onChange={(event) => setNewItem({ ...newItem, link: event.target.value })}
+                    />
+                  </label>
                 </>
               )}
-              <Button
-                onClick={handleCreate}
-                loading={createSaving}
-                loadingText="创建中..."
-                variant="primary"
-              >
-                添加
-              </Button>
             </div>
-          </div>
+          </FormModal>
         )}
 
-        {type === 'wiki-categories' && editingCategory && (
-          <div className="rounded border border-border bg-surface p-5">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
-              <Edit3 size={16} /> 编辑分类
-            </h3>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_120px_160px_auto_auto]">
-              <input
-                type="text"
-                value={editingCategory.name || ''}
-                onChange={(event) =>
-                  setEditingCategory({ ...editingCategory, name: event.target.value })
-                }
-                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-              />
-              <input
-                type="text"
-                value={editingCategory.description || ''}
-                onChange={(event) =>
-                  setEditingCategory({ ...editingCategory, description: event.target.value })
-                }
-                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-              />
-              <input
-                type="number"
-                value={toNumber(editingCategory.order)}
-                onChange={(event) =>
-                  setEditingCategory({ ...editingCategory, order: Number(event.target.value) })
-                }
-                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-              />
+        <FormModal
+          open={type === 'wiki-categories' && editingCategory !== null}
+          onClose={() => void closeCategoryModal()}
+          title="编辑百科分类"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void handleUpdateWikiCategory()
+          }}
+          submitText="保存"
+          cancelText="取消"
+          loading={categorySaving}
+          maxWidth="max-w-2xl"
+        >
+          {editingCategory && (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="grid gap-1 text-sm text-text-secondary">
+                名称
+                <Input
+                  aria-label="名称"
+                  value={editingCategory.name || ''}
+                  onChange={(event) =>
+                    setEditingCategory({ ...editingCategory, name: event.target.value })
+                  }
+                />
+              </label>
+              <label className="grid gap-1 text-sm text-text-secondary">
+                描述
+                <Input
+                  aria-label="描述"
+                  value={editingCategory.description || ''}
+                  onChange={(event) =>
+                    setEditingCategory({ ...editingCategory, description: event.target.value })
+                  }
+                />
+              </label>
+              <label className="grid gap-1 text-sm text-text-secondary">
+                排序
+                <Input
+                  aria-label="排序"
+                  type="number"
+                  value={toNumber(editingCategory.order)}
+                  onChange={(event) =>
+                    setEditingCategory({ ...editingCategory, order: Number(event.target.value) })
+                  }
+                />
+              </label>
               <div className="rounded border border-border bg-surface-alt px-4 py-2">
                 <Checkbox
                   checked={Boolean(editingCategory.requiresAdminEdit)}
@@ -1166,24 +1305,9 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                   label={<span className="text-text-secondary">仅管理员编辑</span>}
                 />
               </div>
-              <Button
-                onClick={() => void handleUpdateWikiCategory()}
-                loading={categorySaving}
-                loadingText="保存中..."
-                variant="primary"
-              >
-                保存
-              </Button>
-              <button
-                type="button"
-                onClick={() => setEditingCategory(null)}
-                className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
-              >
-                取消
-              </button>
             </div>
-          </div>
-        )}
+          )}
+        </FormModal>
 
         <div className="overflow-hidden rounded border border-border bg-surface">
           <div className="overflow-x-auto">

@@ -1,12 +1,8 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import {
-  BookDangerZone,
-  BookEditorHeader,
-  BookEditorShell,
-  bookCompactInputClass,
-} from '../../components/BookEditor'
+import { BookDangerZone, BookEditorShell, bookCompactInputClass } from '../../components/BookEditor'
+import { FormModal } from '../Modal/FormModal'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { useI18n } from '../../lib/i18n'
@@ -26,6 +22,7 @@ import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
 import { hasFormChanges } from '../../utils/formDirty'
+import { useContentEditorNavigation } from '../../hooks/useContentEditorNavigation'
 import { getWikiSaveResultText } from '../../lib/wikiWriteText'
 import { Trash2 } from '@/src/components/icons'
 import WikiEditorForm from './WikiEditorForm'
@@ -34,7 +31,7 @@ import WikiEditorMetaSidebar from './WikiEditorMetaSidebar'
 import type { WikiItemWithRelations, WikiRelationRecord } from './types'
 import type { WikiPageMetadata } from '../../lib/wikiLinkParser'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
-import { Button, Textarea } from '@/src/components/ui'
+import { Button, LoadErrorState, Textarea } from '@/src/components/ui'
 
 const EMPTY_WIKI_FORM = {
   title: '',
@@ -51,10 +48,10 @@ const EMPTY_WIKI_FORM = {
 const WikiEditor = () => {
   const { slug } = useParams()
   const isNew = !slug || slug === 'new'
-  const navigate = useNavigate()
   const { user, isAdmin, isBanned } = useAuth()
   const { t } = useI18n()
   const dialog = useDialog()
+  const { closeEditor, navigateAfterSave } = useContentEditorNavigation()
   const { categories, canEditCategory } = useWikiCategories()
   const tagSuggestions = useTagSuggestions('wiki')
 
@@ -63,6 +60,8 @@ const WikiEditor = () => {
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
+  const [loading, setLoading] = useState(!isNew)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const { show } = useToast()
 
   // 基线在回填/默认分类落定后建立，避免加载期误判为已修改
@@ -83,32 +82,45 @@ const WikiEditor = () => {
     }
   }, [categories, formData.category, isNew])
 
-  useEffect(() => {
-    if (!isNew) {
-      const fetchPage = async () => {
-        try {
-          const response = await apiGet<{ page: WikiItemWithRelations }>(`/api/wiki/${slug}`)
-          const data = response.page
-          const nextFormData = {
-            title: data.title,
-            slug: data.slug,
-            category: data.category,
-            content: data.content,
-            tags: data.tags?.join(', ') || '',
-            eventDate: data.eventDate || '',
-            relations: (data.relations as WikiRelationRecord[]) || [],
-            locationCode: data.locationCode || '',
-            locationName: data.locationDetail || data.locationName || '',
-          }
-          setFormData(nextFormData)
-          setBaseline(nextFormData)
-        } catch (error) {
-          console.error('Error fetching wiki page for edit:', error)
-        }
-      }
-      fetchPage()
+  const loadPage = useCallback(async () => {
+    if (isNew || !slug) {
+      setLoading(false)
+      setLoadError(null)
+      return
     }
-  }, [slug, isNew])
+
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const response = await apiGet<{ page: WikiItemWithRelations }>(`/api/wiki/${slug}`)
+      if (!response.page) {
+        throw new Error('百科页面不存在或无法访问')
+      }
+      const data = response.page
+      const nextFormData = {
+        title: data.title,
+        slug: data.slug,
+        category: data.category,
+        content: data.content,
+        tags: data.tags?.join(', ') || '',
+        eventDate: data.eventDate || '',
+        relations: (data.relations as WikiRelationRecord[]) || [],
+        locationCode: data.locationCode || '',
+        locationName: data.locationDetail || data.locationName || '',
+      }
+      setFormData(nextFormData)
+      setBaseline(nextFormData)
+    } catch (error) {
+      console.error('Error fetching wiki page for edit:', error)
+      setLoadError(error)
+    } finally {
+      setLoading(false)
+    }
+  }, [isNew, slug])
+
+  useEffect(() => {
+    void loadPage()
+  }, [loadPage])
 
   // 加载关联元数据
   useEffect(() => {
@@ -135,7 +147,7 @@ const WikiEditor = () => {
   )
 
   const handleSubmit = async (status: 'draft' | 'pending') => {
-    if (!user) return
+    if (!user || loading || loadError || (!isNew && baseline === null)) return
     if (isBanned) {
       show(t('wiki.bannedCannotEdit'), { variant: 'error' })
       return
@@ -197,8 +209,9 @@ const WikiEditor = () => {
         show(getWikiSaveResultText(t, data.page.status as 'draft' | 'pending' | 'published'), {
           variant: 'success',
         })
+        invalidateApiCacheByPrefix('/api/wiki')
         guard.markClean()
-        navigate(`/wiki/${data.page.slug}`)
+        navigateAfterSave(`/wiki/${data.page.slug}`)
         return
       }
 
@@ -211,8 +224,9 @@ const WikiEditor = () => {
         variant: 'success',
       })
       invalidateApiCache(`GET|/api/wiki/${pageSlug}|`)
+      invalidateApiCacheByPrefix('/api/wiki')
       guard.markClean()
-      navigate(`/wiki/${data.page.slug}`)
+      navigateAfterSave(`/wiki/${data.page.slug}`)
       return
     } catch (e) {
       console.error('Error saving wiki:', e)
@@ -265,7 +279,7 @@ const WikiEditor = () => {
       invalidateApiCacheByPrefix('/api/wiki')
       show(t('wiki.deleteSuccess'), { variant: 'success' })
       guard.markClean()
-      navigate('/wiki')
+      navigateAfterSave('/wiki')
     } catch (e) {
       console.error('Error deleting wiki page:', e)
       show(e instanceof Error ? e.message : t('wiki.deleteFailed'), { variant: 'error' })
@@ -275,100 +289,113 @@ const WikiEditor = () => {
   }
 
   return (
-    <BookEditorShell>
-      <BookEditorHeader
-        title={isNew ? t('wiki.createWiki') : t('wiki.editWiki')}
-        description={
-          isNew
-            ? '整理条目内容、地点和关联关系，保存后进入百科详情。'
-            : '更新条目正文、元信息和关联关系，保存后回到百科详情。'
-        }
-        onClose={() => navigate(-1)}
-        closeLabel={isNew ? t('wiki.createWiki') : t('wiki.editWiki')}
-      />
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          handleSubmit('pending')
-        }}
-        className="space-y-7"
-      >
-        <WikiEditorForm
-          formData={formData}
-          categories={categories}
-          tagSuggestions={tagSuggestions}
-          onFormDataChange={handleFormDataChange}
-        />
-
-        <WikiEditorRelationPanel
-          relations={formData.relations}
-          onRelationsChange={handleRelationsChange}
-          currentPage={
-            isNew
-              ? null
-              : {
-                  slug: formData.slug,
-                  title: formData.title,
-                  category: formData.category,
-                  content: formData.content,
-                  tags: splitTagsInput(formData.tags),
-                  description: '',
-                }
-          }
-          metadataMap={metadataMap}
-          isNew={isNew}
-          slug={slug}
-          formDataTitle={formData.title}
-        />
-
-        <WikiEditorMetaSidebar
-          savingMode={savingMode}
-          isAdmin={isAdmin}
-          onSubmit={handleSubmit}
-          showAdvancedToggle={!isNew && isAdmin}
-          showAdvancedOptions={showAdvancedOptions}
-          onToggleAdvancedOptions={() => setShowAdvancedOptions((value) => !value)}
-        />
-      </form>
-
-      {!isNew && isAdmin && showAdvancedOptions && (
-        <BookDangerZone
-          id="wiki-advanced-options"
-          title={t('wiki.deleteZoneTitle')}
-          description={t('wiki.deleteZoneDescription')}
-        >
-          <label
-            htmlFor="wiki-delete-reason"
-            className="mt-4 block text-sm font-medium text-text-secondary"
+    <FormModal
+      open
+      onClose={() => {
+        if (savingMode || isDeleting) return
+        closeEditor()
+      }}
+      title={isNew ? t('wiki.createWiki') : t('wiki.editWiki')}
+      subtitle={
+        isNew
+          ? '整理条目内容、地点和关联关系，保存后进入百科详情。'
+          : '更新条目正文、元信息和关联关系，保存后回到百科详情。'
+      }
+      loading={savingMode !== null || isDeleting}
+      maxWidth="max-w-6xl"
+    >
+      {loading ? (
+        <div role="status" className="py-12 text-center text-text-muted">
+          正在加载百科...
+        </div>
+      ) : loadError ? (
+        <LoadErrorState error={loadError} onRetry={() => void loadPage()} />
+      ) : (
+        <BookEditorShell embedded>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void handleSubmit('pending')
+            }}
+            className="space-y-7"
           >
-            {t('wiki.deleteReasonLabel')}
-            <span className="ml-1 theme-text-error" aria-hidden="true">
-              *
-            </span>
-          </label>
-          <Textarea
-            id="wiki-delete-reason"
-            value={deleteReason}
-            onChange={(event) => setDeleteReason(event.target.value)}
-            maxLength={1000}
-            rows={3}
-            className={`${bookCompactInputClass} mt-2 focus:border-danger`}
-          />
-          <Button
-            type="button"
-            variant="danger"
-            onClick={handleDelete}
-            loading={isDeleting}
-            loadingText={t('wiki.deleting')}
-            className="mt-4"
-            leftIcon={<Trash2 size={16} />}
-          >
-            {t('wiki.deleteWiki')}
-          </Button>
-        </BookDangerZone>
+            <WikiEditorForm
+              formData={formData}
+              categories={categories}
+              tagSuggestions={tagSuggestions}
+              onFormDataChange={handleFormDataChange}
+            />
+
+            <WikiEditorRelationPanel
+              relations={formData.relations}
+              onRelationsChange={handleRelationsChange}
+              currentPage={
+                isNew
+                  ? null
+                  : {
+                      slug: formData.slug,
+                      title: formData.title,
+                      category: formData.category,
+                      content: formData.content,
+                      tags: splitTagsInput(formData.tags),
+                      description: '',
+                    }
+              }
+              metadataMap={metadataMap}
+              isNew={isNew}
+              slug={slug}
+              formDataTitle={formData.title}
+            />
+
+            <WikiEditorMetaSidebar
+              savingMode={savingMode}
+              isAdmin={isAdmin}
+              onSubmit={handleSubmit}
+              showAdvancedToggle={!isNew && isAdmin}
+              showAdvancedOptions={showAdvancedOptions}
+              onToggleAdvancedOptions={() => setShowAdvancedOptions((value) => !value)}
+            />
+          </form>
+
+          {!isNew && isAdmin && showAdvancedOptions && (
+            <BookDangerZone
+              id="wiki-advanced-options"
+              title={t('wiki.deleteZoneTitle')}
+              description={t('wiki.deleteZoneDescription')}
+            >
+              <label
+                htmlFor="wiki-delete-reason"
+                className="mt-4 block text-sm font-medium text-text-secondary"
+              >
+                {t('wiki.deleteReasonLabel')}
+                <span className="ml-1 theme-text-error" aria-hidden="true">
+                  *
+                </span>
+              </label>
+              <Textarea
+                id="wiki-delete-reason"
+                value={deleteReason}
+                onChange={(event) => setDeleteReason(event.target.value)}
+                maxLength={1000}
+                rows={3}
+                className={`${bookCompactInputClass} mt-2 focus:border-danger`}
+              />
+              <Button
+                type="button"
+                variant="danger"
+                onClick={handleDelete}
+                loading={isDeleting}
+                loadingText={t('wiki.deleting')}
+                className="mt-4"
+                leftIcon={<Trash2 size={16} />}
+              >
+                {t('wiki.deleteWiki')}
+              </Button>
+            </BookDangerZone>
+          )}
+        </BookEditorShell>
       )}
-    </BookEditorShell>
+    </FormModal>
   )
 }
 
