@@ -8,9 +8,11 @@ import { enhancedCache, CACHE_KEYS, CACHE_TTL_SEC } from '../utils/cache'
 import { logger } from '../utils/logger'
 import { createSessionVersion } from '../utils/auth-session'
 import { issueXsrfToken } from './csrf'
+import { API_KEY_PATTERN, API_KEY_PREFIX, hashApiKeyToken } from '../utils/api-keys'
 
 const JWT_SECRET = process.env.JWT_SECRET
 const AUTH_COOKIE_NAME = 'hsf_token'
+const API_KEY_LAST_USED_UPDATE_INTERVAL_MS = 60_000
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 export const AUTH_SESSION_DAYS = 90
 const AUTH_SESSION_TTL_SECONDS = AUTH_SESSION_DAYS * 24 * 60 * 60
@@ -150,22 +152,20 @@ function clearAuthCookie(req: Request, res: Response) {
   })
 }
 
-function getTokenFromRequest(req: Request) {
+function getRequestCredential(req: Request): { token: string; source: 'cookie' | 'bearer' } | null {
+  const authHeader = req.headers.authorization
+  if (authHeader !== undefined) {
+    const parts = authHeader.trim().split(/\s+/)
+    if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer' || !parts[1]) {
+      return null
+    }
+    return { token: parts[1], source: 'bearer' }
+  }
+
   const cookieToken = req.cookies?.[AUTH_COOKIE_NAME]
-  if (cookieToken) return cookieToken
-
-  const authHeader = req.headers.authorization
-  if (!authHeader) return null
-  const [scheme, token] = authHeader.split(' ')
-  if (scheme !== 'Bearer' || !token) return null
-  return token
-}
-
-function isBearerAuthRequest(req: Request) {
-  const authHeader = req.headers.authorization
-  if (!authHeader) return false
-  const [scheme, token] = authHeader.split(' ')
-  return scheme === 'Bearer' && Boolean(token)
+  return typeof cookieToken === 'string' && cookieToken
+    ? { token: cookieToken, source: 'cookie' }
+    : null
 }
 
 /**
@@ -184,14 +184,87 @@ function clearUserCache(uid: string): void {
 
 async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authReq = req as AuthenticatedRequestWithSession
-  const token = getTokenFromRequest(req)
-  if (!token) {
+  const credential = getRequestCredential(req)
+  if (!credential) {
+    next()
+    return
+  }
+
+  if (credential.source === 'bearer' && credential.token.startsWith(API_KEY_PREFIX)) {
+    if (!API_KEY_PATTERN.test(credential.token)) {
+      res.status(401).json({ error: 'API 密钥无效或已失效', code: 'API_KEY_INVALID' })
+      return
+    }
+
+    try {
+      const apiKey = await prisma.userApiKey.findUnique({
+        where: { tokenHash: hashApiKeyToken(credential.token) },
+        select: {
+          id: true,
+          userUid: true,
+          revokedAt: true,
+          expiresAt: true,
+          lastUsedAt: true,
+          user: {
+            select: {
+              uid: true,
+              publicId: true,
+              email: true,
+              displayName: true,
+              photoURL: true,
+              photoAssetId: true,
+              wechatOpenId: true,
+              role: true,
+              status: true,
+              banReason: true,
+              bannedAt: true,
+              emailVerifiedAt: true,
+              level: true,
+              signature: true,
+              bio: true,
+              deletedAt: true,
+            },
+          },
+        },
+      })
+      const now = new Date()
+      const lastUsedCutoff = new Date(now.getTime() - API_KEY_LAST_USED_UPDATE_INTERVAL_MS)
+      if (
+        !apiKey ||
+        apiKey.revokedAt ||
+        (apiKey.expiresAt && apiKey.expiresAt <= now) ||
+        apiKey.user.deletedAt
+      ) {
+        res.status(401).json({ error: 'API 密钥无效或已失效', code: 'API_KEY_INVALID' })
+        return
+      }
+
+      if (apiKey.lastUsedAt === null || apiKey.lastUsedAt < lastUsedCutoff) {
+        await prisma.userApiKey.updateMany({
+          where: {
+            id: apiKey.id,
+            userUid: apiKey.userUid,
+            revokedAt: null,
+            OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: lastUsedCutoff } }],
+          },
+          data: { lastUsedAt: now },
+        })
+      }
+      authReq.authUser = userToApiUser(apiKey.user)
+      authReq.authSource = 'api_key'
+    } catch (error) {
+      next(error)
+      return
+    }
+
     next()
     return
   }
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as SessionJwtPayload
+    const payload = jwt.verify(credential.token, JWT_SECRET, {
+      algorithms: ['HS256'],
+    }) as SessionJwtPayload
     authReq.authSessionVersion = payload.sessionVersion
 
     // 尝试从缓存获取用户
@@ -208,7 +281,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 
       if (user?.deletedAt) {
         logger.info({ uid: user.uid }, 'Rejecting token for soft-deleted user')
-        clearAuthCookie(req, res)
+        if (credential.source === 'cookie') clearAuthCookie(req, res)
         next()
         return
       }
@@ -217,7 +290,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
         const currentSessionVersion = createSessionVersion(user.passwordHash)
         if (payload.sessionVersion !== currentSessionVersion) {
           logger.info({ uid: user.uid }, 'Rejecting token with stale session version')
-          clearAuthCookie(req, res)
+          if (credential.source === 'cookie') clearAuthCookie(req, res)
           next()
           return
         }
@@ -237,10 +310,9 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 
     if (apiUser) {
       authReq.authUser = apiUser
+      authReq.authSource = credential.source
 
-      const isCookieSession = Boolean(req.cookies?.[AUTH_COOKIE_NAME])
-
-      if (isCookieSession && typeof payload.exp === 'number') {
+      if (credential.source === 'cookie' && typeof payload.exp === 'number') {
         const remainingSeconds = payload.exp - Math.floor(Date.now() / 1000)
         if (remainingSeconds <= AUTH_REFRESH_THRESHOLD_SECONDS && authReq.authSessionVersion) {
           const renewedToken = createTokenWithSessionVersion(apiUser, authReq.authSessionVersion)
@@ -250,7 +322,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     }
   } catch (error) {
     logger.warn({ err: error }, 'Invalid auth token')
-    clearAuthCookie(req, res)
+    if (credential.source === 'cookie') clearAuthCookie(req, res)
   }
 
   next()
@@ -258,6 +330,9 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 
 async function refreshAuthUserForAuthorization(req: Request, res: Response) {
   const authReq = req as AuthenticatedRequestWithSession
+  if (authReq.authSource === 'api_key') {
+    return authReq.authUser
+  }
   const uid = authReq.authUser?.uid
   if (!uid) {
     return undefined
@@ -307,6 +382,31 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
     return
   }
   next()
+}
+
+async function requireCookieSession(req: Request, res: Response, next: NextFunction) {
+  const authReq = req as AuthenticatedRequest
+  if (!authReq.authUser) {
+    res.status(401).json({ error: '请先登录' })
+    return
+  }
+  if (authReq.authSource !== 'cookie') {
+    res.status(403).json({
+      error: '请通过网页登录管理 API 密钥',
+      code: 'COOKIE_SESSION_REQUIRED',
+    })
+    return
+  }
+
+  try {
+    if (!(await refreshAuthUserForAuthorization(req, res))) {
+      res.status(401).json({ error: '请先登录' })
+      return
+    }
+    next()
+  } catch (error) {
+    next(error)
+  }
 }
 
 function requireActiveUser(req: Request, res: Response, next: NextFunction) {
@@ -370,10 +470,9 @@ export {
   shouldUseSecureCookie,
   setAuthCookie,
   clearAuthCookie,
-  getTokenFromRequest,
-  isBearerAuthRequest,
   authMiddleware,
   requireAuth,
+  requireCookieSession,
   requireActiveUser,
   requireAdmin,
   requireSuperAdmin,

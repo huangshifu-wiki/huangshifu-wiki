@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   BookOpen,
   Camera,
   ChevronDown,
@@ -27,6 +28,7 @@ import { CharacterCount } from '../components/CharacterCount'
 import MarkdownEditor from '../components/MarkdownEditor'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useToast } from '../components/Toast'
+import { useDialog } from '../components/Dialog'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { hasFormChanges } from '../utils/formDirty'
@@ -38,6 +40,7 @@ import {
   WIKI_MAX_CONTENT_SIZE,
 } from '../lib/contentLimits'
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiRequest } from '../lib/apiClient'
+import { copyToClipboard } from '../lib/copyLink'
 import { getErrorMessage } from '../lib/errorHandler'
 import { formatDateOnly } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
@@ -57,14 +60,23 @@ import {
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import type { CommentItem, GalleryItem, PostItem, TicketListingSummary } from '../types/entities'
 import type { ContentStatus } from '../types/common'
-import type { EmailVerificationPublicConfig, TicketListingMineResponse } from '../types/api'
+import type {
+  CreatePersonalApiKeyRequest,
+  CreatePersonalApiKeyResponse,
+  EmailVerificationPublicConfig,
+  PersonalApiKey,
+  PersonalApiKeyListResponse,
+  TicketListingMineResponse,
+} from '../types/api'
 import type { ListLoadMode } from '../types/userPreferences'
 import {
   Button,
+  Field,
   IconButton,
   Input,
   LoadErrorState,
   SegmentedControl,
+  Select,
   SettingRow,
   SettingsSection,
   Skeleton,
@@ -99,7 +111,24 @@ const EMPTY_PASSWORD_FORM: PasswordForm = {
   confirmPassword: '',
 }
 
-type SettingsSection = 'profile' | 'content' | 'privacy' | 'account' | 'appearance'
+type PersonalApiKeyExpiry = NonNullable<CreatePersonalApiKeyRequest['expiry']>
+type PersonalApiKeyListState = { ownerUid: string; keys: PersonalApiKey[] }
+type RevealedPersonalApiKey = {
+  ownerUid: string
+  token: string
+}
+
+const PERSONAL_API_KEY_EXPIRY_OPTIONS: Array<{
+  value: PersonalApiKeyExpiry
+  label: string
+}> = [
+  { value: '30d', label: '30 天' },
+  { value: '90d', label: '90 天（默认）' },
+  { value: '365d', label: '365 天' },
+  { value: 'never', label: '永久' },
+]
+
+type SettingsSection = 'profile' | 'content' | 'privacy' | 'account' | 'api-keys' | 'appearance'
 type ContentTab = 'posts' | 'wiki' | 'galleries' | 'comments' | 'tickets'
 
 type UserCommentItem = CommentItem & {
@@ -130,6 +159,7 @@ const SECTION_NAV = [
   { id: 'profile', label: '公开资料', icon: UserRound, path: '/settings/profile' },
   { id: 'privacy', label: '隐私设置', icon: Eye, path: '/settings/privacy' },
   { id: 'account', label: '账户', icon: Shield, path: '/settings/account' },
+  { id: 'api-keys', label: 'API 密钥', icon: KeyRound, path: '/settings/api-keys' },
   { id: 'appearance', label: '外观', icon: SlidersHorizontal, path: '/settings/appearance' },
 ] as const
 const CONTENT_SECTION_NAV = [
@@ -146,6 +176,7 @@ const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'content',
   'privacy',
   'account',
+  'api-keys',
   'appearance',
 ])
 const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'wiki', 'galleries', 'comments', 'tickets'])
@@ -220,15 +251,17 @@ function PrivacySwitch({
 }
 
 const Settings = () => {
-  const { user, profile, refreshAuth } = useAuth()
+  const { user, profile, refreshAuth, isBanned } = useAuth()
   const { preferences, updatePreferences } = useUserPreferences()
   const { section } = useParams<{ section?: string }>()
   const [searchParams] = useSearchParams()
   const { show } = useToast()
+  const dialog = useDialog()
   const activeSection = resolveSettingsSection(section)
   const activeContentTab = resolveContentTab(searchParams.get('tab'))
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
   const userPublicId = user?.publicId
+  const personalApiKeyScope = activeSection === 'api-keys' && user ? user.uid : null
   const [profileForm, setProfileForm] = useState<PublicProfileForm>({
     displayName: '',
     signature: '',
@@ -247,6 +280,16 @@ const Settings = () => {
   const [emailVerificationConfig, setEmailVerificationConfig] =
     useState<EmailVerificationPublicConfig>({ enabled: false })
   const [savingPassword, setSavingPassword] = useState(false)
+  const [personalApiKeys, setPersonalApiKeys] = useState<PersonalApiKeyListState | null>(null)
+  const [personalApiKeysLoading, setPersonalApiKeysLoading] = useState(false)
+  const [personalApiKeysError, setPersonalApiKeysError] = useState<unknown | null>(null)
+  const [personalApiKeysRetry, setPersonalApiKeysRetry] = useState(0)
+  const [personalApiKeyName, setPersonalApiKeyName] = useState('')
+  const [personalApiKeyExpiry, setPersonalApiKeyExpiry] = useState<PersonalApiKeyExpiry>('90d')
+  const [creatingPersonalApiKey, setCreatingPersonalApiKey] = useState(false)
+  const [revealedPersonalApiKey, setRevealedPersonalApiKey] =
+    useState<RevealedPersonalApiKey | null>(null)
+  const [revokingPersonalApiKeyId, setRevokingPersonalApiKeyId] = useState<string | null>(null)
   const [contentLoading, setContentLoading] = useState(
     () => activeSection === 'content' && Boolean(userPublicId)
   )
@@ -263,6 +306,10 @@ const Settings = () => {
   })
   const contentScopeRef = useRef<string | null>(null)
   const [contentRetry, setContentRetry] = useState(0)
+  const personalApiKeyRequestIdRef = useRef(0)
+  const personalApiKeyCreateControllerRef = useRef<AbortController | null>(null)
+  const personalApiKeyRevokeControllerRef = useRef<AbortController | null>(null)
+  const personalApiKeyScopeIdRef = useRef(0)
   const [myPosts, setMyPosts] = useState<PostItem[]>([])
   const [myWikiPages, setMyWikiPages] = useState<UserWikiItem[]>([])
   const [myGalleries, setMyGalleries] = useState<GalleryItem[]>([])
@@ -329,6 +376,77 @@ const Settings = () => {
       cancelled = true
     }
   }, [activeSection, user?.uid])
+
+  useEffect(() => {
+    personalApiKeyScopeIdRef.current += 1
+    setRevealedPersonalApiKey(null)
+    setPersonalApiKeyName('')
+    setCreatingPersonalApiKey(false)
+    setRevokingPersonalApiKeyId(null)
+
+    return () => {
+      personalApiKeyCreateControllerRef.current?.abort()
+      personalApiKeyRevokeControllerRef.current?.abort()
+      personalApiKeyCreateControllerRef.current = null
+      personalApiKeyRevokeControllerRef.current = null
+      personalApiKeyScopeIdRef.current += 1
+    }
+  }, [personalApiKeyScope])
+
+  useEffect(() => {
+    const ownerUid = user?.uid
+    const requestId = ++personalApiKeyRequestIdRef.current
+    let cancelled = false
+
+    if (!ownerUid || activeSection !== 'api-keys') {
+      setPersonalApiKeys(null)
+      setPersonalApiKeysLoading(false)
+      setPersonalApiKeysError(null)
+      return () => {
+        cancelled = true
+        personalApiKeyRequestIdRef.current += 1
+      }
+    }
+
+    const controller = new AbortController()
+    const isCurrentRequest = () => !cancelled && requestId === personalApiKeyRequestIdRef.current
+
+    setPersonalApiKeys((current) => (current?.ownerUid === ownerUid ? current : null))
+    setPersonalApiKeysLoading(true)
+    setPersonalApiKeysError(null)
+
+    void apiRequest<PersonalApiKeyListResponse>('/api/users/me/api-keys', {
+      method: 'GET',
+      dedup: false,
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (isCurrentRequest()) {
+          setPersonalApiKeys((current) => {
+            const currentKeys = current?.ownerUid === ownerUid ? current.keys : []
+            const responseIds = new Set(response.keys.map((key) => key.id))
+            return {
+              ownerUid,
+              keys: [...response.keys, ...currentKeys.filter((key) => !responseIds.has(key.id))],
+            }
+          })
+        }
+      })
+      .catch((error) => {
+        if (isCurrentRequest() && !controller.signal.aborted) {
+          setPersonalApiKeysError(error)
+        }
+      })
+      .finally(() => {
+        if (isCurrentRequest()) setPersonalApiKeysLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+      controller.abort()
+      personalApiKeyRequestIdRef.current += 1
+    }
+  }, [activeSection, personalApiKeysRetry, user?.uid])
 
   useEffect(() => {
     if (!userPublicId) return
@@ -989,6 +1107,129 @@ const Settings = () => {
     )
   }
 
+  const visiblePersonalApiKeys = personalApiKeys?.ownerUid === user.uid ? personalApiKeys.keys : []
+  const visibleRevealedPersonalApiKey =
+    revealedPersonalApiKey?.ownerUid === user.uid &&
+    activeSection === 'api-keys' &&
+    revealedPersonalApiKey
+
+  const handlePersonalApiKeyCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const name = personalApiKeyName.trim()
+    if (!name || name.length > 100) {
+      show('密钥名称须为 1 到 100 个字符', { variant: 'error' })
+      return
+    }
+    if (isBanned || visibleRevealedPersonalApiKey) return
+
+    const ownerUid = user.uid
+    const scopeId = personalApiKeyScopeIdRef.current
+    const controller = new AbortController()
+    personalApiKeyCreateControllerRef.current = controller
+    setCreatingPersonalApiKey(true)
+
+    try {
+      const response = await apiPost<CreatePersonalApiKeyResponse>(
+        '/api/users/me/api-keys',
+        { name, expiry: personalApiKeyExpiry },
+        controller.signal
+      )
+      if (
+        scopeId !== personalApiKeyScopeIdRef.current ||
+        activeSection !== 'api-keys' ||
+        user.uid !== ownerUid
+      ) {
+        return
+      }
+
+      setPersonalApiKeys((current) => ({
+        ownerUid,
+        keys: [
+          response.key,
+          ...(current?.ownerUid === ownerUid
+            ? current.keys.filter((key) => key.id !== response.key.id)
+            : []),
+        ],
+      }))
+      setRevealedPersonalApiKey({ ownerUid, token: response.token })
+      setPersonalApiKeyName('')
+      show('API 密钥已创建，请立即复制保存', { variant: 'info', duration: 5000 })
+    } catch (error) {
+      if (
+        !controller.signal.aborted &&
+        scopeId === personalApiKeyScopeIdRef.current &&
+        user.uid === ownerUid
+      ) {
+        show(getErrorMessage(error, '创建 API 密钥失败'), { variant: 'error' })
+      }
+    } finally {
+      if (personalApiKeyCreateControllerRef.current === controller) {
+        personalApiKeyCreateControllerRef.current = null
+      }
+      if (scopeId === personalApiKeyScopeIdRef.current) {
+        setCreatingPersonalApiKey(false)
+      }
+    }
+  }
+
+  const handlePersonalApiKeyRevoke = async (key: PersonalApiKey) => {
+    const ownerUid = user.uid
+    const scopeId = personalApiKeyScopeIdRef.current
+    const confirmed = await dialog.confirm({
+      title: '撤销 API 密钥？',
+      message: `撤销“${key.name}”后，使用该密钥的请求将无法再通过认证。`,
+      confirmText: '撤销密钥',
+      variant: 'danger',
+    })
+    if (
+      !confirmed ||
+      scopeId !== personalApiKeyScopeIdRef.current ||
+      activeSection !== 'api-keys' ||
+      user.uid !== ownerUid
+    ) {
+      return
+    }
+
+    const controller = new AbortController()
+    personalApiKeyRevokeControllerRef.current = controller
+    setRevokingPersonalApiKeyId(key.id)
+    try {
+      await apiDelete(`/api/users/me/api-keys/${encodeURIComponent(key.id)}`, controller.signal)
+      if (
+        scopeId !== personalApiKeyScopeIdRef.current ||
+        activeSection !== 'api-keys' ||
+        user.uid !== ownerUid
+      ) {
+        return
+      }
+
+      const revokedAt = new Date().toISOString()
+      setPersonalApiKeys((current) =>
+        current?.ownerUid === ownerUid
+          ? {
+              ...current,
+              keys: current.keys.map((currentKey) =>
+                currentKey.id === key.id ? { ...currentKey, revokedAt } : currentKey
+              ),
+            }
+          : current
+      )
+      setPersonalApiKeysRetry((current) => current + 1)
+      show('API 密钥已撤销')
+    } catch (error) {
+      if (!controller.signal.aborted && scopeId === personalApiKeyScopeIdRef.current) {
+        show(getErrorMessage(error, '撤销 API 密钥失败'), { variant: 'error' })
+      }
+    } finally {
+      if (personalApiKeyRevokeControllerRef.current === controller) {
+        personalApiKeyRevokeControllerRef.current = null
+      }
+      if (scopeId === personalApiKeyScopeIdRef.current) {
+        setRevokingPersonalApiKeyId(null)
+      }
+    }
+  }
+
   return (
     <div className="mobile-page-shell">
       <div className="mobile-page-container max-w-[1180px]">
@@ -1479,6 +1720,238 @@ const Settings = () => {
                         </div>
                       </form>
                     )}
+                  </div>
+                </div>
+              </SettingsSection>
+            )}
+
+            {activeSection === 'api-keys' && (
+              <SettingsSection
+                title="API 密钥"
+                headingId="settings-api-keys"
+                icon={<KeyRound size={18} />}
+              >
+                <div className="min-w-0 w-full max-w-3xl space-y-6">
+                  <div className="flex items-start gap-2 rounded-lg p-3 text-sm leading-6 theme-status-warning theme-text-warning">
+                    <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    <p>如果你不知道这是什么，请忽略此页面的内容。</p>
+                  </div>
+
+                  {isBanned && (
+                    <p className="mt-4 text-sm theme-text-warning">
+                      账号封禁期间不能创建密钥，仍可查看或撤销已有密钥。
+                    </p>
+                  )}
+                  <form
+                    onSubmit={handlePersonalApiKeyCreate}
+                    className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_auto] sm:items-end"
+                  >
+                    <Field label="密钥名称">
+                      <Input
+                        value={personalApiKeyName}
+                        onChange={(event) => setPersonalApiKeyName(event.target.value)}
+                        maxLength={100}
+                        required
+                        placeholder="例如：定时备份、数据同步"
+                      />
+                    </Field>
+                    <Field label="有效期">
+                      <Select
+                        value={personalApiKeyExpiry}
+                        className="w-full"
+                        onChange={(event) =>
+                          setPersonalApiKeyExpiry(event.target.value as PersonalApiKeyExpiry)
+                        }
+                      >
+                        {PERSONAL_API_KEY_EXPIRY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Button
+                      type="submit"
+                      loading={creatingPersonalApiKey}
+                      className="w-full sm:w-auto"
+                      loadingText="创建中..."
+                      disabled={isBanned || Boolean(visibleRevealedPersonalApiKey)}
+                    >
+                      创建密钥
+                    </Button>
+                  </form>
+                  {visibleRevealedPersonalApiKey && (
+                    <div
+                      className="space-y-4 rounded-lg border border-[var(--color-warning)]/50 bg-surface-alt p-5 sm:p-6"
+                      role="status"
+                    >
+                      <p className="text-sm font-medium text-text-primary">
+                        密钥仅显示一次，请复制并安全保存。
+                      </p>
+                      <Field label="新 API 密钥">
+                        <Input
+                          value={visibleRevealedPersonalApiKey.token}
+                          readOnly
+                          onFocus={(event) => event.currentTarget.select()}
+                          className="font-mono text-xs"
+                        />
+                      </Field>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={async () => {
+                            const copied = await copyToClipboard(
+                              visibleRevealedPersonalApiKey.token
+                            )
+                            show(copied ? 'API 密钥已复制' : '复制失败，请手动选择并复制密钥', {
+                              variant: copied ? 'success' : 'error',
+                            })
+                          }}
+                        >
+                          复制密钥
+                        </Button>
+                        <Button type="button" onClick={() => setRevealedPersonalApiKey(null)}>
+                          我已保存
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-text-primary">已创建的密钥</h3>
+                    {personalApiKeysError && (
+                      <LoadErrorState
+                        error={personalApiKeysError}
+                        description="API 密钥列表加载失败，请重试。"
+                        onRetry={() => setPersonalApiKeysRetry((current) => current + 1)}
+                        className="mt-4"
+                      />
+                    )}
+                    {!personalApiKeys && !personalApiKeysError && (
+                      <div className="mt-4 space-y-3" role="status" aria-label="正在加载 API 密钥">
+                        {[1, 2].map((item) => (
+                          <Skeleton key={item} className="h-16 w-full" />
+                        ))}
+                      </div>
+                    )}
+                    {personalApiKeys?.ownerUid === user.uid &&
+                      personalApiKeys.keys.length === 0 &&
+                      !personalApiKeysLoading && (
+                        <p className="mt-4 text-sm text-text-muted">尚未创建 API 密钥。</p>
+                      )}
+                    {visiblePersonalApiKeys.length > 0 && (
+                      <ul className="divide-y divide-border">
+                        {visiblePersonalApiKeys.map((key) => {
+                          const revoked = Boolean(key.revokedAt)
+                          const expired =
+                            key.expiresAt !== null && Date.parse(key.expiresAt) <= Date.now()
+                          const status = revoked ? '已撤销' : expired ? '已过期' : '有效'
+                          const statusClass = revoked
+                            ? 'theme-status-error theme-text-error'
+                            : expired
+                              ? 'theme-status-warning theme-text-warning'
+                              : 'theme-status-success theme-text-success'
+
+                          return (
+                            <li
+                              key={key.id}
+                              className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between"
+                            >
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="break-all text-sm font-medium text-text-primary">
+                                    {key.name}
+                                  </span>
+                                  <span
+                                    className={clsx(
+                                      'rounded border px-2 py-0.5 text-xs',
+                                      statusClass
+                                    )}
+                                  >
+                                    {status}
+                                  </span>
+                                </div>
+                                <code className="block break-all text-xs text-text-muted">
+                                  {key.prefix}…
+                                </code>
+                                <dl className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                                  <div className="flex gap-2">
+                                    <dt className="text-text-muted">创建</dt>
+                                    <dd className="text-text-secondary">
+                                      {format(new Date(key.createdAt), 'yyyy-MM-dd HH:mm')}
+                                    </dd>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <dt className="text-text-muted">到期</dt>
+                                    <dd className="text-text-secondary">
+                                      {key.expiresAt
+                                        ? format(new Date(key.expiresAt), 'yyyy-MM-dd HH:mm')
+                                        : '永久'}
+                                    </dd>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <dt className="text-text-muted">最近使用</dt>
+                                    <dd className="text-text-secondary">
+                                      {key.lastUsedAt
+                                        ? format(new Date(key.lastUsedAt), 'yyyy-MM-dd HH:mm')
+                                        : '未使用'}
+                                    </dd>
+                                  </div>
+                                </dl>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="danger"
+                                size="sm"
+                                className="self-start"
+                                disabled={revoked || revokingPersonalApiKeyId !== null}
+                                loading={revokingPersonalApiKeyId === key.id}
+                                onClick={() => void handlePersonalApiKeyRevoke(key)}
+                              >
+                                撤销
+                              </Button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="space-y-3 border-t border-border pt-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <details className="min-w-0 w-full">
+                        <summary className="cursor-pointer text-sm text-text-secondary">
+                          调用示例与说明
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                          <p className="text-sm leading-6 text-text-secondary">
+                            通过 Authorization Bearer 请求头发送密钥，不要放入 URL。 对外调用请使用
+                            HTTPS。
+                          </p>
+                          <pre className="max-w-full overflow-x-auto rounded-lg border border-border bg-surface-alt px-4 py-4 text-xs leading-6 text-text-primary sm:text-sm">
+                            <code>
+                              curl -H 'Authorization: Bearer &lt;API_KEY&gt;'
+                              {' \\\n  https://<本站域名>/api/users/me'}
+                            </code>
+                          </pre>
+                          <p className="text-xs leading-6 text-text-muted">
+                            写请求无需浏览器 Cookie 或 XSRF 令牌。JSON 请求使用 Content-Type:
+                            application/json；上传沿用上传会话和 multipart 文件接口。
+                          </p>
+                          <p className="text-xs leading-6 text-text-muted">
+                            修改密码或退出登录不会撤销密钥；泄露后请手动撤销。
+                          </p>
+                        </div>
+                      </details>
+                      <a
+                        href="/api-docs.md"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-brand-gold underline underline-offset-4 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4"
+                      >
+                        查看 API 文档
+                      </a>
+                    </div>
                   </div>
                 </div>
               </SettingsSection>

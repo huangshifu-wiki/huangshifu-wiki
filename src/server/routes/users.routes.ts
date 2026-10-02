@@ -10,7 +10,6 @@ import {
   userToApiUser,
   clearUserCache,
   issueUserSession,
-  isBearerAuthRequest,
 } from '../middleware/auth'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { profileLimiter } from '../middleware/rateLimiter'
@@ -746,14 +745,15 @@ router.put(
         }),
       ])
       clearUserCache(req.authUser!.uid)
-      const { token } = issueUserSession(req, res, {
-        ...updatedUser,
-        passwordHash,
-      })
-
       const response: PasswordUpdateResponse = { success: true }
-      if (isBearerAuthRequest(req)) {
-        response.token = token
+      if (req.authSource !== 'api_key') {
+        const { token } = issueUserSession(req, res, {
+          ...updatedUser,
+          passwordHash,
+        })
+        if (req.authSource === 'bearer') {
+          response.token = token
+        }
       }
 
       res.json(response)
@@ -981,6 +981,10 @@ router.delete(
             status: 'banned',
             banReason: '用户主动注销',
           },
+        })
+        await tx.userApiKey.updateMany({
+          where: { userUid: req.authUser!.uid, revokedAt: null },
+          data: { revokedAt: new Date() },
         })
         return existing?.photoAssetId || null
       })

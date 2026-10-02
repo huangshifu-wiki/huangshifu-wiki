@@ -3840,7 +3840,16 @@ router.delete(
           return
         }
 
-        await prisma.user.update({ where: { uid: id }, data: softDeleteData(req.authUser!.uid) })
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({
+            where: { uid: id },
+            data: softDeleteData(req.authUser!.uid),
+          })
+          await tx.userApiKey.updateMany({
+            where: { userUid: id, revokedAt: null },
+            data: { revokedAt: new Date() },
+          })
+        })
         clearUserCache(id)
         res.json({ success: true })
         return

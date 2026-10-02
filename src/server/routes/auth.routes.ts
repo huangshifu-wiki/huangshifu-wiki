@@ -478,6 +478,13 @@ router.post(
   validateBody(loginSchema),
   asyncHandler(async (req, res) => {
     try {
+      if ((req as AuthenticatedRequest).authSource === 'api_key') {
+        res.status(403).json({
+          error: 'API 密钥不能获取登录会话',
+          code: 'API_KEY_SESSION_FORBIDDEN',
+        })
+        return
+      }
       const { email, password } = req.body as {
         email?: string
         password?: string
@@ -535,6 +542,13 @@ router.post(
   authRateLimiter,
   asyncHandler(async (req, res) => {
     try {
+      if ((req as AuthenticatedRequest).authSource === 'api_key') {
+        res.status(403).json({
+          error: 'API 密钥不能获取登录会话',
+          code: 'API_KEY_SESSION_FORBIDDEN',
+        })
+        return
+      }
       const code = typeof req.body?.code === 'string' ? req.body.code : ''
       const displayNameRaw =
         typeof req.body?.displayName === 'string' ? req.body.displayName.trim().slice(0, 100) : ''
@@ -660,6 +674,13 @@ router.post(
 )
 
 router.post('/logout', (req, res) => {
+  if ((req as AuthenticatedRequest).authSource === 'api_key') {
+    res.status(403).json({
+      error: 'API 密钥不能获取登录会话',
+      code: 'API_KEY_SESSION_FORBIDDEN',
+    })
+    return
+  }
   clearAuthCookie(req, res)
   res.json({ success: true })
 })

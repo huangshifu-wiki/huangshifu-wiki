@@ -29,6 +29,7 @@ import { registerRegionRoutes } from './src/server/location/routes'
 import { registerExifRoutes } from './src/server/location/exifRoutes'
 import { registerAuthRoutes } from './src/server/routes/auth.routes'
 import { registerUsersRoutes } from './src/server/routes/users.routes'
+import { registerApiKeysRoutes } from './src/server/routes/api-keys.routes'
 import { registerWikiRoutes } from './src/server/routes/wiki.routes'
 import { registerPostsRoutes } from './src/server/routes/posts.routes'
 import { registerGalleriesRoutes } from './src/server/routes/galleries.routes'
@@ -197,6 +198,11 @@ async function findAvailablePort(preferredPort: number, host = '0.0.0.0'): Promi
   throw new Error(`No available port found starting from ${preferredPort}`)
 }
 
+app.use('/api/users/me/api-keys', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store')
+  next()
+})
+
 if (CORS_ORIGIN) {
   const origins = parseCorsOrigins(CORS_ORIGIN)
   if (origins.length === 1 && origins[0] === '*') {
@@ -361,6 +367,7 @@ registerExifRoutes(app)
 registerSetupRoutes(app)
 registerAuthRoutes(app)
 registerUsersRoutes(app)
+registerApiKeysRoutes(app)
 registerWikiRoutes(app)
 registerPostsRoutes(app)
 registerGalleriesRoutes(app)

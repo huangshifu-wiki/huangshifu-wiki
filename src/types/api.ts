@@ -13,6 +13,30 @@ import type {
   WikiItem,
 } from './entities'
 import type { Platform } from './common'
+
+export interface PersonalApiKey {
+  id: string
+  name: string
+  prefix: string
+  createdAt: string
+  expiresAt: string | null
+  revokedAt: string | null
+  lastUsedAt: string | null
+}
+
+export interface PersonalApiKeyListResponse {
+  keys: PersonalApiKey[]
+}
+
+export interface CreatePersonalApiKeyRequest {
+  name: string
+  expiry?: '30d' | '90d' | '365d' | 'never'
+}
+
+export interface CreatePersonalApiKeyResponse {
+  key: PersonalApiKey
+  token: string
+}
 export interface ApiResponse<T> {
   data: T
 }

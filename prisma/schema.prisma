@@ -195,6 +195,7 @@ model User {
   deletedBy     String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+  apiKeys UserApiKey[]
   posts         Post[]         @relation("UserPosts")
   comments      PostComment[]  @relation("UserComments")
   postCommentLikes PostCommentLike[]
@@ -231,6 +232,21 @@ model User {
   @@index([wechatUnionId])
   @@index([deletedAt])
   @@index([emailVerifiedAt])
+}
+
+model UserApiKey {
+  id         String    @id @default(cuid())
+  userUid    String
+  name       String
+  tokenHash  String    @unique
+  prefix     String
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  user       User      @relation(fields: [userUid], references: [uid], onDelete: Cascade)
+
+  @@index([userUid, createdAt])
 }
 
 model EmailVerificationToken {

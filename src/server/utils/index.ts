@@ -57,6 +57,7 @@ export {
 } from './textLimits'
 
 export { allocateNumericSlug, isNumericSlug, withNumericSlugTransaction } from './numericSlug'
+export { createApiKeyMaterial, hashApiKeyToken, toApiKeyResponse } from './api-keys'
 export {
   getSharpInputPixelLimit,
   isSharpPixelLimitError,

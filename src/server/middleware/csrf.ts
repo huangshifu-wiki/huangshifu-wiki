@@ -26,6 +26,10 @@ function setXsrfCookie(req: Request, res: Response): void {
 
 export function csrfMiddleware(req: Request, res: Response, next: NextFunction): void {
   const authReq = req as AuthenticatedRequest
+  if (authReq.authSource === 'api_key') {
+    next()
+    return
+  }
   if (SAFE_METHODS.has(req.method.toUpperCase())) {
     setXsrfCookie(req, res)
     next()
