@@ -63,6 +63,8 @@ const SECRET_FIELD_LABELS: Array<{ key: string; label: string }> = [
   { key: 'amapApiKey', label: '高德地图 Key' },
   { key: 'wechatMpAppId', label: '微信小程序 AppId' },
   { key: 'wechatMpAppSecret', label: '微信小程序 AppSecret' },
+  { key: 'turnstileSiteKey', label: 'Turnstile Site Key' },
+  { key: 'turnstileSecretKey', label: 'Turnstile Secret Key' },
 ]
 
 type RuntimeApiResponse<T> = { success: boolean; data: T; error?: string }
@@ -125,6 +127,13 @@ const CONFIG_GROUPS: ConfigGroup[] = [
         key: 'allowSuperAdminManageSuperAdmins',
         label: '允许管理超级管理员身份',
         description: '开启后超级管理员可在通过当前密码验证后设置或取消其他用户的超级管理员身份',
+        type: 'boolean',
+      },
+      {
+        key: 'turnstileEnabled',
+        label: '人机验证（Cloudflare Turnstile）',
+        description:
+          '开启后，注册与发送验证/重置邮件前需通过 Cloudflare Turnstile 校验；需先在「服务凭证」配置 Site Key 与 Secret Key',
         type: 'boolean',
       },
     ],

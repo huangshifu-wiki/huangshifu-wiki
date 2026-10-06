@@ -357,6 +357,7 @@ export interface RuntimeAdminConfig {
   semanticSearchEnabled: boolean
   galleryAdminOnly: boolean
   allowSuperAdminManageSuperAdmins: boolean
+  turnstileEnabled: boolean
   blurhashEnabled: boolean
   blurhashAutoGenerate: boolean
   blurhashComponentsX: number
@@ -407,6 +408,12 @@ export type SecretsFieldStatus = { configured: boolean; last4: string }
 export interface SecretsAdminConfig {
   disabled: boolean
   secrets: Record<string, SecretsFieldStatus>
+}
+
+// Cloudflare Turnstile 公开配置（GET /api/config/turnstile）
+export interface TurnstilePublicConfig {
+  enabled: boolean
+  siteKey: string
 }
 
 export type {

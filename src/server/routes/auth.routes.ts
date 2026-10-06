@@ -13,6 +13,7 @@ import {
   passwordResetRequestLimiter,
 } from '../middleware/rateLimiter'
 import { asyncHandler } from '../middleware/asyncHandler'
+import { requireTurnstile } from '../middleware/turnstile'
 import {
   EmailVerificationError,
   EmailVerificationPurpose,
@@ -127,6 +128,7 @@ router.post(
   '/register',
   authRateLimiter,
   validateBody(registerSchema),
+  requireTurnstile,
   asyncHandler(async (req, res) => {
     try {
       const { email, password, displayName } = req.body as {
@@ -272,6 +274,7 @@ router.post(
   '/resend-verification',
   emailVerificationLimiter,
   validateBody(resendEmailVerificationSchema),
+  requireTurnstile,
   asyncHandler(async (req, res) => {
     try {
       if (!(await isEmailVerificationEnabled())) {
@@ -327,6 +330,7 @@ router.post(
   '/password-reset/request',
   passwordResetRequestLimiter,
   validateBody(passwordResetRequestSchema),
+  requireTurnstile,
   asyncHandler(async (req, res) => {
     try {
       if (!(await isEmailVerificationEnabled())) {

@@ -23,6 +23,8 @@ export interface SecretsConfig {
   s3WriteSecretAccessKey: string
   wechatMpAppId: string
   wechatMpAppSecret: string
+  turnstileSiteKey: string
+  turnstileSecretKey: string
 }
 
 export const DEFAULT_SECRETS_CONFIG: SecretsConfig = {
@@ -36,6 +38,8 @@ export const DEFAULT_SECRETS_CONFIG: SecretsConfig = {
   s3WriteSecretAccessKey: '',
   wechatMpAppId: '',
   wechatMpAppSecret: '',
+  turnstileSiteKey: '',
+  turnstileSecretKey: '',
 }
 
 const CONFIG_KEY = 'secrets_config'

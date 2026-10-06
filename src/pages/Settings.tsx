@@ -25,11 +25,13 @@ import { format } from 'date-fns'
 import { AvatarCropModal } from '../components/AvatarCropModal'
 import Pagination from '../components/Pagination'
 import { CharacterCount } from '../components/CharacterCount'
+import { TurnstileWidget } from '../components/TurnstileWidget'
 import MarkdownEditor from '../components/MarkdownEditor'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useToast } from '../components/Toast'
 import { useDialog } from '../components/Dialog'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
+import { useTurnstileChallenge } from '../hooks/useTurnstileChallenge'
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { hasFormChanges } from '../utils/formDirty'
 import { useAuth } from '../context/AuthContext'
@@ -40,6 +42,7 @@ import {
   WIKI_MAX_CONTENT_SIZE,
 } from '../lib/contentLimits'
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiRequest } from '../lib/apiClient'
+import { resendEmailVerification } from '../lib/auth'
 import { copyToClipboard } from '../lib/copyLink'
 import { getErrorMessage } from '../lib/errorHandler'
 import { formatDateOnly } from '../lib/dateUtils'
@@ -279,6 +282,7 @@ const Settings = () => {
   const [sendingEmailVerification, setSendingEmailVerification] = useState(false)
   const [emailVerificationConfig, setEmailVerificationConfig] =
     useState<EmailVerificationPublicConfig>({ enabled: false })
+  const turnstile = useTurnstileChallenge()
   const [savingPassword, setSavingPassword] = useState(false)
   const [personalApiKeys, setPersonalApiKeys] = useState<PersonalApiKeyListState | null>(null)
   const [personalApiKeysLoading, setPersonalApiKeysLoading] = useState(false)
@@ -743,12 +747,19 @@ const Settings = () => {
       return
     }
 
+    if (turnstile.blocked) {
+      show('请先完成人机验证', { variant: 'error' })
+      return
+    }
+
     setSendingEmailVerification(true)
     try {
-      await apiPost('/api/auth/resend-verification', { email: user.email })
+      await resendEmailVerification(user.email, turnstile.token ?? undefined)
+      turnstile.reset()
       show('验证邮件已发送，请查收邮箱', { duration: 4000 })
     } catch (error) {
       console.error('Error sending verification email:', error)
+      turnstile.reset()
       show(getErrorMessage(error, '验证邮件发送失败，请稍后重试'), { variant: 'error' })
     } finally {
       setSendingEmailVerification(false)
@@ -1520,6 +1531,14 @@ const Settings = () => {
                         </div>
                       </div>
                       <div className="flex max-w-full flex-wrap gap-2">
+                        {canSendEmailVerification && turnstile.enabled && (
+                          <TurnstileWidget
+                            siteKey={turnstile.siteKey}
+                            onToken={turnstile.setToken}
+                            onLoadError={turnstile.markLoadFailed}
+                            resetSignal={turnstile.resetSignal}
+                          />
+                        )}
                         {canSendEmailVerification && (
                           <Button
                             type="button"

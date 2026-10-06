@@ -455,17 +455,17 @@ async function startServer() {
     const directives: string[] = [
       "default-src 'self'",
       isProduction
-        ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://*.amap.com`
-        : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.amap.com`,
+        ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://*.amap.com https://challenges.cloudflare.com`
+        : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.amap.com https://challenges.cloudflare.com`,
       isProduction
         ? `style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com`
         : `style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com`,
       "font-src 'self' data:",
       "img-src 'self' data: blob: https://*.amap.com https://*.gaode.com http://*.music.126.net https://*.music.126.net http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.com https://picsum.photos https://*.picsum.photos https://fastly.picsum.photos https://*.googleusercontent.com",
-      "connect-src 'self' https://*.amap.com http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.net http://*.music.126.net https://*.music.126.net https://analysis.chatglm.cn https://gator.volces.com https://picsum.photos https://*.picsum.photos https://fastly.picsum.photos https://*.googleusercontent.com wss://localhost:* ws://localhost:*",
+      "connect-src 'self' https://*.amap.com http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.net http://*.music.126.net https://*.music.126.net https://analysis.chatglm.cn https://gator.volces.com https://picsum.photos https://*.picsum.photos https://fastly.picsum.photos https://*.googleusercontent.com https://challenges.cloudflare.com wss://localhost:* ws://localhost:*",
       "worker-src 'self' blob:",
       "media-src 'self' http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.com http://*.music.126.net https://*.music.126.net https://*.tc.qq.com https://*.stream.qqmusic.qq.com https://*.kugou.com https://*.kuwo.cn",
-      'frame-src https://open.weixin.qq.com',
+      'frame-src https://open.weixin.qq.com https://challenges.cloudflare.com',
     ]
 
     res.setHeader('Content-Security-Policy', directives.join('; '))

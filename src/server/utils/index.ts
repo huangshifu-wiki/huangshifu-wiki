@@ -221,6 +221,9 @@ export {
   verifyEmailVerificationToken,
 } from './email-verification'
 
+// === 人机验证（Cloudflare Turnstile） ===
+export { isTurnstileEnabled, getTurnstilePublicConfig, verifyTurnstileToken } from './turnstile'
+
 // === 文件上传与存储 ===
 export {
   normalizeTrackDiscPayload,

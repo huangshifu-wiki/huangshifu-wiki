@@ -18,6 +18,7 @@ export interface RuntimeConfig {
   semanticSearchEnabled: boolean
   galleryAdminOnly: boolean
   allowSuperAdminManageSuperAdmins: boolean
+  turnstileEnabled: boolean
   // 图片处理
   blurhashEnabled: boolean
   blurhashAutoGenerate: boolean
@@ -75,6 +76,7 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   semanticSearchEnabled: false,
   galleryAdminOnly: false,
   allowSuperAdminManageSuperAdmins: false,
+  turnstileEnabled: false,
   blurhashEnabled: true,
   blurhashAutoGenerate: true,
   blurhashComponentsX: 4,
@@ -149,6 +151,7 @@ const BOOLEAN_KEYS = new Set([
   'semanticSearchEnabled',
   'galleryAdminOnly',
   'allowSuperAdminManageSuperAdmins',
+  'turnstileEnabled',
   'blurhashEnabled',
   'blurhashAutoGenerate',
   's3Enabled',
