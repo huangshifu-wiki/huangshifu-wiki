@@ -411,6 +411,7 @@ router.put(
             timeSlots: input.timeSlots,
             timeStatus: input.timeStatus,
             ticketPrices: input.ticketPrices,
+            saleTimes: input.saleTimes,
             lineup: input.lineup,
             tags: input.tags,
             externalLinks: input.externalLinks,

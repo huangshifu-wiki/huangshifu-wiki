@@ -227,4 +227,43 @@ describe('Events API - 活动标签筛选', () => {
     expect(scheduledResponse.body.event.timeStatus).toBeNull()
     expect(scheduledResponse.body.event.timeSlots).toEqual([{ type: 'date', start: '2026-10-01' }])
   })
+
+  it('编辑起售时间后重新读取保留修改，并支持清空', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const payload = {
+      title: 'Event Tags Test Sale Times',
+      timeStatus: 'pending',
+      saleTimes: [{ time: '2026-10-01T12:00', note: '预售' }],
+    }
+    const created = await agent
+      .post('/api/events')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send(payload)
+      .expect(201)
+    const { id, slug } = created.body.event
+
+    const saleTimes = [{ time: '2026-10-02T15:30', note: '正式开售' }, { time: '2026-10-03T10:00' }]
+    const updated = await agent
+      .put(`/api/events/${id}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ ...payload, saleTimes })
+      .expect(200)
+    expect(updated.body.event.saleTimes).toEqual(saleTimes)
+
+    const reloaded = await request(app).get(`/api/events/${slug}`).expect(200)
+    expect(reloaded.body.event.saleTimes).toEqual(saleTimes)
+    expect((await prisma.event.findUniqueOrThrow({ where: { id } })).saleTimes).toEqual(saleTimes)
+
+    await agent
+      .put(`/api/events/${id}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ ...payload, saleTimes: [] })
+      .expect(200)
+    const cleared = await request(app).get(`/api/events/${slug}`).expect(200)
+    expect(cleared.body.event.saleTimes).toEqual([])
+    expect((await prisma.event.findUniqueOrThrow({ where: { id } })).saleTimes).toEqual([])
+  })
 })
