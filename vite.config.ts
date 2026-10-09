@@ -42,12 +42,15 @@ export default defineConfig(({ mode }) => {
         },
       },
       rollupOptions: {
-        onwarn(warning) {
-          if (warning.code === 'CIRCULAR_DEPENDENCY') return
-          if (warning.message?.includes('Circular chunk')) return
-          console.warn(warning.message || warning)
+        onwarn(warning, warn) {
+          // 跨包循环会破坏模块初始化顺序，禁止发布此类构建产物。
+          if (warning.code === 'CIRCULAR_CHUNK' || warning.code === 'CYCLIC_CROSS_CHUNK_REEXPORT') {
+            throw new Error(warning.message)
+          }
+          warn(warning)
         },
         output: {
+          // 页面及共享业务模块由 Rollup 按动态导入自动拆分，避免共享依赖被吸入页面包。
           manualChunks(id) {
             if (id.includes('node_modules')) {
               const pkgMatch = id.match(/node_modules[\/\\](@[^\/\\]+[\/\\][^\/\\]+|[^\/\\]+)/)
@@ -98,20 +101,6 @@ export default defineConfig(({ mode }) => {
               }
 
               return 'vendor'
-            }
-
-            if (id.includes('/src/pages/')) {
-              if (id.includes('/pages/Admin')) return 'page-admin'
-              if (id.includes('/pages/Forum')) return 'page-forum'
-              if (id.includes('/pages/Music')) return 'page-music'
-              if (id.includes('/pages/Gallery')) return 'page-gallery'
-              if (id.includes('/pages/Events')) return 'page-events'
-              if (id.includes('/pages/wiki/')) return 'page-wiki'
-              if (id.includes('/pages/Search')) return 'page-search'
-              if (id.includes('GalleryDetail')) return 'page-gallery-detail'
-              if (id.includes('MusicDetail')) return 'page-music-detail'
-              if (id.includes('AlbumDetail')) return 'page-album-detail'
-              if (id.includes('MusicLinks')) return 'page-music-links'
             }
           },
           entryFileNames: `assets/v5-[name]-[hash].js`,

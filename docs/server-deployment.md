@@ -1074,6 +1074,10 @@ pm2 restart huangshifu-wiki --update-env
 
 ### v7.x
 
+- **修复编辑弹窗重构后的生产入口黑屏**：取消页面目录手动分包，解决新依赖图触发的循环初始化问题。
+  循环分包及循环跨包重导出改为构建错误，防止再次发布此类产物。
+  无数据库迁移或环境变量变更；部署时需重新构建并发布完整 `dist`。
+
 - **ChineseCLIP 向量模型替换**：将图片向量模型从 `Xenova/clip-vit-base-patch32` 替换为 `OFA-Sys/chinese-clip-vit-base-patch16`，提升中文语义理解能力
   - 新增 `IMAGE_EMBEDDING_DTYPE` 环境变量：支持 `q8`（int8 量化，省内存）和 `fp32`（全精度）
   - 首次加载时自动执行动态量化（需 Python + onnxruntime，不可用时自动降级为 fp32）
