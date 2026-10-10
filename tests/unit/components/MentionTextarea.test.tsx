@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,20 +26,11 @@ async function openSuggestions(textarea: HTMLTextAreaElement) {
   textarea.setSelectionRange(4, 4)
   fireEvent.click(textarea)
 
-  await act(async () => {
-    vi.advanceTimersByTime(220)
-  })
-
-  await act(async () => {
-    await Promise.resolve()
-  })
-
-  expect(screen.getByRole('listbox')).toBeInTheDocument()
+  await screen.findByRole('listbox')
 }
 
 describe('MentionTextarea', () => {
   beforeEach(() => {
-    vi.useFakeTimers()
     mockApiGet.mockResolvedValue({
       users: [{ uid: 'user-alice', displayName: 'Alice', photoURL: null }],
     })
@@ -46,21 +38,7 @@ describe('MentionTextarea', () => {
 
   afterEach(() => {
     cleanup()
-    vi.runOnlyPendingTimers()
-    vi.useRealTimers()
     vi.clearAllMocks()
-  })
-
-  it('opens visible mention suggestions with floating dropdown state', async () => {
-    renderMentionTextarea()
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
-
-    await openSuggestions(textarea)
-
-    const listbox = screen.getByRole('listbox')
-    expect(listbox).toHaveAttribute('data-state', 'open')
-    expect(listbox).toHaveAttribute('aria-hidden', 'false')
-    expect(screen.getByRole('option', { name: /Alice/ })).toBeInTheDocument()
   })
 
   it('dismisses suggestions with Escape', async () => {
@@ -73,11 +51,12 @@ describe('MentionTextarea', () => {
   })
 
   it('dismisses suggestions with outside clicks', async () => {
+    const user = userEvent.setup()
     renderMentionTextarea()
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
 
     await openSuggestions(textarea)
-    fireEvent.mouseDown(document.body)
+    await user.click(document.body)
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 

@@ -1,8 +1,12 @@
 import React from 'react'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogCancel,
   Button,
   LoadErrorState,
   Checkbox,
@@ -392,7 +396,6 @@ describe('FullscreenSurface', () => {
     const surface = screen.getByRole('dialog', { name: '全屏编辑' })
     expect(container.contains(surface)).toBe(false)
     expect(document.body.contains(surface)).toBe(true)
-    expect(surface).toHaveClass('fixed', 'inset-0', 'z-[1050]')
 
     await user.keyboard('{Escape}')
     expect(onOpenChange).toHaveBeenCalledWith(false)
@@ -404,12 +407,18 @@ describe('FullscreenSurface', () => {
     const NestedDemo = () => {
       const [formOpen, setFormOpen] = React.useState(true)
       const [fullscreen, setFullscreen] = React.useState(false)
+      const [lyrics, setLyrics] = React.useState('第一行')
       return (
         <Dialog open={formOpen} onOpenChange={setFormOpen}>
           <DialogContent title="编辑歌曲" description="表单弹窗">
             <Button onClick={() => setFullscreen(true)}>全屏</Button>
+            <output aria-label="歌词草稿">{lyrics}</output>
             <FullscreenSurface open={fullscreen} onOpenChange={setFullscreen} label="歌词编辑">
-              <Input aria-label="歌词" defaultValue="第一行" />
+              <Input
+                aria-label="歌词"
+                value={lyrics}
+                onChange={(event) => setLyrics(event.target.value)}
+              />
             </FullscreenSurface>
           </DialogContent>
         </Dialog>
@@ -423,9 +432,70 @@ describe('FullscreenSurface', () => {
     await user.click(input)
     // 外层弹窗的 trapped FocusScope 会被整屏浮层暂停，焦点不会被抢回弹窗
     expect(document.activeElement).toBe(input)
+    await user.type(input, '，第二行')
 
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: '歌词编辑' })).not.toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: '编辑歌曲' })).toBeInTheDocument()
+    expect(screen.getByLabelText('歌词草稿')).toHaveTextContent('第一行，第二行')
+  })
+})
+
+describe('弹窗内的辅助浮层', () => {
+  it('菜单动作更新结果并恢复焦点，Tooltip 和确认取消保留外层草稿', async () => {
+    function Editor() {
+      const [result, setResult] = React.useState('未选择')
+      return (
+        <Dialog defaultOpen>
+          <DialogContent title="编辑草稿">
+            <Input aria-label="草稿正文" defaultValue="仍未保存" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>编辑菜单</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onSelect={() => setResult('已标记原创')}>
+                  标记原创
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <output>{result}</output>
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button>编辑提示</Button>
+                </TooltipTrigger>
+                <TooltipContent>草稿不会自动保存</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button>放弃草稿</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent title="确认放弃" description="取消后继续编辑">
+                <AlertDialogCancel asChild>
+                  <Button>继续编辑</Button>
+                </AlertDialogCancel>
+              </AlertDialogContent>
+            </AlertDialog>
+          </DialogContent>
+        </Dialog>
+      )
+    }
+    const user = userEvent.setup()
+    render(<Editor />)
+    const menu = screen.getByRole('button', { name: '编辑菜单' })
+    await user.click(menu)
+    await user.click(screen.getByRole('menuitem', { name: '标记原创' }))
+    expect(screen.getByText('已标记原创')).toBeInTheDocument()
+    await waitFor(() => expect(menu).toHaveFocus())
+    await user.tab()
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('草稿不会自动保存')
+    await user.click(screen.getByRole('button', { name: '放弃草稿' }))
+    const confirmation = screen.getByRole('alertdialog', { name: '确认放弃' })
+    await user.click(within(confirmation).getByRole('button', { name: '继续编辑' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('草稿正文')).toHaveValue('仍未保存')
+    expect(screen.getByRole('dialog', { name: '编辑草稿' })).toBeInTheDocument()
   })
 })

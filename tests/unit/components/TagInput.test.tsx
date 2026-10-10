@@ -3,7 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
-import { Field, TagInput } from '../../../src/components/ui'
+import { Button, Field, Input, TagInput } from '../../../src/components/ui'
+import { FormModal } from '../../../src/components/Modal/FormModal'
 
 function ControlledTagInput({
   initialTags = ['古风'],
@@ -217,5 +218,40 @@ describe('TagInput', () => {
 
     expect(screen.queryByText('古风')).not.toBeInTheDocument()
     expect(screen.getByText('现场')).toBeInTheDocument()
+  })
+})
+
+describe('编辑弹窗中的标签输入', () => {
+  it('候选点击和键盘添加保留草稿，Escape 与 Tab 不关闭父弹窗', async () => {
+    const user = userEvent.setup()
+    render(
+      <FormModal open onClose={() => {}} title="编辑活动">
+        <ControlledTagInput initialTags={[]} />
+        <Input aria-label="活动标题" defaultValue="未保存的活动" />
+        <Button>保存草稿</Button>
+      </FormModal>
+    )
+    const input = screen.getByRole('combobox')
+    await user.click(input)
+    await user.click(screen.getByRole('option', { name: '现场' }))
+    expect(screen.getByRole('button', { name: '删除标签：现场' })).toBeInTheDocument()
+    await user.type(input, '原创')
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(screen.getByRole('button', { name: '删除标签：原创' })).toBeInTheDocument()
+    await user.click(input)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: '编辑活动' })).toBeInTheDocument()
+    await user.click(input)
+    fireEvent.compositionStart(input)
+    fireEvent.change(input, { target: { value: '中文' } })
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(screen.queryByRole('button', { name: '删除标签：中文' })).not.toBeInTheDocument()
+    fireEvent.compositionEnd(input)
+    await user.clear(input)
+    await user.tab()
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('活动标题')).toHaveFocus()
+    expect(screen.getByLabelText('活动标题')).toHaveValue('未保存的活动')
   })
 })

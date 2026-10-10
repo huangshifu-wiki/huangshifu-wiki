@@ -24,6 +24,7 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
       className,
       id,
       disabled,
+      autoComplete = 'off',
       onKeyDown,
       onFocus,
       onBlur: onInputBlur,
@@ -289,6 +290,7 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
                   type="text"
                   value={inputValue}
                   disabled={disabled}
+                  autoComplete={autoComplete}
                   role="combobox"
                   aria-autocomplete="list"
                   aria-haspopup="listbox"

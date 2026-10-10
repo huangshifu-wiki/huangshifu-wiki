@@ -4,6 +4,7 @@ import { clsx } from 'clsx'
 import { MapPickerModal, type PickedLocation } from './MapPickerModal'
 import { apiGet, apiPost } from '../lib/apiClient'
 import { resolveLocationTagInputEnterSelectionIndex } from '../lib/locationTagInput'
+import { Popover, PopoverAnchor, PopoverContent } from '@/src/components/ui'
 
 interface RegionSuggestion {
   code: string
@@ -24,12 +25,10 @@ interface LocationTagInputProps {
 
 export const LocationTagInput = ({
   value,
-  locationCode,
   onChange,
   onClear,
   variant = 'default',
 }: LocationTagInputProps) => {
-  const [open, setOpen] = useState(false)
   const [mapPickerOpen, setMapPickerOpen] = useState(false)
   const [inputValue, setInputValue] = useState(value || '')
   const [suggestions, setSuggestions] = useState<RegionSuggestion[]>([])
@@ -38,6 +37,7 @@ export const LocationTagInput = ({
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const anchorRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -158,10 +158,12 @@ export const LocationTagInput = ({
     }
   }
 
-  const handleBlur = () => {
-    setTimeout(() => {
-      setShowDropdown(false)
-    }, 150)
+  const handleBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    const target = event.relatedTarget as Node | null
+    if (target && (anchorRef.current?.contains(target) || dropdownRef.current?.contains(target)))
+      return
+    setShowDropdown(false)
+    setSelectedIndex(-1)
   }
 
   const isBook = variant === 'book'
@@ -197,79 +199,99 @@ export const LocationTagInput = ({
   }
 
   return (
-    <div className="relative">
-      <div className="flex items-center gap-1">
-        <div className="relative flex-1">
-          <MapPin
-            size={13}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-          />
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            placeholder="输入或选择地点..."
-            className={clsx(
-              'w-full rounded py-2.5 pl-9 pr-9 text-base',
-              isBook
-                ? 'border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-brand-gold'
-                : 'theme-input'
-            )}
-          />
-          {loading && (
-            <Loader2
+    <Popover
+      open={showDropdown && suggestions.length > 0}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          setShowDropdown(false)
+          setSelectedIndex(-1)
+        }
+      }}
+    >
+      <PopoverAnchor asChild>
+        <div ref={anchorRef} onBlurCapture={handleBlur} className="flex items-center gap-1">
+          <div className="relative flex-1">
+            <MapPin
               size={13}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
             />
-          )}
-          {!loading && inputValue && (
-            <button
-              onClick={handleClear}
+            <input
+              ref={inputRef}
+              type="text"
+              autoComplete="off"
+              value={inputValue}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onFocus={handleFocus}
+              placeholder="输入或选择地点..."
               className={clsx(
-                'absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5',
+                'w-full rounded py-2.5 pl-9 pr-9 text-base',
                 isBook
-                  ? 'text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-brand-gold'
-                  : 'hover:bg-surface-alt'
+                  ? 'border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-brand-gold'
+                  : 'theme-input'
               )}
-              type="button"
-            >
-              <X size={13} className={isBook ? undefined : 'text-text-muted'} />
-            </button>
-          )}
+            />
+            {loading && (
+              <Loader2
+                size={13}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin"
+              />
+            )}
+            {!loading && inputValue && (
+              <button
+                onClick={handleClear}
+                className={clsx(
+                  'absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5',
+                  isBook
+                    ? 'text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-brand-gold'
+                    : 'hover:bg-surface-alt'
+                )}
+                type="button"
+              >
+                <X size={13} className={isBook ? undefined : 'text-text-muted'} />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setMapPickerOpen(true)}
+            className={clsx(
+              'rounded border p-2 transition-all',
+              isBook
+                ? 'border-[var(--book-ink-line)] text-text-muted hover:border-brand-gold/50 hover:text-brand-gold'
+                : 'border-border hover:border-brand-gold hover:text-brand-gold'
+            )}
+            type="button"
+            title="在地图上选择"
+          >
+            <MapPin size={15} className={isBook ? undefined : 'text-text-muted'} />
+          </button>
         </div>
-        <button
-          onClick={() => setMapPickerOpen(true)}
-          className={clsx(
-            'rounded border p-2 transition-all',
-            isBook
-              ? 'border-[var(--book-ink-line)] text-text-muted hover:border-brand-gold/50 hover:text-brand-gold'
-              : 'border-border hover:border-brand-gold hover:text-brand-gold'
-          )}
-          type="button"
-          title="在地图上选择"
-        >
-          <MapPin size={15} className={isBook ? undefined : 'text-text-muted'} />
-        </button>
-      </div>
+      </PopoverAnchor>
 
       {showDropdown && suggestions.length > 0 && (
-        <div
+        <PopoverContent
           ref={dropdownRef}
+          role="listbox"
+          aria-label="地点候选"
+          align="start"
+          sideOffset={4}
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          onInteractOutside={(event) => {
+            if (anchorRef.current?.contains(event.target as Node)) event.preventDefault()
+          }}
           className={clsx(
-            'absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded border',
-            isBook
-              ? 'border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[var(--book-panel-shadow)] backdrop-blur-[12px]'
-              : 'border-border bg-surface shadow-lg'
+            'w-[var(--radix-popper-anchor-width)] max-h-[min(15rem,var(--radix-popover-content-available-height))] overflow-y-auto p-0',
+            isBook && 'bg-[var(--book-panel-bg-strong)] shadow-[var(--book-panel-shadow)]'
           )}
         >
           {suggestions.map((region, index) => (
             <button
               key={region.code}
               type="button"
+              role="option"
+              aria-selected={index === selectedIndex}
+              onPointerDown={(event) => event.preventDefault()}
               onClick={() => handleSelect(region)}
               className={clsx(
                 'w-full border-b px-4 py-3 text-left transition-colors last:border-b-0',
@@ -298,7 +320,7 @@ export const LocationTagInput = ({
               <div className="text-xs text-text-muted mt-0.5 pl-[1.125rem]">{region.fullName}</div>
             </button>
           ))}
-        </div>
+        </PopoverContent>
       )}
 
       <MapPickerModal
@@ -306,7 +328,7 @@ export const LocationTagInput = ({
         onClose={() => setMapPickerOpen(false)}
         onConfirm={handleMapConfirm}
       />
-    </div>
+    </Popover>
   )
 }
 
