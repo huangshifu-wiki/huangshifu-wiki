@@ -165,7 +165,7 @@ const WikiPageView = () => {
         backlinks: WikiItem[]
         relations: WikiRelationResolved[]
         relationGraph: RelationGraphData
-      }>(`/api/wiki/${slug}`)
+      }>(`/api/wiki/${slug}`, undefined, { staleTime: 0, swr: false })
       setPage(data.page)
       setBacklinks(data.backlinks || [])
       setResolvedRelations((data.relations || []).filter((relation) => !relation.inferred))
@@ -193,7 +193,7 @@ const WikiPageView = () => {
 
   useEffect(() => {
     void fetchPage()
-  }, [slug])
+  }, [slug, user?.uid])
 
   if (loading && !page)
     return (

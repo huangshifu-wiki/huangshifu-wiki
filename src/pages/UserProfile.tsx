@@ -82,7 +82,7 @@ function formatTime(value: string) {
 function getFavoriteLink(item: FavoriteItem | HistoryItem) {
   if (item.targetType === 'wiki') return `/wiki/${item.target?.slug || item.targetId}`
   if (item.targetType === 'post') return `/forum/${item.target?.slug || item.targetId}`
-  return '/music'
+  return item.target?.slug ? `/music/${item.target.slug}` : '/music'
 }
 
 function getFavoriteTitle(item: FavoriteItem | HistoryItem) {
@@ -184,32 +184,38 @@ export default function UserProfile() {
 
   useEffect(() => {
     if (!userId) return
-    let cancelled = false
+    const controller = new AbortController()
     const run = async () => {
       setProfileLoading(true)
       setError('')
+      setProfile(null)
+      setHistory([])
       try {
-        const data = await apiGet<{ user: PublicUser }>(`/api/users/${userId}/profile`)
-        if (!cancelled) {
+        const data = await apiGet<{ user: PublicUser }>(
+          `/api/users/${userId}/profile`,
+          undefined,
+          { staleTime: 0, swr: false },
+          controller.signal
+        )
+        if (!controller.signal.aborted) {
           setProfile(data.user)
         }
       } catch (err) {
-        console.error('Fetch public profile error:', err)
-        if (!cancelled) {
-          setProfile(null)
+        if (!controller.signal.aborted) {
+          console.error('Fetch public profile error:', err)
           setError('用户不存在或暂不可见')
         }
       } finally {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setProfileLoading(false)
         }
       }
     }
     void run()
     return () => {
-      cancelled = true
+      controller.abort()
     }
-  }, [profileRetry, userId])
+  }, [profileRetry, userId, authUser?.uid])
 
   useEffect(() => {
     if (!signatureEditing) {
@@ -343,6 +349,7 @@ export default function UserProfile() {
     }
 
     let cancelled = false
+    const controller = activeTab === 'history' ? new AbortController() : undefined
     const run = async () => {
       setContentLoading(true)
       setContentError(null)
@@ -400,7 +407,9 @@ export default function UserProfile() {
             {
               page: pagination.page,
               limit: pagination.pageSize,
-            }
+            },
+            { staleTime: 0, swr: false },
+            controller?.signal
           )
           if (!cancelled) {
             setHistory(data.history || [])
@@ -408,8 +417,10 @@ export default function UserProfile() {
           }
         }
       } catch (err) {
-        console.error('Fetch public profile content error:', err)
-        if (!cancelled) setContentError(err)
+        if (!cancelled) {
+          console.error('Fetch public profile content error:', err)
+          setContentError(err)
+        }
       } finally {
         if (!cancelled) setContentLoading(false)
       }
@@ -417,6 +428,7 @@ export default function UserProfile() {
     void run()
     return () => {
       cancelled = true
+      controller?.abort()
     }
   }, [
     activeTab,
@@ -427,6 +439,7 @@ export default function UserProfile() {
     pagination.pageSize,
     profileLoaded,
     userId,
+    authUser?.uid,
   ])
 
   useEffect(() => {

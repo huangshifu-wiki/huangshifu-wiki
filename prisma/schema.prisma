@@ -1174,6 +1174,7 @@ model BrowsingHistory {
   createdAt  DateTime          @default(now())
   user       User              @relation(fields: [userUid], references: [uid], onDelete: Cascade)
 
+  @@unique([userUid, targetType, targetId])
   @@index([userUid, createdAt])
   @@index([userUid, targetType, createdAt])
   @@index([targetType, targetId, createdAt])

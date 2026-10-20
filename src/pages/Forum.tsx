@@ -490,7 +490,8 @@ const PostDetail = () => {
         setLoading(true)
         const data = await apiGet<{ post: PostItem; comments: CommentItem[] }>(
           `/api/posts/${postId}`,
-          { includeDeleted: isAdmin && showDeletedComments }
+          { includeDeleted: isAdmin && showDeletedComments },
+          { staleTime: 0, swr: false }
         )
         setPost(data.post)
         setComments(data.comments || [])
@@ -502,7 +503,7 @@ const PostDetail = () => {
     }
 
     fetchPost()
-  }, [postId, isAdmin, showDeletedComments])
+  }, [postId, isAdmin, showDeletedComments, user?.uid])
 
   useEffect(() => {
     if (!location.hash.startsWith('#comment-')) {

@@ -202,7 +202,10 @@ const MusicDetail = () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const detail = await apiGet<SongDetailResponse>(`/api/music/${songId}`)
+      const detail = await apiGet<SongDetailResponse>(`/api/music/${songId}`, undefined, {
+        staleTime: 0,
+        swr: false,
+      })
       if (requestRef.current !== request) return
       const currentSong = detail.song || null
       setSong(currentSong)
@@ -234,7 +237,7 @@ const MusicDetail = () => {
     return () => {
       requestRef.current += 1
     }
-  }, [songId])
+  }, [songId, user?.uid])
 
   // SEO 元数据：加载中/失败不可索引，成功后输出歌曲详情与 MusicRecording JSON-LD
   const songPath = `/music/${songId}`

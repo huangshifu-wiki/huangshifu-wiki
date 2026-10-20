@@ -45,6 +45,7 @@ import {
   withNumericSlugTransaction,
   normalizeLyricStorage,
   logger,
+  recordBrowsingHistory,
 } from '../utils'
 import type { SongDuplicateStrategy } from '../utils'
 import { parseMusicUrl } from '../music/musicUrlParser'
@@ -958,6 +959,11 @@ router.get(
       if (!song) {
         res.status(404).json({ error: '歌曲不存在' })
         return
+      }
+
+      // 使用歌曲内部 ID 记录历史，与收藏和历史列表的目标解析保持一致。
+      if (req.authUser) {
+        await recordBrowsingHistory(req.authUser.uid, 'music', song.docId)
       }
 
       const favoritedByMe = req.authUser

@@ -1487,6 +1487,10 @@ router.put(
 // User browsing history route
 router.get(
   '/me/history',
+  (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store')
+    next()
+  },
   requireAuth,
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -1509,7 +1513,7 @@ router.get(
       const [histories, total] = await Promise.all([
         prisma.browsingHistory.findMany({
           where,
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: limit,
           skip,
         }),
@@ -2114,6 +2118,7 @@ router.get(
 router.get(
   '/:userId/history',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    res.setHeader('Cache-Control', 'no-store')
     try {
       const targetUser = await resolveExistingPublicProfileUser(req.params.userId, res)
       if (!targetUser) return
@@ -2138,7 +2143,7 @@ router.get(
           userUid: uid,
           ...(type ? { targetType: String(type) as 'wiki' | 'post' | 'music' } : {}),
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true,
           targetType: true,
