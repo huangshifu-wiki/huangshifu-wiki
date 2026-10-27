@@ -149,7 +149,9 @@ export const MatchSuggestionModal = ({
                           : 'border-border'
                       )}
                     >
-                      {selectedIndex === index && <Check size={12} className="text-white" />}
+                      {selectedIndex === index && (
+                        <Check size={12} className="text-[var(--color-theme-accent-contrast)]" />
+                      )}
                     </div>
                     <img
                       src={suggestion.cover}

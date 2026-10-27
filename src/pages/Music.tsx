@@ -381,7 +381,7 @@ const Music = () => {
                     onClick={() => handleTagChange('')}
                     className={clsx(
                       'cursor-pointer rounded-sm px-2 py-0.5 text-xs theme-tag',
-                      !tag && 'font-semibold text-brand-gold'
+                      !tag && 'font-semibold'
                     )}
                   >
                     全部
@@ -393,7 +393,7 @@ const Music = () => {
                       onClick={() => handleTagChange(item)}
                       className={clsx(
                         'cursor-pointer rounded-sm px-2 py-0.5 text-xs theme-tag',
-                        tag === item && 'font-semibold text-brand-gold'
+                        tag === item && 'font-semibold'
                       )}
                     >
                       {item}
