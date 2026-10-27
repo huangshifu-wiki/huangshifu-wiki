@@ -39,6 +39,7 @@ const album = {
 const detail = {
   album: {
     docId: 'album-1',
+    updatedAt: '2026-01-01T00:00:00.000Z',
     tracks: [
       {
         docId: 'song-1',
@@ -124,6 +125,7 @@ describe('AlbumTrackEditor', () => {
 
     await waitFor(() => expect(mockedApiPatch).toHaveBeenCalledOnce())
     expect(mockedApiPatch).toHaveBeenCalledWith('/api/albums/album-1/tracks/reorder', {
+      updatedAt: '2026-01-01T00:00:00.000Z',
       tracks: [
         {
           disc: 1,
@@ -144,6 +146,26 @@ describe('AlbumTrackEditor', () => {
     expect(onChanged).toHaveBeenCalledOnce()
     await waitFor(() => expect(mockedApiGet).toHaveBeenCalledTimes(2))
   })
+  it('排序后仍可增删 Disc 和曲目，撤销恢复完整快照', async () => {
+    renderEditor()
+    await moveSecondTrackUp()
+    await userEvent.click(screen.getByRole('button', { name: '移出《第一首》' }))
+    await userEvent.click(await screen.findByRole('button', { name: '移出' }))
+    await userEvent.click(screen.getByRole('button', { name: '新建 Disc' }))
+    await userEvent.type(screen.getByLabelText(/Disc 编号/), '3')
+    await userEvent.type(screen.getByLabelText(/Disc 名称/), '新碟')
+    await userEvent.click(screen.getByRole('button', { name: '创建 Disc' }))
+    expect(screen.getByRole('heading', { name: '新碟' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '删除 Disc' }))
+    await userEvent.click(await screen.findByRole('button', { name: '删除' }))
+    expect(mockedApiPost).not.toHaveBeenCalled()
+    expect(mockedApiDelete).not.toHaveBeenCalled()
+    expect(mockedApiPatch).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: '撤销调整' }))
+    expect(screen.getByText('第一首')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '新碟' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存编排' })).toBeDisabled()
+  })
 
   it('详情加载失败时显示错误和重试入口', async () => {
     mockedApiGet.mockRejectedValueOnce(new Error('详情服务不可用'))
@@ -156,7 +178,7 @@ describe('AlbumTrackEditor', () => {
     expect(await screen.findByText('附碟')).toBeInTheDocument()
   })
 
-  it('搜索结果直接添加到当前 Disc 并提交追加轨序', async () => {
+  it('搜索结果先加入草稿，保存时提交追加轨序', async () => {
     const newSong = {
       docId: 'song-new',
       title: '新歌曲',
@@ -182,13 +204,20 @@ describe('AlbumTrackEditor', () => {
       await Promise.resolve()
     })
 
-    expect(mockedApiPost).toHaveBeenCalledOnce()
-    expect(mockedApiPost).toHaveBeenCalledWith('/api/music/song-new/albums', {
-      albumDocId: 'album-1',
-      discNumber: 1,
-      trackOrder: 2,
-      isDisplay: false,
-    })
+    expect(mockedApiPost).not.toHaveBeenCalled()
+    expect(screen.getByText('新歌曲')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保存编排' }))
+    expect(mockedApiPatch).toHaveBeenCalledWith(
+      '/api/albums/album-1/tracks/reorder',
+      expect.objectContaining({
+        tracks: expect.arrayContaining([
+          expect.objectContaining({
+            disc: 1,
+            songs: expect.arrayContaining([{ songDocId: 'song-new', trackOrder: 2 }]),
+          }),
+        ]),
+      })
+    )
     expect(screen.getByRole('combobox', { name: '添加歌曲' })).toHaveValue('')
   })
 
@@ -223,7 +252,7 @@ describe('AlbumTrackEditor', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
-  it('移出曲目前要求确认，确认后请求精确端点', async () => {
+  it('移出曲目前要求确认，确认后仅修改草稿', async () => {
     renderEditor()
 
     await screen.findByText('第一首')
@@ -233,7 +262,8 @@ describe('AlbumTrackEditor', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '移出《第一首》' }))
     await userEvent.click(await screen.findByRole('button', { name: '移出' }))
-    await waitFor(() => expect(mockedApiDelete).toHaveBeenCalledOnce())
-    expect(mockedApiDelete).toHaveBeenCalledWith('/api/music/song-1/albums/album-1')
+    expect(screen.queryByText('第一首')).not.toBeInTheDocument()
+    expect(mockedApiDelete).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '保存编排' })).toBeEnabled()
   })
 })

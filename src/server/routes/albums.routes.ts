@@ -990,31 +990,88 @@ router.patch(
       }
 
       const tracks = normalizeTrackDiscPayload(req.body.tracks)
-      const currentRelations = await prisma.songAlbumRelation.findMany({
-        where: { albumDocId: docId, song: { deletedAt: null } },
-        select: { songDocId: true },
-      })
-      const currentSongIds = new Set(currentRelations.map((relation) => relation.songDocId))
-      const requestedSongIds = tracks.flatMap((disc) => disc.songs.map((song) => song.songDocId))
-      if (
-        requestedSongIds.length !== currentSongIds.size ||
-        requestedSongIds.some((songDocId) => !currentSongIds.has(songDocId))
-      ) {
-        res.status(400).json({ error: '曲目快照必须包含专辑当前全部歌曲' })
-        return
-      }
-
-      await prisma.$transaction(async (tx) => {
-        await tx.album.update({
-          where: { docId },
+      const requested = tracks.flatMap((disc) =>
+        disc.songs.map((song) => ({
+          songDocId: song.songDocId,
+          discNumber: disc.disc,
+          trackOrder: song.trackOrder,
+        }))
+      )
+      const requestedIds = requested.map((song) => song.songDocId)
+      const result = await prisma.$transaction(async (tx) => {
+        const updated = await tx.album.updateMany({
+          where: { docId, deletedAt: null, updatedAt: new Date(req.body.updatedAt) },
           data: { tracks },
         })
-        await applyAlbumTracksToRelations(docId, tracks, tx)
+        if (!updated.count) return 'conflict'
+
+        const validCount = await tx.musicTrack.count({
+          where: { docId: { in: requestedIds }, deletedAt: null },
+        })
+        if (validCount !== requestedIds.length) throw new Error('INVALID_ALBUM_TRACKS')
+
+        const existing = await tx.songAlbumRelation.findMany({
+          where: { albumDocId: docId, song: { deletedAt: null } },
+          select: {
+            id: true,
+            songDocId: true,
+            isDisplay: true,
+            discNumber: true,
+            trackOrder: true,
+          },
+        })
+        const bySong = new Map(existing.map((relation) => [relation.songDocId, relation]))
+        const requestedSet = new Set(requestedIds)
+        const removed = existing.filter((relation) => !requestedSet.has(relation.songDocId))
+        if (removed.length) {
+          await tx.songAlbumRelation.deleteMany({
+            where: { id: { in: removed.map((item) => item.id) } },
+          })
+        }
+        for (const relation of removed.filter((item) => item.isDisplay)) {
+          const remaining = await tx.songAlbumRelation.findMany({
+            where: { songDocId: relation.songDocId, album: { deletedAt: null } },
+            orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+          })
+          if (remaining.length && !remaining.some((item) => item.isDisplay)) {
+            await tx.songAlbumRelation.update({
+              where: { id: remaining[0].id },
+              data: { isDisplay: true },
+            })
+          }
+        }
+        for (const song of requested) {
+          const relation = bySong.get(song.songDocId)
+          if (relation) {
+            if (
+              relation.discNumber !== song.discNumber ||
+              relation.trackOrder !== song.trackOrder
+            ) {
+              await tx.songAlbumRelation.update({
+                where: { id: relation.id },
+                data: { discNumber: song.discNumber, trackOrder: song.trackOrder },
+              })
+            }
+          } else {
+            await tx.songAlbumRelation.create({
+              data: { ...song, albumDocId: docId, isDisplay: false },
+            })
+          }
+        }
+        return 'saved'
       })
+      if (result === 'conflict') {
+        res.status(409).json({ error: '专辑已更新，请重新加载后再保存' })
+        return
+      }
 
       invalidateMusicContentCaches()
       res.json({ success: true })
     } catch (error) {
+      if (error instanceof Error && error.message === 'INVALID_ALBUM_TRACKS') {
+        res.status(400).json({ error: '曲目包含不存在或已删除的歌曲' })
+        return
+      }
       console.error('Reorder album tracks error:', error)
       res.status(500).json({ error: '重排专辑曲目失败' })
     }

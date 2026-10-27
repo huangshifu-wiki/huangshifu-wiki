@@ -173,6 +173,7 @@ const adminAlbumTrackDiscSchema = z.object({
 
 export const adminAlbumTrackReorderSchema = z
   .object({
+    updatedAt: z.iso.datetime(),
     tracks: z.array(adminAlbumTrackDiscSchema).max(20),
   })
   .superRefine((value, ctx) => {

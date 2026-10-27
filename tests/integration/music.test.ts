@@ -496,11 +496,13 @@ describe('Music API - 音乐接口测试', () => {
       adminUser.user.email,
       adminUser.plainPassword
     )
+    const snapshot = await prisma.album.findUniqueOrThrow({ where: { docId: album.docId } })
     const incomplete = await agent
       .patch(`/api/albums/${album.docId}/tracks/reorder`)
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({
-        tracks: [{ disc: 1, name: '主碟', songs: [{ songDocId: songOne.docId, trackOrder: 1 }] }],
+        updatedAt: snapshot.updatedAt.toISOString(),
+        tracks: [{ disc: 1, name: '主碟', songs: [{ songDocId: 'missing-song', trackOrder: 0 }] }],
       })
     expect(incomplete.status).toBe(400)
 
@@ -508,6 +510,7 @@ describe('Music API - 音乐接口测试', () => {
       .patch(`/api/albums/${album.docId}/tracks/reorder`)
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({
+        updatedAt: snapshot.updatedAt.toISOString(),
         tracks: [
           { disc: 1, name: '主碟', songs: [{ songDocId: songOne.docId, trackOrder: 1 }] },
           { disc: 2, name: '附碟', songs: [{ songDocId: songTwo.docId, trackOrder: 0 }] },
@@ -552,6 +555,119 @@ describe('Music API - 音乐接口测试', () => {
       { disc: 1, name: '主碟' },
       { disc: 2, name: '附碟' },
     ])
+  })
+  it('统一保存专辑草稿并保护并发修改及歌曲关联', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const [album, otherAlbum, removed, kept, added, deleted] = await Promise.all([
+      prisma.album.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: `Album Admin Bugfix ${suffix}`,
+          artist: '艺人',
+        },
+      }),
+      prisma.album.create({
+        data: {
+          slug: nextTestNumericSlug(),
+          title: `Album Admin Bugfix Other ${suffix}`,
+          artist: '艺人',
+        },
+      }),
+      ...['移出', '保留', '新增', '删除'].map((name) =>
+        prisma.musicTrack.create({
+          data: {
+            slug: nextTestNumericSlug(),
+            title: `Album Admin Bugfix ${name} ${suffix}`,
+            artists: ['艺人'],
+            ...(name === '删除' ? { deletedAt: new Date() } : {}),
+          },
+        })
+      ),
+    ])
+    await prisma.songAlbumRelation.createMany({
+      data: [
+        { albumDocId: album.docId, songDocId: removed.docId, isDisplay: true },
+        { albumDocId: otherAlbum.docId, songDocId: removed.docId },
+        { albumDocId: album.docId, songDocId: kept.docId },
+        { albumDocId: album.docId, songDocId: deleted.docId },
+      ],
+    })
+    const keptRelation = await prisma.songAlbumRelation.findUniqueOrThrow({
+      where: { songDocId_albumDocId: { songDocId: kept.docId, albumDocId: album.docId } },
+    })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const path = `/api/albums/${album.docId}/tracks/reorder`
+    const tracks = [
+      {
+        disc: 2,
+        name: '附碟',
+        songs: [
+          { songDocId: kept.docId, trackOrder: 0 },
+          { songDocId: added.docId, trackOrder: 1 },
+        ],
+      },
+      { disc: 3, name: '新碟', songs: [] },
+    ]
+    const version = album.updatedAt.toISOString()
+    const invalid = await agent
+      .patch(path)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        updatedAt: version,
+        tracks: [{ disc: 1, name: '主碟', songs: [{ songDocId: deleted.docId, trackOrder: 0 }] }],
+      })
+    expect(invalid.status).toBe(400)
+    expect(
+      (
+        await prisma.album.findUniqueOrThrow({ where: { docId: album.docId } })
+      ).updatedAt.toISOString()
+    ).toBe(version)
+    expect(
+      (await prisma.songAlbumRelation.findMany({ where: { albumDocId: album.docId } })).length
+    ).toBe(3)
+    const saved = await agent
+      .patch(path)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ updatedAt: version, tracks })
+    expect(saved.status).toBe(200)
+    const detail = await request(app).get(`/api/albums/${album.slug}`)
+    expect(detail.body.album.discs).toMatchObject(tracks)
+    expect(detail.body.album.tracks.map((song: { docId: string }) => song.docId)).toEqual([
+      kept.docId,
+      added.docId,
+    ])
+    const relations = await prisma.songAlbumRelation.findMany({
+      where: { albumDocId: album.docId },
+    })
+    expect(relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: keptRelation.id,
+          songDocId: kept.docId,
+          discNumber: 2,
+          trackOrder: 0,
+        }),
+        expect.objectContaining({ songDocId: added.docId, isDisplay: false, trackOrder: 1 }),
+        expect.objectContaining({ songDocId: deleted.docId }),
+      ])
+    )
+    expect(relations.some((item) => item.songDocId === removed.docId)).toBe(false)
+    expect(
+      await prisma.songAlbumRelation.findUniqueOrThrow({
+        where: { songDocId_albumDocId: { songDocId: removed.docId, albumDocId: otherAlbum.docId } },
+      })
+    ).toMatchObject({ isDisplay: true })
+    const stale = await agent
+      .patch(path)
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({ updatedAt: version, tracks: [] })
+    expect(stale.status).toBe(409)
+    expect((await request(app).get(`/api/albums/${album.slug}`)).body.album.discs).toMatchObject(
+      tracks
+    )
   })
   it('软删除歌曲后专辑计数过滤且拒绝空白标题更新', async () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
