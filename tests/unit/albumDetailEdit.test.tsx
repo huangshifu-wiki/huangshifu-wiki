@@ -47,6 +47,20 @@ const renderAlbum = (slug?: string) => {
 }
 
 describe('AlbumDetail 管理员编辑入口', () => {
+  it('管理员可以在专辑详情管理曲目，普通用户不可见', async () => {
+    mockedUseAuth.mockReturnValue({ user: null, isAdmin: true } as never)
+    const view = renderAlbum('456')
+    await userEvent.setup().click(await screen.findByRole('button', { name: '管理' }))
+    expect(await screen.findByRole('dialog', { name: '管理曲目' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '新建 Disc' })).toBeInTheDocument()
+    view.unmount()
+
+    mockedUseAuth.mockReturnValue({ user: null, isAdmin: false } as never)
+    renderAlbum('456')
+    await screen.findByRole('heading', { name: '测试专辑' })
+    expect(screen.queryByRole('button', { name: '管理' })).not.toBeInTheDocument()
+  })
+
   it('管理员在专辑详情直接打开预填编辑弹窗，普通用户不可见', async () => {
     mockedUseAuth.mockReturnValue({ user: null, isAdmin: true } as never)
     const view = renderAlbum('456')

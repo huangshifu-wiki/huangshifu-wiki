@@ -1,6 +1,15 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Disc3, Edit3, Play, Heart, Link2, ChevronDown, ChevronUp } from '@/src/components/icons'
+import {
+  Disc3,
+  Edit3,
+  Play,
+  Heart,
+  Link2,
+  List,
+  ChevronDown,
+  ChevronUp,
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
@@ -30,6 +39,7 @@ import type { MusicExternalSource } from '../types/entities'
 const AlbumFormModal = lazy(() =>
   import('../components/AlbumFormModal').then((module) => ({ default: module.AlbumFormModal }))
 )
+const AlbumTrackEditor = lazy(() => import('../components/AlbumTrackEditor'))
 
 type SongItem = {
   docId: string
@@ -96,6 +106,7 @@ const AlbumDetail = () => {
   const [retryNonce, setRetryNonce] = useState(0)
   const [album, setAlbum] = useState<AlbumResponse['album'] | null>(null)
   const [editing, setEditing] = useState(false)
+  const [managingTracks, setManagingTracks] = useState(false)
   const previousAlbumIdRef = useRef<string | undefined>(undefined)
   const [favoriting, setFavoriting] = useState<string | null>(null)
   const [descExpanded, setDescExpanded] = useState(false)
@@ -367,6 +378,18 @@ const AlbumDetail = () => {
                   编辑
                 </Button>
               )}
+              {isAdmin && (
+                <Button
+                  type="button"
+                  onClick={() => setManagingTracks(true)}
+                  variant="secondary"
+                  size="md"
+                  leftIcon={<List size={15} />}
+                  className="border-border bg-transparent px-5 py-2.5 text-[0.9375rem] hover:border-brand-gold"
+                >
+                  管理
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -509,6 +532,16 @@ const AlbumDetail = () => {
             album={editableAlbum}
             onClose={() => setEditing(false)}
             onSuccess={() => setRetryNonce((value) => value + 1)}
+          />
+        </Suspense>
+      )}
+      {isAdmin && managingTracks && (
+        <Suspense fallback={<div role="status">曲目管理加载中...</div>}>
+          <AlbumTrackEditor
+            open
+            album={{ docId: album.docId, slug: album.slug, title: album.title }}
+            onClose={() => setManagingTracks(false)}
+            onChanged={() => setRetryNonce((value) => value + 1)}
           />
         </Suspense>
       )}
