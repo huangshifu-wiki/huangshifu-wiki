@@ -9,6 +9,7 @@ import AlbumDetail from '../../src/pages/AlbumDetail'
 import { apiGet, apiPatch } from '../../src/lib/apiClient'
 import { useAuth } from '../../src/context/AuthContext'
 import { DialogProvider } from '../../src/components/Dialog'
+const playAlbumTracks = vi.hoisted(() => vi.fn())
 
 vi.mock('../../src/lib/apiClient', () => ({
   apiGet: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock('../../src/context/AuthContext', () => ({
   useAuth: vi.fn(() => ({ user: null, isAdmin: false })),
 }))
 vi.mock('../../src/context/MusicContext', () => ({
-  useMusic: () => ({ currentSong: null, playAlbumTracks: vi.fn() }),
+  useMusic: () => ({ currentSong: null, playAlbumTracks }),
 }))
 vi.mock('../../src/components/Toast', () => ({ useToast: () => ({ show: vi.fn() }) }))
 vi.mock('../../src/components/SmartBackLink', () => ({ SmartBackLink: () => null }))
@@ -45,6 +46,41 @@ const renderAlbum = (slug?: string) => {
     </MemoryRouter>
   )
 }
+describe('AlbumDetail 曲目列表', () => {
+  it('按 Disc 分组并显示连续序号，同时保持播放顺序', async () => {
+    mockedApiGet.mockResolvedValueOnce({
+      album: {
+        docId: 'album-db-id',
+        title: '测试专辑',
+        artist: '歌手',
+        cover: '',
+        discs: [{ disc: 1, name: '主碟' }],
+        tracks: [
+          { docId: 'c', title: '歌曲丙', artists: [], discNumber: 2, trackOrder: 4, audioUrl: 'c' },
+          { docId: 'a', title: '歌曲甲', artists: [], discNumber: 1, trackOrder: 0, audioUrl: 'a' },
+          { docId: 'b', title: '歌曲乙', artists: [], discNumber: 1, trackOrder: 0, audioUrl: 'b' },
+        ],
+      },
+    } as never)
+    renderAlbum('456')
+
+    expect(await screen.findByRole('heading', { name: '主碟' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Disc 2' })).toBeInTheDocument()
+    const first = screen.getByRole('link', { name: /歌曲甲/ }).parentElement!
+    const second = screen.getByRole('link', { name: /歌曲乙/ }).parentElement!
+    const third = screen.getByRole('link', { name: /歌曲丙/ }).parentElement!
+    expect(first.firstElementChild).toHaveTextContent('1')
+    expect(second.firstElementChild).toHaveTextContent('2')
+    expect(third.firstElementChild).toHaveTextContent('1')
+    await userEvent.setup().click(third.querySelector('button[title="播放"]')!)
+    expect(playAlbumTracks).toHaveBeenCalledWith(
+      'album-db-id',
+      '测试专辑',
+      expect.arrayContaining([expect.objectContaining({ docId: 'c' })]),
+      2
+    )
+  })
+})
 
 describe('AlbumDetail 管理员编辑入口', () => {
   it('管理员可以在专辑详情管理曲目，普通用户不可见', async () => {

@@ -71,11 +71,12 @@ type AlbumResponse = {
     sources?: MusicExternalSource[]
     releaseDate?: string | null
     tracks: SongItem[]
+    discs?: Array<{ disc: number; name: string }>
   }
 }
 
 const compareTracks = (a: SongItem, b: SongItem) =>
-  (a.discNumber || 0) - (b.discNumber || 0) || (a.trackOrder || 0) - (b.trackOrder || 0)
+  (a.discNumber ?? 1) - (b.discNumber ?? 1) || (a.trackOrder ?? 0) - (b.trackOrder ?? 0)
 
 // JSON-LD 只使用详情 API 已返回的字段
 const buildAlbumJsonLd = (
@@ -131,6 +132,17 @@ const AlbumDetail = () => {
     () => [...(album?.tracks || [])].sort(compareTracks),
     [album?.tracks]
   )
+  const displayTracks = useMemo(() => {
+    let previousDisc = 0
+    let discIndex = 0
+    return sortedTracks.map((track) => {
+      const disc = track.discNumber ?? 1
+      const firstInDisc = disc !== previousDisc
+      discIndex = firstInDisc ? 1 : discIndex + 1
+      previousDisc = disc
+      return { track, disc, discIndex, firstInDisc }
+    })
+  }, [sortedTracks])
 
   const playableTracks = useMemo(() => sortedTracks.filter(isPlayableSong), [sortedTracks])
 
@@ -438,67 +450,73 @@ const AlbumDetail = () => {
             曲目列表
           </h2>
           <div className="flex flex-col">
-            {sortedTracks.map((track, index) => {
+            {displayTracks.map(({ track, disc, discIndex, firstInDisc }, index) => {
               const playable = isPlayableSong(track)
               return (
-                <div
-                  key={track.docId}
-                  className={clsx(
-                    'flex items-center gap-3 py-3 px-1 border-b border-border transition-colors sm:gap-4',
-                    currentSong?.docId === track.docId && 'bg-brand-gold/10'
+                <React.Fragment key={track.docId}>
+                  {firstInDisc && (
+                    <h3 className="pt-5 pb-2 text-sm font-semibold text-text-secondary">
+                      {album.discs?.find((item) => item.disc === disc)?.name || `Disc ${disc}`}
+                    </h3>
                   )}
-                >
-                  <span className="hidden w-7 flex-shrink-0 text-right text-sm text-text-muted sm:inline-block">
-                    {(track.trackOrder ?? index) + 1}
-                  </span>
-                  <button
-                    type="button"
-                    data-press-feedback="ripple"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handlePlay(index)
-                    }}
-                    disabled={!playable}
-                    className="w-8 h-8 flex items-center justify-center text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded-full transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-text-secondary disabled:hover:bg-transparent"
-                    title={playable ? '播放' : '暂无可播放音源'}
-                  >
-                    <Play size={14} />
-                  </button>
-                  <Link
-                    to={`/music/${track.slug || track.docId}`}
-                    className="flex min-h-11 min-w-0 flex-1 flex-col justify-center"
-                    data-pressable
-                    data-press-feedback="state"
-                  >
-                    <p className="text-base text-text-primary truncate hover:text-brand-gold transition-colors">
-                      {track.title}
-                    </p>
-                    <p className="text-xs text-text-muted truncate">
-                      {formatMusicCredits(track.artists, '未知歌手')}
-                    </p>
-                    {!playable ? (
-                      <p className="text-xs text-text-muted truncate">暂无可播放音源</p>
-                    ) : null}
-                  </Link>
-                  <button
-                    type="button"
-                    data-press-feedback="ripple"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleFavorite(track)
-                    }}
-                    disabled={favoriting === track.docId}
+                  <div
                     className={clsx(
-                      'p-2 transition-colors flex-shrink-0',
-                      track.favoritedByMe
-                        ? 'theme-text-error'
-                        : 'text-text-muted theme-icon-button-danger',
-                      favoriting === track.docId && 'opacity-50 cursor-not-allowed'
+                      'flex items-center gap-3 py-3 px-1 border-b border-border transition-colors sm:gap-4',
+                      currentSong?.docId === track.docId && 'bg-brand-gold/10'
                     )}
                   >
-                    <Heart size={15} />
-                  </button>
-                </div>
+                    <span className="w-7 flex-shrink-0 text-right text-sm text-text-muted">
+                      {discIndex}
+                    </span>
+                    <button
+                      type="button"
+                      data-press-feedback="ripple"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handlePlay(index)
+                      }}
+                      disabled={!playable}
+                      className="w-8 h-8 flex items-center justify-center text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded-full transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-text-secondary disabled:hover:bg-transparent"
+                      title={playable ? '播放' : '暂无可播放音源'}
+                    >
+                      <Play size={14} />
+                    </button>
+                    <Link
+                      to={`/music/${track.slug || track.docId}`}
+                      className="flex min-h-11 min-w-0 flex-1 flex-col justify-center"
+                      data-pressable
+                      data-press-feedback="state"
+                    >
+                      <p className="text-base text-text-primary truncate hover:text-brand-gold transition-colors">
+                        {track.title}
+                      </p>
+                      <p className="text-xs text-text-muted truncate">
+                        {formatMusicCredits(track.artists, '未知歌手')}
+                      </p>
+                      {!playable ? (
+                        <p className="text-xs text-text-muted truncate">暂无可播放音源</p>
+                      ) : null}
+                    </Link>
+                    <button
+                      type="button"
+                      data-press-feedback="ripple"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleFavorite(track)
+                      }}
+                      disabled={favoriting === track.docId}
+                      className={clsx(
+                        'p-2 transition-colors flex-shrink-0',
+                        track.favoritedByMe
+                          ? 'theme-text-error'
+                          : 'text-text-muted theme-icon-button-danger',
+                        favoriting === track.docId && 'opacity-50 cursor-not-allowed'
+                      )}
+                    >
+                      <Heart size={15} />
+                    </button>
+                  </div>
+                </React.Fragment>
               )
             })}
           </div>
