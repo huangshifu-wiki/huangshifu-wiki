@@ -185,6 +185,42 @@ export function getUserMessage(error: unknown): string {
 
   return '未知错误，请稍后重试'
 }
+export function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof AppError) {
+    return error.isOperational && error.message.trim() ? error.message : fallback
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+
+  return fallback
+}
+
+export function getApiErrorMessage(data: unknown): string {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return ''
+
+  const record = data as Record<string, unknown>
+  const errorMessage = typeof record.error === 'string' ? record.error.trim() : ''
+  const fieldMessages: string[] = []
+  if (record.fields && typeof record.fields === 'object' && !Array.isArray(record.fields)) {
+    for (const value of Object.values(record.fields as Record<string, unknown>)) {
+      if (typeof value !== 'string') continue
+      const message = value.trim()
+      if (message) fieldMessages.push(message)
+    }
+  }
+
+  if (fieldMessages.length === 0) return errorMessage
+
+  const fieldMessage = fieldMessages.join('；')
+  if (!errorMessage || errorMessage === 'Validation failed') return fieldMessage
+  return `${errorMessage}：${fieldMessage}`
+}
 
 // ============================================================================
 // API 错误分类和日志
@@ -202,64 +238,61 @@ export interface ApiErrorContext {
  * 根据 HTTP 状态码分类错误
  */
 export function classifyError(status: number, data: unknown): AppError {
-  const errorMessage =
-    typeof data === 'object' && data && 'error' in data
-      ? String((data as Record<string, unknown>).error)
-      : `请求失败：${status}`
+  const apiMessage = getApiErrorMessage(data)
 
   if (status === 401) {
-    return new AuthError(errorMessage || '登录已过期，请重新登录')
+    return new AuthError(apiMessage || '登录已过期，请重新登录')
   }
 
   if (status === 403) {
-    return new PermissionError(errorMessage || '权限不足')
+    return new PermissionError(apiMessage || '权限不足')
   }
 
   if (status === 404) {
-    return new NotFoundError(errorMessage || '资源未找到')
+    return new NotFoundError(apiMessage || '资源未找到')
   }
 
   if (status === 408) {
-    return new NetworkError(errorMessage || '请求超时，请检查网络连接')
+    return new NetworkError(apiMessage || '请求超时，请检查网络连接')
   }
 
   if (status === 409) {
-    return new ConflictError(errorMessage || '资源冲突，请刷新后重试')
+    return new ConflictError(apiMessage || '资源冲突，请刷新后重试')
   }
 
   if (status === 413) {
-    return new BusinessError(errorMessage || '上传内容过大，请减小文件大小后重试')
+    return new BusinessError(apiMessage || '上传内容过大，请减小文件大小后重试')
   }
 
   if (status === 422) {
-    return new ValidationError(errorMessage || '提交的数据格式不正确')
+    return new ValidationError(apiMessage || '提交的数据格式不正确')
   }
 
   if (status === 429) {
-    return new RateLimitError(errorMessage || '请求过于频繁，请稍后再试')
+    return new RateLimitError(apiMessage || '请求过于频繁，请稍后再试')
   }
 
   if (status >= 400 && status < 500) {
-    return new BusinessError(errorMessage || '请求失败')
+    return new BusinessError(apiMessage || '请求失败')
   }
 
   if (status === 502) {
-    return new ServerError(errorMessage || '网关错误，服务暂时不可用')
+    return new ServerError(apiMessage || '网关错误，服务暂时不可用')
   }
 
   if (status === 503) {
-    return new ServerError(errorMessage || '服务暂时不可用，请稍后再试')
+    return new ServerError(apiMessage || '服务暂时不可用，请稍后再试')
   }
 
   if (status === 504) {
-    return new NetworkError(errorMessage || '网关超时，请检查网络连接')
+    return new NetworkError(apiMessage || '网关超时，请检查网络连接')
   }
 
   if (status >= 500) {
-    return new ServerError(errorMessage || '服务器繁忙，请稍后再试')
+    return new ServerError(apiMessage || '服务器繁忙，请稍后再试')
   }
 
-  return new AppError(errorMessage, 'UNKNOWN_ERROR', status)
+  return new AppError(apiMessage || `请求失败：${status}`, 'UNKNOWN_ERROR', status)
 }
 
 /**
@@ -308,57 +341,5 @@ export function getAuthErrorCallback(): AuthErrorCallback | null {
  * 获取用户友好的错误消息
  */
 export function getUserFriendlyMessage(error: unknown): string {
-  if (error instanceof NetworkError) {
-    return '网络连接失败，请检查网络设置'
-  }
-
-  if (error instanceof AuthError) {
-    return '登录已过期，请重新登录'
-  }
-
-  if (error instanceof PermissionError) {
-    return '权限不足，无法执行此操作'
-  }
-
-  if (error instanceof NotFoundError) {
-    return '请求的资源不存在'
-  }
-
-  if (error instanceof ConflictError) {
-    return '资源冲突，请刷新页面后重试'
-  }
-
-  if (error instanceof ValidationError) {
-    return error.message || '输入数据有误，请检查后重试'
-  }
-
-  if (error instanceof RateLimitError) {
-    return '操作过于频繁，请稍后再试'
-  }
-
-  if (error instanceof BusinessError) {
-    return error.message
-  }
-
-  if (error instanceof VectorSearchError) {
-    return '搜索服务暂时不可用，请稍后再试'
-  }
-
-  if (error instanceof EmbeddingGenerationError) {
-    return '内容处理失败，请稍后再试'
-  }
-
-  if (error instanceof ServerError) {
-    return '服务器繁忙，请稍后再试'
-  }
-
-  if (error instanceof AppError) {
-    return error.isOperational ? error.message : '系统异常，请稍后重试'
-  }
-
-  if (error instanceof Error) {
-    return error.message || '操作失败，请稍后重试'
-  }
-
-  return '未知错误，请稍后重试'
+  return getErrorMessage(error, '操作失败，请稍后重试')
 }

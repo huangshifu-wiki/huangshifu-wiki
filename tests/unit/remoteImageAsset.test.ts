@@ -12,13 +12,23 @@ const mockPrisma = vi.hoisted(() => ({
   },
   mediaAsset: {
     create: vi.fn(),
+    findUnique: vi.fn(),
   },
+  siteConfig: { findUnique: vi.fn() },
+  imageMap: {
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+    update: vi.fn(),
+  },
+  $transaction: vi.fn(),
+  $executeRaw: vi.fn(),
 }))
 
 vi.mock('../../src/server/utils/config', () => ({
   prisma: mockPrisma,
   uploadsDir: tmpUploadsDir,
 }))
+vi.mock('../../src/server/prisma', () => ({ prisma: mockPrisma }))
 
 describe('remote image asset localization', () => {
   const originalFetch = global.fetch
@@ -27,6 +37,37 @@ describe('remote image asset localization', () => {
     vi.clearAllMocks()
     await fs.rm(tmpUploadsDir, { recursive: true, force: true })
     await fs.mkdir(tmpUploadsDir, { recursive: true })
+    mockPrisma.siteConfig.findUnique.mockResolvedValue(null)
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+    const imageMap = {
+      id: 'map-1',
+      md5: '0123456789abcdef0123456789abcdef',
+      localUrl: '/uploads/music-covers/songs/cover.png',
+      externalUrl: null,
+      s3Url: null,
+      s3Key: null,
+      storageType: 'local',
+      thumbnailUrl: null,
+      blurhash: null,
+      thumbhash: null,
+      variantStatus: 'pending',
+      cloudSyncStatus: 'pending',
+      deletedAt: null,
+      retiredAt: null,
+    }
+    mockPrisma.imageMap.findUnique.mockResolvedValueOnce(null).mockResolvedValue(imageMap)
+    mockPrisma.imageMap.upsert.mockResolvedValue(imageMap)
+    mockPrisma.imageMap.update.mockResolvedValue(imageMap)
+    mockPrisma.mediaAsset.findUnique.mockResolvedValue({
+      id: 'asset-1',
+      imageMapId: 'map-1',
+      storageKey: 'music-covers/songs/cover.png',
+      publicUrl: '/uploads/music-covers/songs/cover.png',
+      fileName: 'cover.png',
+      mimeType: 'image/png',
+      sizeBytes: 68,
+      status: 'ready',
+    })
     mockPrisma.user.findFirst.mockResolvedValue({ uid: 'user-1' })
     mockPrisma.mediaAsset.create.mockResolvedValue({
       id: 'asset-1',
@@ -74,5 +115,57 @@ describe('remote image asset localization', () => {
     })
 
     expect(fetchMock).toHaveBeenCalled()
+  })
+  it('restores a missing canonical local file before removing the temporary upload', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lp9k3wAAAABJRU5ErkJggg==',
+      'base64'
+    )
+    const canonicalUrl = '/uploads/recovered/canonical.png'
+    const imageMap = {
+      id: 'map-1',
+      md5: '0123456789abcdef0123456789abcdef',
+      localUrl: canonicalUrl,
+      externalUrl: null,
+      s3Url: null,
+      s3Key: null,
+      storageType: 'local',
+      thumbnailUrl: null,
+      blurhash: null,
+      thumbhash: null,
+      variantStatus: 'pending',
+      cloudSyncStatus: 'pending',
+      deletedAt: null,
+      retiredAt: null,
+    }
+    const asset = {
+      id: 'asset-1',
+      imageMapId: 'map-1',
+      storageKey: 'recovered/canonical.png',
+      publicUrl: canonicalUrl,
+      fileName: 'canonical.png',
+      mimeType: 'image/png',
+      sizeBytes: png.length,
+      status: 'ready',
+    }
+    mockPrisma.imageMap.findUnique.mockReset().mockResolvedValue(imageMap)
+    mockPrisma.imageMap.upsert.mockResolvedValue(imageMap)
+    mockPrisma.mediaAsset.findUnique.mockResolvedValue(asset)
+    mockPrisma.mediaAsset.create.mockResolvedValue(asset)
+    global.fetch = vi.fn(
+      async () => new Response(png, { status: 200, headers: { 'content-type': 'image/png' } })
+    ) as typeof fetch
+
+    await (
+      await import('../../src/server/utils/remoteImageAsset')
+    ).localizeImageUrlAsMediaAsset('https://example.com/canonical.png', {
+      namespace: 'recovery',
+      fallbackName: 'canonical.png',
+    })
+
+    const canonicalPath = path.join(tmpUploadsDir, 'recovered', 'canonical.png')
+    const temporaryPath = path.join(tmpUploadsDir, 'recovery', 'canonical.png')
+    await expect(fs.readFile(canonicalPath)).resolves.toEqual(png)
+    await expect(fs.access(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })

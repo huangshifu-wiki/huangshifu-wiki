@@ -10,7 +10,8 @@ export {
   passwordSchema,
   setupInitializeSchema,
 } from './auth.schema'
-export { userEmailUpdateSchema, userPasswordUpdateSchema } from './user.schema'
+export { userEmailUpdateSchema } from './user.schema'
+export { createApiKeySchema } from './api-key.schema'
 export {
   wikiCreateSchema,
   wikiUpdateSchema,
@@ -23,8 +24,9 @@ export {
   postDeleteSchema,
   postCommentSchema,
 } from './post.schema'
-export { galleryDeleteSchema } from './gallery.schema'
+export { galleryDeleteSchema, galleryRelatedLinksSchema } from './gallery.schema'
 export { eventWriteSchema } from './event.schema'
+export { ticketListingWriteSchema } from './ticket-listing.schema'
 export {
   backupCreateSchema,
   backupNoteSchema,
@@ -37,5 +39,5 @@ export {
   adminBatchAlbumCoversSchema,
   adminBatchEditLocksSchema,
   adminBatchMusicDisplaySchema,
-  adminMusicCoverThumbnailBackfillSchema,
+  adminAlbumTrackReorderSchema,
 } from './admin.schema'

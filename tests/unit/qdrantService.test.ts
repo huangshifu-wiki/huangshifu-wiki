@@ -12,15 +12,49 @@ const qdrantClientInstanceMock = {
   delete: vi.fn(),
 }
 
-vi.mock('@qdrant/js-client-rest', () => ({
-  QdrantClient: vi.fn(function MockQdrantClient() {
+// Mock 配置服务：集合名/URL/API Key 已从 env 迁移到运行时配置/凭证服务
+const { qdrantClientConstructor } = vi.hoisted(() => ({
+  qdrantClientConstructor: vi.fn(function MockQdrantClient() {
     return qdrantClientInstanceMock
   }),
 }))
 
+vi.mock('@qdrant/js-client-rest', () => ({
+  QdrantClient: qdrantClientConstructor,
+}))
+
+// 配置服务 mock：集合名/URL/API Key 已从 env 迁移到运行时配置/凭证服务
+const runtimeConfigMock = { getConfig: vi.fn() }
+const secretsMock = { getSecrets: vi.fn() }
+
+vi.mock('../../src/server/services/runtimeConfig.service', () => ({
+  runtimeConfigService: {
+    getConfig: (...args: unknown[]) => runtimeConfigMock.getConfig(...args),
+  },
+}))
+
+vi.mock('../../src/server/services/secretsConfig.service', () => ({
+  secretsConfigService: {
+    getSecrets: (...args: unknown[]) => secretsMock.getSecrets(...args),
+  },
+}))
+
+const defaultRuntimeConfig = {
+  qdrantUrl: 'http://127.0.0.1:6333',
+  qdrantCollection: 'hsf_image_embeddings',
+  qdrantTextCollection: 'hsf_text_embeddings',
+}
+
+const defaultSecrets = {
+  qdrantApiKey: '',
+}
+
 describe('qdrantService', () => {
   beforeEach(() => {
     vi.resetModules()
+    runtimeConfigMock.getConfig.mockReturnValue({ ...defaultRuntimeConfig })
+    secretsMock.getSecrets.mockReturnValue({ ...defaultSecrets })
+    qdrantClientConstructor.mockClear()
     Object.values(qdrantClientInstanceMock).forEach((fn) => {
       if (typeof fn === 'function' && 'mockReset' in fn) {
         ;(fn as ReturnType<typeof vi.fn>).mockReset()
@@ -33,24 +67,23 @@ describe('qdrantService', () => {
     qdrantClientInstanceMock.search.mockResolvedValue([])
     qdrantClientInstanceMock.scroll.mockResolvedValue({ points: [], next_offset: null })
     qdrantClientInstanceMock.delete.mockResolvedValue({ result: true })
-    delete process.env.QDRANT_COLLECTION
-    delete process.env.QDRANT_URL
-    delete process.env.QDRANT_API_KEY
     delete process.env.IMAGE_EMBEDDING_VECTOR_SIZE
   })
 
-  it('uses defaults when env vars are unset', async () => {
+  it('uses defaults from runtime config when unset', async () => {
     const { getQdrantCollectionName, getQdrantClient } =
       await import('../../src/server/vector/qdrantService')
     expect(getQdrantCollectionName()).toBe('hsf_image_embeddings')
     expect(getQdrantClient()).toBeDefined()
   })
 
-  it('reads collection name and vector size from env', async () => {
-    process.env.QDRANT_COLLECTION = 'custom_collection'
-    process.env.QDRANT_URL = 'http://custom:6333'
-    process.env.QDRANT_API_KEY = 'secret_key'
-    process.env.IMAGE_EMBEDDING_VECTOR_SIZE = '256'
+  it('reads collection name, URL and API key from runtime/secrets config', async () => {
+    runtimeConfigMock.getConfig.mockReturnValue({
+      ...defaultRuntimeConfig,
+      qdrantUrl: 'http://custom:6333',
+      qdrantCollection: 'custom_collection',
+    })
+    secretsMock.getSecrets.mockReturnValue({ qdrantApiKey: 'secret_key' })
 
     const { getQdrantCollectionName, getQdrantClient } =
       await import('../../src/server/vector/qdrantService')
@@ -58,6 +91,10 @@ describe('qdrantService', () => {
 
     const client = getQdrantClient()
     expect(client).toBeDefined()
+    expect(qdrantClientConstructor).toHaveBeenCalledWith({
+      url: 'http://custom:6333',
+      apiKey: 'secret_key',
+    })
   })
 
   it('creates collection when it does not exist', async () => {
@@ -395,6 +432,24 @@ describe('qdrantService', () => {
       const callArgs = qdrantClientInstanceMock.search.mock.calls[0][1]
       expect(callArgs.filter).toBeUndefined()
     })
+    it('透传向量分页 offset', async () => {
+      qdrantClientInstanceMock.search.mockResolvedValueOnce([])
+      const { searchImageEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
+      await searchImageEmbeddingPoints({ vector: [0.1, 0.2], limit: 100, offset: 200 })
+      expect(qdrantClientInstanceMock.search).toHaveBeenCalledWith(
+        'hsf_image_embeddings',
+        expect.objectContaining({ limit: 100, offset: 200 })
+      )
+    })
+  })
+  it('透传文本向量分页 offset', async () => {
+    qdrantClientInstanceMock.search.mockResolvedValueOnce([])
+    const { searchTextEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
+    await searchTextEmbeddingPoints([0.1, 0.2], 100, 0.5, 200)
+    expect(qdrantClientInstanceMock.search).toHaveBeenCalledWith(
+      'hsf_text_embeddings',
+      expect.objectContaining({ limit: 100, offset: 200, score_threshold: 0.5 })
+    )
   })
 
   describe('toEmbeddingPayload', () => {
@@ -429,22 +484,6 @@ describe('qdrantService', () => {
       const { toEmbeddingPayload } = await import('../../src/server/vector/qdrantService')
 
       expect(toEmbeddingPayload({ unknownField: 'value' })).toBeNull()
-    })
-  })
-
-  describe('deleteImageEmbeddingPoint', () => {
-    it('deletes embedding point by id', async () => {
-      const { deleteImageEmbeddingPoint } = await import('../../src/server/vector/qdrantService')
-
-      await deleteImageEmbeddingPoint('point-123')
-
-      expect(qdrantClientInstanceMock.delete).toHaveBeenCalledWith(
-        'hsf_image_embeddings',
-        expect.objectContaining({
-          wait: true,
-          points: ['point-123'],
-        })
-      )
     })
   })
 

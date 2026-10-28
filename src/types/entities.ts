@@ -1,10 +1,12 @@
 import type { ContentStatus, FavoriteTargetType, AdminRole, UserStatus, Platform } from './common'
+import type { LyricType } from '../lib/lrcParser'
 
 export interface UserProfile {
   uid: string
   publicId: string
   displayName: string
   photoURL: string
+  photoAssetId?: string | null
   email: string | null
   role: AdminRole
   status: UserStatus
@@ -25,6 +27,8 @@ export interface MusicExternalSource {
   createdAt?: string
   updatedAt?: string
 }
+
+export type MusicPlayableOverride = 'auto' | 'enabled' | 'disabled'
 
 export interface SongItem {
   docId: string
@@ -47,11 +51,32 @@ export interface SongItem {
   releaseDate?: string | null
   durationMs?: number | null
   lyric?: string | null
+  lyricType?: LyricType | null
+  lyricPlain?: string | null
+  lyricSource?: Platform | null
   description?: string | null
   favoritedByMe?: boolean
   sources?: MusicExternalSource[]
+  tags?: string[]
   playable?: boolean
+  playableOverride?: MusicPlayableOverride
   createdAt?: string
+}
+
+export interface LyricMatchLine {
+  index: number
+  text: string
+}
+
+export interface LyricSearchItem {
+  docId: string
+  slug: string
+  title: string
+  artists: string[]
+  album: string
+  cover: string
+  coverThumbnail?: string
+  matchedLines: LyricMatchLine[]
 }
 
 export interface AlbumItem {
@@ -62,9 +87,52 @@ export interface AlbumItem {
   cover: string
   coverThumbnail?: string
   description?: string | null
+  tags?: string[]
   sources?: MusicExternalSource[]
+  releaseDate?: string | null
   trackCount?: number
   tracks?: unknown[]
+}
+
+export type TicketListingType = 'offer' | 'request'
+
+export interface TicketListingEventOption {
+  id: string
+  slug: string
+  title: string
+  location: string
+  sortStart: string | null
+}
+
+export interface TicketListingSummary {
+  id: string
+  slug: string
+  type: TicketListingType
+  eventId: string | null
+  customEventName: string | null
+  eventName: string
+  eventSlug: string | null
+  eventLocation: string | null
+  quantity: number
+  ticketTier: string
+  seat: string
+  authorUid: string
+  authorPublicId: string | null
+  authorName: string
+  status?: ContentStatus
+  reviewNote?: string | null
+  reviewedAt?: string | null
+  isDeleted?: boolean
+  deletedAt?: string | null
+  deletedBy?: string | null
+  deletionReason?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TicketListingItem extends TicketListingSummary {
+  description: string
+  contact: string
 }
 
 export interface PostItem {
@@ -173,6 +241,7 @@ export interface GalleryItem {
   authorPublicId?: string | null
   authorName: string
   tags: string[]
+  relatedLinks: ContentLink[]
   eventDate?: string | null
   locationCode: string | null
   locationName: string | null
@@ -215,12 +284,15 @@ export interface EventTimeSlot {
   end?: string
 }
 
+export type EventTimeStatus = 'pending' | 'postponed'
+
 export interface EventSaleTime {
   time: string
   note?: string
 }
 
-export interface EventExternalLink {
+/** 内容页的可点击链接：url 为站外 http/https 地址，或以 / 开头的站内路径 */
+export type ContentLink = {
   label: string
   url: string
 }
@@ -242,12 +314,13 @@ export interface EventItem {
   location: string
   content: string
   timeSlots: EventTimeSlot[]
+  timeStatus: EventTimeStatus | null
   ticketPrices: unknown[]
   saleTimes: EventSaleTime[]
   lineup: string[]
   tags: string[]
-  externalLinks: EventExternalLink[]
-  relatedLinks: EventExternalLink[]
+  externalLinks: ContentLink[]
+  relatedLinks: ContentLink[]
   sortStart: string | null
   sortEnd: string | null
   coverAssetId: string | null
@@ -272,6 +345,7 @@ export interface AnnouncementItem {
   content: string
   link?: string | null
   createdAt: string
+  updatedAt: string
 }
 
 export interface NotificationItem {
@@ -382,6 +456,7 @@ export interface AdminDataItem {
   bio?: string
   photoURL?: string
   cover?: string
+  coverThumbnail?: string
   content?: string
   description?: string
   artist?: string

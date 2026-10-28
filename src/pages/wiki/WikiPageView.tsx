@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useParams, useNavigate } from 'react-router-dom'
 import {
-  Book,
-  ChevronRight,
   Clock,
   ArrowLeft,
   Heart,
@@ -24,16 +22,27 @@ import { useToast } from '../../components/Toast'
 import { useToggleInteraction } from '../../hooks/useToggleInteraction'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../../lib/copyLink'
 import { apiGet, apiPost } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
 import { formatDate } from '../../lib/dateUtils'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../../lib/seo'
+import type { SeoMetadata } from '../../lib/seo'
 import { buildMiniRelationGraphData } from '../../lib/wikiRelationGraph'
 import { getWikiRelationDisplayTitle } from '../../lib/wikiRelationDisplay'
 import { getWikiSubmitButtonText } from '../../lib/wikiWriteText'
 import WikiMarkdown from './WikiMarkdown'
+import { SmartBackLink } from '../../components/SmartBackLink'
 import RelationGraph from '../../components/wiki/RelationGraph'
 import type { RelationGraphData } from '../../components/wiki/RelationGraph'
 import { RELATION_TYPE_LABELS } from '../../components/wiki/types'
 import type { WikiItem, WikiRelationResolved, WikiRelationDisplayItem } from './types'
+import { LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const hasExpandableRelationGraph = (graph: RelationGraphData | null, currentSlug?: string) => {
@@ -82,8 +91,10 @@ const SidebarHeading = ({ children }: { children: React.ReactNode }) => (
 const WikiPageView = () => {
   const { slug } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const [page, setPage] = useState<WikiItem | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const { user, isAdmin, isBanned } = useAuth()
   const { t } = useI18n()
   const { show } = useToast()
@@ -114,75 +125,110 @@ const WikiPageView = () => {
   const [resolvedRelations, setResolvedRelations] = useState<WikiRelationResolved[]>([])
   const [showGraph, setShowGraph] = useState(false)
 
-  useEffect(() => {
-    const fetchPage = async () => {
-      setLoading(true)
-      try {
-        const data = await apiGet<{
-          page: WikiItem
-          backlinks: WikiItem[]
-          relations: WikiRelationResolved[]
-          relationGraph: RelationGraphData
-        }>(`/api/wiki/${slug}`)
-        setPage(data.page)
-        setBacklinks(data.backlinks || [])
-        setResolvedRelations((data.relations || []).filter((relation) => !relation.inferred))
-        const nextRelationGraph = data.relationGraph || null
-        setRelationGraph(nextRelationGraph)
-        if (!hasExpandableRelationGraph(nextRelationGraph, slug)) {
-          setShowGraph(false)
-        }
-        if (!data.page.content) {
-          console.warn('[WikiPageView] API returned empty content:', {
-            slug,
-            hasContent: !!data.page.content,
-            contentType: typeof data.page.content,
-            contentLength: data.page.content?.length,
-            pageKeys: Object.keys(data.page),
-          })
-        }
-      } catch (e) {
-        console.error('Error fetching page:', e)
+  // SEO 元数据：加载中/失败不可索引，成功且已发布才 index
+  const wikiPagePath = `/wiki/${slug}`
+  const wikiPageDescription = page
+    ? summarizeSeoText(page.content, `${page.title}，黄诗扶 Wiki 百科资料。`)
+    : ''
+  const wikiSeoMetadata: SeoMetadata = page
+    ? {
+        title: `${page.title}｜${SEO_SITE_NAME}`,
+        description: wikiPageDescription,
+        canonicalPath: wikiPagePath,
+        robots: page.status && page.status !== 'published' ? 'noindex,follow' : 'index,follow',
+        ogType: 'article',
+        jsonLd: {
+          '@context': 'https://schema.org',
+          '@type': 'Article',
+          headline: page.title,
+          description: wikiPageDescription,
+          mainEntityOfPage: toAbsoluteSeoUrl(wikiPagePath),
+          ...(page.createdAt ? { datePublished: page.createdAt } : {}),
+          ...(page.updatedAt ? { dateModified: page.updatedAt } : {}),
+        },
       }
+    : loading
+      ? getDetailFallbackSeo({ canonicalPath: wikiPagePath, title: SEO_SITE_NAME })
+      : getDetailFallbackSeo({
+          canonicalPath: wikiPagePath,
+          title: `百科页面不存在｜${SEO_SITE_NAME}`,
+          description: '当前百科页面不存在或尚未发布。',
+        })
+  useSeo(wikiSeoMetadata)
+
+  const fetchPage = async () => {
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const data = await apiGet<{
+        page: WikiItem
+        backlinks: WikiItem[]
+        relations: WikiRelationResolved[]
+        relationGraph: RelationGraphData
+      }>(`/api/wiki/${slug}`, undefined, { staleTime: 0, swr: false })
+      setPage(data.page)
+      setBacklinks(data.backlinks || [])
+      setResolvedRelations((data.relations || []).filter((relation) => !relation.inferred))
+      const nextRelationGraph = data.relationGraph || null
+      setRelationGraph(nextRelationGraph)
+      if (!hasExpandableRelationGraph(nextRelationGraph, slug)) {
+        setShowGraph(false)
+      }
+      if (!data.page.content) {
+        console.warn('[WikiPageView] API returned empty content:', {
+          slug,
+          hasContent: !!data.page.content,
+          contentType: typeof data.page.content,
+          contentLength: data.page.content?.length,
+          pageKeys: Object.keys(data.page),
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching page:', error)
+      setLoadError(error)
+    } finally {
       setLoading(false)
     }
-    fetchPage()
-  }, [slug])
+  }
 
-  if (loading)
+  useEffect(() => {
+    void fetchPage()
+  }, [slug, user?.uid])
+
+  if (loading && !page)
     return (
-      <div className="mobile-page-shell antique-detail">
+      <div className="mobile-page-shell antique-detail" role="status" aria-label="加载中">
         <div className="mobile-page-container">
-          <div className="mb-6 h-4 w-24 animate-pulse rounded bg-surface-alt" />
+          <Skeleton className="mb-6 h-4 w-24" />
           <div className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
-            <div className="mb-4 h-10 w-2/3 animate-pulse rounded bg-surface-alt" />
-            <div className="h-5 w-1/2 animate-pulse rounded bg-surface-alt" />
+            <Skeleton className="mb-4 h-10 w-2/3" />
+            <Skeleton className="h-5 w-1/2" />
           </div>
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((item) => (
-              <div
-                key={item}
-                className="h-5 animate-pulse rounded bg-surface-alt"
-                style={{ width: `${94 - item * 10}%` }}
-              />
+              <Skeleton key={item} className="h-5" style={{ width: `${94 - item * 10}%` }} />
             ))}
           </div>
         </div>
       </div>
     )
+
   if (!page)
     return (
       <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
-          <Link
-            to="/wiki"
+          <SmartBackLink
+            fallbackTo="/wiki"
+            fallbackLabel={t('wiki.backToList')}
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-          >
-            <ArrowLeft size={16} /> {t('wiki.backToList')}
-          </Link>
-          <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
-            {t('wiki.notFound')}
-          </div>
+          />
+          {loadError ? (
+            <LoadErrorState error={loadError} className="mt-8" onRetry={() => void fetchPage()} />
+          ) : (
+            <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
+              {t('wiki.notFound')}
+            </div>
+          )}
         </div>
       </div>
     )
@@ -234,21 +280,27 @@ const WikiPageView = () => {
       }
     } catch (error) {
       console.error('Submit wiki review failed:', error)
-      show(t('wiki.reviewSubmitFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('wiki.reviewSubmitFailed')), { variant: 'error' })
     } finally {
       setSubmittingReview(false)
     }
   }
 
   return (
-    <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
+    <div
+      className="mobile-page-shell antique-detail text-[var(--color-text-antique)]"
+      aria-busy={loading}
+    >
       <div className="mobile-page-container wiki-detail-page">
-        <Link
-          to={'/wiki'}
+        <SmartBackLink
+          fallbackTo="/wiki"
+          fallbackLabel={t('wiki.backToList')}
+          icon={<ArrowLeft size={18} />}
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-        >
-          <ArrowLeft size={18} /> {t('wiki.backToList')}
-        </Link>
+        />
+        {loadError && (
+          <LoadErrorState error={loadError} className="mb-6" onRetry={() => void fetchPage()} />
+        )}
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">
@@ -259,6 +311,7 @@ const WikiPageView = () => {
               {canEditPage && canEditPageCategory && (
                 <Link
                   to={`/wiki/${slug}/edit`}
+                  state={{ editorBackground: location }}
                   data-pressable
                   className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
                 >
@@ -516,14 +569,13 @@ const WikiPageView = () => {
                 <SidebarHeading>{t('wiki.tags')}</SidebarHeading>
                 <div className="flex flex-wrap gap-2">
                   {page.tags.map((tag: string) => (
-                    <button
-                      type="button"
+                    <Link
                       key={tag}
-                      onClick={() => navigate(`/wiki?tag=${encodeURIComponent(tag)}`)}
+                      to={`/wiki?tag=${encodeURIComponent(tag)}`}
                       className="cursor-pointer rounded-sm border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-2 py-1 text-xs text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold"
                     >
                       {tag}
-                    </button>
+                    </Link>
                   ))}
                 </div>
               </div>

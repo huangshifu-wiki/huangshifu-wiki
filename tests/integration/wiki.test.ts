@@ -98,6 +98,70 @@ describe('Wiki API', () => {
     await cleanupWikiTestData()
   })
 
+  it('returns standard pagination metadata for the mini-app Wiki list', async () => {
+    const category = 'roi-wiki-category-pagination'
+    await ensureTestWikiCategory(category)
+    const pages = [0, 1, 2].map((index) => ({
+      slug: `${WIKI_SLUG_PREFIX}pagination-${index}`,
+      title: `${WIKI_TITLE_PREFIX} Pagination ${index}`,
+      titleKey: `${WIKI_TITLE_PREFIX} Pagination ${index}`.toLowerCase(),
+      category,
+      content: '# Test Content',
+      tags: ['test'],
+      status: 'published' as const,
+      lastEditorUid: normalUser.user.uid,
+      updatedAt: new Date(`2025-03-01T00:00:0${3 - index}.000Z`),
+    }))
+    await prisma.wikiPage.createMany({ data: pages })
+
+    const firstPage = await request(app).get('/api/mp/wiki').query({ category, page: 1, limit: 2 })
+    expect(firstPage.status).toBe(200)
+    expect(firstPage.body.items.map((page: { slug: string }) => page.slug)).toEqual([
+      pages[0].slug,
+      pages[1].slug,
+    ])
+    expect(firstPage.body).toMatchObject({
+      total: 3,
+      page: 1,
+      limit: 2,
+      totalPages: 2,
+      hasMore: true,
+    })
+
+    const lastPage = await request(app).get('/api/mp/wiki').query({ category, page: 2, limit: 2 })
+    expect(lastPage.body.items.map((page: { slug: string }) => page.slug)).toEqual([pages[2].slug])
+    expect(lastPage.body).toMatchObject({
+      total: 3,
+      page: 2,
+      limit: 2,
+      totalPages: 2,
+      hasMore: false,
+    })
+
+    const emptyPage = await request(app)
+      .get('/api/mp/wiki')
+      .query({ category: 'roi-wiki-pagination-empty', page: 1, limit: 2 })
+    expect(emptyPage.body.items).toEqual([])
+    expect(emptyPage.body).toMatchObject({
+      total: 0,
+      page: 1,
+      limit: 2,
+      totalPages: 1,
+      hasMore: false,
+    })
+
+    const beyondLastPage = await request(app)
+      .get('/api/mp/wiki')
+      .query({ category, page: 9, limit: 2 })
+    expect(beyondLastPage.body.items).toEqual([])
+    expect(beyondLastPage.body).toMatchObject({
+      total: 3,
+      page: 9,
+      limit: 2,
+      totalPages: 2,
+      hasMore: false,
+    })
+  })
   it('lists only published pages to visitors', async () => {
     const publishedPage = await createTestWikiPage({
       slug: `${WIKI_SLUG_PREFIX}published`,
@@ -326,5 +390,68 @@ describe('Wiki API', () => {
 
     expect(missingResponse.status).toBe(404)
     expect(legacySlugResponse.status).toBe(404)
+  })
+  it('按可见性聚合去重排序的Wiki标签建议', async () => {
+    const publicPage = await createTestWikiPage({
+      slug: `${WIKI_SLUG_PREFIX}tag-public`,
+      title: `${WIKI_TITLE_PREFIX} Tag Public`,
+      authorUid: normalUser.user.uid,
+    })
+    const ownDraft = await createTestWikiPage({
+      slug: `${WIKI_SLUG_PREFIX}tag-own-draft`,
+      title: `${WIKI_TITLE_PREFIX} Tag Own Draft`,
+      status: 'draft',
+      authorUid: normalUser.user.uid,
+    })
+    const otherDraft = await createTestWikiPage({
+      slug: `${WIKI_SLUG_PREFIX}tag-other-draft`,
+      title: `${WIKI_TITLE_PREFIX} Tag Other Draft`,
+      status: 'draft',
+      authorUid: adminUser.user.uid,
+    })
+    const deletedPage = await createTestWikiPage({
+      slug: `${WIKI_SLUG_PREFIX}tag-deleted`,
+      title: `${WIKI_TITLE_PREFIX} Tag Deleted`,
+      authorUid: normalUser.user.uid,
+    })
+
+    await Promise.all([
+      prisma.wikiPage.update({
+        where: { id: publicPage.id },
+        data: { tags: ['公开Wiki标签', '重复Wiki标签'] },
+      }),
+      prisma.wikiPage.update({
+        where: { id: ownDraft.id },
+        data: { tags: ['本人Wiki草稿标签'] },
+      }),
+      prisma.wikiPage.update({
+        where: { id: otherDraft.id },
+        data: { tags: ['他人Wiki草稿标签'] },
+      }),
+      prisma.wikiPage.update({
+        where: { id: deletedPage.id },
+        data: { tags: ['删除Wiki标签'], deletedAt: new Date() },
+      }),
+    ])
+
+    const anonymousResponse = await request(app).get('/api/wiki/tags')
+    expect(anonymousResponse.status).toBe(200)
+    expect(anonymousResponse.body.tags).toContain('公开Wiki标签')
+    expect(anonymousResponse.body.tags).not.toContain('本人Wiki草稿标签')
+    expect(anonymousResponse.body.tags).not.toContain('他人Wiki草稿标签')
+    expect(anonymousResponse.body.tags).not.toContain('删除Wiki标签')
+    expect(
+      anonymousResponse.body.tags.filter((tag: string) => tag === '重复Wiki标签')
+    ).toHaveLength(1)
+
+    const { agent } = await createAuthenticatedAgent(
+      normalUser.user.email,
+      normalUser.plainPassword
+    )
+    const authenticatedResponse = await agent.get('/api/wiki/tags')
+    expect(authenticatedResponse.status).toBe(200)
+    expect(authenticatedResponse.body.tags).toContain('本人Wiki草稿标签')
+    expect(authenticatedResponse.body.tags).not.toContain('他人Wiki草稿标签')
+    expect(authenticatedResponse.body.tags).not.toContain('删除Wiki标签')
   })
 })

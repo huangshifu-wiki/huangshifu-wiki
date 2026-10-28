@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="cn">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -65,6 +65,58 @@
       })()
     </script>
 
+    <!--
+      启动占位（splash）样式：
+      JS/CSS 加载完成前 #root 为空，用品牌化加载画面避免白屏。
+      内联在 head 保证首帧前生效；React 挂载后由 hideStaticFallback 淡出移除。
+      配色与 index.css 的 --color-theme-bg / 品牌金保持一致。
+    -->
+    <style>
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #f7f5f0;
+        pointer-events: none;
+        opacity: 1;
+        transition: opacity 0.25s ease;
+      }
+      #boot-splash.boot-splash--hide {
+        opacity: 0;
+      }
+      [data-theme='dark'] #boot-splash {
+        background: #1f1a16;
+      }
+      .boot-splash__ring {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 2px solid rgba(176, 123, 23, 0.25);
+        border-top-color: #b07b17;
+        animation: boot-splash-spin 0.9s linear infinite;
+      }
+      .boot-splash__title {
+        font-family: 'STKaiti', 'KaiTi', serif;
+        font-size: 17px;
+        letter-spacing: 0.35em;
+        text-indent: 0.35em;
+        color: #8a6313;
+      }
+      [data-theme='dark'] .boot-splash__title {
+        color: #d9b268;
+      }
+      @keyframes boot-splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+
     <!-- 预连接到关键第三方域名，加速后续请求但不阻塞渲染 -->
     <link rel="dns-prefetch" href="https://gator.volces.com" />
     <link rel="dns-prefetch" href="https://analysis.chatglm.cn" />
@@ -86,6 +138,24 @@
 
     <link rel="apple-touch-icon" href="/icons/icon.svg" />
     <title>黄诗扶 Wiki</title>
+
+    <!-- 基础 SEO：静态 meta 带 data-hsf-seo 标记，供客户端管理器原位更新；
+         不放静态 canonical / og:url，避免所有 SPA 路径在脚本运行前指向首页 -->
+    <meta
+      name="description"
+      data-hsf-seo="description"
+      content="黄诗扶 Wiki，整理黄诗扶的音乐作品、歌曲、专辑、活动、图集与百科资料。"
+    />
+    <meta name="robots" data-hsf-seo="robots" content="index,follow" />
+    <meta property="og:title" data-hsf-seo="og:title" content="黄诗扶 Wiki" />
+    <meta
+      property="og:description"
+      data-hsf-seo="og:description"
+      content="黄诗扶 Wiki，整理黄诗扶的音乐作品、歌曲、专辑、活动、图集与百科资料。"
+    />
+    <meta property="og:type" data-hsf-seo="og:type" content="website" />
+    <meta property="og:site_name" data-hsf-seo="og:site_name" content="黄诗扶 Wiki" />
+    <meta property="og:locale" data-hsf-seo="og:locale" content="zh_CN" />
 
     <!-- SVG滤镜定义 -->
     <svg width="0" height="0" class="svg-defs-container">
@@ -115,6 +185,11 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- 启动占位：React 挂载前填充首帧，避免白屏；挂载后淡出移除 -->
+    <div id="boot-splash" aria-hidden="true">
+      <div class="boot-splash__ring"></div>
+      <div class="boot-splash__title">黄诗扶 Wiki</div>
+    </div>
     <footer id="static-footer" class="static-fallback-footer">
       <a
         href="https://img.lhl.one"
@@ -135,6 +210,54 @@
       </p>
     </footer>
     <script type="module" src="/src/main.tsx"></script>
-    <script src="/static-fallback.js"></script>
+    <!--
+      内联而非独立文件：脚本必须与 HTML 同版本传输，否则旧缓存文件会导致
+      新版 splash 无法移除（部署后界面被永久遮挡）。
+    -->
+    <script>
+      ;(function () {
+        var shown = false
+        var staticFooter = document.getElementById('static-footer')
+        var bootSplash = document.getElementById('boot-splash')
+        var desktopMedia = window.matchMedia('(min-width: 768px)')
+
+        function removeNode(node) {
+          if (node && node.parentNode) {
+            node.parentNode.removeChild(node)
+          }
+        }
+
+        // React 挂载后淡出移除 splash；超时兜底直接移除，避免 JS 失败时动画永远转圈
+        function hideBootSplash(withFade) {
+          if (!bootSplash) return
+          if (withFade) {
+            bootSplash.classList.add('boot-splash--hide')
+            setTimeout(function () {
+              removeNode(bootSplash)
+            }, 300)
+          } else {
+            removeNode(bootSplash)
+          }
+        }
+
+        var timer = setTimeout(function () {
+          // 兜底：超时后不允许 splash 永久遮挡界面
+          hideBootSplash(false)
+          if (!window.__REACT_MOUNTED__ && staticFooter && !shown && desktopMedia.matches) {
+            shown = true
+            staticFooter.style.display = 'block'
+          }
+        }, 8000)
+
+        window.hideStaticFallback = function () {
+          clearTimeout(timer)
+          window.__REACT_MOUNTED__ = true
+          hideBootSplash(true)
+          if (staticFooter) {
+            staticFooter.style.display = 'none'
+          }
+        }
+      })()
+    </script>
   </body>
 </html>

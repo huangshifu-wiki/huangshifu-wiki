@@ -37,9 +37,10 @@ type GalleryImageRecord = {
   url: string
   name: string
   asset: {
-    storageKey: string
-    publicUrl: string
+    storageKey: string | null
+    publicUrl: string | null
     fileName: string
+    imageMap: { localUrl: string; s3Url: string | null; externalUrl: string | null } | null
   } | null
 }
 
@@ -110,48 +111,33 @@ function resolveLocalImagePath(
     { localUrl: string; s3Url: string | null; externalUrl: string | null }
   >
 ) {
-  // 优先使用 ImageMap 的 localUrl（最直接的路径）
+  if (galleryImage.asset?.imageMap?.localUrl) {
+    const canonicalPath = localUrlToAbsoluteFile(galleryImage.asset.imageMap.localUrl, uploadsDir)
+    if (canonicalPath) return canonicalPath
+  }
   if (imageMapByUrl) {
-    // 尝试通过 publicUrl 查找 ImageMap
     if (galleryImage.asset?.publicUrl) {
       const im = imageMapByUrl.get(galleryImage.asset.publicUrl)
       if (im?.localUrl) {
         const imageMapPath = localUrlToAbsoluteFile(im.localUrl, uploadsDir)
-        if (imageMapPath) {
-          console.log(`[EmbeddingSync] 使用 ImageMap 路径: ${imageMapPath}`)
-          return imageMapPath
-        }
+        if (imageMapPath) return imageMapPath
       }
     }
-
-    // 尝试通过 url 查找 ImageMap
     const im = imageMapByUrl.get(galleryImage.url)
     if (im?.localUrl) {
       const imageMapPath = localUrlToAbsoluteFile(im.localUrl, uploadsDir)
-      if (imageMapPath) {
-        console.log(`[EmbeddingSync] 使用 ImageMap 路径: ${imageMapPath}`)
-        return imageMapPath
-      }
+      if (imageMapPath) return imageMapPath
     }
   }
-
-  // 回退到 MediaAsset storageKey 解析
   if (galleryImage.asset?.storageKey) {
     return resolveUploadPathByStorageKey(galleryImage.asset.storageKey, uploadsDir)
   }
-
   const directUrlStorageKey = extractStorageKeyFromUploadUrl(galleryImage.url)
-  if (directUrlStorageKey) {
-    return resolveUploadPathByStorageKey(directUrlStorageKey, uploadsDir)
-  }
-
+  if (directUrlStorageKey) return resolveUploadPathByStorageKey(directUrlStorageKey, uploadsDir)
   if (galleryImage.asset?.publicUrl) {
     const publicUrlStorageKey = extractStorageKeyFromUploadUrl(galleryImage.asset.publicUrl)
-    if (publicUrlStorageKey) {
-      return resolveUploadPathByStorageKey(publicUrlStorageKey, uploadsDir)
-    }
+    if (publicUrlStorageKey) return resolveUploadPathByStorageKey(publicUrlStorageKey, uploadsDir)
   }
-
   return null
 }
 
@@ -277,6 +263,7 @@ export async function syncImageEmbeddingBatch(
               storageKey: true,
               publicUrl: true,
               fileName: true,
+              imageMap: { select: { localUrl: true, s3Url: true, externalUrl: true } },
             },
           },
         },

@@ -332,7 +332,7 @@ describe('theme helpers', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
     expect(document.documentElement.style.colorScheme).toBe('dark')
     expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(
-      '#0c0c12'
+      '#1f1a16'
     )
   })
 

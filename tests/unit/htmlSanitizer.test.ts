@@ -224,6 +224,49 @@ describe('htmlSanitizer', () => {
       expect(output).toContain('style="text-align:center"')
     })
 
+    it('renders plain text fences as prose without parsing Markdown', () => {
+      const output = renderMarkdown(
+        [
+          '```plain',
+          '# 这不是标题',
+          '*这不是斜体*',
+          '[这不是链接](https://example.com)',
+          '保留  连续空格',
+          '下一行',
+          '```',
+        ].join('\n')
+      )
+
+      expect(output).toContain('class="markdown-plain-text"')
+      expect(output).toContain('# 这不是标题')
+      expect(output).toContain('*这不是斜体*')
+      expect(output).toContain('[这不是链接](https://example.com)')
+      expect(output).not.toMatch(/<pre(?:\s|>)/)
+      expect(output).not.toMatch(/<h1(?:\s|>)/)
+      expect(output).not.toMatch(/<em(?:\s|>)/)
+      expect(output).not.toMatch(/<a(?:\s|>)/)
+      expect(output).toMatch(/保留  连续空格\n[\s\S]*下一行/)
+    })
+
+    it('supports the text alias and preserves normal code block rendering', () => {
+      const textOutput = renderMarkdown(['```text', '纯文本别名', '```'].join('\n'))
+      expect(textOutput).toContain('class="markdown-plain-text"')
+      expect(textOutput).not.toMatch(/<pre(?:\s|>)/)
+
+      const codeOutput = renderMarkdown(['```ts', 'const value = 1', '```'].join('\n'))
+      expect(codeOutput).toMatch(/<pre(?:\s|>)/)
+      expect(codeOutput).toContain('language-ts')
+      expect(codeOutput).not.toContain('markdown-plain-text')
+    })
+
+    it('preserves raw pre elements with plain-looking code classes', () => {
+      const output = renderMarkdown('<pre><code class="language-plain">raw</code></pre>')
+
+      expect(output).toMatch(/<pre(?:\s|>)/)
+      expect(output).not.toContain('markdown-plain-text')
+      expect(output).toContain('raw')
+    })
+
     it('renders code highlighting, line numbers and highlighted lines from code meta', () => {
       const output = renderMarkdown(`
 \`\`\`js showLineNumbers {1}

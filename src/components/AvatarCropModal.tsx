@@ -4,11 +4,12 @@ import { X, Upload, Loader2 } from '@/src/components/icons'
 
 import { uploadAvatar, type UploadImageResult } from '../services/imageService'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import { isBackdropClick } from '../utils/modal'
 
 interface AvatarCropModalProps {
   open: boolean
   onClose: () => void
-  onSuccess: (photoURL: string) => void
+  onSuccess: (result: Pick<UploadImageResult, 'assetId' | 'url'>) => void
 }
 
 // 限制头像最大输出边长（足以覆盖 2x DPR 的 256 显示），避免超大 canvas 浪费内存
@@ -117,7 +118,7 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
         return
       }
       const result: UploadImageResult = await uploadAvatar(blob)
-      onSuccess(result.url)
+      onSuccess({ assetId: result.assetId, url: result.url })
       handleClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : '上传失败')
@@ -139,11 +140,14 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
 
   return (
     <div
-      className="floating-overlay fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center"
+      className="floating-overlay fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] p-4 flex items-center justify-center"
       data-state={presence.state}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) handleClose()
+      }}
     >
-      <div className="floating-panel w-full max-w-md bg-surface rounded border border-border flex flex-col overflow-hidden">
+      <div className="floating-panel w-full max-w-md flex flex-col overflow-hidden">
         <header className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-text-primary">修改头像</h3>

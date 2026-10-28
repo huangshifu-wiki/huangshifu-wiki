@@ -16,9 +16,15 @@ interface CacheEntry<T> {
   staleTime: number
 }
 
+interface RequestGeneration {
+  global: number
+  key: number
+}
+
 interface InFlightRequest<T> {
   promise: Promise<T>
   timestamp: number
+  generation: RequestGeneration
 }
 
 export interface DedupOptions {
@@ -38,6 +44,15 @@ const cache = new Map<string, CacheEntry<unknown>>()
 const inFlightRequests = new Map<string, InFlightRequest<unknown>>()
 
 const swrCooldowns = new Map<string, number>()
+let globalGeneration = 0
+const keyGenerations = new Map<string, number>()
+
+function invalidateKey(key: string): void {
+  cache.delete(key)
+  inFlightRequests.delete(key)
+  swrCooldowns.delete(key)
+  keyGenerations.set(key, (keyGenerations.get(key) ?? 0) + 1)
+}
 
 function debugLog(message: string, ...args: unknown[]): void {
   if (process.env.NODE_ENV !== 'production') {
@@ -57,6 +72,7 @@ function cleanupStaleInFlightRequests(): void {
   for (const [key, req] of inFlightRequests.entries()) {
     if (now - req.timestamp > INFLIGHT_TIMEOUT_MS) {
       inFlightRequests.delete(key)
+      keyGenerations.set(key, (keyGenerations.get(key) ?? 0) + 1)
     }
   }
 }
@@ -90,13 +106,13 @@ function isSwrOnCooldown(key: string, cooldown: number): boolean {
  */
 export function clearCache(key?: string): void {
   if (key) {
-    cache.delete(key)
-    inFlightRequests.delete(key)
-    swrCooldowns.delete(key)
+    invalidateKey(key)
   } else {
     cache.clear()
     inFlightRequests.clear()
     swrCooldowns.clear()
+    globalGeneration += 1
+    keyGenerations.clear()
   }
 }
 
@@ -140,10 +156,18 @@ export async function dedupedRequest<T>(
   const { staleTime = 60000, swr = true, swrCooldown: swrCooldownMs = 5000 } = options
 
   cleanupStaleInFlightRequests()
+  const generation: RequestGeneration = {
+    global: globalGeneration,
+    key: keyGenerations.get(key) ?? 0,
+  }
 
-  // 1. 检查是否有正在进行的相同请求，直接复用 Promise
+  // 1. 检查是否有同一代的进行中请求，直接复用 Promise
   const inFlight = inFlightRequests.get(key) as InFlightRequest<T> | undefined
-  if (inFlight) {
+  if (
+    inFlight &&
+    inFlight.generation.global === generation.global &&
+    inFlight.generation.key === generation.key
+  ) {
     debugLog(`Reusing in-flight request: ${key}`)
     return inFlight.promise
   }
@@ -154,15 +178,19 @@ export async function dedupedRequest<T>(
   if (cached && isCacheValid(cached, staleTime)) {
     debugLog(`Cache hit: ${key}`)
 
-    // SWR 策略：在后台重新验证（如果不在冷却期）
     if (swr && !isSwrOnCooldown(key, swrCooldownMs)) {
       debugLog(`SWR revalidating in background: ${key}`)
       swrCooldowns.set(key, Date.now())
 
-      // 后台重新验证，不阻塞当前返回
-      const revalidatePromise = requestFn()
+      let revalidatePromise: Promise<T | undefined>
+      revalidatePromise = requestFn()
         .then((data) => {
-          if (data !== undefined && data !== null) {
+          if (
+            data !== undefined &&
+            data !== null &&
+            generation.global === globalGeneration &&
+            generation.key === (keyGenerations.get(key) ?? 0)
+          ) {
             evictOldestCacheEntry()
             cache.set(key, { data, timestamp: Date.now(), staleTime })
           }
@@ -171,14 +199,18 @@ export async function dedupedRequest<T>(
         })
         .catch((error) => {
           debugLog(`SWR revalidate failed: ${key}`, error)
+          return undefined
         })
         .finally(() => {
-          inFlightRequests.delete(key)
+          if (inFlightRequests.get(key)?.promise === revalidatePromise) {
+            inFlightRequests.delete(key)
+          }
         })
 
       inFlightRequests.set(key, {
-        promise: revalidatePromise as Promise<unknown>,
+        promise: revalidatePromise,
         timestamp: Date.now(),
+        generation,
       })
     }
 
@@ -189,9 +221,15 @@ export async function dedupedRequest<T>(
   evictOldestCacheEntry()
   debugLog(`Cache miss, fetching: ${key}`)
 
-  const promise = requestFn()
+  let promise: Promise<T>
+  promise = requestFn()
     .then((data) => {
-      if (data !== undefined && data !== null) {
+      if (
+        data !== undefined &&
+        data !== null &&
+        generation.global === globalGeneration &&
+        generation.key === (keyGenerations.get(key) ?? 0)
+      ) {
         evictOldestCacheEntry()
         cache.set(key, { data, timestamp: Date.now(), staleTime })
       }
@@ -205,14 +243,15 @@ export async function dedupedRequest<T>(
       throw error
     })
     .finally(() => {
-      // 清理进行中的请求记录
-      inFlightRequests.delete(key)
+      if (inFlightRequests.get(key)?.promise === promise) {
+        inFlightRequests.delete(key)
+      }
     })
 
-  // 记录进行中的请求
   inFlightRequests.set(key, {
-    promise: promise as Promise<unknown>,
+    promise,
     timestamp: Date.now(),
+    generation,
   })
 
   return promise
@@ -258,8 +297,7 @@ export function preloadCache<T>(key: string, data: T, staleTime: number = 60000)
  * 使指定缓存失效
  */
 export function invalidateCache(key: string): void {
-  cache.delete(key)
-  swrCooldowns.delete(key)
+  invalidateKey(key)
   debugLog(`Invalidated cache: ${key}`)
 }
 
@@ -267,11 +305,14 @@ export function invalidateCache(key: string): void {
  * 使匹配前缀的所有缓存失效
  */
 export function invalidateCacheByPrefix(prefix: string): void {
-  for (const key of cache.keys()) {
-    if (key.includes(prefix)) {
-      cache.delete(key)
-      swrCooldowns.delete(key)
-    }
+  const keys = new Set([
+    ...cache.keys(),
+    ...inFlightRequests.keys(),
+    ...swrCooldowns.keys(),
+    ...keyGenerations.keys(),
+  ])
+  for (const key of keys) {
+    if (key.includes(prefix)) invalidateKey(key)
   }
   debugLog(`Invalidated cache by prefix: ${prefix}`)
 }

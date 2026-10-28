@@ -1,37 +1,30 @@
-// 文件上传(S3/External/Superbed)、图片校验、路径管理、编辑锁规范
+// 文件上传(S3/Superbed)、图片校验、路径管理
 
 import fs from 'fs'
 import path from 'path'
-import { uploadsDir, UPLOAD_SESSION_TTL_MINUTES } from './config'
+import { uploadsDir } from './config'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 import { parseInteger } from './parsers'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
-import type {
-  EDIT_LOCK_COLLECTION_ALLOWLIST,
-  ALLOWED_IMAGE_EXTENSIONS,
-  ALLOWED_IMAGE_MIME_TYPES,
-} from '../types'
-import { getStorageKeyFromFilePath } from '../uploadPath'
+import type { ALLOWED_IMAGE_EXTENSIONS, ALLOWED_IMAGE_MIME_TYPES } from '../types'
 import { logger } from './logger'
 
 import {
-  EDIT_LOCK_COLLECTION_ALLOWLIST as editLockAllowlist,
   ALLOWED_IMAGE_EXTENSIONS as allowedImageExtensions,
   ALLOWED_IMAGE_MIME_TYPES as allowedImageMimeTypes,
 } from '../types'
 
-// ─── 编辑锁/会话辅助 ────────────────────────────────────────────────
+// ─── 曲目盘符/会话辅助 ──────────────────────────────────────────────
 
-export function normalizeTrackDiscPayload(rawTracks: unknown): Array<{
+export type TrackDiscPayload = Array<{
   disc: number
   name: string
   songs: Array<{ songDocId: string; trackOrder: number }>
-}> {
+}>
+
+export function normalizeTrackDiscPayload(rawTracks: unknown): TrackDiscPayload {
   if (!Array.isArray(rawTracks)) {
-    return [] as Array<{
-      disc: number
-      name: string
-      songs: Array<{ songDocId: string; trackOrder: number }>
-    }>
+    return []
   }
 
   const normalized = rawTracks
@@ -84,26 +77,8 @@ export function normalizeTrackDiscPayload(rawTracks: unknown): Array<{
   return normalized
 }
 
-export function normalizeEditLockCollection(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  const normalized = value.trim().toLowerCase()
-  if (!normalized) return ''
-  if ((editLockAllowlist as Set<string>).has(normalized)) return normalized
-  return ''
-}
-
-export function normalizeEditLockRecordId(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  const normalized = value.trim()
-  if (!normalized) return ''
-  if (normalized.length > 191) {
-    return normalized.slice(0, 191)
-  }
-  return normalized
-}
-
 export function createUploadSessionExpiresAt(): Date {
-  return new Date(Date.now() + UPLOAD_SESSION_TTL_MINUTES * 60 * 1000)
+  return new Date(Date.now() + runtimeConfigService.getConfig().uploadSessionTtlMinutes * 60 * 1000)
 }
 
 export function isUploadSessionExpired(expiresAt: Date): boolean {
@@ -168,15 +143,7 @@ export async function safeDeleteUploadFileByStorageKey(storageKey: string): Prom
   }
 }
 
-export async function safeDeleteUploadFileByUrl(url: string): Promise<void> {
-  const storageKey = extractStorageKeyFromUploadUrl(url)
-  if (!storageKey) {
-    return
-  }
-  await safeDeleteUploadFileByStorageKey(storageKey)
-}
-
-// ─── 存储上传（S3 / External / Superbed）─────────────────────────────
+// ─── 存储上传（S3 / Superbed）────────────────────────────────────────
 
 let s3ModuleCache: {
   s3Service: typeof import('../s3/s3Service')
@@ -211,9 +178,7 @@ export async function uploadFileToS3(
 
     const fileBuffer = await fs.promises.readFile(filePath)
 
-    // S3 Key 应该是原始字符串，不需要 encodeURIComponent
-    // AWS SDK 会自动处理 UTF-8 字符
-    const s3Key = objectKey
+    const s3Key = config.prefix ? `${config.prefix}${objectKey}` : objectKey
 
     await s3Client.send(
       new PutObjectCommand({
@@ -237,76 +202,6 @@ export async function uploadFileToS3(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'S3 upload failed',
-    }
-  }
-}
-
-export async function uploadFileToExternal(
-  filePath: string,
-  fileName: string,
-  contentType: string,
-  config: {
-    apiUrl: string
-    apiKey?: string
-    customHeaders?: Record<string, string>
-  }
-): Promise<{ success: boolean; url?: string; error?: string }> {
-  try {
-    const FormData = (await import('form-data')).default
-
-    const formData = new FormData()
-    formData.append('file', await fs.promises.readFile(filePath), {
-      filename: fileName,
-      contentType,
-    })
-
-    const headers: Record<string, string> = {
-      ...config.customHeaders,
-      ...formData.getHeaders(),
-    }
-    if (config.apiKey) {
-      headers['Authorization'] = `Bearer ${config.apiKey}`
-    }
-
-    const response = await fetch(config.apiUrl, {
-      method: 'POST',
-      headers,
-      body: formData as unknown as BodyInit,
-      signal: AbortSignal.timeout(10000),
-    })
-
-    if (!response.ok) {
-      return {
-        success: false,
-        error: `External upload failed: ${response.status} ${response.statusText}`,
-      }
-    }
-
-    const data = await response.json()
-
-    let externalUrl: string | undefined
-    if (data.url) {
-      externalUrl = data.url
-    } else if (data.data?.url) {
-      externalUrl = data.data.url
-    } else if (data.image?.url) {
-      externalUrl = data.image.url
-    } else if (data.link) {
-      externalUrl = data.link
-    } else if (Array.isArray(data) && data[0]?.url) {
-      externalUrl = data[0].url
-    }
-
-    if (!externalUrl) {
-      return { success: false, error: 'Failed to parse external upload response' }
-    }
-
-    return { success: true, url: externalUrl }
-  } catch (error) {
-    console.error('[External Upload] Error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'External upload failed',
     }
   }
 }
@@ -474,7 +369,7 @@ export async function validateUploadedImage(
   }
 }
 
-export function detectImageMimeType(buffer: Buffer): string | null {
+function detectImageMimeType(buffer: Buffer): string | null {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
     return 'image/jpeg'
   }
@@ -524,9 +419,4 @@ export function detectImageMimeType(buffer: Buffer): string | null {
   }
 
   return null
-}
-
-export function getUploadFileStorageKey(file: Express.Multer.File): string {
-  const storageKey = getStorageKeyFromFilePath(file.path, uploadsDir)
-  return storageKey || file.filename
 }

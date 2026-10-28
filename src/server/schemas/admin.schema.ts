@@ -9,7 +9,7 @@ import {
 
 export const backupRestoreSchema = z.object({
   confirm: z.preprocess((value) => value === true || value === 'true', z.literal(true)),
-  legacyPassword: z.string().optional(),
+  password: z.string().optional(),
 })
 
 export const backupNoteSchema = z
@@ -156,18 +156,47 @@ export const adminBatchMusicDisplaySchema = z
       })
     }
   })
+const adminAlbumTrackSongSchema = z.object({
+  songDocId: z.string({ error: '歌曲 ID 必须是字符串' }).trim().min(1, '歌曲 ID 不能为空').max(191),
+  trackOrder: z.number({ error: '轨序必须是数字' }).int().min(0).max(5000),
+})
 
-export const adminMusicCoverThumbnailBackfillSchema = z.preprocess(
-  (value) => value ?? {},
-  z
-    .object({
-      type: z.enum(['all', 'song', 'album'], { error: '处理范围无效' }).default('all'),
-      batchSize: z
-        .number({ error: '批量大小必须是数字' })
-        .int('批量大小必须是整数')
-        .min(1, '批量大小至少为 1')
-        .max(100, '批量大小最多为 100')
-        .default(50),
+const adminAlbumTrackDiscSchema = z.object({
+  disc: z.number({ error: 'Disc 编号必须是数字' }).int().min(1).max(20),
+  name: z
+    .string({ error: 'Disc 名称必须是字符串' })
+    .trim()
+    .min(1, 'Disc 名称不能为空')
+    .max(CONTENT_LIMITS.album.discName),
+  songs: z.array(adminAlbumTrackSongSchema).max(5000),
+})
+
+export const adminAlbumTrackReorderSchema = z
+  .object({
+    updatedAt: z.iso.datetime(),
+    tracks: z.array(adminAlbumTrackDiscSchema).max(20),
+  })
+  .superRefine((value, ctx) => {
+    const discs = new Set<number>()
+    const songs = new Set<string>()
+    value.tracks.forEach((disc, discIndex) => {
+      if (discs.has(disc.disc)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tracks', discIndex, 'disc'],
+          message: 'Disc 编号不能重复',
+        })
+      }
+      discs.add(disc.disc)
+      disc.songs.forEach((song, songIndex) => {
+        if (songs.has(song.songDocId)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['tracks', discIndex, 'songs', songIndex, 'songDocId'],
+            message: '歌曲不能重复出现在多个曲目位置',
+          })
+        }
+        songs.add(song.songDocId)
+      })
     })
-    .strip()
-)
+  })

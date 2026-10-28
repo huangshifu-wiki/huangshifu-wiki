@@ -12,14 +12,16 @@ import {
 } from './music'
 
 import { Prisma, UserRole as PrismaUserRole } from '@prisma/client'
-import type { VariantStatus } from '@prisma/client'
+import type { MusicPlayableOverride, VariantStatus } from '@prisma/client'
 import { normalizeStringListInput } from '../../lib/musicCredits'
 import { isPlayableSong } from '../../lib/musicPlayback'
+import type { LyricType } from '../../lib/lrcParser'
 import { RELATION_TYPE_LABELS } from '../../lib/relationConstants'
 
 import type {
   UserStatus,
   ContentStatus,
+  TicketListingType,
   WikiRelationType,
   FavoriteTargetType,
   ModerationTargetType,
@@ -363,6 +365,98 @@ export function toPostResponse(post: {
     updatedAt: post.updatedAt.toISOString(),
   }
 }
+type TicketListingTransformerInput = {
+  id: string
+  slug: string
+  type: TicketListingType
+  eventId: string | null
+  customEventName: string | null
+  quantity: number
+  ticketTier: string
+  seat: string
+  description?: string
+  contact?: string
+  authorUid: string
+  status?: ContentStatus
+  reviewNote?: string | null
+  reviewedBy?: string | null
+  reviewedAt?: Date | null
+  deletedAt?: Date | null
+  deletedBy?: string | null
+  createdAt: Date
+  updatedAt: Date
+  event?: {
+    id: string
+    slug: string
+    title: string
+    location: string
+    deletedAt?: Date | null
+  } | null
+  author?: { publicId: string; displayName: string } | null
+  deletionReason?: string | null
+}
+
+type TicketListingResponseOptions = {
+  includePrivate?: boolean
+  includeContent?: boolean
+}
+
+function toTicketListingBaseResponse(
+  listing: TicketListingTransformerInput,
+  options: TicketListingResponseOptions = {}
+) {
+  const includePrivate = options.includePrivate === true
+  const eventUnavailable = Boolean(listing.event?.deletedAt)
+  const eventName = listing.event?.title || listing.customEventName || '未命名活动'
+  const response = {
+    id: listing.id,
+    slug: listing.slug,
+    type: listing.type,
+    eventId: eventUnavailable ? null : listing.eventId,
+    customEventName:
+      listing.customEventName || (eventUnavailable ? listing.event?.title || null : null),
+    eventName,
+    eventSlug: eventUnavailable ? null : listing.event?.slug || null,
+    eventLocation: listing.event?.location || null,
+    quantity: listing.quantity,
+    ticketTier: listing.ticketTier,
+    seat: listing.seat,
+    authorUid: listing.authorUid,
+    authorPublicId: listing.author?.publicId || null,
+    authorName: listing.author?.displayName || '匿名',
+    createdAt: listing.createdAt.toISOString(),
+    updatedAt: listing.updatedAt.toISOString(),
+    ...(options.includeContent === true
+      ? { description: listing.description || '', contact: listing.contact || '' }
+      : {}),
+    ...(includePrivate
+      ? {
+          status: listing.status,
+          reviewNote: listing.reviewNote,
+          reviewedAt: listing.reviewedAt ? listing.reviewedAt.toISOString() : null,
+          isDeleted: Boolean(listing.deletedAt),
+          deletedAt: listing.deletedAt ? listing.deletedAt.toISOString() : null,
+          deletedBy: listing.deletedBy || null,
+          deletionReason: listing.deletionReason || null,
+        }
+      : {}),
+  }
+  return response
+}
+
+export function toTicketListingResponse(
+  listing: TicketListingTransformerInput,
+  options: TicketListingResponseOptions = {}
+) {
+  return toTicketListingBaseResponse(listing, { ...options, includeContent: true })
+}
+
+export function toTicketListingListResponse(
+  listing: TicketListingTransformerInput,
+  options: TicketListingResponseOptions = {}
+) {
+  return toTicketListingBaseResponse(listing, { ...options, includeContent: false })
+}
 
 const DELETED_COMMENT_PLACEHOLDER = '评论已删除'
 
@@ -446,6 +540,7 @@ type GalleryInput = {
   author?: { publicId?: string; displayName?: string | null } | null
   authorName: string
   tags: unknown
+  relatedLinks?: unknown
   eventDate?: string | null
   locationCode?: string | null
   locationDetail?: string | null
@@ -467,25 +562,11 @@ type GalleryInput = {
   createdAt: Date
   updatedAt: Date
   location?: { code: string; name: string; fullName: string } | null
-  images: {
-    id: string
-    url: string
-    name: string
-    sortOrder: number
-    assetId?: string | null
-    asset?: {
-      id: string
-      publicUrl: string
-      fileName: string
-      mimeType: string
-      sizeBytes: number
-      status: string
-      storageKey: string
-    } | null
-  }[]
+  images: MediaImageInput[]
 }
 
 type GalleryImageMapEntry = {
+  id?: string
   localUrl: string
   externalUrl: string | null
   s3Url: string | null
@@ -493,78 +574,104 @@ type GalleryImageMapEntry = {
   variantStatus: VariantStatus | null
 }
 
-function resolveGalleryImageLocalUrl(image: GalleryInput['images'][number]) {
-  if (image.asset?.storageKey) {
-    return `/uploads/${image.asset.storageKey}`
-  }
-  if (image.url?.startsWith('/uploads/')) {
-    return image.url
-  }
+type MediaImageInput = {
+  id: string
+  url: string
+  name: string
+  sortOrder: number
+  assetId?: string | null
+  asset?: {
+    id?: string
+    imageMapId?: string | null
+    publicUrl: string | null
+    fileName: string
+    mimeType: string
+    sizeBytes: number
+    status: string
+    storageKey: string | null
+    imageMap?: GalleryImageMapEntry | null
+  } | null
+}
+
+type ImageMapLookupInput = Pick<MediaImageInput, 'url' | 'asset'>
+
+type GalleryImageMapLookup = {
+  byId: Map<string, GalleryImageMapEntry>
+  byLocalUrl: Map<string, GalleryImageMapEntry>
+}
+
+function getAttachedImageMap(image: ImageMapLookupInput, lookup: GalleryImageMapLookup) {
+  return (
+    image.asset?.imageMap ||
+    (image.asset?.imageMapId ? lookup.byId.get(image.asset.imageMapId) : null)
+  )
+}
+
+function resolveGalleryImageLocalUrl(image: ImageMapLookupInput, lookup: GalleryImageMapLookup) {
+  const imageMap = getAttachedImageMap(image, lookup)
+  if (imageMap?.localUrl) return imageMap.localUrl
+  if (image.asset?.storageKey) return `/uploads/${image.asset.storageKey}`
+  if (image.url.startsWith('/uploads/')) return image.url
   return null
 }
 
-function resolveImageUrl(
-  image: GalleryInput['images'][number],
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
-) {
+function resolveImageUrl(image: ImageMapLookupInput, lookup: GalleryImageMapLookup) {
+  const attachedMap = getAttachedImageMap(image, lookup)
+  if (attachedMap?.localUrl) return attachedMap.localUrl
   let url = image.asset?.publicUrl || image.url
-  const localUrl = resolveGalleryImageLocalUrl(image)
-
-  if (localUrl) {
-    const imageMap = imageMapByLocalUrl.get(localUrl)
-
-    if (imageMap) {
-      url = imageMap.localUrl || url
-    }
-  }
-
+  const localUrl = resolveGalleryImageLocalUrl(image, lookup)
+  if (localUrl) url = lookup.byLocalUrl.get(localUrl)?.localUrl || url
   return url
 }
 
 function resolveThumbnailUrl(
-  image: GalleryInput['images'][number],
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
+  image: ImageMapLookupInput,
+  lookup: GalleryImageMapLookup
 ): string | null {
-  const localUrl = resolveGalleryImageLocalUrl(image)
-  if (localUrl) {
-    const imageMap = imageMapByLocalUrl.get(localUrl)
-
-    if (imageMap?.thumbnailUrl) {
-      return imageMap.thumbnailUrl
-    }
-  }
-
-  return null
+  const attachedMap = getAttachedImageMap(image, lookup)
+  if (attachedMap?.thumbnailUrl) return attachedMap.thumbnailUrl
+  const localUrl = resolveGalleryImageLocalUrl(image, lookup)
+  return localUrl ? lookup.byLocalUrl.get(localUrl)?.thumbnailUrl || null : null
 }
 
 function resolveThumbnailStatus(
-  image: GalleryInput['images'][number],
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
+  image: ImageMapLookupInput,
+  lookup: GalleryImageMapLookup
 ): VariantStatus | null {
-  const localUrl = resolveGalleryImageLocalUrl(image)
-  if (!localUrl) return null
-  return imageMapByLocalUrl.get(localUrl)?.variantStatus ?? null
+  const attachedMap = getAttachedImageMap(image, lookup)
+  if (attachedMap?.variantStatus) return attachedMap.variantStatus
+  const localUrl = resolveGalleryImageLocalUrl(image, lookup)
+  return localUrl ? (lookup.byLocalUrl.get(localUrl)?.variantStatus ?? null) : null
 }
 
-export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?: string) {
-  void storageStrategy
-
-  const localUrls: string[] = []
-  for (const img of gallery.images) {
-    const localUrl = resolveGalleryImageLocalUrl(img)
-    if (localUrl) {
-      localUrls.push(localUrl)
-    }
-  }
-
+async function loadImageMaps(images: ImageMapLookupInput[]): Promise<GalleryImageMapLookup> {
+  const imageMapIds = [
+    ...new Set(
+      images.map((image) => image.asset?.imageMapId).filter((id): id is string => Boolean(id))
+    ),
+  ]
+  const localUrls = [
+    ...new Set(
+      images
+        .filter((image) => !image.asset?.imageMap)
+        .map((image) =>
+          image.asset?.storageKey ? `/uploads/${image.asset.storageKey}` : image.url
+        )
+        .filter((url): url is string => Boolean(url && url.startsWith('/uploads/')))
+    ),
+  ]
+  const where =
+    imageMapIds.length && localUrls.length
+      ? { deletedAt: null, OR: [{ id: { in: imageMapIds } }, { localUrl: { in: localUrls } }] }
+      : imageMapIds.length
+        ? { deletedAt: null, id: { in: imageMapIds } }
+        : { deletedAt: null, localUrl: { in: localUrls } }
   const imageMaps =
-    localUrls.length > 0
+    imageMapIds.length || localUrls.length
       ? await prisma.imageMap.findMany({
-          where: {
-            deletedAt: null,
-            localUrl: { in: localUrls },
-          },
+          where,
           select: {
+            id: true,
             localUrl: true,
             externalUrl: true,
             s3Url: true,
@@ -573,9 +680,31 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
           },
         })
       : []
+  return {
+    byId: new Map(imageMaps.map((imageMap) => [imageMap.id, imageMap])),
+    byLocalUrl: new Map(imageMaps.map((imageMap) => [imageMap.localUrl, imageMap])),
+  }
+}
 
-  const imageMapByLocalUrl = new Map(imageMaps.map((im) => [im.localUrl, im]))
+function toGalleryImageResponse(image: MediaImageInput, imageMapLookup: GalleryImageMapLookup) {
+  const thumbnailUrl = resolveThumbnailUrl(image, imageMapLookup)
+  return {
+    id: image.id,
+    assetId: image.assetId || image.asset?.id || null,
+    url: thumbnailUrl || '',
+    originalUrl: resolveImageUrl(image, imageMapLookup),
+    thumbnailUrl,
+    thumbnailStatus: resolveThumbnailStatus(image, imageMapLookup),
+    name: image.asset?.fileName || image.name,
+    mimeType: image.asset?.mimeType || null,
+    sizeBytes: image.asset?.sizeBytes || null,
+  }
+}
 
+function toGalleryResponseWithImageMaps(
+  gallery: GalleryInput,
+  imageMapLookup: GalleryImageMapLookup
+) {
   return {
     id: gallery.id,
     slug: gallery.slug || gallery.id,
@@ -585,6 +714,7 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
     authorPublicId: gallery.author?.publicId || null,
     authorName: gallery.authorName,
     tags: serializeTags(gallery.tags),
+    relatedLinks: arrayJson(gallery.relatedLinks),
     eventDate: gallery.eventDate ?? null,
     locationCode: gallery.locationCode || null,
     locationName: gallery.location?.fullName || null,
@@ -609,116 +739,22 @@ export async function toGalleryResponse(gallery: GalleryInput, storageStrategy?:
     updatedAt: gallery.updatedAt.toISOString(),
     images: gallery.images
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((image) => ({
-        id: image.id,
-        assetId: image.assetId || image.asset?.id || null,
-        url: resolveThumbnailUrl(image, imageMapByLocalUrl) || '',
-        originalUrl: resolveImageUrl(image, imageMapByLocalUrl),
-        thumbnailUrl: resolveThumbnailUrl(image, imageMapByLocalUrl),
-        thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
-        name: image.asset?.fileName || image.name,
-        mimeType: image.asset?.mimeType || null,
-        sizeBytes: image.asset?.sizeBytes || null,
-      })),
+      .map((image) => toGalleryImageResponse(image, imageMapLookup)),
   }
 }
 
-export async function toGalleryListResponse(galleries: GalleryInput[], storageStrategy?: string) {
+export async function toGalleryResponse(gallery: GalleryInput) {
+  const imageMapLookup = await loadImageMaps(gallery.images)
+  return toGalleryResponseWithImageMaps(gallery, imageMapLookup)
+}
+
+export async function toGalleryListResponse(galleries: GalleryInput[]) {
   if (galleries.length === 0) return []
-  void storageStrategy
-
-  const allLocalUrls: string[] = []
-  for (const gallery of galleries) {
-    for (const img of gallery.images) {
-      const localUrl = resolveGalleryImageLocalUrl(img)
-      if (localUrl) {
-        allLocalUrls.push(localUrl)
-      }
-    }
-  }
-
-  const imageMaps =
-    allLocalUrls.length > 0
-      ? await prisma.imageMap.findMany({
-          where: {
-            deletedAt: null,
-            localUrl: { in: allLocalUrls },
-          },
-          select: {
-            localUrl: true,
-            externalUrl: true,
-            s3Url: true,
-            thumbnailUrl: true,
-            variantStatus: true,
-          },
-        })
-      : []
-
-  const imageMapByLocalUrl = new Map(imageMaps.map((im) => [im.localUrl, im]))
-
-  return galleries.map((gallery) => ({
-    id: gallery.id,
-    slug: gallery.slug || gallery.id,
-    title: gallery.title,
-    description: gallery.description,
-    authorUid: gallery.authorUid,
-    authorPublicId: gallery.author?.publicId || null,
-    authorName: gallery.authorName,
-    tags: serializeTags(gallery.tags),
-    eventDate: gallery.eventDate ?? null,
-    locationCode: gallery.locationCode || null,
-    locationName: gallery.location?.fullName || null,
-    locationDetail: gallery.locationDetail || null,
-    copyright: gallery.copyright || null,
-    status: gallery.status,
-    reviewNote: gallery.reviewNote ?? null,
-    reviewedBy: gallery.reviewedBy ?? null,
-    reviewedAt: gallery.reviewedAt ? gallery.reviewedAt.toISOString() : null,
-    published: gallery.published,
-    publishedAt: gallery.publishedAt ? gallery.publishedAt.toISOString() : null,
-    likesCount: gallery.likesCount ?? 0,
-    dislikesCount: gallery.dislikesCount ?? 0,
-    favoritesCount: gallery.favoritesCount ?? 0,
-    likedByMe: Boolean(gallery.likedByMe),
-    dislikedByMe: Boolean(gallery.dislikedByMe),
-    favoritedByMe: Boolean(gallery.favoritedByMe),
-    isDeleted: Boolean(gallery.deletedAt),
-    deletedAt: gallery.deletedAt ? gallery.deletedAt.toISOString() : null,
-    deletedBy: gallery.deletedBy ?? null,
-    createdAt: gallery.createdAt.toISOString(),
-    updatedAt: gallery.updatedAt.toISOString(),
-    images: gallery.images
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((image) => ({
-        id: image.id,
-        assetId: image.assetId || image.asset?.id || null,
-        url: resolveThumbnailUrl(image, imageMapByLocalUrl) || '',
-        originalUrl: resolveImageUrl(image, imageMapByLocalUrl),
-        thumbnailUrl: resolveThumbnailUrl(image, imageMapByLocalUrl),
-        thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
-        name: image.asset?.fileName || image.name,
-        mimeType: image.asset?.mimeType || null,
-        sizeBytes: image.asset?.sizeBytes || null,
-      })),
-  }))
+  const imageMapLookup = await loadImageMaps(galleries.flatMap((gallery) => gallery.images))
+  return galleries.map((gallery) => toGalleryResponseWithImageMaps(gallery, imageMapLookup))
 }
 
-type EventImageInput = {
-  id: string
-  url: string
-  name: string
-  sortOrder: number
-  assetId?: string | null
-  asset?: {
-    id: string
-    publicUrl: string
-    fileName: string
-    mimeType: string
-    sizeBytes: number
-    status: string
-    storageKey: string
-  } | null
-}
+type EventImageInput = MediaImageInput
 
 type EventInput = {
   id: string
@@ -727,6 +763,7 @@ type EventInput = {
   location: string
   content: string
   timeSlots: unknown
+  timeStatus?: 'pending' | 'postponed' | null
   ticketPrices: unknown
   saleTimes: unknown
   lineup: unknown
@@ -766,47 +803,14 @@ function resolveEventCoverImage(event: EventInput): EventImageInput | null {
   }
 }
 
-function collectEventImageMaps(events: EventInput[]) {
-  const localUrls: string[] = []
-  for (const event of events) {
-    const cover = resolveEventCoverImage(event)
-    if (cover) {
-      const coverLocalUrl = resolveGalleryImageLocalUrl(cover)
-      if (coverLocalUrl) localUrls.push(coverLocalUrl)
-    }
-    for (const poster of event.posters) {
-      const localUrl = resolveGalleryImageLocalUrl(poster)
-      if (localUrl) localUrls.push(localUrl)
-    }
-  }
-  return localUrls
+function getEventImages(event: EventInput): EventImageInput[] {
+  const cover = resolveEventCoverImage(event)
+  return cover ? [cover, ...event.posters] : event.posters
 }
 
-async function loadImageMapsByLocalUrl(localUrls: string[]) {
-  if (localUrls.length === 0) return new Map<string, GalleryImageMapEntry>()
-  const uniqueLocalUrls = [...new Set(localUrls)]
-  const imageMaps = await prisma.imageMap.findMany({
-    where: {
-      deletedAt: null,
-      localUrl: { in: uniqueLocalUrls },
-    },
-    select: {
-      localUrl: true,
-      externalUrl: true,
-      s3Url: true,
-      thumbnailUrl: true,
-      variantStatus: true,
-    },
-  })
-  return new Map(imageMaps.map((im) => [im.localUrl, im]))
-}
-
-function toEventPosterResponse(
-  image: EventImageInput,
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
-) {
-  const thumbnailUrl = resolveThumbnailUrl(image, imageMapByLocalUrl)
-  const originalUrl = resolveImageUrl(image, imageMapByLocalUrl)
+function toEventPosterResponse(image: EventImageInput, imageMapLookup: GalleryImageMapLookup) {
+  const thumbnailUrl = resolveThumbnailUrl(image, imageMapLookup)
+  const originalUrl = resolveImageUrl(image, imageMapLookup)
 
   return {
     id: image.id,
@@ -814,17 +818,14 @@ function toEventPosterResponse(
     url: thumbnailUrl || originalUrl,
     originalUrl,
     thumbnailUrl,
-    thumbnailStatus: resolveThumbnailStatus(image, imageMapByLocalUrl),
+    thumbnailStatus: resolveThumbnailStatus(image, imageMapLookup),
     name: image.asset?.fileName || image.name,
   }
 }
 
-function toEventResponseWithImageMaps(
-  event: EventInput,
-  imageMapByLocalUrl: Map<string, GalleryImageMapEntry>
-) {
+function toEventResponseWithImageMaps(event: EventInput, imageMapLookup: GalleryImageMapLookup) {
   const cover = resolveEventCoverImage(event)
-  const coverResponse = cover ? toEventPosterResponse(cover, imageMapByLocalUrl) : null
+  const coverResponse = cover ? toEventPosterResponse(cover, imageMapLookup) : null
 
   return {
     id: event.id,
@@ -833,6 +834,7 @@ function toEventResponseWithImageMaps(
     location: event.location,
     content: event.content,
     timeSlots: arrayJson(event.timeSlots),
+    timeStatus: event.timeStatus ?? null,
     ticketPrices: arrayJson(event.ticketPrices),
     saleTimes: arrayJson(event.saleTimes),
     lineup: arrayJson(event.lineup),
@@ -857,63 +859,70 @@ function toEventResponseWithImageMaps(
     updatedAt: event.updatedAt.toISOString(),
     posters: [...event.posters]
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((poster) => toEventPosterResponse(poster, imageMapByLocalUrl)),
+      .map((poster) => toEventPosterResponse(poster, imageMapLookup)),
   }
 }
 
 export async function toEventResponse(event: EventInput) {
-  const imageMapByLocalUrl = await loadImageMapsByLocalUrl(collectEventImageMaps([event]))
-  return toEventResponseWithImageMaps(event, imageMapByLocalUrl)
+  const imageMapLookup = await loadImageMaps(getEventImages(event))
+  return toEventResponseWithImageMaps(event, imageMapLookup)
 }
 
 export async function toEventListResponse(events: EventInput[]) {
   if (events.length === 0) return []
-  const imageMapByLocalUrl = await loadImageMapsByLocalUrl(collectEventImageMaps(events))
-  return events.map((event) => toEventResponseWithImageMaps(event, imageMapByLocalUrl))
+  const imageMapLookup = await loadImageMaps(events.flatMap(getEventImages))
+  return events.map((event) => toEventResponseWithImageMaps(event, imageMapLookup))
 }
 
-export function toMusicResponse(track: {
-  docId: string
-  slug?: string
-  title: string
-  artists: string[]
-  lyricists?: string[]
-  composers?: string[]
-  arrangers?: string[]
-  vocals?: string[]
-  album: string
-  audioUrl: string
-  lyric?: string | null
-  releaseDate?: Date | null
-  durationMs?: number | null
-  coverId?: string | null
-  coverAlbumDocId?: string | null
-  covers?: Array<{
-    id: string
-    publicUrl: string
-    thumbnailUrl?: string | null
-    isDefault?: boolean
-  }>
-  albumRelations?: Array<{
-    album: {
-      docId: string
-      coverId: string | null
-      covers: Array<{
-        id: string
-        publicUrl: string
-        thumbnailUrl?: string | null
-        isDefault?: boolean
-      }>
-    }
-  }>
-  externalSources?: MusicExternalSourceRecord[]
-  displayAlbumMode: string
-  manualAlbumName?: string | null
-  deletedAt?: Date | null
-  deletedBy?: string | null
-  createdAt: Date
-  updatedAt: Date
-}) {
+export function toMusicResponse(
+  track: {
+    docId: string
+    slug?: string
+    title: string
+    artists: string[]
+    lyricists?: string[]
+    composers?: string[]
+    arrangers?: string[]
+    vocals?: string[]
+    album: string
+    audioUrl: string
+    description?: string | null
+    tags?: unknown
+    customPlatformLinks?: unknown
+    playableOverride?: MusicPlayableOverride
+    lyric?: string | null
+    releaseDate?: Date | null
+    durationMs?: number | null
+    coverId?: string | null
+    coverAlbumDocId?: string | null
+    covers?: Array<{
+      id: string
+      publicUrl: string
+      thumbnailUrl?: string | null
+      isDefault?: boolean
+    }>
+    albumRelations?: Array<{
+      album: {
+        docId: string
+        coverId: string | null
+        covers: Array<{
+          id: string
+          publicUrl: string
+          thumbnailUrl?: string | null
+          isDefault?: boolean
+        }>
+      }
+    }>
+    externalSources?: MusicExternalSourceRecord[]
+    displayAlbumMode: string
+    manualAlbumName?: string | null
+    deletedAt?: Date | null
+    deletedBy?: string | null
+    createdAt: Date
+    updatedAt: Date
+  },
+  options?: { favoritedByMe?: boolean }
+) {
   const cover = resolveSongCoverUrl({
     coverId: track.coverId ?? null,
     coverAlbumDocId: track.coverAlbumDocId ?? null,
@@ -937,6 +946,7 @@ export function toMusicResponse(track: {
     arrangers: normalizeStringListInput(track.arrangers),
     vocals: normalizeStringListInput(track.vocals),
     album: track.album,
+    tags: serializeTags(track.tags),
     cover,
     coverThumbnail,
     audioUrl: track.audioUrl,
@@ -945,11 +955,17 @@ export function toMusicResponse(track: {
     durationMs: track.durationMs ?? null,
     sources: serializeMusicExternalSources(track.externalSources || []),
     playable: isPlayableSong(track),
+    playableOverride: track.playableOverride ?? 'auto',
+    favoritedByMe: Boolean(options?.favoritedByMe),
     displayAlbumMode: track.displayAlbumMode,
     manualAlbumName: track.manualAlbumName || null,
     isDeleted: Boolean(track.deletedAt),
     deletedAt: track.deletedAt ? track.deletedAt.toISOString() : null,
     deletedBy: track.deletedBy ?? null,
+    ...(track.description !== undefined ? { description: track.description } : {}),
+    ...(track.customPlatformLinks !== undefined
+      ? { customPlatformLinks: normalizeSongCustomPlatformLinks(track.customPlatformLinks) }
+      : {}),
     createdAt: track.createdAt.toISOString(),
     updatedAt: track.updatedAt.toISOString(),
   }
@@ -977,6 +993,7 @@ export function toUserResponse(user: {
   email: string
   displayName: string
   photoURL: string | null
+  photoAssetId?: string | null
   role: PrismaUserRole
   status: UserStatus
   banReason: string | null
@@ -992,6 +1009,7 @@ export function toUserResponse(user: {
 }) {
   return {
     ...user,
+    photoAssetId: user.photoAssetId ?? null,
     emailVerified: Boolean(user.emailVerifiedAt),
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : null,
     isDeleted: Boolean(user.deletedAt),
@@ -1025,34 +1043,6 @@ export function toUploadSessionResponse(session: {
   }
 }
 
-export function toMediaAssetResponse(asset: {
-  id: string
-  ownerUid: string
-  sessionId: string | null
-  storageKey: string
-  publicUrl: string
-  fileName: string
-  mimeType: string
-  sizeBytes: number
-  status: string
-  createdAt: Date
-  updatedAt: Date
-}) {
-  return {
-    id: asset.id,
-    ownerUid: asset.ownerUid,
-    sessionId: asset.sessionId,
-    storageKey: asset.storageKey,
-    url: asset.publicUrl,
-    fileName: asset.fileName,
-    mimeType: asset.mimeType,
-    sizeBytes: asset.sizeBytes,
-    status: asset.status,
-    createdAt: asset.createdAt.toISOString(),
-    updatedAt: asset.updatedAt.toISOString(),
-  }
-}
-
 export function toSongResponse(
   song: MusicTrackWithRelations,
   options?: { favoritedByMe?: boolean; excludeLyric?: boolean; excludeDescription?: boolean }
@@ -1072,6 +1062,7 @@ export function toSongResponse(
     arrangers: normalizeStringListInput(song.arrangers),
     vocals: normalizeStringListInput(song.vocals),
     album: song.album,
+    tags: serializeTags(song.tags),
     cover: coverUrl,
     coverThumbnail,
     audioUrl: song.audioUrl,
@@ -1079,6 +1070,7 @@ export function toSongResponse(
     durationMs: song.durationMs ?? null,
     sources: serializeMusicExternalSources(song.externalSources),
     playable: isPlayableSong(song),
+    playableOverride: song.playableOverride ?? 'auto',
     customPlatformLinks,
     displayAlbumMode: song.displayAlbumMode,
     displayAlbum,
@@ -1110,7 +1102,14 @@ export function toSongResponse(
 
   const withOptionalFields = {
     ...base,
-    ...(options?.excludeLyric ? {} : { lyric: song.lyric }),
+    ...(options?.excludeLyric
+      ? {}
+      : {
+          lyric: song.lyric,
+          lyricType: song.lyricType,
+          lyricPlain: song.lyricPlain,
+          lyricSource: song.lyricSource,
+        }),
     ...(options?.excludeDescription ? {} : { description: song.description }),
   }
 
@@ -1123,6 +1122,7 @@ export function toAlbumResponse(album: {
   title: string
   artist: string
   description: string | null
+  tags?: Prisma.JsonValue
   tracks?: Prisma.JsonValue
   releaseDate?: Date | null
   coverId: string | null
@@ -1177,6 +1177,7 @@ export function toAlbumResponse(album: {
     cover: coverUrl,
     coverThumbnail,
     description: album.description,
+    tags: serializeTags(album.tags),
     sources: serializeMusicExternalSources(album.externalSources || []),
     releaseDate: formatDateOnly(album.releaseDate),
     tracks: album.tracks || [],

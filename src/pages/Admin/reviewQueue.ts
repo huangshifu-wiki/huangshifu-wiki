@@ -13,20 +13,23 @@ import type {
 
 export type ReviewFilter = 'all' | AdminReviewQueueType
 
-const reviewQueueTypes: AdminReviewQueueType[] = ['wiki', 'posts', 'galleries']
+const reviewQueueTypes: AdminReviewQueueType[] = ['wiki', 'posts', 'galleries', 'tickets']
 
 export const REVIEW_FILTER_OPTIONS: { id: ReviewFilter; label: string }[] = [
   { id: 'all', label: '全部待审' },
   { id: 'wiki', label: '百科待审' },
   { id: 'posts', label: '帖子待审' },
   { id: 'galleries', label: '图集待审' },
+  { id: 'tickets', label: '盘票待审' },
 ]
 
 export const getReviewFilterLabel = (filter: ReviewFilter) =>
   REVIEW_FILTER_OPTIONS.find((item) => item.id === filter)?.label || '全部待审'
 
 export const normalizeReviewFilter = (value: string | null): ReviewFilter => {
-  if (value === 'wiki' || value === 'posts' || value === 'galleries') return value
+  if (value === 'wiki' || value === 'posts' || value === 'galleries' || value === 'tickets') {
+    return value
+  }
   return 'all'
 }
 
@@ -37,7 +40,13 @@ export const invalidateReviewQueueCaches = () => {
 }
 
 const getReviewItemType = (queueType: AdminReviewQueueType): AdminReviewItemType =>
-  queueType === 'wiki' ? 'wiki' : queueType === 'galleries' ? 'gallery' : 'post'
+  queueType === 'wiki'
+    ? 'wiki'
+    : queueType === 'galleries'
+      ? 'gallery'
+      : queueType === 'tickets'
+        ? 'ticket'
+        : 'post'
 
 const getReviewId = (
   item: AdminReviewQueueResponse['items'][number],
@@ -54,15 +63,17 @@ export const fetchReviewQueue = async (
 
   const results = await Promise.all(
     requestedTypes.map((type) =>
-      apiGet<AdminReviewQueueResponse>('/api/admin/review-queue', {
+      apiGet<AdminReviewQueueResponse & { type: AdminReviewQueueType }>('/api/admin/review-queue', {
         type,
         status: 'pending',
+        page: 1,
+        limit: 100,
       })
     )
   )
 
   const merged = results.flatMap((bucket) =>
-    (bucket.items || []).map((item) => ({
+    bucket.items.map((item) => ({
       ...item,
       reviewType: getReviewItemType(bucket.type),
       reviewId: getReviewId(item, bucket.type),
@@ -76,4 +87,44 @@ export const fetchReviewQueue = async (
   })
 
   return merged
+}
+export type ReviewQueuePage = {
+  items: AdminReviewQueueMergedItem[]
+  total: number
+}
+
+export const fetchReviewQueuePage = async (
+  filter: ReviewFilter,
+  page: number,
+  limit: number
+): Promise<ReviewQueuePage> => {
+  if (filter === 'all') {
+    const response = await apiGet<
+      AdminReviewQueueResponse & { type: 'all'; items: AdminReviewQueueMergedItem[] }
+    >('/api/admin/review-queue', {
+      type: 'all',
+      status: 'pending',
+      page,
+      limit,
+    })
+    return {
+      items: response.items,
+      total: response.total,
+    }
+  }
+
+  const response = await apiGet<AdminReviewQueueResponse>('/api/admin/review-queue', {
+    type: filter,
+    status: 'pending',
+    page,
+    limit,
+  })
+  return {
+    items: response.items.map((item) => ({
+      ...item,
+      reviewType: getReviewItemType(filter),
+      reviewId: getReviewId(item, filter),
+    })),
+    total: response.total,
+  }
 }

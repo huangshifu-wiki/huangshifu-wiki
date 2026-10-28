@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { clsx } from 'clsx'
-import { parseLRC, isLRCFormat, LRCLine } from '../lib/lrcParser'
+import { parseLyrics } from '../lib/lrcParser'
 
 interface LyricsDisplayProps {
   lyric: string
@@ -8,27 +8,17 @@ interface LyricsDisplayProps {
 }
 
 export const LyricsDisplay = ({ lyric, currentTime }: LyricsDisplayProps) => {
-  const { lines, metadata } = useMemo(() => {
-    if (lyric && isLRCFormat(lyric)) {
-      return parseLRC(lyric)
-    }
-    return {
-      lines: lyric
-        ? lyric.split('\n').map((text, i) => ({ time: i * 3, text: text.trim() }) as LRCLine)
-        : [],
-      metadata: {},
-    }
-  }, [lyric])
+  const { type, lines, metadata } = useMemo(() => parseLyrics(lyric), [lyric])
 
   const currentLineIndex = useMemo(() => {
-    if (currentTime === undefined) return -1
+    if (currentTime === undefined || type === 'plain') return -1
     for (let i = lines.length - 1; i >= 0; i--) {
       if (lines[i].time >= 0 && currentTime >= lines[i].time) {
         return i
       }
     }
     return -1
-  }, [currentTime, lines])
+  }, [currentTime, lines, type])
 
   if (lines.length === 0) {
     return <p className="text-[0.875rem] text-text-muted italic tracking-[0.08em]">暂无歌词</p>

@@ -46,6 +46,7 @@ const getAuthorLabel = (item: AdminReviewQueueMergedItem) => {
 const getReviewTypeLabel = (item: AdminReviewQueueMergedItem) => {
   if (item.reviewType === 'wiki') return '百科'
   if (item.reviewType === 'gallery') return '图集'
+  if (item.reviewType === 'ticket') return '盘票'
   return '帖子'
 }
 
@@ -178,7 +179,13 @@ const renderGalleryPreview = (
             {getReviewTypeLabel(item)}
           </span>
         </div>
-        <p className="mt-2 text-text-secondary leading-relaxed">{item.description || '暂无描述'}</p>
+        {item.description ? (
+          <div className="prose mt-2 max-w-none font-body leading-relaxed text-text-secondary">
+            <MarkdownRenderer content={item.description} />
+          </div>
+        ) : (
+          <p className="mt-2 text-text-secondary leading-relaxed">暂无描述</p>
+        )}
         {item.copyright && <p className="text-xs text-text-muted mt-1">{item.copyright}</p>}
       </header>
 
@@ -208,8 +215,9 @@ const renderGalleryPreview = (
                 key={image.id}
                 type="button"
                 variant="ghost"
+                data-press-feedback="ripple"
                 onClick={() => onOpenLightbox(index)}
-                className="group relative aspect-[3/4] h-auto cursor-zoom-in overflow-hidden rounded border-0 p-0"
+                className="group relative aspect-[3/4] h-auto cursor-zoom-in overflow-hidden rounded border-0 p-0 press-feedback-cover"
               >
                 {previewSrc ? (
                   <SmartImage
@@ -245,6 +253,34 @@ const renderGalleryPreview = (
     </>
   )
 }
+const renderTicketPreview = (item: AdminReviewQueueMergedItem) => (
+  <>
+    <header className="mb-7">
+      <div className="flex items-end justify-between flex-wrap gap-3">
+        <h1 className="text-[1.75rem] font-semibold tracking-[0.12em] text-text-primary">
+          {item.eventName || item.customEventName || '盘票信息'}
+        </h1>
+        <span className="px-3 py-1 rounded bg-surface-alt text-brand-gold text-xs font-medium">
+          {item.type === 'offer' ? '出票' : '收票'}
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-text-secondary md:grid-cols-4">
+        <span>数量：{item.quantity || 0}</span>
+        <span>票档：{item.ticketTier || '未填写'}</span>
+        <span>座位：{item.seat || '未填写'}</span>
+        <span>作者：{getAuthorLabel(item)}</span>
+      </div>
+    </header>
+    <section className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
+      <div className="prose prose-lg max-w-none font-body leading-relaxed text-text-primary">
+        <MarkdownRenderer content={item.description || ''} />
+        <h3>联系方式</h3>
+        <MarkdownRenderer content={item.contact || ''} />
+      </div>
+      {renderSidebar(item)}
+    </section>
+  </>
+)
 
 const AdminReviewContentPreview = ({ item }: AdminReviewContentPreviewProps) => {
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -267,7 +303,9 @@ const AdminReviewContentPreview = ({ item }: AdminReviewContentPreviewProps) => 
       <div className="max-w-[1100px] mx-auto px-6 py-8 pb-16 wiki-detail-page">
         {item.reviewType === 'gallery'
           ? renderGalleryPreview(item, handleOpenLightbox)
-          : renderArticlePreview(item)}
+          : item.reviewType === 'ticket'
+            ? renderTicketPreview(item)
+            : renderArticlePreview(item)}
       </div>
 
       {item.reviewType === 'gallery' ? (

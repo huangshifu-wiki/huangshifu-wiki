@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertCircle, KeyRound } from '@/src/components/icons'
 import { confirmPasswordReset } from '../lib/auth'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
+import { validatePassword, validateRequiredText } from '../lib/clientValidation'
 import { CharacterCount } from '../components/CharacterCount'
 import { useToast } from '../components/Toast'
 import { Button, Input, LinkButton } from '@/src/components/ui'
@@ -18,15 +19,15 @@ const ResetPassword = () => {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!token) return
-
-    if (newPassword !== confirmPassword) {
-      show('两次输入的密码不一致', { variant: 'error' })
+    const tokenError = validateRequiredText(token, 'token', '重置 token')
+    const passwordError = validatePassword(newPassword, 'password', '密码')
+    if (tokenError || passwordError) {
+      show((tokenError || passwordError)!.message, { variant: 'error' })
       return
     }
 
-    if (newPassword.length < PASSWORD_MIN_LENGTH) {
-      show(`密码至少${PASSWORD_MIN_LENGTH}个字符`, { variant: 'error' })
+    if (newPassword !== confirmPassword) {
+      show('两次输入的密码不一致', { variant: 'error' })
       return
     }
 
@@ -77,8 +78,8 @@ const ResetPassword = () => {
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label htmlFor="reset-password-new" className="sr-only">
-              新密码
+            <label htmlFor="reset-password-new" className="block text-sm text-text-secondary">
+              新密码 <span className="theme-text-error">*</span>
             </label>
             <Input
               id="reset-password-new"
@@ -98,8 +99,8 @@ const ResetPassword = () => {
           </div>
 
           <div>
-            <label htmlFor="reset-password-confirm" className="sr-only">
-              确认新密码
+            <label htmlFor="reset-password-confirm" className="block text-sm text-text-secondary">
+              确认新密码 <span className="theme-text-error">*</span>
             </label>
             <Input
               id="reset-password-confirm"

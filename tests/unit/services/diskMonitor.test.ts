@@ -80,11 +80,6 @@ describe('DiskMonitorService - 初始化与配置', () => {
   let service: any
 
   beforeEach(async () => {
-    process.env.DISK_WARNING_THRESHOLD_GB = '50'
-    process.env.DISK_CRITICAL_THRESHOLD_GB = '20'
-    process.env.DISK_CHECK_INTERVAL_MS = '300000'
-    process.env.UPLOADS_MIN_FREE_SPACE_MB = '500'
-
     vi.clearAllMocks()
     mockReadDiskSpace.mockResolvedValue({
       totalSpaceGB: 100,
@@ -125,9 +120,6 @@ describe('DiskMonitorService - 磁盘检查', () => {
   })
 
   beforeEach(async () => {
-    process.env.DISK_WARNING_THRESHOLD_GB = '100'
-    process.env.DISK_CRITICAL_THRESHOLD_GB = '30'
-
     vi.clearAllMocks()
     mockReadDiskSpace.mockResolvedValue({
       totalSpaceGB: 100,

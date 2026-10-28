@@ -61,7 +61,7 @@ export class VariantCleanupService {
     try {
       // 互斥检查：跳过正在被 VariantGenerator 处理的 ID
       const processingIds = variantGenerator.getProcessingIds()
-      if (processingIds.has(imageMapId)) {
+      if (processingIds.has(`imageMap:${imageMapId}`)) {
         logger.warn(
           `[Cleanup] Skipping ${imageMapId}: currently being processed by VariantGenerator`
         )
@@ -76,6 +76,7 @@ export class VariantCleanupService {
         where: { id: imageMapId },
         select: {
           thumbnailUrl: true,
+          variantStatus: true,
         },
       })
 
@@ -93,6 +94,13 @@ export class VariantCleanupService {
 
         logger.warn(`[Cleanup] ImageMap ${imageMapId} not found, skipping`)
         return this.createResult(trigger, [], [], 0, Date.now() - startTime)
+      }
+      if (imageMap.variantStatus === 'processing') {
+        logger.warn(`[Cleanup] Skipping ${imageMapId}: variant status is processing`)
+        return this.createResult(trigger, [], [], 0, Date.now() - startTime, {
+          skipped: true,
+          skippedReason: 'processing',
+        })
       }
 
       // 2. 收集所有变体文件路径
@@ -180,7 +188,7 @@ export class VariantCleanupService {
 
       const processingIds = variantGenerator.getProcessingIds()
       for (const imageMapId of subDirs) {
-        if (processingIds.has(imageMapId)) {
+        if (processingIds.has(`imageMap:${imageMapId}`)) {
           logger.warn(
             `[Cleanup] Skipping orphaned directory ${imageMapId}: currently being processed`
           )
@@ -193,6 +201,7 @@ export class VariantCleanupService {
             id: true,
             localUrl: true,
             deletedAt: true,
+            variantStatus: true,
           },
         })
 
@@ -211,6 +220,10 @@ export class VariantCleanupService {
               error: (error as Error).message,
             })
           }
+          continue
+        }
+        if (imageMap.variantStatus === 'processing') {
+          logger.warn(`[Cleanup] Skipping variant directory ${imageMapId}: status is processing`)
           continue
         }
 

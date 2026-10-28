@@ -86,9 +86,20 @@ router.delete('/:id', requireAdmin, async (req: AuthenticatedRequest, res) => {
       return
     }
 
-    await prisma.section.update({
-      where: { id: sectionId },
-      data: softDeleteData(req.authUser!.uid),
+    await prisma.$transaction(async (tx) => {
+      await tx.section.update({
+        where: { id: sectionId },
+        data: softDeleteData(req.authUser!.uid),
+      })
+      await tx.moderationLog.create({
+        data: {
+          targetType: 'section',
+          targetId: sectionId,
+          action: 'delete',
+          operatorUid: req.authUser!.uid,
+          note: null,
+        },
+      })
     })
     res.json({ success: true })
   } catch (error) {

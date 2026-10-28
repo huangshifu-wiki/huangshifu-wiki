@@ -1,12 +1,16 @@
 import { QdrantClient } from '@qdrant/js-client-rest'
 
-const DEFAULT_COLLECTION = 'hsf_image_embeddings'
-const DEFAULT_TEXT_COLLECTION = 'hsf_text_embeddings'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
+import { secretsConfigService } from '../services/secretsConfig.service'
+
 const DEFAULT_DISTANCE: 'Cosine' | 'Dot' | 'Euclid' | 'Manhattan' = 'Cosine'
 
 let qdrantClient: QdrantClient | null = null
 let ensureCollectionPromise: Promise<void> | null = null
 let ensureTextCollectionPromise: Promise<void> | null = null
+let lastQdrantFingerprint = ''
+// 客户端代际：指纹重建时递增，防止旧 ensure 闭包完成后清空新 promise 引用
+let clientGeneration = 0
 
 function parseInteger(value: string | undefined, fallback: number) {
   const parsed = Number(value)
@@ -17,19 +21,11 @@ function parseInteger(value: string | undefined, fallback: number) {
 }
 
 export function getQdrantCollectionName() {
-  return process.env.QDRANT_COLLECTION || DEFAULT_COLLECTION
+  return runtimeConfigService.getConfig().qdrantCollection
 }
 
 export function getTextCollectionName(): string {
-  return process.env.QDRANT_TEXT_COLLECTION || DEFAULT_TEXT_COLLECTION
-}
-
-function getQdrantUrl() {
-  return process.env.QDRANT_URL || 'http://127.0.0.1:6333'
-}
-
-function getQdrantApiKey() {
-  return process.env.QDRANT_API_KEY || undefined
+  return runtimeConfigService.getConfig().qdrantTextCollection
 }
 
 function getVectorSize() {
@@ -37,16 +33,24 @@ function getVectorSize() {
 }
 
 export function getQdrantClient() {
-  if (!qdrantClient) {
+  const config = runtimeConfigService.getConfig()
+  const apiKey = secretsConfigService.getSecrets().qdrantApiKey || undefined
+  const fingerprint = JSON.stringify([config.qdrantUrl, apiKey])
+  if (!qdrantClient || fingerprint !== lastQdrantFingerprint) {
     qdrantClient = new QdrantClient({
-      url: getQdrantUrl(),
-      apiKey: getQdrantApiKey(),
+      url: config.qdrantUrl,
+      apiKey,
     })
+    lastQdrantFingerprint = fingerprint
+    ensureCollectionPromise = null
+    ensureTextCollectionPromise = null
+    clientGeneration += 1
   }
   return qdrantClient
 }
 
 export async function ensureQdrantCollection() {
+  const generation = clientGeneration
   if (!ensureCollectionPromise) {
     ensureCollectionPromise = (async () => {
       const client = getQdrantClient()
@@ -105,7 +109,9 @@ export async function ensureQdrantCollection() {
         })
       } catch {}
     })().catch((error) => {
-      ensureCollectionPromise = null
+      if (generation === clientGeneration) {
+        ensureCollectionPromise = null
+      }
       throw error
     })
   }
@@ -114,6 +120,7 @@ export async function ensureQdrantCollection() {
 }
 
 export async function ensureTextQdrantCollection() {
+  const generation = clientGeneration
   if (!ensureTextCollectionPromise) {
     ensureTextCollectionPromise = (async () => {
       const client = getQdrantClient()
@@ -180,7 +187,9 @@ export async function ensureTextQdrantCollection() {
         })
       } catch {}
     })().catch((error) => {
-      ensureTextCollectionPromise = null
+      if (generation === clientGeneration) {
+        ensureTextCollectionPromise = null
+      }
       throw error
     })
   }
@@ -310,16 +319,17 @@ export async function upsertImageEmbeddingPoint(params: {
 export async function searchImageEmbeddingPoints(params: {
   vector: number[]
   limit: number
+  offset?: number
   minScore?: number
   sourceType?: string
 }) {
   await ensureQdrantCollection()
   const client = getQdrantClient()
   const collectionName = getQdrantCollectionName()
-
   const results = await client.search(collectionName, {
     vector: params.vector,
     limit: params.limit,
+    offset: params.offset,
     score_threshold: params.minScore,
     with_payload: true,
     with_vector: false,
@@ -338,31 +348,6 @@ export async function searchImageEmbeddingPoints(params: {
     score: result.score,
     payload: toEmbeddingPayload(result.payload as Record<string, unknown> | undefined),
   }))
-}
-
-/**
- * 删除图片向量嵌入点
- */
-export async function deleteImageEmbeddingPoint(pointId: string) {
-  await ensureQdrantCollection()
-  const client = getQdrantClient()
-  const collectionName = getQdrantCollectionName()
-
-  await client.delete(collectionName, {
-    wait: true,
-    points: [pointId],
-  })
-}
-
-export async function healthCheck(): Promise<{ status: string; latencyMs: number }> {
-  const start = Date.now()
-  try {
-    const client = getQdrantClient()
-    await client.getCollections()
-    return { status: 'ok', latencyMs: Date.now() - start }
-  } catch (error) {
-    return { status: 'error', latencyMs: Date.now() - start }
-  }
 }
 
 export async function upsertTextEmbeddingPoint(params: {
@@ -399,7 +384,8 @@ export async function upsertTextEmbeddingPoint(params: {
 export async function searchTextEmbeddingPoints(
   queryVector: number[],
   limit?: number,
-  minScore?: number
+  minScore?: number,
+  offset?: number
 ): Promise<
   Array<{
     sourceType: string
@@ -412,10 +398,10 @@ export async function searchTextEmbeddingPoints(
   await ensureTextQdrantCollection()
   const client = getQdrantClient()
   const collectionName = getTextCollectionName()
-
   const results = await client.search(collectionName, {
     vector: queryVector,
     limit: limit ?? 10,
+    offset,
     score_threshold: minScore,
     with_payload: true,
     with_vector: false,

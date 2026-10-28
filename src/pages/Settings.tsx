@@ -1,5 +1,6 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   BookOpen,
   Camera,
   ChevronDown,
@@ -8,13 +9,13 @@ import {
   FileText,
   Image as ImageIcon,
   KeyRound,
-  Loader2,
   Mail,
   MailCheck,
   MessageSquare,
   Save,
   Shield,
   SlidersHorizontal,
+  Ticket,
   UserRound,
 } from '@/src/components/icons'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
@@ -22,10 +23,17 @@ import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
 import { AvatarCropModal } from '../components/AvatarCropModal'
+import Pagination from '../components/Pagination'
 import { CharacterCount } from '../components/CharacterCount'
+import { TurnstileWidget } from '../components/TurnstileWidget'
 import MarkdownEditor from '../components/MarkdownEditor'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useToast } from '../components/Toast'
+import { useDialog } from '../components/Dialog'
+import { useRoutedPagination } from '../hooks/useRoutedPagination'
+import { useTurnstileChallenge } from '../hooks/useTurnstileChallenge'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../utils/formDirty'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import {
@@ -33,7 +41,10 @@ import {
   PROFILE_SIGNATURE_MAX_LENGTH,
   WIKI_MAX_CONTENT_SIZE,
 } from '../lib/contentLimits'
-import { apiGet, apiPatch, apiPost, apiPut } from '../lib/apiClient'
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiRequest } from '../lib/apiClient'
+import { resendEmailVerification } from '../lib/auth'
+import { copyToClipboard } from '../lib/copyLink'
+import { getErrorMessage } from '../lib/errorHandler'
 import { formatDateOnly } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import {
@@ -43,18 +54,36 @@ import {
   THUMBNAIL_POLL_MAX_ATTEMPTS,
 } from '../lib/galleryThumbnails'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
+import {
+  validateEmail,
+  validateMaxLength,
+  validatePassword,
+  validateRequiredText,
+} from '../lib/clientValidation'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
-import type { CommentItem, GalleryItem, PostItem } from '../types/entities'
+import type { CommentItem, GalleryItem, PostItem, TicketListingSummary } from '../types/entities'
 import type { ContentStatus } from '../types/common'
-import type { EmailVerificationPublicConfig } from '../types/api'
+import type {
+  CreatePersonalApiKeyRequest,
+  CreatePersonalApiKeyResponse,
+  EmailVerificationPublicConfig,
+  PersonalApiKey,
+  PersonalApiKeyListResponse,
+  TicketListingMineResponse,
+} from '../types/api'
 import type { ListLoadMode } from '../types/userPreferences'
 import {
   Button,
+  Field,
   IconButton,
   Input,
+  LoadErrorState,
   SegmentedControl,
+  Select,
   SettingRow,
   SettingsSection,
+  Skeleton,
+  Spinner,
   Switch,
   Textarea,
 } from '@/src/components/ui'
@@ -64,6 +93,7 @@ type PublicProfileForm = {
   signature: string
   bio: string
   photoURL: string
+  photoAssetId: string | null
 }
 
 type EmailForm = {
@@ -77,8 +107,32 @@ type PasswordForm = {
   confirmPassword: string
 }
 
-type SettingsSection = 'profile' | 'content' | 'privacy' | 'account' | 'appearance'
-type ContentTab = 'posts' | 'wiki' | 'galleries' | 'comments'
+const EMPTY_EMAIL_FORM: EmailForm = { newEmail: '', currentPassword: '' }
+const EMPTY_PASSWORD_FORM: PasswordForm = {
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: '',
+}
+
+type PersonalApiKeyExpiry = NonNullable<CreatePersonalApiKeyRequest['expiry']>
+type PersonalApiKeyListState = { ownerUid: string; keys: PersonalApiKey[] }
+type RevealedPersonalApiKey = {
+  ownerUid: string
+  token: string
+}
+
+const PERSONAL_API_KEY_EXPIRY_OPTIONS: Array<{
+  value: PersonalApiKeyExpiry
+  label: string
+}> = [
+  { value: '30d', label: '30 天' },
+  { value: '90d', label: '90 天（默认）' },
+  { value: '365d', label: '365 天' },
+  { value: 'never', label: '永久' },
+]
+
+type SettingsSection = 'profile' | 'content' | 'privacy' | 'account' | 'api-keys' | 'appearance'
+type ContentTab = 'posts' | 'wiki' | 'galleries' | 'comments' | 'tickets'
 
 type UserCommentItem = CommentItem & {
   targetType?: 'post' | 'gallery'
@@ -98,10 +152,6 @@ type UserWikiItem = {
   editedAt?: string
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback
-}
-
 const WECHAT_PLACEHOLDER_EMAIL_SUFFIX = '@wechat.local'
 
 function isWechatPlaceholderEmail(email?: string | null) {
@@ -112,6 +162,7 @@ const SECTION_NAV = [
   { id: 'profile', label: '公开资料', icon: UserRound, path: '/settings/profile' },
   { id: 'privacy', label: '隐私设置', icon: Eye, path: '/settings/privacy' },
   { id: 'account', label: '账户', icon: Shield, path: '/settings/account' },
+  { id: 'api-keys', label: 'API 密钥', icon: KeyRound, path: '/settings/api-keys' },
   { id: 'appearance', label: '外观', icon: SlidersHorizontal, path: '/settings/appearance' },
 ] as const
 const CONTENT_SECTION_NAV = [
@@ -128,9 +179,10 @@ const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'content',
   'privacy',
   'account',
+  'api-keys',
   'appearance',
 ])
-const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'wiki', 'galleries', 'comments'])
+const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'wiki', 'galleries', 'comments', 'tickets'])
 const CONTENT_ITEM_LINK_CLASS =
   'group -mx-3 block max-w-[calc(100%+1.5rem)] px-3 transition-colors hover:bg-surface-alt/70'
 const CONTENT_META_ROW_CLASS =
@@ -202,30 +254,26 @@ function PrivacySwitch({
 }
 
 const Settings = () => {
-  const { user, profile, refreshAuth } = useAuth()
+  const { user, profile, refreshAuth, isBanned } = useAuth()
   const { preferences, updatePreferences } = useUserPreferences()
   const { section } = useParams<{ section?: string }>()
   const [searchParams] = useSearchParams()
   const { show } = useToast()
+  const dialog = useDialog()
   const activeSection = resolveSettingsSection(section)
   const activeContentTab = resolveContentTab(searchParams.get('tab'))
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
   const userPublicId = user?.publicId
+  const personalApiKeyScope = activeSection === 'api-keys' && user ? user.uid : null
   const [profileForm, setProfileForm] = useState<PublicProfileForm>({
     displayName: '',
     signature: '',
     bio: '',
     photoURL: '',
+    photoAssetId: null,
   })
-  const [emailForm, setEmailForm] = useState<EmailForm>({
-    newEmail: '',
-    currentPassword: '',
-  })
-  const [passwordForm, setPasswordForm] = useState<PasswordForm>({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  })
+  const [emailForm, setEmailForm] = useState(EMPTY_EMAIL_FORM)
+  const [passwordForm, setPasswordForm] = useState(EMPTY_PASSWORD_FORM)
   const [isEmailEditorOpen, setIsEmailEditorOpen] = useState(false)
   const [isPasswordEditorOpen, setIsPasswordEditorOpen] = useState(false)
   const [avatarModalOpen, setAvatarModalOpen] = useState(false)
@@ -234,30 +282,86 @@ const Settings = () => {
   const [sendingEmailVerification, setSendingEmailVerification] = useState(false)
   const [emailVerificationConfig, setEmailVerificationConfig] =
     useState<EmailVerificationPublicConfig>({ enabled: false })
+  const turnstile = useTurnstileChallenge()
   const [savingPassword, setSavingPassword] = useState(false)
-  const [contentLoading, setContentLoading] = useState(false)
+  const [personalApiKeys, setPersonalApiKeys] = useState<PersonalApiKeyListState | null>(null)
+  const [personalApiKeysLoading, setPersonalApiKeysLoading] = useState(false)
+  const [personalApiKeysError, setPersonalApiKeysError] = useState<unknown | null>(null)
+  const [personalApiKeysRetry, setPersonalApiKeysRetry] = useState(0)
+  const [personalApiKeyName, setPersonalApiKeyName] = useState('')
+  const [personalApiKeyExpiry, setPersonalApiKeyExpiry] = useState<PersonalApiKeyExpiry>('90d')
+  const [creatingPersonalApiKey, setCreatingPersonalApiKey] = useState(false)
+  const [revealedPersonalApiKey, setRevealedPersonalApiKey] =
+    useState<RevealedPersonalApiKey | null>(null)
+  const [revokingPersonalApiKeyId, setRevokingPersonalApiKeyId] = useState<string | null>(null)
+  const [contentLoading, setContentLoading] = useState(
+    () => activeSection === 'content' && Boolean(userPublicId)
+  )
+  const [contentError, setContentError] = useState<unknown | null>(null)
+  const [contentTotalState, setContentTotal] = useState<{ scope: string; total: number }>()
+  const contentScope = JSON.stringify([userPublicId, activeSection, activeContentTab])
+  const contentTotal =
+    contentTotalState?.scope === contentScope ? contentTotalState.total : undefined
+  const pagination = useRoutedPagination({
+    totalCount: contentTotal,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'contentPage',
+    pageSizeParam: 'contentPageSize',
+    showPageSizeSelector: true,
+    enabled: activeSection === 'content',
+  })
+  const [contentRetry, setContentRetry] = useState(0)
+  const personalApiKeyRequestIdRef = useRef(0)
+  const personalApiKeyCreateControllerRef = useRef<AbortController | null>(null)
+  const personalApiKeyRevokeControllerRef = useRef<AbortController | null>(null)
+  const personalApiKeyScopeIdRef = useRef(0)
   const [myPosts, setMyPosts] = useState<PostItem[]>([])
   const [myWikiPages, setMyWikiPages] = useState<UserWikiItem[]>([])
   const [myGalleries, setMyGalleries] = useState<GalleryItem[]>([])
+  const [myTicketListings, setMyTicketListings] = useState<TicketListingSummary[]>([])
   const [myComments, setMyComments] = useState<UserCommentItem[]>([])
+
+  // 基线在资料回填落定后建立，避免加载期误判为已修改；邮箱/密码面板以空表单为基线
+  const [profileBaseline, setProfileBaseline] = useState<PublicProfileForm | null>(null)
+  const isDirty =
+    (profileBaseline !== null && hasFormChanges(profileForm, profileBaseline)) ||
+    hasFormChanges(emailForm, EMPTY_EMAIL_FORM) ||
+    hasFormChanges(passwordForm, EMPTY_PASSWORD_FORM)
+  const guard = useUnsavedChangesGuard(isDirty)
   const hasPendingGalleryThumbnails = myGalleries.some(shouldWaitForGalleryThumbnail)
+  const activeContentHasItems =
+    activeContentTab === 'posts'
+      ? myPosts.length > 0
+      : activeContentTab === 'wiki'
+        ? myWikiPages.length > 0
+        : activeContentTab === 'galleries'
+          ? myGalleries.length > 0
+          : activeContentTab === 'tickets'
+            ? myTicketListings.length > 0
+            : myComments.length > 0
 
   useEffect(() => {
     if (!user) return
 
-    setProfileForm({
+    const nextProfileForm = {
       displayName: profile?.displayName || user.displayName || '',
       signature: profile?.signature || '',
       bio: profile?.bio || '',
       photoURL: profile?.photoURL || user.photoURL || '',
-    })
+      photoAssetId: user.photoAssetId || profile?.photoAssetId || null,
+    }
+    setProfileForm(nextProfileForm)
+    setProfileBaseline(nextProfileForm)
   }, [
     profile?.bio,
     profile?.displayName,
     profile?.photoURL,
+    profile?.photoAssetId,
     profile?.signature,
     user?.displayName,
     user?.email,
+    user?.photoAssetId,
     user?.photoURL,
     user?.uid,
   ])
@@ -280,49 +384,148 @@ const Settings = () => {
   }, [activeSection, user?.uid])
 
   useEffect(() => {
+    personalApiKeyScopeIdRef.current += 1
+    setRevealedPersonalApiKey(null)
+    setPersonalApiKeyName('')
+    setCreatingPersonalApiKey(false)
+    setRevokingPersonalApiKeyId(null)
+
+    return () => {
+      personalApiKeyCreateControllerRef.current?.abort()
+      personalApiKeyRevokeControllerRef.current?.abort()
+      personalApiKeyCreateControllerRef.current = null
+      personalApiKeyRevokeControllerRef.current = null
+      personalApiKeyScopeIdRef.current += 1
+    }
+  }, [personalApiKeyScope])
+
+  useEffect(() => {
+    const ownerUid = user?.uid
+    const requestId = ++personalApiKeyRequestIdRef.current
+    let cancelled = false
+
+    if (!ownerUid || activeSection !== 'api-keys') {
+      setPersonalApiKeys(null)
+      setPersonalApiKeysLoading(false)
+      setPersonalApiKeysError(null)
+      return () => {
+        cancelled = true
+        personalApiKeyRequestIdRef.current += 1
+      }
+    }
+
+    const controller = new AbortController()
+    const isCurrentRequest = () => !cancelled && requestId === personalApiKeyRequestIdRef.current
+
+    setPersonalApiKeys((current) => (current?.ownerUid === ownerUid ? current : null))
+    setPersonalApiKeysLoading(true)
+    setPersonalApiKeysError(null)
+
+    void apiRequest<PersonalApiKeyListResponse>('/api/users/me/api-keys', {
+      method: 'GET',
+      dedup: false,
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (isCurrentRequest()) {
+          setPersonalApiKeys((current) => {
+            const currentKeys = current?.ownerUid === ownerUid ? current.keys : []
+            const responseIds = new Set(response.keys.map((key) => key.id))
+            return {
+              ownerUid,
+              keys: [...response.keys, ...currentKeys.filter((key) => !responseIds.has(key.id))],
+            }
+          })
+        }
+      })
+      .catch((error) => {
+        if (isCurrentRequest() && !controller.signal.aborted) {
+          setPersonalApiKeysError(error)
+        }
+      })
+      .finally(() => {
+        if (isCurrentRequest()) setPersonalApiKeysLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+      controller.abort()
+      personalApiKeyRequestIdRef.current += 1
+    }
+  }, [activeSection, personalApiKeysRetry, user?.uid])
+
+  useEffect(() => {
     if (!userPublicId || activeSection !== 'content') return
 
     let cancelled = false
     const run = async () => {
       setContentLoading(true)
+      setContentError(null)
       try {
+        const params = { page: pagination.page, limit: pagination.pageSize }
         if (activeContentTab === 'posts') {
-          const data = await apiGet<{ posts: PostItem[] }>(`/api/users/${userPublicId}/posts`, {
-            limit: 50,
-          })
-          if (!cancelled) setMyPosts(data.posts || [])
+          const data = await apiGet<{ posts: PostItem[]; total: number }>(
+            `/api/users/${userPublicId}/posts`,
+            params
+          )
+          if (!cancelled) {
+            setMyPosts(data.posts || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
           return
         }
 
         if (activeContentTab === 'wiki') {
-          const data = await apiGet<{ pages: UserWikiItem[] }>(`/api/users/${userPublicId}/wiki`, {
-            limit: 50,
-          })
-          if (!cancelled) setMyWikiPages(data.pages || [])
+          const data = await apiGet<{ pages: UserWikiItem[]; total: number }>(
+            `/api/users/${userPublicId}/wiki`,
+            params
+          )
+          if (!cancelled) {
+            setMyWikiPages(data.pages || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
           return
         }
 
         if (activeContentTab === 'galleries') {
-          const data = await apiGet<{ galleries: GalleryItem[] }>(
+          const data = await apiGet<{ galleries: GalleryItem[]; total: number }>(
             `/api/users/${userPublicId}/galleries`,
-            {
-              limit: 50,
-            }
+            params
           )
-          if (!cancelled) setMyGalleries(data.galleries || [])
+          if (!cancelled) {
+            setMyGalleries(data.galleries || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
           return
         }
 
-        const data = await apiGet<{ comments: UserCommentItem[] }>(
-          `/api/users/${userPublicId}/comments`,
-          {
-            limit: 50,
+        if (activeContentTab === 'tickets') {
+          const data = await apiRequest<TicketListingMineResponse>('/api/ticket-listings/mine', {
+            method: 'GET',
+            query: params,
+            dedup: false,
+          })
+          if (!cancelled) {
+            setMyTicketListings(data.listings || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
+          return
+        }
+
+        const data = await apiGet<{ comments: UserCommentItem[]; total: number }>(
+          `/api/users/${userPublicId}/comments`,
+          params
         )
-        if (!cancelled) setMyComments(data.comments || [])
+        if (!cancelled) {
+          setMyComments(data.comments || [])
+          setContentTotal({ scope: contentScope, total: data.total || 0 })
+        }
       } catch (error) {
         console.error('Fetch content management data error:', error)
-        show('内容加载失败', { variant: 'error' })
+        if (!cancelled) {
+          setContentError(error)
+          show(getErrorMessage(error, '内容加载失败'), { variant: 'error' })
+        }
       } finally {
         if (!cancelled) setContentLoading(false)
       }
@@ -332,7 +535,16 @@ const Settings = () => {
     return () => {
       cancelled = true
     }
-  }, [activeContentTab, activeSection, show, userPublicId])
+  }, [
+    activeContentTab,
+    activeSection,
+    contentScope,
+    contentRetry,
+    pagination.page,
+    pagination.pageSize,
+    show,
+    userPublicId,
+  ])
 
   useEffect(() => {
     if (
@@ -352,15 +564,19 @@ const Settings = () => {
     const poll = async () => {
       attempts += 1
       try {
-        const data = await apiGet<{ galleries: GalleryItem[] }>(
+        const data = await apiGet<{ galleries: GalleryItem[]; total: number }>(
           `/api/users/${userPublicId}/galleries`,
           {
-            limit: 50,
+            page: pagination.page,
+            limit: pagination.pageSize,
           },
           THUMBNAIL_POLL_DEDUP_OPTIONS,
           abortController.signal
         )
-        if (!stopped) setMyGalleries(data.galleries || [])
+        if (!stopped) {
+          setMyGalleries(data.galleries || [])
+          setContentTotal({ scope: contentScope, total: data.total || 0 })
+        }
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           console.error('Poll my gallery thumbnails error:', error)
@@ -381,7 +597,15 @@ const Settings = () => {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [activeContentTab, activeSection, hasPendingGalleryThumbnails, userPublicId])
+  }, [
+    activeContentTab,
+    activeSection,
+    contentScope,
+    hasPendingGalleryThumbnails,
+    pagination.page,
+    pagination.pageSize,
+    userPublicId,
+  ])
 
   if (!activeSection) {
     return <Navigate to="/settings/profile" replace />
@@ -399,13 +623,30 @@ const Settings = () => {
   const canSendEmailVerification =
     emailVerificationConfig.enabled && !user.emailVerified && hasDeliverableEmail
 
-  const handleAvatarSuccess = async (photoURL: string) => {
-    setProfileForm((current) => ({ ...current, photoURL }))
+  const handleAvatarSuccess = async (result: { assetId: string; url: string }) => {
+    const previousAvatar = {
+      photoURL: profileForm.photoURL,
+      photoAssetId: profileForm.photoAssetId,
+    }
+    setProfileForm((current) => ({
+      ...current,
+      photoURL: result.url,
+      photoAssetId: result.assetId,
+    }))
+    let profileSaved = false
     try {
-      await apiPatch('/api/users/me', { photoURL })
+      await apiPatch('/api/users/me', { photoURL: result.url, photoAssetId: result.assetId })
+      profileSaved = true
+      guard.markClean()
       await refreshAuth()
       show('头像更新成功')
     } catch (error) {
+      if (!profileSaved) {
+        setProfileForm((current) => ({ ...current, ...previousAvatar }))
+        await apiDelete(`/api/uploads/assets/${result.assetId}`).catch((cleanupError) =>
+          console.error('Error releasing unsaved avatar asset:', cleanupError)
+        )
+      }
       console.error('Error saving avatar:', error)
       show(getErrorMessage(error, '头像保存失败，请稍后重试'), { variant: 'error' })
     }
@@ -413,14 +654,30 @@ const Settings = () => {
 
   const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const profileError =
+      validateMaxLength(
+        profileForm.displayName,
+        'displayName',
+        '昵称',
+        PROFILE_DISPLAY_NAME_MAX_LENGTH
+      ) ||
+      validateMaxLength(profileForm.signature, 'signature', '签名', PROFILE_SIGNATURE_MAX_LENGTH) ||
+      validateMaxLength(profileForm.bio, 'bio', '个人简介', WIKI_MAX_CONTENT_SIZE)
+    if (profileError) {
+      show(profileError.message, { variant: 'error' })
+      return
+    }
+
     setSavingProfile(true)
     try {
       await apiPatch('/api/users/me', {
-        displayName: profileForm.displayName,
-        signature: profileForm.signature,
-        bio: profileForm.bio,
+        displayName: profileForm.displayName.trim(),
+        signature: profileForm.signature.trim(),
+        bio: profileForm.bio.trim(),
         photoURL: profileForm.photoURL,
+        photoAssetId: profileForm.photoAssetId,
       })
+      guard.markClean()
       await refreshAuth()
       show('公开资料已保存')
     } catch (error) {
@@ -432,10 +689,7 @@ const Settings = () => {
   }
 
   const openEmailEditor = () => {
-    setEmailForm({
-      newEmail: '',
-      currentPassword: '',
-    })
+    setEmailForm(EMPTY_EMAIL_FORM)
     setIsEmailEditorOpen(true)
   }
 
@@ -450,24 +704,25 @@ const Settings = () => {
   const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!emailForm.currentPassword.trim()) {
-      show('当前密码不能为空', { variant: 'error' })
-      return
-    }
-
-    if (!emailForm.newEmail.trim()) {
-      show('新邮箱不能为空', { variant: 'error' })
+    const emailError =
+      validateRequiredText(emailForm.currentPassword, 'currentPassword', '当前密码') ||
+      validateEmail(emailForm.newEmail, 'newEmail', '新邮箱')
+    if (emailError) {
+      show(emailError.message, { variant: 'error' })
       return
     }
 
     setSavingEmail(true)
     try {
       await apiPut('/api/users/email', {
-        newEmail: emailForm.newEmail,
+        newEmail: emailForm.newEmail.trim(),
         currentPassword: emailForm.currentPassword,
       })
+      guard.markClean()
       await refreshAuth()
-      setEmailForm((current) => ({ ...current, currentPassword: '' }))
+      // 整体重置而非只清密码：残留 newEmail 会让 isDirty 在 markClean 后又被还原，
+      // 守卫处于"脏但未安装"状态，后续站内离开将不再提示
+      setEmailForm(EMPTY_EMAIL_FORM)
       setIsEmailEditorOpen(false)
       show('邮箱已更新，可按需发送验证邮件', { duration: 4000 })
     } catch (error) {
@@ -486,12 +741,19 @@ const Settings = () => {
       return
     }
 
+    if (turnstile.blocked) {
+      show('请先完成人机验证', { variant: 'error' })
+      return
+    }
+
     setSendingEmailVerification(true)
     try {
-      await apiPost('/api/auth/resend-verification', { email: user.email })
+      await resendEmailVerification(user.email, turnstile.token ?? undefined)
+      turnstile.reset()
       show('验证邮件已发送，请查收邮箱', { duration: 4000 })
     } catch (error) {
       console.error('Error sending verification email:', error)
+      turnstile.reset()
       show(getErrorMessage(error, '验证邮件发送失败，请稍后重试'), { variant: 'error' })
     } finally {
       setSendingEmailVerification(false)
@@ -499,28 +761,23 @@ const Settings = () => {
   }
 
   const openPasswordEditor = () => {
-    setPasswordForm({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    })
+    setPasswordForm(EMPTY_PASSWORD_FORM)
     setIsPasswordEditorOpen(true)
   }
 
   const closePasswordEditor = () => {
     setIsPasswordEditorOpen(false)
-    setPasswordForm({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    })
+    setPasswordForm(EMPTY_PASSWORD_FORM)
   }
 
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!passwordForm.currentPassword.trim()) {
-      show('当前密码不能为空', { variant: 'error' })
+    const passwordError =
+      validateRequiredText(passwordForm.currentPassword, 'currentPassword', '当前密码') ||
+      validatePassword(passwordForm.newPassword, 'newPassword', '新密码')
+    if (passwordError) {
+      show(passwordError.message, { variant: 'error' })
       return
     }
 
@@ -528,13 +785,13 @@ const Settings = () => {
       show('两次输入的新密码不一致', { variant: 'error' })
       return
     }
-
     setSavingPassword(true)
     try {
       await apiPut('/api/users/password', {
         currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword,
       })
+      guard.markClean()
       await refreshAuth()
       closePasswordEditor()
       show('密码已更新')
@@ -547,13 +804,17 @@ const Settings = () => {
   }
 
   const renderContentPanel = () => {
-    if (contentLoading) {
+    if (contentLoading && !activeContentHasItems) {
       return (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={24} className="animate-spin text-brand-gold" />
+        <div className="space-y-3 py-8" role="status" aria-label="加载中">
+          {[1, 2, 3, 4].map((item) => (
+            <Skeleton key={item} className="h-12 w-full" />
+          ))}
         </div>
       )
     }
+
+    if (contentError && !activeContentHasItems) return null
 
     if (activeContentTab === 'posts') {
       return myPosts.length ? (
@@ -709,6 +970,55 @@ const Settings = () => {
       )
     }
 
+    if (activeContentTab === 'tickets') {
+      return myTicketListings.length ? (
+        <ul>
+          {myTicketListings.map((listing) => (
+            <li key={listing.id} className="border-b border-border last:border-b-0">
+              <Link
+                to={`/tickets/${listing.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={clsx(CONTENT_ITEM_LINK_CLASS, 'py-3')}
+              >
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className={CONTENT_META_ROW_CLASS}>
+                      <span className="min-w-0 break-words text-text-muted">
+                        {listing.type === 'offer' ? '出票' : '收票'} · {listing.quantity}张 ·{' '}
+                        {listing.ticketTier}
+                      </span>
+                      {listing.status ? (
+                        <span
+                          className={clsx(
+                            CONTENT_STATUS_BADGE_CLASS,
+                            getStatusClassName(listing.status)
+                          )}
+                        >
+                          {getStatusText(listing.status)}
+                          {listing.status === 'rejected' && listing.reviewNote
+                            ? `（原因：${listing.reviewNote}）`
+                            : ''}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                      {listing.eventName || listing.customEventName || '未命名活动'}
+                    </p>
+                  </div>
+                  <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
+                    {format(new Date(listing.updatedAt), 'MM-dd HH:mm')}
+                  </p>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <EmptyState message="暂无盘票信息" />
+      )
+    }
+
     return myComments.length ? (
       <ul>
         {myComments.map((comment) => {
@@ -800,6 +1110,129 @@ const Settings = () => {
     ) : (
       <EmptyState message="暂无评论" />
     )
+  }
+
+  const visiblePersonalApiKeys = personalApiKeys?.ownerUid === user.uid ? personalApiKeys.keys : []
+  const visibleRevealedPersonalApiKey =
+    revealedPersonalApiKey?.ownerUid === user.uid &&
+    activeSection === 'api-keys' &&
+    revealedPersonalApiKey
+
+  const handlePersonalApiKeyCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const name = personalApiKeyName.trim()
+    if (!name || name.length > 100) {
+      show('密钥名称须为 1 到 100 个字符', { variant: 'error' })
+      return
+    }
+    if (isBanned || visibleRevealedPersonalApiKey) return
+
+    const ownerUid = user.uid
+    const scopeId = personalApiKeyScopeIdRef.current
+    const controller = new AbortController()
+    personalApiKeyCreateControllerRef.current = controller
+    setCreatingPersonalApiKey(true)
+
+    try {
+      const response = await apiPost<CreatePersonalApiKeyResponse>(
+        '/api/users/me/api-keys',
+        { name, expiry: personalApiKeyExpiry },
+        controller.signal
+      )
+      if (
+        scopeId !== personalApiKeyScopeIdRef.current ||
+        activeSection !== 'api-keys' ||
+        user.uid !== ownerUid
+      ) {
+        return
+      }
+
+      setPersonalApiKeys((current) => ({
+        ownerUid,
+        keys: [
+          response.key,
+          ...(current?.ownerUid === ownerUid
+            ? current.keys.filter((key) => key.id !== response.key.id)
+            : []),
+        ],
+      }))
+      setRevealedPersonalApiKey({ ownerUid, token: response.token })
+      setPersonalApiKeyName('')
+      show('API 密钥已创建，请立即复制保存', { variant: 'info', duration: 5000 })
+    } catch (error) {
+      if (
+        !controller.signal.aborted &&
+        scopeId === personalApiKeyScopeIdRef.current &&
+        user.uid === ownerUid
+      ) {
+        show(getErrorMessage(error, '创建 API 密钥失败'), { variant: 'error' })
+      }
+    } finally {
+      if (personalApiKeyCreateControllerRef.current === controller) {
+        personalApiKeyCreateControllerRef.current = null
+      }
+      if (scopeId === personalApiKeyScopeIdRef.current) {
+        setCreatingPersonalApiKey(false)
+      }
+    }
+  }
+
+  const handlePersonalApiKeyRevoke = async (key: PersonalApiKey) => {
+    const ownerUid = user.uid
+    const scopeId = personalApiKeyScopeIdRef.current
+    const confirmed = await dialog.confirm({
+      title: '撤销 API 密钥？',
+      message: `撤销“${key.name}”后，使用该密钥的请求将无法再通过认证。`,
+      confirmText: '撤销密钥',
+      variant: 'danger',
+    })
+    if (
+      !confirmed ||
+      scopeId !== personalApiKeyScopeIdRef.current ||
+      activeSection !== 'api-keys' ||
+      user.uid !== ownerUid
+    ) {
+      return
+    }
+
+    const controller = new AbortController()
+    personalApiKeyRevokeControllerRef.current = controller
+    setRevokingPersonalApiKeyId(key.id)
+    try {
+      await apiDelete(`/api/users/me/api-keys/${encodeURIComponent(key.id)}`, controller.signal)
+      if (
+        scopeId !== personalApiKeyScopeIdRef.current ||
+        activeSection !== 'api-keys' ||
+        user.uid !== ownerUid
+      ) {
+        return
+      }
+
+      const revokedAt = new Date().toISOString()
+      setPersonalApiKeys((current) =>
+        current?.ownerUid === ownerUid
+          ? {
+              ...current,
+              keys: current.keys.map((currentKey) =>
+                currentKey.id === key.id ? { ...currentKey, revokedAt } : currentKey
+              ),
+            }
+          : current
+      )
+      setPersonalApiKeysRetry((current) => current + 1)
+      show('API 密钥已撤销')
+    } catch (error) {
+      if (!controller.signal.aborted && scopeId === personalApiKeyScopeIdRef.current) {
+        show(getErrorMessage(error, '撤销 API 密钥失败'), { variant: 'error' })
+      }
+    } finally {
+      if (personalApiKeyRevokeControllerRef.current === controller) {
+        personalApiKeyRevokeControllerRef.current = null
+      }
+      if (scopeId === personalApiKeyScopeIdRef.current) {
+        setRevokingPersonalApiKeyId(null)
+      }
+    }
   }
 
   return (
@@ -968,6 +1401,7 @@ const Settings = () => {
                       { id: 'posts', label: '帖子', icon: FileText },
                       { id: 'wiki', label: '编辑过的百科', icon: BookOpen },
                       { id: 'galleries', label: '图集', icon: ImageIcon },
+                      { id: 'tickets', label: '盘票', icon: Ticket },
                       { id: 'comments', label: '评论', icon: MessageSquare },
                     ].map((item) => {
                       const Icon = item.icon
@@ -991,7 +1425,31 @@ const Settings = () => {
                     })}
                   </div>
 
-                  <div className="mt-4">{renderContentPanel()}</div>
+                  <div className="mt-4" aria-busy={contentLoading}>
+                    {contentError && (
+                      <LoadErrorState
+                        error={contentError}
+                        onRetry={() => setContentRetry((current) => current + 1)}
+                      />
+                    )}
+                    {contentLoading && activeContentHasItems && (
+                      <div className="mb-3 flex justify-end">
+                        <Spinner size="sm" label="内容刷新中" />
+                      </div>
+                    )}
+                    {renderContentPanel()}
+                  </div>
+                  {activeContentHasItems && pagination.hasMultiplePages ? (
+                    <Pagination
+                      page={pagination.page}
+                      totalPages={pagination.totalPages}
+                      onPageChange={pagination.handlePageChange}
+                      pageSize={pagination.pageSize}
+                      onPageSizeChange={pagination.handlePageSizeChange}
+                      pageSizeOptions={[20, 50, 100]}
+                      showPageSizeSelector
+                    />
+                  ) : null}
                 </div>
               </SettingsSection>
             )}
@@ -1067,6 +1525,14 @@ const Settings = () => {
                         </div>
                       </div>
                       <div className="flex max-w-full flex-wrap gap-2">
+                        {canSendEmailVerification && turnstile.enabled && (
+                          <TurnstileWidget
+                            siteKey={turnstile.siteKey}
+                            onToken={turnstile.setToken}
+                            onLoadError={turnstile.markLoadFailed}
+                            resetSignal={turnstile.resetSignal}
+                          />
+                        )}
                         {canSendEmailVerification && (
                           <Button
                             type="button"
@@ -1101,7 +1567,7 @@ const Settings = () => {
                       >
                         <label className="block">
                           <span className="mb-1 block text-xs font-medium text-text-muted">
-                            当前密码
+                            当前密码 <span className="theme-text-error">*</span>
                           </span>
                           <Input
                             type="password"
@@ -1118,7 +1584,7 @@ const Settings = () => {
                         </label>
                         <label className="block">
                           <span className="mb-1 block text-xs font-medium text-text-muted">
-                            新邮箱
+                            新邮箱 <span className="theme-text-error">*</span>
                           </span>
                           <Input
                             type="email"
@@ -1179,7 +1645,7 @@ const Settings = () => {
                       >
                         <label className="block">
                           <span className="mb-1 block text-xs font-medium text-text-muted">
-                            当前密码
+                            当前密码 <span className="theme-text-error">*</span>
                           </span>
                           <Input
                             type="password"
@@ -1200,7 +1666,7 @@ const Settings = () => {
                               htmlFor="settings-new-password"
                               className="text-xs font-medium text-text-muted"
                             >
-                              新密码
+                              新密码 <span className="theme-text-error">*</span>
                             </label>
                             <CharacterCount
                               current={passwordForm.newPassword.length}
@@ -1229,7 +1695,7 @@ const Settings = () => {
                               htmlFor="settings-confirm-password"
                               className="text-xs font-medium text-text-muted"
                             >
-                              确认新密码
+                              确认新密码 <span className="theme-text-error">*</span>
                             </label>
                             <CharacterCount
                               current={passwordForm.confirmPassword.length}
@@ -1267,6 +1733,238 @@ const Settings = () => {
                         </div>
                       </form>
                     )}
+                  </div>
+                </div>
+              </SettingsSection>
+            )}
+
+            {activeSection === 'api-keys' && (
+              <SettingsSection
+                title="API 密钥"
+                headingId="settings-api-keys"
+                icon={<KeyRound size={18} />}
+              >
+                <div className="min-w-0 w-full max-w-3xl space-y-6">
+                  <div className="flex items-start gap-2 rounded-lg p-3 text-sm leading-6 theme-status-warning theme-text-warning">
+                    <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    <p>如果你不知道这是什么，请忽略此页面的内容。</p>
+                  </div>
+
+                  {isBanned && (
+                    <p className="mt-4 text-sm theme-text-warning">
+                      账号封禁期间不能创建密钥，仍可查看或撤销已有密钥。
+                    </p>
+                  )}
+                  <form
+                    onSubmit={handlePersonalApiKeyCreate}
+                    className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_auto] sm:items-end"
+                  >
+                    <Field label="密钥名称">
+                      <Input
+                        value={personalApiKeyName}
+                        onChange={(event) => setPersonalApiKeyName(event.target.value)}
+                        maxLength={100}
+                        required
+                        placeholder="例如：定时备份、数据同步"
+                      />
+                    </Field>
+                    <Field label="有效期">
+                      <Select
+                        value={personalApiKeyExpiry}
+                        className="w-full"
+                        onChange={(event) =>
+                          setPersonalApiKeyExpiry(event.target.value as PersonalApiKeyExpiry)
+                        }
+                      >
+                        {PERSONAL_API_KEY_EXPIRY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Button
+                      type="submit"
+                      loading={creatingPersonalApiKey}
+                      className="w-full sm:w-auto"
+                      loadingText="创建中..."
+                      disabled={isBanned || Boolean(visibleRevealedPersonalApiKey)}
+                    >
+                      创建密钥
+                    </Button>
+                  </form>
+                  {visibleRevealedPersonalApiKey && (
+                    <div
+                      className="space-y-4 rounded-lg border border-[var(--color-warning)]/50 bg-surface-alt p-5 sm:p-6"
+                      role="status"
+                    >
+                      <p className="text-sm font-medium text-text-primary">
+                        密钥仅显示一次，请复制并安全保存。
+                      </p>
+                      <Field label="新 API 密钥">
+                        <Input
+                          value={visibleRevealedPersonalApiKey.token}
+                          readOnly
+                          onFocus={(event) => event.currentTarget.select()}
+                          className="font-mono text-xs"
+                        />
+                      </Field>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={async () => {
+                            const copied = await copyToClipboard(
+                              visibleRevealedPersonalApiKey.token
+                            )
+                            show(copied ? 'API 密钥已复制' : '复制失败，请手动选择并复制密钥', {
+                              variant: copied ? 'success' : 'error',
+                            })
+                          }}
+                        >
+                          复制密钥
+                        </Button>
+                        <Button type="button" onClick={() => setRevealedPersonalApiKey(null)}>
+                          我已保存
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-text-primary">已创建的密钥</h3>
+                    {personalApiKeysError && (
+                      <LoadErrorState
+                        error={personalApiKeysError}
+                        description="API 密钥列表加载失败，请重试。"
+                        onRetry={() => setPersonalApiKeysRetry((current) => current + 1)}
+                        className="mt-4"
+                      />
+                    )}
+                    {!personalApiKeys && !personalApiKeysError && (
+                      <div className="mt-4 space-y-3" role="status" aria-label="正在加载 API 密钥">
+                        {[1, 2].map((item) => (
+                          <Skeleton key={item} className="h-16 w-full" />
+                        ))}
+                      </div>
+                    )}
+                    {personalApiKeys?.ownerUid === user.uid &&
+                      personalApiKeys.keys.length === 0 &&
+                      !personalApiKeysLoading && (
+                        <p className="mt-4 text-sm text-text-muted">尚未创建 API 密钥。</p>
+                      )}
+                    {visiblePersonalApiKeys.length > 0 && (
+                      <ul className="divide-y divide-border">
+                        {visiblePersonalApiKeys.map((key) => {
+                          const revoked = Boolean(key.revokedAt)
+                          const expired =
+                            key.expiresAt !== null && Date.parse(key.expiresAt) <= Date.now()
+                          const status = revoked ? '已撤销' : expired ? '已过期' : '有效'
+                          const statusClass = revoked
+                            ? 'theme-status-error theme-text-error'
+                            : expired
+                              ? 'theme-status-warning theme-text-warning'
+                              : 'theme-status-success theme-text-success'
+
+                          return (
+                            <li
+                              key={key.id}
+                              className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between"
+                            >
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="break-all text-sm font-medium text-text-primary">
+                                    {key.name}
+                                  </span>
+                                  <span
+                                    className={clsx(
+                                      'rounded border px-2 py-0.5 text-xs',
+                                      statusClass
+                                    )}
+                                  >
+                                    {status}
+                                  </span>
+                                </div>
+                                <code className="block break-all text-xs text-text-muted">
+                                  {key.prefix}…
+                                </code>
+                                <dl className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                                  <div className="flex gap-2">
+                                    <dt className="text-text-muted">创建</dt>
+                                    <dd className="text-text-secondary">
+                                      {format(new Date(key.createdAt), 'yyyy-MM-dd HH:mm')}
+                                    </dd>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <dt className="text-text-muted">到期</dt>
+                                    <dd className="text-text-secondary">
+                                      {key.expiresAt
+                                        ? format(new Date(key.expiresAt), 'yyyy-MM-dd HH:mm')
+                                        : '永久'}
+                                    </dd>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <dt className="text-text-muted">最近使用</dt>
+                                    <dd className="text-text-secondary">
+                                      {key.lastUsedAt
+                                        ? format(new Date(key.lastUsedAt), 'yyyy-MM-dd HH:mm')
+                                        : '未使用'}
+                                    </dd>
+                                  </div>
+                                </dl>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="danger"
+                                size="sm"
+                                className="self-start"
+                                disabled={revoked || revokingPersonalApiKeyId !== null}
+                                loading={revokingPersonalApiKeyId === key.id}
+                                onClick={() => void handlePersonalApiKeyRevoke(key)}
+                              >
+                                撤销
+                              </Button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="space-y-3 border-t border-border pt-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <details className="min-w-0 w-full">
+                        <summary className="cursor-pointer text-sm text-text-secondary">
+                          调用示例与说明
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                          <p className="text-sm leading-6 text-text-secondary">
+                            通过 Authorization Bearer 请求头发送密钥，不要放入 URL。 对外调用请使用
+                            HTTPS。
+                          </p>
+                          <pre className="max-w-full overflow-x-auto rounded-lg border border-border bg-surface-alt px-4 py-4 text-xs leading-6 text-text-primary sm:text-sm">
+                            <code>
+                              curl -H 'Authorization: Bearer &lt;API_KEY&gt;'
+                              {' \\\n  https://<本站域名>/api/users/me'}
+                            </code>
+                          </pre>
+                          <p className="text-xs leading-6 text-text-muted">
+                            写请求无需浏览器 Cookie 或 XSRF 令牌。JSON 请求使用 Content-Type:
+                            application/json；上传沿用上传会话和 multipart 文件接口。
+                          </p>
+                          <p className="text-xs leading-6 text-text-muted">
+                            修改密码或退出登录不会撤销密钥；泄露后请手动撤销。
+                          </p>
+                        </div>
+                      </details>
+                      <a
+                        href="/api-docs.md"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-brand-gold underline underline-offset-4 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4"
+                      >
+                        查看 API 文档
+                      </a>
+                    </div>
                   </div>
                 </div>
               </SettingsSection>

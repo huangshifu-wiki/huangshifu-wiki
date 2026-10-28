@@ -37,6 +37,8 @@ services:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     container_name: hsf-app
     restart: unless-stopped
+    mem_limit: ${APP_MEM_LIMIT:-320m}
+    memswap_limit: ${APP_MEM_LIMIT:-320m}
     env_file:
       - ${APP_ENV_FILE:-.env}
     environment:

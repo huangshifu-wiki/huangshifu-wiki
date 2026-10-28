@@ -1,11 +1,12 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Play, Heart } from '@/src/components/icons'
+import { Link } from 'react-router-dom'
+import { Music, Play, Heart } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useI18n } from '../../lib/i18n'
 import { formatMusicCredits } from '../../lib/musicCredits'
 import { isPlayableSong } from '../../lib/musicPlayback'
 import { SmartImage } from '../SmartImage'
+import { CoverPlaceholder } from '../CoverPlaceholder'
 import type { SongItem } from '../../types/entities'
 import type { ViewMode } from '../../types/userPreferences'
 
@@ -33,7 +34,6 @@ const SongCard = React.memo(function SongCard({
   onToggleFavorite,
 }: SongCardProps) {
   const { t } = useI18n()
-  const navigate = useNavigate()
   const isList = viewMode === 'list'
   const isSmallGrid = viewMode === 'small'
   const artistsText = formatMusicCredits(song.artists, '未知歌手')
@@ -41,33 +41,28 @@ const SongCard = React.memo(function SongCard({
   const albumText = (song.displayAlbum ? song.displayAlbum.title : song.album).trim()
   const releaseDateText = song.releaseDate || null
   const coverSrc = song.coverThumbnail || song.cover
-  const metaItems = [artistsText, albumText, releaseDateText].filter(Boolean)
-
-  const handleRowClick = () => {
-    navigate(`/music/${song.slug || song.docId}`)
-  }
+  const bodyMeta = [artistsText, albumText].filter(Boolean)
 
   const handlePlayClick = (e: React.MouseEvent) => {
+    // 必须 preventDefault：Link 的 preventDefault 在自身 onClick 里，仅
+    // stopPropagation 会把它拦掉，导致 <a href> 原生默认导航整页跳转
+    e.preventDefault()
     e.stopPropagation()
     if (!canPlay) return
     onPlay(song)
   }
 
   const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.preventDefault()
     e.stopPropagation()
     onToggleFavorite(song)
   }
 
   if (isList) {
     return (
-      <div
-        onClick={handleRowClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            handleRowClick()
-          }
-        }}
+      <Link
+        to={`/music/${song.slug || song.docId}`}
+        data-press-feedback="state"
         className={clsx(
           'group flex cursor-pointer items-center gap-2 rounded px-3 py-2.5 sm:gap-3.5',
           'transition-all duration-300',
@@ -75,8 +70,6 @@ const SongCard = React.memo(function SongCard({
             ? 'bg-[color-mix(in_srgb,var(--color-theme-accent)_8%,transparent)]'
             : 'hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]'
         )}
-        role="button"
-        tabIndex={0}
         aria-label={`${song.title} - ${artistsText}`}
       >
         {sequenceNumber !== undefined && (
@@ -98,30 +91,50 @@ const SongCard = React.memo(function SongCard({
             className="h-full w-full object-cover"
             style={{ filter: COVER_FILTER }}
             lazy={false}
+            fallback={<CoverPlaceholder icon={<Music size={18} />} label="无封面" />}
           />
         </div>
 
         <div className="pointer-events-none min-w-0 flex-1">
-          <p
-            className={clsx(
-              'truncate text-[0.9375rem] font-semibold tracking-[0.03em] transition-colors sm:text-[0.975rem]',
-              isCurrentSong ? 'text-brand-gold' : 'text-text-primary group-hover:text-brand-gold'
+          <p className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={clsx(
+                'min-w-0 truncate text-[0.9375rem] font-semibold tracking-[0.03em] transition-colors sm:text-[0.975rem]',
+                isCurrentSong ? 'text-brand-gold' : 'text-text-primary group-hover:text-brand-gold'
+              )}
+            >
+              {song.title}
+            </span>
+            {(song.tags?.length ?? 0) > 0 && (
+              <span className="flex flex-shrink-0 items-center gap-1">
+                {song.tags!.map((tag) => (
+                  <span
+                    key={tag}
+                    className="whitespace-nowrap rounded-[3px] border border-border/60 px-1 py-px text-[0.625rem] font-normal leading-tight text-text-muted/80"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </span>
             )}
-          >
-            {song.title}
           </p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 truncate text-[0.78rem] text-text-muted">
-            {metaItems.map((item, index) => (
-              <React.Fragment key={`${index}-${item}`}>
-                {index > 0 && <span className="text-text-muted/40">·</span>}
-                <span>{item}</span>
-              </React.Fragment>
-            ))}
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.78rem] text-text-muted">
+            {bodyMeta.length > 0 && (
+              <span className="min-w-0 truncate">{bodyMeta.join(' · ')}</span>
+            )}
+            {releaseDateText && (
+              <>
+                <span className="flex-shrink-0 text-text-muted/40">·</span>
+                <span className="flex-shrink-0 whitespace-nowrap">{releaseDateText}</span>
+              </>
+            )}
           </p>
         </div>
 
         <div className="pointer-events-auto flex flex-shrink-0 items-center gap-1.5">
           <button
+            type="button"
+            data-press-feedback="ripple"
             onClick={handleFavoriteClick}
             disabled={isFavoriting}
             className={clsx(
@@ -154,19 +167,14 @@ const SongCard = React.memo(function SongCard({
             <Play size={13} fill="currentColor" className="ml-0.5" />
           </button>
         </div>
-      </div>
+      </Link>
     )
   }
 
   return (
-    <div
-      onClick={handleRowClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          handleRowClick()
-        }
-      }}
+    <Link
+      to={`/music/${song.slug || song.docId}`}
+      data-press-feedback="state"
       className={clsx(
         'group cursor-pointer overflow-hidden rounded-lg',
         'border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)]',
@@ -175,8 +183,6 @@ const SongCard = React.memo(function SongCard({
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
         isCurrentSong && 'border-brand-gold/30'
       )}
-      role="button"
-      tabIndex={0}
       aria-label={`${song.title} - ${artistsText}`}
     >
       <div className="relative aspect-square overflow-hidden bg-surface-alt">
@@ -186,6 +192,7 @@ const SongCard = React.memo(function SongCard({
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
           style={{ filter: COVER_FILTER }}
           lazy={false}
+          fallback={<CoverPlaceholder icon={<Music size={18} />} label="无封面" />}
         />
         <button
           type="button"
@@ -214,14 +221,28 @@ const SongCard = React.memo(function SongCard({
       </div>
 
       <div className={clsx(isSmallGrid ? 'p-2.5' : 'p-3')}>
-        <p
-          className={clsx(
-            'truncate font-semibold tracking-[0.02em] transition-colors',
-            isSmallGrid ? 'text-[0.8125rem]' : 'text-[0.9rem]',
-            isCurrentSong ? 'text-brand-gold' : 'text-text-primary group-hover:text-brand-gold'
+        <p className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={clsx(
+              'min-w-0 truncate font-semibold tracking-[0.02em] transition-colors',
+              isSmallGrid ? 'text-[0.8125rem]' : 'text-[0.9rem]',
+              isCurrentSong ? 'text-brand-gold' : 'text-text-primary group-hover:text-brand-gold'
+            )}
+          >
+            {song.title}
+          </span>
+          {!isSmallGrid && (song.tags?.length ?? 0) > 0 && (
+            <span className="flex flex-shrink-0 items-center gap-1">
+              {song.tags!.map((tag) => (
+                <span
+                  key={tag}
+                  className="whitespace-nowrap rounded-[3px] border border-border/60 px-1 py-px text-[0.625rem] font-normal leading-tight text-text-muted/80"
+                >
+                  {tag}
+                </span>
+              ))}
+            </span>
           )}
-        >
-          {song.title}
         </p>
         <p
           className={clsx(
@@ -241,6 +262,8 @@ const SongCard = React.memo(function SongCard({
 
       <div className={clsx('flex items-center', isSmallGrid ? 'px-2.5 pb-2' : 'px-3 pb-2.5')}>
         <button
+          type="button"
+          data-press-feedback="ripple"
           onClick={handleFavoriteClick}
           disabled={isFavoriting}
           className={clsx(
@@ -255,7 +278,7 @@ const SongCard = React.memo(function SongCard({
           <Heart size={isSmallGrid ? 13 : 14} fill={song.favoritedByMe ? 'currentColor' : 'none'} />
         </button>
       </div>
-    </div>
+    </Link>
   )
 })
 

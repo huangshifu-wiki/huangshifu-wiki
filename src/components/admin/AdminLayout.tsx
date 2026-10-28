@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import {
   type LucideIcon,
@@ -14,6 +14,7 @@ import {
   Lock,
   FileText,
   Calendar,
+  Ticket,
   Shield,
   Database,
   Cpu,
@@ -24,16 +25,18 @@ import {
   Menu,
   X,
   ChevronRight,
+  ChevronDown,
   HardDrive,
   RefreshCw,
   Settings as SettingsIcon,
 } from '@/src/components/icons'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { clsx } from 'clsx'
 import { useAuth } from '../../context/AuthContext'
 import { logoutRequest } from '../../lib/auth'
 import { HeaderUserControls } from '../HeaderUserControls'
 import { useToast } from '../Toast'
-import { IconButton } from '@/src/components/ui'
+import { Button, IconButton } from '@/src/components/ui'
 import { usePendingReviewCount } from '../../hooks/usePendingReviewCount'
 import { usePublicFeatures } from '../../hooks/usePublicFeatures'
 
@@ -60,17 +63,21 @@ const contentNav: AdminNavItem[] = [
   { id: 'music', label: '音乐管理', path: '/admin/music', icon: Music },
   { id: 'posts', label: '帖子管理', path: '/admin/posts', icon: MessageSquare },
   { id: 'galleries', label: '图集管理', path: '/admin/galleries', icon: ImageIcon },
+  { id: 'ticket-listings', label: '盘票管理', path: '/admin/ticket-listings', icon: Ticket },
   { id: 'events', label: '活动管理', path: '/admin/events', icon: Calendar },
   { id: 'sections', label: '版块管理', path: '/admin/sections', icon: Layers },
   { id: 'announcements', label: '公告管理', path: '/admin/announcements', icon: Megaphone },
 ]
 
-const siteNav: AdminNavItem[] = [
+const operationNav: AdminNavItem[] = [
   { id: 'reviews', label: '审核队列', path: '/admin/reviews', icon: CheckCircle },
   { id: 'users', label: '用户管理', path: '/admin/users', icon: Users },
   { id: 'locks', label: '编辑锁', path: '/admin/locks', icon: Lock },
   { id: 'moderation_logs', label: '操作日志', path: '/admin/moderation_logs', icon: FileText },
   { id: 'ban_logs', label: '封禁日志', path: '/admin/ban_logs', icon: Shield },
+]
+
+const toolsNav: AdminNavItem[] = [
   { id: 'embeddings', label: '向量管理', path: '/admin/embeddings', icon: Cpu },
   {
     id: 'backups',
@@ -84,6 +91,10 @@ const siteNav: AdminNavItem[] = [
   { id: 'markdown_links', label: '链接更新', path: '/admin/markdown_links', icon: LinkIcon },
   { id: 'disk-monitor', label: '磁盘监控', path: '/admin/disk-monitor', icon: HardDrive },
   { id: 'variant-manager', label: '变体管理', path: '/admin/variant-manager', icon: RefreshCw },
+  { id: 'maintenance', label: '媒体维护', path: '/admin/maintenance', icon: RefreshCw },
+]
+
+const settingsNav: AdminNavItem[] = [
   {
     id: 'settings',
     label: '站点设置',
@@ -152,6 +163,17 @@ const SidebarNavLink = ({
   )
 }
 
+const readCollapsedGroups = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem('hsf:admin:nav-groups')
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    return new Set(Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
 const NavGroup = ({
   title,
   items,
@@ -159,6 +181,8 @@ const NavGroup = ({
   sidebarCollapsed,
   mobileOpen,
   onClick,
+  collapsed,
+  onToggleCollapsed,
   showReviewDot = false,
 }: {
   title: string
@@ -167,29 +191,42 @@ const NavGroup = ({
   sidebarCollapsed: boolean
   mobileOpen: boolean
   onClick: () => void
+  collapsed: boolean
+  onToggleCollapsed: () => void
   showReviewDot?: boolean
 }) => (
   <div className="mb-3">
     {(!sidebarCollapsed || mobileOpen) && (
-      <div className="px-3 py-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        fullWidth
+        className="justify-between px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted hover:text-brand-gold"
+        rightIcon={collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        onClick={onToggleCollapsed}
+        aria-expanded={!collapsed}
+      >
         {title}
+      </Button>
+    )}
+    {!collapsed && (
+      <div className="space-y-0.5">
+        {items.map((item) => {
+          return (
+            <SidebarNavLink
+              key={item.id}
+              item={item}
+              currentPath={currentPath}
+              sidebarCollapsed={sidebarCollapsed}
+              mobileOpen={mobileOpen}
+              onClick={onClick}
+              showDot={showReviewDot && item.id === 'reviews'}
+            />
+          )
+        })}
       </div>
     )}
-    <div className="space-y-0.5">
-      {items.map((item) => {
-        return (
-          <SidebarNavLink
-            key={item.id}
-            item={item}
-            currentPath={currentPath}
-            sidebarCollapsed={sidebarCollapsed}
-            mobileOpen={mobileOpen}
-            onClick={onClick}
-            showDot={showReviewDot && item.id === 'reviews'}
-          />
-        )
-      })}
-    </div>
   </div>
 )
 
@@ -201,15 +238,36 @@ export const AdminLayout = () => {
   const { features } = usePublicFeatures()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(readCollapsedGroups)
   const pendingReviewCount = usePendingReviewCount(isAdmin)
 
   const currentPath = location.pathname
   const closeMobileMenu = () => setMobileOpen(false)
-  const visibleSiteNav = siteNav.filter(
+  const visibleToolsNav = toolsNav.filter(
     (item) =>
       (!item.superAdminOnly || user?.role === 'super_admin') &&
       (item.id !== 'embeddings' || features.semanticSearch)
   )
+  const visibleSettingsNav = settingsNav.filter(
+    (item) => !item.superAdminOnly || user?.role === 'super_admin'
+  )
+
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupId)) {
+        next.delete(groupId)
+      } else {
+        next.add(groupId)
+      }
+      try {
+        localStorage.setItem('hsf:admin:nav-groups', JSON.stringify([...next]))
+      } catch {
+        // localStorage 不可用时仅本次会话生效
+      }
+      return next
+    })
+  }
 
   const handleLogout = async () => {
     try {
@@ -217,7 +275,7 @@ export const AdminLayout = () => {
       navigate('/')
     } catch (error) {
       console.error('Logout failed:', error)
-      show('退出登录失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '退出登录失败，请稍后重试'), { variant: 'error' })
     }
   }
 
@@ -227,7 +285,7 @@ export const AdminLayout = () => {
 
   return (
     <div
-      className="h-screen flex flex-col overflow-hidden bg-[var(--color-bg-antique)]"
+      className="admin-shell h-screen flex flex-col overflow-hidden bg-[var(--color-bg-antique)]"
       style={{
         fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
       }}
@@ -314,17 +372,45 @@ export const AdminLayout = () => {
               sidebarCollapsed={sidebarCollapsed}
               mobileOpen={mobileOpen}
               onClick={closeMobileMenu}
+              collapsed={collapsedGroups.has('content')}
+              onToggleCollapsed={() => toggleGroup('content')}
             />
 
             <NavGroup
-              title="站务管理"
-              items={visibleSiteNav}
+              title="运营管理"
+              items={operationNav}
               currentPath={currentPath}
               sidebarCollapsed={sidebarCollapsed}
               mobileOpen={mobileOpen}
               onClick={closeMobileMenu}
+              collapsed={collapsedGroups.has('operations')}
+              onToggleCollapsed={() => toggleGroup('operations')}
               showReviewDot={pendingReviewCount > 0}
             />
+
+            <NavGroup
+              title="系统工具"
+              items={visibleToolsNav}
+              currentPath={currentPath}
+              sidebarCollapsed={sidebarCollapsed}
+              mobileOpen={mobileOpen}
+              onClick={closeMobileMenu}
+              collapsed={collapsedGroups.has('tools')}
+              onToggleCollapsed={() => toggleGroup('tools')}
+            />
+
+            {visibleSettingsNav.length > 0 && (
+              <NavGroup
+                title="设置"
+                items={visibleSettingsNav}
+                currentPath={currentPath}
+                sidebarCollapsed={sidebarCollapsed}
+                mobileOpen={mobileOpen}
+                onClick={closeMobileMenu}
+                collapsed={collapsedGroups.has('settings')}
+                onToggleCollapsed={() => toggleGroup('settings')}
+              />
+            )}
           </nav>
 
           <div className="hidden md:block p-2 border-t border-[var(--book-ink-line)]">

@@ -1,13 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, Disc3, Image as ImageIcon, Music, Pause, Play } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { IconButton } from '@/src/components/ui'
+import { IconButton, LoadErrorState } from '@/src/components/ui'
 import { SmartImage } from '../../components/SmartImage'
+import { CoverPlaceholder } from '../../components/CoverPlaceholder'
 import { SiteFooterContent } from '../../components/SiteFooter'
 import { useMusic } from '../../context/MusicContext'
 import { apiGet } from '../../lib/apiClient'
-import { formatEventListDate, getEventCoverSrc } from '../../lib/eventFormat'
+import { formatEventListDate, getEventCoverSrc, getEventListDayOffset } from '../../lib/eventFormat'
+import { EventDateOffset } from '../../components/Events/EventDateOffset'
 import {
   getFirstGalleryImage,
   getGalleryThumbnailPlaceholderLabel,
@@ -31,6 +33,15 @@ interface HomeLoadState {
   albums: LoadState
 }
 
+type HomeSection = keyof HomeLoadState
+type HomeRetryState = Record<HomeSection, number>
+
+type HomeSectionResult =
+  | { section: 'events'; items: EventItem[] }
+  | { section: 'galleries'; items: GalleryItem[] }
+  | { section: 'songs'; items: SongItem[] }
+  | { section: 'albums'; items: AlbumItem[] }
+
 interface AlbumsResponse {
   albums: AlbumItem[]
   total: number
@@ -53,6 +64,15 @@ const initialLoadState: HomeLoadState = {
   songs: 'loading',
   albums: 'loading',
 }
+
+const initialRetryState: HomeRetryState = {
+  events: 0,
+  galleries: 0,
+  songs: 0,
+  albums: 0,
+}
+
+const homeSections: HomeSection[] = ['events', 'galleries', 'songs', 'albums']
 
 function useRevealOnScroll(refreshKey: number) {
   useEffect(() => {
@@ -97,7 +117,7 @@ function SectionHeader({
   return (
     <div className="home-section-hd">
       <h2>{title}</h2>
-      <Link to={to} className="home-section-link">
+      <Link to={to} className="home-section-link" data-press-feedback="inline">
         {actionLabel} <span aria-hidden="true">→</span>
       </Link>
     </div>
@@ -108,20 +128,23 @@ function EmptyState({ label }: { label: string }) {
   return <div className="home-empty">{label}</div>
 }
 
-function CoverFallback({
+function HomeCoverPlaceholder({
   icon,
   label,
-  className,
+  labelClassName,
 }: {
   icon: React.ReactNode
   label: string
-  className?: string
+  labelClassName?: string
 }) {
   return (
-    <div className={clsx('home-cover-fallback', className)}>
-      <span>{icon}</span>
-      <span>{label}</span>
-    </div>
+    <CoverPlaceholder
+      icon={icon}
+      label={label}
+      bgClassName="bg-[var(--home-bg-surface)]"
+      iconClassName="text-[var(--home-gold)]"
+      labelClassName={labelClassName ?? 'text-[var(--home-text-3)]'}
+    />
   )
 }
 
@@ -147,10 +170,9 @@ function GalleryImage({
   }
 
   return (
-    <CoverFallback
+    <HomeCoverPlaceholder
       icon={<ImageIcon size={22} />}
       label={getGalleryThumbnailPlaceholderLabel(image)}
-      className="home-gallery-fallback"
     />
   )
 }
@@ -162,6 +184,7 @@ function GalleryTile({ gallery, index }: { gallery: GalleryItem; index: number }
   return (
     <Link
       to={`/gallery/${gallery.slug || gallery.id}`}
+      data-press-feedback="state"
       className={clsx('home-gallery-item home-reveal', `home-reveal-d${Math.min(index + 1, 4)}`)}
     >
       <GalleryImage gallery={gallery} image={image} eager={index === 0} />
@@ -180,19 +203,22 @@ function EventCover({ event }: { event: EventItem }) {
     return <SmartImage src={src} alt={event.title} className="home-list-cover-img" loading="lazy" />
   }
 
-  return <CoverFallback icon={<Calendar size={18} />} label="暂无封面" />
+  return <HomeCoverPlaceholder icon={<Calendar size={18} />} label="无封面" />
 }
 
 function EventRow({ event }: { event: EventItem }) {
-  const date = formatEventListDate(event.timeSlots)
+  const date = formatEventListDate(event.timeSlots, event.timeStatus)
+  const dayOffset = getEventListDayOffset(event.timeSlots)
 
   return (
-    <Link to={`/events/${event.slug}`} className="home-list-item">
+    <Link to={`/events/${event.slug}`} className="home-list-item" data-press-feedback="state">
       <div className="home-list-cover">
         <EventCover event={event} />
       </div>
       <div className="home-list-info">
-        <div className="home-list-name">{event.title}</div>
+        <div className="home-list-name">
+          <EventDateOffset dayOffset={dayOffset} compact /> {event.title}
+        </div>
         <div className="home-list-meta">
           {date || '时间待定'}
           {event.location ? ` · ${event.location}` : ''}
@@ -215,10 +241,10 @@ function SongCover({ song, active }: { song: SongItem; active: boolean }) {
   }
 
   return (
-    <CoverFallback
+    <HomeCoverPlaceholder
       icon={<Music size={18} />}
       label="无封面"
-      className={clsx(active && 'home-cover-fallback-active')}
+      labelClassName={active ? 'text-[var(--home-gold)]' : undefined}
     />
   )
 }
@@ -236,10 +262,18 @@ function SongRow({
 }) {
   return (
     <div className={clsx('home-list-item', active && 'home-list-item-active')}>
-      <Link to={`/music/${song.slug || song.docId}`} className="home-list-cover">
+      <Link
+        to={`/music/${song.slug || song.docId}`}
+        className="home-list-cover"
+        data-press-feedback="state"
+      >
         <SongCover song={song} active={active} />
       </Link>
-      <Link to={`/music/${song.slug || song.docId}`} className="home-list-info">
+      <Link
+        to={`/music/${song.slug || song.docId}`}
+        className="home-list-info"
+        data-press-feedback="state"
+      >
         <div className="home-list-name">{song.title}</div>
         <div className="home-list-meta">
           {formatMusicCredits(song.artists, '未知歌手')}
@@ -269,7 +303,7 @@ function AlbumFeature({ album }: { album: AlbumItem }) {
   const albumSlug = album.slug || album.docId || ''
 
   return (
-    <Link to={`/album/${albumSlug}`} className="home-album-item">
+    <Link to={`/album/${albumSlug}`} className="home-album-item" data-press-feedback="state">
       <div className="home-album-cover">
         {album.cover ? (
           <SmartImage
@@ -279,7 +313,7 @@ function AlbumFeature({ album }: { album: AlbumItem }) {
             loading="lazy"
           />
         ) : (
-          <CoverFallback icon={<Disc3 size={20} />} label="无封面" />
+          <HomeCoverPlaceholder icon={<Disc3 size={20} />} label="无封面" />
         )}
       </div>
       <div className="home-album-info">
@@ -324,37 +358,93 @@ export const DefaultHome = () => {
   const [songs, setSongs] = useState<SongItem[]>([])
   const [albums, setAlbums] = useState<AlbumItem[]>([])
   const [loadState, setLoadState] = useState<HomeLoadState>(initialLoadState)
+  const [retryNonce, setRetryNonce] = useState<HomeRetryState>(initialRetryState)
+  const previousRetryNonceRef = useRef<HomeRetryState | null>(null)
+  const initialRequestPendingRef = useRef(false)
   const { currentSong, isPlaying, playAlbumTracks } = useMusic()
 
   useEffect(() => {
     let cancelled = false
+    const previousRetryNonce = previousRetryNonceRef.current
+    previousRetryNonceRef.current = retryNonce
+    const changedSections = previousRetryNonce
+      ? homeSections.filter((section) => retryNonce[section] !== previousRetryNonce[section])
+      : homeSections
+    const sectionsToLoad =
+      changedSections.length > 0
+        ? changedSections
+        : initialRequestPendingRef.current
+          ? homeSections
+          : []
+    if (sectionsToLoad.length === 0) return
+    initialRequestPendingRef.current = true
+    if (previousRetryNonce) {
+      setLoadState((current) => {
+        const next = { ...current }
+        sectionsToLoad.forEach((section) => {
+          next[section] = 'loading'
+        })
+        return next
+      })
+    }
+
+    const loadSection = async (section: HomeSection): Promise<HomeSectionResult> => {
+      switch (section) {
+        case 'events': {
+          const data = await apiGet<EventListResponse>('/api/events', {
+            page: 1,
+            limit: 4,
+            sortOrder: 'upcoming',
+          })
+          return { section, items: data.events || [] }
+        }
+        case 'galleries': {
+          const data = await apiGet<GalleryListResponse>('/api/galleries', { page: 1, limit: 5 })
+          return { section, items: data.galleries || [] }
+        }
+        case 'songs': {
+          const data = await apiGet<SongsResponse>('/api/music', {
+            page: 1,
+            limit: 3,
+            includeInstrumentals: false,
+          })
+          return { section, items: data.songs || [] }
+        }
+        case 'albums': {
+          const data = await apiGet<AlbumsResponse>('/api/albums', { page: 1, limit: 1 })
+          return { section, items: data.albums || [] }
+        }
+      }
+    }
 
     const loadHomeContent = async () => {
-      setLoadState(initialLoadState)
-
-      const [eventResult, galleryResult, songResult, albumResult] = await Promise.allSettled([
-        apiGet<EventListResponse>('/api/events', { page: 1, limit: 4, sortOrder: 'desc' }),
-        apiGet<GalleryListResponse>('/api/galleries', { page: 1, limit: 5 }),
-        apiGet<SongsResponse>('/api/music', {
-          page: 1,
-          limit: 3,
-          includeInstrumentals: false,
-        }),
-        apiGet<AlbumsResponse>('/api/albums', { page: 1, limit: 1 }),
-      ])
-
+      const results = await Promise.allSettled(sectionsToLoad.map(loadSection))
       if (cancelled) return
+      initialRequestPendingRef.current = false
+      results.forEach((result) => {
+        if (result.status !== 'fulfilled') return
+        switch (result.value.section) {
+          case 'events':
+            setEvents(result.value.items)
+            break
+          case 'galleries':
+            setGalleries(result.value.items)
+            break
+          case 'songs':
+            setSongs(result.value.items)
+            break
+          case 'albums':
+            setAlbums(result.value.items)
+            break
+        }
+      })
 
-      setEvents(eventResult.status === 'fulfilled' ? eventResult.value.events || [] : [])
-      setGalleries(galleryResult.status === 'fulfilled' ? galleryResult.value.galleries || [] : [])
-      setSongs(songResult.status === 'fulfilled' ? songResult.value.songs || [] : [])
-      setAlbums(albumResult.status === 'fulfilled' ? albumResult.value.albums || [] : [])
-
-      setLoadState({
-        events: eventResult.status === 'fulfilled' ? 'ready' : 'error',
-        galleries: galleryResult.status === 'fulfilled' ? 'ready' : 'error',
-        songs: songResult.status === 'fulfilled' ? 'ready' : 'error',
-        albums: albumResult.status === 'fulfilled' ? 'ready' : 'error',
+      setLoadState((current) => {
+        const next = { ...current }
+        results.forEach((result, index) => {
+          next[sectionsToLoad[index]] = result.status === 'fulfilled' ? 'ready' : 'error'
+        })
+        return next
       })
     }
 
@@ -363,6 +453,10 @@ export const DefaultHome = () => {
     return () => {
       cancelled = true
     }
+  }, [retryNonce])
+
+  const retrySection = useCallback((section: HomeSection) => {
+    setRetryNonce((current) => ({ ...current, [section]: current[section] + 1 }))
   }, [])
 
   const displayedGalleries = useMemo(() => galleries.slice(0, 5), [galleries])
@@ -408,7 +502,11 @@ export const DefaultHome = () => {
                 {loadState.events === 'loading' ? (
                   <ListSkeleton />
                 ) : loadState.events === 'error' ? (
-                  <EmptyState label="活动暂时无法加载" />
+                  <LoadErrorState
+                    className="py-6"
+                    description="活动暂时无法加载。"
+                    onRetry={() => retrySection('events')}
+                  />
                 ) : events.length > 0 ? (
                   <div className="home-list">
                     {events.map((event) => (
@@ -425,7 +523,11 @@ export const DefaultHome = () => {
                 {loadState.songs === 'loading' ? (
                   <ListSkeleton count={3} />
                 ) : loadState.songs === 'error' ? (
-                  <EmptyState label="曲目暂时无法加载" />
+                  <LoadErrorState
+                    className="py-6"
+                    description="曲目暂时无法加载。"
+                    onRetry={() => retrySection('songs')}
+                  />
                 ) : songs.length > 0 ? (
                   <div className="home-list">
                     {songs.map((song) => {
@@ -449,7 +551,11 @@ export const DefaultHome = () => {
                 {loadState.albums === 'loading' ? (
                   <ListSkeleton count={1} />
                 ) : loadState.albums === 'error' ? (
-                  <EmptyState label="专辑暂时无法加载" />
+                  <LoadErrorState
+                    className="py-6"
+                    description="专辑暂时无法加载。"
+                    onRetry={() => retrySection('albums')}
+                  />
                 ) : featuredAlbum ? (
                   <div className="home-albums-list">
                     <AlbumFeature album={featuredAlbum} />
@@ -472,7 +578,11 @@ export const DefaultHome = () => {
             {loadState.galleries === 'loading' ? (
               <GallerySkeleton />
             ) : loadState.galleries === 'error' ? (
-              <EmptyState label="图集暂时无法加载" />
+              <LoadErrorState
+                className="py-6"
+                description="图集暂时无法加载。"
+                onRetry={() => retrySection('galleries')}
+              />
             ) : displayedGalleries.length > 0 ? (
               <div className="home-gallery-grid">
                 {displayedGalleries.map((gallery, index) => (

@@ -6,15 +6,19 @@ import { useMusic } from '../context/MusicContext'
 import { clsx } from 'clsx'
 import { useToast } from '../components/Toast'
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import Pagination from '../components/Pagination'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
+import { useTagSuggestions } from '../hooks/useTagSuggestions'
 import { useI18n } from '../lib/i18n'
-import { PageSkeleton } from '../components/PageSkeleton'
-import { SongCard } from '../components/Music/SongCard'
 import { AlbumCard } from '../components/Music/AlbumCard'
-import { MusicFilters, type SortBy } from '../components/Music/MusicFilters'
+import { Spinner } from '@/src/components/ui'
+import { SongCard } from '../components/Music/SongCard'
+import { MusicFilters } from '../components/Music/MusicFilters'
+import { ListPageContentState, ListPageLoadingBoundary } from '../components/ListPageState'
+import { getListLoadState } from '../lib/listLoadState'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import { isPlayableSong } from '../lib/musicPlayback'
 import type { SongItem, AlbumItem } from '../types/entities'
@@ -25,14 +29,20 @@ const MUSIC_PAGE_SIZE_OPTIONS = [25, 50, 100]
 const Music = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [songs, setSongs] = useState<SongItem[]>([])
-  const [songTotal, setSongTotal] = useState<number>()
+  const [songTotalState, setSongTotal] = useState<{ scope: string; total: number }>()
   const [loading, setLoading] = useState(true)
+  const [songLoadError, setSongLoadError] = useState<unknown | null>(null)
+  const [songRetryNonce, setSongRetryNonce] = useState(0)
   const [favoriting, setFavoriting] = useState<string | null>(null)
   const [albums, setAlbums] = useState<AlbumItem[]>([])
-  const [albumTotal, setAlbumTotal] = useState<number>()
-  const [loadingAlbums, setLoadingAlbums] = useState(false)
+  const [albumTotalState, setAlbumTotal] = useState<{ scope: string; total: number }>()
+  const [loadingAlbums, setLoadingAlbums] = useState(true)
+  const [albumLoadError, setAlbumLoadError] = useState<unknown | null>(null)
+  const [albumRetryNonce, setAlbumRetryNonce] = useState(0)
   const tabParam = searchParams.get('tab')
   const activeTab: 'music' | 'albums' = tabParam === 'albums' ? 'albums' : 'music'
+  const tag = searchParams.get('tag') || ''
+  const albumTag = searchParams.get('albumTag') || ''
   const { user } = useAuth()
   const { currentSong, setCurrentSong, setIsPlaying, setPlaylist, playSongAtIndex } = useMusic()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
@@ -41,8 +51,12 @@ const Music = () => {
   const { show } = useToast()
   const { t } = useI18n()
 
-  const [sortBy, setSortBy] = useState<SortBy>('releaseDate')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [showAccompaniments, setShowAccompaniments] = useState(false)
+  const songScope = JSON.stringify([tag, showAccompaniments])
+  const albumScope = JSON.stringify([albumTag])
+  const songTotal = songTotalState?.scope === songScope ? songTotalState.total : undefined
+  const albumTotal = albumTotalState?.scope === albumScope ? albumTotalState.total : undefined
 
   const musicPagination = useRoutedPagination({
     totalCount: songTotal,
@@ -60,49 +74,66 @@ const Music = () => {
     showPageSizeSelector: false,
     enabled: !isIncrementalMode,
   })
-  const [showAccompaniments, setShowAccompaniments] = useState(false)
+  const musicTags = useTagSuggestions('music')
+  const albumTags = useTagSuggestions('album')
+  const activeTag = activeTab === 'music' ? tag : albumTag
+  const activeTags = activeTab === 'music' ? musicTags : albumTags
+
   const fetchSongPage = useCallback(
-    async (page: number) => {
-      const data = await apiGet<MusicListResponse>('/api/music', {
-        limit: musicPagination.pageSize,
-        page,
-        includeInstrumentals: showAccompaniments,
-        sortBy,
-        sortOrder,
-      })
+    async (page: number, signal?: AbortSignal) => {
+      const data = await apiGet<MusicListResponse>(
+        '/api/music',
+        {
+          limit: musicPagination.pageSize,
+          page,
+          includeInstrumentals: showAccompaniments,
+          sortOrder,
+          ...(tag ? { tag } : {}),
+        },
+        undefined,
+        signal
+      )
 
       return {
         items: data.songs || [],
         total: data.total || 0,
       }
     },
-    [musicPagination.pageSize, showAccompaniments, sortBy, sortOrder]
+    [musicPagination.pageSize, showAccompaniments, sortOrder, tag]
   )
   const fetchAlbumPage = useCallback(
-    async (page: number) => {
-      const data = await apiGet<AlbumListResponse>('/api/albums', {
-        limit: albumPagination.pageSize,
-        page,
-      })
+    async (page: number, signal?: AbortSignal) => {
+      const data = await apiGet<AlbumListResponse>(
+        '/api/albums',
+        {
+          limit: albumPagination.pageSize,
+          page,
+          sortOrder,
+          ...(albumTag ? { tag: albumTag } : {}),
+        },
+        undefined,
+        signal
+      )
 
       return {
         items: data.albums || [],
         total: data.total || 0,
       }
     },
-    [albumPagination.pageSize]
+    [albumPagination.pageSize, sortOrder, albumTag]
   )
   const incrementalSongs = useIncrementalListLoader({
     enabled: isIncrementalMode,
     pageSize: musicPagination.pageSize,
-    resetKey: `songs:${showAccompaniments}:${sortBy}:${sortOrder}`,
+    resetKey: `songs:${showAccompaniments}:${sortOrder}:${tag}`,
     fetchPage: fetchSongPage,
     getItemKey: (song) => song.docId,
+    preserveItemsOnReset: true,
   })
   const incrementalAlbums = useIncrementalListLoader({
     enabled: isIncrementalMode,
     pageSize: albumPagination.pageSize,
-    resetKey: 'albums',
+    resetKey: `albums:${sortOrder}:${albumTag}`,
     fetchPage: fetchAlbumPage,
     getItemKey: (album) => album.docId,
   })
@@ -151,33 +182,54 @@ const Music = () => {
     })
   }
 
+  const handleTagChange = (nextTag: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      const param = activeTab === 'music' ? 'tag' : 'albumTag'
+      if (nextTag) {
+        next.set(param, nextTag)
+      } else {
+        next.delete(param)
+      }
+      if (activeTab === 'music') {
+        next.delete('musicPage')
+        next.delete('musicPageSize')
+      } else {
+        next.delete('albumPage')
+      }
+      return next
+    })
+  }
+
   useEffect(() => {
     if (isIncrementalMode) return
     let cancelled = false
+    const abortController = new AbortController()
 
     const fetchSongs = async () => {
       setLoading(true)
+      setSongLoadError(null)
       try {
-        const data = await fetchSongPage(musicPagination.page)
+        const data = await fetchSongPage(musicPagination.page, abortController.signal)
         if (cancelled) return
         setSongs(data.items)
-        setSongTotal(data.total)
-      } catch (e) {
+        setSongTotal({ scope: songScope, total: data.total })
+      } catch (error) {
         if (cancelled) return
-        console.error('Fetch songs error:', e)
-        setSongs([])
-        setSongTotal(0)
+        console.error('Fetch songs error:', error)
+        setSongLoadError(error)
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
 
-    fetchSongs()
+    void fetchSongs()
 
     return () => {
       cancelled = true
+      abortController.abort()
     }
-  }, [fetchSongPage, isIncrementalMode, musicPagination.page])
+  }, [fetchSongPage, isIncrementalMode, musicPagination.page, songRetryNonce, songScope])
 
   useEffect(() => {
     setPlaylist(visibleSongs)
@@ -186,30 +238,48 @@ const Music = () => {
   useEffect(() => {
     if (isIncrementalMode) return
     let cancelled = false
+    const abortController = new AbortController()
 
     const fetchAlbums = async () => {
       setLoadingAlbums(true)
+      setAlbumLoadError(null)
       try {
-        const data = await fetchAlbumPage(albumPagination.page)
+        const data = await fetchAlbumPage(albumPagination.page, abortController.signal)
         if (cancelled) return
         setAlbums(data.items)
-        setAlbumTotal(data.total)
+        setAlbumTotal({ scope: albumScope, total: data.total })
       } catch (error) {
         if (cancelled) return
         console.error('Fetch albums error:', error)
-        setAlbums([])
-        setAlbumTotal(0)
+        setAlbumLoadError(error)
       } finally {
         if (!cancelled) setLoadingAlbums(false)
       }
     }
 
-    fetchAlbums()
+    void fetchAlbums()
 
     return () => {
       cancelled = true
+      abortController.abort()
     }
-  }, [albumPagination.page, fetchAlbumPage, isIncrementalMode])
+  }, [albumPagination.page, albumRetryNonce, fetchAlbumPage, isIncrementalMode, albumScope])
+
+  const songState = getListLoadState({
+    items: visibleSongs,
+    loading,
+    error: songLoadError,
+    retry: () => setSongRetryNonce((value) => value + 1),
+    incremental: isIncrementalMode ? incrementalSongs : null,
+  })
+  const albumState = getListLoadState({
+    items: visibleAlbums,
+    loading: loadingAlbums,
+    error: albumLoadError,
+    retry: () => setAlbumRetryNonce((value) => value + 1),
+    incremental: isIncrementalMode ? incrementalAlbums : null,
+  })
+  const activeListState = activeTab === 'music' ? songState : albumState
 
   const playSong = (song: SongItem) => {
     if (!isPlayableSong(song)) {
@@ -257,104 +327,145 @@ const Music = () => {
       }
     } catch (error) {
       console.error('Toggle music favorite error:', error)
-      show('收藏操作失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '收藏操作失败，请稍后重试'), { variant: 'error' })
     } finally {
       setFavoriting(null)
     }
   }
 
-  if (isIncrementalMode ? incrementalSongs.loadingInitial : loading) {
-    return <PageSkeleton variant="music" />
-  }
-
   return (
-    <div className="gufeng-music-page mobile-page-shell">
-      <div className="mobile-page-container">
-        {/* Header */}
-        <header className="mobile-page-header">
-          <div className="mobile-page-titlebar">
-            <h1 className="mobile-page-title">{t('music.title')}</h1>
-          </div>
-          <div className="mt-3 flex">
-            <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
-          </div>
-        </header>
+    <ListPageLoadingBoundary variant="music" isInitialLoading={activeListState.isInitialLoading}>
+      <div className="gufeng-music-page mobile-page-shell">
+        <div
+          className="mobile-page-container"
+          aria-busy={activeListState.isRefreshing || undefined}
+        >
+          {/* Header */}
+          <header className="mobile-page-header">
+            <div className="mobile-page-titlebar">
+              <h1 className="mobile-page-title">{t('music.title')}</h1>
+              {activeListState.isRefreshing && <Spinner size="sm" label="音乐刷新中" />}
+            </div>
+            <div className="mt-3 flex">
+              <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+            </div>
+          </header>
 
-        {/* Two Column Layout */}
-        <div className="mobile-detail-grid">
-          {/* Main Content */}
-          <div className="min-w-0">
-            <MusicFilters
-              activeTab={activeTab}
-              onTabChange={handleTabChange}
-              sortBy={sortBy}
-              onSortByChange={(value) => {
-                setSortBy(value)
-                musicPagination.setPage(1)
-              }}
-              sortOrder={sortOrder}
-              onSortOrderChange={(value) => {
-                setSortOrder(value)
-                musicPagination.setPage(1)
-              }}
-              showAccompaniments={showAccompaniments}
-              onShowAccompanimentsChange={(value) => {
-                setShowAccompaniments(value)
-                musicPagination.setPage(1)
-              }}
-              musicCount={visibleSongTotal}
-              albumCount={visibleAlbumTotal}
-              viewMode={viewMode}
-              onViewModeChange={(mode) => void setScopedViewMode('music', mode)}
-            />
+          {/* Two Column Layout */}
+          <div className="mobile-detail-grid">
+            {/* Main Content */}
+            <div className="min-w-0">
+              <MusicFilters
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+                sortOrder={sortOrder}
+                onSortOrderChange={(value) => {
+                  setSortOrder(value)
+                  musicPagination.setPage(1)
+                  albumPagination.setPage(1)
+                }}
+                showAccompaniments={showAccompaniments}
+                onShowAccompanimentsChange={(value) => {
+                  setShowAccompaniments(value)
+                  musicPagination.setPage(1)
+                }}
+                musicCount={visibleSongTotal}
+                albumCount={visibleAlbumTotal}
+                viewMode={viewMode}
+                onViewModeChange={(mode) => void setScopedViewMode('music', mode)}
+              />
 
-            {/* Content */}
-            {activeTab === 'music' ? (
-              <div className="mt-5 flex flex-col">
-                {visibleSongs.length > 0 ? (
-                  <>
-                    <div
+              {(activeTags.length > 0 || activeTag) && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleTagChange('')}
+                    className={clsx(
+                      'cursor-pointer rounded-sm px-2 py-0.5 text-xs theme-tag',
+                      !activeTag && 'font-semibold'
+                    )}
+                  >
+                    全部
+                  </button>
+                  {activeTags.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => handleTagChange(item)}
                       className={clsx(
-                        viewMode === 'list'
-                          ? 'flex flex-col gap-0.5'
-                          : clsx(
-                              'mobile-grid grid',
-                              viewMode === 'large' && 'music-large-grid',
-                              VIEW_MODE_CONFIG[viewMode].gridCols,
-                              VIEW_MODE_CONFIG[viewMode].gap
-                            )
+                        'cursor-pointer rounded-sm px-2 py-0.5 text-xs theme-tag',
+                        activeTag === item && 'font-semibold'
                       )}
                     >
-                      {visibleSongs.map((song, index) => (
-                        <SongCard
-                          key={song.docId}
-                          song={song}
-                          sequenceNumber={
-                            isIncrementalMode
-                              ? index + 1
-                              : (musicPagination.page - 1) * musicPagination.pageSize + index + 1
-                          }
-                          showSequenceOnMobile={preferences.showMobileSongSequence}
-                          viewMode={viewMode}
-                          isCurrentSong={currentSong?.docId === song.docId}
-                          isFavoriting={favoriting === song.docId}
-                          onPlay={playSong}
-                          onToggleFavorite={handleToggleFavorite}
-                        />
-                      ))}
-                    </div>
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-                    {isIncrementalMode ? (
-                      <IncrementalLoadFooter
-                        hasMore={incrementalSongs.hasMore}
-                        loading={incrementalSongs.loadingMore}
-                        total={visibleSongTotal}
-                        loaded={visibleSongs.length}
-                        onLoadMore={incrementalSongs.loadMore}
-                        sentinelRef={incrementalSongs.sentinelRef}
-                      />
-                    ) : musicPagination.totalPages > 1 ? (
-                      <div className="mt-8">
+              {activeTab === 'music' ? (
+                <div className="mt-5 flex flex-col">
+                  <ListPageContentState
+                    hasItems={songState.items.length > 0}
+                    error={songState.error}
+                    onRetry={songState.retry}
+                    staleDescription="当前曲目可能不是最新内容。"
+                    empty={
+                      <div className="py-20 text-center">
+                        <p className="text-[0.9rem] tracking-[0.08em] text-text-muted">
+                          {t('music.noMusic')}
+                        </p>
+                      </div>
+                    }
+                  >
+                    <>
+                      <div
+                        className={clsx(
+                          viewMode === 'list'
+                            ? 'flex flex-col gap-0.5'
+                            : clsx(
+                                'mobile-grid grid',
+                                viewMode === 'large' && 'music-large-grid',
+                                VIEW_MODE_CONFIG[viewMode].gridCols,
+                                VIEW_MODE_CONFIG[viewMode].gap
+                              )
+                        )}
+                      >
+                        {visibleSongs.map((song, index) => (
+                          <SongCard
+                            key={song.docId}
+                            song={song}
+                            sequenceNumber={
+                              isIncrementalMode
+                                ? index + 1
+                                : (musicPagination.page - 1) * musicPagination.pageSize + index + 1
+                            }
+                            showSequenceOnMobile={preferences.showMobileSongSequence}
+                            viewMode={viewMode}
+                            isCurrentSong={currentSong?.docId === song.docId}
+                            isFavoriting={favoriting === song.docId}
+                            onPlay={playSong}
+                            onToggleFavorite={handleToggleFavorite}
+                          />
+                        ))}
+                      </div>
+                      {isIncrementalMode ? (
+                        <IncrementalLoadFooter
+                          hasMore={incrementalSongs.hasMore}
+                          loading={incrementalSongs.loadingMore}
+                          total={visibleSongTotal}
+                          pageSize={musicPagination.pageSize}
+                          loaded={visibleSongs.length}
+                          onLoadMore={incrementalSongs.loadMore}
+                          sentinelRef={incrementalSongs.sentinelRef}
+                          error={
+                            songState.loadMoreError
+                              ? getErrorMessage(songState.loadMoreError, '加载失败，请重试')
+                              : undefined
+                          }
+                          onRetry={songState.retry}
+                        />
+                      ) : musicPagination.hasMultiplePages ? (
                         <Pagination
                           page={musicPagination.page}
                           totalPages={musicPagination.totalPages}
@@ -364,68 +475,63 @@ const Music = () => {
                           pageSizeOptions={MUSIC_PAGE_SIZE_OPTIONS}
                           showPageSizeSelector
                         />
+                      ) : null}
+                    </>
+                  </ListPageContentState>
+                </div>
+              ) : (
+                <div className="mt-5">
+                  <ListPageContentState
+                    hasItems={albumState.items.length > 0}
+                    error={albumState.error}
+                    onRetry={albumState.retry}
+                    staleDescription="当前专辑可能不是最新内容。"
+                    empty={
+                      <div className="py-20 text-center">
+                        <p className="text-[0.9rem] tracking-[0.08em] text-text-muted">
+                          {t('music.noAlbums')}
+                        </p>
                       </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <div className="py-20 text-center">
-                    <p className="text-[0.9rem] tracking-[0.08em] text-text-muted">
-                      {t('music.noMusic')}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="mt-5">
-                {!isIncrementalMode && loadingAlbums ? (
-                  <div
-                    className={clsx(
-                      'grid',
-                      VIEW_MODE_CONFIG[viewMode].gridCols,
-                      VIEW_MODE_CONFIG[viewMode].gap
-                    )}
+                    }
                   >
-                    {[1, 2, 3, 4, 5, 6].map((i) => (
-                      <div key={i} className="animate-pulse">
-                        <div className="mb-2.5 aspect-square rounded-lg bg-surface-alt" />
-                        <div className="mb-1.5 h-4 w-2/3 rounded bg-surface-alt" />
-                        <div className="h-3 w-1/2 rounded bg-surface-alt" />
+                    <>
+                      <div
+                        className={clsx(
+                          viewMode === 'list'
+                            ? 'flex flex-col gap-0.5'
+                            : clsx(
+                                'mobile-grid grid',
+                                viewMode === 'large' && 'music-large-grid',
+                                VIEW_MODE_CONFIG[viewMode].gridCols,
+                                VIEW_MODE_CONFIG[viewMode].gap
+                              )
+                        )}
+                      >
+                        {visibleAlbums.map((album) => (
+                          <AlbumCard
+                            key={album.docId}
+                            album={album}
+                            viewMode={viewMode === 'list' ? 'list' : 'grid'}
+                          />
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                ) : visibleAlbums.length > 0 ? (
-                  <>
-                    <div
-                      className={clsx(
-                        viewMode === 'list'
-                          ? 'flex flex-col gap-0.5'
-                          : clsx(
-                              'mobile-grid grid',
-                              viewMode === 'large' && 'music-large-grid',
-                              VIEW_MODE_CONFIG[viewMode].gridCols,
-                              VIEW_MODE_CONFIG[viewMode].gap
-                            )
-                      )}
-                    >
-                      {visibleAlbums.map((album) => (
-                        <AlbumCard
-                          key={album.docId}
-                          album={album}
-                          viewMode={viewMode === 'list' ? 'list' : 'grid'}
+                      {isIncrementalMode ? (
+                        <IncrementalLoadFooter
+                          hasMore={incrementalAlbums.hasMore}
+                          loading={incrementalAlbums.loadingMore}
+                          total={visibleAlbumTotal}
+                          pageSize={albumPagination.pageSize}
+                          loaded={visibleAlbums.length}
+                          onLoadMore={incrementalAlbums.loadMore}
+                          sentinelRef={incrementalAlbums.sentinelRef}
+                          error={
+                            albumState.loadMoreError
+                              ? getErrorMessage(albumState.loadMoreError, '加载失败，请重试')
+                              : undefined
+                          }
+                          onRetry={albumState.retry}
                         />
-                      ))}
-                    </div>
-                    {isIncrementalMode ? (
-                      <IncrementalLoadFooter
-                        hasMore={incrementalAlbums.hasMore}
-                        loading={incrementalAlbums.loadingMore}
-                        total={visibleAlbumTotal}
-                        loaded={visibleAlbums.length}
-                        onLoadMore={incrementalAlbums.loadMore}
-                        sentinelRef={incrementalAlbums.sentinelRef}
-                      />
-                    ) : albumPagination.totalPages > 1 ? (
-                      <div className="mt-8">
+                      ) : albumPagination.hasMultiplePages ? (
                         <Pagination
                           page={albumPagination.page}
                           totalPages={albumPagination.totalPages}
@@ -433,48 +539,42 @@ const Music = () => {
                           pageSize={albumPagination.pageSize}
                           showPageSizeSelector={false}
                         />
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <div className="py-20 text-center">
-                    <p className="text-[0.9rem] tracking-[0.08em] text-text-muted">
-                      {t('music.noAlbums')}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Sidebar */}
-          <aside className="mobile-detail-aside">
-            <div className="py-5">
-              <div className="mb-4 flex justify-center">
-                <div className="h-px w-8 bg-gradient-to-r from-transparent via-brand-gold/30 to-transparent" />
-              </div>
-              <h3 className="mb-4 text-center text-[0.8125rem] uppercase tracking-[0.14em] text-text-muted">
-                统计
-              </h3>
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[0.875rem] text-text-muted">单曲</span>
-                  <span className="text-[0.875rem] font-medium tabular-nums text-text-primary">
-                    {visibleSongTotal}
-                  </span>
+                      ) : null}
+                    </>
+                  </ListPageContentState>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[0.875rem] text-text-muted">专辑</span>
-                  <span className="text-[0.875rem] font-medium tabular-nums text-text-primary">
-                    {visibleAlbumTotal}
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
-          </aside>
+
+            {/* Sidebar */}
+            <aside className="mobile-detail-aside">
+              <div className="py-5">
+                <div className="mb-4 flex justify-center">
+                  <div className="h-px w-8 bg-gradient-to-r from-transparent via-brand-gold/30 to-transparent" />
+                </div>
+                <h3 className="mb-4 text-center text-[0.8125rem] uppercase tracking-[0.14em] text-text-muted">
+                  统计
+                </h3>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[0.875rem] text-text-muted">单曲</span>
+                    <span className="text-[0.875rem] font-medium tabular-nums text-text-primary">
+                      {visibleSongTotal}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[0.875rem] text-text-muted">专辑</span>
+                    <span className="text-[0.875rem] font-medium tabular-nums text-text-primary">
+                      {visibleAlbumTotal}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
         </div>
       </div>
-    </div>
+    </ListPageLoadingBoundary>
   )
 }
 

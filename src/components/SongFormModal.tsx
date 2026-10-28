@@ -1,12 +1,35 @@
 import React, { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, ExternalLink, Plus, Search, Trash2 } from '@/src/components/icons'
+import {
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Music,
+  Plus,
+  Search,
+  Trash2,
+} from '@/src/components/icons'
 
-import { apiPatch, apiPost } from '../lib/apiClient'
+import { SmartImage } from './SmartImage'
+import { CoverPlaceholder } from './CoverPlaceholder'
+import { apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
-import { getPlatformExternalUrl } from '../lib/musicPlatformUrls'
+import {
+  getMusicPlatformLabel,
+  getPlatformExternalUrl,
+  MUSIC_PLATFORM_OPTIONS,
+} from '../lib/musicPlatformUrls'
 import { formatMusicCredits, normalizeStringListInput } from '../lib/musicCredits'
+import { splitTagsInput } from '../lib/contentUtils'
+import {
+  validateMaxLength,
+  validateTags,
+  validateUrl,
+  type ClientValidationError,
+} from '../lib/clientValidation'
 import type { Platform } from '../types/common'
-import type { MusicExternalSource } from '../types/entities'
+import type { MusicExternalSource, MusicPlayableOverride } from '../types/entities'
+import type { DuplicateSongSourceWarning } from '../types/api'
+import { useDialog } from './Dialog'
 import { useToast } from './Toast'
 import { MatchSuggestionModal } from './MatchSuggestionModal'
 import { FormModal } from './Modal/FormModal'
@@ -20,6 +43,8 @@ import {
   bookSecondaryButtonClass,
   bookSmallButtonClass,
 } from './BookEditor'
+import { useTagSuggestions } from '../hooks/useTagSuggestions'
+import { TagInput } from '@/src/components/ui'
 
 type SongFormData = {
   title: string
@@ -30,6 +55,8 @@ type SongFormData = {
   vocals: string
   album: string
   audioUrl: string
+  tagsText: string
+  playableOverride: MusicPlayableOverride
   releaseDate: string
   durationMs: string
   lyric?: string | null
@@ -64,6 +91,7 @@ type SongItem = {
   vocals?: string[]
   album: string
   cover: string
+  coverThumbnail?: string
   audioUrl: string
   lyric?: string | null
   description?: string | null
@@ -71,6 +99,8 @@ type SongItem = {
   durationMs?: number | null
   favoritedByMe?: boolean
   sources?: MusicExternalSource[]
+  tags?: string[]
+  playableOverride?: MusicPlayableOverride
   customPlatformLinks?: CustomPlatformLink[]
 }
 
@@ -82,37 +112,10 @@ interface SongFormModalProps {
   song?: SongItem
 }
 
-const platformFields: Array<{
-  platform: Platform
-  label: string
-  urlPattern: (id: string) => string
-}> = [
-  {
-    platform: 'netease',
-    label: '网易云音乐',
-    urlPattern: (id) => getPlatformExternalUrl('netease', id) || '#',
-  },
-  {
-    platform: 'tencent',
-    label: 'QQ音乐',
-    urlPattern: (id) => getPlatformExternalUrl('tencent', id) || '#',
-  },
-  {
-    platform: 'kugou',
-    label: '酷狗音乐',
-    urlPattern: (id) => getPlatformExternalUrl('kugou', id) || '#',
-  },
-  {
-    platform: 'baidu',
-    label: '百度音乐',
-    urlPattern: (id) => getPlatformExternalUrl('baidu', id) || '#',
-  },
-  {
-    platform: 'kuwo',
-    label: '酷我音乐',
-    urlPattern: (id) => getPlatformExternalUrl('kuwo', id) || '#',
-  },
-]
+const platformFields = MUSIC_PLATFORM_OPTIONS.map(({ value: platform, label }) => ({
+  platform,
+  label,
+}))
 
 export type PlatformSourceIds = Partial<Record<Platform, string | null>>
 
@@ -194,6 +197,8 @@ const emptyFormData: SongFormData = {
   vocals: '',
   album: '',
   audioUrl: '',
+  tagsText: '',
+  playableOverride: 'auto',
   releaseDate: '',
   durationMs: '',
   lyric: '',
@@ -214,6 +219,8 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
   const [matchingPlatform, setMatchingPlatform] = useState<Platform | null>(null)
   const [saving, setSaving] = useState(false)
   const { show } = useToast()
+  const dialog = useDialog()
+  const tagSuggestions = useTagSuggestions('music', open)
 
   useEffect(() => {
     if (!open) return
@@ -227,6 +234,8 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         vocals: formatMusicCredits(song.vocals),
         album: song.album || '',
         audioUrl: song.audioUrl || '',
+        tagsText: (song.tags || []).join(', '),
+        playableOverride: song.playableOverride || 'auto',
         releaseDate: song.releaseDate || '',
         durationMs: typeof song.durationMs === 'number' ? String(song.durationMs) : '',
         lyric: song.lyric || '',
@@ -279,6 +288,51 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
       return
     }
 
+    const tags = splitTagsInput(formData.tagsText)
+
+    const validationError =
+      validateTags(tags, 'tags', '标签', CONTENT_LIMITS.music.tags, CONTENT_LIMITS.music.tag) ||
+      (artists.some((artist) => artist.length > CONTENT_LIMITS.music.artist)
+        ? {
+            field: 'artists',
+            message: `艺术家单项长度不能超过${CONTENT_LIMITS.music.artist}个字符`,
+          }
+        : null) ||
+      validateMaxLength(formData.album, 'album', '专辑', CONTENT_LIMITS.music.album) ||
+      validateMaxLength(
+        formData.description,
+        'description',
+        '简介',
+        CONTENT_LIMITS.music.description
+      ) ||
+      validateMaxLength(formData.lyric, 'lyric', '歌词', CONTENT_LIMITS.music.lyric) ||
+      validateUrl(formData.audioUrl, 'audioUrl', '音频地址', CONTENT_LIMITS.music.audioUrl) ||
+      (formData.durationMs &&
+      (!Number.isFinite(Number(formData.durationMs)) || Number(formData.durationMs) < 0)
+        ? { field: 'durationMs', message: '时长必须是非负数字' }
+        : null) ||
+      normalizedCustomPlatformLinks.reduce<ClientValidationError | null>(
+        (result, link) =>
+          result ||
+          validateMaxLength(
+            link.label,
+            'customPlatformLabel',
+            '平台名称',
+            CONTENT_LIMITS.music.customPlatformLabel
+          ) ||
+          validateUrl(
+            normalizeCustomPlatformLinkUrl(link.url),
+            'customPlatformUrl',
+            '平台链接',
+            CONTENT_LIMITS.music.customPlatformUrl
+          ),
+        null
+      )
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
+
     setSaving(true)
     const description =
       typeof formData.description === 'string' && formData.description.trim()
@@ -294,6 +348,8 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         vocals: normalizeStringListInput(formData.vocals),
         album: formData.album.trim(),
         audioUrl: formData.audioUrl.trim(),
+        tags,
+        playableOverride: formData.playableOverride,
         releaseDate: formData.releaseDate || null,
         durationMs: formData.durationMs ? Number(formData.durationMs) : null,
         lyric: formData.lyric?.trim() || null,
@@ -301,13 +357,17 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         customPlatformLinks: normalizedCustomPlatformLinks.filter((link) => link.label && link.url),
       }
 
+      let duplicateSources: DuplicateSongSourceWarning[] = []
       if (isEdit && song) {
         const sourcesPatch = buildSourcesPatchFromPlatformSourceIds(platformSourceIds, song.sources)
         if (sourcesPatch) {
           payload.sources = sourcesPatch
         }
-        await apiPatch(`/api/music/${song.docId}`, payload)
-        show('歌曲已更新')
+        const result = await apiPatch<{ duplicates?: DuplicateSongSourceWarning[] }>(
+          `/api/music/${song.docId}`,
+          payload
+        )
+        duplicateSources = result?.duplicates || []
       } else {
         const sources = platformFields
           .map((field) => {
@@ -329,22 +389,38 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
             isPrimary: primaryIndex >= 0 ? index === primaryIndex : index === 0,
           }))
         }
-        await apiPost('/api/music', payload)
-        show('歌曲已创建')
+        const result = await apiPost<{ duplicates?: DuplicateSongSourceWarning[] }>(
+          '/api/music',
+          payload
+        )
+        duplicateSources = result?.duplicates || []
+      }
+      invalidateMusicApiCaches()
+      if (duplicateSources.length) {
+        const message = duplicateSources
+          .map(
+            (duplicate) =>
+              `${getMusicPlatformLabel(duplicate.platform)} ID ${duplicate.sourceId} 已被歌曲「${duplicate.song.title}」使用，已保存为共享引用`
+          )
+          .join('；')
+        const confirmed = await dialog.confirm({
+          title: '平台ID重复提醒',
+          message,
+          confirmText: '知道了',
+          cancelText: null,
+          variant: 'info',
+        })
+        // Esc/遮罩关闭弹窗时仍要有成功反馈，避免误判保存失败而重复提交
+        if (!confirmed) {
+          show(isEdit ? '歌曲已更新' : '歌曲已创建')
+        }
+      } else {
+        show(isEdit ? '歌曲已更新' : '歌曲已创建')
       }
       onSuccess()
       onClose()
     } catch (error) {
-      const err = error as {
-        conflict?: boolean
-        conflictingSong?: { docId: string; title: string; artists: string[] }
-        message?: string
-      }
-      if (err.conflict && err.conflictingSong) {
-        show(`该平台ID已被歌曲「${err.conflictingSong.title}」使用`, { variant: 'error' })
-      } else {
-        show(error instanceof Error ? error.message : '保存失败', { variant: 'error' })
-      }
+      show(error instanceof Error ? error.message : '保存失败', { variant: 'error' })
     } finally {
       setSaving(false)
     }
@@ -488,6 +564,45 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
               </BookFormField>
             </div>
 
+            <BookFormField
+              label="标签（可选，回车添加）"
+              htmlFor="song-tags"
+              counter={
+                <CharacterCount
+                  current={formData.tagsText.length}
+                  max={CONTENT_LIMITS.music.tags * CONTENT_LIMITS.music.tag}
+                />
+              }
+            >
+              <TagInput
+                id="song-tags"
+                value={splitTagsInput(formData.tagsText)}
+                onChange={(tags) => setFormData((prev) => ({ ...prev, tagsText: tags.join(', ') }))}
+                suggestions={tagSuggestions}
+                placeholder="输入标签后按回车添加"
+              />
+            </BookFormField>
+
+            <BookFormField label="播放状态">
+              <select
+                value={formData.playableOverride}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    playableOverride: e.target.value as MusicPlayableOverride,
+                  }))
+                }
+                className={bookCompactInputClass}
+              >
+                <option value="auto">自动判断（默认）</option>
+                <option value="enabled">允许播放</option>
+                <option value="disabled">禁止播放</option>
+              </select>
+              <p className="mt-1 text-xs text-text-muted">
+                禁止播放：前台不显示播放按钮、不解析播放地址；允许播放：即使自动判定失败也按可播放处理。
+              </p>
+            </BookFormField>
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <BookFormField label="发行日期">
                 <input
@@ -601,7 +716,7 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
                       />
                       {isLinked && (
                         <a
-                          href={platform.urlPattern(currentId)}
+                          href={getPlatformExternalUrl(platform.platform, currentId) || '#'}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center justify-center rounded p-2 text-text-muted transition-colors hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
@@ -706,11 +821,11 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
         {isEdit && song && (
           <div className={`${bookPanelClass} p-3`}>
             <div className="flex items-center gap-3">
-              <img
-                src={song.cover}
+              <SmartImage
+                src={song.coverThumbnail || song.cover}
                 alt="封面"
-                className="h-12 w-12 rounded border border-[var(--book-ink-line)] object-cover"
-                referrerPolicy="no-referrer"
+                className="h-12 w-12 rounded border border-[var(--book-ink-line)]"
+                fallback={<CoverPlaceholder icon={<Music size={14} />} label="无封面" />}
               />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-text-primary truncate">{song.title}</p>

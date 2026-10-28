@@ -43,8 +43,7 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
               if (!open) setToast(null)
             }}
             className={cn(
-              'grid min-w-56 max-w-[calc(100vw-2rem)] grid-cols-[1fr_auto] items-center gap-3 rounded border bg-[var(--book-panel-bg-strong)] px-4 py-3 text-sm shadow-[var(--ui-floating-shadow)]',
-              'data-[state=open]:animate-in data-[state=closed]:animate-out',
+              'grid min-w-56 max-w-[calc(100vw-2rem)] grid-cols-[1fr_auto] items-center gap-3 rounded border bg-[var(--ui-floating-bg)] px-4 py-3 text-sm shadow-[var(--ui-floating-shadow)]',
               toast.variant === 'error' && 'border-[var(--color-error)] text-[var(--color-error)]',
               toast.variant === 'warning' &&
                 'border-[var(--color-warning)] text-[var(--color-warning)]',
@@ -52,7 +51,10 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
               toast.variant === 'info' && 'border-brand-gold text-text-primary'
             )}
           >
-            <ToastPrimitive.Description>{toast.message}</ToastPrimitive.Description>
+            {/* Radix 在 Root 上内联 user-select: none，这里显式放开文案选择 */}
+            <ToastPrimitive.Description className="select-text">
+              {toast.message}
+            </ToastPrimitive.Description>
             <ToastPrimitive.Close asChild>
               <IconButton variant="ghost" size="sm" aria-label="关闭通知">
                 <X className="h-4 w-4" />

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FocusEvent } from 'react'
 import {
   Trash2,
@@ -12,13 +12,8 @@ import {
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { CharacterCount } from '../../components/CharacterCount'
-import {
-  DANGER_BUTTON_CLASSES,
-  INFO_BUTTON_CLASSES,
-  SECONDARY_BUTTON_CLASSES,
-  SUCCESS_BUTTON_CLASSES,
-  WARNING_BUTTON_CLASSES,
-} from '../../lib/buttonClasses'
+import { Button, LoadErrorState, Switch } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 import {
   apiDelete,
   apiGet,
@@ -26,6 +21,9 @@ import {
   apiPut,
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
+import { validateEmail, validateMaxLength, validatePassword } from '../../lib/clientValidation'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { SmartImage } from '../../components/SmartImage'
@@ -35,13 +33,16 @@ import { formatAdminRole } from '../../lib/formatUtils'
 import { FormModal } from '../../components/Modal'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/passwordRules'
 import { useDismissableLayer } from '../../hooks/useClickOutside'
+import { useScrollRestore } from '../../hooks/useScrollRestore'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import {
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   PROFILE_SIGNATURE_MAX_LENGTH,
   WIKI_MAX_CONTENT_SIZE,
 } from '../../lib/contentLimits'
 import type { AdminDataItem } from '../../types/entities'
-import { Switch } from '@/src/components/ui'
+import type { AdminDataListResponse } from '../../types/api'
 
 const ADMIN_USERS_API_PREFIX = '/api/admin/users'
 const ADMIN_PERMISSIONS_API_PATH = '/api/config/admin-permissions'
@@ -78,7 +79,9 @@ export const AdminUsers = () => {
   const { user: currentUser, profile } = useAuth()
   const isSuperAdmin = profile?.role === 'super_admin'
   const [data, setData] = useState<AdminDataItem[]>([])
+  const [total, setTotal] = useState<number | undefined>()
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [editTarget, setEditTarget] = useState<AdminDataItem | null>(null)
   const [editForm, setEditForm] = useState<AdminUserEditForm>(EMPTY_EDIT_FORM)
   const [editLoading, setEditLoading] = useState(false)
@@ -88,14 +91,20 @@ export const AdminUsers = () => {
   const actionsMenuRef = useRef<HTMLDivElement | null>(null)
   const dialog = useDialog()
   const { show } = useToast()
+  const saveScroll = useScrollRestore()
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
+  const requestIdRef = useRef(0)
 
   const closeActionsMenu = useCallback(() => setOpenMenuUid(null), [])
   const invalidateAdminUsersCache = () => invalidateApiCacheByPrefix(ADMIN_USERS_API_PREFIX)
   const isCurrentUser = (uid?: string) => Boolean(uid && uid === currentUser?.uid)
-  const applyUserUpdate = (user: AdminDataItem) => {
-    invalidateAdminUsersCache()
-    setData((prev) => prev.map((item) => (item.uid === user.uid ? { ...item, ...user } : item)))
-  }
 
   useDismissableLayer(actionsMenuRef, closeActionsMenu, Boolean(openMenuUid))
 
@@ -128,33 +137,49 @@ export const AdminUsers = () => {
     return target.role === 'user'
   }
 
-  const fetchData = async () => {
+  const fetchData = async (options?: { silent?: boolean }) => {
+    const requestId = ++requestIdRef.current
     closeActionsMenu()
-    setLoading(true)
+    const silent = options?.silent === true
+    if (silent) saveScroll()
+    else {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
-      const permissionsRequest = isSuperAdmin
-        ? apiGet<AdminPermissionConfig>(ADMIN_PERMISSIONS_API_PATH).catch(
-            () => DEFAULT_ADMIN_PERMISSIONS
-          )
-        : Promise.resolve(DEFAULT_ADMIN_PERMISSIONS)
       const [result, permissions] = await Promise.all([
-        apiGet<{ data: AdminDataItem[] }>(ADMIN_USERS_API_PREFIX),
-        permissionsRequest,
+        apiGet<AdminDataListResponse>(ADMIN_USERS_API_PREFIX, {
+          page: pagination.page,
+          limit: pagination.pageSize,
+        }),
+        isSuperAdmin
+          ? apiGet<AdminPermissionConfig>(ADMIN_PERMISSIONS_API_PATH).catch(
+              () => DEFAULT_ADMIN_PERMISSIONS
+            )
+          : Promise.resolve(DEFAULT_ADMIN_PERMISSIONS),
       ])
+      if (requestId !== requestIdRef.current) return
       setData(result.data || [])
+      setTotal(result.total || 0)
       setAdminPermissions(permissions)
-    } catch (e) {
-      console.error(e)
-      setData([])
-      setAdminPermissions(DEFAULT_ADMIN_PERMISSIONS)
+      setLoadError(null)
+    } catch (error) {
+      if (requestId !== requestIdRef.current) return
+      console.error(error)
+      setLoadError(error)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current && !silent) setLoading(false)
     }
   }
 
+  const refreshUsers = async () => {
+    invalidateAdminUsersCache()
+    await fetchData({ silent: true })
+  }
+
   useEffect(() => {
-    fetchData()
-  }, [])
+    void fetchData()
+  }, [pagination.page, pagination.pageSize, isSuperAdmin])
 
   const toggleBan = async (target: AdminDataItem) => {
     closeActionsMenu()
@@ -174,20 +199,24 @@ export const AdminUsers = () => {
       variant: shouldUnban ? 'info' : 'warning',
       multiline: true,
       onConfirm: async (value) => {
-        if (!shouldUnban && !value.trim()) {
-          show('请输入封禁原因', { variant: 'error' })
+        const reasonError = validateMaxLength(
+          value,
+          'reason',
+          shouldUnban ? '解封备注' : '封禁原因',
+          shouldUnban ? CONTENT_LIMITS.userModeration.note : CONTENT_LIMITS.userModeration.banReason
+        )
+        if (reasonError) {
+          show(reasonError.message, { variant: 'error' })
           return false
         }
+
         try {
-          const result = await apiPut<{ user: AdminDataItem }>(
-            endpoint,
-            shouldUnban ? { note: value } : { reason: value }
-          )
-          applyUserUpdate(result.user)
+          await apiPut(endpoint, shouldUnban ? { note: value } : { reason: value })
+          await refreshUsers()
           show(shouldUnban ? '已解封' : '已封禁', { variant: 'success' })
           return true
-        } catch {
-          show(shouldUnban ? '解封失败' : '封禁失败', { variant: 'error' })
+        } catch (error) {
+          show(getErrorMessage(error, shouldUnban ? '解封失败' : '封禁失败'), { variant: 'error' })
           return false
         }
       },
@@ -209,13 +238,13 @@ export const AdminUsers = () => {
     })
     if (!confirmed) return
     try {
-      const result = await apiPut<{ user: AdminDataItem }>(`/api/users/${target.uid}/role`, {
+      await apiPut(`/api/users/${target.uid}/role`, {
         role: newRole,
       })
-      applyUserUpdate(result.user)
+      await refreshUsers()
       show('角色已更新', { variant: 'success' })
     } catch (e) {
-      show('更新角色失败', { variant: 'error' })
+      show(getErrorMessage(e, '更新角色失败'), { variant: 'error' })
     }
   }
 
@@ -241,15 +270,15 @@ export const AdminUsers = () => {
         }
 
         try {
-          const result = await apiPut<{ user: AdminDataItem }>(`/api/users/${target.uid}/role`, {
+          await apiPut(`/api/users/${target.uid}/role`, {
             role,
             currentPassword: value,
           })
-          applyUserUpdate(result.user)
+          await refreshUsers()
           show('角色已更新', { variant: 'success' })
           return true
         } catch (error) {
-          show(error instanceof Error ? error.message : '更新角色失败', { variant: 'error' })
+          show(getErrorMessage(error, '更新角色失败'), { variant: 'error' })
           return false
         }
       },
@@ -275,11 +304,10 @@ export const AdminUsers = () => {
 
     try {
       await apiDelete(`/api/admin/users/${target.uid}`)
-      invalidateAdminUsersCache()
-      setData((prev) => prev.filter((item) => item.uid !== target.uid))
+      await refreshUsers()
       show('已删除', { variant: 'success' })
     } catch (error) {
-      show(error instanceof Error ? error.message : '删除失败', { variant: 'error' })
+      show(getErrorMessage(error, '删除失败'), { variant: 'error' })
     }
   }
 
@@ -342,8 +370,9 @@ export const AdminUsers = () => {
       show(`昵称不能超过${PROFILE_DISPLAY_NAME_MAX_LENGTH}个字符`, { variant: 'error' })
       return
     }
-    if (!editForm.email.trim()) {
-      show('邮箱不能为空', { variant: 'error' })
+    const emailError = validateEmail(editForm.email, 'email', '邮箱')
+    if (emailError) {
+      show(emailError.message, { variant: 'error' })
       return
     }
     if (editForm.signature.length > PROFILE_SIGNATURE_MAX_LENGTH) {
@@ -359,16 +388,7 @@ export const AdminUsers = () => {
         show('两次输入的新密码不一致', { variant: 'error' })
         return
       }
-      if (editForm.newPassword.length < PASSWORD_MIN_LENGTH) {
-        show(`新密码至少${PASSWORD_MIN_LENGTH}个字符`, { variant: 'error' })
-        return
-      }
-      if (editForm.newPassword.length > PASSWORD_MAX_LENGTH) {
-        show(`新密码最多${PASSWORD_MAX_LENGTH}个字符`, { variant: 'error' })
-        return
-      }
     }
-
     setEditLoading(true)
     try {
       const payload: {
@@ -393,20 +413,21 @@ export const AdminUsers = () => {
         `/api/users/${editTarget.uid}`,
         payload
       )
-      invalidateAdminUsersCache()
-      setData((prev) =>
-        prev.map((item) => (item.uid === editTarget.uid ? { ...item, ...result.user } : item))
-      )
+      await refreshUsers()
       setEditTarget(null)
       setEditForm(EMPTY_EDIT_FORM)
       show(`已更新 ${result.user.displayName || editTarget.displayName || editTarget.uid} 的资料`, {
         variant: 'success',
       })
     } catch (error) {
-      show(error instanceof Error ? error.message : '更新用户资料失败', { variant: 'error' })
+      show(getErrorMessage(error, '更新用户资料失败'), { variant: 'error' })
     } finally {
       setEditLoading(false)
     }
+  }
+
+  if (loading && data.length === 0) {
+    return <PageSkeleton variant="admin" />
   }
 
   return (
@@ -414,12 +435,20 @@ export const AdminUsers = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">用户管理</h1>
         <button
-          onClick={fetchData}
+          onClick={() => void fetchData()}
           className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
         >
           <RefreshCw size={14} className="inline mr-1" /> 刷新
         </button>
       </div>
+      {loadError && data.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          error={loadError}
+          description="当前用户列表可能不是最新内容。"
+          onRetry={() => void fetchData()}
+        />
+      )}
 
       <div className="bg-surface border border-border rounded overflow-hidden">
         <div className="overflow-x-auto">
@@ -437,14 +466,12 @@ export const AdminUsers = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {loading ? (
-                [1, 2, 3].map((i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td colSpan={4} className="px-5 py-4">
-                      <div className="h-6 bg-surface-alt rounded" />
-                    </td>
-                  </tr>
-                ))
+              {loadError && data.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    <LoadErrorState error={loadError} onRetry={() => void fetchData()} />
+                  </td>
+                </tr>
               ) : data.length > 0 ? (
                 data.map((item) => {
                   const superAdminRoleAction = getSuperAdminRoleAction(item)
@@ -504,54 +531,62 @@ export const AdminUsers = () => {
                       <td className="px-5 py-4 text-left">
                         <div className="flex items-center justify-start gap-2">
                           {canManageUser(item) && (
-                            <button
+                            <Button
                               onClick={() => openEditModal(item)}
-                              className={INFO_BUTTON_CLASSES}
+                              variant="info"
+                              soft
+                              size="sm"
+                              leftIcon={<Pencil size={14} />}
                             >
-                              <Pencil size={14} />
                               编辑
-                            </button>
+                            </Button>
                           )}
                           {isSuperAdmin &&
                             !isCurrentUser(item.uid) &&
                             item.role !== 'super_admin' && (
-                              <button
+                              <Button
                                 onClick={() => toggleRole(item)}
-                                className={INFO_BUTTON_CLASSES}
+                                variant="info"
+                                soft
+                                size="sm"
+                                leftIcon={
+                                  getNextRole(item.role) === 'admin' ? (
+                                    <CheckCircle size={14} />
+                                  ) : (
+                                    <XCircle size={14} />
+                                  )
+                                }
                               >
-                                {getNextRole(item.role) === 'admin' ? (
-                                  <CheckCircle size={14} />
-                                ) : (
-                                  <XCircle size={14} />
-                                )}
                                 {getNextRole(item.role) === 'admin' ? '升为管理员' : '降为普通'}
-                              </button>
+                              </Button>
                             )}
                           {canManageUser(item) && (
-                            <button
+                            <Button
                               onClick={() => toggleBan(item)}
-                              className={
-                                item.status === 'banned'
-                                  ? SUCCESS_BUTTON_CLASSES
-                                  : WARNING_BUTTON_CLASSES
+                              variant={item.status === 'banned' ? 'success' : 'warning'}
+                              soft
+                              size="sm"
+                              leftIcon={
+                                item.status === 'banned' ? (
+                                  <CheckCircle size={14} />
+                                ) : (
+                                  <AlertTriangle size={14} />
+                                )
                               }
                             >
-                              {item.status === 'banned' ? (
-                                <CheckCircle size={14} />
-                              ) : (
-                                <AlertTriangle size={14} />
-                              )}
                               {item.status === 'banned' ? '解封' : '封禁'}
-                            </button>
+                            </Button>
                           )}
                           {canManageUser(item) && (
-                            <button
+                            <Button
                               onClick={() => void handleDeleteUser(item)}
-                              className={DANGER_BUTTON_CLASSES}
+                              variant="danger"
+                              soft
+                              size="sm"
+                              leftIcon={<Trash2 size={14} />}
                             >
-                              <Trash2 size={14} />
                               删除
-                            </button>
+                            </Button>
                           )}
                           {superAdminRoleAction && (
                             <div
@@ -559,21 +594,22 @@ export const AdminUsers = () => {
                               onBlur={handleActionsMenuBlur}
                               className="relative"
                             >
-                              <button
-                                type="button"
+                              <Button
                                 onClick={() =>
                                   setOpenMenuUid((current) =>
                                     current === item.uid ? null : item.uid!
                                   )
                                 }
-                                className={SECONDARY_BUTTON_CLASSES}
+                                variant="secondary"
+                                soft
+                                size="sm"
+                                leftIcon={<MoreVertical size={14} />}
                                 aria-haspopup="menu"
                                 aria-expanded={openMenuUid === item.uid}
                                 aria-label={`${item.displayName || item.uid} 的其他选项`}
                               >
-                                <MoreVertical size={14} />
                                 更多
-                              </button>
+                              </Button>
                               {openMenuUid === item.uid && (
                                 <div
                                   role="menu"
@@ -610,6 +646,17 @@ export const AdminUsers = () => {
           </table>
         </div>
       </div>
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
 
       <FormModal
         open={Boolean(editTarget)}
@@ -643,7 +690,9 @@ export const AdminUsers = () => {
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-medium text-text-secondary">邮箱</span>
+            <span className="text-sm font-medium text-text-secondary">
+              邮箱 <span className="theme-text-error">*</span>
+            </span>
             <input
               type="email"
               value={editForm.email}

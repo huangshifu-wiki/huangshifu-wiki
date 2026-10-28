@@ -30,6 +30,9 @@ describe('music response transformers', () => {
       album: '专辑',
       audioUrl: '',
       lyric: '歌词',
+      lyricType: 'word',
+      lyricPlain: '歌词',
+      lyricSource: 'tencent',
       description: 'Markdown 描述',
       releaseDate: null,
       durationMs: null,
@@ -60,6 +63,9 @@ describe('music response transformers', () => {
     const detail = toSongResponse(baseSong as Parameters<typeof toSongResponse>[0])
     expect(detail.description).toBe('Markdown 描述')
     expect(detail.lyric).toBe('歌词')
+    expect(detail.lyricType).toBe('word')
+    expect(detail.lyricPlain).toBe('歌词')
+    expect(detail.lyricSource).toBe('tencent')
     expect(detail.playable).toBe(true)
     expect(detail.sources).toEqual([
       expect.objectContaining({
@@ -75,6 +81,9 @@ describe('music response transformers', () => {
     })
     expect(listItem.description).toBeUndefined()
     expect(listItem.lyric).toBeUndefined()
+    expect(listItem.lyricType).toBeUndefined()
+    expect(listItem.lyricPlain).toBeUndefined()
+    expect(listItem.lyricSource).toBeUndefined()
   })
 
   it('resolves song covers in compact music responses', async () => {

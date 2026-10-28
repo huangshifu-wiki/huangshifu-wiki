@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import request from 'supertest'
+import jwt from 'jsonwebtoken'
 import { app } from '../../server'
 import { prisma, createTestToken, createTestUser } from './setup'
 import {
@@ -98,7 +99,9 @@ describe('Auth API', () => {
       email: `${AUTH_EMAIL_PREFIX}login@example.com`,
       displayName: 'RoiLogin',
     })
-    expect(pickCookie(successResponse.headers['set-cookie'], 'hsf_token')).toContain('HttpOnly')
+    const authCookie = pickCookie(successResponse.headers['set-cookie'], 'hsf_token')
+    expect(authCookie).toContain('HttpOnly')
+    expect(authCookie).toContain('Max-Age=7776000')
     expect(pickCookie(successResponse.headers['set-cookie'], 'XSRF-TOKEN')).toBeTruthy()
 
     const failureResponse = await request(app)
@@ -110,6 +113,46 @@ describe('Auth API', () => {
 
     expect(failureResponse.status).toBe(401)
     expect(failureResponse.body.error).toContain('邮箱或密码错误')
+  })
+  it('renews near-expiry cookie sessions but not bearer sessions', async () => {
+    const { user } = await createTestUser({
+      email: `${AUTH_EMAIL_PREFIX}renew@example.com`,
+    })
+    const nearExpiryToken = await createTestToken(user.uid, user.role, '1d')
+
+    const cookieResponse = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', `hsf_token=${nearExpiryToken}`)
+
+    expect(cookieResponse.status).toBe(200)
+    expect(cookieResponse.body.user.uid).toBe(user.uid)
+
+    const renewedCookie = pickCookie(cookieResponse.headers['set-cookie'], 'hsf_token')
+    expect(renewedCookie).toContain('Max-Age=7776000')
+
+    const renewedToken = renewedCookie?.split(';')[0].slice('hsf_token='.length)
+    if (!renewedToken) throw new Error('续期响应缺少 hsf_token')
+
+    const originalPayload = jwt.decode(nearExpiryToken)
+    if (!originalPayload || typeof originalPayload === 'string') {
+      throw new Error('原始 JWT 载荷无效')
+    }
+
+    const payload = jwt.decode(renewedToken)
+    if (!payload || typeof payload === 'string') throw new Error('续期 JWT 载荷无效')
+    expect(payload.sessionVersion).toBe(originalPayload.sessionVersion)
+    expect(payload.exp).toBeDefined()
+    expect(payload.iat).toBeDefined()
+    expect(payload.exp! - payload.iat!).toBe(90 * 24 * 60 * 60)
+
+    const bearerResponse = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${nearExpiryToken}`)
+
+    expect(bearerResponse.status).toBe(200)
+    expect(bearerResponse.headers['set-cookie'] || []).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('hsf_token=')])
+    )
   })
 
   it('registers users, rejects duplicate emails, and keeps email verification token behavior explicit', async () => {

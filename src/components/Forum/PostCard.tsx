@@ -51,7 +51,7 @@ const PostCard = React.memo(function PostCard({ post, sectionName, viewMode }: P
           post.isPinned && 'border-l-[3px] border-l-brand-gold'
         )}
       >
-        <Link to={postUrl} className="flex min-w-0 flex-col">
+        <Link to={postUrl} data-press-feedback="state" className="flex min-w-0 flex-col">
           <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
             {post.isPinned && (
               <span className="flex shrink-0 items-center gap-1 rounded-sm px-2 py-0.5 text-[0.625rem] font-semibold tracking-[0.08em] theme-tag">
@@ -113,7 +113,7 @@ const PostCard = React.memo(function PostCard({ post, sectionName, viewMode }: P
         post.isPinned && 'border-l-[3px] border-l-brand-gold'
       )}
     >
-      <Link to={postUrl} className="block min-w-0">
+      <Link to={postUrl} data-press-feedback="state" className="block min-w-0">
         <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
           {post.isPinned && (
             <span className="flex shrink-0 items-center gap-1 rounded-sm px-2 py-0.5 text-[0.625rem] font-semibold tracking-[0.08em] theme-tag">

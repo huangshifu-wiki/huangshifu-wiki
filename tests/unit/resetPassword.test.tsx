@@ -42,10 +42,10 @@ describe('ResetPassword', () => {
   it('rejects mismatched passwords before calling the API', () => {
     renderResetPassword()
 
-    fireEvent.change(screen.getByLabelText('新密码'), {
+    fireEvent.change(screen.getByLabelText(/^新密码\s*\*$/), {
       target: { value: 'NewPassword123!' },
     })
-    fireEvent.change(screen.getByLabelText('确认新密码'), {
+    fireEvent.change(screen.getByLabelText(/确认新密码\s*\*/), {
       target: { value: 'DifferentPassword123!' },
     })
     fireEvent.submit(screen.getByRole('button', { name: '重置密码' }).closest('form')!)
@@ -57,10 +57,10 @@ describe('ResetPassword', () => {
   it('rejects short passwords before calling the API', () => {
     renderResetPassword()
 
-    fireEvent.change(screen.getByLabelText('新密码'), {
+    fireEvent.change(screen.getByLabelText(/^新密码\s*\*$/), {
       target: { value: 'short' },
     })
-    fireEvent.change(screen.getByLabelText('确认新密码'), {
+    fireEvent.change(screen.getByLabelText(/确认新密码\s*\*/), {
       target: { value: 'short' },
     })
     fireEvent.submit(screen.getByRole('button', { name: '重置密码' }).closest('form')!)
@@ -73,10 +73,10 @@ describe('ResetPassword', () => {
     mockConfirmPasswordReset.mockResolvedValueOnce({ success: true })
     renderResetPassword()
 
-    fireEvent.change(screen.getByLabelText('新密码'), {
+    fireEvent.change(screen.getByLabelText(/^新密码\s*\*$/), {
       target: { value: 'NewPassword123!' },
     })
-    fireEvent.change(screen.getByLabelText('确认新密码'), {
+    fireEvent.change(screen.getByLabelText(/确认新密码\s*\*/), {
       target: { value: 'NewPassword123!' },
     })
     fireEvent.submit(screen.getByRole('button', { name: '重置密码' }).closest('form')!)

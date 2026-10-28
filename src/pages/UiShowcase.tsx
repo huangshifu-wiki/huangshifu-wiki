@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { MoreVertical, Settings, Trash2 } from '@/src/components/icons'
 import {
   Badge,
@@ -13,9 +14,11 @@ import {
   DropdownMenuTrigger,
   EmptyState,
   Field,
+  FullscreenSurface,
   IconButton,
   Input,
   Panel,
+  LoadErrorState,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -40,19 +43,43 @@ import {
   TabsList,
   TabsTrigger,
   Textarea,
+  TagInput,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
   useToast,
 } from '@/src/components/ui'
+import MarkdownEditor from '@/src/components/MarkdownEditor'
 
-const variants = ['primary', 'secondary', 'ghost', 'danger', 'warning', 'success'] as const
+const variants = ['primary', 'secondary', 'ghost', 'danger', 'warning', 'success', 'info'] as const
+
+const softVariants = ['secondary', 'danger', 'warning', 'success', 'info'] as const
+
+const DEMO_MARKDOWN = [
+  '# 山鬼',
+  '',
+  '若有人兮山之阿，被薜荔兮带女萝。',
+  '',
+  '既含睇兮又宜笑，子慕予兮善窈窕。',
+  '',
+  '```plain',
+  '# 这不是标题',
+  '*这不是斜体*',
+  '[这不是链接](https://example.com)',
+  '保留  连续空格',
+  '下一行',
+  '```',
+].join('\n')
 
 const UiShowcase = () => {
   const [dark, setDark] = useState(false)
   const [loadMode, setLoadMode] = useState('pagination')
   const { show } = useToast()
+  const [demoTags, setDemoTags] = useState(['古风'])
+  const [fullscreenDemo, setFullscreenDemo] = useState(false)
+  const [demoMarkdown, setDemoMarkdown] = useState(DEMO_MARKDOWN)
+  const [menuResult, setMenuResult] = useState('尚未选择菜单操作')
 
   return (
     <div data-theme={dark ? 'dark' : 'default'} className="mobile-page-shell min-h-screen">
@@ -73,6 +100,32 @@ const UiShowcase = () => {
             {variants.map((variant) => (
               <Button key={variant} variant={variant}>
                 {variant}
+              </Button>
+            ))}
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Link
+              to="/__ui"
+              data-press-feedback="state"
+              className="block rounded border border-border bg-surface p-4 text-sm text-text-primary transition-colors hover:bg-surface-alt"
+            >
+              整卡 state 导航
+            </Link>
+            <Link
+              to="/__ui"
+              data-press-feedback="inline"
+              className="self-center text-sm text-text-secondary transition-colors hover:text-brand-gold"
+            >
+              透明 inline 文字导航
+            </Link>
+            <Button type="button" data-press-feedback="ripple" variant="ghost">
+              ripple 操作按钮
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {softVariants.map((variant) => (
+              <Button key={variant} variant={variant} soft>
+                {variant} soft
               </Button>
             ))}
           </div>
@@ -108,6 +161,17 @@ const UiShowcase = () => {
               <Textarea placeholder="输入简介" />
             </Field>
           </div>
+          <Field
+            label="标签令牌"
+            description="聚焦显示站内候选，回车添加；默认关闭浏览器自动补全。"
+          >
+            <TagInput
+              value={demoTags}
+              onChange={setDemoTags}
+              suggestions={['古风', '现场', '原创']}
+              placeholder="输入标签后按回车添加"
+            />
+          </Field>
           <div className="flex flex-wrap gap-6">
             <Checkbox label="允许评论" defaultChecked />
             <Switch label="公开展示" defaultChecked />
@@ -116,6 +180,17 @@ const UiShowcase = () => {
               <RadioGroupItem value="member" label="成员" />
             </RadioGroup>
           </div>
+        </ShowcaseSection>
+
+        <ShowcaseSection title="内容输入">
+          <MarkdownEditor
+            value={demoMarkdown}
+            onChange={setDemoMarkdown}
+            height="240px"
+            variant="book"
+            ariaLabel="展厅 Markdown 示例"
+            placeholder="试试工具栏右侧的全屏按钮"
+          />
         </ShowcaseSection>
 
         <ShowcaseSection title="展示与状态">
@@ -132,10 +207,20 @@ const UiShowcase = () => {
               <Skeleton className="h-4 w-2/3" />
               <Skeleton className="h-12" />
             </Panel>
-            <Panel className="flex items-center justify-center">
-              <Spinner />
+            <Panel className="flex flex-wrap items-center justify-center gap-3">
+              <Spinner size="sm" label="小型加载中" />
+              <Spinner label="标准加载中" />
+              <Spinner size="lg" label="大型加载中" />
+              <Spinner variant="tail" size="lg" label="拖尾加载中" />
             </Panel>
           </div>
+          <Panel>
+            <LoadErrorState
+              title="示例加载失败"
+              description="点击按钮检查重试反馈。"
+              onRetry={() => show('已重新加载')}
+            />
+          </Panel>
           <EmptyState title="暂无修订" description="完成第一次编辑后，修订记录会出现在这里。" />
         </ShowcaseSection>
 
@@ -173,10 +258,59 @@ const UiShowcase = () => {
               <DialogTrigger asChild>
                 <Button variant="secondary">打开弹窗</Button>
               </DialogTrigger>
-              <DialogContent title="编辑条目" description="焦点、Escape 和恢复行为由 Radix 管理。">
+              <DialogContent
+                title="编辑条目"
+                description="焦点、Escape 和恢复行为由 Radix 管理。"
+                className="max-h-[70vh]"
+              >
                 <div className="space-y-4 p-5">
                   <Field label="标题">
                     <Input autoFocus />
+                  </Field>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="secondary">弹窗内菜单</Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onSelect={() => setMenuResult('已选择编辑资料')}>
+                        编辑资料
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <p role="status" className="text-sm text-text-secondary">
+                    {menuResult}
+                  </p>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost">弹窗内提示</Button>
+                      </TooltipTrigger>
+                      <TooltipContent>提示应显示在编辑弹窗之上</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="secondary">打开子弹窗</Button>
+                    </DialogTrigger>
+                    <DialogContent
+                      title="子弹窗"
+                      description="Escape 只关闭当前子弹窗，父层草稿不变。"
+                    >
+                      <Field label="子弹窗输入" className="p-5">
+                        <Input />
+                      </Field>
+                    </DialogContent>
+                  </Dialog>
+                  <div className="h-[30vh] content-center text-sm text-text-muted">
+                    向下滚动，检查底部标签候选是否翻转、滚动且不被弹窗裁切。
+                  </div>
+                  <Field label="弹窗底部标签">
+                    <TagInput
+                      value={demoTags}
+                      onChange={setDemoTags}
+                      suggestions={['古风', '现场', '原创']}
+                      placeholder="输入标签后按回车添加"
+                    />
                   </Field>
                   <Button>保存</Button>
                 </div>
@@ -211,7 +345,22 @@ const UiShowcase = () => {
               </Tooltip>
             </TooltipProvider>
             <Button onClick={() => show('组件展厅通知', { duration: 3000 })}>Toast</Button>
+            <Button variant="secondary" onClick={() => setFullscreenDemo(true)}>
+              整屏浮层
+            </Button>
           </div>
+          <FullscreenSurface
+            open={fullscreenDemo}
+            onOpenChange={setFullscreenDemo}
+            label="整屏浮层示例"
+          >
+            <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
+              <p className="text-sm text-text-secondary">
+                铺满视口、锁定背景滚动，Escape 关闭并把焦点交还触发按钮。
+              </p>
+              <Button onClick={() => setFullscreenDemo(false)}>关闭</Button>
+            </div>
+          </FullscreenSurface>
           <Tabs defaultValue="one">
             <TabsList aria-label="示例标签页">
               <TabsTrigger value="one">条目</TabsTrigger>

@@ -1,8 +1,9 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { List, ChevronRight } from '@/src/components/icons'
+import { Disc3, List, ChevronRight } from '@/src/components/icons'
 import { useI18n } from '../../lib/i18n'
 import { SmartImage } from '../SmartImage'
+import { CoverPlaceholder } from '../CoverPlaceholder'
 import type { AlbumItem } from '../../types/entities'
 
 interface AlbumCardProps {
@@ -20,23 +21,33 @@ const AlbumCard = React.memo(function AlbumCard({ album, viewMode = 'grid' }: Al
 
   if (viewMode === 'list') {
     return (
-      <div className="group flex cursor-pointer items-center gap-4 rounded px-2 py-3 transition-all duration-300 hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]">
+      <Link
+        to={`/album/${albumSlug}`}
+        data-press-feedback="state"
+        className="group flex cursor-pointer items-center gap-4 rounded px-2 py-3 transition-all duration-300 hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]"
+      >
         <div className="relative h-[100px] w-[100px] flex-shrink-0 overflow-hidden rounded shadow-[0_4px_20px_rgba(42,37,32,0.06)] transition-shadow duration-300 group-hover:shadow-[0_12px_48px_rgba(42,37,32,0.08)]">
           <SmartImage
             src={coverSrc}
             alt={album.title}
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
             style={{ filter: COVER_FILTER }}
+            fallback={<CoverPlaceholder icon={<Disc3 size={18} />} label="无封面" />}
           />
         </div>
         <div className="min-w-0 flex-1">
-          <Link
-            to={`/album/${albumSlug}`}
-            className="block truncate text-[0.975rem] font-semibold tracking-[0.04em] text-text-primary transition-colors group-hover:text-brand-gold"
-          >
+          <span className="block truncate text-[0.975rem] font-semibold tracking-[0.04em] text-text-primary transition-colors group-hover:text-brand-gold">
             {album.title}
-          </Link>
-          <p className="mt-0.5 truncate text-[0.8125rem] text-text-muted">{album.artist}</p>
+          </span>
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.8125rem] text-text-muted">
+            <span className="min-w-0 truncate">{album.artist}</span>
+            {album.releaseDate && (
+              <>
+                <span className="flex-shrink-0 text-text-muted/40">·</span>
+                <span className="flex-shrink-0 whitespace-nowrap">{album.releaseDate}</span>
+              </>
+            )}
+          </p>
           {album.description && (
             <p className="mt-1 line-clamp-2 text-[0.75rem] leading-relaxed text-text-muted/70">
               {album.description}
@@ -47,26 +58,27 @@ const AlbumCard = React.memo(function AlbumCard({ album, viewMode = 'grid' }: Al
           <span className="hidden text-[0.75rem] text-text-muted/60 sm:inline">
             {trackCount} {t('music.unit.song')}
           </span>
-          <Link
-            to={`/album/${albumSlug}`}
+          <span
             className="text-brand-gold/70 transition-colors hover:text-brand-gold"
+            aria-hidden="true"
           >
             <ChevronRight size={16} />
-          </Link>
+          </span>
         </div>
-      </div>
+      </Link>
     )
   }
 
   return (
     <div className="group">
-      <Link to={`/album/${albumSlug}`} className="block">
+      <Link to={`/album/${albumSlug}`} data-press-feedback="state" className="block">
         <div className="relative aspect-square overflow-hidden rounded-lg bg-surface-alt shadow-[0_4px_20px_rgba(42,37,32,0.06)] transition-shadow duration-300 group-hover:shadow-[0_12px_48px_rgba(42,37,32,0.08)]">
           <SmartImage
             src={coverSrc}
             alt={album.title}
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
             style={{ filter: COVER_FILTER }}
+            fallback={<CoverPlaceholder icon={<Disc3 size={18} />} label="无封面" />}
           />
           {trackCount > 0 && (
             <div className="absolute right-2 top-2 flex items-center gap-1 rounded bg-black/40 px-2 py-0.5 text-xs text-white backdrop-blur-sm">
@@ -78,10 +90,14 @@ const AlbumCard = React.memo(function AlbumCard({ album, viewMode = 'grid' }: Al
           {album.title}
         </h3>
         <p className="mt-0.5 truncate text-[0.78rem] text-text-muted">{album.artist}</p>
+        {album.releaseDate && (
+          <p className="mt-0.5 truncate text-[0.72rem] text-text-muted/60">{album.releaseDate}</p>
+        )}
       </Link>
       <div className="mt-2">
         <Link
           to={`/album/${albumSlug}`}
+          data-press-feedback="inline"
           className="inline-flex items-center gap-1 text-[0.75rem] tracking-[0.04em] text-text-muted transition-colors hover:text-brand-gold"
         >
           {t('music.viewAlbum')} <ChevronRight size={13} />

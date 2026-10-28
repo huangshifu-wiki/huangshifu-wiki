@@ -1,15 +1,34 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Calendar, ExternalLink, MapPin, Tag } from '@/src/components/icons'
+import { Calendar, Edit3, MapPin, Tag } from '@/src/components/icons'
+import { useAuth } from '../context/AuthContext'
+import { ContentLinkList } from '../components/ContentLinkList'
+import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
+import { CoverPlaceholder } from '../components/CoverPlaceholder'
 import { Lightbox } from '../components/Lightbox'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import { apiGet } from '../lib/apiClient'
-import { formatDateTime } from '../lib/dateUtils'
-import { formatEventTicketPrices, formatEventTimeSlot, getEventCoverSrc } from '../lib/eventFormat'
+import { formatDateTime, toDateValue } from '../lib/dateUtils'
+import {
+  formatEventTicketPrices,
+  formatEventTimeSlot,
+  formatEventTimeStatus,
+  getEventCoverSrc,
+} from '../lib/eventFormat'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
 import type { EventDetailResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
-import { Button } from '@/src/components/ui'
+import { Button, LoadErrorState } from '@/src/components/ui'
+
+const AdminEventEdit = lazy(() => import('./Admin/AdminEventEdit'))
 
 type EventPosterImage = {
   id: string
@@ -20,6 +39,32 @@ type EventPosterImage = {
 
 const COVER_FILTER = 'brightness(0.97) saturate(0.92)'
 
+// JSON-LD：只有 sortStart 能解析为有效日期时才输出 startDate，不猜测活动时间
+const buildEventJsonLd = (
+  event: EventItem,
+  url: string,
+  description: string,
+  coverUrl: string
+): Record<string, unknown> => {
+  const jsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: event.title,
+    url,
+    description,
+  }
+  if (coverUrl) {
+    jsonLd.image = toAbsoluteSeoUrl(coverUrl)
+  }
+  if (event.location) {
+    jsonLd.location = event.location
+  }
+  if (toDateValue(event.sortStart)) {
+    jsonLd.startDate = event.sortStart
+  }
+  return jsonLd
+}
+
 const SectionHeading = ({ children }: { children: React.ReactNode }) => (
   <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold tracking-[0.1em] text-text-primary">
     <span className="inline-block h-4 w-[3px] rounded-[1px] bg-brand-gold opacity-60" />
@@ -27,58 +72,40 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
   </h2>
 )
 
-const EventLinkPanel = ({
-  title,
-  emptyText,
-  links,
-}: {
-  title: string
-  emptyText: string
-  links: EventItem['externalLinks']
-}) => (
-  <div className="border-y border-[var(--book-ink-line)] py-5">
-    <div className="mb-3">
-      <SectionHeading>{title}</SectionHeading>
-    </div>
-    {links.length ? (
-      <div className="flex flex-col">
-        {links.map((link) => (
-          <a
-            key={link.url}
-            href={link.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2.5 border-b border-[var(--book-ink-line)] py-2.5 text-sm text-text-secondary transition-all hover:pl-1 hover:text-brand-gold last:border-0"
-          >
-            <ExternalLink size={15} className="shrink-0 text-text-muted" />
-            {link.label}
-          </a>
-        ))}
-      </div>
-    ) : (
-      <p className="py-2 text-sm italic tracking-[0.06em] text-text-muted">{emptyText}</p>
-    )}
-  </div>
-)
-
 const EventDetail = () => {
   const { slug } = useParams()
+  const { isAdmin } = useAuth()
+  const [editing, setEditing] = useState(false)
   const [event, setEvent] = useState<EventItem | null>(null)
+  const previousSlugRef = useRef<string | undefined>(undefined)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
 
   useEffect(() => {
-    if (!slug) return
+    if (!slug) {
+      previousSlugRef.current = undefined
+      setLoading(false)
+      setLoadError(null)
+      setEvent(null)
+      return
+    }
+
+    const preserveEvent = previousSlugRef.current === slug
+    previousSlugRef.current = slug
     let cancelled = false
     setLoading(true)
+    setLoadError(null)
+    if (!preserveEvent) setEvent(null)
     apiGet<EventDetailResponse>(`/api/events/${slug}`)
       .then((data) => {
         if (!cancelled) setEvent(data.event)
       })
       .catch((error) => {
         console.error('Fetch event detail failed:', error)
-        if (!cancelled) setEvent(null)
+        if (!cancelled) setLoadError(error)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -87,7 +114,7 @@ const EventDetail = () => {
     return () => {
       cancelled = true
     }
-  }, [slug])
+  }, [retryNonce, slug])
 
   const posterImages = useMemo<EventPosterImage[]>(() => {
     if (!event) return []
@@ -114,8 +141,64 @@ const EventDetail = () => {
       })),
     ]
   }, [event])
+  const handleOpenLightbox = (index: number) => {
+    setLightboxIndex(index)
+    setLightboxOpen(true)
+  }
 
-  if (loading) {
+  // SEO 元数据：加载中/失败不可索引，成功后输出活动详情与 Event JSON-LD
+  const eventPath = `/events/${slug}`
+  const eventCoverUrl = event ? getEventCoverSrc(event) : ''
+  const eventDescription = event
+    ? summarizeSeoText(event.content, `${event.location || '未知地点'}的活动记录，黄诗扶 Wiki。`)
+    : ''
+  // loadError 置位后立即切错误标题：错误 UI 条件是 loadError && !event，
+  // SEO 若只看 loading，会与 alert 分属两次渲染，标题短暂停留在默认值
+  const eventSeoMetadata: SeoMetadata = event
+    ? {
+        title: `${event.title}｜${SEO_SITE_NAME}`,
+        description: eventDescription,
+        canonicalPath: eventPath,
+        robots: 'index,follow',
+        ogType: 'article',
+        ogImage: eventCoverUrl || undefined,
+        ogImageAlt: event.title,
+        jsonLd: buildEventJsonLd(
+          event,
+          toAbsoluteSeoUrl(eventPath),
+          eventDescription,
+          eventCoverUrl
+        ),
+      }
+    : loadError || !loading
+      ? getDetailFallbackSeo({
+          canonicalPath: eventPath,
+          title: `活动不存在｜${SEO_SITE_NAME}`,
+          description: '当前活动不存在或已被删除。',
+        })
+      : getDetailFallbackSeo({ canonicalPath: eventPath, title: SEO_SITE_NAME })
+  useSeo(eventSeoMetadata)
+
+  if (loadError && !event) {
+    return (
+      <div className="mobile-page-shell antique-detail">
+        <div className="mobile-page-container">
+          <SmartBackLink
+            fallbackTo="/events"
+            fallbackLabel="返回游记"
+            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+          />
+          <LoadErrorState
+            error={loadError}
+            className="mt-6"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (loading && !event) {
     return (
       <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
@@ -150,12 +233,11 @@ const EventDetail = () => {
     return (
       <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
-          <Link
-            to="/events"
+          <SmartBackLink
+            fallbackTo="/events"
+            fallbackLabel="返回活动"
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-          >
-            <ArrowLeft size={16} /> 返回活动
-          </Link>
+          />
           <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
             活动不存在或已删除
           </div>
@@ -168,15 +250,24 @@ const EventDetail = () => {
   const ticketPrices = formatEventTicketPrices(event.ticketPrices)
 
   return (
-    <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
+    <div
+      className="mobile-page-shell antique-detail text-[var(--color-text-antique)]"
+      aria-busy={loading || undefined}
+    >
       <div className="mobile-page-container max-w-[1000px]">
-        <Link
-          to="/events"
+        <SmartBackLink
+          fallbackTo="/events"
+          fallbackLabel="返回活动"
           className="mb-6 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-        >
-          <ArrowLeft size={16} />
-          返回活动
-        </Link>
+        />
+        {loadError && (
+          <LoadErrorState
+            className="mb-6"
+            error={loadError}
+            description="活动内容可能不是最新内容。"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
+        )}
 
         <article className="space-y-10">
           <header className="flex flex-col gap-6 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row sm:items-start">
@@ -185,11 +276,9 @@ const EventDetail = () => {
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => {
-                    setLightboxIndex(0)
-                    setLightboxOpen(true)
-                  }}
-                  className="block h-auto max-h-56 max-w-56 overflow-hidden rounded-lg border-0 p-0 shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-300 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] sm:max-h-72 sm:max-w-72"
+                  data-press-feedback="ripple"
+                  onClick={() => handleOpenLightbox(0)}
+                  className="block h-auto max-h-56 max-w-56 overflow-hidden rounded-lg border-0 p-0 press-feedback-cover shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-300 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] sm:max-h-72 sm:max-w-72"
                   aria-label={`查看 ${event.title} 封面`}
                 >
                   <img
@@ -202,15 +291,32 @@ const EventDetail = () => {
                   />
                 </Button>
               ) : (
-                <div className="flex h-56 w-56 flex-col items-center justify-center gap-2 rounded-lg border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-muted sm:h-72 sm:w-72">
-                  <Calendar size={32} className="text-brand-gold/60" />
-                  <span className="text-sm">暂无封面</span>
-                </div>
+                <CoverPlaceholder
+                  icon={<Calendar size={32} />}
+                  label="无封面"
+                  className="h-56 w-56 rounded-lg border border-[var(--book-ink-line)] sm:h-72 sm:w-72"
+                  bgClassName="bg-[var(--book-panel-bg)]"
+                  labelClassName="text-sm"
+                />
               )}
             </div>
 
             <div className="min-w-0 flex-1 py-1">
-              <h1 className="mobile-page-title mb-3">{event.title}</h1>
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <h1 className="mobile-page-title">{event.title}</h1>
+                {isAdmin && event.id && (
+                  <Button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    variant="secondary"
+                    size="md"
+                    leftIcon={<Edit3 size={14} />}
+                    className="shrink-0 bg-transparent px-4 py-2 text-[0.875rem] transition-all duration-300"
+                  >
+                    编辑
+                  </Button>
+                )}
+              </div>
               <div className="space-y-3 text-[0.9375rem] text-text-secondary">
                 <div className="flex gap-2">
                   <Calendar size={16} className="mt-1 shrink-0 text-brand-gold" />
@@ -220,7 +326,7 @@ const EventDetail = () => {
                         <p key={`${slot.start}-${index}`}>{formatEventTimeSlot(slot)}</p>
                       ))
                     ) : (
-                      <p>时间待定</p>
+                      <p>{formatEventTimeStatus(event.timeStatus) || '时间待定'}</p>
                     )}
                   </div>
                 </div>
@@ -235,6 +341,7 @@ const EventDetail = () => {
                       <Link
                         key={tag}
                         to={`/events?tag=${encodeURIComponent(tag)}`}
+                        data-press-feedback="inline"
                         className="rounded-sm px-2 py-0.5 text-xs theme-tag"
                       >
                         {tag}
@@ -307,10 +414,14 @@ const EventDetail = () => {
               )}
             </div>
 
-            <EventLinkPanel title="外部链接" emptyText="暂无外部链接" links={event.externalLinks} />
+            <ContentLinkList
+              title={<SectionHeading>外部链接</SectionHeading>}
+              emptyText="暂无外部链接"
+              links={event.externalLinks}
+            />
             {event.relatedLinks.length ? (
-              <EventLinkPanel
-                title="其他相关链接"
+              <ContentLinkList
+                title={<SectionHeading>其他相关链接</SectionHeading>}
                 emptyText="暂无其他相关链接"
                 links={event.relatedLinks}
               />
@@ -328,11 +439,9 @@ const EventDetail = () => {
                     key={poster.id}
                     type="button"
                     variant="ghost"
-                    onClick={() => {
-                      setLightboxIndex(index)
-                      setLightboxOpen(true)
-                    }}
-                    className="group aspect-[3/4] h-auto overflow-hidden rounded border border-[var(--book-ink-line)]/60 bg-[var(--book-panel-bg)] p-0 shadow-[0_10px_30px_rgba(42,37,32,0.06)]"
+                    data-press-feedback="ripple"
+                    onClick={() => handleOpenLightbox(index)}
+                    className="group aspect-[3/4] h-auto overflow-hidden rounded border border-[var(--book-ink-line)]/60 bg-[var(--book-panel-bg)] p-0 press-feedback-cover shadow-[0_10px_30px_rgba(42,37,32,0.06)]"
                   >
                     <SmartImage
                       src={poster.url}
@@ -353,6 +462,18 @@ const EventDetail = () => {
           open={lightboxOpen}
           onClose={() => setLightboxOpen(false)}
         />
+        {isAdmin && editing && (
+          <Suspense fallback={<div role="status">编辑器加载中...</div>}>
+            <AdminEventEdit
+              eventId={event.id}
+              onClose={() => setEditing(false)}
+              onSaved={() => {
+                setEditing(false)
+                setRetryNonce((value) => value + 1)
+              }}
+            />
+          </Suspense>
+        )}
       </div>
     </div>
   )

@@ -101,7 +101,11 @@ const PLATFORM_URL_PATTERNS: Array<{
   {
     platform: 'kuwo',
     type: 'song',
-    patterns: [/kuwo\.cn\/song_detail\/([a-z0-9_-]+)/i],
+    patterns: [
+      // play_detail 是酷我当前官方歌曲页，song_detail 为历史链接，保留兼容
+      /kuwo\.cn\/play_detail\/([a-z0-9_-]+)/i,
+      /kuwo\.cn\/song_detail\/([a-z0-9_-]+)/i,
+    ],
   },
   {
     platform: 'kuwo',
@@ -111,10 +115,7 @@ const PLATFORM_URL_PATTERNS: Array<{
   {
     platform: 'kuwo',
     type: 'playlist',
-    patterns: [
-      /kuwo\.cn\/playlist_detail\/([a-z0-9_-]+)/i,
-      /kuwo\.cn\/play_detail\/([a-z0-9_-]+)/i,
-    ],
+    patterns: [/kuwo\.cn\/playlist_detail\/([a-z0-9_-]+)/i],
   },
 ]
 
@@ -156,11 +157,12 @@ export function buildPlatformResourceUrl(
     return `https://www.kugou.com/songlist/${safeId}`
   }
   if (platform === 'baidu') {
-    if (type === 'song') return `https://music.baidu.com/song/${safeId}`
-    if (type === 'album') return `https://music.baidu.com/album/${safeId}`
-    return `https://music.baidu.com/songlist/${safeId}`
+    // 百度音乐已更名为 91Q 音乐，旧 music.baidu.com 域名已下线
+    if (type === 'song') return `https://music.91q.com/#/song/${safeId}`
+    if (type === 'album') return `https://music.91q.com/#/album/${safeId}`
+    return `https://music.91q.com/#/songlist/${safeId}`
   }
-  if (type === 'song') return `https://www.kuwo.cn/song_detail/${safeId}`
+  if (type === 'song') return `https://www.kuwo.cn/play_detail/${safeId}`
   if (type === 'album') return `https://www.kuwo.cn/album_detail/${safeId}`
   return `https://www.kuwo.cn/playlist_detail/${safeId}`
 }

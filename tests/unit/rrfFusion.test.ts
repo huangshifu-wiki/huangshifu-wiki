@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import {
-  rrfScore,
-  RRF_K,
-  buildHybridResponse,
-  fetchVectorSearchWithTimeout,
-} from '../../src/server/routes/search.routes'
+import { rrfScore, buildHybridResponse } from '../../src/server/routes/search.routes'
+
+const RRF_K = 60
 
 describe('RRF Fusion Algorithm', () => {
   describe('rrfScore - core formula', () => {
@@ -146,10 +143,6 @@ describe('RRF Fusion Algorithm', () => {
   })
 
   describe('RRF_K constant validation', () => {
-    it('is set to standard value of 60', () => {
-      expect(RRF_K).toBe(60)
-    })
-
     it('produces reasonable absolute scores with k=60', () => {
       const topHit = rrfScore([0, 0])
       expect(topHit).toBeGreaterThan(0.01)
@@ -513,11 +506,5 @@ describe('Three-way RRF Fusion', () => {
     ]
     const result = buildHybridResponse(kwResults, [], 'vector', 'q', false, undefined, textResults)
     expect(result.searchMeta.textVectorResultCount).toBe(1)
-  })
-})
-
-describe('fetchVectorSearchWithTimeout - timeout behavior', () => {
-  it('is covered by integration tests (requires CLIP model)', () => {
-    expect(fetchVectorSearchWithTimeout).toBeDefined()
   })
 })

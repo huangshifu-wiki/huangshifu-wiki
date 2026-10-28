@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import {
   Ban,
   Book,
@@ -10,10 +10,10 @@ import {
   Layers,
   Megaphone,
   MessageSquare,
-  Music,
   Plus,
   RefreshCw,
   RotateCcw,
+  Ticket,
   Trash2,
   XCircle,
 } from '@/src/components/icons'
@@ -25,36 +25,37 @@ import {
   apiPost,
   invalidateApiCacheByPrefix,
 } from '../../lib/apiClient'
-import {
-  DANGER_BUTTON_CLASSES,
-  SUCCESS_BUTTON_CLASSES,
-  WARNING_BUTTON_CLASSES,
-} from '../../lib/buttonClasses'
+import { getErrorMessage } from '../../lib/errorHandler'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { validateMaxLength, validateRequiredText, validateUrl } from '../../lib/clientValidation'
 import { formatDateTime } from '../../lib/dateUtils'
 import { getStatusClassName, getStatusText } from '../../lib/contentUtils'
-import { CONTENT_LIMITS } from '../../lib/contentLimits'
-import { formatMusicCredits } from '../../lib/musicCredits'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
-import { SmartImage } from '../../components/SmartImage'
-import { MusicImportModal } from '../../components/MusicImportModal'
-import { SongFormModal } from '../../components/SongFormModal'
+import { useScrollRestore } from '../../hooks/useScrollRestore'
 import Pagination from '../../components/Pagination'
 import { useRoutedPagination } from '../../hooks/useRoutedPagination'
+import { SmartImage } from '../../components/SmartImage'
 import type { ContentStatus } from '../../types/common'
 import type { AdminDataItem } from '../../types/entities'
-import { Checkbox } from '@/src/components/ui'
+import type { AdminDataListResponse } from '../../types/api'
+import { Button, Checkbox, Input, LinkButton, LoadErrorState } from '@/src/components/ui'
+import { FormModal } from '../../components/Modal/FormModal'
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../../utils/formDirty'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
+
+const AdminEventEdit = React.lazy(() => import('./AdminEventEdit'))
 
 type ListType =
   | 'wiki'
   | 'wiki-categories'
-  | 'music'
   | 'posts'
   | 'galleries'
+  | 'ticket-listings'
   | 'events'
   | 'sections'
   | 'announcements'
-
 type ColumnKey =
   | 'details'
   | 'status'
@@ -65,7 +66,6 @@ type ColumnKey =
   | 'media'
   | 'link'
   | 'order'
-  | 'ids'
   | 'lifecycle'
   | 'permissions'
   | 'actions'
@@ -76,14 +76,8 @@ type ListConfig = {
   apiPath: string
   columns: { key: ColumnKey; label: string; className?: string }[]
   hasCreate: boolean
+  editorBasePath?: string
 }
-
-type AdminListResponse = {
-  data: AdminDataItem[]
-  total?: number
-}
-
-const MUSIC_PAGE_SIZE_OPTIONS = [25, 50, 100]
 
 const WIKI_CATEGORIES_ADMIN_PATH = '/api/admin/wiki-categories'
 const WIKI_CATEGORIES_PUBLIC_PATH = '/api/wiki/categories'
@@ -103,6 +97,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
+    editorBasePath: '/wiki',
   },
   'wiki-categories': {
     title: '百科分类',
@@ -116,20 +111,6 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: true,
-  },
-  music: {
-    title: '音乐管理',
-    icon: Music,
-    apiPath: 'music',
-    columns: [
-      { key: 'details', label: '歌曲', className: 'min-w-[260px]' },
-      { key: 'status', label: '平台', className: 'min-w-[130px]' },
-      { key: 'relations', label: '专辑', className: 'min-w-[180px]' },
-      { key: 'ids', label: '平台 ID', className: 'min-w-[220px]' },
-      { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
-      { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
-    ],
-    hasCreate: false,
   },
   posts: {
     title: '帖子管理',
@@ -145,6 +126,7 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
+    editorBasePath: '/forum',
   },
   galleries: {
     title: '图集管理',
@@ -160,7 +142,24 @@ const configMap: Record<ListType, ListConfig> = {
       { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
     ],
     hasCreate: false,
+    editorBasePath: '/gallery',
   },
+  'ticket-listings': {
+    title: '盘票管理',
+    icon: Ticket,
+    apiPath: 'ticket-listings',
+    columns: [
+      { key: 'details', label: '活动', className: 'min-w-[280px]' },
+      { key: 'status', label: '状态', className: 'min-w-[110px]' },
+      { key: 'owner', label: '作者', className: 'min-w-[140px]' },
+      { key: 'relations', label: '票务信息', className: 'min-w-[180px]' },
+      { key: 'lifecycle', label: '时间', className: 'min-w-[170px]' },
+      { key: 'actions', label: '操作', className: 'min-w-[240px] text-left' },
+    ],
+    hasCreate: false,
+    editorBasePath: '/tickets',
+  },
+
   events: {
     title: '活动管理',
     icon: Calendar,
@@ -203,10 +202,10 @@ const configMap: Record<ListType, ListConfig> = {
   },
 }
 
-const contentStatuses = new Set<ContentStatus>(['draft', 'pending', 'published', 'rejected'])
+const contentStatuses = ['draft', 'pending', 'published', 'rejected'] as const
 
 const isContentStatus = (value: unknown): value is ContentStatus =>
-  typeof value === 'string' && contentStatuses.has(value as ContentStatus)
+  typeof value === 'string' && contentStatuses.some((status) => status === value)
 
 const toText = (value: unknown, fallback = 'N/A') =>
   typeof value === 'string' && value.trim() ? value : fallback
@@ -221,17 +220,6 @@ const getTags = (item: AdminDataItem) =>
   Array.isArray(item.tags) ? item.tags.filter((tag): tag is string => typeof tag === 'string') : []
 
 const getImages = (item: AdminDataItem) => (Array.isArray(item.images) ? item.images : [])
-
-const getSources = (item: AdminDataItem) =>
-  Array.isArray(item.sources)
-    ? item.sources.filter(
-        (source): source is { platform: string; sourceId: string; isPrimary?: boolean } =>
-          source &&
-          typeof source === 'object' &&
-          typeof (source as { platform?: unknown }).platform === 'string' &&
-          typeof (source as { sourceId?: unknown }).sourceId === 'string'
-      )
-    : []
 
 const formatCount = (value: unknown) => toNumber(value).toLocaleString('zh-CN')
 
@@ -260,7 +248,7 @@ const getItemHref = (type: ListType, item: AdminDataItem) => {
   if (type === 'posts' && item.slug) return `/forum/${item.slug}`
   if (type === 'galleries' && item.slug) return `/gallery/${item.slug}`
   if (type === 'events' && item.slug) return `/events/${item.slug}`
-  if (type === 'music' && item.slug) return `/music/${item.slug}`
+  if (type === 'ticket-listings' && item.slug) return `/tickets/${item.slug}`
   return null
 }
 
@@ -288,7 +276,7 @@ const renderTagsAndLocation = (item: AdminDataItem) => {
   return (
     <div className="space-y-2 text-xs">
       {renderTagBadges(tags)}
-      <p className="truncate text-text-muted">
+      <p className="line-clamp-1 text-wrap-anywhere text-text-muted">
         {toOptionalText(item.locationName) || toOptionalText(item.locationDetail) || '未设置位置'}
       </p>
     </div>
@@ -307,10 +295,12 @@ const renderTagBadges = (tags: string[]) =>
 
 const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementType) => {
   const href = getItemHref(type, item)
-  const title = toText(item.title || item.displayName || item.name || item.slug || item.id)
+  const title = toText(
+    item.title || item.eventName || item.displayName || item.name || item.slug || item.id
+  )
   const subtitle =
-    type === 'music'
-      ? [formatMusicCredits(item.artists, ''), item.album].filter(Boolean).join(' / ')
+    type === 'ticket-listings'
+      ? `${item.type === 'offer' ? '出票' : '收票'} · ${item.quantity || 0}张 · ${item.ticketTier || '未填写票档'}`
       : item.content?.slice(0, 80) || item.description?.slice(0, 80) || ''
 
   return (
@@ -322,12 +312,6 @@ const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementT
               ? String(item.coverThumbnailUrl || item.coverUrl || '')
               : (getImages(item)[0] as { thumbnailUrl?: string } | undefined)?.thumbnailUrl || ''
           }
-          alt=""
-          className="h-11 w-11 rounded bg-surface-alt object-cover"
-        />
-      ) : type === 'music' ? (
-        <SmartImage
-          src={item.cover || ''}
           alt=""
           className="h-11 w-11 rounded bg-surface-alt object-cover"
         />
@@ -353,16 +337,20 @@ const renderDetails = (type: ListType, item: AdminDataItem, Icon: React.ElementT
           {item.isPinned && renderBadge('置顶', 'theme-status-warning')}
           {item.isDeleted && renderBadge('已删除', 'theme-status-error')}
         </p>
-        {subtitle && <p className="max-w-sm truncate text-xs text-text-muted">{subtitle}</p>}
-        <p className="truncate text-[11px] text-text-muted">
+        {subtitle && (
+          <p className="max-w-sm line-clamp-1 text-wrap-anywhere text-xs text-text-muted">
+            {subtitle}
+          </p>
+        )}
+        <p className="line-clamp-1 text-wrap-anywhere text-[11px] text-text-muted">
           {type === 'wiki' && `slug: ${toText(item.slug)}`}
           {type === 'posts' && `ID: ${toText(item.id)}`}
           {type === 'galleries' && `ID: ${toText(item.id)}`}
           {type === 'events' && `slug: ${toText(item.slug)}`}
-          {type === 'music' && `docId: ${toText(item.docId)}`}
           {type === 'sections' && `ID: ${toText(item.id)}`}
           {type === 'wiki-categories' && `ID: ${toText(item.id)}`}
           {type === 'announcements' && `ID: ${toText(item.id)}`}
+          {type === 'ticket-listings' && `slug: ${toText(item.slug)}`}
         </p>
       </div>
     </div>
@@ -381,7 +369,7 @@ const renderStatus = (type: ListType, item: AdminDataItem) => {
     return renderBadge('公开', 'theme-status-success')
   }
   if (type === 'galleries') {
-    const status = toOptionalText(item.status) as ContentStatus | null
+    const status = isContentStatus(item.status) ? item.status : null
     const published = status ? status === 'published' : Boolean(item.published)
     return (
       <div className="space-y-1">
@@ -396,18 +384,6 @@ const renderStatus = (type: ListType, item: AdminDataItem) => {
             {formatDateTime(toOptionalText(item.publishedAt))}
           </p>
         )}
-      </div>
-    )
-  }
-  if (type === 'music') {
-    const sources = getSources(item)
-    const primary = sources.find((source) => source.isPrimary) || sources[0]
-    return (
-      <div className="space-y-1 text-xs">
-        {primary
-          ? renderBadge(primary.platform, 'bg-surface-alt text-brand-gold')
-          : renderBadge('无平台来源')}
-        <p className="text-text-muted">来源：{sources.length}</p>
       </div>
     )
   }
@@ -464,6 +440,15 @@ const renderMetrics = (type: ListType, item: AdminDataItem) => {
 }
 
 const renderRelations = (type: ListType, item: AdminDataItem) => {
+  if (type === 'ticket-listings') {
+    return (
+      <div className="space-y-1 text-xs text-text-muted">
+        <p>活动：{toText(item.eventName || item.customEventName, '未命名活动')}</p>
+        <p>类型：{item.type === 'offer' ? '出票' : '收票'}</p>
+        <p>座位：{toText(item.seat, '未填写')}</p>
+      </div>
+    )
+  }
   if (type === 'posts') {
     return (
       <div className="space-y-1 text-xs text-text-muted">
@@ -473,36 +458,7 @@ const renderRelations = (type: ListType, item: AdminDataItem) => {
       </div>
     )
   }
-  if (type === 'music') {
-    return (
-      <div className="space-y-1 text-xs text-text-muted">
-        <p className="font-medium text-text-primary">{toText(item.album, '未设置专辑')}</p>
-        <p>显示：{toText(item.displayAlbumMode, '默认')}</p>
-        {toOptionalText(item.manualAlbumName) && (
-          <p>手动：{toOptionalText(item.manualAlbumName)}</p>
-        )}
-      </div>
-    )
-  }
   return <span className="text-xs text-text-muted">N/A</span>
-}
-
-const renderExternalSources = (item: AdminDataItem) => {
-  const sources = getSources(item)
-
-  return (
-    <div className="flex max-w-[260px] flex-wrap gap-1 text-xs">
-      {sources.length
-        ? sources.map((source) =>
-            renderKeyedBadge(
-              `${source.platform}:${source.sourceId}`,
-              `${source.platform}: ${source.sourceId}`,
-              'bg-surface-alt text-brand-gold'
-            )
-          )
-        : renderBadge('无外部来源')}
-    </div>
-  )
 }
 
 const renderMedia = (item: AdminDataItem) => (
@@ -510,12 +466,12 @@ const renderMedia = (item: AdminDataItem) => (
     {'posters' in item ? (
       <>
         <p>海报：{Array.isArray(item.posters) ? item.posters.length : 0}</p>
-        <p className="truncate">地点：{toText(item.location, '未填写')}</p>
+        <p className="line-clamp-1 text-wrap-anywhere">地点：{toText(item.location, '未填写')}</p>
       </>
     ) : (
       <>
         <p>图片：{getImages(item).length}</p>
-        <p className="truncate">版权：{toText(item.copyright, '未填写')}</p>
+        <p className="line-clamp-1 text-wrap-anywhere">版权：{toText(item.copyright, '未填写')}</p>
       </>
     )}
   </div>
@@ -556,7 +512,6 @@ const renderCell = (
     return item.requiresAdminEdit
       ? renderBadge('仅管理员编辑', 'theme-status-warning')
       : renderBadge('开放协作', 'theme-status-success')
-  if (key === 'ids') return renderExternalSources(item)
   if (key === 'lifecycle') return renderDateBlock(item)
   return null
 }
@@ -576,38 +531,58 @@ const invalidateWikiCategoryCaches = () => {
 }
 
 export const AdminListPage = ({ type }: { type: ListType }) => {
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const cfg = configMap[type]
   const Icon = cfg.icon
   const [data, setData] = useState<AdminDataItem[]>([])
-  const [musicTotal, setMusicTotal] = useState<number>()
+  const [totalState, setTotal] = useState<{ scope: string; total: number }>()
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [pendingActions, setPendingActions] = useState<
-    Record<string, 'delete' | 'restore' | 'permanentDelete'>
+    Record<string, 'delete' | 'restore' | 'permanentDelete' | 'toggle'>
   >({})
-  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
-  const [batchDisplayOpen, setBatchDisplayOpen] = useState(false)
-  const [batchDisplaySaving, setBatchDisplaySaving] = useState(false)
-  const [musicImportOpen, setMusicImportOpen] = useState(false)
-  const [songCreateOpen, setSongCreateOpen] = useState(false)
+  const [createSaving, setCreateSaving] = useState(false)
+  const [categorySaving, setCategorySaving] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createBaseline, setCreateBaseline] = useState<Record<string, unknown> | null>(null)
   const [editingCategory, setEditingCategory] = useState<AdminDataItem | null>(null)
-  const [batchDisplayForm, setBatchDisplayForm] = useState({
-    displayAlbumMode: 'linked' as 'linked' | 'manual' | 'none',
-    manualAlbumName: '',
-    displayAlbumDocId: '',
-  })
+  const [categoryBaseline, setCategoryBaseline] = useState<AdminDataItem | null>(null)
+  const [editingEventId, setEditingEventId] = useState<string | null>(null)
   const showDeleted = searchParams.get('includeDeleted') === 'true'
+  const scope = JSON.stringify([type, showDeleted])
+  const total = totalState?.scope === scope ? totalState.total : undefined
   const dialog = useDialog()
   const { show } = useToast()
-  const [newItem, setNewItem] = useState<any>({})
-  const isMusicList = type === 'music'
-  const previousTypeRef = useRef(type)
-  const musicPagination = useRoutedPagination({
-    totalCount: musicTotal,
+  const saveScroll = useScrollRestore()
+  const pagination = useRoutedPagination({
+    totalCount: total,
     defaultPageSize: 50,
-    pageSizeOptions: MUSIC_PAGE_SIZE_OPTIONS,
-    enabled: isMusicList,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
   })
+  const requestIdRef = useRef(0)
+  const [newItem, setNewItem] = useState<any>({})
+  const createClosePendingRef = useRef(false)
+  const categoryClosePendingRef = useRef(false)
+  const createSubmitPendingRef = useRef(false)
+  const categorySubmitPendingRef = useRef(false)
+  const createInitialItem = (listType: ListType): Record<string, unknown> =>
+    listType === 'sections'
+      ? { name: '', description: '', order: 0 }
+      : listType === 'wiki-categories'
+        ? { id: '', name: '', description: '', order: 0, requiresAdminEdit: false }
+        : { content: '', link: '', active: true }
+  const createDirty =
+    createOpen && createBaseline !== null && hasFormChanges(newItem, createBaseline)
+  const categoryDirty =
+    editingCategory !== null &&
+    categoryBaseline !== null &&
+    hasFormChanges(editingCategory, categoryBaseline)
+  const createGuard = useUnsavedChangesGuard(createDirty)
+  const categoryGuard = useUnsavedChangesGuard(categoryDirty)
 
   const invalidateCurrentDataCaches = () => {
     if (type === 'wiki-categories') {
@@ -618,41 +593,39 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     invalidateApiCacheByPrefix(`/api/admin/${cfg.apiPath}`)
   }
 
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = async (options?: { silent?: boolean }) => {
+    const requestId = ++requestIdRef.current
+    const silent = options?.silent === true
+    if (silent) saveScroll()
+    else {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
-      const result = await apiGet<AdminListResponse>(`/api/admin/${cfg.apiPath}`, {
+      const result = await apiGet<AdminDataListResponse>(`/api/admin/${cfg.apiPath}`, {
         includeDeleted: showDeleted ? 'true' : undefined,
-        page: isMusicList ? musicPagination.page : undefined,
-        limit: isMusicList ? musicPagination.pageSize : undefined,
+        page: pagination.page,
+        limit: pagination.pageSize,
       })
-      const nextData = result.data || []
-      setData(nextData)
-      if (isMusicList) {
-        setMusicTotal(result.total ?? nextData.length)
-      }
-      setSelectedRowIds((prev) => {
-        const rowIds = new Set(nextData.map(getAdminItemId))
-        return new Set([...prev].filter((rowId) => rowIds.has(rowId)))
-      })
-    } catch (e) {
-      console.error(e)
-      setData([])
-      if (isMusicList) {
-        setMusicTotal(0)
-      }
+      if (requestId !== requestIdRef.current) return
+      setData(result.data || [])
+      setTotal({ scope, total: result.total || 0 })
+      setLoadError(null)
+    } catch (error) {
+      if (requestId !== requestIdRef.current) return
+      console.error(error)
+      setLoadError(error)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current && !silent) setLoading(false)
     }
   }
 
   const setRowPendingAction = (
     id: string,
-    action: 'delete' | 'restore' | 'permanentDelete' | null
+    action: 'delete' | 'restore' | 'permanentDelete' | 'toggle' | null
   ) => {
     setPendingActions((prev) => {
       if (action) return { ...prev, [id]: action }
-
       const next = { ...prev }
       delete next[id]
       return next
@@ -660,96 +633,38 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   }
 
   useEffect(() => {
-    fetchData()
-  }, [
-    type,
-    showDeleted,
-    isMusicList ? musicPagination.page : 1,
-    isMusicList ? musicPagination.pageSize : 50,
-  ])
-
-  useEffect(() => {
-    setSelectedRowIds(new Set())
-    setBatchDisplayOpen(false)
-    if (previousTypeRef.current !== type) {
-      previousTypeRef.current = type
-      if (isMusicList) {
-        musicPagination.setPage(1)
-      }
-    }
+    setCreateOpen(false)
+    setCreateBaseline(null)
+    setNewItem(createInitialItem(type))
+    setEditingCategory(null)
+    setCategoryBaseline(null)
+    setCreateSaving(false)
+    setCategorySaving(false)
+    createClosePendingRef.current = false
+    categoryClosePendingRef.current = false
+    createSubmitPendingRef.current = false
+    categorySubmitPendingRef.current = false
+    createGuard.markClean()
+    categoryGuard.markClean()
   }, [type])
 
-  const isSelectableList = isMusicList
-  const selectedCount = selectedRowIds.size
+  useEffect(() => {
+    void fetchData()
+  }, [type, showDeleted, pagination.page, pagination.pageSize])
 
   const handleToggleDeleted = () => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       next.delete('page')
-      if (showDeleted) {
-        next.delete('includeDeleted')
-      } else {
-        next.set('includeDeleted', 'true')
-      }
+      if (showDeleted) next.delete('includeDeleted')
+      else next.set('includeDeleted', 'true')
       return next
     })
-  }
-
-  const setRowSelected = (rowId: string, selected: boolean) => {
-    setSelectedRowIds((prev) => {
-      const next = new Set(prev)
-      if (selected) next.add(rowId)
-      else next.delete(rowId)
-      return next
-    })
-  }
-
-  const setAllRowsSelected = (selected: boolean) => {
-    const selectableIds = data.map(getAdminItemId).filter(Boolean)
-    setSelectedRowIds(selected ? new Set(selectableIds) : new Set())
-  }
-
-  const toggleAllRows = () => setAllRowsSelected(selectedCount !== data.length)
-
-  const handleBatchDisplaySubmit = async () => {
-    if (type !== 'music' || !selectedRowIds.size || batchDisplaySaving) return
-    if (
-      batchDisplayForm.displayAlbumMode === 'manual' &&
-      !batchDisplayForm.manualAlbumName.trim()
-    ) {
-      show('手动专辑名不能为空', { variant: 'error' })
-      return
-    }
-
-    setBatchDisplaySaving(true)
-    try {
-      await apiPatch('/api/admin/music/batch-display', {
-        songDocIds: [...selectedRowIds],
-        displayAlbumMode: batchDisplayForm.displayAlbumMode,
-        manualAlbumName:
-          batchDisplayForm.displayAlbumMode === 'manual'
-            ? batchDisplayForm.manualAlbumName.trim()
-            : null,
-        displayAlbumDocId:
-          batchDisplayForm.displayAlbumMode === 'linked' &&
-          batchDisplayForm.displayAlbumDocId.trim()
-            ? batchDisplayForm.displayAlbumDocId.trim()
-            : null,
-      })
-      show('歌曲展示信息已批量更新', { variant: 'success' })
-      setSelectedRowIds(new Set())
-      setBatchDisplayOpen(false)
-      invalidateApiCacheByPrefix('/api/admin/music')
-      await fetchData()
-    } catch (error) {
-      show(error instanceof Error ? error.message : '批量更新展示信息失败', { variant: 'error' })
-    } finally {
-      setBatchDisplaySaving(false)
-    }
   }
 
   const handleDelete = async (id: string) => {
-    const requiresReason = type === 'wiki' || type === 'posts' || type === 'galleries'
+    const requiresReason =
+      type === 'wiki' || type === 'posts' || type === 'galleries' || type === 'ticket-listings'
     const reasonInput = requiresReason
       ? await dialog.prompt({
           title: '删除理由',
@@ -763,6 +678,16 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     const trimmedReasonInput = reasonInput.trim()
     if (requiresReason && !trimmedReasonInput) {
       show('删除该内容必须填写删除理由', { variant: 'error' })
+      return
+    }
+    const reasonError = validateMaxLength(
+      trimmedReasonInput,
+      'reason',
+      '删除理由',
+      CONTENT_LIMITS.userModeration.note
+    )
+    if (reasonError) {
+      show(reasonError.message, { variant: 'error' })
       return
     }
     const confirmed = await dialog.confirm({
@@ -788,16 +713,14 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     )
     try {
       const deletePath = `/api/admin/${cfg.apiPath}/${id}`
-      if (trimmedReasonInput) {
-        await apiDelete(deletePath, { reason: trimmedReasonInput })
-      } else {
-        await apiDelete(deletePath)
-      }
+      if (trimmedReasonInput) await apiDelete(deletePath, { reason: trimmedReasonInput })
+      else await apiDelete(deletePath)
       show('已删除', { variant: 'success' })
       invalidateCurrentDataCaches()
+      await fetchData({ silent: true })
     } catch (e) {
       setData(previousData)
-      show(e instanceof Error ? e.message : '删除失败', { variant: 'error' })
+      show(getErrorMessage(e, '删除失败'), { variant: 'error' })
     } finally {
       setRowPendingAction(id, null)
     }
@@ -818,9 +741,10 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       )
       show('已恢复', { variant: 'success' })
       invalidateCurrentDataCaches()
+      await fetchData({ silent: true })
     } catch (e) {
       setData(previousData)
-      show(e instanceof Error ? e.message : '恢复失败', { variant: 'error' })
+      show(getErrorMessage(e, '恢复失败'), { variant: 'error' })
     } finally {
       setRowPendingAction(id, null)
     }
@@ -842,21 +766,63 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       await apiDelete(`/api/admin/${cfg.apiPath}/${id}/permanent`)
       show('已彻底删除', { variant: 'success' })
       invalidateCurrentDataCaches()
+      await fetchData({ silent: true })
     } catch (e) {
       setData(previousData)
-      show(e instanceof Error ? e.message : '彻底删除失败', { variant: 'error' })
+      show(getErrorMessage(e, '彻底删除失败'), { variant: 'error' })
     } finally {
       setRowPendingAction(id, null)
     }
   }
 
+  const validateNewItem = () =>
+    type === 'sections'
+      ? validateRequiredText(newItem.name, 'name', '版块名称') ||
+        validateMaxLength(newItem.name, 'name', '版块名称', CONTENT_LIMITS.section.name) ||
+        validateMaxLength(
+          newItem.description,
+          'description',
+          '版块描述',
+          CONTENT_LIMITS.section.description
+        ) ||
+        (Number.isFinite(newItem.order ?? 0) && (newItem.order ?? 0) >= 0
+          ? null
+          : { field: 'order', message: '排序必须是非负数字' })
+      : type === 'wiki-categories'
+        ? validateRequiredText(newItem.id, 'id', '分类 ID') ||
+          validateRequiredText(newItem.name, 'name', '分类名称') ||
+          validateMaxLength(newItem.id, 'id', '分类 ID', CONTENT_LIMITS.wiki.slug) ||
+          validateMaxLength(newItem.name, 'name', '分类名称', CONTENT_LIMITS.wiki.category) ||
+          validateMaxLength(
+            newItem.description,
+            'description',
+            '分类描述',
+            CONTENT_LIMITS.section.description
+          )
+        : validateRequiredText(newItem.content, 'content', '公告内容') ||
+          validateMaxLength(
+            newItem.content,
+            'content',
+            '公告内容',
+            CONTENT_LIMITS.announcement.content
+          ) ||
+          validateUrl(newItem.link, 'link', '公告链接', CONTENT_LIMITS.announcement.link)
+
   const handleCreate = async () => {
+    if (createSubmitPendingRef.current) return
+    const validationError = validateNewItem()
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
+    createSubmitPendingRef.current = true
+    setCreateSaving(true)
     try {
       if (type === 'sections') {
         await apiPost('/api/sections', {
           name: newItem.name?.trim(),
           description: newItem.description?.trim(),
-          order: Number.isFinite(newItem.order) ? newItem.order : 0,
+          order: newItem.order ?? 0,
         })
       } else if (type === 'wiki-categories') {
         await apiPost(WIKI_CATEGORIES_ADMIN_PATH, {
@@ -870,33 +836,118 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           active: newItem.active ?? true,
         })
       }
-      setNewItem({})
-      if (type === 'wiki-categories') {
-        invalidateCurrentDataCaches()
-      }
-      await fetchData()
+      createGuard.markClean()
+      setCreateBaseline(null)
+      setCreateOpen(false)
+      setNewItem(createInitialItem(type))
+      invalidateCurrentDataCaches()
       show('创建成功', { variant: 'success' })
+      await fetchData({ silent: true })
     } catch (e) {
-      show('创建失败', { variant: 'error' })
+      show(getErrorMessage(e, '创建失败'), { variant: 'error' })
+    } finally {
+      createSubmitPendingRef.current = false
+      setCreateSaving(false)
     }
   }
 
   const handleUpdateWikiCategory = async () => {
     if (type !== 'wiki-categories' || !editingCategory?.id) return
+    if (categorySubmitPendingRef.current) return
+    const validationError =
+      validateRequiredText(editingCategory.name, 'name', '分类名称') ||
+      (Number.isFinite(Number(editingCategory.order ?? 0)) &&
+      Number(editingCategory.order ?? 0) >= 0
+        ? null
+        : { field: 'order', message: '排序必须是非负数字' }) ||
+      validateMaxLength(
+        editingCategory.description,
+        'description',
+        '分类描述',
+        CONTENT_LIMITS.section.description
+      )
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
+    categorySubmitPendingRef.current = true
+    setCategorySaving(true)
     try {
       await apiPatch(`${WIKI_CATEGORIES_ADMIN_PATH}/${editingCategory.id}`, {
         ...getWikiCategoryPayload(editingCategory),
       })
+      categoryGuard.markClean()
+      setCategoryBaseline(null)
       setEditingCategory(null)
       invalidateCurrentDataCaches()
-      await fetchData()
       show('更新成功', { variant: 'success' })
+      await fetchData({ silent: true })
     } catch (e) {
-      show(e instanceof Error ? e.message : '更新失败', { variant: 'error' })
+      show(getErrorMessage(e, '更新失败'), { variant: 'error' })
+    } finally {
+      categorySubmitPendingRef.current = false
+      setCategorySaving(false)
+    }
+  }
+
+  const openCreateModal = () => {
+    const initial = createInitialItem(type)
+    setNewItem(initial)
+    setCreateBaseline(initial)
+    setCreateOpen(true)
+  }
+
+  const closeCreateModal = async () => {
+    if (createSaving || !createOpen || createClosePendingRef.current) return
+    createClosePendingRef.current = true
+    try {
+      if (createDirty) {
+        const confirmed = await dialog.confirm({
+          title: '放弃修改？',
+          message: '当前修改尚未保存，关闭后将丢失这些更改。',
+          confirmText: '放弃修改',
+          variant: 'warning',
+        })
+        if (!confirmed) return
+      }
+      createGuard.markClean()
+      setCreateBaseline(null)
+      setNewItem(createInitialItem(type))
+      setCreateOpen(false)
+    } finally {
+      createClosePendingRef.current = false
+    }
+  }
+
+  const openCategoryModal = (item: AdminDataItem) => {
+    setEditingCategory(item)
+    setCategoryBaseline(item)
+  }
+
+  const closeCategoryModal = async () => {
+    if (categorySaving || !editingCategory || categoryClosePendingRef.current) return
+    categoryClosePendingRef.current = true
+    try {
+      if (categoryDirty) {
+        const confirmed = await dialog.confirm({
+          title: '放弃修改？',
+          message: '当前修改尚未保存，关闭后将丢失这些更改。',
+          confirmText: '放弃修改',
+          variant: 'warning',
+        })
+        if (!confirmed) return
+      }
+      categoryGuard.markClean()
+      setCategoryBaseline(null)
+      setEditingCategory(null)
+    } finally {
+      categoryClosePendingRef.current = false
     }
   }
 
   const toggleAnnouncement = async (item: AdminDataItem) => {
+    if (!item.id || pendingActions[item.id]) return
+    setRowPendingAction(item.id, 'toggle')
     try {
       const result = await apiPatch<{ announcement: AdminDataItem }>(
         `/api/announcements/${item.id}`,
@@ -910,116 +961,144 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         )
       )
       show('状态已更新', { variant: 'success' })
+      await fetchData({ silent: true })
     } catch (e) {
-      show('更新失败', { variant: 'error' })
+      show(getErrorMessage(e, '更新失败'), { variant: 'error' })
+    } finally {
+      setRowPendingAction(item.id, null)
     }
   }
 
   const renderActions = (item: AdminDataItem, rowId: string) => {
     const pendingAction = pendingActions[rowId]
     const isPending = Boolean(pendingAction)
+    const itemHref = cfg.editorBasePath ? getItemHref(type, item) : null
 
     return (
-      <div className="flex items-center justify-start gap-2">
-        {pendingAction && (
-          <button
-            disabled
-            className={pendingAction === 'restore' ? SUCCESS_BUTTON_CLASSES : DANGER_BUTTON_CLASSES}
+      <div className="flex flex-wrap items-center justify-start gap-2">
+        {itemHref && !item.isDeleted && !item.deletedAt && !isPending && (
+          <LinkButton
+            to={`${itemHref}/edit`}
+            state={{ editorBackground: location }}
+            variant="warning"
+            soft
+            size="sm"
+            leftIcon={<Edit3 size={14} />}
           >
-            <RefreshCw size={14} className="animate-spin" />
+            编辑
+          </LinkButton>
+        )}
+        {isPending && pendingAction !== 'toggle' && (
+          <Button
+            variant={pendingAction === 'restore' ? 'success' : 'danger'}
+            soft
+            size="sm"
+            loading
+          >
             {pendingAction === 'delete'
               ? '删除中...'
               : pendingAction === 'restore'
                 ? '恢复中...'
                 : '永久删除中...'}
-          </button>
+          </Button>
         )}
         {type === 'announcements' && !item.isDeleted && (
-          <button
+          <Button
             onClick={() => toggleAnnouncement(item)}
             disabled={isPending}
-            className={WARNING_BUTTON_CLASSES}
+            loading={pendingAction === 'toggle'}
+            variant="warning"
+            soft
+            size="sm"
+            leftIcon={item.active ? <CheckCircle size={14} /> : <XCircle size={14} />}
           >
-            {item.active ? <CheckCircle size={14} /> : <XCircle size={14} />}
             {item.active ? '禁用' : '启用'}
-          </button>
+          </Button>
         )}
         {type === 'wiki-categories' && !item.isDeleted && !isPending && (
-          <button
-            onClick={() => setEditingCategory(item)}
-            disabled={isPending}
-            className={WARNING_BUTTON_CLASSES}
+          <Button
+            onClick={() => openCategoryModal(item)}
+            variant="warning"
+            soft
+            size="sm"
+            leftIcon={<Edit3 size={14} />}
           >
-            <Edit3 size={14} />
             编辑
-          </button>
+          </Button>
         )}
         {type === 'events' && !item.isDeleted && !isPending && item.id && (
-          <Link to={`/admin/events/${item.id}/edit`} className={WARNING_BUTTON_CLASSES}>
-            <Edit3 size={14} />
+          <Button
+            type="button"
+            onClick={() => setEditingEventId(item.id)}
+            variant="warning"
+            soft
+            size="sm"
+            leftIcon={<Edit3 size={14} />}
+          >
             编辑
-          </Link>
+          </Button>
         )}
         {!isPending && item.isDeleted ? (
           <>
-            <button
+            <Button
               onClick={() => handleRestore(rowId)}
-              disabled={isPending}
-              className={SUCCESS_BUTTON_CLASSES}
+              variant="success"
+              soft
+              size="sm"
+              leftIcon={<RotateCcw size={14} />}
             >
-              <RotateCcw size={14} />
               恢复
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => handlePermanentDelete(rowId)}
-              disabled={isPending}
-              className={DANGER_BUTTON_CLASSES}
+              variant="danger"
+              soft
+              size="sm"
+              leftIcon={<Trash2 size={14} />}
             >
-              <Trash2 size={14} />
               永久删除
-            </button>
+            </Button>
           </>
         ) : !isPending ? (
-          <button
+          <Button
             onClick={() => handleDelete(rowId)}
-            disabled={isPending}
-            className={DANGER_BUTTON_CLASSES}
+            variant="danger"
+            soft
+            size="sm"
+            leftIcon={<Trash2 size={14} />}
           >
-            <Trash2 size={14} />
             删除
-          </button>
+          </Button>
         ) : null}
       </div>
     )
   }
 
+  if (loading && data.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+
   return (
     <>
       <div className="space-y-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-[0.12em] text-text-primary">
             <Icon size={24} className="text-brand-gold" /> {cfg.title}
           </h1>
-          <div className="flex items-center gap-2">
-            {type === 'music' && (
-              <>
-                <button
-                  onClick={() => setSongCreateOpen(true)}
-                  className="rounded theme-button-primary px-4 py-2 text-sm transition-all"
-                >
-                  <Plus size={14} className="mr-1 inline" /> 添加音乐
-                </button>
-                <button
-                  onClick={() => setMusicImportOpen(true)}
-                  className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
-                >
-                  <Plus size={14} className="mr-1 inline" /> 导入音乐
-                </button>
-              </>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {cfg.editorBasePath && (
+              <LinkButton
+                to={`${cfg.editorBasePath}/new`}
+                state={{ editorBackground: location }}
+                leftIcon={<Plus size={14} />}
+              >
+                新增{cfg.title.replace(/管理$/, '')}
+              </LinkButton>
             )}
             {type === 'events' && (
               <Link
                 to="/admin/events/new"
+                state={{ editorBackground: location }}
                 data-pressable
                 className="inline-flex items-center rounded theme-button-primary px-4 py-2 text-sm transition-all"
               >
@@ -1038,157 +1117,123 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               <Ban size={14} className="mr-1 inline" /> 显示已删除
             </button>
             <button
-              onClick={fetchData}
+              onClick={() => void fetchData()}
               className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
             >
               <RefreshCw size={14} className="mr-1 inline" /> 刷新
             </button>
           </div>
         </div>
+        {loadError && data.length > 0 && (
+          <LoadErrorState
+            className="py-5"
+            error={loadError}
+            description="当前列表可能不是最新内容。"
+            onRetry={() => void fetchData()}
+          />
+        )}
 
-        {isSelectableList && (
-          <div className="rounded border border-border bg-surface p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-text-secondary">
-                已选择 <span className="font-semibold text-brand-gold">{selectedCount}</span> 首歌曲
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={toggleAllRows}
-                  disabled={!data.length}
-                  className="rounded border border-border px-3 py-1.5 text-xs text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {selectedCount === data.length && data.length ? '取消全选' : '全选'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBatchDisplayOpen((value) => !value)}
-                  disabled={!selectedCount}
-                  className="rounded theme-button-secondary px-3 py-1.5 text-xs transition-all disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  批量更新展示
-                </button>
-              </div>
-            </div>
-
-            {batchDisplayOpen && selectedCount > 0 && (
-              <div className="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-4 md:grid-cols-[160px_1fr_1fr_auto]">
-                <select
-                  value={batchDisplayForm.displayAlbumMode}
-                  onChange={(event) =>
-                    setBatchDisplayForm((prev) => ({
-                      ...prev,
-                      displayAlbumMode: event.target.value as 'linked' | 'manual' | 'none',
-                    }))
-                  }
-                  className="rounded border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none"
-                >
-                  <option value="linked">显示关联专辑</option>
-                  <option value="manual">显示手动专辑</option>
-                  <option value="none">不显示专辑</option>
-                </select>
-                <input
-                  type="text"
-                  value={batchDisplayForm.manualAlbumName}
-                  onChange={(event) =>
-                    setBatchDisplayForm((prev) => ({
-                      ...prev,
-                      manualAlbumName: event.target.value,
-                    }))
-                  }
-                  disabled={batchDisplayForm.displayAlbumMode !== 'manual'}
-                  maxLength={CONTENT_LIMITS.music.manualAlbumName}
-                  placeholder="手动专辑名"
-                  className="rounded border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                />
-                <input
-                  type="text"
-                  value={batchDisplayForm.displayAlbumDocId}
-                  onChange={(event) =>
-                    setBatchDisplayForm((prev) => ({
-                      ...prev,
-                      displayAlbumDocId: event.target.value,
-                    }))
-                  }
-                  disabled={batchDisplayForm.displayAlbumMode !== 'linked'}
-                  placeholder="展示专辑 docId（可选）"
-                  className="rounded border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary focus:border-brand-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleBatchDisplaySubmit()}
-                  disabled={batchDisplaySaving}
-                  className="rounded theme-button-primary px-4 py-2 text-sm transition-all disabled:cursor-wait disabled:opacity-50"
-                >
-                  {batchDisplaySaving ? '保存中...' : '保存'}
-                </button>
-              </div>
-            )}
+        {cfg.hasCreate && (
+          <div className="flex justify-end">
+            <Button onClick={openCreateModal} variant="primary" leftIcon={<Plus size={14} />}>
+              新增
+            </Button>
           </div>
         )}
 
         {cfg.hasCreate && (
-          <div className="rounded border border-border bg-surface p-5">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
-              <Plus size={16} /> 新增
-            </h3>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <FormModal
+            open={createOpen}
+            onClose={() => void closeCreateModal()}
+            title={
+              type === 'sections'
+                ? '新增版块'
+                : type === 'wiki-categories'
+                  ? '新增百科分类'
+                  : '新增公告'
+            }
+            onSubmit={(event) => {
+              event.preventDefault()
+              void handleCreate()
+            }}
+            submitText="创建"
+            cancelText="取消"
+            loading={createSaving}
+            maxWidth="max-w-2xl"
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {type === 'sections' && (
                 <>
-                  <input
-                    type="text"
-                    placeholder="名称"
-                    value={newItem.name || ''}
-                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="描述"
-                    value={newItem.description || ''}
-                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="number"
-                    placeholder="排序"
-                    value={newItem.order || 0}
-                    onChange={(e) => setNewItem({ ...newItem, order: Number(e.target.value) })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    名称 <span className="theme-text-error">*</span>
+                    <Input
+                      aria-label="名称"
+                      value={newItem.name || ''}
+                      onChange={(event) => setNewItem({ ...newItem, name: event.target.value })}
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    描述
+                    <Input
+                      aria-label="描述"
+                      value={newItem.description || ''}
+                      onChange={(event) =>
+                        setNewItem({ ...newItem, description: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    排序
+                    <Input
+                      aria-label="排序"
+                      type="number"
+                      value={newItem.order ?? 0}
+                      onChange={(event) =>
+                        setNewItem({ ...newItem, order: Number(event.target.value) })
+                      }
+                    />
+                  </label>
                 </>
               )}
               {type === 'wiki-categories' && (
                 <>
-                  <input
-                    type="text"
-                    placeholder="分类 ID"
-                    value={newItem.id || ''}
-                    onChange={(e) => setNewItem({ ...newItem, id: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="名称"
-                    value={newItem.name || ''}
-                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="描述"
-                    value={newItem.description || ''}
-                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
-                  <input
-                    type="number"
-                    placeholder="排序"
-                    value={newItem.order || 0}
-                    onChange={(e) => setNewItem({ ...newItem, order: Number(e.target.value) })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    分类 ID <span className="theme-text-error">*</span>
+                    <Input
+                      aria-label="分类 ID"
+                      value={newItem.id || ''}
+                      onChange={(event) => setNewItem({ ...newItem, id: event.target.value })}
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    名称 <span className="theme-text-error">*</span>
+                    <Input
+                      aria-label="名称"
+                      value={newItem.name || ''}
+                      onChange={(event) => setNewItem({ ...newItem, name: event.target.value })}
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    描述
+                    <Input
+                      aria-label="描述"
+                      value={newItem.description || ''}
+                      onChange={(event) =>
+                        setNewItem({ ...newItem, description: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    排序
+                    <Input
+                      aria-label="排序"
+                      type="number"
+                      value={newItem.order ?? 0}
+                      onChange={(event) =>
+                        setNewItem({ ...newItem, order: Number(event.target.value) })
+                      }
+                    />
+                  </label>
                   <div className="rounded border border-border bg-surface-alt px-4 py-2">
                     <Checkbox
                       checked={Boolean(newItem.requiresAdminEdit)}
@@ -1202,62 +1247,74 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               )}
               {type === 'announcements' && (
                 <>
-                  <input
-                    type="text"
-                    placeholder="公告内容"
-                    value={newItem.content || ''}
-                    onChange={(e) => setNewItem({ ...newItem, content: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none md:col-span-2"
-                  />
-                  <input
-                    type="text"
-                    placeholder="跳转链接 (可选)"
-                    value={newItem.link || ''}
-                    onChange={(e) => setNewItem({ ...newItem, link: e.target.value })}
-                    className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-                  />
+                  <label className="grid gap-1 text-sm text-text-secondary md:col-span-2">
+                    公告内容 <span className="theme-text-error">*</span>
+                    <Input
+                      aria-label="公告内容"
+                      value={newItem.content || ''}
+                      onChange={(event) => setNewItem({ ...newItem, content: event.target.value })}
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm text-text-secondary">
+                    跳转链接（可选）
+                    <Input
+                      aria-label="跳转链接（可选）"
+                      value={newItem.link || ''}
+                      onChange={(event) => setNewItem({ ...newItem, link: event.target.value })}
+                    />
+                  </label>
                 </>
               )}
-              <button
-                onClick={handleCreate}
-                className="rounded bg-brand-gold-dark px-5 py-2 text-sm font-medium text-white transition-all hover:bg-brand-gold"
-              >
-                添加
-              </button>
             </div>
-          </div>
+          </FormModal>
         )}
 
-        {type === 'wiki-categories' && editingCategory && (
-          <div className="rounded border border-border bg-surface p-5">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
-              <Edit3 size={16} /> 编辑分类
-            </h3>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_120px_160px_auto_auto]">
-              <input
-                type="text"
-                value={editingCategory.name || ''}
-                onChange={(event) =>
-                  setEditingCategory({ ...editingCategory, name: event.target.value })
-                }
-                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-              />
-              <input
-                type="text"
-                value={editingCategory.description || ''}
-                onChange={(event) =>
-                  setEditingCategory({ ...editingCategory, description: event.target.value })
-                }
-                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-              />
-              <input
-                type="number"
-                value={toNumber(editingCategory.order)}
-                onChange={(event) =>
-                  setEditingCategory({ ...editingCategory, order: Number(event.target.value) })
-                }
-                className="rounded border border-border bg-surface-alt px-4 py-2 text-sm focus:border-brand-gold focus:outline-none"
-              />
+        <FormModal
+          open={type === 'wiki-categories' && editingCategory !== null}
+          onClose={() => void closeCategoryModal()}
+          title="编辑百科分类"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void handleUpdateWikiCategory()
+          }}
+          submitText="保存"
+          cancelText="取消"
+          loading={categorySaving}
+          maxWidth="max-w-2xl"
+        >
+          {editingCategory && (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="grid gap-1 text-sm text-text-secondary">
+                名称
+                <Input
+                  aria-label="名称"
+                  value={editingCategory.name || ''}
+                  onChange={(event) =>
+                    setEditingCategory({ ...editingCategory, name: event.target.value })
+                  }
+                />
+              </label>
+              <label className="grid gap-1 text-sm text-text-secondary">
+                描述
+                <Input
+                  aria-label="描述"
+                  value={editingCategory.description || ''}
+                  onChange={(event) =>
+                    setEditingCategory({ ...editingCategory, description: event.target.value })
+                  }
+                />
+              </label>
+              <label className="grid gap-1 text-sm text-text-secondary">
+                排序
+                <Input
+                  aria-label="排序"
+                  type="number"
+                  value={toNumber(editingCategory.order)}
+                  onChange={(event) =>
+                    setEditingCategory({ ...editingCategory, order: Number(event.target.value) })
+                  }
+                />
+              </label>
               <div className="rounded border border-border bg-surface-alt px-4 py-2">
                 <Checkbox
                   checked={Boolean(editingCategory.requiresAdminEdit)}
@@ -1270,43 +1327,20 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                   label={<span className="text-text-secondary">仅管理员编辑</span>}
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => void handleUpdateWikiCategory()}
-                className="rounded theme-button-primary px-4 py-2 text-sm transition-all"
-              >
-                保存
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditingCategory(null)}
-                className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
-              >
-                取消
-              </button>
             </div>
-          </div>
-        )}
+          )}
+        </FormModal>
 
         <div className="overflow-hidden rounded border border-border bg-surface">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-border bg-surface-alt">
-                  {isSelectableList && (
-                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                      <Checkbox
-                        checked={data.length > 0 && selectedCount === data.length}
-                        onCheckedChange={(checked) => setAllRowsSelected(checked === true)}
-                        aria-label="选择全部歌曲"
-                      />
-                    </th>
-                  )}
                   {cfg.columns.map((col) => (
                     <th
                       key={col.key}
                       className={clsx(
-                        'px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted',
+                        'px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted lg:min-w-0',
                         col.className
                       )}
                     >
@@ -1316,17 +1350,12 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {loading ? (
-                  [1, 2, 3].map((i) => (
-                    <tr key={i} className="animate-pulse">
-                      <td
-                        colSpan={cfg.columns.length + (isSelectableList ? 1 : 0)}
-                        className="px-5 py-4"
-                      >
-                        <div className="h-6 rounded bg-surface-alt" />
-                      </td>
-                    </tr>
-                  ))
+                {loadError && data.length === 0 ? (
+                  <tr>
+                    <td colSpan={cfg.columns.length}>
+                      <LoadErrorState error={loadError} onRetry={() => void fetchData()} />
+                    </td>
+                  </tr>
                 ) : data.length > 0 ? (
                   data.map((item) => {
                     const rowId = getAdminItemId(item)
@@ -1338,20 +1367,11 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                           item.isDeleted && 'opacity-70'
                         )}
                       >
-                        {isSelectableList && (
-                          <td className="px-5 py-4 align-top">
-                            <Checkbox
-                              checked={selectedRowIds.has(rowId)}
-                              onCheckedChange={(checked) => setRowSelected(rowId, checked === true)}
-                              aria-label={`选择 ${toText(item.title || item.id || rowId)}`}
-                            />
-                          </td>
-                        )}
                         {cfg.columns.map((col) => (
                           <td
                             key={col.key}
                             className={clsx(
-                              'px-5 py-4 align-top',
+                              'text-wrap-anywhere px-5 py-4 align-top',
                               col.key === 'actions' && 'text-left'
                             )}
                           >
@@ -1363,10 +1383,18 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
                       </tr>
                     )
                   })
+                ) : loading ? (
+                  [1, 2, 3].map((i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td colSpan={cfg.columns.length} className="px-5 py-4">
+                        <div className="h-6 rounded bg-surface-alt" />
+                      </td>
+                    </tr>
+                  ))
                 ) : (
                   <tr>
                     <td
-                      colSpan={cfg.columns.length + (isSelectableList ? 1 : 0)}
+                      colSpan={cfg.columns.length}
                       className="px-5 py-16 text-center italic text-text-muted"
                     >
                       暂无数据
@@ -1376,41 +1404,30 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               </tbody>
             </table>
           </div>
-          {isMusicList && musicPagination.totalPages > 1 && (
-            <Pagination
-              page={musicPagination.page}
-              totalPages={musicPagination.totalPages}
-              onPageChange={musicPagination.handlePageChange}
-              pageSize={musicPagination.pageSize}
-              onPageSizeChange={musicPagination.handlePageSizeChange}
-              pageSizeOptions={MUSIC_PAGE_SIZE_OPTIONS}
-              showPageSizeSelector
-            />
-          )}
         </div>
+        {pagination.hasMultiplePages ? (
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={pagination.handlePageChange}
+            pageSize={pagination.pageSize}
+            onPageSizeChange={pagination.handlePageSizeChange}
+            pageSizeOptions={[20, 50, 100]}
+            showPageSizeSelector
+          />
+        ) : null}
       </div>
-      {type === 'music' && (
-        <>
-          <SongFormModal
-            open={songCreateOpen}
-            onClose={() => setSongCreateOpen(false)}
-            onSuccess={() => {
-              setSongCreateOpen(false)
-              invalidateApiCacheByPrefix('/api/admin/music')
-              void fetchData()
-            }}
-            mode="create"
-          />
-          <MusicImportModal
-            open={musicImportOpen}
-            onClose={() => setMusicImportOpen(false)}
-            onImported={() => {
-              setMusicImportOpen(false)
-              invalidateApiCacheByPrefix('/api/admin/music')
-              void fetchData()
+      {type === 'events' && editingEventId && (
+        <React.Suspense fallback={<div role="status">编辑器加载中...</div>}>
+          <AdminEventEdit
+            eventId={editingEventId}
+            onClose={() => setEditingEventId(null)}
+            onSaved={() => {
+              setEditingEventId(null)
+              void fetchData({ silent: true })
             }}
           />
-        </>
+        </React.Suspense>
       )}
     </>
   )

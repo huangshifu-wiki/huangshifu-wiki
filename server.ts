@@ -29,10 +29,12 @@ import { registerRegionRoutes } from './src/server/location/routes'
 import { registerExifRoutes } from './src/server/location/exifRoutes'
 import { registerAuthRoutes } from './src/server/routes/auth.routes'
 import { registerUsersRoutes } from './src/server/routes/users.routes'
+import { registerApiKeysRoutes } from './src/server/routes/api-keys.routes'
 import { registerWikiRoutes } from './src/server/routes/wiki.routes'
 import { registerPostsRoutes } from './src/server/routes/posts.routes'
 import { registerGalleriesRoutes } from './src/server/routes/galleries.routes'
 import { registerEventsRoutes } from './src/server/routes/events.routes'
+import { registerTicketListingsRoutes } from './src/server/routes/ticket-listings.routes'
 import { registerMusicRoutes } from './src/server/routes/music.routes'
 import { registerAlbumsRoutes } from './src/server/routes/albums.routes'
 import { registerSearchRoutes } from './src/server/routes/search.routes'
@@ -47,20 +49,28 @@ import { registerS3Routes } from './src/server/routes/s3.routes'
 import { registerMusicSongRoutes } from './src/server/routes/music-song.routes'
 import { registerUploadRoutes } from './src/server/routes/uploads.routes'
 import { registerSetupRoutes } from './src/server/routes/setup.routes'
+import { registerSeoRoutes } from './src/server/routes/seo.routes'
 import { UPLOAD_MAX_FILE_SIZE_MB } from './src/lib/uploadLimits'
 import { registerAdminSystemRoutes } from './src/server/routes/admin.system.routes'
 import { registerAdminVariantsRoutes } from './src/server/routes/admin.variants.routes'
 import { registerAdminMediaHealthRoutes } from './src/server/routes/admin.media-health.routes'
-import { registerAdminMusicCoverThumbnailsRoutes } from './src/server/routes/admin.music-cover-thumbnails.routes'
+import { registerAdminMediaMaintenanceRoutes } from './src/server/routes/admin.media-maintenance.routes'
 import { cloudSyncService } from './src/server/services/cloudSyncService'
 import { variantGenerator } from './src/server/services/variantGenerator'
+import {
+  cleanupExpiredUploadSessions,
+  garbageCollectRetiredMedia,
+} from './src/server/services/mediaLifecycle.service'
 import { rateLimitConfigService } from './src/server/services/rateLimitConfig.service'
+import { runtimeConfigService } from './src/server/services/runtimeConfig.service'
+import { secretsConfigService } from './src/server/services/secretsConfig.service'
 import { isSemanticSearchEnabled } from './src/server/utils'
 import {
   injectHtmlBootstrapState,
   shouldBypassProductionStaticHtml,
   SPA_FALLBACK_PATH,
 } from './src/server/utils/htmlShell'
+import { getRobotsDirective, isDocumentPath } from './src/server/utils'
 import type { AuthenticatedRequest } from './src/server/types'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -93,6 +103,10 @@ fs.mkdirSync(backupsDir, { recursive: true })
 const DEFAULT_PORT = Number(process.env.PORT) || 3003
 const DEFAULT_HMR_PORT = Number(process.env.VITE_HMR_PORT) || 24678
 const CORS_ORIGIN = process.env.CORS_ORIGIN || ''
+
+// 静态缓存策略：哈希产物内容不变可长期缓存；HTML、上传文件及 public 无哈希文件必须重新验证
+const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable'
+const CACHE_CONTROL_REVALIDATE = 'no-cache'
 
 function parseCorsOrigins(envValue: string): string[] {
   return envValue
@@ -184,6 +198,11 @@ async function findAvailablePort(preferredPort: number, host = '0.0.0.0'): Promi
   throw new Error(`No available port found starting from ${preferredPort}`)
 }
 
+app.use('/api/users/me/api-keys', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store')
+  next()
+})
+
 if (CORS_ORIGIN) {
   const origins = parseCorsOrigins(CORS_ORIGIN)
   if (origins.length === 1 && origins[0] === '*') {
@@ -251,22 +270,36 @@ app.use(
       if (/\bimage\/|\/pdf$|\.gz$|\.br$|\.zip$/i.test(contentType)) {
         return false
       }
-      if (/\bjavascript\b|\bcss\b/i.test(contentType)) {
-        ;(req as unknown as Record<string, unknown>)._customCompressionLevel = 9
-      }
       return compression.filter(req, res)
     },
     threshold: 1024,
   })
 )
 
+// SEO 路由（robots.txt / sitemap.xml）必须在静态资源与 SPA fallback 之前注册，
+// 否则生产环境会被 dist/index.html 抢先响应这些路径
+registerSeoRoutes(app)
+
+// 文档响应附加 X-Robots-Tag，在首个 SPA 壳返回时保护私有页与筛选页；
+// 详情资源是否存在仍由客户端详情 SEO 处理（本站不引入 SSR）
+app.use((req, res, next) => {
+  if (isDocumentPath(req.path)) {
+    res.setHeader('X-Robots-Tag', getRobotsDirective(req.path, Object.keys(req.query).length > 0))
+  }
+  next()
+})
+
 // 生产环境静态资源服务 - 必须在 compression 之后
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(process.cwd(), 'dist')
+
+  // dist/assets/ 下均为 Vite 哈希产物（见 vite.config.ts 输出配置）；public/ 原样拷贝在根目录，无 hash
+  function isHashedBuildAsset(filePath: string): boolean {
+    return filePath.includes(`${path.sep}assets${path.sep}`)
+  }
+
   const staticMiddleware = express.static(distPath, {
     index: false,
-    maxAge: '1y', // 静态资源缓存1年
-    immutable: true, // 文件名带hash，内容不变则永不失效
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.js')) {
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
@@ -279,6 +312,11 @@ if (process.env.NODE_ENV === 'production') {
         res.setHeader('Access-Control-Allow-Origin', '*')
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
       }
+      // 哈希产物可长期缓存；无哈希文件必须重新验证，否则更新后客户端长期命中旧文件
+      res.setHeader(
+        'Cache-Control',
+        isHashedBuildAsset(filePath) ? CACHE_CONTROL_IMMUTABLE : CACHE_CONTROL_REVALIDATE
+      )
     },
   })
 
@@ -311,7 +349,15 @@ app.use(csrfMiddleware)
 app.use(requestLoggerMiddleware)
 
 // 静态文件服务 - 必须在路由注册之前
-app.use('/uploads', express.static(uploadsDir))
+app.use(
+  '/uploads',
+  express.static(uploadsDir, {
+    // 上传文件可能被覆盖、删除或重建变体，必须重新验证而非长期缓存
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', CACHE_CONTROL_REVALIDATE)
+    },
+  })
+)
 app.use('/uploads', (_req, res) => {
   res.status(404).end()
 })
@@ -321,13 +367,19 @@ registerExifRoutes(app)
 registerSetupRoutes(app)
 registerAuthRoutes(app)
 registerUsersRoutes(app)
+registerApiKeysRoutes(app)
 registerWikiRoutes(app)
 registerPostsRoutes(app)
 registerGalleriesRoutes(app)
+registerTicketListingsRoutes(app)
 registerEventsRoutes(app)
 registerMusicRoutes(app)
 registerAlbumsRoutes(app)
 registerSearchRoutes(app)
+// 运行时配置需在 embeddings 路由注册决策（依赖语义搜索开关）前加载完成；
+// 失败时回退默认值，不阻塞启动。search 路由在请求时惰性读取配置，不受此影响。
+await runtimeConfigService.init()
+await secretsConfigService.init()
 if (isSemanticSearchEnabled()) {
   const { registerEmbeddingsRoutes } = await import('./src/server/routes/embeddings.routes')
   registerEmbeddingsRoutes(app)
@@ -337,7 +389,7 @@ if (isSemanticSearchEnabled()) {
 registerAdminSystemRoutes(app)
 registerAdminVariantsRoutes(app)
 registerAdminMediaHealthRoutes(app)
-registerAdminMusicCoverThumbnailsRoutes(app)
+registerAdminMediaMaintenanceRoutes(app)
 registerAdminRoutes(app)
 registerNotificationsRoutes(app)
 registerFavoritesRoutes(app)
@@ -363,14 +415,20 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     res.status(400).json({ error: err.message })
     return
   }
+  const statusCode = (err as Error & { statusCode?: unknown }).statusCode
+  if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) {
+    res.status(statusCode).json({ error: err.message })
+    return
+  }
 
   logger.error({ err: err }, 'Unhandled server error')
   res.status(500).json({ error: '服务器内部错误' })
 })
 
 async function startServer() {
+  const isProduction = process.env.NODE_ENV === 'production'
   const port = await findAvailablePort(DEFAULT_PORT)
-  const hmrPort = await findAvailablePort(DEFAULT_HMR_PORT, '127.0.0.1')
+  const hmrPort = isProduction ? null : await findAvailablePort(DEFAULT_HMR_PORT, '127.0.0.1')
   if (port !== DEFAULT_PORT) {
     logger.warn(
       {
@@ -380,7 +438,7 @@ async function startServer() {
       'Preferred port is busy, falling back to next available port'
     )
   }
-  if (hmrPort !== DEFAULT_HMR_PORT) {
+  if (hmrPort !== null && hmrPort !== DEFAULT_HMR_PORT) {
     logger.warn(
       {
         requestedPort: DEFAULT_HMR_PORT,
@@ -394,29 +452,26 @@ async function startServer() {
     const nonce = crypto.randomBytes(16).toString('base64')
     res.locals.nonce = nonce
 
-    const isProduction = process.env.NODE_ENV === 'production'
-
     const directives: string[] = [
       "default-src 'self'",
       isProduction
-        ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://*.amap.com`
-        : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.amap.com`,
+        ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://*.amap.com https://challenges.cloudflare.com`
+        : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.amap.com https://challenges.cloudflare.com`,
       isProduction
         ? `style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com`
         : `style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com`,
       "font-src 'self' data:",
       "img-src 'self' data: blob: https://*.amap.com https://*.gaode.com http://*.music.126.net https://*.music.126.net http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.com https://picsum.photos https://*.picsum.photos https://fastly.picsum.photos https://*.googleusercontent.com",
-      "connect-src 'self' https://*.amap.com http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.net http://*.music.126.net https://*.music.126.net https://analysis.chatglm.cn https://gator.volces.com https://picsum.photos https://*.picsum.photos https://fastly.picsum.photos https://*.googleusercontent.com wss://localhost:* ws://localhost:*",
+      "connect-src 'self' https://*.amap.com http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.net http://*.music.126.net https://*.music.126.net https://analysis.chatglm.cn https://gator.volces.com https://picsum.photos https://*.picsum.photos https://fastly.picsum.photos https://*.googleusercontent.com https://challenges.cloudflare.com wss://localhost:* ws://localhost:*",
       "worker-src 'self' blob:",
-      "media-src 'self' http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.com http://*.music.126.net https://*.music.126.net",
-      'frame-src https://open.weixin.qq.com',
+      "media-src 'self' http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.com http://*.music.126.net https://*.music.126.net https://*.tc.qq.com https://*.stream.qqmusic.qq.com https://*.kugou.com https://*.kuwo.cn",
+      'frame-src https://open.weixin.qq.com https://challenges.cloudflare.com',
     ]
 
     res.setHeader('Content-Security-Policy', directives.join('; '))
     next()
   })
-
-  if (process.env.NODE_ENV !== 'production') {
+  if (!isProduction) {
     const { createServer: createViteServer } = await import('vite')
     const vite = await createViteServer({
       server: {
@@ -424,11 +479,27 @@ async function startServer() {
         strictPort: false,
         hmr: {
           host: '127.0.0.1',
-          port: hmrPort,
-          clientPort: hmrPort,
+          port: hmrPort!,
+          clientPort: hmrPort!,
         },
       },
       appType: 'custom',
+    })
+    // public 中的 Markdown 显式声明 UTF-8，避免浏览器按本地默认编码显示中文。
+    const markdownMiddleware = express.static(path.join(process.cwd(), 'public'), {
+      index: false,
+      redirect: false,
+      setHeaders: (res) => {
+        res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
+        res.setHeader('Cache-Control', CACHE_CONTROL_REVALIDATE)
+      },
+    })
+    app.use((req, res, next) => {
+      if (req.path.toLowerCase().endsWith('.md')) {
+        markdownMiddleware(req, res, next)
+      } else {
+        next()
+      }
     })
     app.use(vite.middlewares)
     app.get(SPA_FALLBACK_PATH, async (req: AuthenticatedRequest, res, next) => {
@@ -439,6 +510,7 @@ async function startServer() {
           authUid: req.authUser?.uid ?? null,
         })
         html = await vite.transformIndexHtml(req.originalUrl, html)
+        res.setHeader('Cache-Control', CACHE_CONTROL_REVALIDATE)
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.status(200).send(html)
       } catch (error) {
@@ -460,6 +532,8 @@ async function startServer() {
           authUid: req.authUser?.uid ?? null,
           nonce: res.locals.nonce as string | undefined,
         })
+        // HTML 必须重新验证，避免浏览器/CDN 缓存旧壳导致拿不到新资源引用
+        res.setHeader('Cache-Control', CACHE_CONTROL_REVALIDATE)
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.send(html)
       })
@@ -470,12 +544,30 @@ async function startServer() {
     logger.info(`Server running on http://localhost:${port}`)
 
     // Avoid noisy startup failures in development when local model cache is incomplete.
-    if (process.env.NODE_ENV === 'production' && isSemanticSearchEnabled()) {
+    if (isProduction && isSemanticSearchEnabled()) {
       import('./src/server/vector/clipEmbedding').then(({ warmup }) => warmup()).catch(() => {})
     }
 
-    const editLockCleanupInterval = setInterval(
-      async () => {
+    // 媒体生命周期清理：递归 setTimeout，间隔随运行时配置即时生效
+    let mediaLifecycleTimer: NodeJS.Timeout | null = null
+    const scheduleMediaLifecycle = () => {
+      mediaLifecycleTimer = setTimeout(async () => {
+        try {
+          await cleanupExpiredUploadSessions(100)
+          await garbageCollectRetiredMedia(100)
+        } catch (error) {
+          logger.error({ err: error }, 'Media lifecycle cleanup failed')
+        } finally {
+          scheduleMediaLifecycle()
+        }
+      }, runtimeConfigService.getConfig().mediaCleanupIntervalMs)
+    }
+    scheduleMediaLifecycle()
+
+    // 编辑锁清理：递归 setTimeout，间隔随运行时配置即时生效
+    let editLockCleanupTimer: NodeJS.Timeout | null = null
+    const scheduleEditLockCleanup = () => {
+      editLockCleanupTimer = setTimeout(async () => {
         try {
           await prisma.editLock.deleteMany({
             where: { expiresAt: { lt: new Date() } },
@@ -483,9 +575,10 @@ async function startServer() {
         } catch (error) {
           logger.error({ err: error }, 'Clean up expired edit locks failed')
         }
-      },
-      parseInt(process.env.EDIT_LOCK_CLEANUP_INTERVAL_MS || '90000', 10)
-    )
+        scheduleEditLockCleanup()
+      }, runtimeConfigService.getConfig().editLockCleanupIntervalMs)
+    }
+    scheduleEditLockCleanup()
 
     function shutdown(signal: string): void {
       logger.info({ signal }, 'Starting graceful shutdown')
@@ -497,7 +590,12 @@ async function startServer() {
         logger.info('HTTP server closed')
 
         Promise.allSettled([prisma.$disconnect()]).then(() => {
-          clearInterval(editLockCleanupInterval)
+          if (editLockCleanupTimer) {
+            clearTimeout(editLockCleanupTimer)
+          }
+          if (mediaLifecycleTimer) {
+            clearTimeout(mediaLifecycleTimer)
+          }
           logger.info('Graceful shutdown complete')
           process.exit(0)
         })
@@ -517,6 +615,16 @@ async function startServer() {
 await initSensitiveWords()
 
 if (!isTestEnv) {
+  // 未捕获的 rejection 只记录不退出：单个瞬时 native 异步错误不应打挂全站
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ err: reason }, 'Unhandled promise rejection')
+  })
+  // uncaughtException 后进程状态不可信，记录结构化日志后退出，交给容器重启兜底
+  process.on('uncaughtException', (err) => {
+    logger.error({ err }, 'Uncaught exception, exiting')
+    process.exit(1)
+  })
+
   startServer().catch((error) => {
     logger.error({ err: error }, 'Failed to start server')
     process.exit(1)

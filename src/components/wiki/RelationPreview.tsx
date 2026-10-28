@@ -92,6 +92,7 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
           {onEdit && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={() => onEdit(relation)}
               className="rounded p-1.5 text-text-muted transition-colors hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
               title="编辑关联"
@@ -103,6 +104,7 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
           {onRemove && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={onRemove}
               className="rounded p-1.5 text-text-muted theme-icon-button-danger transition-colors hover:bg-[color-mix(in_srgb,var(--color-error)_10%,var(--book-panel-bg))]"
               title="移除关联"
@@ -114,6 +116,7 @@ const RelationPreview: React.FC<RelationPreviewProps> = ({
           {onConfirm && isNew && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={onConfirm}
               className="rounded p-1.5 theme-text-success transition-colors hover:bg-[color-mix(in_srgb,var(--color-success)_10%,var(--book-panel-bg))]"
               title="确认添加"

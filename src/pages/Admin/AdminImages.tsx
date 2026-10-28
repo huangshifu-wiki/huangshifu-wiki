@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Download,
   Upload,
@@ -7,19 +7,32 @@ import {
   CheckCircle,
   XCircle,
   FileText,
+  Loader2,
   Settings,
   RefreshCw,
   Sparkles,
   Search,
 } from '@/src/components/icons'
-import { apiGet, apiPatch, apiDelete, apiPost, apiDownload } from '../../lib/apiClient'
+import {
+  apiGet,
+  apiPatch,
+  apiDelete,
+  apiPost,
+  apiDownload,
+  invalidateApiCacheByPrefix,
+} from '../../lib/apiClient'
+import { getApiErrorMessage, getErrorMessage } from '../../lib/errorHandler'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
+import { useScrollRestore } from '../../hooks/useScrollRestore'
 import { formatDateTime } from '../../lib/dateUtils'
 import { clsx } from 'clsx'
 import { SmartImage } from '../../components/SmartImage'
 import { clearImagePreferenceCache } from '../../services/imageService'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
+import { isBackdropClick } from '../../utils/modal'
 import type {
   MediaHealthBlockReason,
   MediaHealthCleanupApiResponse,
@@ -29,7 +42,8 @@ import type {
   MediaHealthScanMode,
   MediaHealthScanResult,
 } from '../../types/api'
-import { Checkbox, Switch } from '@/src/components/ui'
+import { Checkbox, LoadErrorState, Switch } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 
 interface ImageMap {
   id: string
@@ -164,8 +178,10 @@ const buildMediaHealthItems = (mediaHealth: MediaHealthScanResult | null): Media
 
 const AdminImages: React.FC = () => {
   const [images, setImages] = useState<ImageMap[]>([])
+  const [imageTotal, setImageTotal] = useState<number | undefined>()
   const [stats, setStats] = useState<ImageStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [editingImage, setEditingImage] = useState<ImageMap | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showPreferenceModal, setShowPreferenceModal] = useState(false)
@@ -180,20 +196,53 @@ const AdminImages: React.FC = () => {
   const [mediaHealthLoading, setMediaHealthLoading] = useState(false)
   const [mediaHealthCleaning, setMediaHealthCleaning] = useState(false)
   const [selectedHealthItems, setSelectedHealthItems] = useState<string[]>([])
+  const [blurhashLoadingId, setBlurhashLoadingId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [savingPreference, setSavingPreference] = useState(false)
   const dialog = useDialog()
   const { show } = useToast()
 
-  const fetchImages = async () => {
-    setLoading(true)
-    try {
-      const response = await apiGet<{ items: ImageMap[] }>('/api/image-maps')
-      setImages(response.items || [])
-    } catch (error) {
-      console.error(error)
-      show('获取图片列表失败', { variant: 'error' })
-    } finally {
-      setLoading(false)
+  const saveScroll = useScrollRestore()
+  const pagination = useRoutedPagination({
+    totalCount: imageTotal,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
+  const imageRequestIdRef = useRef(0)
+
+  const fetchImages = async (options?: { silent?: boolean }) => {
+    const requestId = ++imageRequestIdRef.current
+    const silent = options?.silent === true
+    if (silent) saveScroll()
+    else {
+      setLoading(true)
+      setLoadError(null)
     }
+    try {
+      const response = await apiGet<{ items: ImageMap[]; total: number }>('/api/image-maps', {
+        page: pagination.page,
+        limit: pagination.pageSize,
+      })
+      if (requestId !== imageRequestIdRef.current) return
+      setImages(response.items || [])
+      setImageTotal(response.total || 0)
+      setLoadError(null)
+    } catch (error) {
+      if (requestId !== imageRequestIdRef.current) return
+      console.error(error)
+      setLoadError(error)
+      if (!silent) show(getErrorMessage(error, '获取图片列表失败'), { variant: 'error' })
+    } finally {
+      if (requestId === imageRequestIdRef.current && !silent) setLoading(false)
+    }
+  }
+
+  const refreshImages = async () => {
+    invalidateApiCacheByPrefix('/api/image-maps')
+    await fetchImages({ silent: true })
   }
 
   const fetchStats = async () => {
@@ -215,7 +264,10 @@ const AdminImages: React.FC = () => {
   }
 
   useEffect(() => {
-    fetchImages()
+    void fetchImages()
+  }, [pagination.page, pagination.pageSize])
+
+  useEffect(() => {
     fetchStats()
     fetchPreference()
   }, [])
@@ -223,8 +275,10 @@ const AdminImages: React.FC = () => {
   const handleExport = async (format: 'json' | 'csv') => {
     try {
       const response = await apiDownload(`/api/image-maps/export?format=${format}`)
-      if (!response.ok)
-        throw new Error((await response.json().catch(() => ({}))).error || '导出失败')
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(getApiErrorMessage(data) || '导出失败')
+      }
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -236,7 +290,7 @@ const AdminImages: React.FC = () => {
       URL.revokeObjectURL(url)
       show(`成功导出 ${images.length} 条图片记录`, { variant: 'success' })
     } catch (error) {
-      show(error instanceof Error ? error.message : '导出失败', { variant: 'error' })
+      show(getErrorMessage(error, '导出失败'), { variant: 'error' })
     }
   }
 
@@ -250,15 +304,16 @@ const AdminImages: React.FC = () => {
     if (!confirmed) return
     try {
       await apiDelete(`/api/image-maps/${id}`)
-      setImages((prev) => prev.filter((img) => img.id !== id))
+      await Promise.all([refreshImages(), fetchStats()])
       show('删除成功', { variant: 'success' })
-      fetchStats()
-    } catch {
-      show('删除失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '删除失败'), { variant: 'error' })
     }
   }
 
   const handleRefreshBlurhash = async (id: string) => {
+    if (blurhashLoadingId) return
+    setBlurhashLoadingId(id)
     try {
       const response = await apiPost<{ success: boolean; item: ImageMap }>(
         `/api/image-maps/${id}/refresh-blurhash`,
@@ -268,13 +323,16 @@ const AdminImages: React.FC = () => {
         setImages((prev) => prev.map((img) => (img.id === id ? response.item : img)))
         show('Blurhash 生成成功', { variant: 'success' })
       }
-    } catch {
-      show('生成 Blurhash 失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '生成 Blurhash 失败'), { variant: 'error' })
+    } finally {
+      setBlurhashLoadingId(null)
     }
   }
 
   const handleUpdate = async () => {
-    if (!editingImage) return
+    if (!editingImage || saving) return
+    setSaving(true)
     try {
       const response = await apiPatch<{ item: ImageMap }>(`/api/image-maps/${editingImage.id}`, {
         localUrl: editingImage.localUrl || null,
@@ -286,19 +344,25 @@ const AdminImages: React.FC = () => {
       setEditingImage(null)
       show('更新成功', { variant: 'success' })
       fetchStats()
-    } catch {
-      show('更新失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '更新失败'), { variant: 'error' })
+    } finally {
+      setSaving(false)
     }
   }
 
   const handlePreferenceUpdate = async () => {
+    if (savingPreference) return
+    setSavingPreference(true)
     try {
       await apiPatch('/api/config/image-preference', preference)
       clearImagePreferenceCache()
       setShowPreferenceModal(false)
       show('设置已保存', { variant: 'success' })
-    } catch {
-      show('保存设置失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '保存设置失败'), { variant: 'error' })
+    } finally {
+      setSavingPreference(false)
     }
   }
 
@@ -313,7 +377,7 @@ const AdminImages: React.FC = () => {
       setMediaHealth(response.data)
       setSelectedHealthItems([])
     } catch (error) {
-      show(error instanceof Error ? error.message : '媒体健康扫描失败', { variant: 'error' })
+      show(getErrorMessage(error, '媒体健康扫描失败'), { variant: 'error' })
     } finally {
       setMediaHealthLoading(false)
     }
@@ -359,12 +423,25 @@ const AdminImages: React.FC = () => {
       show(`已清理 ${response.data.cleaned} 条，跳过 ${response.data.skipped} 条`, {
         variant: response.data.skipped > 0 ? 'error' : 'success',
       })
-      await Promise.all([handleScanMediaHealth(mediaHealthMode), fetchImages(), fetchStats()])
+      await Promise.all([handleScanMediaHealth(mediaHealthMode), refreshImages(), fetchStats()])
     } catch (error) {
-      show(error instanceof Error ? error.message : '媒体记录清理失败', { variant: 'error' })
+      show(getErrorMessage(error, '媒体记录清理失败'), { variant: 'error' })
     } finally {
       setMediaHealthCleaning(false)
     }
+  }
+
+  if (loading && images.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+  if (loadError && images.length === 0) {
+    return (
+      <LoadErrorState
+        error={loadError}
+        description="图片列表加载失败，请重试。"
+        onRetry={() => void fetchImages()}
+      />
+    )
   }
 
   return (
@@ -389,6 +466,14 @@ const AdminImages: React.FC = () => {
           </button>
         </div>
       </div>
+      {loadError && images.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          error={loadError}
+          description="当前图片列表可能不是最新内容。"
+          onRetry={() => void fetchImages()}
+        />
+      )}
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -577,7 +662,7 @@ const AdminImages: React.FC = () => {
           </div>
         </div>
 
-        {loading ? (
+        {loading && images.length === 0 ? (
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="h-20 bg-surface-alt rounded animate-pulse" />
@@ -656,10 +741,15 @@ const AdminImages: React.FC = () => {
                       {!image.blurhash && imageUrl && (
                         <button
                           onClick={() => handleRefreshBlurhash(image.id)}
-                          className="p-2 text-brand-gold hover:bg-brand-gold/10 rounded transition-all"
+                          disabled={blurhashLoadingId !== null}
+                          className="p-2 text-brand-gold hover:bg-brand-gold/10 rounded transition-all disabled:opacity-50"
                           title="生成 Blurhash"
                         >
-                          <Sparkles size={18} />
+                          {blurhashLoadingId === image.id ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <Sparkles size={18} />
+                          )}
                         </button>
                       )}
                       <button
@@ -684,14 +774,28 @@ const AdminImages: React.FC = () => {
           </div>
         )}
       </div>
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
 
       {editModalPresence.mounted && editingImage && (
         <div
-          className="floating-overlay fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          className="floating-overlay fixed inset-0 bg-[var(--ui-overlay-bg)] flex items-center justify-center z-50 p-4"
           data-state={editModalPresence.state}
           aria-hidden={!editingImage}
+          onClick={(event) => {
+            if (isBackdropClick(event)) setEditingImage(null)
+          }}
         >
-          <div className="floating-panel bg-surface border border-border rounded p-6 max-w-2xl w-full">
+          <div className="floating-panel p-6 max-w-2xl w-full">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-text-primary">编辑图片映射</h3>
               <button
@@ -787,9 +891,10 @@ const AdminImages: React.FC = () => {
                 </button>
                 <button
                   onClick={handleUpdate}
-                  className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all"
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
                 >
-                  保存修改
+                  {saving ? '保存中...' : '保存修改'}
                 </button>
               </div>
             </div>
@@ -801,7 +906,7 @@ const AdminImages: React.FC = () => {
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
         onSuccess={() => {
-          fetchImages()
+          void refreshImages()
           fetchStats()
           setShowImportModal(false)
         }}
@@ -809,11 +914,14 @@ const AdminImages: React.FC = () => {
 
       {preferenceModalPresence.mounted && (
         <div
-          className="floating-overlay fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          className="floating-overlay fixed inset-0 bg-[var(--ui-overlay-bg)] flex items-center justify-center z-50 p-4"
           data-state={preferenceModalPresence.state}
           aria-hidden={!showPreferenceModal}
+          onClick={(event) => {
+            if (isBackdropClick(event)) setShowPreferenceModal(false)
+          }}
         >
-          <div className="floating-panel bg-surface border border-border rounded p-6 max-w-md w-full">
+          <div className="floating-panel p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-text-primary">图片加载策略</h3>
               <button
@@ -861,9 +969,10 @@ const AdminImages: React.FC = () => {
                 </button>
                 <button
                   onClick={handlePreferenceUpdate}
-                  className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all"
+                  disabled={savingPreference}
+                  className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
                 >
-                  保存设置
+                  {savingPreference ? '保存中...' : '保存设置'}
                 </button>
               </div>
             </div>
@@ -922,8 +1031,8 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) =
         })
       else show(`成功导入 ${response.success} 条记录`, { variant: 'success' })
       onSuccess()
-    } catch {
-      show('导入失败', { variant: 'error' })
+    } catch (error) {
+      show(getErrorMessage(error, '导入失败'), { variant: 'error' })
     } finally {
       setLoading(false)
     }
@@ -933,11 +1042,14 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) =
 
   return (
     <div
-      className="floating-overlay fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="floating-overlay fixed inset-0 bg-[var(--ui-overlay-bg)] flex items-center justify-center z-50 p-4"
       data-state={presence.state}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) onClose()
+      }}
     >
-      <div className="floating-panel bg-surface border border-border rounded p-6 max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="floating-panel p-6 max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-text-primary">批量导入图片映射</h3>
           <button onClick={onClose} className="p-2 hover:bg-surface-alt rounded">

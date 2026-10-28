@@ -1,6 +1,8 @@
 import { Loader2 } from '@/src/components/icons'
 import React, { useId } from 'react'
+import { Button } from './actions'
 import { cn } from './utils'
+import { getErrorMessage } from '@/src/lib/errorHandler'
 
 export const Panel = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
@@ -55,18 +57,91 @@ export const Separator = React.forwardRef<HTMLHRElement, React.HTMLAttributes<HT
 )
 Separator.displayName = 'Separator'
 
+const spinnerSizeClasses = {
+  sm: 'h-4 w-4',
+  md: 'h-5 w-5',
+  lg: 'h-7 w-7',
+} as const
+
+export interface SpinnerProps {
+  className?: string
+  label?: string
+  size?: keyof typeof spinnerSizeClasses
+  /** icon: 旋转图标（默认）；tail: conic-gradient 拖尾圆环，颜色跟随 currentColor */
+  variant?: 'icon' | 'tail'
+}
+
 export const Spinner = ({
   className,
   label = '加载中',
-}: {
-  className?: string
-  label?: string
-}) => (
-  <span role="status" className="inline-flex items-center">
-    <Loader2 className={cn('h-5 w-5 animate-spin', className)} aria-hidden="true" />
+  size = 'md',
+  variant = 'icon',
+}: SpinnerProps) => (
+  <span role="status" aria-label={label} className="inline-flex items-center">
+    {variant === 'tail' ? (
+      <span
+        className={cn(spinnerSizeClasses[size], 'spinner-tail', className)}
+        aria-hidden="true"
+      />
+    ) : (
+      <Loader2
+        className={cn(spinnerSizeClasses[size], 'animate-spin', className)}
+        aria-hidden="true"
+      />
+    )}
     <span className="sr-only">{label}</span>
   </span>
 )
+
+export interface LoadErrorStateProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
+  title?: React.ReactNode
+  description?: React.ReactNode
+  error?: unknown
+  retryLabel?: React.ReactNode
+  onRetry?: () => void
+}
+
+export const LoadErrorState = React.forwardRef<HTMLDivElement, LoadErrorStateProps>(
+  (
+    {
+      title = '加载失败',
+      description = '内容暂时无法加载，请稍后重试。',
+      error,
+      retryLabel = '重新加载',
+      onRetry,
+      className,
+      ...props
+    },
+    ref
+  ) => {
+    const errorMessage = error == null ? '' : getErrorMessage(error, '')
+    const resolvedDescription = errorMessage || description
+
+    return (
+      <div
+        ref={ref}
+        className={cn('py-12 text-center text-text-muted', className)}
+        {...props}
+        role="alert"
+      >
+        <h3 className="font-[var(--book-title-font)] text-xl tracking-[0.08em] text-text-primary">
+          {title}
+        </h3>
+        {resolvedDescription && (
+          <p className="mx-auto mt-2 max-w-md text-sm">{resolvedDescription}</p>
+        )}
+        {onRetry && (
+          <div className="mt-5 flex justify-center">
+            <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+              {retryLabel}
+            </Button>
+          </div>
+        )}
+      </div>
+    )
+  }
+)
+LoadErrorState.displayName = 'LoadErrorState'
 
 export const Skeleton = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (

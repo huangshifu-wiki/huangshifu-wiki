@@ -21,8 +21,6 @@ import {
   parseFavoriteType,
   parseMusicPlatform,
   parseDisplayAlbumMode,
-  parseBrowsingTargetType,
-  parseModerationTargetType,
   normalizeModerationTargetType,
   parsePostSort,
 } from '../../src/server/utils/parsers'
@@ -509,31 +507,6 @@ describe('parsers', () => {
 
     it('returns null for invalid modes', () => {
       expect(parseDisplayAlbumMode('grid')).toBeNull()
-    })
-  })
-
-  describe('parseBrowsingTargetType', () => {
-    it('returns valid types', () => {
-      expect(parseBrowsingTargetType('wiki')).toBe('wiki')
-      expect(parseBrowsingTargetType('post')).toBe('post')
-      expect(parseBrowsingTargetType('music')).toBe('music')
-    })
-
-    it('returns null for invalid types', () => {
-      expect(parseBrowsingTargetType('gallery')).toBeNull()
-    })
-  })
-
-  describe('parseModerationTargetType', () => {
-    it('returns valid types', () => {
-      expect(parseModerationTargetType('wiki')).toBe('wiki')
-      expect(parseModerationTargetType('post')).toBe('post')
-      expect(parseModerationTargetType('gallery')).toBe('gallery')
-      expect(parseModerationTargetType('comment')).toBe('comment')
-    })
-
-    it('returns null for invalid types', () => {
-      expect(parseModerationTargetType('music')).toBeNull()
     })
   })
 

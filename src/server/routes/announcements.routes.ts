@@ -4,7 +4,7 @@ import { prisma } from '../prisma'
 import { requireAdmin } from '../middleware/auth'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { enhancedCache, CACHE_KEYS, CACHE_TTL_SEC } from '../utils/cache'
-import { ensureTextLimit, softDeleteData } from '../utils'
+import { createPaginationMeta, ensureTextLimit, parsePagination, softDeleteData } from '../utils'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import type { AuthenticatedRequest } from '../types'
 
@@ -33,6 +33,36 @@ router.get(
     enhancedCache.set(CACHE_KEYS.ANNOUNCEMENT_LATEST, result, CACHE_TTL_SEC.ANNOUNCEMENT)
 
     res.json(result)
+  })
+)
+
+router.get(
+  '/list',
+  asyncHandler(async (req, res) => {
+    const { limit, page, offset } = parsePagination(req.query)
+    const where = { active: true, deletedAt: null }
+
+    const [announcements, total] = await Promise.all([
+      prisma.announcement.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+        select: {
+          id: true,
+          content: true,
+          link: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.announcement.count({ where }),
+    ])
+
+    res.json({
+      announcements,
+      ...createPaginationMeta(total, page, limit, announcements.length),
+    })
   })
 )
 
@@ -120,9 +150,29 @@ router.delete(
   '/:id',
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    await prisma.announcement.update({
+    const announcement = await prisma.announcement.findUnique({
       where: { id: req.params.id },
-      data: softDeleteData(req.authUser!.uid),
+      select: { deletedAt: true },
+    })
+    if (!announcement || announcement.deletedAt) {
+      res.status(404).json({ error: '公告不存在' })
+      return
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.announcement.update({
+        where: { id: req.params.id },
+        data: softDeleteData(req.authUser!.uid),
+      })
+      await tx.moderationLog.create({
+        data: {
+          targetType: 'announcement',
+          targetId: req.params.id,
+          action: 'delete',
+          operatorUid: req.authUser!.uid,
+          note: null,
+        },
+      })
     })
 
     clearAnnouncementCache()

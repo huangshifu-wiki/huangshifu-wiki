@@ -3,15 +3,32 @@ import type { ParamsFlatDictionary } from 'express-serve-static-core'
 import type { ParsedQs } from 'qs'
 import { JwtPayload } from 'jsonwebtoken'
 import { Prisma, UserRole as PrismaUserRole } from '@prisma/client'
+import type { MusicPlayableOverride } from '@prisma/client'
 import type { WikiRelationType } from '../../lib/relationConstants'
+import type { LyricType } from '../../lib/lrcParser'
 
 type UserStatus = 'active' | 'banned'
 type ContentStatus = 'draft' | 'pending' | 'published' | 'rejected'
+type TicketListingType = 'offer' | 'request'
 type WikiBranchStatus = 'draft' | 'pending_review' | 'merged' | 'rejected' | 'conflict'
 type WikiPullRequestStatus = 'open' | 'merged' | 'rejected'
 type FavoriteTargetType = 'wiki' | 'post' | 'music' | 'gallery'
-type ModerationTargetType = 'wiki' | 'post' | 'gallery' | 'comment'
 type NotificationType = 'reply' | 'like' | 'review_result' | 'mention'
+type ModerationTargetType =
+  | 'wiki'
+  | 'post'
+  | 'gallery'
+  | 'comment'
+  | 'music'
+  | 'album'
+  | 'event'
+  | 'announcement'
+  | 'section'
+  | 'imageMap'
+  | 'wikiCategory'
+  | 'config'
+  | 'user'
+  | 'ticketListing'
 type BrowsingTargetType = 'wiki' | 'post' | 'music'
 type PostSortType = 'latest' | 'hot' | 'recommended'
 
@@ -76,8 +93,13 @@ type MusicTrackWithRelations = {
   vocals: string[]
   album: string
   audioUrl: string
+  playableOverride: MusicPlayableOverride
   lyric: string | null
+  lyricType: LyricType | null
+  lyricPlain: string | null
+  lyricSource: MusicPlatform | null
   description: string | null
+  tags: Prisma.JsonValue
   releaseDate: Date | null
   durationMs: number | null
   coverId: string | null
@@ -166,6 +188,7 @@ interface ApiUser {
   email: string
   displayName: string
   photoURL: string | null
+  photoAssetId?: string | null
   wechatBound: boolean
   role: PrismaUserRole
   status: UserStatus
@@ -177,7 +200,28 @@ interface ApiUser {
   bio: string
 }
 
+type ApiKeyResponseInput = {
+  id: string
+  name: string
+  prefix: string
+  createdAt: Date
+  expiresAt: Date | null
+  revokedAt: Date | null
+  lastUsedAt: Date | null
+}
+
+type ApiKeyResponse = {
+  id: string
+  name: string
+  prefix: string
+  createdAt: string
+  expiresAt: string | null
+  revokedAt: string | null
+  lastUsedAt: string | null
+}
+
 type AuthenticatedRequest = Request<ParamsFlatDictionary, any, any, ParsedQs> & {
+  authSource?: 'cookie' | 'bearer' | 'api_key'
   authUser?: ApiUser
 }
 
@@ -283,14 +327,6 @@ type WikiPullRequestWithRelations = {
 
 const WIKI_RELATION_SCAN_LIMIT = 800
 const MUSIC_SECTION_ID = 'music'
-const EDIT_LOCK_COLLECTION_ALLOWLIST = new Set([
-  'songs',
-  'albums',
-  'galleries',
-  'activities',
-  'wiki',
-  'posts',
-])
 const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'])
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
@@ -303,6 +339,7 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
 export type {
   UserStatus,
   ContentStatus,
+  TicketListingType,
   WikiBranchStatus,
   WikiPullRequestStatus,
   WikiRelationType,
@@ -326,6 +363,8 @@ export type {
   SessionJwtPayload,
   WechatCodeSessionResponse,
   ApiUser,
+  ApiKeyResponseInput,
+  ApiKeyResponse,
   AuthenticatedRequest,
   WikiResponseInput,
   WikiRelationPageLite,
@@ -338,7 +377,6 @@ export type {
 export {
   WIKI_RELATION_SCAN_LIMIT,
   MUSIC_SECTION_ID,
-  EDIT_LOCK_COLLECTION_ALLOWLIST,
   ALLOWED_IMAGE_EXTENSIONS,
   ALLOWED_IMAGE_MIME_TYPES,
 }

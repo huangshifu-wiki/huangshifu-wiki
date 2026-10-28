@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatTime, isLRCFormat, parseLRC } from '../../src/lib/lrcParser'
+import { formatTime, isLRCFormat, parseLRC, parseLyrics } from '../../src/lib/lrcParser'
 
 describe('lrcParser', () => {
   describe('parseLRC', () => {
@@ -84,6 +84,62 @@ describe('lrcParser', () => {
     })
   })
 
+  describe('parseLyrics', () => {
+    it('classifies plain text without synthetic timestamps', () => {
+      const result = parseLyrics('第一行\n第二行')
+
+      expect(result.type).toBe('plain')
+      expect(result.lines).toEqual([
+        { time: -1, text: '第一行' },
+        { time: -1, text: '第二行' },
+      ])
+      expect(result.plainText).toBe('第一行\n第二行')
+    })
+
+    it('parses second-only LRC timestamps as line lyrics', () => {
+      const result = parseLyrics('[00:12]文本')
+
+      expect(result.type).toBe('line')
+      expect(result.lines).toEqual([{ time: 12, text: '文本' }])
+    })
+
+    it('preserves word timing numbers while producing readable text', () => {
+      const result = parseLyrics('[00:12.34]<0,200>你<200,300,7>好')
+
+      expect(result.type).toBe('word')
+      expect(result.lines).toEqual([
+        {
+          time: 12.34,
+          text: '你好',
+          words: [
+            { rawStartMs: 0, durationMs: 200, text: '你' },
+            { rawStartMs: 200, durationMs: 300, text: '好' },
+          ],
+        },
+      ])
+      expect(result.plainText).toBe('你好')
+    })
+
+    it('keeps unknown angle-bracket content instead of deleting it', () => {
+      const result = parseLyrics('[00:01.00]<0,100>你<unknown>好')
+
+      expect(result.type).toBe('word')
+      expect(result.lines[0].text).toBe('你<unknown>好')
+      expect(result.lines[0].words?.[0].text).toBe('你<unknown>好')
+    })
+
+    it('returns an empty plain result for empty input', () => {
+      expect(parseLyrics('')).toEqual({ type: 'plain', lines: [], metadata: {}, plainText: '' })
+    })
+
+    it('parses lyricist and composer metadata aliases and sorts timed lines', () => {
+      const result = parseLyrics('[lyricist:词作者]\n[composer:曲作者]\n[00:03]后句\n[00:01]前句')
+
+      expect(result.metadata).toMatchObject({ lyricist: '词作者', composer: '曲作者' })
+      expect(result.lines.map((line) => line.text)).toEqual(['前句', '后句'])
+    })
+  })
+
   describe('formatTime', () => {
     it('formats time with leading zeros', () => {
       expect(formatTime(65)).toBe('01:05')
@@ -109,6 +165,9 @@ describe('lrcParser', () => {
 
     it('returns true for millisecond format', () => {
       expect(isLRCFormat('[01:30:500]Text')).toBe(true)
+    })
+    it('returns true for timestamps without fractions', () => {
+      expect(isLRCFormat('[00:12]Some text')).toBe(true)
     })
 
     it('returns false for plain text', () => {

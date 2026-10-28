@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Database,
@@ -14,15 +14,14 @@ import {
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'
-import {
-  DANGER_BUTTON_CLASSES,
-  INFO_BUTTON_CLASSES,
-  SECONDARY_BUTTON_CLASSES,
-  SUCCESS_BUTTON_CLASSES,
-} from '../../lib/buttonClasses'
+import { getApiErrorMessage, getErrorMessage } from '../../lib/errorHandler'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { validateMaxLength } from '../../lib/clientValidation'
+import { Button, LoadErrorState } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
-import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { isBackdropClick } from '../../utils/modal'
 import type {
   AdminBackup,
   AdminBackupCreateResponse,
@@ -46,11 +45,12 @@ const formatMediaReference = (reference: { source: string; id?: string; field: s
 const AdminBackups = () => {
   const [backups, setBackups] = useState<AdminBackup[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogType>(null)
   const [createNote, setCreateNote] = useState('')
   const [editNote, setEditNote] = useState('')
-  const [legacyPassword, setLegacyPassword] = useState('')
+  const [restorePassword, setRestorePassword] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [noteTarget, setNoteTarget] = useState<string | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<string | null>(null)
@@ -70,16 +70,21 @@ const AdminBackups = () => {
 
   const fetchBackups = useCallback(
     async (showSpinner = true) => {
-      if (showSpinner) setLoading(true)
+      if (showSpinner) {
+        setLoading(true)
+        setLoadError(null)
+      }
       try {
         const response = await apiGet<AdminBackupsResponse>('/api/admin/backup/list', undefined, {
           staleTime: 0,
           swr: false,
         })
         setBackups(response.backups || [])
+        setLoadError(null)
       } catch (error) {
         console.error('Fetch backups failed:', error)
-        show('获取备份列表失败', { variant: 'error' })
+        setLoadError(error)
+        if (showSpinner) show(getErrorMessage(error, '获取备份列表失败'), { variant: 'error' })
       } finally {
         if (showSpinner) setLoading(false)
       }
@@ -95,7 +100,7 @@ const AdminBackups = () => {
     setDialog(null)
     setCreateNote('')
     setEditNote('')
-    setLegacyPassword('')
+    setRestorePassword('')
     setDeleteTarget(null)
     setNoteTarget(null)
     setRestoreTarget(null)
@@ -120,6 +125,17 @@ const AdminBackups = () => {
   }
 
   const handleCreate = async () => {
+    if (actionLoading) return
+    const noteError = validateMaxLength(
+      createNote,
+      'note',
+      '备份备注',
+      CONTENT_LIMITS.admin.backupNote
+    )
+    if (noteError) {
+      show(noteError.message, { variant: 'error' })
+      return
+    }
     setActionLoading('create')
     try {
       const body = createNote.trim() ? { note: createNote } : undefined
@@ -130,18 +146,31 @@ const AdminBackups = () => {
       closeDialog()
       setBackups((current) => [
         response.backup,
-        ...current.filter((item) => item.filename !== response.backup.filename),
+        ...current.filter(
+          (item) =>
+            item.filename !== response.backup.filename &&
+            !response.removedFilenames?.includes(item.filename)
+        ),
       ])
-      await fetchBackups(false)
     } catch (error) {
-      show(error instanceof Error ? error.message : '创建备份失败', { variant: 'error' })
+      show(getErrorMessage(error, '创建备份失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
   }
 
   const handleUpdateNote = async () => {
-    if (!noteTarget) return
+    if (!noteTarget || actionLoading) return
+    const noteError = validateMaxLength(
+      editNote,
+      'note',
+      '备份备注',
+      CONTENT_LIMITS.admin.backupNote
+    )
+    if (noteError) {
+      show(noteError.message, { variant: 'error' })
+      return
+    }
     setActionLoading('note')
     try {
       const response = await apiPost<AdminBackupNoteResponse>(
@@ -156,7 +185,7 @@ const AdminBackups = () => {
       )
       closeDialog()
     } catch (error) {
-      show(error instanceof Error ? error.message : '更新备注失败', { variant: 'error' })
+      show(getErrorMessage(error, '更新备注失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -171,8 +200,10 @@ const AdminBackups = () => {
     setActionLoading(options.loadingKey)
     try {
       const response = await apiDownload(url, { method: 'POST' })
-      if (!response.ok)
-        throw new Error((await response.json().catch(() => ({}))).error || options.errorMessage)
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(getApiErrorMessage(data) || options.errorMessage)
+      }
       const blob = await response.blob()
       const objectUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -184,7 +215,7 @@ const AdminBackups = () => {
       URL.revokeObjectURL(objectUrl)
       show(options.successMessage, { variant: 'success' })
     } catch (error) {
-      show(error instanceof Error ? error.message : options.errorMessage, { variant: 'error' })
+      show(getErrorMessage(error, options.errorMessage), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -199,6 +230,7 @@ const AdminBackups = () => {
   }
 
   const handleRestore = async () => {
+    if (actionLoading) return
     if (!restoreFile) {
       show('请选择备份文件', { variant: 'error' })
       return
@@ -208,8 +240,8 @@ const AdminBackups = () => {
       const formData = new FormData()
       formData.append('file', restoreFile)
       formData.append('confirm', 'true')
-      if (legacyPassword !== '') {
-        formData.append('legacyPassword', legacyPassword)
+      if (restorePassword !== '') {
+        formData.append('password', restorePassword)
       }
       const response = await apiUpload<AdminBackupRestoreResponse>(
         '/api/admin/backup/restore',
@@ -219,41 +251,40 @@ const AdminBackups = () => {
       closeDialog()
       await fetchBackups(false)
     } catch (error) {
-      show(error instanceof Error ? error.message : '恢复失败', { variant: 'error' })
+      show(getErrorMessage(error, '恢复失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
   }
 
   const handleDelete = async () => {
-    if (!deleteTarget) return
+    if (!deleteTarget || actionLoading) return
     setActionLoading('delete')
     try {
       await apiPost(`/api/admin/backup/${encodeURIComponent(deleteTarget)}/delete`)
       show('备份已删除')
       setBackups((current) => current.filter((item) => item.filename !== deleteTarget))
       closeDialog()
-      await fetchBackups(false)
     } catch (error) {
-      show(error instanceof Error ? error.message : '删除失败', { variant: 'error' })
+      show(getErrorMessage(error, '删除失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
   }
 
   const handleRestoreExisting = async () => {
-    if (!restoreTarget) return
+    if (!restoreTarget || actionLoading) return
     setActionLoading('restore-existing')
     try {
       const response = await apiPost<AdminBackupRestoreResponse>(
         `/api/admin/backup/${encodeURIComponent(restoreTarget)}/restore`,
-        { confirm: true, ...(legacyPassword !== '' ? { legacyPassword } : {}) }
+        { confirm: true, ...(restorePassword !== '' ? { password: restorePassword } : {}) }
       )
       handleRestoreSuccess(response)
       closeDialog()
       await fetchBackups(false)
     } catch (error) {
-      show(error instanceof Error ? error.message : '恢复失败', { variant: 'error' })
+      show(getErrorMessage(error, '恢复失败'), { variant: 'error' })
     } finally {
       setActionLoading(null)
     }
@@ -261,7 +292,7 @@ const AdminBackups = () => {
 
   const openRestoreExistingDialog = (filename: string) => {
     setRestoreTarget(filename)
-    setLegacyPassword('')
+    setRestorePassword('')
     setDialog('restore-existing')
   }
 
@@ -288,11 +319,16 @@ const AdminBackups = () => {
     )
   }
 
-  if (loading) {
+  if (loading && backups.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+  if (loadError && backups.length === 0) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 size={32} className="animate-spin text-text-muted" />
-      </div>
+      <LoadErrorState
+        error={loadError}
+        description="备份列表加载失败，请重试。"
+        onRetry={() => void fetchBackups()}
+      />
     )
   }
 
@@ -321,10 +357,18 @@ const AdminBackups = () => {
           </button>
         </div>
       </div>
+      {loadError && backups.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          error={loadError}
+          description="当前备份列表可能不是最新内容。"
+          onRetry={() => void fetchBackups()}
+        />
+      )}
 
       {(lastMediaReport || lastMediaReportError) && (
-        <div className="bg-surface border border-border rounded p-4 space-y-4">
-          <div className="flex items-start justify-between gap-4">
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-4 border-b border-border pb-3">
             <div>
               <p className="text-sm font-medium text-text-primary">最近恢复图片清单</p>
               {lastMediaReport ? (
@@ -359,9 +403,9 @@ const AdminBackups = () => {
                   </p>
                 )}
               </div>
-              <div className="mt-2 max-h-80 overflow-y-auto border border-border rounded divide-y divide-border">
+              <div className="mt-2 max-h-80 overflow-y-auto divide-y divide-border">
                 {lastMediaReport.missingFilePreview.map((file) => (
-                  <div key={file.storageKey} className="p-3 bg-surface-alt/40">
+                  <div key={file.storageKey} className="p-3">
                     <p className="text-sm font-medium text-text-primary break-all">
                       {file.storageKey}
                     </p>
@@ -393,10 +437,7 @@ const AdminBackups = () => {
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {lastMediaReport.orphanFilePreview.slice(0, 6).map((file) => (
-                  <div
-                    key={file.storageKey}
-                    className="border border-border rounded bg-surface-alt/40 p-2"
-                  >
+                  <div key={file.storageKey} className="p-2">
                     <p className="text-xs text-text-primary break-all">{file.storageKey}</p>
                     <p className="text-[11px] text-text-muted mt-1">
                       {formatBytes(file.sizeBytes)}
@@ -409,108 +450,113 @@ const AdminBackups = () => {
         </div>
       )}
 
-      <div className="bg-surface border border-border rounded overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-surface-alt border-b border-border">
-              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                文件名
-              </th>
-              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                备注
-              </th>
-              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                创建时间
-              </th>
-              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                大小
-              </th>
-              <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                操作
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {backups.length > 0 ? (
-              backups.map((backup) => (
-                <tr key={backup.filename} className="hover:bg-surface-alt transition-colors">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <Database size={16} className="text-text-muted shrink-0" />
-                      <span className="text-sm font-medium text-text-primary">
-                        {backup.filename}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-sm text-text-secondary max-w-[280px]">
-                    {backup.note ? (
-                      <span className="line-clamp-2 whitespace-pre-wrap break-words">
-                        {backup.note}
-                      </span>
-                    ) : (
-                      <span className="text-text-muted italic">无备注</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-sm text-text-secondary">
-                    {format(new Date(backup.createdAt), 'yyyy-MM-dd HH:mm:ss')}
-                  </td>
-                  <td className="px-5 py-4 text-sm text-text-secondary">{backup.sizeFormatted}</td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center justify-start gap-2">
-                      <button
-                        onClick={() => openNoteDialog(backup)}
-                        className={INFO_BUTTON_CLASSES}
-                      >
-                        <Pencil size={14} />
-                        备注
-                      </button>
-                      <button
-                        onClick={() => handleDownload(backup.filename)}
-                        className={SECONDARY_BUTTON_CLASSES}
-                      >
-                        <Download size={14} />
-                        下载
-                      </button>
-                      <button
-                        onClick={() => openRestoreExistingDialog(backup.filename)}
-                        className={SUCCESS_BUTTON_CLASSES}
-                      >
-                        <RotateCcw size={14} />
-                        恢复
-                      </button>
-                      <button
-                        onClick={() => openDeleteDialog(backup.filename)}
-                        className={DANGER_BUTTON_CLASSES}
-                      >
-                        <Trash2 size={14} />
-                        删除
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
-                  暂无备份记录
+      <table className="w-full">
+        <thead>
+          <tr className="bg-surface-alt border-b border-border">
+            <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              文件名
+            </th>
+            <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              备注
+            </th>
+            <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              创建时间
+            </th>
+            <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              大小
+            </th>
+            <th className="px-5 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+              操作
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {backups.length > 0 ? (
+            backups.map((backup) => (
+              <tr key={backup.filename} className="hover:bg-surface-alt transition-colors">
+                <td className="px-5 py-4">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Database size={16} className="text-text-muted shrink-0" />
+                    <span className="min-w-0 break-all text-sm font-medium text-text-primary">
+                      {backup.filename}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-5 py-4 text-sm text-text-secondary max-w-[280px]">
+                  {backup.note ? (
+                    <span className="line-clamp-2 whitespace-pre-wrap break-words">
+                      {backup.note}
+                    </span>
+                  ) : (
+                    <span className="text-text-muted italic">无备注</span>
+                  )}
+                </td>
+                <td className="px-5 py-4 text-sm text-text-secondary">
+                  {format(new Date(backup.createdAt), 'yyyy-MM-dd HH:mm:ss')}
+                </td>
+                <td className="px-5 py-4 text-sm text-text-secondary">{backup.sizeFormatted}</td>
+                <td className="px-5 py-4">
+                  <div className="flex items-center justify-start gap-2">
+                    <Button
+                      onClick={() => openNoteDialog(backup)}
+                      variant="info"
+                      soft
+                      size="sm"
+                      leftIcon={<Pencil size={14} />}
+                    >
+                      备注
+                    </Button>
+                    <Button
+                      onClick={() => handleDownload(backup.filename)}
+                      variant="secondary"
+                      soft
+                      size="sm"
+                      leftIcon={<Download size={14} />}
+                    >
+                      下载
+                    </Button>
+                    <Button
+                      onClick={() => openRestoreExistingDialog(backup.filename)}
+                      variant="success"
+                      soft
+                      size="sm"
+                      leftIcon={<RotateCcw size={14} />}
+                    >
+                      恢复
+                    </Button>
+                    <Button
+                      onClick={() => openDeleteDialog(backup.filename)}
+                      variant="danger"
+                      soft
+                      size="sm"
+                      leftIcon={<Trash2 size={14} />}
+                    >
+                      删除
+                    </Button>
+                  </div>
                 </td>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
+                暂无备份记录
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
 
       {dialogPresence.mounted && visibleDialog && (
         <div
-          className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay-bg)]"
           data-state={dialogPresence.state}
           aria-hidden={!dialog}
-          onClick={closeDialog}
+          onClick={(event) => {
+            if (isBackdropClick(event)) closeDialog()
+          }}
         >
-          <div
-            className="floating-panel bg-surface border border-border rounded w-full max-w-md mx-4 p-6 space-y-5"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="floating-panel w-full max-w-md mx-4 p-6 space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-text-primary">
                 {visibleDialog === 'create' && '创建备份'}
@@ -607,13 +653,13 @@ const AdminBackups = () => {
             {(visibleDialog === 'restore' || visibleDialog === 'restore-existing') && (
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  旧备份解密密码（可选）
+                  备份解密密码（可选）
                 </label>
                 <input
                   type="password"
-                  value={legacyPassword}
-                  onChange={(e) => setLegacyPassword(e.target.value)}
-                  placeholder="仅旧加密备份需要"
+                  value={restorePassword}
+                  onChange={(e) => setRestorePassword(e.target.value)}
+                  placeholder="服务器密钥不匹配或未配置时填写"
                   className="w-full px-4 py-2.5 rounded border border-border text-sm focus:outline-none focus:border-brand-gold"
                   onKeyDown={(e) => {
                     if (actionLoading) return

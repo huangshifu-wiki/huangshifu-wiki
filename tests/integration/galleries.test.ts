@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import crypto from 'node:crypto'
 import request from 'supertest'
 import { app } from '../../server'
 import { prisma, createTestGallery, createTestUser } from './setup'
@@ -30,11 +31,11 @@ async function cleanupGalleryEventDateData() {
   await prisma.gallery.deleteMany({
     where: { title: { startsWith: GALLERY_TITLE_PREFIX } },
   })
-  await prisma.imageMap.deleteMany({
-    where: { localUrl: { startsWith: PUBLIC_URL_PREFIX } },
-  })
   await prisma.mediaAsset.deleteMany({
     where: { storageKey: { startsWith: STORAGE_KEY_PREFIX } },
+  })
+  await prisma.imageMap.deleteMany({
+    where: { localUrl: { startsWith: PUBLIC_URL_PREFIX } },
   })
   await prisma.user.deleteMany({
     where: { email: { startsWith: 'roi_gallery_event_date_' } },
@@ -43,11 +44,17 @@ async function cleanupGalleryEventDateData() {
 
 async function createTestImageAsset(ownerUid: string, suffix: string) {
   const fileName = `gallery-event-date-${suffix}.jpg`
+  const storageKey = `${STORAGE_KEY_PREFIX}${fileName}`
+  const md5 = crypto.createHash('md5').update(storageKey).digest('hex')
+  const imageMap = await prisma.imageMap.create({
+    data: { id: `map-${suffix}`, md5, localUrl: `${PUBLIC_URL_PREFIX}${fileName}` },
+  })
 
   return prisma.mediaAsset.create({
     data: {
       ownerUid,
-      storageKey: `${STORAGE_KEY_PREFIX}${fileName}`,
+      imageMapId: imageMap.id,
+      storageKey,
       publicUrl: `${PUBLIC_URL_PREFIX}${fileName}`,
       fileName,
       mimeType: 'image/jpeg',
@@ -145,5 +152,130 @@ describe('Galleries API eventDate handling', () => {
       .send({ eventDate: '2024-02-31' })
 
     expect(invalidResponse.status).toBe(400)
+  })
+
+  it('创建图集时保存相关链接，站内路径和站外地址都接受', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const asset = await createTestImageAsset(adminUser.user.uid, `${suffix}-links`)
+    const relatedLinks = [
+      { label: '配套游记', url: '/events/259' },
+      { label: '站外报道', url: 'https://example.com/news' },
+    ]
+
+    const response = await agent
+      .post('/api/galleries')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: `${GALLERY_TITLE_PREFIX} Related Links ${suffix}`,
+        description: 'Create with related links',
+        assetIds: [asset.id],
+        relatedLinks,
+      })
+
+    expect(response.status).toBe(201)
+    expect(response.body.gallery.relatedLinks).toEqual(relatedLinks)
+  })
+
+  it('更新相关链接支持覆盖与清空，非法地址返回 400 且不改库', async () => {
+    const gallery = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Related Links Patch`,
+      authorUid: adminUser.user.uid,
+      authorName: adminUser.user.displayName,
+    })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const patch = (body: Record<string, unknown>) =>
+      agent.patch(`/api/galleries/${gallery.id}`).set('X-XSRF-TOKEN', xsrfToken).send(body)
+
+    const updated = await patch({ relatedLinks: [{ label: '另一个图集', url: '/gallery/1024' }] })
+    expect(updated.status).toBe(200)
+    expect(updated.body.gallery.relatedLinks).toEqual([
+      { label: '另一个图集', url: '/gallery/1024' },
+    ])
+
+    const rejected = await patch({ relatedLinks: [{ label: '坏链接', url: '//evil.com' }] })
+    expect(rejected.status).toBe(400)
+    const storedAfterRejection = await prisma.gallery.findUnique({
+      where: { id: gallery.id },
+      select: { relatedLinks: true },
+    })
+    expect(storedAfterRejection?.relatedLinks).toEqual([
+      { label: '另一个图集', url: '/gallery/1024' },
+    ])
+
+    const cleared = await patch({ relatedLinks: [] })
+    expect(cleared.status).toBe(200)
+    expect(cleared.body.gallery.relatedLinks).toEqual([])
+
+    const titleOnly = await patch({ title: `${GALLERY_TITLE_PREFIX} Related Links Renamed` })
+    expect(titleOnly.body.gallery.relatedLinks).toEqual([])
+  })
+  it('按可见性聚合去重排序的画廊标签建议', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const viewer = await createTestUser({
+      role: 'user',
+      email: `roi_gallery_event_date_viewer_${suffix}@example.com`,
+      displayName: `RoiGalleryEventDateViewer_${suffix}`,
+    })
+    const publicGallery = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Tag Public`,
+      authorUid: adminUser.user.uid,
+    })
+    const ownDraft = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Tag Own Draft`,
+      status: 'draft',
+      authorUid: viewer.user.uid,
+    })
+    const otherDraft = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Tag Other Draft`,
+      status: 'draft',
+      authorUid: adminUser.user.uid,
+    })
+    const deletedGallery = await createTestGallery({
+      title: `${GALLERY_TITLE_PREFIX} Tag Deleted`,
+      authorUid: viewer.user.uid,
+    })
+
+    await Promise.all([
+      prisma.gallery.update({
+        where: { id: publicGallery.id },
+        data: { tags: ['公开画廊标签', '重复画廊标签'] },
+      }),
+      prisma.gallery.update({
+        where: { id: ownDraft.id },
+        data: { tags: ['本人画廊草稿标签'] },
+      }),
+      prisma.gallery.update({
+        where: { id: otherDraft.id },
+        data: { tags: ['他人画廊草稿标签'] },
+      }),
+      prisma.gallery.update({
+        where: { id: deletedGallery.id },
+        data: { tags: ['删除画廊标签'], deletedAt: new Date() },
+      }),
+    ])
+
+    const anonymousResponse = await request(app).get('/api/galleries/tags')
+    expect(anonymousResponse.status).toBe(200)
+    expect(anonymousResponse.body.tags).toContain('公开画廊标签')
+    expect(anonymousResponse.body.tags).not.toContain('本人画廊草稿标签')
+    expect(anonymousResponse.body.tags).not.toContain('他人画廊草稿标签')
+    expect(anonymousResponse.body.tags).not.toContain('删除画廊标签')
+    expect(
+      anonymousResponse.body.tags.filter((tag: string) => tag === '重复画廊标签')
+    ).toHaveLength(1)
+
+    const { agent } = await createAuthenticatedAgent(viewer.user.email, viewer.plainPassword)
+    const authenticatedResponse = await agent.get('/api/galleries/tags')
+    expect(authenticatedResponse.status).toBe(200)
+    expect(authenticatedResponse.body.tags).toContain('本人画廊草稿标签')
+    expect(authenticatedResponse.body.tags).not.toContain('他人画廊草稿标签')
+    expect(authenticatedResponse.body.tags).not.toContain('删除画廊标签')
   })
 })

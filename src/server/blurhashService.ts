@@ -1,6 +1,9 @@
 import fs from 'fs'
 import { encode } from 'blurhash'
 import sharp from 'sharp'
+import { runtimeConfigService } from './services/runtimeConfig.service'
+import { EnhancedCache } from './utils/cache'
+import { getSharpInputPixelLimit } from './utils/sharpSafe'
 
 export interface BlurhashConfig {
   enabled: boolean
@@ -14,33 +17,14 @@ export interface BlurhashResult {
   thumbhash?: string
 }
 
-const DEFAULT_BLURHASH_CONFIG: BlurhashConfig = {
-  enabled: true,
-  autoGenerate: true,
-  componentsX: 4,
-  componentsY: 3,
-}
-
-let cachedConfig: BlurhashConfig | null = null
-
 function getBlurhashConfig(): BlurhashConfig {
-  if (cachedConfig) {
-    return cachedConfig
+  const config = runtimeConfigService.getConfig()
+  return {
+    enabled: config.blurhashEnabled,
+    autoGenerate: config.blurhashAutoGenerate,
+    componentsX: config.blurhashComponentsX,
+    componentsY: config.blurhashComponentsY,
   }
-
-  const enabled = process.env.BLURHASH_ENABLED !== 'false'
-  const autoGenerate = process.env.BLURHASH_AUTO_GENERATE !== 'false'
-  const componentsX = parseInt(process.env.BLURHASH_COMPONENTS_X || '4', 10)
-  const componentsY = parseInt(process.env.BLURHASH_COMPONENTS_Y || '3', 10)
-
-  cachedConfig = {
-    enabled,
-    autoGenerate,
-    componentsX: isNaN(componentsX) ? 4 : componentsX,
-    componentsY: isNaN(componentsY) ? 3 : componentsY,
-  }
-
-  return cachedConfig
 }
 
 export function isBlurhashEnabled(): boolean {
@@ -51,32 +35,15 @@ export function shouldAutoGenerate(): boolean {
   return getBlurhashConfig().autoGenerate
 }
 
-const blurhashCache = new Map<string, BlurhashResult>()
-const BLURHASH_CACHE_TTL = 60 * 60 * 1000
-
-function getCachedBlurhash(key: string): BlurhashResult | null {
-  const cached = blurhashCache.get(key)
-  if (cached) {
-    const timestamp = blurhashCache.get(`_timestamp_${key}`)
-    if (timestamp && Date.now() - (timestamp as any) < BLURHASH_CACHE_TTL) {
-      return cached
-    }
-    blurhashCache.delete(key)
-    blurhashCache.delete(`_timestamp_${key}`)
-  }
-  return null
-}
-
-function setCachedBlurhash(key: string, result: BlurhashResult): void {
-  blurhashCache.set(key, result)
-  blurhashCache.set(`_timestamp_${key}`, Date.now() as any)
-}
+// blurhash 生成结果缓存：TTL 1 小时，容量跟随管理后台 cacheMaxKeys 配置
+const blurhashCache = new EnhancedCache({ stdTTL: 3600 })
 
 async function extractPixels(
   buffer: Buffer
 ): Promise<{ data: Uint8ClampedArray; width: number; height: number } | null> {
   try {
-    const metadata = await sharp(buffer).metadata()
+    const pixelLimit = getSharpInputPixelLimit()
+    const metadata = await sharp(buffer, { limitInputPixels: pixelLimit }).metadata()
 
     // Downsize very large images to keep encoding fast
     const MAX_DIMENSION = 100
@@ -92,7 +59,7 @@ async function extractPixels(
       }
     }
 
-    const { data, info } = await sharp(buffer)
+    const { data, info } = await sharp(buffer, { limitInputPixels: pixelLimit })
       .ensureAlpha()
       .removeAlpha()
       .resize(targetWidth, targetHeight, { fit: 'inside' })
@@ -111,7 +78,8 @@ async function extractPixels(
 }
 
 export async function generateBlurhashFromBuffer(buffer: Buffer): Promise<string | null> {
-  if (!isBlurhashEnabled()) {
+  const config = getBlurhashConfig()
+  if (!config.enabled) {
     console.log('[Blurhash] Blurhash is disabled')
     return null
   }
@@ -120,8 +88,6 @@ export async function generateBlurhashFromBuffer(buffer: Buffer): Promise<string
     console.warn('[Blurhash] Empty buffer provided')
     return null
   }
-
-  const config = getBlurhashConfig()
 
   try {
     const pixels = await extractPixels(buffer)
@@ -164,10 +130,10 @@ export async function generateBlurhashFromFile(filePath: string): Promise<string
   }
 
   const cacheKey = `blurhash_file_${filePath}`
-  const cached = getCachedBlurhash(cacheKey)
-  if (cached?.blurhash) {
+  const cached = blurhashCache.get<string>(cacheKey)
+  if (cached) {
     console.log('[Blurhash] Using cached blurhash for:', filePath)
-    return cached.blurhash
+    return cached
   }
 
   try {
@@ -175,8 +141,7 @@ export async function generateBlurhashFromFile(filePath: string): Promise<string
     const blurhash = await generateBlurhashFromBuffer(buffer)
 
     if (blurhash) {
-      const result: BlurhashResult = { blurhash }
-      setCachedBlurhash(cacheKey, result)
+      blurhashCache.set(cacheKey, blurhash)
     }
 
     return blurhash
@@ -186,26 +151,20 @@ export async function generateBlurhashFromFile(filePath: string): Promise<string
   }
 }
 
-export async function generateThumbhashFromFile(_filePath: string): Promise<string | null> {
-  // Thumbhash generation is not prioritized; returning null as placeholder.
-  console.log('[Thumbhash] Thumbhash generation not yet implemented')
-  return null
-}
-
 export async function generateImageHashesFromFile(filePath: string): Promise<BlurhashResult> {
-  if (!isBlurhashEnabled()) {
+  const config = getBlurhashConfig()
+  if (!config.enabled) {
     console.log('[Blurhash] Blurhash is disabled')
     return {}
   }
 
   const cacheKey = `hashes_file_${filePath}`
-  const cached = getCachedBlurhash(cacheKey)
+  const cached = blurhashCache.get<BlurhashResult>(cacheKey)
   if (cached) {
     console.log('[Blurhash] Using cached hashes for:', filePath)
     return cached
   }
 
-  const config = getBlurhashConfig()
   const result: BlurhashResult = {}
 
   if (config.autoGenerate) {
@@ -217,26 +176,9 @@ export async function generateImageHashesFromFile(filePath: string): Promise<Blu
     }
 
     if (Object.keys(result).length > 0) {
-      setCachedBlurhash(cacheKey, result)
+      blurhashCache.set(cacheKey, result)
     }
   }
 
   return result
-}
-
-export async function refreshImageHashesFromFile(filePath: string): Promise<BlurhashResult> {
-  const cacheKey = `hashes_file_${filePath}`
-  blurhashCache.delete(cacheKey)
-  blurhashCache.delete(`blurhash_file_${filePath}`)
-
-  return generateImageHashesFromFile(filePath)
-}
-
-export function clearBlurhashCache(): void {
-  blurhashCache.clear()
-  console.log('[Blurhash] Cache cleared')
-}
-
-export function getBlurhashCacheSize(): number {
-  return Math.floor(blurhashCache.size / 2)
 }

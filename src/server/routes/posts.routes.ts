@@ -23,6 +23,7 @@ import {
   notifyCommentReply,
   parsePagination,
   enhancedCache,
+  createPaginationMeta,
   fetchPostCommentsForResponse,
   fetchPostCommentsPageForResponse,
   resolveCommentReplyTarget,
@@ -35,6 +36,8 @@ import {
   resolveMentionTargetsForText,
   allocateNumericSlug,
   isNumericSlug,
+  fetchVisibleTagSuggestions,
+  recordBrowsingHistory,
 } from '../utils'
 import type { AuthenticatedRequest, ContentStatus } from '../types'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -190,11 +193,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
         likedByMe: likedPostSet.has(post.id),
         favoritedByMe: favoritedPostSet.has(post.id),
       })),
-      total,
-      page,
-      limit,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
-      hasMore: skip + posts.length < total,
+      ...createPaginationMeta(total, page, limit, posts.length),
     }
 
     if (!req.authUser && sort === 'latest') {
@@ -206,6 +205,15 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     console.error('Fetch posts error:', error)
     res.status(500).json({ error: '获取帖子失败' })
+  }
+})
+router.get('/tags', async (req: AuthenticatedRequest, res) => {
+  try {
+    const tags = await fetchVisibleTagSuggestions('post', req.authUser)
+    res.json({ tags })
+  } catch (error) {
+    console.error('Fetch post tags error:', error)
+    res.status(500).json({ error: '获取帖子标签失败' })
   }
 })
 
@@ -353,29 +361,7 @@ router.get('/:slug', async (req: AuthenticatedRequest, res) => {
     const hotScore = calculatePostHotScore(post)
 
     const browsingPromise = req.authUser
-      ? (async () => {
-          const existing = await prisma.browsingHistory.findFirst({
-            where: {
-              userUid: req.authUser!.uid,
-              targetType: 'post',
-              targetId: post.id,
-            },
-          })
-          if (existing) {
-            await prisma.browsingHistory.update({
-              where: { id: existing.id },
-              data: { createdAt: new Date() },
-            })
-          } else {
-            await prisma.browsingHistory.create({
-              data: {
-                userUid: req.authUser!.uid,
-                targetType: 'post',
-                targetId: post.id,
-              },
-            })
-          }
-        })()
+      ? recordBrowsingHistory(req.authUser.uid, 'post', post.id)
       : Promise.resolve()
 
     await Promise.all([
@@ -701,9 +687,7 @@ router.get('/:postId/comments', async (req: AuthenticatedRequest, res) => {
 
     res.json({
       comments,
-      total,
-      page,
-      limit,
+      ...createPaginationMeta(total, page, limit, comments.length),
     })
   } catch (error) {
     console.error('Fetch post comments error:', error)

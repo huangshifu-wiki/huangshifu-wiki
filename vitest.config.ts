@@ -7,9 +7,9 @@ import dotenv from 'dotenv'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // 加载测试环境变量（优先级：.env.test > .env.local > .env）
-dotenv.config({ path: path.resolve(__dirname, '.env.test') })
-dotenv.config({ path: path.resolve(__dirname, '.env.local') })
-dotenv.config()
+dotenv.config({ path: path.resolve(__dirname, '.env.test'), quiet: true })
+dotenv.config({ path: path.resolve(__dirname, '.env.local'), quiet: true })
+dotenv.config({ quiet: true })
 
 const testUploadsPath =
   process.env.UPLOADS_PATH || path.join(os.tmpdir(), 'huangshifu-wiki-test-uploads')

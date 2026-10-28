@@ -39,11 +39,37 @@ describe('eventWriteSchema', () => {
     expect(result.relatedLinks[0]?.label).toBe('官宣')
   })
 
-  it('defaults related links to an empty array', () => {
-    const result = eventWriteSchema.parse({ title: '默认链接活动' })
+  it('defaults related links to an empty array for a pending event', () => {
+    const result = eventWriteSchema.parse({
+      title: '默认链接活动',
+      timeStatus: 'pending',
+    })
 
     expect(result.tags).toEqual([])
     expect(result.relatedLinks).toEqual([])
+  })
+
+  it('accepts pending and postponed events without time slots', () => {
+    expect(eventWriteSchema.parse({ title: '待定活动', timeStatus: 'pending' }).timeStatus).toBe(
+      'pending'
+    )
+    expect(eventWriteSchema.parse({ title: '推迟活动', timeStatus: 'postponed' }).timeStatus).toBe(
+      'postponed'
+    )
+  })
+
+  it('requires exactly one of time slots and time status', () => {
+    expect(() => eventWriteSchema.parse({ title: '缺少时间活动' })).toThrow(ZodError)
+    expect(() =>
+      eventWriteSchema.parse({
+        title: '重复时间活动',
+        timeSlots: [{ type: 'date', start: '2025-08-23' }],
+        timeStatus: 'pending',
+      })
+    ).toThrow(ZodError)
+    expect(() => eventWriteSchema.parse({ title: '未知状态活动', timeStatus: 'unknown' })).toThrow(
+      ZodError
+    )
   })
 
   it('rejects mismatched date type values', () => {
@@ -59,6 +85,7 @@ describe('eventWriteSchema', () => {
     expect(() =>
       eventWriteSchema.parse({
         title: '错误活动',
+        timeStatus: 'pending',
         externalLinks: [{ label: '购票', url: 'not-a-url' }],
       })
     ).toThrow(ZodError)
@@ -67,6 +94,7 @@ describe('eventWriteSchema', () => {
   it('rejects invalid related links', () => {
     expect(() =>
       eventWriteSchema.parse({
+        timeStatus: 'pending',
         title: '错误活动',
         relatedLinks: [{ label: '官宣', url: 'not-a-url' }],
       })
@@ -76,6 +104,7 @@ describe('eventWriteSchema', () => {
   it('rejects invalid ticket prices', () => {
     expect(() =>
       eventWriteSchema.parse({
+        timeStatus: 'pending',
         title: '错误活动',
         ticketPrices: [{ description: '看台' }],
       })
@@ -83,6 +112,7 @@ describe('eventWriteSchema', () => {
 
     expect(() =>
       eventWriteSchema.parse({
+        timeStatus: 'pending',
         title: '错误活动',
         ticketPrices: [{ price: -1 }],
       })
@@ -90,6 +120,7 @@ describe('eventWriteSchema', () => {
 
     expect(() =>
       eventWriteSchema.parse({
+        timeStatus: 'pending',
         title: '错误活动',
         ticketPrices: [{ price: '280' }],
       })
@@ -97,6 +128,7 @@ describe('eventWriteSchema', () => {
 
     expect(() =>
       eventWriteSchema.parse({
+        timeStatus: 'pending',
         title: '错误活动',
         ticketPrices: ['看台 280'],
       })
@@ -106,6 +138,7 @@ describe('eventWriteSchema', () => {
   it('normalizes ticket price descriptions and rejects extra fields', () => {
     expect(
       eventWriteSchema.parse({
+        timeStatus: 'pending',
         title: '票价活动',
         ticketPrices: [
           { description: '  看台  ', price: 280 },
@@ -116,6 +149,7 @@ describe('eventWriteSchema', () => {
 
     expect(() =>
       eventWriteSchema.parse({
+        timeStatus: 'pending',
         title: '错误活动',
         ticketPrices: [{ description: '看台', price: 280, currency: 'CNY' }],
       })

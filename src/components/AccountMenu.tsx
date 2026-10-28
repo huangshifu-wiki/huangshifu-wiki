@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Server,
   Settings,
+  Ticket,
   UserRound,
 } from '@/src/components/icons'
 import { useAuth } from '../context/AuthContext'
@@ -147,6 +148,14 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
                   >
                     <FileText size={16} />
                     <span>我的帖子</span>
+                  </Link>
+                  <Link
+                    to="/settings/content?tab=tickets"
+                    className={styles.menuAction}
+                    onClick={closeAccountMenu}
+                  >
+                    <Ticket size={16} />
+                    <span>我的盘票</span>
                   </Link>
                   <Link
                     to="/settings/content?tab=comments"

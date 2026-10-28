@@ -70,7 +70,7 @@ export const CommentActionMenu = ({
         role="menu"
         aria-hidden={!open}
         className={clsx(
-          'absolute right-0 top-full z-30 mt-1 min-w-32 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] p-1 shadow-[var(--book-panel-shadow)] backdrop-blur-[12px] transition-all',
+          'absolute right-0 top-full z-30 mt-1 min-w-32 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-1 shadow-[var(--book-panel-shadow)] transition-all',
           open
             ? 'visible translate-y-0 opacity-100'
             : 'invisible -translate-y-1 opacity-0 pointer-events-none'

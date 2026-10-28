@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   EnhancedCache,
   enhancedCache,
@@ -12,10 +12,6 @@ describe('EnhancedCache', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     cache = new EnhancedCache({ stdTTL: 10, maxKeys: 100, checkperiod: 99999 })
-  })
-
-  afterEach(() => {
-    cache.destroy()
   })
 
   describe('get / set', () => {
@@ -69,13 +65,6 @@ describe('EnhancedCache', () => {
       const s = cache.getStats()
       expect(s.hits).toBe(1)
       expect(s.misses).toBe(1)
-    })
-  })
-
-  describe('destroy', () => {
-    it('closes the cache', () => {
-      cache.destroy()
-      expect(cache.get('anything')).toBeUndefined()
     })
   })
 })

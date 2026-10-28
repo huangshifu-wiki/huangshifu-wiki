@@ -3,6 +3,7 @@ import { clsx } from 'clsx'
 import { getEventCoverSrc } from '../../lib/eventFormat'
 import type { EventItem } from '../../types/entities'
 import { SmartImage } from '../SmartImage'
+import { CoverPlaceholder } from '../CoverPlaceholder'
 
 interface EventCoverProps {
   event: EventItem
@@ -23,17 +24,7 @@ const EventCover = ({ event, className, imageClassName }: EventCoverProps) => {
     )
   }
 
-  return (
-    <div
-      className={clsx(
-        'flex h-full w-full flex-col items-center justify-center gap-2 bg-surface-alt text-text-muted',
-        className
-      )}
-    >
-      <Calendar size={24} className="text-brand-gold/60" />
-      <span className="text-xs tracking-[0.06em]">暂无封面</span>
-    </div>
-  )
+  return <CoverPlaceholder icon={<Calendar size={24} />} label="无封面" className={className} />
 }
 
 export { EventCover }

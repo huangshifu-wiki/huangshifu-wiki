@@ -5,20 +5,23 @@ import {
   FileText,
   History,
   Image as ImageIcon,
-  Loader2,
   Settings,
   UserRound,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
+import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import MarkdownRenderer from '../components/MarkdownRenderer'
+import Pagination from '../components/Pagination'
 import { useToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
+import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { apiGet, apiPatch } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { PROFILE_SIGNATURE_MAX_LENGTH } from '../lib/contentLimits'
 import { formatDateOnly } from '../lib/dateUtils'
+import { summarizeSeoText } from '../lib/seo'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import {
   shouldWaitForGalleryThumbnail,
@@ -79,7 +82,7 @@ function formatTime(value: string) {
 function getFavoriteLink(item: FavoriteItem | HistoryItem) {
   if (item.targetType === 'wiki') return `/wiki/${item.target?.slug || item.targetId}`
   if (item.targetType === 'post') return `/forum/${item.target?.slug || item.targetId}`
-  return '/music'
+  return item.target?.slug ? `/music/${item.target.slug}` : '/music'
 }
 
 function getFavoriteTitle(item: FavoriteItem | HistoryItem) {
@@ -114,8 +117,11 @@ function ProfileActivityList({
                 <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
                   {getFavoriteTitle(item)}
                 </p>
-                <p className="mt-1 text-xs text-text-muted">
-                  {getFavoriteMeta(item)} · {verb} {formatTime(item.createdAt)}
+                <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-text-muted">
+                  <span className="min-w-0 truncate">{getFavoriteMeta(item)}</span>
+                  <span className="flex-shrink-0 whitespace-nowrap">
+                    · {verb} {formatTime(item.createdAt)}
+                  </span>
                 </p>
               </Link>
             </li>
@@ -138,8 +144,24 @@ export default function UserProfile() {
   const [galleries, setGalleries] = useState<GalleryItem[]>([])
   const [favorites, setFavorites] = useState<FavoriteItem[]>([])
   const [history, setHistory] = useState<HistoryItem[]>([])
-  const [profileLoading, setProfileLoading] = useState(false)
+  const [contentTotalState, setContentTotal] = useState<{ scope: string; total: number }>()
+  const contentScope = JSON.stringify([userId, activeTab])
+  const contentTotal =
+    contentTotalState?.scope === contentScope ? contentTotalState.total : undefined
+  const pagination = useRoutedPagination({
+    totalCount: contentTotal,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+    enabled: activeTab !== 'profile',
+  })
+  const [profileLoading, setProfileLoading] = useState(true)
   const [contentLoading, setContentLoading] = useState(false)
+  const [contentError, setContentError] = useState<unknown | null>(null)
+  const [contentRetry, setContentRetry] = useState(0)
+  const [profileRetry, setProfileRetry] = useState(0)
   const [error, setError] = useState('')
   const [signatureDraft, setSignatureDraft] = useState('')
   const [signatureEditing, setSignatureEditing] = useState(false)
@@ -151,35 +173,51 @@ export default function UserProfile() {
   const canViewFavorites = Boolean(profile?.canViewFavorites)
   const canViewHistory = Boolean(profile?.canViewHistory)
   const hasPendingGalleryThumbnails = galleries.some(shouldWaitForGalleryThumbnail)
+  const activeContentHasItems =
+    activeTab === 'posts'
+      ? posts.length > 0
+      : activeTab === 'galleries'
+        ? galleries.length > 0
+        : activeTab === 'favorites'
+          ? favorites.length > 0
+          : activeTab === 'history'
+            ? history.length > 0
+            : false
 
   useEffect(() => {
     if (!userId) return
-    let cancelled = false
+    const controller = new AbortController()
     const run = async () => {
       setProfileLoading(true)
       setError('')
+      setProfile(null)
+      setHistory([])
       try {
-        const data = await apiGet<{ user: PublicUser }>(`/api/users/${userId}/profile`)
-        if (!cancelled) {
+        const data = await apiGet<{ user: PublicUser }>(
+          `/api/users/${userId}/profile`,
+          undefined,
+          { staleTime: 0, swr: false },
+          controller.signal
+        )
+        if (!controller.signal.aborted) {
           setProfile(data.user)
         }
       } catch (err) {
-        console.error('Fetch public profile error:', err)
-        if (!cancelled) {
-          setProfile(null)
+        if (!controller.signal.aborted) {
+          console.error('Fetch public profile error:', err)
           setError('用户不存在或暂不可见')
         }
       } finally {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setProfileLoading(false)
         }
       }
     }
     void run()
     return () => {
-      cancelled = true
+      controller.abort()
     }
-  }, [userId])
+  }, [profileRetry, userId, authUser?.uid])
 
   useEffect(() => {
     if (!signatureEditing) {
@@ -266,8 +304,12 @@ export default function UserProfile() {
   const saveSignature = async () => {
     if (signatureSaving || !profile) return
 
-    const nextSignature = signatureDraft
+    const nextSignature = signatureDraft.trim()
     const currentSignature = profile.signature || ''
+    if (nextSignature.length > PROFILE_SIGNATURE_MAX_LENGTH) {
+      toast.show(`签名不能超过${PROFILE_SIGNATURE_MAX_LENGTH}个字符`, { variant: 'error' })
+      return
+    }
     setSignatureEditing(false)
 
     if (nextSignature === currentSignature) {
@@ -293,64 +335,104 @@ export default function UserProfile() {
     if (!userId || !profileLoaded) return
     if (activeTab === 'profile') {
       setContentLoading(false)
+      setContentError(null)
       return
     }
 
     let cancelled = false
+    const controller = activeTab === 'history' ? new AbortController() : undefined
     const run = async () => {
       setContentLoading(true)
+      setContentError(null)
       try {
         if (activeTab === 'posts') {
-          const data = await apiGet<{ posts: PostItem[] }>(`/api/users/${userId}/posts`, {
-            limit: 50,
-            visibility: 'public',
-          })
-          if (!cancelled) setPosts(data.posts || [])
+          const data = await apiGet<{ posts: PostItem[]; total: number }>(
+            `/api/users/${userId}/posts`,
+            {
+              page: pagination.page,
+              limit: pagination.pageSize,
+              visibility: 'public',
+            }
+          )
+          if (!cancelled) {
+            setPosts(data.posts || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
           return
         }
 
         if (activeTab === 'galleries') {
-          const data = await apiGet<{ galleries: GalleryItem[] }>(
+          const data = await apiGet<{ galleries: GalleryItem[]; total: number }>(
             `/api/users/${userId}/galleries`,
             {
-              limit: 50,
+              page: pagination.page,
+              limit: pagination.pageSize,
               visibility: 'public',
             }
           )
-          if (!cancelled) setGalleries(data.galleries || [])
+          if (!cancelled) {
+            setGalleries(data.galleries || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
           return
         }
 
         if (activeTab === 'favorites' && canViewFavorites) {
-          const data = await apiGet<{ favorites: FavoriteItem[] }>(
+          const data = await apiGet<{ favorites: FavoriteItem[]; total: number }>(
             `/api/users/${userId}/favorites`,
             {
-              limit: 50,
+              page: pagination.page,
+              limit: pagination.pageSize,
             }
           )
-          if (!cancelled) setFavorites(data.favorites || [])
+          if (!cancelled) {
+            setFavorites(data.favorites || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
           return
         }
 
         if (activeTab === 'history' && canViewHistory) {
-          const data = await apiGet<{ history: HistoryItem[] }>(`/api/users/${userId}/history`, {
-            limit: 50,
-          })
-          if (!cancelled) setHistory(data.history || [])
+          const data = await apiGet<{ history: HistoryItem[]; total: number }>(
+            `/api/users/${userId}/history`,
+            {
+              page: pagination.page,
+              limit: pagination.pageSize,
+            },
+            { staleTime: 0, swr: false },
+            controller?.signal
+          )
+          if (!cancelled) {
+            setHistory(data.history || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
         }
       } catch (err) {
-        console.error('Fetch public profile content error:', err)
-      } finally {
         if (!cancelled) {
-          setContentLoading(false)
+          console.error('Fetch public profile content error:', err)
+          setContentError(err)
         }
+      } finally {
+        if (!cancelled) setContentLoading(false)
       }
     }
     void run()
     return () => {
       cancelled = true
+      controller?.abort()
     }
-  }, [activeTab, canViewFavorites, canViewHistory, profileLoaded, userId])
+  }, [
+    activeTab,
+    canViewFavorites,
+    canViewHistory,
+    contentScope,
+    contentRetry,
+    pagination.page,
+    pagination.pageSize,
+    profileLoaded,
+    userId,
+    authUser?.uid,
+  ])
 
   useEffect(() => {
     if (!userId || activeTab !== 'galleries' || !hasPendingGalleryThumbnails) {
@@ -365,16 +447,20 @@ export default function UserProfile() {
     const poll = async () => {
       attempts += 1
       try {
-        const data = await apiGet<{ galleries: GalleryItem[] }>(
+        const data = await apiGet<{ galleries: GalleryItem[]; total: number }>(
           `/api/users/${userId}/galleries`,
           {
-            limit: 50,
+            page: pagination.page,
+            limit: pagination.pageSize,
             visibility: 'public',
           },
           THUMBNAIL_POLL_DEDUP_OPTIONS,
           abortController.signal
         )
-        if (!stopped) setGalleries(data.galleries || [])
+        if (!stopped) {
+          setGalleries(data.galleries || [])
+          setContentTotal({ scope: contentScope, total: data.total || 0 })
+        }
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
           console.error('Poll public user gallery thumbnails error:', err)
@@ -395,7 +481,14 @@ export default function UserProfile() {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [activeTab, hasPendingGalleryThumbnails, userId])
+  }, [
+    activeTab,
+    contentScope,
+    hasPendingGalleryThumbnails,
+    pagination.page,
+    pagination.pageSize,
+    userId,
+  ])
 
   const visibleTabs = useMemo(() => {
     const tabs: Array<{ id: UserProfileTab; label: string; icon: React.ReactNode; path: string }> =
@@ -442,18 +535,22 @@ export default function UserProfile() {
     return <Navigate to="/" replace />
   }
 
-  if (profileLoading) {
+  if (profileLoading && !profile) {
     return (
       <div className="mobile-page-shell flex min-h-[60vh] items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-brand-gold" />
+        <Spinner label="资料加载中" />
       </div>
     )
   }
 
   if (!profile) {
     return (
-      <div className="mobile-page-shell flex min-h-[60vh] items-center justify-center px-6 text-center text-sm text-text-muted">
-        <span className="relative z-10">{error || '用户不存在或暂不可见'}</span>
+      <div className="mobile-page-shell px-6">
+        <LoadErrorState
+          className="min-h-[60vh] pt-24"
+          title={error || '用户不存在或暂不可见'}
+          onRetry={() => setProfileRetry((current) => current + 1)}
+        />
       </div>
     )
   }
@@ -572,100 +669,126 @@ export default function UserProfile() {
           ))}
         </nav>
 
-        {contentLoading ? (
-          <div className="flex items-center justify-center py-14">
-            <Loader2 size={24} className="animate-spin text-brand-gold" />
-          </div>
-        ) : activeTab === 'profile' ? (
-          <section className={TAB_PANEL_CLASS}>
-            {bio ? (
-              <div className="prose max-w-none text-sm leading-8 text-text-secondary">
-                <MarkdownRenderer content={bio} />
-              </div>
-            ) : (
-              <p className="max-w-[72ch] text-sm leading-8 text-text-secondary">
-                这位粉丝很神秘，还没有写下任何简介...
-              </p>
-            )}
-          </section>
-        ) : activeTab === 'posts' ? (
-          <section className={TAB_PANEL_CLASS}>
-            {posts.length ? (
-              <ul>
-                {posts.map((post) => (
-                  <li key={post.id} className="border-b border-border last:border-b-0">
-                    <Link to={`/forum/${post.slug || post.id}`} className="group block py-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
-                            {post.title}
-                          </p>
-                          <p className="mt-1 text-xs text-text-muted">
-                            {post.section} · 评论 {post.commentsCount || 0} · 喜欢{' '}
-                            {post.likesCount || 0}
+        <div aria-busy={contentLoading}>
+          {contentError && (
+            <LoadErrorState
+              error={contentError}
+              onRetry={() => setContentRetry((current) => current + 1)}
+            />
+          )}
+          {contentLoading && activeContentHasItems && (
+            <div className="mb-3 flex justify-end">
+              <Spinner size="sm" label="内容刷新中" />
+            </div>
+          )}
+          {contentLoading && !activeContentHasItems ? (
+            <div className="space-y-3 py-8" role="status" aria-label="加载中">
+              {[1, 2, 3, 4].map((item) => (
+                <Skeleton key={item} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : contentError && !activeContentHasItems ? null : activeTab === 'profile' ? (
+            <section className={TAB_PANEL_CLASS}>
+              {bio ? (
+                <div className="prose max-w-none text-sm leading-8 text-text-secondary">
+                  <MarkdownRenderer content={bio} />
+                </div>
+              ) : (
+                <p className="max-w-[72ch] text-sm leading-8 text-text-secondary">
+                  这位粉丝很神秘，还没有写下任何简介...
+                </p>
+              )}
+            </section>
+          ) : activeTab === 'posts' ? (
+            <section className={TAB_PANEL_CLASS}>
+              {posts.length ? (
+                <ul>
+                  {posts.map((post) => (
+                    <li key={post.id} className="border-b border-border last:border-b-0">
+                      <Link to={`/forum/${post.slug || post.id}`} className="group block py-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                              {post.title}
+                            </p>
+                            <p className="mt-1 text-xs text-text-muted">
+                              {post.section} · 评论 {post.commentsCount || 0} · 喜欢{' '}
+                              {post.likesCount || 0}
+                            </p>
+                          </div>
+                          <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
+                            {formatTime(post.createdAt)}
                           </p>
                         </div>
-                        <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
-                          {formatTime(post.createdAt)}
-                        </p>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState message="暂无公开帖子" />
-            )}
-          </section>
-        ) : activeTab === 'galleries' ? (
-          <section className={TAB_PANEL_CLASS}>
-            {galleries.length ? (
-              <ul>
-                {galleries.map((gallery) => (
-                  <li key={gallery.id} className="border-b border-border last:border-b-0">
-                    <Link
-                      to={`/gallery/${gallery.slug || gallery.id}`}
-                      className="group flex gap-3 py-3"
-                    >
-                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded bg-surface-alt">
-                        {gallery.images?.[0]?.thumbnailUrl ? (
-                          <img
-                            src={gallery.images[0].thumbnailUrl}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : null}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
-                          {gallery.title}
-                        </p>
-                        <p className="mt-1 line-clamp-1 text-xs text-text-muted">
-                          {gallery.description || '暂无描述'}
-                        </p>
-                        <p className="mt-1 text-xs text-text-muted">
-                          {gallery.images?.length || 0} 张 ·{' '}
-                          {gallery.eventDate
-                            ? formatDateOnly(gallery.eventDate, 'MM-dd')
-                            : formatTime(gallery.createdAt)}
-                        </p>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState message="暂无公开图集" />
-            )}
-          </section>
-        ) : activeTab === 'favorites' && profile.canViewFavorites ? (
-          <ProfileActivityList items={favorites} emptyMessage="暂无可见收藏" verb="收藏于" />
-        ) : activeTab === 'history' && profile.canViewHistory ? (
-          <ProfileActivityList items={history} emptyMessage="暂无可见浏览历史" verb="浏览于" />
-        ) : (
-          <Navigate to={`/users/${userId}`} replace />
-        )}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState message="暂无公开帖子" />
+              )}
+            </section>
+          ) : activeTab === 'galleries' ? (
+            <section className={TAB_PANEL_CLASS}>
+              {galleries.length ? (
+                <ul>
+                  {galleries.map((gallery) => (
+                    <li key={gallery.id} className="border-b border-border last:border-b-0">
+                      <Link
+                        to={`/gallery/${gallery.slug || gallery.id}`}
+                        className="group flex gap-3 py-3"
+                      >
+                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded bg-surface-alt">
+                          {gallery.images?.[0]?.thumbnailUrl ? (
+                            <img
+                              src={gallery.images[0].thumbnailUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                            {gallery.title}
+                          </p>
+                          <p className="mt-1 line-clamp-1 text-xs text-text-muted">
+                            {summarizeSeoText(gallery.description, '暂无描述')}
+                          </p>
+                          <p className="mt-1 text-xs text-text-muted">
+                            {gallery.images?.length || 0} 张 ·{' '}
+                            {gallery.eventDate
+                              ? formatDateOnly(gallery.eventDate, 'MM-dd')
+                              : formatTime(gallery.createdAt)}
+                          </p>
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState message="暂无公开图集" />
+              )}
+            </section>
+          ) : activeTab === 'favorites' && profile.canViewFavorites ? (
+            <ProfileActivityList items={favorites} emptyMessage="暂无可见收藏" verb="收藏于" />
+          ) : activeTab === 'history' && profile.canViewHistory ? (
+            <ProfileActivityList items={history} emptyMessage="暂无可见浏览历史" verb="浏览于" />
+          ) : (
+            <Navigate to={`/users/${userId}`} replace />
+          )}
+        </div>
+        {activeTab !== 'profile' && activeContentHasItems && pagination.hasMultiplePages ? (
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={pagination.handlePageChange}
+            pageSize={pagination.pageSize}
+            onPageSizeChange={pagination.handlePageSizeChange}
+            pageSizeOptions={[20, 50, 100]}
+            showPageSizeSelector
+          />
+        ) : null}
       </div>
     </div>
   )

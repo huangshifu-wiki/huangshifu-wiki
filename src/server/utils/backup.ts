@@ -1,9 +1,10 @@
 // 备份加密/解密/清理/文件安全工具
 
-import crypto, { timingSafeEqual } from 'crypto'
+import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import { backupsDir, BACKUP_PASSWORD, BACKUP_RETAIN_COUNT } from './config'
+import { backupsDir } from './config'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 
 export const BACKUP_METADATA_ENTRY = 'backup-meta.json'
 
@@ -68,20 +69,13 @@ export function parseDatabaseUrl(
   }
 }
 
-export function verifyBackupPassword(password: string): boolean {
-  if (!BACKUP_PASSWORD) return false
-  if (password.length !== BACKUP_PASSWORD.length) return false
-  return timingSafeEqual(Buffer.from(password), Buffer.from(BACKUP_PASSWORD))
-}
-
 export function formatBackupTimestamp(date = new Date()): string {
   return date.toISOString().slice(0, 23).replace('T', '_').replace(/[:.]/g, '-')
 }
 
 export function sanitizeFilename(name: string): boolean {
   const currentFormat = /^backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d{3})?\.zip$/
-  const legacyIsoFormat = /^backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.zip$/
-  return currentFormat.test(name) || legacyIsoFormat.test(name)
+  return currentFormat.test(name)
 }
 
 function getBackupNoteMetadataPath(filename: string): string {
@@ -92,7 +86,7 @@ function getBackupNoteMetadataPath(filename: string): string {
   return path.join(backupsDir, `${filename}.meta.json`)
 }
 
-export function normalizeBackupNote(note: string): string {
+function normalizeBackupNote(note: string): string {
   return note.replace(/\r\n?/g, '\n').trim()
 }
 
@@ -432,7 +426,8 @@ export function formatFileSize(bytes: number): string {
 
 // ─── 备份清理 ───────────────────────────────────────────────────────
 
-export async function cleanupOldBackups(skipFiles?: string[]): Promise<void> {
+export async function cleanupOldBackups(skipFiles?: string[]): Promise<string[]> {
+  const removed: string[] = []
   try {
     const backupFilenames = (await fs.promises.readdir(backupsDir)).filter(
       (f) => f.startsWith('backup_') && f.endsWith('.zip')
@@ -447,19 +442,22 @@ export async function cleanupOldBackups(skipFiles?: string[]): Promise<void> {
       )
     ).sort((a, b) => b.mtime - a.mtime)
 
-    if (files.length > BACKUP_RETAIN_COUNT) {
-      const toDelete = files.slice(BACKUP_RETAIN_COUNT).filter((f) => !skipFiles?.includes(f.name))
+    const retainCount = runtimeConfigService.getConfig().backupRetainCount
+    if (files.length > retainCount) {
+      const toDelete = files.slice(retainCount).filter((f) => !skipFiles?.includes(f.name))
       for (const file of toDelete) {
         await fs.promises.unlink(path.join(backupsDir, file.name))
         if (sanitizeFilename(file.name)) {
           await deleteBackupNote(file.name)
         }
+        removed.push(file.name)
         console.log(`Cleaned up old backup: ${file.name}`)
       }
     }
   } catch (error) {
     console.error('Cleanup old backups error:', error)
   }
+  return removed
 }
 
 // ─── 加密 / 解密 ────────────────────────────────────────────────────
@@ -483,25 +481,18 @@ export function decryptBuffer(buffer: Buffer, password: string): Buffer {
   const versionByte = buffer[0]
 
   try {
-    if (versionByte === 0x01) {
-      const salt = buffer.subarray(1, 33)
-      const iv = buffer.subarray(33, 45)
-      const encryptedEnd = buffer.length - 16
-      const encrypted = buffer.subarray(45, encryptedEnd)
-      const authTag = buffer.subarray(encryptedEnd)
-      const key = crypto.scryptSync(password, salt, 32)
-      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv)
-      decipher.setAuthTag(authTag)
-      return Buffer.concat([decipher.update(encrypted), decipher.final()])
+    if (versionByte !== 0x01) {
+      throw new Error('不支持的备份加密格式，仅支持 v2 (AES-256-GCM)')
     }
 
-    console.warn(
-      '[Backup] ⚠️ Decrypting legacy format (AES-256-CBC). Please re-encrypt with new format.'
-    )
-    const iv = buffer.subarray(0, 16)
-    const encrypted = buffer.subarray(16)
-    const key = crypto.scryptSync(password, 'huangshifu-backup-salt', 32)
-    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv)
+    const salt = buffer.subarray(1, 33)
+    const iv = buffer.subarray(33, 45)
+    const encryptedEnd = buffer.length - 16
+    const encrypted = buffer.subarray(45, encryptedEnd)
+    const authTag = buffer.subarray(encryptedEnd)
+    const key = crypto.scryptSync(password, salt, 32)
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv)
+    decipher.setAuthTag(authTag)
     return Buffer.concat([decipher.update(encrypted), decipher.final()])
   } catch (error) {
     throw new Error(

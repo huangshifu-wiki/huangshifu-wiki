@@ -53,6 +53,9 @@ const requiredDisplayNameSchema = z.preprocess(
     .max(AUTH_DISPLAY_NAME_MAX_LENGTH, `显示名称过长，最多${AUTH_DISPLAY_NAME_MAX_LENGTH}个字符`)
 )
 
+// 人机验证 token：是否必填由中间件判断，避免未完成验证时落到泛型校验错误
+const turnstileTokenSchema = z.string().trim().max(4096, '人机验证 token 过长').optional()
+
 export const registerSchema = z.object({
   email: authEmailSchema,
   password: z
@@ -60,6 +63,7 @@ export const registerSchema = z.object({
     .min(PASSWORD_MIN_LENGTH, `密码至少${PASSWORD_MIN_LENGTH}个字符`)
     .max(PASSWORD_MAX_LENGTH, `密码最多${PASSWORD_MAX_LENGTH}个字符`),
   displayName: optionalDisplayNameSchema,
+  turnstileToken: turnstileTokenSchema,
 })
 
 export const loginSchema = z.object({
@@ -73,10 +77,12 @@ export const verifyEmailSchema = z.object({
 
 export const resendEmailVerificationSchema = z.object({
   email: authEmailSchema,
+  turnstileToken: turnstileTokenSchema,
 })
 
 export const passwordResetRequestSchema = z.object({
   email: authEmailSchema,
+  turnstileToken: turnstileTokenSchema,
 })
 
 export const passwordSchema = z

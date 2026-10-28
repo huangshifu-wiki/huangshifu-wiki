@@ -1,10 +1,18 @@
 import { Router } from 'express'
-import { prisma, resolveMusicPlayUrl, toSongResponse, normalizeMusicImportTracks } from '../utils'
+import {
+  normalizeLyricStorage,
+  normalizeMusicImportTracks,
+  prisma,
+  resolveMusicPlayUrl,
+  toSongResponse,
+} from '../utils'
 import {
   getMusicResourcePreview,
+  getMusicTrackMetadata,
   resolveAudioUrl as resolveMetingAudioUrl,
   resolveLyric as resolveMetingLyric,
 } from '../music/metingService'
+import { extractMusicCreditsFromLyric, resolveImportedVocals } from '../../lib/musicCredits'
 const router = Router()
 
 router.get('/song/:id', async (req, res) => {
@@ -16,6 +24,8 @@ router.get('/song/:id', async (req, res) => {
         resourceType: 'song',
         sourceId: id,
       },
+      // 同一 id 可被多首歌共享，固定取最早占用者
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       include: {
         song: {
           include: {
@@ -53,7 +63,7 @@ router.get('/song/:id', async (req, res) => {
       const song = toSongResponse(existing)
       res.json({
         ...song,
-        playUrl: resolved.playUrl || song.audioUrl,
+        playUrl: resolved.mode === 'disabled' ? '' : resolved.playUrl || song.audioUrl,
         playMeta: {
           platform: resolved.platform,
           sourceId: resolved.sourceId,
@@ -72,25 +82,28 @@ router.get('/song/:id', async (req, res) => {
       return
     }
 
-    const audioUrl = await resolveMetingAudioUrl('netease', track.urlId)
-    const lyric = await resolveMetingLyric('netease', track.lyricId)
+    const [audioUrl, lyric, metadata] = await Promise.all([
+      resolveMetingAudioUrl('netease', track.urlId),
+      resolveMetingLyric('netease', track.lyricId),
+      getMusicTrackMetadata('netease', track.sourceId),
+    ])
+    const lyricStorage = normalizeLyricStorage({ lyric, lyricSource: 'netease' })
+    const credits = extractMusicCreditsFromLyric(lyric)
+    const artists = track.artists.length ? track.artists : [preview.artist]
+    credits.vocals = resolveImportedVocals(credits.vocals, artists, track.isInstrumental === true)
 
     res.json({
       docId: null,
       title: track.title || preview.title,
-      artists: track.artists.length ? track.artists : [preview.artist],
-      lyricists: [],
-      composers: [],
-      arrangers: [],
-      vocals: [],
+      artists,
       album: track.album || preview.title,
       description: null,
-      releaseDate: null,
-      durationMs: null,
+      releaseDate: metadata.releaseDate,
+      durationMs: metadata.durationMs,
       cover: track.cover || preview.cover,
       audioUrl: audioUrl || '',
       playUrl: audioUrl || '',
-      lyric: lyric || null,
+      ...lyricStorage.data,
       sources: [
         {
           id: `preview-netease-${track.sourceId}`,

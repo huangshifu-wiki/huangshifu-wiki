@@ -10,6 +10,7 @@ import {
 } from '../schemas'
 import {
   prisma,
+  fetchVisibleTagSuggestions,
   toWikiResponse,
   toWikiListResponse,
   buildWikiVisibilityWhere,
@@ -26,6 +27,7 @@ import {
   clearWikiRelationCache,
   logger,
   parsePagination,
+  createPaginationMeta,
   ensureTextLimit,
   createNotification,
   softDeleteData,
@@ -348,10 +350,7 @@ router.get(
           likedByMe: likedWikiSet.has(p.slug),
           dislikedByMe: dislikedWikiSet.has(p.slug),
         })),
-        total,
-        page,
-        limit,
-        hasMore: page * limit < total,
+        ...createPaginationMeta(total, page, limit, pages.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'Fetch wiki pages error')
@@ -368,9 +367,7 @@ mpWikiRouter.get('/', async (req: AuthenticatedRequest, res) => {
   res.setHeader('Expires', '0')
   try {
     const category = typeof req.query.category === 'string' ? req.query.category : 'all'
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100)
-    const page = Math.max(Number(req.query.page) || 1, 1)
-    const skip = (page - 1) * limit
+    const { limit, page, offset: skip } = parsePagination(req.query)
 
     const where = {
       ...buildWikiVisibilityWhere(req.authUser),
@@ -408,9 +405,7 @@ mpWikiRouter.get('/', async (req: AuthenticatedRequest, res) => {
         favoritesCount: page.favoritesCount,
         updatedAt: page.updatedAt.toISOString(),
       })),
-      total,
-      page,
-      limit,
+      ...createPaginationMeta(total, page, limit, pages.length),
     })
   } catch (error) {
     logger.error({ err: error }, 'Fetch mp wiki list error')
@@ -525,6 +520,13 @@ router.get(
       logger.error({ err: error }, 'Fetch wiki categories error')
       res.status(500).json({ error: '获取百科分类失败' })
     }
+  })
+)
+router.get(
+  '/tags',
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const tags = await fetchVisibleTagSuggestions('wiki', req.authUser)
+    res.json({ tags })
   })
 )
 
@@ -941,7 +943,7 @@ router.get(
   '/:slug/history',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const page = await prisma.wikiPage.findUnique({
+      const wikiPage = await prisma.wikiPage.findUnique({
         where: { slug: req.params.slug },
         select: {
           slug: true,
@@ -950,40 +952,45 @@ router.get(
         },
       })
 
-      if (!page) {
+      if (!wikiPage) {
         res.status(404).json({ error: '页面未找到' })
         return
       }
 
-      if (!canViewWikiPage(page, req.authUser)) {
+      if (!canViewWikiPage(wikiPage, req.authUser)) {
         res.status(404).json({ error: '页面未找到' })
         return
       }
 
-      const revisions = await prisma.wikiRevision.findMany({
-        where: { pageSlug: req.params.slug },
-        orderBy: { createdAt: 'desc' },
-        take: Math.min(Math.max(Number(req.query.limit) || 50, 1), 200),
-        skip: Math.max(Number(req.query.skip) || 0, 0),
-        select: {
-          id: true,
-          pageSlug: true,
-          branchId: true,
-          title: true,
-          slug: true,
-          category: true,
-          editorUid: true,
-          editorName: true,
-          isAutoSave: true,
-          createdAt: true,
-        },
-      })
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [revisions, total] = await Promise.all([
+        prisma.wikiRevision.findMany({
+          where: { pageSlug: req.params.slug },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+          select: {
+            id: true,
+            pageSlug: true,
+            branchId: true,
+            title: true,
+            slug: true,
+            category: true,
+            editorUid: true,
+            editorName: true,
+            isAutoSave: true,
+            createdAt: true,
+          },
+        }),
+        prisma.wikiRevision.count({ where: { pageSlug: req.params.slug } }),
+      ])
 
       res.json({
         revisions: revisions.map((revision) => ({
           ...revision,
           createdAt: revision.createdAt.toISOString(),
         })),
+        ...createPaginationMeta(total, page, limit, revisions.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'Fetch wiki history error')
@@ -1950,28 +1957,41 @@ router.get(
     try {
       const status =
         req.query.status === 'merged' || req.query.status === 'rejected' ? req.query.status : 'open'
-      const where = isAdminRole(req.authUser!.role)
+      const pageSlug = typeof req.query.pageSlug === 'string' ? req.query.pageSlug.trim() : ''
+      const branchId = typeof req.query.branchId === 'string' ? req.query.branchId.trim() : ''
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const baseWhere = isAdminRole(req.authUser!.role)
         ? { status: status as WikiPullRequestStatus }
         : { status: status as WikiPullRequestStatus, createdByUid: req.authUser!.uid }
+      const where = {
+        ...baseWhere,
+        ...(pageSlug ? { pageSlug } : {}),
+        ...(branchId ? { branchId } : {}),
+      }
 
-      const pullRequests = await prisma.wikiPullRequest.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          branch: {
-            include: {
-              page: { select: { slug: true, title: true, category: true } },
+      const [pullRequests, total] = await Promise.all([
+        prisma.wikiPullRequest.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            branch: {
+              include: {
+                page: { select: { slug: true, title: true, category: true } },
+              },
             },
+            page: { select: { slug: true, title: true, category: true } },
           },
-          page: { select: { slug: true, title: true, category: true } },
-        },
-        take: 200,
-      })
+          take: limit,
+          skip,
+        }),
+        prisma.wikiPullRequest.count({ where }),
+      ])
 
       res.json({
         pullRequests: pullRequests.map((pr) =>
           toWikiPullRequestResponse(pr as WikiPullRequestWithRelations)
         ),
+        ...createPaginationMeta(total, page, limit, pullRequests.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'List wiki pull requests error')

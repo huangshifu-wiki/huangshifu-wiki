@@ -15,7 +15,6 @@
 - [Blurhash 使用指南](BLURHASH_USAGE_GUIDE.md)
 - [S3 设置指南](S3_SETUP_GUIDE.md)
 - [S3 安全优化](S3_SECURITY_OPTIMIZATION.md)
-- [兰空图床使用](LSKY_USAGE.md)
 - [支持的外部嵌入平台](supported-embed-platforms.md)
 - [微信小程序闭环](p2-wechat-mini-program.md)
 

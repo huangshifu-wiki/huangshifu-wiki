@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  Loader2,
+  Cpu,
+  Database,
+  FileText,
+  HardDrive,
+  Images,
+  Lock,
   MailCheck,
   RefreshCw,
   Save,
   Search,
+  Server,
   Settings,
   Shield,
+  SlidersHorizontal,
+  Upload,
   UserPlus,
 } from '@/src/components/icons'
 import {
@@ -23,13 +31,459 @@ import {
   clearApiCache,
   generateApiCacheKey,
 } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { useToast } from '../../components/Toast'
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../../utils/formDirty'
 import type {
   EmailVerificationAdminConfig,
   RegistrationConfig,
+  RuntimeAdminConfig,
+  SecretsAdminConfig,
   SearchHotKeywordsConfig,
 } from '../../types/api'
-import { Button, Checkbox, Input, Switch, Textarea } from '@/src/components/ui'
+import { validateMaxLength, validateUrl } from '../../lib/clientValidation'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { Button, Checkbox, Field, Input, Select, Switch, Textarea } from '@/src/components/ui'
+import { AdminSection, SectionStatus } from '../../components/admin/AdminSection'
+
+const RUNTIME_CONFIG_PATH = '/api/admin/runtime-config'
+const SECRETS_CONFIG_PATH = '/api/admin/secrets-config'
+const NO_CACHE_OPTIONS = { staleTime: 0, swr: false }
+
+// 服务凭证字段清单（面板展示顺序），值与 secrets_config 键一一对应
+const SECRET_FIELD_LABELS: Array<{ key: string; label: string }> = [
+  { key: 's3ReadAccessKeyId', label: 'S3 读取 AccessKeyId' },
+  { key: 's3ReadSecretAccessKey', label: 'S3 读取 SecretAccessKey' },
+  { key: 's3WriteAccessKeyId', label: 'S3 写入 AccessKeyId' },
+  { key: 's3WriteSecretAccessKey', label: 'S3 写入 SecretAccessKey' },
+  { key: 'qdrantApiKey', label: 'Qdrant API Key' },
+  { key: 'superbedApiToken', label: 'Superbed 图床 Token' },
+  { key: 'lskyToken', label: 'Lsky 图床 Token' },
+  { key: 'amapApiKey', label: '高德地图 Key' },
+  { key: 'wechatMpAppId', label: '微信小程序 AppId' },
+  { key: 'wechatMpAppSecret', label: '微信小程序 AppSecret' },
+  { key: 'turnstileSiteKey', label: 'Turnstile Site Key' },
+  { key: 'turnstileSecretKey', label: 'Turnstile Secret Key' },
+]
+
+type RuntimeApiResponse<T> = { success: boolean; data: T; error?: string }
+
+interface ConfigField<T extends keyof RuntimeAdminConfig> {
+  key: T
+  label: string
+  description?: string
+  type: 'boolean' | 'number' | 'string' | 'select'
+  options?: string[]
+  hint?: string
+}
+
+type ConfigGroup = {
+  id: string
+  title: string
+  icon: ReactNode
+  fields: Array<ConfigField<keyof RuntimeAdminConfig>>
+}
+
+// 页面分类锚点（站点设置 + 系统参数分区），供顶部一键跳转
+const SETTINGS_SECTIONS = [
+  { id: 'registration', label: '账号注册' },
+  { id: 'search-hot', label: '搜索热词' },
+  { id: 'rate-limit', label: '请求限流' },
+  { id: 'email', label: '邮件服务' },
+  { id: 'features', label: '功能开关' },
+  { id: 'blurhash', label: '图片处理' },
+  { id: 'upload-backup', label: '上传与备份' },
+  { id: 'cache-search', label: '缓存与搜索' },
+  { id: 'edit-lock', label: '编辑锁' },
+  { id: 'variants', label: '变体生成' },
+  { id: 'cloud-sync', label: '云同步' },
+  { id: 'log', label: '日志' },
+  { id: 's3', label: 'S3 存储' },
+  { id: 'vector', label: '向量检索' },
+  { id: 'image-hosting', label: '外部图床' },
+  { id: 'secrets', label: '服务凭证' },
+]
+
+const CONFIG_GROUPS: ConfigGroup[] = [
+  {
+    id: 'features',
+    title: '功能开关',
+    icon: <SlidersHorizontal size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'semanticSearchEnabled',
+        label: '语义搜索',
+        description: '启用后提供图片/文本向量检索与 Embeddings 管理入口',
+        type: 'boolean',
+      },
+      {
+        key: 'galleryAdminOnly',
+        label: '图集仅管理员可写',
+        description: '开启后普通用户不能新建/编辑图集',
+        type: 'boolean',
+      },
+      {
+        key: 'allowSuperAdminManageSuperAdmins',
+        label: '允许管理超级管理员身份',
+        description: '开启后超级管理员可在通过当前密码验证后设置或取消其他用户的超级管理员身份',
+        type: 'boolean',
+      },
+      {
+        key: 'turnstileEnabled',
+        label: '人机验证（Cloudflare Turnstile）',
+        description:
+          '开启后，注册与发送验证/重置邮件前需通过 Cloudflare Turnstile 校验；需先在「服务凭证」配置 Site Key 与 Secret Key',
+        type: 'boolean',
+      },
+    ],
+  },
+  {
+    id: 'blurhash',
+    title: '图片处理',
+    icon: <Images size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'blurhashEnabled',
+        label: '启用 Blurhash',
+        description: '是否生成模糊占位图',
+        type: 'boolean',
+      },
+      {
+        key: 'blurhashAutoGenerate',
+        label: '自动生成 Blurhash',
+        description: '上传图片时自动生成模糊占位图',
+        type: 'boolean',
+      },
+      {
+        key: 'blurhashComponentsX',
+        label: 'Blurhash 横向分量',
+        description: '取值范围 1–16',
+        type: 'number',
+      },
+      {
+        key: 'blurhashComponentsY',
+        label: 'Blurhash 纵向分量',
+        description: '取值范围 1–16',
+        type: 'number',
+      },
+    ],
+  },
+  {
+    id: 'upload-backup',
+    title: '上传与备份',
+    icon: <Upload size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'uploadSessionTtlMinutes',
+        label: '上传会话有效期（分钟）',
+        description: '取值范围 5–1440',
+        type: 'number',
+      },
+      {
+        key: 'backupRetainCount',
+        label: '备份保留数量',
+        description: '最多保留多少个备份文件，取值范围 1–365',
+        type: 'number',
+      },
+    ],
+  },
+  {
+    id: 'cache-search',
+    title: '缓存与搜索',
+    icon: <Search size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'playUrlCacheTtlSeconds',
+        label: '音乐播放 URL 缓存 TTL（秒）',
+        description: '取值范围 60–86400',
+        type: 'number',
+      },
+      {
+        key: 'cacheMaxKeys',
+        label: '服务端缓存最大键数量',
+        description: '取值范围 100–1000000，修改后即时生效',
+        type: 'number',
+      },
+      {
+        key: 'qdrantTimeoutMs',
+        label: '向量检索超时（毫秒）',
+        description: '取值范围 100–30000',
+        type: 'number',
+      },
+      {
+        key: 'imageEmbeddingBatchSize',
+        label: '向量批量同步每批大小',
+        description: '取值范围 1–2000',
+        type: 'number',
+      },
+    ],
+  },
+  {
+    id: 'edit-lock',
+    title: '编辑锁',
+    icon: <Lock size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'editLockCleanupIntervalMs',
+        label: '编辑锁清理间隔（毫秒）',
+        description: '取值范围 10000–3600000',
+        type: 'number',
+      },
+      {
+        key: 'mediaCleanupIntervalMs',
+        label: '媒体清理间隔（毫秒）',
+        description: '取值范围 10000–3600000',
+        type: 'number',
+      },
+    ],
+  },
+  {
+    id: 'variants',
+    title: '变体生成',
+    icon: <RefreshCw size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'variantMaxConcurrent',
+        label: '变体生成最大并发数',
+        description: '取值范围 1–32',
+        type: 'number',
+      },
+      {
+        key: 'variantTaskTimeoutMs',
+        label: '变体任务超时（毫秒）',
+        description: '取值范围 1000–600000',
+        type: 'number',
+      },
+      {
+        key: 'variantQueueMaxWaitMs',
+        label: '变体队列最大等待（毫秒）',
+        description: '取值范围 1000–86400000',
+        type: 'number',
+      },
+      {
+        key: 'variantSharpMemoryLimitMb',
+        label: '变体 Sharp 内存限制（MB）',
+        description:
+          '取值范围 64–8192；实际生效取本值与像素硬闸（默认 2500 万像素，约 96MB）的较小者，高于约 96 时被硬闸截断',
+        type: 'number',
+      },
+      {
+        key: 'variantMaxRetries',
+        label: '变体任务最大重试次数',
+        description: '取值范围 0–20',
+        type: 'number',
+      },
+    ],
+  },
+  {
+    id: 'cloud-sync',
+    title: '云同步',
+    icon: <Server size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'cloudSyncMaxConcurrent',
+        label: '云同步最大并发数',
+        description: '取值范围 1–16',
+        type: 'number',
+      },
+      {
+        key: 'cloudSyncMaxRetries',
+        label: '云同步最大重试次数',
+        description: '取值范围 0–20',
+        type: 'number',
+      },
+    ],
+  },
+  {
+    id: 'log',
+    title: '日志',
+    icon: <FileText size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'logLevel',
+        label: '日志级别',
+        description: '修改后即时生效，排查问题时切到 debug',
+        type: 'select',
+        options: ['debug', 'info', 'warn', 'error'],
+      },
+    ],
+  },
+  {
+    id: 's3',
+    title: 'S3 存储',
+    icon: <Database size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 's3Enabled',
+        label: '启用 S3 存储',
+        description: '开启后上传走 S3 兼容对象存储，需先配置下方凭证',
+        type: 'boolean',
+      },
+      {
+        key: 's3EndpointUrl',
+        label: '端点 URL',
+        description: 'S3 兼容服务端点',
+        type: 'string',
+      },
+      {
+        key: 's3PublicBucketName',
+        label: '公有桶名称',
+        type: 'string',
+      },
+      {
+        key: 's3PublicBucketRegion',
+        label: '公有桶 Region',
+        type: 'string',
+      },
+      {
+        key: 's3PublicBucketPrefix',
+        label: '公有桶前缀',
+        description: '对象键前缀，留空为桶根',
+        type: 'string',
+      },
+      {
+        key: 's3PrivateBucketName',
+        label: '私有桶名称',
+        description: '预留，当前服务端未直接使用',
+        type: 'string',
+      },
+      {
+        key: 's3PrivateBucketRegion',
+        label: '私有桶 Region',
+        type: 'string',
+      },
+      {
+        key: 's3SignatureVersion',
+        label: '签名版本',
+        description: 'AWS SDK v3 仅支持 SigV4',
+        type: 'select',
+        options: ['v4'],
+      },
+      {
+        key: 's3PublicDomain',
+        label: '公网访问域名',
+        description: '自定义 CDN/域名，留空自动由端点与桶拼接',
+        type: 'string',
+      },
+      {
+        key: 's3DefaultAcl',
+        label: '默认 ACL',
+        type: 'string',
+      },
+      {
+        key: 's3ForcePathStyle',
+        label: 'Force Path Style',
+        description: '兼容多数 S3 服务，开启后使用路径式寻址',
+        type: 'boolean',
+      },
+      {
+        key: 's3SslEnabled',
+        label: '启用 TLS',
+        type: 'boolean',
+      },
+      {
+        key: 's3EnableMd5Verification',
+        label: 'MD5 校验',
+        description: '上传时校验 Content-MD5',
+        type: 'boolean',
+      },
+      {
+        key: 's3ExpiresIn',
+        label: '预签名 URL 过期时间（秒）',
+        description: '取值范围 60–86400',
+        type: 'number',
+      },
+      {
+        key: 's3MaxFileSize',
+        label: '上传单文件上限（字节）',
+        description: '取值范围 1–1073741824',
+        type: 'number',
+      },
+      {
+        key: 's3AllowedContentTypes',
+        label: '允许的内容类型',
+        description: '逗号分隔的 MIME 列表',
+        type: 'string',
+      },
+    ],
+  },
+  {
+    id: 'vector',
+    title: '向量检索',
+    icon: <Cpu size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'qdrantUrl',
+        label: 'Qdrant 端点',
+        description: '修改后下次向量操作时自动重连',
+        type: 'string',
+      },
+      {
+        key: 'qdrantCollection',
+        label: '图片向量集合名',
+        type: 'string',
+      },
+      {
+        key: 'qdrantTextCollection',
+        label: '文本向量集合名',
+        type: 'string',
+      },
+    ],
+  },
+  {
+    id: 'image-hosting',
+    title: '外部图床',
+    icon: <HardDrive size={18} className="text-brand-gold" />,
+    fields: [
+      {
+        key: 'lskyBaseUrl',
+        label: 'Lsky 图床地址',
+        type: 'string',
+      },
+      {
+        key: 'lskyStrategyId',
+        label: 'Lsky 存储策略 ID',
+        type: 'string',
+      },
+      {
+        key: 'lskyTimeout',
+        label: 'Lsky 请求超时（毫秒）',
+        description: '取值范围 1000–300000',
+        type: 'number',
+      },
+    ],
+  },
+]
+
+// 数字字段列表（保存前校验用），从分组定义派生，避免与分组重复维护
+const NUMBER_FIELDS = CONFIG_GROUPS.flatMap((group) => group.fields).filter(
+  (field) => field.type === 'number'
+)
+
+function scrollToSection(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function SectionNav() {
+  return (
+    <nav
+      aria-label="设置分类导航"
+      className="sticky top-0 z-30 flex flex-nowrap gap-2 overflow-x-auto rounded border border-border bg-surface p-3 shadow-sm"
+    >
+      {SETTINGS_SECTIONS.map(({ id, label }) => (
+        <Button
+          key={id}
+          variant="ghost"
+          className="h-auto shrink-0 whitespace-nowrap px-3 py-1.5 text-sm"
+          onClick={() => scrollToSection(id)}
+        >
+          {label}
+        </Button>
+      ))}
+    </nav>
+  )
+}
 
 type EmailVerificationForm = EmailVerificationAdminConfig & {
   smtpPass: string
@@ -86,7 +540,6 @@ const SEARCH_HOT_KEYWORDS_ADMIN_CONFIG_CACHE_KEY = generateApiCacheKey(
 const PUBLIC_FEATURES_CONFIG_CACHE_KEY = generateApiCacheKey('GET', '/api/config/features')
 const RATE_LIMIT_ADMIN_CONFIG_PATH = '/api/admin/rate-limits/config'
 const RATE_LIMIT_ADMIN_CONFIG_CACHE_KEY = generateApiCacheKey('GET', RATE_LIMIT_ADMIN_CONFIG_PATH)
-const NO_CACHE_OPTIONS = { staleTime: 0, swr: false }
 
 function toForm(config: EmailVerificationAdminConfig): EmailVerificationForm {
   return {
@@ -103,22 +556,22 @@ function parsePositiveInteger(value: string) {
 }
 
 interface BooleanSettingSectionProps {
+  id: string
   icon: ReactNode
   title: string
   loading: boolean
   loadingText: string
-  loadError: boolean
+  loadError: unknown | null
   errorText: string
   retry: () => void
   enabled: boolean
   label: string
   description: string
-  saving: boolean
-  save: () => void
   onEnabledChange: (enabled: boolean) => void
 }
 
 function BooleanSettingSection({
+  id,
   icon,
   title,
   loading,
@@ -129,87 +582,73 @@ function BooleanSettingSection({
   enabled,
   label,
   description,
-  saving,
-  save,
   onEnabledChange,
 }: BooleanSettingSectionProps) {
   return (
-    <section className="space-y-5 border border-border bg-surface p-5">
-      <div className="flex items-center gap-2 border-b border-border pb-3">
-        {icon}
-        <h2 className="text-base font-semibold text-text-primary">{title}</h2>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-text-secondary">
-          <Loader2 size={16} className="animate-spin" />
-          {loadingText}
-        </div>
-      ) : loadError ? (
-        <div className="flex flex-col gap-3 text-sm text-text-secondary" role="alert">
-          <p>{errorText}</p>
-          <Button
-            variant="secondary"
-            onClick={retry}
-            className="w-fit"
-            leftIcon={<RefreshCw size={14} />}
-          >
-            重试
-          </Button>
-        </div>
-      ) : (
+    <AdminSection id={id} icon={icon} title={title}>
+      <SectionStatus
+        loading={loading}
+        loadingText={loadingText}
+        loadError={loadError}
+        errorText={errorText}
+        onRetry={retry}
+      >
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <p className="text-sm font-medium text-text-primary">{label}</p>
             <p className="text-sm leading-6 text-text-secondary">{description}</p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Switch checked={enabled} aria-label={label} onCheckedChange={onEnabledChange} />
-
-            <Button
-              onClick={save}
-              loading={saving}
-              loadingText="保存中..."
-              leftIcon={<Save size={14} />}
-            >
-              保存
-            </Button>
-          </div>
+          <Switch checked={enabled} aria-label={label} onCheckedChange={onEnabledChange} />
         </div>
-      )}
-    </section>
+      </SectionStatus>
+    </AdminSection>
   )
 }
 
 const AdminSettings = () => {
   const { show } = useToast()
   const [form, setForm] = useState<EmailVerificationForm>(DEFAULT_EMAIL_VERIFICATION_FORM)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [savingAll, setSavingAll] = useState(false)
   const [registrationConfig, setRegistrationConfig] = useState<RegistrationConfig>({
     enabled: true,
   })
   const [registrationLoading, setRegistrationLoading] = useState(true)
-  const [registrationLoadError, setRegistrationLoadError] = useState(false)
-  const [registrationSaving, setRegistrationSaving] = useState(false)
+  const [registrationLoadError, setRegistrationLoadError] = useState<unknown | null>(null)
   const [searchHotKeywordsConfig, setSearchHotKeywordsConfig] = useState<SearchHotKeywordsConfig>({
     enabled: true,
   })
   const [searchHotKeywordsLoading, setSearchHotKeywordsLoading] = useState(true)
-  const [searchHotKeywordsLoadError, setSearchHotKeywordsLoadError] = useState(false)
-  const [searchHotKeywordsSaving, setSearchHotKeywordsSaving] = useState(false)
+  const [searchHotKeywordsLoadError, setSearchHotKeywordsLoadError] = useState<unknown | null>(null)
   const [rateLimitConfig, setRateLimitConfig] = useState<RateLimitAdminConfig | null>(null)
   const [rateLimitLoading, setRateLimitLoading] = useState(true)
-  const [rateLimitLoadError, setRateLimitLoadError] = useState(false)
-  const [rateLimitSaving, setRateLimitSaving] = useState(false)
+  const [rateLimitLoadError, setRateLimitLoadError] = useState<unknown | null>(null)
   const [rateLimitResetting, setRateLimitResetting] = useState(false)
+  const [runtimeForm, setRuntimeForm] = useState<RuntimeAdminConfig | null>(null)
+  const [runtimeLoading, setRuntimeLoading] = useState(true)
+  const [runtimeLoadError, setRuntimeLoadError] = useState<unknown | null>(null)
+  const [runtimeSaveSuccess, setRuntimeSaveSuccess] = useState(false)
+  const [runtimeValidationErrors, setRuntimeValidationErrors] = useState<string[]>([])
+  const [secretsConfig, setSecretsConfig] = useState<SecretsAdminConfig | null>(null)
+  const [secretsLoading, setSecretsLoading] = useState(true)
+  const [secretsLoadError, setSecretsLoadError] = useState<unknown | null>(null)
+  const [secretsDirty, setSecretsDirty] = useState(false)
+  const [secretsForm, setSecretsForm] = useState<Record<string, string | null>>({})
+
+  const [runtimeBaseline, setRuntimeBaseline] = useState<RuntimeAdminConfig | null>(null)
+  const isDirty =
+    (runtimeBaseline !== null &&
+      runtimeForm !== null &&
+      hasFormChanges(runtimeForm, runtimeBaseline)) ||
+    secretsDirty
+  const guard = useUnsavedChangesGuard(isDirty)
 
   const loadConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
       setLoading(true)
-      setLoadError(false)
+      setLoadError(null)
 
       try {
         const data = await apiRequest<EmailVerificationAdminConfig>(
@@ -225,8 +664,8 @@ const AdminSettings = () => {
       } catch (error) {
         if (!isActive()) return
         console.error('Load email verification config failed:', error)
-        setLoadError(true)
-        show('邮件服务配置加载失败', { variant: 'error' })
+        setLoadError(error)
+        show(getErrorMessage(error, '邮件服务配置加载失败'), { variant: 'error' })
       } finally {
         if (isActive()) setLoading(false)
       }
@@ -246,7 +685,7 @@ const AdminSettings = () => {
   const loadRegistrationConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
       setRegistrationLoading(true)
-      setRegistrationLoadError(false)
+      setRegistrationLoadError(null)
 
       try {
         const data = await apiRequest<RegistrationConfig>(REGISTRATION_ADMIN_CONFIG_PATH, {
@@ -259,8 +698,8 @@ const AdminSettings = () => {
       } catch (error) {
         if (!isActive()) return
         console.error('Load registration config failed:', error)
-        setRegistrationLoadError(true)
-        show('注册配置加载失败', { variant: 'error' })
+        setRegistrationLoadError(error)
+        show(getErrorMessage(error, '注册配置加载失败'), { variant: 'error' })
       } finally {
         if (isActive()) setRegistrationLoading(false)
       }
@@ -280,7 +719,7 @@ const AdminSettings = () => {
   const loadSearchHotKeywordsConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
       setSearchHotKeywordsLoading(true)
-      setSearchHotKeywordsLoadError(false)
+      setSearchHotKeywordsLoadError(null)
 
       try {
         const data = await apiRequest<SearchHotKeywordsConfig>(
@@ -296,8 +735,8 @@ const AdminSettings = () => {
       } catch (error) {
         if (!isActive()) return
         console.error('Load search hot keywords config failed:', error)
-        setSearchHotKeywordsLoadError(true)
-        show('搜索热词配置加载失败', { variant: 'error' })
+        setSearchHotKeywordsLoadError(error)
+        show(getErrorMessage(error, '搜索热词配置加载失败'), { variant: 'error' })
       } finally {
         if (isActive()) setSearchHotKeywordsLoading(false)
       }
@@ -317,7 +756,7 @@ const AdminSettings = () => {
   const loadRateLimitConfig = useCallback(
     async (isActive: () => boolean = () => true) => {
       setRateLimitLoading(true)
-      setRateLimitLoadError(false)
+      setRateLimitLoadError(null)
 
       try {
         const response = await apiGet<{
@@ -330,8 +769,8 @@ const AdminSettings = () => {
       } catch (error) {
         if (!isActive()) return
         console.error('Load rate limit config failed:', error)
-        setRateLimitLoadError(true)
-        show('请求限流配置加载失败', { variant: 'error' })
+        setRateLimitLoadError(error)
+        show(getErrorMessage(error, '请求限流配置加载失败'), { variant: 'error' })
       } finally {
         if (isActive()) setRateLimitLoading(false)
       }
@@ -348,13 +787,29 @@ const AdminSettings = () => {
     }
   }, [loadRateLimitConfig])
 
-  const saveConfig = async () => {
+  const saveConfig = async (): Promise<boolean> => {
     if (loading || loadError) {
       show('请先成功加载站点设置后再保存', { variant: 'error' })
-      return
+      return false
+    }
+    const validationError =
+      validateUrl(form.publicBaseUrl, 'publicBaseUrl', '公开地址', CONTENT_LIMITS.url) ||
+      (form.enabled && !form.publicBaseUrl.trim()
+        ? { field: 'publicBaseUrl', message: '启用邮件验证时必须填写公开地址' }
+        : null) ||
+      (Number.isFinite(form.tokenTtlMinutes) && form.tokenTtlMinutes > 0
+        ? null
+        : { field: 'tokenTtlMinutes', message: '令牌有效期必须是正数' }) ||
+      (Number.isInteger(form.smtpPort) && form.smtpPort >= 1 && form.smtpPort <= 65535
+        ? null
+        : { field: 'smtpPort', message: 'SMTP 端口必须是 1 到 65535 之间的整数' }) ||
+      validateMaxLength(form.verificationSubject, 'verificationSubject', '验证邮件主题', 200) ||
+      validateMaxLength(form.resetSubject, 'resetSubject', '重置邮件主题', 200)
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return false
     }
 
-    setSaving(true)
     try {
       const result = await apiPatch<{
         success: boolean
@@ -379,22 +834,20 @@ const AdminSettings = () => {
       })
       clearApiCache(EMAIL_VERIFICATION_ADMIN_CONFIG_CACHE_KEY)
       setForm(toForm(result.config))
-      show('站点设置已保存')
+      return true
     } catch (error) {
       console.error('Save email verification config failed:', error)
-      show(error instanceof Error ? error.message : '站点设置保存失败', { variant: 'error' })
-    } finally {
-      setSaving(false)
+      show(getErrorMessage(error, '站点设置保存失败'), { variant: 'error' })
+      return false
     }
   }
 
-  const saveRegistrationConfig = async () => {
+  const saveRegistrationConfig = async (): Promise<boolean> => {
     if (registrationLoading || registrationLoadError) {
       show('请先成功加载注册设置后再保存', { variant: 'error' })
-      return
+      return false
     }
 
-    setRegistrationSaving(true)
     try {
       const result = await apiPatch<{
         success: boolean
@@ -404,22 +857,20 @@ const AdminSettings = () => {
       })
       clearApiCache(REGISTRATION_ADMIN_CONFIG_CACHE_KEY)
       setRegistrationConfig(result.config)
-      show('注册设置已保存')
+      return true
     } catch (error) {
       console.error('Save registration config failed:', error)
-      show(error instanceof Error ? error.message : '注册设置保存失败', { variant: 'error' })
-    } finally {
-      setRegistrationSaving(false)
+      show(getErrorMessage(error, '注册设置保存失败'), { variant: 'error' })
+      return false
     }
   }
 
-  const saveSearchHotKeywordsConfig = async () => {
+  const saveSearchHotKeywordsConfig = async (): Promise<boolean> => {
     if (searchHotKeywordsLoading || searchHotKeywordsLoadError) {
       show('请先成功加载搜索热词设置后再保存', { variant: 'error' })
-      return
+      return false
     }
 
-    setSearchHotKeywordsSaving(true)
     try {
       const result = await apiPatch<{
         success: boolean
@@ -430,22 +881,20 @@ const AdminSettings = () => {
       clearApiCache(SEARCH_HOT_KEYWORDS_ADMIN_CONFIG_CACHE_KEY)
       clearApiCache(PUBLIC_FEATURES_CONFIG_CACHE_KEY)
       setSearchHotKeywordsConfig(result.config)
-      show('搜索热词设置已保存')
+      return true
     } catch (error) {
       console.error('Save search hot keywords config failed:', error)
-      show(error instanceof Error ? error.message : '搜索热词设置保存失败', { variant: 'error' })
-    } finally {
-      setSearchHotKeywordsSaving(false)
+      show(getErrorMessage(error, '搜索热词设置保存失败'), { variant: 'error' })
+      return false
     }
   }
 
-  const saveRateLimitConfig = async () => {
+  const saveRateLimitConfig = async (): Promise<boolean> => {
     if (!rateLimitConfig || rateLimitLoading || rateLimitLoadError) {
       show('请先成功加载请求限流配置后再保存', { variant: 'error' })
-      return
+      return false
     }
 
-    setRateLimitSaving(true)
     try {
       const response = await apiPatch<{
         success: boolean
@@ -454,12 +903,171 @@ const AdminSettings = () => {
 
       clearApiCache(RATE_LIMIT_ADMIN_CONFIG_CACHE_KEY)
       setRateLimitConfig(response.data)
-      show('请求限流配置已保存')
+      return true
     } catch (error) {
       console.error('Save rate limit config failed:', error)
-      show(error instanceof Error ? error.message : '请求限流配置保存失败', { variant: 'error' })
+      show(getErrorMessage(error, '请求限流配置保存失败'), { variant: 'error' })
+      return false
+    }
+  }
+
+  const loadRuntimeConfig = useCallback(async () => {
+    setRuntimeLoading(true)
+    setRuntimeLoadError(null)
+    try {
+      const result = await apiGet<RuntimeApiResponse<RuntimeAdminConfig>>(
+        RUNTIME_CONFIG_PATH,
+        undefined,
+        NO_CACHE_OPTIONS
+      )
+      if (result.success) {
+        const next = { ...result.data }
+        setRuntimeForm(next)
+        setRuntimeBaseline(next)
+      } else {
+        setRuntimeLoadError(new Error(result.error || '系统参数加载失败'))
+      }
+    } catch (error) {
+      setRuntimeLoadError(error)
     } finally {
-      setRateLimitSaving(false)
+      setRuntimeLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadRuntimeConfig()
+  }, [loadRuntimeConfig])
+
+  const setRuntimeField = <T extends keyof RuntimeAdminConfig>(
+    key: T,
+    value: RuntimeAdminConfig[T]
+  ) => {
+    setRuntimeForm((prev) => (prev ? { ...prev, [key]: value } : prev))
+  }
+
+  const parseRuntimeNumberField = (value: string): number | null => {
+    if (!value) return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  const saveRuntimeConfig = async (): Promise<boolean> => {
+    if (!runtimeForm) return false
+    const errors: string[] = []
+    for (const field of NUMBER_FIELDS) {
+      const value = runtimeForm[field.key]
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        errors.push(`${field.label} 必须是数字`)
+      }
+    }
+    if (errors.length > 0) {
+      setRuntimeValidationErrors(errors)
+      return false
+    }
+    try {
+      setRuntimeValidationErrors([])
+      const result = await apiPatch<RuntimeApiResponse<RuntimeAdminConfig>>(
+        RUNTIME_CONFIG_PATH,
+        runtimeForm
+      )
+      if (result.success) {
+        const next = { ...result.data }
+        setRuntimeForm(next)
+        setRuntimeBaseline(next)
+        setRuntimeSaveSuccess(true)
+        setTimeout(() => setRuntimeSaveSuccess(false), 3000)
+        return true
+      } else {
+        throw new Error(result.error || '保存失败')
+      }
+    } catch (err) {
+      show(getErrorMessage(err, '保存失败'), { variant: 'error' })
+      return false
+    }
+  }
+
+  const loadSecretsConfig = useCallback(async () => {
+    setSecretsLoading(true)
+    setSecretsLoadError(null)
+    try {
+      const result = await apiGet<RuntimeApiResponse<SecretsAdminConfig>>(
+        SECRETS_CONFIG_PATH,
+        undefined,
+        NO_CACHE_OPTIONS
+      )
+      if (result.success) {
+        setSecretsConfig(result.data)
+        setSecretsForm({})
+        setSecretsDirty(false)
+      } else {
+        setSecretsLoadError(new Error(result.error || '服务凭证加载失败'))
+      }
+    } catch (error) {
+      setSecretsLoadError(error)
+    } finally {
+      setSecretsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadSecretsConfig()
+  }, [loadSecretsConfig])
+
+  const setSecretsField = (key: string, value: string) => {
+    setSecretsForm((prev) => ({ ...prev, [key]: value }))
+    setSecretsDirty(true)
+  }
+
+  const clearSecretsField = (key: string) => {
+    setSecretsForm((prev) => ({ ...prev, [key]: null }))
+    setSecretsDirty(true)
+  }
+
+  const saveSecretsConfig = async (): Promise<boolean> => {
+    if (!secretsConfig) return false
+    if (!secretsDirty) return true
+    if (secretsConfig.disabled) {
+      show('未配置 SECRETS_ENCRYPTION_KEY，无法管理凭证', { variant: 'error' })
+      return false
+    }
+    const payload: Record<string, string | null> = {}
+    for (const [key, value] of Object.entries(secretsForm)) {
+      payload[key] = value === '' ? null : value
+    }
+    if (Object.keys(payload).length === 0) return true
+    try {
+      const result = await apiPatch<RuntimeApiResponse<SecretsAdminConfig>>(
+        SECRETS_CONFIG_PATH,
+        payload
+      )
+      if (result.success) {
+        setSecretsConfig(result.data)
+        setSecretsForm({})
+        setSecretsDirty(false)
+        return true
+      } else {
+        throw new Error(result.error || '保存失败')
+      }
+    } catch (err) {
+      show(getErrorMessage(err, '服务凭证保存失败'), { variant: 'error' })
+      return false
+    }
+  }
+
+  const handleSaveAll = async () => {
+    setSavingAll(true)
+    try {
+      const results = await Promise.all([
+        saveConfig(),
+        saveRegistrationConfig(),
+        saveSearchHotKeywordsConfig(),
+        saveRateLimitConfig(),
+        saveRuntimeConfig(),
+        saveSecretsConfig(),
+      ])
+      if (results.every(Boolean)) show('站点设置已保存')
+    } finally {
+      setSavingAll(false)
     }
   }
 
@@ -473,11 +1081,11 @@ const AdminSettings = () => {
 
       clearApiCache(RATE_LIMIT_ADMIN_CONFIG_CACHE_KEY)
       setRateLimitConfig(response.data)
-      setRateLimitLoadError(false)
+      setRateLimitLoadError(null)
       show('请求限流配置已恢复默认')
     } catch (error) {
       console.error('Reset rate limit config failed:', error)
-      show(error instanceof Error ? error.message : '请求限流配置重置失败', { variant: 'error' })
+      show(getErrorMessage(error, '请求限流配置重置失败'), { variant: 'error' })
     } finally {
       setRateLimitResetting(false)
     }
@@ -514,9 +1122,21 @@ const AdminSettings = () => {
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-[0.12em] text-text-primary">
           <Settings size={24} className="text-brand-gold" /> 站点设置
         </h1>
+        <Button
+          variant="primary"
+          onClick={() => void handleSaveAll()}
+          loading={savingAll}
+          loadingText="保存中..."
+          leftIcon={<Save size={16} />}
+        >
+          保存
+        </Button>
       </div>
 
+      <SectionNav />
+
       <BooleanSettingSection
+        id="registration"
         icon={<UserPlus size={18} className="text-brand-gold" />}
         title="账号注册"
         loading={registrationLoading}
@@ -527,8 +1147,6 @@ const AdminSettings = () => {
         enabled={registrationConfig.enabled}
         label="开放账号注册"
         description="关闭后新用户无法注册，已有用户仍可登录。"
-        saving={registrationSaving}
-        save={saveRegistrationConfig}
         onEnabledChange={(enabled) =>
           setRegistrationConfig((current) => ({
             ...current,
@@ -538,6 +1156,7 @@ const AdminSettings = () => {
       />
 
       <BooleanSettingSection
+        id="search-hot"
         icon={<Search size={18} className="text-brand-gold" />}
         title="搜索热词推荐"
         loading={searchHotKeywordsLoading}
@@ -548,8 +1167,6 @@ const AdminSettings = () => {
         enabled={searchHotKeywordsConfig.enabled}
         label="显示搜索热词推荐"
         description="关闭后前台不展示热门搜索词，也不在输入联想中返回热词项；搜索计数仍会继续累计。"
-        saving={searchHotKeywordsSaving}
-        save={saveSearchHotKeywordsConfig}
         onEnabledChange={(enabled) =>
           setSearchHotKeywordsConfig((current) => ({
             ...current,
@@ -558,161 +1175,117 @@ const AdminSettings = () => {
         }
       />
 
-      <section className="space-y-5 border border-border bg-surface p-5">
-        <div className="flex items-center gap-2 border-b border-border pb-3">
-          <Shield size={18} className="text-brand-gold" />
-          <h2 className="text-base font-semibold text-text-primary">请求限流</h2>
-        </div>
+      <AdminSection
+        id="rate-limit"
+        icon={<Shield size={18} className="text-brand-gold" />}
+        title="请求限流"
+      >
+        <SectionStatus
+          loading={rateLimitLoading}
+          loadingText="正在加载请求限流配置..."
+          loadError={rateLimitLoadError || !rateLimitConfig}
+          errorText="请求限流配置加载失败，未加载成功前无法保存设置。"
+          onRetry={() => void loadRateLimitConfig()}
+        >
+          {rateLimitConfig && (
+            <div className="space-y-4">
+              <p className="text-sm leading-6 text-text-secondary">
+                修改后会立即替换当前进程内的限流窗口；如部署多实例，需要分别生效或配合后续共享存储。
+              </p>
 
-        {rateLimitLoading ? (
-          <div className="flex items-center gap-2 text-sm text-text-secondary">
-            <Loader2 size={16} className="animate-spin" />
-            正在加载请求限流配置...
-          </div>
-        ) : rateLimitLoadError || !rateLimitConfig ? (
-          <div className="flex flex-col gap-3 text-sm text-text-secondary" role="alert">
-            <p>请求限流配置加载失败，未加载成功前无法保存设置。</p>
-            <Button
-              variant="secondary"
-              onClick={() => void loadRateLimitConfig()}
-              className="w-fit"
-              leftIcon={<RefreshCw size={14} />}
-            >
-              重试
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-sm leading-6 text-text-secondary">
-              修改后会立即替换当前进程内的限流窗口；如部署多实例，需要分别生效或配合后续共享存储。
-            </p>
+              <div className="grid gap-3">
+                {RATE_LIMIT_BUCKET_LABELS.map((bucket) => {
+                  const config = rateLimitConfig[bucket.id]
+                  return (
+                    <div key={bucket.id} className="grid gap-3 lg:grid-cols-12">
+                      <div className="lg:col-span-3">
+                        <p className="text-sm font-semibold text-text-primary">{bucket.label}</p>
+                        <p className="mt-1 text-xs leading-5 text-text-muted">
+                          {bucket.description}
+                        </p>
+                      </div>
 
-            <div className="grid gap-3">
-              {RATE_LIMIT_BUCKET_LABELS.map((bucket) => {
-                const config = rateLimitConfig[bucket.id]
-                return (
-                  <div
-                    key={bucket.id}
-                    className="grid gap-3 border border-border p-4 lg:grid-cols-12"
-                  >
-                    <div className="lg:col-span-3">
-                      <p className="text-sm font-semibold text-text-primary">{bucket.label}</p>
-                      <p className="mt-1 text-xs leading-5 text-text-muted">{bucket.description}</p>
+                      <div className="flex items-center lg:col-span-2">
+                        <Switch
+                          label="启用"
+                          checked={config.enabled}
+                          onCheckedChange={(checked) =>
+                            setRateLimitField(bucket.id, 'enabled', checked)
+                          }
+                          aria-label={`启用${bucket.label}`}
+                        />
+                      </div>
+
+                      <Field label="窗口（秒）" className="lg:col-span-2">
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          value={Math.round(config.windowMs / 1000)}
+                          onChange={(event) => {
+                            const value = parsePositiveInteger(event.target.value)
+                            if (value) setRateLimitField(bucket.id, 'windowMs', value * 1000)
+                          }}
+                          className="py-2"
+                        />
+                      </Field>
+
+                      <Field label="最大请求数" className="lg:col-span-2">
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          value={config.max}
+                          onChange={(event) => {
+                            const value = parsePositiveInteger(event.target.value)
+                            if (value) setRateLimitField(bucket.id, 'max', value)
+                          }}
+                          className="py-2"
+                        />
+                      </Field>
+
+                      <Field label="429 提示" className="lg:col-span-3">
+                        <Input
+                          type="text"
+                          value={config.message}
+                          onChange={(event) =>
+                            setRateLimitField(bucket.id, 'message', event.target.value)
+                          }
+                          className="py-2"
+                        />
+                      </Field>
                     </div>
+                  )
+                })}
+              </div>
 
-                    <div className="flex items-center lg:col-span-2">
-                      <Switch
-                        label="启用"
-                        checked={config.enabled}
-                        onCheckedChange={(checked) =>
-                          setRateLimitField(bucket.id, 'enabled', checked)
-                        }
-                        aria-label={`启用${bucket.label}`}
-                      />
-                    </div>
-
-                    <label className="block lg:col-span-2">
-                      <span className="mb-1 block text-xs font-medium text-text-muted">
-                        窗口（秒）
-                      </span>
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={Math.round(config.windowMs / 1000)}
-                        onChange={(event) => {
-                          const value = parsePositiveInteger(event.target.value)
-                          if (value) setRateLimitField(bucket.id, 'windowMs', value * 1000)
-                        }}
-                        className="py-2"
-                      />
-                    </label>
-
-                    <label className="block lg:col-span-2">
-                      <span className="mb-1 block text-xs font-medium text-text-muted">
-                        最大请求数
-                      </span>
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={config.max}
-                        onChange={(event) => {
-                          const value = parsePositiveInteger(event.target.value)
-                          if (value) setRateLimitField(bucket.id, 'max', value)
-                        }}
-                        className="py-2"
-                      />
-                    </label>
-
-                    <label className="block lg:col-span-3">
-                      <span className="mb-1 block text-xs font-medium text-text-muted">
-                        429 提示
-                      </span>
-                      <Input
-                        type="text"
-                        value={config.message}
-                        onChange={(event) =>
-                          setRateLimitField(bucket.id, 'message', event.target.value)
-                        }
-                        className="py-2"
-                      />
-                    </label>
-                  </div>
-                )
-              })}
+              <div className="flex flex-col gap-3 md:flex-row md:justify-end">
+                <Button
+                  variant="secondary"
+                  onClick={resetRateLimitConfig}
+                  disabled={rateLimitResetting}
+                  loading={rateLimitResetting}
+                  loadingText="重置中..."
+                  leftIcon={<RefreshCw size={14} />}
+                >
+                  恢复默认
+                </Button>
+              </div>
             </div>
+          )}
+        </SectionStatus>
+      </AdminSection>
 
-            <div className="flex flex-col gap-3 md:flex-row md:justify-end">
-              <Button
-                variant="secondary"
-                onClick={resetRateLimitConfig}
-                disabled={rateLimitResetting || rateLimitSaving}
-                loading={rateLimitResetting}
-                loadingText="重置中..."
-                leftIcon={<RefreshCw size={14} />}
-              >
-                恢复默认
-              </Button>
-
-              <Button
-                onClick={saveRateLimitConfig}
-                disabled={rateLimitSaving || rateLimitResetting}
-                loading={rateLimitSaving}
-                loadingText="保存中..."
-                leftIcon={<Save size={14} />}
-              >
-                保存请求限流
-              </Button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-5 border border-border bg-surface p-5">
-        <div className="flex items-center gap-2 border-b border-border pb-3">
-          <MailCheck size={18} className="text-brand-gold" />
-          <h2 className="text-base font-semibold text-text-primary">邮件服务</h2>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center gap-2 text-sm text-text-secondary">
-            <Loader2 size={16} className="animate-spin" />
-            正在加载配置...
-          </div>
-        ) : loadError ? (
-          <div className="flex flex-col gap-3 text-sm text-text-secondary" role="alert">
-            <p>邮件服务配置加载失败，未加载成功前无法保存设置。</p>
-            <Button
-              variant="secondary"
-              onClick={() => void loadConfig()}
-              className="w-fit"
-              leftIcon={<RefreshCw size={14} />}
-            >
-              重试
-            </Button>
-          </div>
-        ) : (
+      <AdminSection
+        id="email"
+        icon={<MailCheck size={18} className="text-brand-gold" />}
+        title="邮件服务"
+      >
+        <SectionStatus
+          loading={loading}
+          loadingText="正在加载配置..."
+          loadError={loadError}
+          errorText="邮件服务配置加载失败，未加载成功前无法保存设置。"
+          onRetry={() => void loadConfig()}
+        >
           <div className="space-y-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1">
@@ -730,20 +1303,16 @@ const AdminSettings = () => {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <label className="block md:col-span-2">
-                <span className="mb-1 block text-xs font-medium text-text-muted">站点公网地址</span>
+              <Field label="站点公网地址" className="block md:col-span-2">
                 <Input
                   type="url"
                   value={form.publicBaseUrl}
                   onChange={(event) => setField('publicBaseUrl', event.target.value)}
                   placeholder="https://wiki.example.com"
                 />
-              </label>
+              </Field>
 
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-text-muted">
-                  链接有效期（分钟）
-                </span>
+              <Field label="链接有效期（分钟）" className="block">
                 <Input
                   type="number"
                   min={5}
@@ -751,20 +1320,18 @@ const AdminSettings = () => {
                   value={form.tokenTtlMinutes}
                   onChange={(event) => setField('tokenTtlMinutes', Number(event.target.value))}
                 />
-              </label>
+              </Field>
 
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-text-muted">SMTP Host</span>
+              <Field label="SMTP Host" className="block">
                 <Input
                   type="text"
                   value={form.smtpHost}
                   onChange={(event) => setField('smtpHost', event.target.value)}
                   placeholder="smtp.example.com"
                 />
-              </label>
+              </Field>
 
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-text-muted">SMTP 端口</span>
+              <Field label="SMTP 端口" className="block">
                 <Input
                   type="number"
                   min={1}
@@ -772,20 +1339,18 @@ const AdminSettings = () => {
                   value={form.smtpPort}
                   onChange={(event) => setField('smtpPort', Number(event.target.value))}
                 />
-              </label>
+              </Field>
 
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-text-muted">SMTP 用户名</span>
+              <Field label="SMTP 用户名" className="block">
                 <Input
                   type="text"
                   value={form.smtpUser}
                   onChange={(event) => setField('smtpUser', event.target.value)}
                   autoComplete="username"
                 />
-              </label>
+              </Field>
 
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-text-muted">SMTP 密码</span>
+              <Field label="SMTP 密码" className="block">
                 <Input
                   type="password"
                   value={form.smtpPass}
@@ -793,17 +1358,16 @@ const AdminSettings = () => {
                   autoComplete="new-password"
                   placeholder={form.smtpPassSet ? '已保存，留空保持不变' : ''}
                 />
-              </label>
+              </Field>
 
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-text-muted">发件人</span>
+              <Field label="发件人" className="block">
                 <Input
                   type="text"
                   value={form.smtpFrom}
                   onChange={(event) => setField('smtpFrom', event.target.value)}
                   placeholder="黄诗扶 Wiki <no-reply@example.com>"
                 />
-              </label>
+              </Field>
             </div>
 
             <details className="group border border-border">
@@ -840,71 +1404,57 @@ const AdminSettings = () => {
                   <div className="border border-border p-3">
                     <p className="mb-3 text-xs font-semibold text-text-primary">验证邮件</p>
                     <div className="grid gap-3">
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-text-muted">主题</span>
+                      <Field label="主题" className="block">
                         <Input
                           type="text"
                           value={form.verificationSubject}
                           onChange={(e) => setField('verificationSubject', e.target.value)}
                         />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-text-muted">
-                          纯文本正文
-                        </span>
+                      </Field>
+                      <Field label="纯文本正文" className="block">
                         <Textarea
                           value={form.verificationTextBody}
                           onChange={(e) => setField('verificationTextBody', e.target.value)}
                           className="font-mono"
                           rows={6}
                         />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-text-muted">
-                          HTML 正文
-                        </span>
+                      </Field>
+                      <Field label="HTML 正文" className="block">
                         <Textarea
                           value={form.verificationHtmlBody}
                           onChange={(e) => setField('verificationHtmlBody', e.target.value)}
                           className="font-mono"
                           rows={6}
                         />
-                      </label>
+                      </Field>
                     </div>
                   </div>
                   <div className="border border-border p-3">
                     <p className="mb-3 text-xs font-semibold text-text-primary">密码重置邮件</p>
                     <div className="grid gap-3">
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-text-muted">主题</span>
+                      <Field label="主题" className="block">
                         <Input
                           type="text"
                           value={form.resetSubject}
                           onChange={(e) => setField('resetSubject', e.target.value)}
                         />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-text-muted">
-                          纯文本正文
-                        </span>
+                      </Field>
+                      <Field label="纯文本正文" className="block">
                         <Textarea
                           value={form.resetTextBody}
                           onChange={(e) => setField('resetTextBody', e.target.value)}
                           className="font-mono"
                           rows={6}
                         />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium text-text-muted">
-                          HTML 正文
-                        </span>
+                      </Field>
+                      <Field label="HTML 正文" className="block">
                         <Textarea
                           value={form.resetHtmlBody}
                           onChange={(e) => setField('resetHtmlBody', e.target.value)}
                           className="font-mono"
                           rows={6}
                         />
-                      </label>
+                      </Field>
                     </div>
                   </div>
                 </div>
@@ -924,18 +1474,198 @@ const AdminSettings = () => {
                 disabled={!form.smtpPassSet}
                 onCheckedChange={(checked) => setField('clearSmtpPass', checked === true)}
               />
-
-              <Button
-                onClick={saveConfig}
-                loading={saving}
-                loadingText="保存中..."
-                leftIcon={<Save size={14} />}
-              >
-                保存
-              </Button>
             </div>
           </div>
+        </SectionStatus>
+      </AdminSection>
+
+      <section className="space-y-5">
+        {runtimeSaveSuccess && (
+          <div className="flex items-start gap-3 p-3 rounded theme-status-success">
+            <p className="text-sm theme-text-success flex-1">保存成功</p>
+          </div>
         )}
+
+        {runtimeValidationErrors.length > 0 && (
+          <div className="p-3 rounded theme-status-error">
+            <ul className="text-sm theme-text-error list-disc pl-5 space-y-1">
+              {runtimeValidationErrors.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <SectionStatus
+          loading={runtimeLoading && !runtimeForm}
+          loadingText="正在加载系统参数..."
+          loadError={runtimeLoadError && !runtimeForm}
+          errorText="系统参数加载失败，未加载成功前无法保存设置。"
+          onRetry={() => void loadRuntimeConfig()}
+        >
+          {runtimeForm &&
+            CONFIG_GROUPS.map((group) => {
+              const booleanFields = group.fields.filter((field) => field.type === 'boolean')
+              const textFields = group.fields.filter(
+                (field) =>
+                  field.type === 'number' || field.type === 'string' || field.type === 'select'
+              )
+              return (
+                <AdminSection key={group.id} id={group.id} icon={group.icon} title={group.title}>
+                  <div className="space-y-4">
+                    {booleanFields.map((field) => (
+                      <div key={field.key} className="flex items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-text-primary">{field.label}</p>
+                          <p className="text-xs text-text-secondary">{field.description}</p>
+                        </div>
+                        <Switch
+                          checked={Boolean(runtimeForm[field.key])}
+                          onCheckedChange={(checked) =>
+                            setRuntimeField(
+                              field.key,
+                              checked as RuntimeAdminConfig[typeof field.key]
+                            )
+                          }
+                          aria-label={field.label}
+                        />
+                      </div>
+                    ))}
+                    {textFields.length > 0 && (
+                      <div className="grid gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                        {textFields.map((field) => (
+                          <Field
+                            key={field.key}
+                            label={field.label}
+                            description={
+                              field.hint
+                                ? `${field.description}（${field.hint}）`
+                                : field.description
+                            }
+                          >
+                            {field.type === 'select' ? (
+                              <Select
+                                value={runtimeForm[field.key] as string}
+                                onChange={(event) =>
+                                  setRuntimeField(
+                                    field.key,
+                                    event.target.value as RuntimeAdminConfig[typeof field.key]
+                                  )
+                                }
+                                className="py-2"
+                              >
+                                {field.options?.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </Select>
+                            ) : field.type === 'number' ? (
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                value={runtimeForm[field.key] as number}
+                                onChange={(event) => {
+                                  const parsed = parseRuntimeNumberField(event.target.value)
+                                  if (parsed !== null) {
+                                    setRuntimeField(
+                                      field.key,
+                                      parsed as RuntimeAdminConfig[typeof field.key]
+                                    )
+                                  }
+                                }}
+                                className="py-2"
+                              />
+                            ) : (
+                              <Input
+                                type="text"
+                                value={runtimeForm[field.key] as string}
+                                onChange={(event) =>
+                                  setRuntimeField(
+                                    field.key,
+                                    event.target.value as RuntimeAdminConfig[typeof field.key]
+                                  )
+                                }
+                                className="py-2"
+                              />
+                            )}
+                          </Field>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </AdminSection>
+              )
+            })}
+        </SectionStatus>
+
+        <SectionStatus
+          loading={secretsLoading}
+          loadingText="正在加载服务凭证状态..."
+          loadError={secretsLoadError}
+          errorText="服务凭证加载失败，未加载成功前无法保存。"
+          onRetry={() => void loadSecretsConfig()}
+        >
+          <AdminSection
+            id="secrets"
+            icon={<Shield size={18} className="text-brand-gold" />}
+            title="服务凭证"
+          >
+            <div className="space-y-5">
+              <p className="text-xs text-text-secondary">
+                凭证以 AES-256-GCM 加密存储，只会显示是否已配置及末 4 位，不会回显明文。
+                输入新值保存即覆盖，输入框留空并保存即清除对应凭证。
+              </p>
+              {secretsConfig?.disabled ? (
+                <div className="p-3 rounded theme-status-error">
+                  <p className="text-sm theme-text-error">
+                    未配置 SECRETS_ENCRYPTION_KEY 环境变量，凭证管理已禁用。
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {SECRET_FIELD_LABELS.map((field) => {
+                    const status = secretsConfig?.secrets[field.key]
+                    const dirtyValue = secretsForm[field.key]
+                    return (
+                      <Field
+                        key={field.key}
+                        label={field.label}
+                        description={
+                          status?.configured ? `已配置（末 4 位 ${status.last4}）` : '未配置'
+                        }
+                      >
+                        <Input
+                          type="password"
+                          placeholder={status?.configured ? '输入新值以覆盖' : '输入凭证'}
+                          value={dirtyValue ?? ''}
+                          onChange={(event) => setSecretsField(field.key, event.target.value)}
+                          autoComplete="new-password"
+                          className="py-2"
+                        />
+                      </Field>
+                    )
+                  })}
+                </div>
+              )}
+              {secretsConfig && !secretsConfig.disabled && (
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!secretsDirty}
+                    onClick={() => {
+                      setSecretsForm({})
+                      setSecretsDirty(false)
+                    }}
+                  >
+                    撤销未保存修改
+                  </Button>
+                </div>
+              )}
+            </div>
+          </AdminSection>
+        </SectionStatus>
       </section>
     </div>
   )

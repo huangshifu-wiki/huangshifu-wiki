@@ -4,9 +4,12 @@ const STATE_LAYER_CLASS = 'material-state-layer'
 const RIPPLE_SURFACE_CLASS = 'material-ripple-surface'
 const RIPPLE_FALLBACK_SIZE = 44
 const RIPPLE_CLEANUP_DELAY = 700
+const STALE_CHECK_INTERVAL = 16
 const CARD_FEEDBACK_MIN_HEIGHT = 64
 const CARD_FEEDBACK_MIN_AREA = 12_000
 const SURFACE_CLASS_PATTERN = /(?:^|:)(?:theme-(?:button|icon-button)|(?:home|lsky)-btn)/
+// 设计系统里浮层（汉堡菜单、下拉、弹窗）收起时的约定标记
+const COLLAPSED_HOST_SELECTOR = '[data-state="closed"], [aria-hidden="true"]'
 
 type PressFeedbackVariant = 'ripple' | 'state' | 'inline'
 
@@ -48,6 +51,7 @@ const hasSurfaceClass = (element: Element): boolean => {
 
 const resolveButtonSurfaceStyle = (element: Element): CSSStyleDeclaration | null | undefined => {
   if (
+    element.hasAttribute('data-press-feedback') ||
     element.hasAttribute('data-pressable') ||
     element.getAttribute('role') === 'switch' ||
     hasSurfaceClass(element)
@@ -224,6 +228,11 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
 
   const removeSurface = (surface: HTMLSpanElement) => {
     activeSurfaces.delete(surface)
+
+    if (activeSurfaces.size === 0 && staleCheckTimer !== undefined) {
+      ownerWindow?.clearTimeout(staleCheckTimer)
+      staleCheckTimer = undefined
+    }
   }
 
   const removeActiveSurfaces = () => {
@@ -236,7 +245,8 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
 
   const removeStaleSurfaces = () => {
     activeSurfaces.forEach(({ element, elementRect: initialRect, remove }) => {
-      if (!element.isConnected) {
+      // 折叠面板靠 overflow 裁切与淡出让按钮消失，元素矩形和连接状态都不变，只能看宿主是否已收起
+      if (!element.isConnected || element.closest(COLLAPSED_HOST_SELECTOR)) {
         remove()
         return
       }
@@ -252,6 +262,15 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
     })
   }
 
+  const runStaleSurfaceCheck = () => {
+    staleCheckTimer = undefined
+    removeStaleSurfaces()
+
+    if (activeSurfaces.size > 0 && ownerWindow) {
+      staleCheckTimer = ownerWindow.setTimeout(runStaleSurfaceCheck, STALE_CHECK_INTERVAL)
+    }
+  }
+
   const scheduleStaleSurfaceCheck = () => {
     if (activeSurfaces.size === 0) return
 
@@ -263,10 +282,7 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
     if (staleCheckTimer !== undefined) {
       ownerWindow.clearTimeout(staleCheckTimer)
     }
-    staleCheckTimer = ownerWindow.setTimeout(() => {
-      staleCheckTimer = undefined
-      removeStaleSurfaces()
-    }, 0)
+    staleCheckTimer = ownerWindow.setTimeout(runStaleSurfaceCheck, 0)
   }
 
   const showFeedback = ({ element, computedStyle }: PressableTarget, point?: PressPoint) => {
@@ -276,6 +292,7 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
       elementRect: feedback.elementRect,
       remove: feedback.remove,
     })
+    scheduleStaleSurfaceCheck()
   }
 
   const handlePointerDown = (event: Event) => {
@@ -299,7 +316,6 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
     const target = findPressable(keyboardEvent.target)
     if (target) {
       showFeedback(target)
-      scheduleStaleSurfaceCheck()
     }
   }
 
@@ -315,9 +331,6 @@ export const initPressFeedback = (root: Document | HTMLElement = document): (() 
     root.removeEventListener('click', scheduleStaleSurfaceCheck)
     root.removeEventListener('scroll', removeActiveSurfaces, true)
     ownerWindow?.removeEventListener('resize', removeActiveSurfaces)
-    if (staleCheckTimer !== undefined) {
-      ownerWindow?.clearTimeout(staleCheckTimer)
-    }
     removeActiveSurfaces()
   }
 }

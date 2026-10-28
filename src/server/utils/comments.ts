@@ -24,7 +24,7 @@ const commentInclude = {
 
 type CommentWithRelations = Prisma.PostCommentGetPayload<{ include: typeof commentInclude }>
 
-export async function buildCommentResponses(
+async function buildCommentResponses(
   comments: CommentWithRelations[],
   options: {
     authUserUid?: string | null

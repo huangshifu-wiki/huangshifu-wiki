@@ -16,6 +16,12 @@ vi.mock('sharp', () => {
   }
 })
 
+// Mock sharpSafe：斩断其 runtimeConfigService→prisma 依赖，避免单测实例化真实 Prisma client
+vi.mock('../../../src/server/utils/sharpSafe', () => ({
+  getSharpInputPixelLimit: vi.fn(() => 25_000_000),
+  resolveSharpInputPixelLimit: vi.fn((hardCap: number) => hardCap),
+}))
+
 // Mock blurhashService
 vi.mock('../../../src/server/blurhashService', () => ({
   generateBlurhashFromBuffer: vi.fn().mockResolvedValue('LKH8O%_4'),
@@ -29,11 +35,6 @@ describe('imageOptimizer', () => {
   it('应该导出 optimizeImage 函数', async () => {
     const { optimizeImage } = await import('../../../src/server/services/imageOptimizer')
     expect(typeof optimizeImage).toBe('function')
-  })
-
-  it('应该导出 generateVariants 函数', async () => {
-    const { generateVariants } = await import('../../../src/server/services/imageOptimizer')
-    expect(typeof generateVariants).toBe('function')
   })
 
   it('optimizeImage 应该返回正确的优化结果结构', async () => {
@@ -66,37 +67,6 @@ describe('imageOptimizer', () => {
 
     expect(result.success).toBe(true)
     expect(result.format).toBe('jpeg')
-  })
-
-  it('generateVariants 应该返回多尺寸变体 Map', async () => {
-    const { generateVariants } = await import('../../../src/server/services/imageOptimizer')
-
-    const inputBuffer = Buffer.from('test-image-data')
-    const variants = await generateVariants(inputBuffer)
-
-    expect(variants).toBeInstanceOf(Map)
-    // 默认应该生成 thumbnail、medium、large 三种变体
-    expect(variants.has('thumbnail')).toBe(true)
-    expect(variants.has('medium')).toBe(true)
-    expect(variants.has('large')).toBe(true)
-  })
-
-  it('generateVariants 应该支持自定义变体配置', async () => {
-    const { generateVariants } = await import('../../../src/server/services/imageOptimizer')
-
-    const inputBuffer = Buffer.from('test-image-data')
-    const variants = await generateVariants(inputBuffer, {
-      formats: [
-        { name: 'custom-small', width: 200, quality: 70 },
-        { name: 'custom-large', width: 1600, height: 900, quality: 95 },
-      ],
-    })
-
-    expect(variants).toBeInstanceOf(Map)
-    // 应该包含默认变体和自定义变体
-    expect(variants.has('thumbnail')).toBe(true)
-    expect(variants.has('custom-small')).toBe(true)
-    expect(variants.has('custom-large')).toBe(true)
   })
 
   it('optimizeImage 应该在默认情况下生成 blurhash', async () => {

@@ -1,14 +1,28 @@
 import React, { useState } from 'react'
 import { Loader2, Trash2, Star, Upload, X } from '@/src/components/icons'
-import { Checkbox } from '@/src/components/ui'
+import { Checkbox, LoadErrorState } from '@/src/components/ui'
 import { clsx } from 'clsx'
 
-import { apiDelete, apiGet, apiPatch, apiPost, invalidateApiCacheByPrefix } from '../lib/apiClient'
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  invalidateApiCacheByPrefix,
+  invalidateMusicApiCaches,
+} from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
+import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import { useDialog } from './Dialog'
 import { useToast } from './Toast'
 import { uploadImageWithStrategy, type UploadImageResult } from '../services/imageService'
-import { UPLOAD_MAX_FILE_SIZE_BYTES, formatUploadLimitWithSize } from '../lib/uploadLimits'
-import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import {
+  COVER_IMAGE_ACCEPT,
+  isAllowedCoverImage,
+  UPLOAD_MAX_FILE_SIZE_BYTES,
+  formatUploadLimitWithSize,
+} from '../lib/uploadLimits'
+import { isBackdropClick } from '../utils/modal'
 
 type CoverItem = {
   id: string
@@ -50,6 +64,8 @@ interface CoverManagerProps {
   resourceType: ResourceType
   resourceId: string
   currentCover: string
+  open?: boolean
+  onClose?: () => void
   onCoverUpdated?: (cover: CoverUpdate) => void
   onSyncToSongs?: () => void
 }
@@ -58,57 +74,80 @@ export const CoverManager = ({
   resourceType,
   resourceId,
   currentCover,
+  open,
+  onClose,
   onCoverUpdated,
   onSyncToSongs,
 }: CoverManagerProps) => {
   const config = RESOURCE_CONFIG[resourceType]
   const [covers, setCovers] = useState<CoverItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [uploading, setUploading] = useState(false)
   const [settingDefault, setSettingDefault] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [batchDeleting, setBatchDeleting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [selectedCoverIds, setSelectedCoverIds] = useState<Set<string>>(new Set())
-  const [isOpen, setIsOpen] = useState(false)
-  const presence = useFloatingPresence(isOpen)
+  const presence = useFloatingPresence(Boolean(open))
   const dialog = useDialog()
   const { show } = useToast()
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
-  const fetchCovers = React.useCallback(async () => {
-    setLoading(true)
-    try {
-      const response = await apiGet<CoversResponse>(`${config.apiPrefix}/${resourceId}/covers`)
-      const nextCovers = response.covers || []
-      setCovers(nextCovers)
-      setSelectedCoverIds((prev) => {
-        const existingIds = new Set(nextCovers.map((cover) => cover.id))
-        return new Set([...prev].filter((coverId) => existingIds.has(coverId)))
-      })
-      return nextCovers
-    } catch (error) {
-      console.error('Fetch covers failed:', error)
-      return []
-    } finally {
-      setLoading(false)
-    }
-  }, [config.apiPrefix, resourceId])
+  const fetchCovers = React.useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const response = await apiGet<CoversResponse>(
+          `${config.apiPrefix}/${resourceId}/covers`,
+          undefined,
+          undefined,
+          signal
+        )
+        if (signal?.aborted) return []
+        const nextCovers = response.covers || []
+        setCovers(nextCovers)
+        setSelectedCoverIds((prev) => {
+          const existingIds = new Set(nextCovers.map((cover) => cover.id))
+          for (const coverId of prev) {
+            if (!existingIds.has(coverId)) {
+              return new Set([...prev].filter((id) => existingIds.has(id)))
+            }
+          }
+          return prev
+        })
+        return nextCovers
+      } catch (error) {
+        if (!signal?.aborted) {
+          setLoadError(error)
+          console.error('Fetch covers failed:', error)
+        }
+        return []
+      } finally {
+        if (!signal?.aborted) setLoading(false)
+      }
+    },
+    [config.apiPrefix, resourceId]
+  )
 
   const invalidateCoversCache = React.useCallback(() => {
     invalidateApiCacheByPrefix(`${config.apiPrefix}/${resourceId}/covers`)
   }, [config.apiPrefix, resourceId])
 
   React.useEffect(() => {
-    if (isOpen) {
-      fetchCovers()
-    }
-  }, [isOpen, fetchCovers])
+    if (!open) return
+    const controller = new AbortController()
+    void fetchCovers(controller.signal)
+    return () => controller.abort()
+  }, [open, fetchCovers])
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      show('请选择图片文件', { variant: 'error' })
+    if (!isAllowedCoverImage(file)) {
+      show('请选择 JPG、PNG、WEBP、GIF 或 BMP 图片', { variant: 'error' })
+      if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
     if (file.size > UPLOAD_MAX_FILE_SIZE_BYTES) {
@@ -125,10 +164,11 @@ export const CoverManager = ({
       if (!result.assetId) throw new Error('上传失败')
       await apiPost(`${config.apiPrefix}/${resourceId}/covers`, { assetId: result.assetId })
       show('封面上传成功')
-      fetchCovers()
+      invalidateMusicApiCaches()
+      void fetchCovers()
     } catch (error) {
       console.error('Upload cover failed:', error)
-      show(error instanceof Error ? error.message : '上传封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '上传封面失败'), { variant: 'error' })
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -148,9 +188,10 @@ export const CoverManager = ({
         })
       }
       show('默认封面已更新')
+      invalidateMusicApiCaches()
     } catch (error) {
       console.error('Set default cover failed:', error)
-      show('设置默认封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '设置默认封面失败'), { variant: 'error' })
     } finally {
       setSettingDefault(null)
     }
@@ -183,9 +224,10 @@ export const CoverManager = ({
         })
       }
       show('封面已删除')
+      invalidateMusicApiCaches()
     } catch (error) {
       console.error('Delete cover failed:', error)
-      show('删除封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '删除封面失败'), { variant: 'error' })
     } finally {
       setDeleting(null)
     }
@@ -234,9 +276,10 @@ export const CoverManager = ({
         })
       }
       show('封面已批量删除')
+      invalidateMusicApiCaches()
     } catch (error) {
       console.error('Batch delete covers failed:', error)
-      show(error instanceof Error ? error.message : '批量删除封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '批量删除封面失败'), { variant: 'error' })
     } finally {
       setBatchDeleting(false)
     }
@@ -249,35 +292,33 @@ export const CoverManager = ({
       confirmText: '同步',
       variant: 'warning',
     })
-    if (!confirmed) return
+    if (!confirmed || syncing) return
+    setSyncing(true)
     try {
       await apiPost(`${config.apiPrefix}/${resourceId}/sync-covers-to-songs`)
       show('封面已同步到专辑内歌曲')
+      invalidateMusicApiCaches()
       onSyncToSongs?.()
     } catch (error) {
       console.error('Sync covers to songs failed:', error)
-      show('同步封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '同步封面失败'), { variant: 'error' })
+    } finally {
+      setSyncing(false)
     }
   }
 
-  if (!presence.mounted) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="px-4 py-2 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
-      >
-        封面管理
-      </button>
-    )
-  }
+  if (!presence.mounted) return null
 
   return (
     <div
-      className="floating-overlay fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center"
+      className="floating-overlay fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] p-4 flex items-center justify-center"
       data-state={presence.state}
-      aria-hidden={!isOpen}
+      aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) onClose?.()
+      }}
     >
-      <div className="floating-panel w-full max-w-2xl max-h-[90vh] overflow-hidden bg-[var(--book-panel-bg-strong)] rounded border border-[var(--book-ink-line)] flex flex-col shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+      <div className="floating-panel w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <header className="px-5 py-4 border-b border-[var(--book-ink-line)] flex items-center justify-between">
           <div>
             <h3
@@ -289,7 +330,7 @@ export const CoverManager = ({
             <p className="text-xs text-text-muted mt-0.5">{config.subtitle}</p>
           </div>
           <button
-            onClick={() => setIsOpen(false)}
+            onClick={onClose}
             className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-alt transition-colors"
           >
             <X size={18} />
@@ -314,7 +355,7 @@ export const CoverManager = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept={COVER_IMAGE_ACCEPT}
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -322,7 +363,7 @@ export const CoverManager = ({
               <div className="flex gap-2">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
+                  disabled={uploading || syncing}
                   className="flex-1 px-4 py-2.5 rounded theme-button-primary font-medium disabled:opacity-50 inline-flex items-center justify-center gap-2 text-sm transition-all"
                 >
                   {uploading ? (
@@ -334,9 +375,11 @@ export const CoverManager = ({
                 </button>
                 <button
                   onClick={handleSyncToSongsInternal}
-                  className="px-4 py-2.5 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
+                  disabled={syncing || uploading}
+                  className="px-4 py-2.5 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300 disabled:opacity-50 inline-flex items-center justify-center gap-2"
                 >
-                  同步到歌曲
+                  {syncing && <Loader2 size={14} className="animate-spin" />}
+                  {syncing ? '同步中...' : '同步到歌曲'}
                 </button>
               </div>
             ) : (
@@ -355,6 +398,12 @@ export const CoverManager = ({
             <div className="flex items-center justify-center py-8">
               <Loader2 size={22} className="animate-spin text-brand-gold" />
             </div>
+          ) : loadError ? (
+            <LoadErrorState
+              error={loadError}
+              description="获取封面失败"
+              onRetry={() => void fetchCovers()}
+            />
           ) : covers.length > 0 ? (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -462,7 +511,7 @@ export const CoverManager = ({
 
         <footer className="px-5 py-3 border-t border-[var(--book-ink-line)] bg-surface-alt/60 flex justify-end">
           <button
-            onClick={() => setIsOpen(false)}
+            onClick={onClose}
             className="px-4 py-2 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
           >
             关闭

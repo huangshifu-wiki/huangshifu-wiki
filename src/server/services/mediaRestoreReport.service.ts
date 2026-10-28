@@ -3,6 +3,7 @@ import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import type { PrismaClient } from '@prisma/client'
+import { runtimeConfigService } from './runtimeConfig.service'
 import {
   buildUploadPublicUrl,
   extractStorageKeyFromUploadUrl as extractUploadStorageKeyFromUrl,
@@ -12,17 +13,13 @@ import {
 const UPLOAD_URL_PATTERN = /\/uploads\/[^\s"'`)<>\\]+/g
 const REPORT_FILENAME_PATTERN =
   /^restore-media-report_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:-\d{3})?\.json$/
-const MEDIA_RESTORE_REPORT_RETAIN_COUNT = Math.max(
-  1,
-  Number(process.env.MEDIA_RESTORE_REPORT_RETAIN_COUNT || process.env.BACKUP_RETAIN_COUNT || 20)
-)
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 export const defaultUploadsDir =
   process.env.UPLOADS_PATH || path.join(__dirname, '..', '..', '..', 'uploads')
-export const defaultBackupsDir =
+const defaultBackupsDir =
   process.env.NODE_ENV === 'test'
     ? path.join(os.tmpdir(), 'huangshifu-wiki-test-backups')
     : path.join(__dirname, '..', '..', '..', 'backups')
@@ -232,19 +229,6 @@ export async function collectReferencedStorageKeys(prisma: PrismaClient) {
       source: 'MediaAsset',
       id: item.id,
       field: 'publicUrl',
-    })
-  }
-
-  for (const item of imageMaps) {
-    addReference(references, item.localUrl, {
-      source: 'ImageMap',
-      id: item.id,
-      field: 'localUrl',
-    })
-    addReference(references, item.thumbnailUrl, {
-      source: 'ImageMap',
-      id: item.id,
-      field: 'thumbnailUrl',
     })
   }
 
@@ -527,7 +511,7 @@ async function cleanupOldMediaRestoreReports() {
 
     await Promise.all(
       files
-        .slice(MEDIA_RESTORE_REPORT_RETAIN_COUNT)
+        .slice(runtimeConfigService.getConfig().backupRetainCount)
         .map((file) => fs.unlink(resolveMediaRestoreReportPath(file.name)))
     )
   } catch {

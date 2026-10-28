@@ -3,7 +3,7 @@ import type { NotificationItem } from '../types/entities'
 interface ReviewNotificationPayload {
   approved?: boolean
   action?: 'deleted' | 'restored'
-  targetType?: 'wiki' | 'post' | 'gallery'
+  targetType?: 'wiki' | 'post' | 'gallery' | 'ticketListing'
   targetId?: string
   targetSlug?: string
   title?: string
@@ -67,7 +67,9 @@ export function getNotificationText(notif: NotificationItem) {
             ? '帖子'
             : payload.targetType === 'gallery'
               ? '图集'
-              : '内容'
+              : payload.targetType === 'ticketListing'
+                ? '盘票'
+                : '内容'
       const title =
         typeof payload.title === 'string' && payload.title.trim() ? `《${payload.title}》` : ''
       const base =
@@ -140,6 +142,13 @@ export function getNotificationLink(notif: NotificationItem) {
       }
 
       return `/gallery/${payload.targetSlug || payload.targetId}`
+    }
+    if (payload.targetType === 'ticketListing' && typeof payload.targetId === 'string') {
+      if (payload.action === 'deleted') {
+        return null
+      }
+
+      return `/tickets/${payload.targetSlug || payload.targetId}`
     }
   }
 

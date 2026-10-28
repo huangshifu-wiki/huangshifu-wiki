@@ -5,6 +5,8 @@ import { MusicProvider, useMusic } from './context/MusicContext'
 import { useNetworkStatus } from './hooks/useNetworkStatus'
 
 import { Navbar } from './components/Navbar'
+import { BackLinkTracker } from './components/SmartBackLink'
+import { ScrollPositionSync } from './components/ScrollPositionSync'
 import { BottomNav } from './components/BottomNav'
 import { AnnouncementBar } from './components/AnnouncementBar'
 import { GlobalMusicPlayer } from './components/GlobalMusicPlayer'
@@ -12,7 +14,9 @@ import { SiteFooterContent } from './components/SiteFooter'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PageSkeleton } from './components/PageSkeleton'
 import { RouteGuard } from './components/RouteGuard'
+import { Seo } from './components/Seo'
 import { clsx } from 'clsx'
+import { getStaticRouteSeo } from './lib/seo'
 import { loginWithWeChat } from './lib/auth'
 import {
   clearMiniProgramLoginParams,
@@ -20,6 +24,9 @@ import {
   isMiniProgramWebView,
 } from './lib/miniProgram'
 import { getSetupStatus, type SetupStatus } from './lib/setup'
+import { getRouteSkeletonVariant } from './lib/routeSkeleton'
+import { getContentBackgroundLocation } from './lib/contentEditorRoutes'
+import { ContentEditorRoutes } from './pages/ContentEditorRoutes'
 
 const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.default })))
 const Wiki = lazy(() => import('./pages/wiki').then((m) => ({ default: m.default })))
@@ -29,14 +36,18 @@ const Forum = lazy(() => import('./pages/Forum').then((m) => ({ default: m.defau
 const Music = lazy(() => import('./pages/Music').then((m) => ({ default: m.default })))
 const Gallery = lazy(() => import('./pages/Gallery').then((m) => ({ default: m.default })))
 const Events = lazy(() => import('./pages/Events').then((m) => ({ default: m.default })))
+const Tickets = lazy(() => import('./pages/Tickets').then((m) => ({ default: m.default })))
 const EventDetail = lazy(() => import('./pages/EventDetail').then((m) => ({ default: m.default })))
 const GalleryDetail = lazy(() =>
   import('./pages/GalleryDetail').then((m) => ({ default: m.default }))
 )
-const GalleryEdit = lazy(() => import('./pages/GalleryEdit').then((m) => ({ default: m.default })))
 const AlbumDetail = lazy(() => import('./pages/AlbumDetail').then((m) => ({ default: m.default })))
 const MusicDetail = lazy(() => import('./pages/MusicDetail').then((m) => ({ default: m.default })))
 const Search = lazy(() => import('./pages/Search').then((m) => ({ default: m.default })))
+const Announcements = lazy(() =>
+  import('./pages/Announcements').then((m) => ({ default: m.default }))
+)
+const More = lazy(() => import('./pages/More').then((m) => ({ default: m.default })))
 const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.default })))
 const ForgotPassword = lazy(() =>
   import('./pages/ForgotPassword').then((m) => ({ default: m.default }))
@@ -57,7 +68,12 @@ const MainLayout = () => {
   const { user } = useAuth()
   const { isOnline } = useNetworkStatus()
   const location = useLocation()
-  const path = location.pathname
+  const viewLocation = getContentBackgroundLocation(location)
+  const path = viewLocation.pathname
+  const backgroundState = viewLocation.state as { editorSaved?: boolean } | null
+  const backgroundRouteKey = backgroundState?.editorSaved ? viewLocation.key : 'content-page'
+  // 布局级 SEO：详情路径返回 null，由详情组件自行管理元数据
+  const layoutSeo = getStaticRouteSeo(path, viewLocation.search)
   const [setupStatus, setSetupStatus] = React.useState<SetupStatus | null>(null)
   const [setupStatusLoaded, setSetupStatusLoaded] = React.useState(false)
 
@@ -101,9 +117,12 @@ const MainLayout = () => {
 
   if (path === '/setup') {
     return (
-      <Suspense fallback={<PageSkeleton />}>
-        <Setup />
-      </Suspense>
+      <>
+        {layoutSeo && <Seo metadata={layoutSeo} />}
+        <Suspense fallback={<PageSkeleton />}>
+          <Setup />
+        </Suspense>
+      </>
     )
   }
 
@@ -117,14 +136,21 @@ const MainLayout = () => {
 
   if (path === '/admin' || path.startsWith('/admin/')) {
     return (
-      <Suspense fallback={<PageSkeleton />}>
-        <AdminRoutes />
-      </Suspense>
+      <>
+        {layoutSeo && <Seo metadata={layoutSeo} />}
+        <Suspense fallback={<PageSkeleton />}>
+          <Routes key={backgroundRouteKey} location={viewLocation}>
+            <Route path="/*" element={<AdminRoutes />} />
+          </Routes>
+        </Suspense>
+        <ContentEditorRoutes />
+      </>
     )
   }
 
   return (
     <div className="min-h-screen flex flex-col">
+      {layoutSeo && <Seo metadata={layoutSeo} />}
       {!isOnline && (
         <div
           className="bg-amber-500 text-white text-center py-1.5 px-4 text-sm font-medium fixed top-0 left-0 right-0 z-[300]"
@@ -148,26 +174,29 @@ const MainLayout = () => {
           path === '/' ? '' : 'site-main-offset',
           currentSong ? 'pb-36 md:pb-20' : 'pb-20 md:pb-0'
         )}
+        data-bottom-navigation="visible"
+        data-music-player={currentSong ? 'visible' : undefined}
         role="main"
         id="main-content"
       >
         <ErrorBoundary>
-          <Suspense fallback={<PageSkeleton />}>
-            <Routes>
+          <Suspense fallback={<PageSkeleton variant={getRouteSkeletonVariant(path)} />}>
+            <Routes key={backgroundRouteKey} location={viewLocation}>
               <Route path="/" element={<Home />} />
               <Route path="/wiki/*" element={<Wiki />} />
               <Route path="/forum/*" element={<Forum />} />
               <Route path="/gallery" element={<Gallery />} />
-              <Route path="/gallery/new" element={<GalleryEdit />} />
-              <Route path="/gallery/:galleryId/edit" element={<GalleryEdit />} />
               <Route path="/gallery/:galleryId" element={<GalleryDetail />} />
               <Route path="/events" element={<Events />} />
               <Route path="/events/:slug" element={<EventDetail />} />
+              <Route path="/tickets/*" element={<Tickets />} />
               <Route path="/music" element={<Music />} />
               <Route path="/music/links" element={<Navigate to="/admin/music" replace />} />
               <Route path="/music/:songId" element={<MusicDetail />} />
               <Route path="/album/:albumId" element={<AlbumDetail />} />
               <Route path="/search" element={<Search />} />
+              <Route path="/announcements" element={<Announcements />} />
+              <Route path="/more" element={<More />} />
               <Route path="/login" element={<Login />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
@@ -188,6 +217,7 @@ const MainLayout = () => {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          <ContentEditorRoutes />
         </ErrorBoundary>
       </main>
       <GlobalMusicPlayer />
@@ -207,6 +237,9 @@ const MainLayout = () => {
     </div>
   )
 }
+export const AppRouter = ({ children }: { children: React.ReactNode }) => (
+  <Router useTransitions={false}>{children}</Router>
+)
 
 export default function App() {
   React.useEffect(() => {
@@ -246,12 +279,14 @@ export default function App() {
   }, [])
 
   return (
-    <Router>
+    <AppRouter>
+      <BackLinkTracker />
+      <ScrollPositionSync />
       <AuthProvider>
         <MusicProvider>
           <MainLayout />
         </MusicProvider>
       </AuthProvider>
-    </Router>
+    </AppRouter>
   )
 }

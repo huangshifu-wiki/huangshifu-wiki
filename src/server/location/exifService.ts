@@ -1,5 +1,6 @@
 import axios from 'axios'
 import ExifReader from 'exifreader'
+import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
 
 export interface GpsCoordinate {
   latitude: number
@@ -38,6 +39,8 @@ export async function extractGpsFromImageUrl(imageUrl: string): Promise<GpsCoord
     const response = await axios.get(imageUrl, {
       responseType: 'arraybuffer',
       timeout: 15000,
+      maxContentLength: UPLOAD_MAX_FILE_SIZE_BYTES,
+      maxBodyLength: UPLOAD_MAX_FILE_SIZE_BYTES,
       headers: {
         Accept: 'image/*',
       },

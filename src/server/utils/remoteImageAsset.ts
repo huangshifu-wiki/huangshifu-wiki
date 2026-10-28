@@ -3,12 +3,18 @@ import path from 'path'
 import sharp from 'sharp'
 
 import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
-import { buildUploadPublicUrl, createUploadStorageInfo } from '../uploadPath'
+import {
+  buildUploadPublicUrl,
+  createUploadStorageInfo,
+  extractStorageKeyFromUploadUrl,
+} from '../uploadPath'
 import { ALLOWED_IMAGE_EXTENSIONS, ALLOWED_IMAGE_MIME_TYPES } from '../types'
 import { prisma, uploadsDir } from './config'
+import { createOrReuseUploadedAsset, getCanonicalMediaUrl } from '../services/mediaAssetService'
 
 type LocalizedImageAsset = {
   assetId: string
+  imageMapId: string | null
   storageKey: string
   publicUrl: string
   fileName: string
@@ -20,6 +26,7 @@ type LocalizeRemoteImageOptions = {
   namespace: string
   ownerUid?: string
   fallbackName?: string
+  requireOwner?: boolean
 }
 
 const IMAGE_EXTENSION_BY_FORMAT: Record<string, string> = {
@@ -81,13 +88,16 @@ function normalizeMimeType(format: string | undefined, responseContentType: stri
   return mime
 }
 
-async function resolveMediaAssetOwnerUid(ownerUid?: string) {
+async function resolveMediaAssetOwnerUid(ownerUid: string | undefined, requireOwner: boolean) {
   if (ownerUid) {
     const user = await prisma.user.findFirst({
       where: { uid: ownerUid, deletedAt: null },
       select: { uid: true },
     })
     if (user) return user.uid
+    if (requireOwner) throw new Error('媒体资源所有者不存在或已删除')
+  } else if (requireOwner) {
+    throw new Error('媒体资源缺少明确所有者')
   }
 
   const user = await prisma.user.findFirst({
@@ -95,9 +105,7 @@ async function resolveMediaAssetOwnerUid(ownerUid?: string) {
     orderBy: [{ role: 'desc' }, { createdAt: 'asc' }],
     select: { uid: true },
   })
-  if (!user) {
-    throw new Error('无法创建媒体资源：系统中没有可用用户')
-  }
+  if (!user) throw new Error('无法创建媒体资源：系统中没有可用用户')
   return user.uid
 }
 
@@ -136,13 +144,18 @@ async function downloadRemoteImageBuffer(url: URL) {
   }
 }
 
-export async function findReadyMediaAssetByPublicUrl(
+async function findReadyMediaAssetByPublicUrl(
   publicUrl: string
 ): Promise<LocalizedImageAsset | null> {
   const asset = await prisma.mediaAsset.findFirst({
     where: {
-      publicUrl,
       status: 'ready',
+      OR: [
+        { publicUrl },
+        { imageMap: { localUrl: publicUrl } },
+        { imageMap: { externalUrl: publicUrl } },
+        { imageMap: { s3Url: publicUrl } },
+      ],
     },
     select: {
       id: true,
@@ -151,15 +164,21 @@ export async function findReadyMediaAssetByPublicUrl(
       fileName: true,
       mimeType: true,
       sizeBytes: true,
+      imageMapId: true,
+      imageMap: {
+        select: { id: true, localUrl: true, externalUrl: true, s3Url: true },
+      },
     },
   })
-
   if (!asset) return null
 
+  const canonicalUrl = getCanonicalMediaUrl(asset) || publicUrl
+  const canonicalStorageKey = extractStorageKeyFromUploadUrl(canonicalUrl) || asset.storageKey || ''
   return {
     assetId: asset.id,
-    storageKey: asset.storageKey,
-    publicUrl: asset.publicUrl,
+    imageMapId: asset.imageMapId,
+    storageKey: canonicalStorageKey,
+    publicUrl: canonicalUrl,
     fileName: asset.fileName,
     mimeType: asset.mimeType,
     sizeBytes: asset.sizeBytes,
@@ -181,10 +200,12 @@ export async function localizeImageUrlAsMediaAsset(
 
   const parsedUrl = normalizeRemoteImageUrl(trimmed)
   const { buffer, contentType } = await downloadRemoteImageBuffer(parsedUrl)
+  // metadata 只做头部解析、不解码像素，无需像素限制；超限的合法大图也应正常落库，
+  // 后续变体/blurhash 各自优雅降级
   const metadata = await sharp(buffer, { animated: true }).metadata()
   const ext = normalizeExtension(metadata.format, getFileNameFromUrl(parsedUrl, 'image.jpg'))
   const mimeType = normalizeMimeType(metadata.format, contentType)
-  const ownerUid = await resolveMediaAssetOwnerUid(options.ownerUid)
+  const ownerUid = await resolveMediaAssetOwnerUid(options.ownerUid, options.requireOwner ?? false)
   const originalName = getFileNameFromUrl(parsedUrl, options.fallbackName || `image${ext}`)
   const basename = path.basename(originalName, path.extname(originalName)) || 'image'
   const normalizedName = `${basename}${ext}`
@@ -194,34 +215,21 @@ export async function localizeImageUrlAsMediaAsset(
   await fs.writeFile(absolutePath, buffer)
 
   try {
-    const publicUrl = buildUploadPublicUrl(storageInfo.storageKey)
-    const asset = await prisma.mediaAsset.create({
-      data: {
-        ownerUid,
-        storageKey: storageInfo.storageKey,
-        publicUrl,
-        fileName: normalizedName,
-        mimeType,
-        sizeBytes: buffer.length,
-        status: 'ready',
-      },
-      select: {
-        id: true,
-        storageKey: true,
-        publicUrl: true,
-        fileName: true,
-        mimeType: true,
-        sizeBytes: true,
-      },
+    const result = await createOrReuseUploadedAsset({
+      ownerUid,
+      tempFilePath: absolutePath,
+      originalFileName: normalizedName,
+      mimeType,
+      sizeBytes: buffer.length,
     })
-
     return {
-      assetId: asset.id,
-      storageKey: asset.storageKey,
-      publicUrl: asset.publicUrl,
-      fileName: asset.fileName,
-      mimeType: asset.mimeType,
-      sizeBytes: asset.sizeBytes,
+      assetId: result.assetId,
+      imageMapId: result.imageMapId,
+      storageKey: result.storageKey || storageInfo.storageKey,
+      publicUrl: result.publicUrl || buildUploadPublicUrl(storageInfo.storageKey),
+      fileName: result.fileName,
+      mimeType: result.mimeType,
+      sizeBytes: result.sizeBytes,
     }
   } catch (error) {
     await fs.unlink(absolutePath).catch(() => undefined)

@@ -1,9 +1,16 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import React from 'react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogCancel,
   Button,
+  LoadErrorState,
   Checkbox,
+  Spinner,
   Dialog,
   DialogContent,
   DialogTrigger,
@@ -12,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Field,
+  FullscreenSurface,
   Input,
   Popover,
   PopoverContent,
@@ -19,6 +27,7 @@ import {
   SegmentedControl,
   SettingRow,
   SettingsSection,
+  Select,
   Switch,
   Table,
   TableBody,
@@ -53,6 +62,79 @@ describe('UI 设计系统', () => {
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('aria-busy', 'true')
   })
+  it('Spinner 暴露可访问文案并支持尺寸', () => {
+    render(
+      <>
+        <Spinner size="sm" label="列表加载中" />
+        <Spinner size="lg" />
+      </>
+    )
+
+    const statuses = screen.getAllByRole('status')
+    expect(statuses).toHaveLength(2)
+    expect(statuses[0]).toHaveTextContent('列表加载中')
+    expect(statuses[0].querySelector('svg')).toHaveClass('h-4', 'w-4')
+    expect(statuses[1].querySelector('svg')).toHaveClass('h-7', 'w-7')
+  })
+
+  it('Spinner tail 变体渲染拖尾圆环并支持 className 覆盖尺寸', () => {
+    render(<Spinner variant="tail" size="lg" label="拖尾加载中" className="h-10 w-10" />)
+
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('拖尾加载中')
+    const ring = status.querySelector('.spinner-tail')
+    expect(ring).toBeInTheDocument()
+    expect(ring).toHaveClass('h-10', 'w-10')
+    expect(ring?.querySelector('svg')).toBeNull()
+  })
+
+  it('LoadErrorState 显示错误信息并支持重试', () => {
+    const onRetry = vi.fn()
+    render(
+      <LoadErrorState
+        title="读取失败"
+        error={new Error('服务不可用')}
+        retryLabel="再次加载"
+        onRetry={onRetry}
+      />
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('读取失败')
+    expect(screen.getByRole('alert')).toHaveTextContent('服务不可用')
+    fireEvent.click(screen.getByRole('button', { name: '再次加载' }))
+    expect(onRetry).toHaveBeenCalledOnce()
+  })
+
+  it('Button soft 变体使用浅色底与语义文字色', () => {
+    render(
+      <>
+        <Button variant="warning" soft>
+          强制释放
+        </Button>
+        <Button variant="info" soft>
+          备注
+        </Button>
+      </>
+    )
+    const warning = screen.getByRole('button', { name: '强制释放' })
+    const info = screen.getByRole('button', { name: '备注' })
+    expect(warning).toHaveClass('btn-warning-bg', 'text-warning', 'border-0', 'min-h-0')
+    expect(warning).not.toHaveClass('theme-button-warning')
+    expect(info).toHaveClass('btn-info-bg', 'text-info')
+  })
+
+  it('Button soft 在 primary 与 ghost 下等同原样式', () => {
+    render(
+      <>
+        <Button variant="primary" soft>
+          保存
+        </Button>
+        <Button variant="primary">保存</Button>
+      </>
+    )
+    const [softButton, plainButton] = screen.getAllByRole('button', { name: '保存' })
+    expect(softButton.className).toBe(plainButton.className)
+  })
 
   it('Field 自动关联 label、说明和错误', () => {
     render(
@@ -66,6 +148,28 @@ describe('UI 设计系统', () => {
     expect(input).toHaveAttribute('aria-invalid', 'true')
     expect(describedBy.split(' ')).toHaveLength(2)
     expect(screen.getByRole('alert')).toHaveTextContent('标题不能为空')
+  })
+
+  it('Select 显示下拉标记并保留原生选择行为', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <Field label="分类">
+        <Select defaultValue="music" onChange={onChange}>
+          <option value="music">音乐</option>
+          <option value="event">事件</option>
+        </Select>
+      </Field>
+    )
+
+    const select = screen.getByRole('combobox', { name: '分类' })
+    expect(select).toHaveClass('peer', 'appearance-none', 'pr-10')
+    expect(select.parentElement).toHaveClass('relative')
+    expect(select.parentElement?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+
+    await user.selectOptions(select, 'event')
+    expect(onChange).toHaveBeenCalledOnce()
+    expect(select).toHaveValue('event')
   })
 
   it('Switch 支持键盘切换', async () => {
@@ -276,5 +380,122 @@ describe('UI 设计系统', () => {
     expect(screen.getByRole('button', { name: '分页模式' })).toHaveAttribute('aria-pressed', 'true')
     await user.click(screen.getByRole('button', { name: '分段加载' }))
     expect(onValueChange).toHaveBeenCalledWith('incremental')
+  })
+})
+
+describe('FullscreenSurface', () => {
+  it('脱离渲染容器铺满视口，Escape 回调请求关闭', async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    const { container } = render(
+      <FullscreenSurface open onOpenChange={onOpenChange} label="全屏编辑">
+        <Button>退出全屏</Button>
+      </FullscreenSurface>
+    )
+
+    const surface = screen.getByRole('dialog', { name: '全屏编辑' })
+    expect(container.contains(surface)).toBe(false)
+    expect(document.body.contains(surface)).toBe(true)
+
+    await user.keyboard('{Escape}')
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('嵌在 Dialog 内时焦点留在浮层，Escape 只关浮层不关外层弹窗', async () => {
+    const user = userEvent.setup()
+
+    const NestedDemo = () => {
+      const [formOpen, setFormOpen] = React.useState(true)
+      const [fullscreen, setFullscreen] = React.useState(false)
+      const [lyrics, setLyrics] = React.useState('第一行')
+      return (
+        <Dialog open={formOpen} onOpenChange={setFormOpen}>
+          <DialogContent title="编辑歌曲" description="表单弹窗">
+            <Button onClick={() => setFullscreen(true)}>全屏</Button>
+            <output aria-label="歌词草稿">{lyrics}</output>
+            <FullscreenSurface open={fullscreen} onOpenChange={setFullscreen} label="歌词编辑">
+              <Input
+                aria-label="歌词"
+                value={lyrics}
+                onChange={(event) => setLyrics(event.target.value)}
+              />
+            </FullscreenSurface>
+          </DialogContent>
+        </Dialog>
+      )
+    }
+
+    render(<NestedDemo />)
+    await user.click(screen.getByRole('button', { name: '全屏' }))
+
+    const input = screen.getByRole('textbox', { name: '歌词' })
+    await user.click(input)
+    // 外层弹窗的 trapped FocusScope 会被整屏浮层暂停，焦点不会被抢回弹窗
+    expect(document.activeElement).toBe(input)
+    await user.type(input, '，第二行')
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: '歌词编辑' })).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: '编辑歌曲' })).toBeInTheDocument()
+    expect(screen.getByLabelText('歌词草稿')).toHaveTextContent('第一行，第二行')
+  })
+})
+
+describe('弹窗内的辅助浮层', () => {
+  it('菜单动作更新结果并恢复焦点，Tooltip 和确认取消保留外层草稿', async () => {
+    function Editor() {
+      const [result, setResult] = React.useState('未选择')
+      return (
+        <Dialog defaultOpen>
+          <DialogContent title="编辑草稿">
+            <Input aria-label="草稿正文" defaultValue="仍未保存" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>编辑菜单</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onSelect={() => setResult('已标记原创')}>
+                  标记原创
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <output>{result}</output>
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button>编辑提示</Button>
+                </TooltipTrigger>
+                <TooltipContent>草稿不会自动保存</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button>放弃草稿</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent title="确认放弃" description="取消后继续编辑">
+                <AlertDialogCancel asChild>
+                  <Button>继续编辑</Button>
+                </AlertDialogCancel>
+              </AlertDialogContent>
+            </AlertDialog>
+          </DialogContent>
+        </Dialog>
+      )
+    }
+    const user = userEvent.setup()
+    render(<Editor />)
+    const menu = screen.getByRole('button', { name: '编辑菜单' })
+    await user.click(menu)
+    await user.click(screen.getByRole('menuitem', { name: '标记原创' }))
+    expect(screen.getByText('已标记原创')).toBeInTheDocument()
+    await waitFor(() => expect(menu).toHaveFocus())
+    await user.tab()
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('草稿不会自动保存')
+    await user.click(screen.getByRole('button', { name: '放弃草稿' }))
+    const confirmation = screen.getByRole('alertdialog', { name: '确认放弃' })
+    await user.click(within(confirmation).getByRole('button', { name: '继续编辑' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('草稿正文')).toHaveValue('仍未保存')
+    expect(screen.getByRole('dialog', { name: '编辑草稿' })).toBeInTheDocument()
   })
 })

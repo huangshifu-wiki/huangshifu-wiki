@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import {
   generateRequestKey,
   clearCache,
+  dedupedRequest,
   getCacheStats,
   preloadCache,
   invalidateCache,
@@ -96,5 +97,51 @@ describe('requestDedup', () => {
       invalidateCacheByPrefix('')
       expect(getCacheStats().cacheSize).toBe(0)
     })
+  })
+  it('does not cache an in-flight response invalidated by prefix', async () => {
+    const key = 'GET|/api/music|'
+    let resolveStale!: (value: string) => void
+    const staleRequest = new Promise<string>((resolve) => {
+      resolveStale = resolve
+    })
+
+    const staleResponse = dedupedRequest(() => staleRequest, key)
+    invalidateCacheByPrefix('/api/music')
+    resolveStale('stale')
+    await expect(staleResponse).resolves.toBe('stale')
+
+    let freshCalls = 0
+    await expect(
+      dedupedRequest(
+        () => {
+          freshCalls += 1
+          return Promise.resolve('fresh')
+        },
+        key,
+        { swr: false }
+      )
+    ).resolves.toBe('fresh')
+    expect(freshCalls).toBe(1)
+  })
+
+  it('keeps a newer request after an older invalidated request settles', async () => {
+    const key = 'GET|/api/music|'
+    let resolveOld!: (value: string) => void
+    let resolveNew!: (value: string) => void
+    const oldRequest = new Promise<string>((resolve) => {
+      resolveOld = resolve
+    })
+    const newRequest = new Promise<string>((resolve) => {
+      resolveNew = resolve
+    })
+
+    const oldResponse = dedupedRequest(() => oldRequest, key)
+    invalidateCacheByPrefix('/api/music')
+    const newResponse = dedupedRequest(() => newRequest, key)
+    resolveOld('old')
+    await expect(oldResponse).resolves.toBe('old')
+    expect(getCacheStats().inFlightSize).toBe(1)
+    resolveNew('new')
+    await expect(newResponse).resolves.toBe('new')
   })
 })

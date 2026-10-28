@@ -11,8 +11,10 @@ import {
   fetchSongWithRelationsByDocId,
   normalizeMusicImportTracks,
   createOrUpdateImportedSong,
+  batchMatchAndDiffImportTracks,
   resolveMusicPlayUrl,
   normalizeMusicExternalSourceInputs,
+  findDuplicateSongSources,
   parseMusicPlatform,
   parseDisplayAlbumMode,
   normalizeSongCustomPlatformLinks,
@@ -24,6 +26,7 @@ import {
   ensureDisplayRelation,
   normalizeTrackDiscPayload,
   parseInteger,
+  createPaginationMeta,
   parseBoolean,
   normalizeOptionalDateOnly,
   normalizeOptionalDurationMs,
@@ -33,21 +36,22 @@ import {
   canViewPost,
   applyAlbumTracksToRelations,
   enhancedCache,
+  invalidateMusicContentCaches,
   ensureTextLimit,
   deletedAtFilter,
   softDeleteData,
   allocateNumericSlug,
   isNumericSlug,
   withNumericSlugTransaction,
+  normalizeLyricStorage,
+  logger,
+  recordBrowsingHistory,
 } from '../utils'
+import type { SongDuplicateStrategy } from '../utils'
 import { parseMusicUrl } from '../music/musicUrlParser'
-import {
-  getMusicResourcePreview,
-  searchMusicResources,
-  type MusicResourcePreview,
-} from '../music/metingService'
-import { cleanupUnusedMediaAssetById } from '../services/mediaAssetCleanupService'
-import { deleteMusicCoverThumbnail } from '../services/musicCoverThumbnail.service'
+import { getMusicResourcePreview, searchMusicResources } from '../music/metingService'
+import { MediaAssetRequestError, releaseMediaAsset } from '../services/mediaAssetService'
+import { enqueueMusicTextEmbeddingsDeferred } from '../vector/textEmbeddingSync'
 import type { AuthenticatedRequest, ContentStatus } from '../types'
 import { Prisma } from '@prisma/client'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -55,7 +59,6 @@ import { formatMusicCredits, normalizeStringListInput } from '../../lib/musicCre
 
 const router = createRouter()
 
-type MusicListSortBy = 'releaseDate' | 'title' | 'artist'
 type MusicListSortOrder = 'asc' | 'desc'
 
 async function maybeAddImportedAlbumCover(albumDocId: string, coverUrl: string) {
@@ -66,12 +69,6 @@ async function maybeAddImportedAlbumCover(albumDocId: string, coverUrl: string) 
     console.warn(`Import album cover failed for ${albumDocId}:`, error)
     return false
   }
-}
-
-function parseMusicListSortBy(value: unknown): MusicListSortBy {
-  if (value === 'createdAt' || value === 'releaseDate') return 'releaseDate'
-  if (value === 'title' || value === 'artist') return value
-  return 'releaseDate'
 }
 
 function parseMusicListSortOrder(value: unknown): MusicListSortOrder {
@@ -88,26 +85,14 @@ function buildReleaseDateOrderBy(
   ]
 }
 
-function compareMusicListRows(
-  a: { docId: string; title: string; artists: string[]; createdAt: Date },
-  b: { docId: string; title: string; artists: string[]; createdAt: Date },
-  sortBy: MusicListSortBy,
-  sortOrder: MusicListSortOrder
-) {
-  const direction = sortOrder === 'asc' ? 1 : -1
-  const result =
-    sortBy === 'artist'
-      ? formatMusicCredits(a.artists, '').localeCompare(formatMusicCredits(b.artists, ''), 'zh-CN')
-      : a.title.localeCompare(b.title, 'zh-CN')
-
-  if (result !== 0) return result * direction
-  const createdAtResult = b.createdAt.getTime() - a.createdAt.getTime()
-  if (createdAtResult !== 0) return createdAtResult
-  return a.docId.localeCompare(b.docId)
-}
-
-async function fetchAlbumTrackPage(albumDocId: string, skip: number, limit: number) {
-  const where = { albumDocId, song: { deletedAt: null } }
+async function fetchAlbumTrackPage(albumDocId: string, skip: number, limit: number, tag = '') {
+  const where = {
+    albumDocId,
+    song: {
+      deletedAt: null,
+      ...(tag ? { tags: { array_contains: [tag] } } : {}),
+    },
+  }
   const [relations, total] = await Promise.all([
     prisma.songAlbumRelation.findMany({
       where,
@@ -135,6 +120,16 @@ function ensureMusicTextLimits(
         .json({ error: `${field} 单项长度不能超过 ${CONTENT_LIMITS.music.artist} 个字符` })
       return false
     }
+  }
+
+  const tags = normalizeStringListInput(input.tags)
+  if (tags.some((item) => item.length > CONTENT_LIMITS.music.tag)) {
+    res.status(400).json({ error: `标签单项长度不能超过 ${CONTENT_LIMITS.music.tag} 个字符` })
+    return false
+  }
+  if (tags.length > CONTENT_LIMITS.music.tags) {
+    res.status(400).json({ error: `标签最多 ${CONTENT_LIMITS.music.tags} 个` })
+    return false
   }
 
   return (
@@ -174,10 +169,9 @@ async function deleteSongCoverById(docId: string, coverId: string) {
   if (!cover) return false
 
   await prisma.songCover.delete({ where: { id: cover.id } })
-  await deleteMusicCoverThumbnail(cover.thumbnailUrl)
 
   if (cover.assetId) {
-    await cleanupUnusedMediaAssetById(cover.assetId)
+    await releaseMediaAsset(cover.assetId)
   }
 
   const remaining = await prisma.songCover.findMany({
@@ -221,15 +215,15 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
       const albumDocId = typeof req.query.albumDocId === 'string' ? req.query.albumDocId.trim() : ''
+      const tag = typeof req.query.tag === 'string' ? req.query.tag.trim() : ''
       const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 })
       const page = parseInteger(req.query.page, 1, { min: 1 })
       const skip = (page - 1) * limit
       const includeInstrumentals = parseBoolean(req.query.includeInstrumentals, true)
-      const sortBy = parseMusicListSortBy(req.query.sortBy)
       const sortOrder = parseMusicListSortOrder(req.query.sortOrder)
 
       if (!req.authUser && !albumDocId) {
-        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortBy}:${sortOrder}`
+        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortOrder}:${tag || ''}`
         const cached = enhancedCache.get(cacheKey)
         if (cached) {
           res.json(cached)
@@ -246,46 +240,23 @@ router.get(
         instrumentalDocIds = relations.map((r) => r.songDocId)
       }
 
-      const where = albumDocId
-        ? {
-            deletedAt: null,
-            albumRelations: {
-              some: {
-                albumDocId,
-              },
-            },
-          }
-        : instrumentalDocIds.length > 0
-          ? { deletedAt: null, docId: { notIn: instrumentalDocIds } }
-          : { deletedAt: null }
+      const where = {
+        deletedAt: null,
+        ...(tag ? { tags: { array_contains: [tag] } } : {}),
+        ...(albumDocId ? { albumRelations: { some: { albumDocId } } } : {}),
+        ...(instrumentalDocIds.length > 0 ? { docId: { notIn: instrumentalDocIds } } : {}),
+      }
 
       const [songs, total] = albumDocId
-        ? await fetchAlbumTrackPage(albumDocId, skip, limit)
-        : sortBy === 'artist' || sortBy === 'title'
-          ? await (async () => {
-              const rows = await prisma.musicTrack.findMany({
-                where,
-                select: {
-                  docId: true,
-                  title: true,
-                  artists: true,
-                  createdAt: true,
-                },
-              })
-              const songDocIds = rows
-                .sort((a, b) => compareMusicListRows(a, b, sortBy, sortOrder))
-                .slice(skip, skip + limit)
-                .map((song) => song.docId)
-              return [await fetchSongsWithRelationsByDocIds(songDocIds), rows.length] as const
-            })()
-          : await Promise.all([
-              fetchSongsWithRelations(where, {
-                take: limit,
-                skip,
-                orderBy: buildReleaseDateOrderBy(sortOrder),
-              }),
-              prisma.musicTrack.count({ where }),
-            ])
+        ? await fetchAlbumTrackPage(albumDocId, skip, limit, tag)
+        : await Promise.all([
+            fetchSongsWithRelations(where, {
+              take: limit,
+              skip,
+              orderBy: buildReleaseDateOrderBy(sortOrder),
+            }),
+            prisma.musicTrack.count({ where }),
+          ])
 
       const favoritedMusicSet = new Set<string>()
       if (req.authUser && songs.length) {
@@ -308,14 +279,11 @@ router.get(
             excludeDescription: true,
           })
         ),
-        total,
-        page,
-        limit,
-        hasMore: page * limit < total,
+        ...createPaginationMeta(total, page, limit, songs.length),
       }
 
       if (!req.authUser && !albumDocId) {
-        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortBy}:${sortOrder}`
+        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortOrder}:${tag || ''}`
         enhancedCache.set(cacheKey, result, 120)
       }
 
@@ -324,6 +292,21 @@ router.get(
       console.error('Fetch music error:', error)
       res.status(500).json({ error: '获取音乐失败' })
     }
+  })
+)
+
+// Music tags summary
+router.get(
+  '/tags',
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.$queryRaw<Array<{ tag: string }>>`
+      SELECT DISTINCT music_tag.tag AS tag
+      FROM "MusicTrack"
+      CROSS JOIN LATERAL jsonb_array_elements_text("MusicTrack"."tags") AS music_tag(tag)
+      WHERE "MusicTrack"."deletedAt" IS NULL AND btrim(music_tag.tag) <> ''
+    `
+    const tags = rows.map((row) => row.tag).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    res.json({ tags })
   })
 )
 
@@ -345,7 +328,9 @@ router.post(
       const vocals = normalizeStringListInput(body.vocals)
       const album = typeof body.album === 'string' ? body.album.trim() : ''
       const audioUrl = typeof body.audioUrl === 'string' ? body.audioUrl.trim() : ''
-      const lyric = typeof body.lyric === 'string' ? body.lyric : null
+      const lyricStorage = normalizeLyricStorage({
+        lyric: typeof body.lyric === 'string' ? body.lyric : null,
+      })
       const description = normalizeNullableMarkdown(body.description)
       const hasReleaseDate = Object.prototype.hasOwnProperty.call(body, 'releaseDate')
       const hasDurationMs = Object.prototype.hasOwnProperty.call(body, 'durationMs')
@@ -353,6 +338,18 @@ router.post(
       const durationMs = hasDurationMs ? normalizeOptionalDurationMs(body.durationMs) : null
       const sources = normalizeMusicExternalSourceInputs(body.sources)
       const customPlatformLinks = normalizeSongCustomPlatformLinks(body.customPlatformLinks)
+      const tags = normalizeStringListInput(body.tags)
+      const rawPlayableOverride = body.playableOverride
+      const playableOverride: 'auto' | 'enabled' | 'disabled' | undefined =
+        rawPlayableOverride === 'auto' ||
+        rawPlayableOverride === 'enabled' ||
+        rawPlayableOverride === 'disabled'
+          ? rawPlayableOverride
+          : undefined
+      if (rawPlayableOverride !== undefined && playableOverride === undefined) {
+        res.status(400).json({ error: '播放状态无效' })
+        return
+      }
       if (!ensureMusicTextLimits(res, body)) {
         return
       }
@@ -366,32 +363,9 @@ router.post(
         return
       }
 
-      if (sources.length) {
-        const conflict = await prisma.musicExternalSource.findFirst({
-          where: {
-            resourceType: 'song',
-            OR: sources.map((source) => ({
-              platform: source.platform,
-              sourceId: source.sourceId,
-            })),
-          },
-          include: {
-            song: { select: { docId: true, title: true, artists: true } },
-          },
-        })
-        if (conflict?.song) {
-          res.status(409).json({
-            error: `该平台来源已被歌曲「${conflict.song.title}」使用`,
-            conflict: true,
-            conflictingSong: {
-              docId: conflict.song.docId,
-              title: conflict.song.title,
-              artists: conflict.song.artists,
-            },
-          })
-          return
-        }
-      }
+      // 同一平台 id 可被多首歌共享，重复时只提醒不拒绝。
+      // 必须先检查再创建：若并行，新建歌曲自身的来源行会被当成重复上报。
+      const duplicateSources = await findDuplicateSongSources(sources)
 
       const song = await prisma.$transaction(async (tx) => {
         const slug = await allocateNumericSlug(tx, 'MusicTrack')
@@ -406,13 +380,18 @@ router.post(
             vocals,
             album,
             audioUrl,
-            lyric,
+            lyric: lyricStorage.data.lyric,
+            lyricType: lyricStorage.data.lyricType,
+            lyricPlain: lyricStorage.data.lyricPlain,
+            lyricSource: null,
             description: description ?? null,
+            tags,
             releaseDate,
             durationMs,
             customPlatformLinks: customPlatformLinks.length
               ? (customPlatformLinks as unknown as Prisma.InputJsonValue)
               : undefined,
+            ...(playableOverride !== undefined ? { playableOverride } : {}),
             ...(sources.length
               ? {
                   externalSources: {
@@ -433,8 +412,10 @@ router.post(
       const hydrated = await fetchSongWithRelationsByDocId(song.docId)
       res.status(201).json({
         song: hydrated ? toSongResponse(hydrated) : song,
+        duplicates: duplicateSources,
       })
       enhancedCache.invalidateByPrefix('music_list:')
+      enqueueMusicTextEmbeddingsDeferred(prisma, [song.docId])
     } catch (error) {
       console.error('Add music error:', error)
       res.status(500).json({ error: '添加歌曲失败' })
@@ -462,10 +443,32 @@ router.post(
 
       const preview = await getMusicResourcePreview(parsed.platform, parsed.type, parsed.id)
 
+      const normalizedTracks = normalizeMusicImportTracks(preview.songs)
+      const { matches, summary: matchSummary } = await batchMatchAndDiffImportTracks({
+        platform: parsed.platform,
+        tracks: normalizedTracks,
+        albumFallback: preview.title,
+      })
+      const matchBySourceId = new Map(
+        normalizedTracks.map((track, index) => [track.sourceId, matches[index]])
+      )
+
+      const enrichedSongs = preview.songs.map((song) => ({
+        ...song,
+        match: matchBySourceId.get(song.sourceId) || {
+          status: 'new' as const,
+          matchType: 'none' as const,
+          existingSong: null,
+          diffs: [],
+        },
+      }))
+
       res.json({
         resource: {
           ...preview,
+          songs: enrichedSongs,
           totalSongs: preview.songs.length,
+          matchSummary,
         },
       })
     } catch (error) {
@@ -494,6 +497,13 @@ router.post(
       }
 
       const preview = await getMusicResourcePreview(parsed.platform, parsed.type, parsed.id)
+      const duplicateStrategyRaw =
+        typeof req.body?.duplicateStrategy === 'string' ? req.body.duplicateStrategy.trim() : 'fill'
+      const duplicateStrategy: SongDuplicateStrategy =
+        duplicateStrategyRaw === 'overwrite' || duplicateStrategyRaw === 'skip'
+          ? duplicateStrategyRaw
+          : 'fill'
+
       const selectedSongIdsRaw = Array.isArray(req.body?.selectedSongIds)
         ? req.body.selectedSongIds
         : []
@@ -502,7 +512,6 @@ router.post(
         .map((item: string) => item.trim())
         .filter(Boolean)
       const selectedSet = selectedSongIds.length ? new Set(selectedSongIds) : null
-
       const tracks = normalizeMusicImportTracks(preview.songs).filter((track) => {
         if (!selectedSet) return true
         return selectedSet.has(track.sourceId)
@@ -539,6 +548,7 @@ router.post(
             platform: preview.platform,
             track,
             albumNameFallback: preview.title,
+            duplicateStrategy,
           })
           if (result.created) {
             imported += 1
@@ -586,20 +596,34 @@ router.post(
       let collection: { docId: string; title: string } | null = null
       let albumListChanged = false
 
-      if (tracksPayload.length) {
-        const existingAlbumSource = await prisma.musicExternalSource.findUnique({
+      // 单曲导入不建专辑：歌曲只保留平台返回的专辑名字段，专辑实体仅由专辑/歌单链接导入创建
+      if (tracksPayload.length && parsed.type !== 'song') {
+        const existingAlbumSources = await prisma.musicExternalSource.findMany({
           where: {
-            resourceType_platform_sourceId: {
-              resourceType: 'album',
-              platform: preview.platform,
-              sourceId: preview.id,
+            resourceType: 'album',
+            platform: preview.platform,
+            sourceId: preview.id,
+            // 软删除专辑不再占用 id；悬空行（无专辑）一并排除
+            album: { is: { deletedAt: null } },
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 2,
+          select: {
+            album: {
+              select: {
+                docId: true,
+                title: true,
+                tracks: true,
+                description: true,
+                artist: true,
+                coverId: true,
+              },
             },
           },
-          include: {
-            album: true,
-          },
         })
-        const existingAlbum = existingAlbumSource?.album || null
+        // 同一 id 可被多张专辑共享：仅当恰好一个活专辑占用时合并，多个占用者时新建
+        const existingAlbum =
+          existingAlbumSources.length === 1 ? existingAlbumSources[0].album : null
 
         if (existingAlbum) {
           collection = {
@@ -616,14 +640,16 @@ router.post(
           if (newTracks.length) {
             const merged = [...existingTracks, ...newTracks]
             merged.sort((a, b) => a.disc - b.disc)
-            await prisma.album.update({
-              where: { docId: existingAlbum.docId },
-              data: {
-                tracks: merged,
-                updatedAt: new Date(),
-              },
+            await prisma.$transaction(async (tx) => {
+              await tx.album.update({
+                where: { docId: existingAlbum.docId },
+                data: {
+                  tracks: merged,
+                  updatedAt: new Date(),
+                },
+              })
+              await applyAlbumTracksToRelations(existingAlbum.docId, merged, tx)
             })
-            await applyAlbumTracksToRelations(existingAlbum.docId, merged)
             albumListChanged = true
           }
           // 增量导入时更新专辑信息
@@ -654,7 +680,7 @@ router.post(
             prisma,
             'Album',
             async (tx, slug) => {
-              return tx.album.create({
+              const created = await tx.album.create({
                 data: {
                   slug,
                   title: preview.title,
@@ -672,12 +698,13 @@ router.post(
                   },
                 },
               })
+              await applyAlbumTracksToRelations(created.docId, tracksPayload, tx)
+              return created
             }
           )
           if (preview.cover) {
             await maybeAddImportedAlbumCover(createdAlbum.docId, preview.cover)
           }
-          await applyAlbumTracksToRelations(createdAlbum.docId, tracksPayload)
           albumListChanged = true
           collection = {
             docId: createdAlbum.docId,
@@ -769,8 +796,16 @@ router.get(
 
       const resolved = await resolveMusicPlayUrl(song)
 
+      if (!resolved.playable) {
+        const errors = 'errors' in resolved ? resolved.errors : []
+        if (errors.length) {
+          logger.warn({ docId, songTitle: song.title, errors }, 'Music play URL resolution failed')
+        }
+      }
+
       res.json({
         playUrl: resolved.playUrl,
+        mode: resolved.mode,
         platform: resolved.platform,
         sourceId: resolved.sourceId,
         playable: resolved.playable,
@@ -872,35 +907,13 @@ router.get(
         autoSelectedIndex = 0
       }
 
-      const sourceIds = scored.map((item) => item.sourceId)
-      const existingSongsByPlatformId = sourceIds.length
-        ? await prisma.musicExternalSource.findMany({
-            where: {
-              resourceType: 'song',
-              platform: parsedPlatform,
-              sourceId: { in: sourceIds },
-            },
-            include: {
-              song: {
-                select: {
-                  docId: true,
-                  title: true,
-                  artists: true,
-                },
-              },
-            },
-          })
-        : []
+      const existingSources = await findDuplicateSongSources(
+        scored.map((item) => ({ platform: parsedPlatform, sourceId: item.sourceId }))
+      )
 
       const existingMap = new Map<string, { docId: string; title: string; artists: string[] }>()
-      for (const source of existingSongsByPlatformId) {
-        if (source.song) {
-          existingMap.set(source.sourceId, {
-            docId: source.song.docId,
-            title: source.song.title,
-            artists: source.song.artists,
-          })
-        }
+      for (const source of existingSources) {
+        existingMap.set(source.sourceId, source.song)
       }
 
       const suggestions = scored.map((item, index) => {
@@ -948,6 +961,11 @@ router.get(
         return
       }
 
+      // 使用歌曲内部 ID 记录历史，与收藏和历史列表的目标解析保持一致。
+      if (req.authUser) {
+        await recordBrowsingHistory(req.authUser.uid, 'music', song.docId)
+      }
+
       const favoritedByMe = req.authUser
         ? Boolean(
             await prisma.favorite.findFirst({
@@ -989,9 +1007,20 @@ router.delete(
         return
       }
 
-      await prisma.musicTrack.update({
-        where: { docId },
-        data: softDeleteData(req.authUser!.uid),
+      await prisma.$transaction(async (tx) => {
+        await tx.musicTrack.update({
+          where: { docId },
+          data: softDeleteData(req.authUser!.uid),
+        })
+        await tx.moderationLog.create({
+          data: {
+            targetType: 'music',
+            targetId: docId,
+            action: 'delete',
+            operatorUid: req.authUser!.uid,
+            note: null,
+          },
+        })
       })
 
       res.json({ success: true })
@@ -1032,7 +1061,21 @@ router.patch(
         updateData.vocals = normalizeStringListInput(body.vocals)
       if (typeof body.album === 'string') updateData.album = body.album.trim()
       if (typeof body.audioUrl === 'string') updateData.audioUrl = body.audioUrl.trim()
-      if (typeof body.lyric === 'string' || body.lyric === null) updateData.lyric = body.lyric
+      if (Object.prototype.hasOwnProperty.call(body, 'playableOverride')) {
+        const value = body.playableOverride
+        if (value !== 'auto' && value !== 'enabled' && value !== 'disabled') {
+          res.status(400).json({ error: '播放状态无效' })
+          return
+        }
+        updateData.playableOverride = value
+      }
+      if (typeof body.lyric === 'string' || body.lyric === null) {
+        const lyricStorage = normalizeLyricStorage({ lyric: body.lyric })
+        updateData.lyric = lyricStorage.data.lyric
+        updateData.lyricType = lyricStorage.data.lyricType
+        updateData.lyricPlain = lyricStorage.data.lyricPlain
+        updateData.lyricSource = null
+      }
       if (typeof body.description === 'string' || body.description === null) {
         updateData.description = normalizeNullableMarkdown(body.description)
       }
@@ -1093,60 +1136,47 @@ router.patch(
           body.customPlatformLinks
         ) as unknown as Prisma.InputJsonValue
       }
+      if (Object.prototype.hasOwnProperty.call(body, 'tags')) {
+        updateData.tags = normalizeStringListInput(body.tags)
+      }
 
       const shouldReplaceSources = Object.prototype.hasOwnProperty.call(body, 'sources')
       const sources = shouldReplaceSources ? normalizeMusicExternalSourceInputs(body.sources) : []
-      if (sources.length) {
-        const conflict = await prisma.musicExternalSource.findFirst({
-          where: {
-            resourceType: 'song',
-            OR: sources.map((source) => ({
-              platform: source.platform,
-              sourceId: source.sourceId,
-            })),
-            songDocId: { not: docId },
-          },
-          include: {
-            song: { select: { docId: true, title: true, artists: true } },
-          },
-        })
-        if (conflict?.song) {
-          res.status(409).json({
-            error: `该平台来源已被歌曲「${conflict.song.title}」使用`,
-            conflict: true,
-            conflictingSong: {
-              docId: conflict.song.docId,
-              title: conflict.song.title,
-              artists: conflict.song.artists,
-            },
+      // 同一平台 id 可被多首歌共享，重复时只提醒不拒绝（排除当前歌曲自身）；
+      // 检查与写事务互不依赖（写事务只替换当前歌曲自身的来源行），并行执行；
+      // 检查失败只丢失提醒，不影响写入与缓存失效
+      const duplicateSourcesPromise = shouldReplaceSources
+        ? findDuplicateSongSources(sources, docId).catch((error) => {
+            console.warn('重复来源检查失败，跳过提醒:', error)
+            return []
           })
-          return
-        }
-      }
-
-      await prisma.$transaction(async (tx) => {
-        await tx.musicTrack.update({
-          where: { docId },
-          data: updateData,
-        })
-        if (shouldReplaceSources) {
-          await tx.musicExternalSource.deleteMany({
-            where: { resourceType: 'song', songDocId: docId },
+        : Promise.resolve([])
+      const [, duplicateSources] = await Promise.all([
+        prisma.$transaction(async (tx) => {
+          await tx.musicTrack.update({
+            where: { docId },
+            data: updateData,
           })
-          if (sources.length) {
-            await tx.musicExternalSource.createMany({
-              data: sources.map((source) => ({
-                resourceType: 'song',
-                songDocId: docId,
-                platform: source.platform,
-                sourceId: source.sourceId,
-                sourceUrl: source.sourceUrl,
-                isPrimary: source.isPrimary,
-              })),
+          if (shouldReplaceSources) {
+            await tx.musicExternalSource.deleteMany({
+              where: { resourceType: 'song', songDocId: docId },
             })
+            if (sources.length) {
+              await tx.musicExternalSource.createMany({
+                data: sources.map((source) => ({
+                  resourceType: 'song',
+                  songDocId: docId,
+                  platform: source.platform,
+                  sourceId: source.sourceId,
+                  sourceUrl: source.sourceUrl,
+                  isPrimary: source.isPrimary,
+                })),
+              })
+            }
           }
-        }
-      })
+        }),
+        duplicateSourcesPromise,
+      ])
 
       const song = await fetchSongWithRelationsByDocId(docId)
       if (!song) {
@@ -1154,8 +1184,9 @@ router.patch(
         return
       }
 
-      res.json({ song: toSongResponse(song) })
+      res.json({ song: toSongResponse(song), duplicates: duplicateSources })
       enhancedCache.invalidateByPrefix('music_list:')
+      enqueueMusicTextEmbeddingsDeferred(prisma, [docId])
     } catch (error) {
       console.error('Update music error:', error)
       res.status(500).json({ error: '更新歌曲失败' })
@@ -1170,9 +1201,18 @@ router.get(
     try {
       const song = await prisma.musicTrack.findUnique({
         where: { docId: req.params.docId },
-        include: {
+        select: {
           covers: {
             orderBy: { sortOrder: 'asc' },
+            select: {
+              id: true,
+              assetId: true,
+              storageKey: true,
+              publicUrl: true,
+              thumbnailUrl: true,
+              isDefault: true,
+              sortOrder: true,
+            },
           },
         },
       })
@@ -1221,7 +1261,7 @@ router.post(
         return
       }
 
-      const cover = await addSongCoverFromAsset(songDocId, assetId, isDefault)
+      const cover = await addSongCoverFromAsset(songDocId, assetId, isDefault, req.authUser!.uid)
 
       res.status(201).json({
         cover: {
@@ -1235,6 +1275,10 @@ router.post(
         },
       })
     } catch (error) {
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
       console.error('Create song cover error:', error)
       res.status(500).json({ error: '添加歌曲封面失败' })
     }
@@ -1348,13 +1392,32 @@ router.get(
   asyncHandler(async (req, res) => {
     try {
       const songDocId = req.params.docId
+      const song = await prisma.musicTrack.findUnique({
+        where: { docId: songDocId },
+        select: { deletedAt: true },
+      })
+      if (!song || song.deletedAt) {
+        res.status(404).json({ error: '歌曲不存在' })
+        return
+      }
       const relationsRaw = await prisma.songAlbumRelation.findMany({
-        where: { songDocId },
-        include: {
+        where: { songDocId, album: { deletedAt: null } },
+        select: {
+          id: true,
+          songDocId: true,
+          albumDocId: true,
+          discNumber: true,
+          trackOrder: true,
+          isDisplay: true,
           album: {
-            include: {
+            select: {
+              docId: true,
+              title: true,
+              artist: true,
+              coverId: true,
               covers: {
                 orderBy: { sortOrder: 'asc' },
+                select: { id: true, publicUrl: true, isDefault: true },
               },
             },
           },
@@ -1362,11 +1425,11 @@ router.get(
         orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
       })
 
+      const hasDisplayRelation = relationsRaw.some((relation) => relation.isDisplay)
       const relations = ensureDisplayRelation(relationsRaw)
-      const displayRelation = relations.find((relation) => relation.isDisplay)
-      if (displayRelation && !relationsRaw.some((relation) => relation.isDisplay)) {
+      if (relations.length && !hasDisplayRelation) {
         await prisma.songAlbumRelation.update({
-          where: { id: displayRelation.id },
+          where: { id: relations[0].id },
           data: { isDisplay: true },
         })
       }
@@ -1412,67 +1475,72 @@ router.post(
       }
 
       const [song, album] = await Promise.all([
-        prisma.musicTrack.findUnique({ where: { docId: songDocId } }),
-        prisma.album.findUnique({ where: { docId: albumDocId } }),
+        prisma.musicTrack.findUnique({ where: { docId: songDocId }, select: { deletedAt: true } }),
+        prisma.album.findUnique({
+          where: { docId: albumDocId },
+          select: { deletedAt: true, tracks: true },
+        }),
       ])
 
-      if (!song || !album) {
+      if (!song || song.deletedAt || !album || album.deletedAt) {
         res.status(404).json({ error: '歌曲或专辑不存在' })
         return
       }
 
-      const relation = await prisma.songAlbumRelation.upsert({
-        where: {
-          songDocId_albumDocId: {
-            songDocId,
-            albumDocId,
-          },
-        },
-        create: {
-          songDocId,
-          albumDocId,
-          discNumber,
-          trackOrder,
-          isDisplay,
-        },
-        update: {
-          discNumber,
-          trackOrder,
-          isDisplay,
-        },
-      })
+      let relation: { id: string }
+      try {
+        relation = await prisma.$transaction(async (tx) => {
+          const created = await tx.songAlbumRelation.create({
+            data: {
+              songDocId,
+              albumDocId,
+              discNumber,
+              trackOrder,
+              isDisplay,
+            },
+          })
 
-      if (isDisplay) {
-        await prisma.songAlbumRelation.updateMany({
-          where: {
-            songDocId,
-            id: { not: relation.id },
-          },
-          data: { isDisplay: false },
+          if (isDisplay) {
+            await tx.songAlbumRelation.updateMany({
+              where: {
+                songDocId,
+                id: { not: created.id },
+                isDisplay: true,
+              },
+              data: { isDisplay: false },
+            })
+          }
+
+          const tracksFromAlbum = await tx.songAlbumRelation.findMany({
+            where: { albumDocId, song: { deletedAt: null } },
+            include: {
+              song: {
+                select: {
+                  docId: true,
+                  title: true,
+                  artists: true,
+                },
+              },
+            },
+          })
+          await tx.album.update({
+            where: { docId: albumDocId },
+            data: {
+              tracks: buildAlbumTracksPayload(tracksFromAlbum, album.tracks),
+            },
+          })
+          return created
         })
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          res.status(409).json({ error: '歌曲已经关联此专辑' })
+          return
+        }
+        throw error
       }
 
-      const tracksFromAlbum = await prisma.songAlbumRelation.findMany({
-        where: { albumDocId },
-        include: {
-          song: {
-            select: {
-              docId: true,
-              title: true,
-              artists: true,
-            },
-          },
-        },
-        orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
-      })
-      await prisma.album.update({
-        where: { docId: albumDocId },
-        data: {
-          tracks: buildAlbumTracksPayload(tracksFromAlbum),
-        },
-      })
-
       const updatedSong = await fetchSongWithRelationsByDocId(songDocId)
+      invalidateMusicContentCaches()
       res.status(201).json({
         song: updatedSong ? toSongResponse(updatedSong) : null,
       })
@@ -1497,10 +1565,22 @@ router.patch(
             albumDocId,
           },
         },
+        select: {
+          id: true,
+          discNumber: true,
+          trackOrder: true,
+          isDisplay: true,
+          song: { select: { deletedAt: true } },
+          album: { select: { deletedAt: true, tracks: true } },
+        },
       })
 
       if (!existing) {
         res.status(404).json({ error: '关联不存在' })
+        return
+      }
+      if (existing.song.deletedAt || existing.album.deletedAt) {
+        res.status(404).json({ error: '歌曲或专辑不存在' })
         return
       }
 
@@ -1520,43 +1600,49 @@ router.patch(
       if (req.body?.isDisplay !== undefined) {
         updateData.isDisplay = parseBoolean(req.body.isDisplay, existing.isDisplay)
       }
+      const hasUpdates = Object.keys(updateData).length > 0
 
-      const updated = await prisma.songAlbumRelation.update({
-        where: { id: existing.id },
-        data: updateData,
-      })
+      if (hasUpdates) {
+        await prisma.$transaction(async (tx) => {
+          const next = await tx.songAlbumRelation.update({
+            where: { id: existing.id },
+            data: updateData,
+          })
 
-      if (updated.isDisplay) {
-        await prisma.songAlbumRelation.updateMany({
-          where: {
-            songDocId,
-            id: { not: updated.id },
-          },
-          data: { isDisplay: false },
+          if (next.isDisplay) {
+            await tx.songAlbumRelation.updateMany({
+              where: {
+                songDocId,
+                id: { not: next.id },
+                isDisplay: true,
+              },
+              data: { isDisplay: false },
+            })
+          }
+
+          const tracksFromAlbum = await tx.songAlbumRelation.findMany({
+            where: { albumDocId, song: { deletedAt: null } },
+            include: {
+              song: {
+                select: {
+                  docId: true,
+                  title: true,
+                  artists: true,
+                },
+              },
+            },
+          })
+          await tx.album.update({
+            where: { docId: albumDocId },
+            data: {
+              tracks: buildAlbumTracksPayload(tracksFromAlbum, existing.album.tracks),
+            },
+          })
         })
       }
 
-      const tracksFromAlbum = await prisma.songAlbumRelation.findMany({
-        where: { albumDocId },
-        include: {
-          song: {
-            select: {
-              docId: true,
-              title: true,
-              artists: true,
-            },
-          },
-        },
-        orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
-      })
-      await prisma.album.update({
-        where: { docId: albumDocId },
-        data: {
-          tracks: buildAlbumTracksPayload(tracksFromAlbum),
-        },
-      })
-
       const song = await fetchSongWithRelationsByDocId(songDocId)
+      if (hasUpdates) invalidateMusicContentCaches()
       res.json({ song: song ? toSongResponse(song) : null })
     } catch (error) {
       console.error('Update song album relation error:', error)
@@ -1579,47 +1665,57 @@ router.delete(
             albumDocId,
           },
         },
+        select: {
+          id: true,
+          song: { select: { deletedAt: true } },
+          album: { select: { deletedAt: true, tracks: true } },
+        },
       })
-
       if (!existing) {
         res.status(404).json({ error: '关联不存在' })
         return
       }
-
-      await prisma.songAlbumRelation.delete({ where: { id: existing.id } })
-
-      const remaining = await prisma.songAlbumRelation.findMany({
-        where: { songDocId },
-        orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
-      })
-      if (remaining.length && !remaining.some((item) => item.isDisplay)) {
-        await prisma.songAlbumRelation.update({
-          where: { id: remaining[0].id },
-          data: { isDisplay: true },
-        })
+      if (existing.song.deletedAt || existing.album.deletedAt) {
+        res.status(404).json({ error: '歌曲或专辑不存在' })
+        return
       }
 
-      const tracksFromAlbum = await prisma.songAlbumRelation.findMany({
-        where: { albumDocId },
-        include: {
-          song: {
-            select: {
-              docId: true,
-              title: true,
-              artists: true,
+      await prisma.$transaction(async (tx) => {
+        await tx.songAlbumRelation.delete({ where: { id: existing.id } })
+
+        const remaining = await tx.songAlbumRelation.findMany({
+          where: { songDocId, album: { deletedAt: null } },
+          orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+        })
+        if (remaining.length && !remaining.some((item) => item.isDisplay)) {
+          await tx.songAlbumRelation.update({
+            where: { id: remaining[0].id },
+            data: { isDisplay: true },
+          })
+        }
+
+        const tracksFromAlbum = await tx.songAlbumRelation.findMany({
+          where: { albumDocId, song: { deletedAt: null } },
+          include: {
+            song: {
+              select: {
+                docId: true,
+                title: true,
+                artists: true,
+              },
             },
           },
-        },
-        orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
-      })
-      await prisma.album.update({
-        where: { docId: albumDocId },
-        data: {
-          tracks: buildAlbumTracksPayload(tracksFromAlbum),
-        },
+        })
+        await tx.album.update({
+          where: { docId: albumDocId },
+          data: {
+            tracks: buildAlbumTracksPayload(tracksFromAlbum, existing.album.tracks),
+          },
+        })
       })
 
       const song = await fetchSongWithRelationsByDocId(songDocId)
+      invalidateMusicContentCaches()
       res.json({ song: song ? toSongResponse(song) : null })
     } catch (error) {
       console.error('Delete song album relation error:', error)

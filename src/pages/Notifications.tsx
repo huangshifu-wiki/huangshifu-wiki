@@ -7,11 +7,11 @@ import {
   AtSign,
   ThumbsUp,
   ShieldCheck,
-  Loader2,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiGet, apiPost } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import { getNotificationLink, getNotificationText } from '../lib/notifications'
 import Pagination from '../components/Pagination'
@@ -19,17 +19,10 @@ import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import type { NotificationItem } from '../types/entities'
-import { Button } from '@/src/components/ui'
+import type { NotificationsResponse } from '../types/api'
+import { Button, LoadErrorState, Spinner } from '@/src/components/ui'
 
 type NotificationType = NotificationItem['type']
-
-type NotificationsResponse = {
-  notifications: NotificationItem[]
-  total: number
-  unreadCount: number
-  page: number
-  limit: number
-}
 
 type NotificationFilter = 'all' | NotificationType | 'unread'
 
@@ -80,17 +73,21 @@ const Notifications = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const rawFilter = searchParams.get('filter')
   const filter: NotificationFilter = isNotificationFilter(rawFilter) ? rawFilter : 'all'
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
   const [markingAllRead, setMarkingAllRead] = useState(false)
   const { preferences } = useUserPreferences()
   const isIncrementalMode = preferences.listLoadMode === 'incremental'
   const [data, setData] = useState<NotificationsResponse>({
     notifications: [],
     total: 0,
-    unreadCount: 0,
     page: 1,
     limit: PAGE_SIZE,
+    totalPages: 1,
+    hasMore: false,
+    unreadCount: 0,
   })
   const pagination = useRoutedPagination({
     totalCount: data.total,
@@ -153,6 +150,7 @@ const Notifications = () => {
       return result
     },
     getItemKey: (notification) => notification.id,
+    preserveItemsOnReset: true,
   })
   const visibleNotifications = isIncrementalMode ? incrementalList.items : data.notifications
 
@@ -171,6 +169,7 @@ const Notifications = () => {
   const fetchData = React.useCallback(async () => {
     if (isIncrementalMode) return
     setLoading(true)
+    setLoadError(null)
     try {
       const result = await fetchNotificationPage(pagination.page)
 
@@ -181,10 +180,23 @@ const Notifications = () => {
       setLoaded(true)
     } catch (error) {
       console.error('Fetch notifications error:', error)
+      setLoadError(error)
     } finally {
       setLoading(false)
     }
-  }, [fetchNotificationPage, isIncrementalMode, pagination.page])
+  }, [fetchNotificationPage, isIncrementalMode, pagination.page, retryNonce])
+
+  const currentLoadError = isIncrementalMode ? incrementalList.initialError : loadError
+  const isInitialLoading = isIncrementalMode
+    ? incrementalList.isInitialLoading && visibleNotifications.length === 0
+    : loading && visibleNotifications.length === 0
+  const handleRetry = () => {
+    if (isIncrementalMode) {
+      incrementalList.retry()
+      return
+    }
+    setRetryNonce((value) => value + 1)
+  }
 
   React.useEffect(() => {
     fetchData()
@@ -335,10 +347,25 @@ const Notifications = () => {
         </div>
 
         {/* List */}
-        <div className="bg-surface border border-border rounded overflow-hidden min-h-[360px]">
-          {(isIncrementalMode ? incrementalList.loadingInitial : loading) ? (
+        <div
+          className="bg-surface border border-border rounded overflow-hidden min-h-[360px]"
+          aria-busy={
+            (loading || incrementalList.isInitialLoading) && visibleNotifications.length > 0
+          }
+        >
+          {currentLoadError && visibleNotifications.length > 0 && (
+            <LoadErrorState
+              className="py-5"
+              error={currentLoadError}
+              description="当前通知可能不是最新内容。"
+              onRetry={handleRetry}
+            />
+          )}
+          {currentLoadError && visibleNotifications.length === 0 ? (
+            <LoadErrorState error={currentLoadError} onRetry={handleRetry} />
+          ) : isInitialLoading ? (
             <div className="flex items-center justify-center py-20">
-              <Loader2 size={24} className="animate-spin text-brand-gold" />
+              <Spinner size="lg" label="通知加载中" />
             </div>
           ) : visibleNotifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-text-muted">
@@ -417,11 +444,18 @@ const Notifications = () => {
             hasMore={incrementalList.hasMore}
             loading={incrementalList.loadingMore}
             total={incrementalList.total}
+            pageSize={PAGE_SIZE}
             loaded={visibleNotifications.length}
             onLoadMore={incrementalList.loadMore}
             sentinelRef={incrementalList.sentinelRef}
+            error={
+              incrementalList.error && !incrementalList.initialError
+                ? getErrorMessage(incrementalList.error, '加载失败，请重试')
+                : undefined
+            }
+            onRetry={incrementalList.retry}
           />
-        ) : pagination.totalPages > 1 ? (
+        ) : pagination.hasMultiplePages ? (
           <Pagination
             page={pagination.page}
             totalPages={pagination.totalPages}

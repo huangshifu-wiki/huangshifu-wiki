@@ -4,13 +4,9 @@
  */
 
 import NodeCache from 'node-cache'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 
-export interface CacheEntry<T> {
-  value: T
-  expiresAt: number
-}
-
-export interface CacheStats {
+interface CacheStats {
   hits: number
   misses: number
   size: number
@@ -24,24 +20,32 @@ class EnhancedCache {
   private cache: NodeCache
   private hits = 0
   private misses = 0
-  private readonly maxKeys: number
+  private readonly explicitMaxKeys?: number
 
   constructor(options?: { stdTTL?: number; maxKeys?: number; checkperiod?: number }) {
     const stdTTL = typeof options === 'object' ? (options.stdTTL ?? 300) : 300
-    this.maxKeys =
-      typeof options === 'object' && options.maxKeys !== undefined
-        ? options.maxKeys
-        : Number(process.env.CACHE_MAX_KEYS) || 5000
+    this.explicitMaxKeys = typeof options === 'object' ? options.maxKeys : undefined
     const checkperiod = typeof options === 'object' ? (options.checkperiod ?? 60) : 60
 
+    // 上限不传给 NodeCache，由本类在 set 时按运行时配置动态控制（可即时生效）
     this.cache = new NodeCache({
       stdTTL,
       checkperiod,
-      maxKeys: this.maxKeys,
       useClones: false,
     })
+  }
 
-    this.cache.on('evict', (_key, _value) => {})
+  private get maxKeys(): number {
+    return this.explicitMaxKeys ?? runtimeConfigService.getConfig().cacheMaxKeys
+  }
+
+  private evictToMaxKeys(): void {
+    const maxKeys = this.maxKeys
+    while (this.cache.getStats().keys >= maxKeys) {
+      const oldest = this.cache.keys()[0]
+      if (oldest === undefined) break
+      this.cache.del(oldest)
+    }
   }
 
   get<T>(key: string): T | undefined {
@@ -55,6 +59,7 @@ class EnhancedCache {
   }
 
   set<T>(key: string, value: T, ttl?: number): boolean {
+    this.evictToMaxKeys()
     if (this.isNamespaceOverQuota(key)) {
       this.evictOldestInNamespace(key)
     }
@@ -96,12 +101,6 @@ class EnhancedCache {
     return this.cache.getStats()
   }
 
-  destroy(): void {
-    this.cache.close()
-    this.hits = 0
-    this.misses = 0
-  }
-
   static generateKey(prefix: string, ...parts: (string | number | boolean | undefined)[]): string {
     return `${prefix}:${parts.filter((p) => p !== undefined).join(':')}`
   }
@@ -114,8 +113,11 @@ class EnhancedCache {
   private isNamespaceOverQuota(key: string): boolean {
     const prefix = this.getNamespacePrefix(key)
     if (!prefix) return false
+    const quota = Math.floor(this.maxKeys * NAMESPACE_QUOTA_RATIO)
+    // 总键数低于配额时任何命名空间都不可能超配额；getStats() 为 O(1) 计数，避免每条 set 都做 O(n) 全量扫描
+    if (this.cache.getStats().keys < quota) return false
     const keys = this.cache.keys().filter((k) => k.startsWith(prefix + ':'))
-    return keys.length >= Math.floor(this.maxKeys * NAMESPACE_QUOTA_RATIO)
+    return keys.length >= quota
   }
 
   private evictOldestInNamespace(key: string): void {
@@ -137,9 +139,17 @@ class EnhancedCache {
 
 export const enhancedCache = new EnhancedCache({
   stdTTL: 300,
-  maxKeys: Number(process.env.CACHE_MAX_KEYS) || 5000,
   checkperiod: 60,
 })
+
+export function invalidateMusicContentCaches() {
+  enhancedCache.invalidateByPrefix('music_list:')
+  enhancedCache.invalidateByPrefix('album_list:')
+  enhancedCache.invalidateByPrefix('search:')
+}
+export function invalidateTicketListingCaches() {
+  enhancedCache.invalidateByPrefix('ticket_listing_list:')
+}
 
 export const CACHE_KEYS = {
   ANNOUNCEMENT_LATEST: 'announcement:latest',

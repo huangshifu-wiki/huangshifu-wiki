@@ -8,6 +8,12 @@ import { useAuth } from '../context/AuthContext'
 import { PROFILE_DISPLAY_NAME_MAX_LENGTH } from '../lib/contentLimits'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
 import { clearSetupStatusCache, getSetupStatus, initializeSetup } from '../lib/setup'
+import {
+  validateEmail,
+  validateMaxLength,
+  validatePassword,
+  validateRequiredText,
+} from '../lib/clientValidation'
 
 const Setup = () => {
   const navigate = useNavigate()
@@ -46,15 +52,21 @@ const Setup = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!email.trim() || !displayName.trim() || !password) {
+    const validationError =
+      validateEmail(email, 'email', '邮箱') ||
+      validateRequiredText(displayName, 'displayName', '显示名称') ||
+      validateMaxLength(displayName, 'displayName', '显示名称', PROFILE_DISPLAY_NAME_MAX_LENGTH) ||
+      validatePassword(password, 'password', '密码')
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
       return
     }
 
     try {
       setSubmitting(true)
       await initializeSetup({
-        email,
-        displayName,
+        email: email.trim(),
+        displayName: displayName.trim(),
         password,
       })
       clearSetupStatusCache()
@@ -90,8 +102,8 @@ const Setup = () => {
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label htmlFor="setup-email" className="sr-only">
-              管理员邮箱
+            <label htmlFor="setup-email" className="block text-sm text-text-secondary">
+              管理员邮箱 <span className="theme-text-error">*</span>
             </label>
             <Input
               id="setup-email"
@@ -107,8 +119,8 @@ const Setup = () => {
           </div>
 
           <div>
-            <label htmlFor="setup-display-name" className="sr-only">
-              显示名称
+            <label htmlFor="setup-display-name" className="block text-sm text-text-secondary">
+              显示名称 <span className="theme-text-error">*</span>
             </label>
             <Input
               id="setup-display-name"
@@ -126,8 +138,8 @@ const Setup = () => {
           </div>
 
           <div>
-            <label htmlFor="setup-password" className="sr-only">
-              登录密码
+            <label htmlFor="setup-password" className="block text-sm text-text-secondary">
+              登录密码 <span className="theme-text-error">*</span>
             </label>
             <Input
               id="setup-password"

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { logger } from '../utils/logger'
+import { secretsConfigService } from '../services/secretsConfig.service'
 
 const AMAP_BASE_URL = 'https://restapi.amap.com/v3'
 const AMAP_TIMEOUT_MS = 10000
@@ -57,7 +58,7 @@ export interface AddressSearchResult {
 }
 
 function getAmapKey(): string {
-  return process.env.AMAP_API_KEY?.trim() || ''
+  return secretsConfigService.getSecrets().amapApiKey?.trim() || ''
 }
 
 async function amapGet<T extends AmapBaseResponse>(
@@ -99,19 +100,7 @@ function parseCoordinate(value: string | undefined): Coordinate | null {
   return { lng, lat }
 }
 
-export async function addressToCoordinate(address: string): Promise<Coordinate | null> {
-  interface GeocodeResponse extends AmapBaseResponse {
-    geocodes?: Array<{ location?: string }>
-  }
-
-  const data = await amapGet<GeocodeResponse>('/geocode/geo', { address, output: 'json' })
-  return parseCoordinate(data.geocodes?.[0]?.location)
-}
-
-export async function coordinateToAddress(
-  lng: number,
-  lat: number
-): Promise<GeocodingResult | null> {
+async function coordinateToAddress(lng: number, lat: number): Promise<GeocodingResult | null> {
   interface RegeoResponse extends AmapBaseResponse {
     regeocode?: {
       addressComponent?: {

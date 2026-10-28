@@ -212,4 +212,51 @@ describe('gallery response transformers', () => {
 
     expect(result.eventDate).toBeNull()
   })
+
+  it('serializes related links and falls back to an empty list for non-array values', async () => {
+    const { toGalleryResponse } = await import('../../src/server/utils/response-transformers')
+
+    mockImageMapFindMany.mockResolvedValue([])
+
+    const links = [{ label: '配套游记', url: '/events/259' }]
+    const result = await toGalleryResponse({
+      id: 'gallery-1',
+      title: '测试图集',
+      description: '',
+      authorUid: 'user-1',
+      authorName: '作者',
+      tags: [],
+      relatedLinks: links,
+      locationCode: null,
+      locationDetail: null,
+      copyright: null,
+      status: 'published',
+      published: true,
+      publishedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+      images: [],
+    })
+    const brokenResult = await toGalleryResponse({
+      id: 'gallery-2',
+      title: '脏数据图集',
+      description: '',
+      authorUid: 'user-1',
+      authorName: '作者',
+      tags: [],
+      relatedLinks: 'not-a-list',
+      locationCode: null,
+      locationDetail: null,
+      copyright: null,
+      status: 'published',
+      published: true,
+      publishedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+      images: [],
+    })
+
+    expect(result.relatedLinks).toEqual(links)
+    expect(brokenResult.relatedLinks).toEqual([])
+  })
 })

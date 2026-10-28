@@ -2,10 +2,13 @@ import { Prisma } from '@prisma/client'
 
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { normalizeStringListInput } from '../../lib/musicCredits'
+import type { LyricType } from '../../lib/lrcParser'
 import { getMusicResourcePreview, resolveCoverUrlCandidates } from '../music/metingService'
+import { enqueueMusicTextEmbeddingsDeferred } from '../vector/textEmbeddingSync'
 import {
   addSongCoverFromUrl,
   autoLinkInstrumental,
+  buildMusicMetadataFillUpdateData,
   enhancedCache,
   normalizeMusicExternalSourceInputs,
   normalizeOptionalDateOnly,
@@ -13,7 +16,9 @@ import {
   normalizeSongCustomPlatformLinks,
   prisma,
   withNumericSlugTransaction,
+  normalizeLyricStorage,
 } from '../utils'
+import type { MusicMetadataFields } from '../utils'
 import type { MusicPlatform, SongCustomPlatformLink } from '../types'
 
 export type SongDuplicateAction = 'fill' | 'overwrite' | 'skip'
@@ -33,6 +38,9 @@ export interface NormalizedSongJsonInput {
   audioUrl: string
   coverUrl: string
   lyric: string | null
+  lyricType: LyricType | null
+  lyricPlain: string | null
+  lyricSource: MusicPlatform | null
   description: string | null
   releaseDate: Date | null
   durationMs: number | null
@@ -51,6 +59,9 @@ export interface SongImportExistingSong {
   album: string
   audioUrl: string
   lyric: string | null
+  lyricType: LyricType | null
+  lyricPlain: string | null
+  lyricSource: MusicPlatform | null
   description: string | null
   releaseDate: Date | null
   durationMs: number | null
@@ -207,7 +218,19 @@ function normalizeSongRecord(
     stringValue(platformRecord.albumName)
   const audioUrl = stringValue(record.audioUrl)
   const coverUrl = stringValue(record.coverUrl)
-  const lyric = nullableText(record.lyric)
+  const rawLyric =
+    [record.lyric, record.lyricTimed, record.lyricPlain].find(
+      (value): value is string => typeof value === 'string' && Boolean(value.trim())
+    ) ?? null
+  const lyricStorage = normalizeLyricStorage({
+    lyric: rawLyric,
+    lyricPlain: record.lyricPlain,
+    lyricType: record.lyricType,
+    lyricSource: Object.prototype.hasOwnProperty.call(record, 'lyricSource')
+      ? record.lyricSource
+      : record.source,
+  })
+  const { lyric, lyricType, lyricPlain, lyricSource } = lyricStorage.data
   const description = nullableText(record.description)
   const releaseDateValue = valueFromRecordOrPlatformRecord(record, platformRecord, 'releaseDate')
   const releaseDate =
@@ -224,12 +247,14 @@ function normalizeSongRecord(
   if (!artists.length) errors.push('缺少歌手 artists')
   if (releaseDate === undefined) errors.push('releaseDate 必须是 YYYY-MM-DD')
   if (durationMs === undefined) errors.push('durationMs 必须是非负整数毫秒')
+  errors.push(...lyricStorage.errors)
 
   validateLength(errors, title, '歌曲标题', CONTENT_LIMITS.music.title)
   validateLength(errors, album, '专辑名', CONTENT_LIMITS.music.album)
   validateLength(errors, audioUrl, '音频链接', CONTENT_LIMITS.music.audioUrl)
   validateLength(errors, coverUrl, '封面链接', CONTENT_LIMITS.url)
   validateLength(errors, lyric, '歌词', CONTENT_LIMITS.music.lyric)
+  validateLength(errors, lyricPlain, '纯文本歌词', CONTENT_LIMITS.music.lyric)
   validateLength(errors, description, '歌曲描述', CONTENT_LIMITS.music.description)
   validateCredits(errors, artists, '歌手')
   validateCredits(errors, lyricists, '作词')
@@ -255,6 +280,9 @@ function normalizeSongRecord(
       audioUrl,
       coverUrl,
       lyric,
+      lyricType,
+      lyricPlain,
+      lyricSource,
       description,
       releaseDate: releaseDate ?? null,
       durationMs: durationMs ?? null,
@@ -420,23 +448,31 @@ function hasText(value: string | null | undefined) {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function hasList(value: unknown) {
-  return Array.isArray(value) && value.length > 0
-}
-
 function buildFillUpdateData(input: NormalizedSongJsonInput, existing: SongImportExistingSong) {
-  const data: Prisma.MusicTrackUpdateInput = {}
-
-  if (!hasList(existing.lyricists) && input.lyricists.length) data.lyricists = input.lyricists
-  if (!hasList(existing.composers) && input.composers.length) data.composers = input.composers
-  if (!hasList(existing.arrangers) && input.arrangers.length) data.arrangers = input.arrangers
-  if (!hasList(existing.vocals) && input.vocals.length) data.vocals = input.vocals
+  const data: Prisma.MusicTrackUpdateInput = buildMusicMetadataFillUpdateData(
+    {
+      lyricists: input.lyricists,
+      composers: input.composers,
+      arrangers: input.arrangers,
+      vocals: input.vocals,
+      releaseDate: input.releaseDate,
+      durationMs: input.durationMs,
+    } satisfies MusicMetadataFields,
+    existing
+  )
   if (!hasText(existing.album) && input.album) data.album = input.album
   if (!hasText(existing.audioUrl) && input.audioUrl) data.audioUrl = input.audioUrl
-  if (!hasText(existing.lyric) && input.lyric) data.lyric = input.lyric
+  if (!hasText(existing.lyric) && input.lyric) {
+    data.lyric = input.lyric
+    data.lyricType = input.lyricType
+    data.lyricPlain = input.lyricPlain
+    data.lyricSource = input.lyricSource
+  } else if (existing.lyric === input.lyric) {
+    if (!existing.lyricType && input.lyricType) data.lyricType = input.lyricType
+    if (!hasText(existing.lyricPlain) && input.lyricPlain) data.lyricPlain = input.lyricPlain
+    if (!existing.lyricSource && input.lyricSource) data.lyricSource = input.lyricSource
+  }
   if (!hasText(existing.description) && input.description) data.description = input.description
-  if (!existing.releaseDate && input.releaseDate) data.releaseDate = input.releaseDate
-  if (existing.durationMs === null && input.durationMs !== null) data.durationMs = input.durationMs
   if (!existing.customPlatformLinks && input.customPlatformLinks.length) {
     data.customPlatformLinks = toJsonValue(input.customPlatformLinks)
   }
@@ -459,6 +495,9 @@ function buildSongData(input: NormalizedSongJsonInput) {
     album: input.album,
     audioUrl: input.audioUrl,
     lyric: input.lyric,
+    lyricType: input.lyricType,
+    lyricPlain: input.lyricPlain,
+    lyricSource: input.lyricSource,
     description: input.description,
     releaseDate: input.releaseDate,
     durationMs: input.durationMs,
@@ -672,7 +711,7 @@ export async function executeSongJsonImport(
 ): Promise<SongImportExecutionResult> {
   const summary = createSummary()
   const results: SongImportResultItem[] = []
-  let changed = false
+  const touchedDocIds: string[] = []
 
   for (const item of preview.items) {
     summary.sourceConflicts += item.sourceConflicts.length
@@ -720,7 +759,7 @@ export async function executeSongJsonImport(
           item.input.artists[0] || '未知歌手'
         )
         summary.created += 1
-        changed = true
+        touchedDocIds.push(song.docId)
         results.push({
           index: item.input.index,
           title: item.input.title,
@@ -768,6 +807,7 @@ export async function executeSongJsonImport(
         const coverResult = await tryMaybeAddCover(item.input, item.existingSong, summary, options)
         coverError = coverResult.error
         summary.overwritten += 1
+        touchedDocIds.push(item.existingSong.docId)
       } else {
         const data = buildFillUpdateData(item.input, item.existingSong)
         const hasDataChanges = Object.keys(data).length > 0
@@ -782,12 +822,11 @@ export async function executeSongJsonImport(
         const coverChanged = coverResult.changed
         coverError = coverResult.error
         summary.filled += 1
-        changed = changed || hasDataChanges || sourcesChanged || coverChanged
+        if (hasDataChanges || sourcesChanged || coverChanged) {
+          touchedDocIds.push(item.existingSong.docId)
+        }
       }
 
-      if (action === 'overwrite') {
-        changed = true
-      }
       results.push({
         index: item.input.index,
         title: item.input.title,
@@ -809,8 +848,10 @@ export async function executeSongJsonImport(
     }
   }
 
-  if (changed) {
+  // 有实际变更（create/overwrite/fill 命中变更）的 docId 已全部收集于 touchedDocIds
+  if (touchedDocIds.length) {
     enhancedCache.invalidateByPrefix('music_list:')
+    enqueueMusicTextEmbeddingsDeferred(prisma, touchedDocIds)
   }
 
   return {

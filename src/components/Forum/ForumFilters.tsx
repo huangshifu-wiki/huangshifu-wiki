@@ -47,6 +47,7 @@ const ForumFilters = ({
       <div className="mobile-filter-tabs">
         <Link
           to={getListUrl({ section: 'all' })}
+          data-press-feedback="inline"
           className={sectionFilterClassName(activeSection === 'all')}
         >
           {t('forum.allSections')}
@@ -61,6 +62,7 @@ const ForumFilters = ({
             <Link
               key={section.id}
               to={getListUrl({ section: section.id })}
+              data-press-feedback="inline"
               className={sectionFilterClassName(active)}
             >
               {section.name}
@@ -79,6 +81,7 @@ const ForumFilters = ({
           <Link
             key={sort}
             to={getListUrl({ sort })}
+            data-press-feedback="inline"
             className={sortFilterClassName(activeSort === sort)}
           >
             {sort === 'latest'

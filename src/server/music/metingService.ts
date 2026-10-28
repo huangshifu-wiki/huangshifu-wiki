@@ -112,13 +112,17 @@ function normalizeText(value: unknown, fallback = '') {
   return normalized || fallback
 }
 
+function upgradeToHttps(url: string) {
+  // Upgrade HTTP to HTTPS to avoid Mixed Content warnings
+  return url.replace(/^http:\/\//i, 'https://')
+}
+
 function normalizeImageUrl(value: unknown, fallback = '') {
   const url = normalizeText(value, fallback)
   if (!url) {
     return url
   }
-  // Upgrade HTTP to HTTPS to avoid Mixed Content warnings
-  return url.replace(/^http:\/\//i, 'https://')
+  return upgradeToHttps(url)
 }
 
 function normalizeArtist(value: unknown, fallback = '未知歌手') {
@@ -155,6 +159,86 @@ async function runRawValue(platform: MusicPlatform, runner: (client: Meting) => 
   const client = createClient(platform, false)
   const raw = ensureString(await withTimeout(runner(client), METING_API_TIMEOUT_MS))
   return parseJsonSafe<unknown>(raw, {})
+}
+
+function firstRawSong(payload: unknown): Record<string, unknown> {
+  if (Array.isArray(payload)) {
+    return firstRawSong(payload[0])
+  }
+  if (!payload || typeof payload !== 'object') {
+    return {}
+  }
+
+  const record = payload as Record<string, unknown>
+  if (Array.isArray(record.songs)) return firstRawSong(record.songs[0])
+  if (Array.isArray(record.data)) return firstRawSong(record.data[0])
+  if (record.data && typeof record.data === 'object') return firstRawSong(record.data)
+  return record
+}
+
+function parseFiniteInteger(value: unknown, multiplier = 1) {
+  const raw = typeof value === 'string' ? value.trim() : value
+  if (raw === '') return null
+  const numeric = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+  if (!Number.isFinite(numeric) || numeric < 0) return null
+  const result = numeric * multiplier
+  return Number.isSafeInteger(result) && result <= 2_147_483_647 ? result : null
+}
+
+function parseDateOnly(value: unknown) {
+  if (typeof value === 'string') {
+    const normalized = value.trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null
+    const date = new Date(`${normalized}T00:00:00.000Z`)
+    return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== normalized
+      ? null
+      : normalized
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null
+  // 网易云把中国本地发行日编码为对应的 UTC 时间戳，按中国日历日读取后再输出 YYYY-MM-DD。
+  const date = new Date(value + 8 * 60 * 60 * 1000)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10)
+}
+
+export async function getMusicTrackMetadata(
+  platform: MusicPlatform,
+  sourceId: string
+): Promise<{ releaseDate: string | null; durationMs: number | null }> {
+  const empty = { releaseDate: null, durationMs: null }
+  if (!sourceId.trim()) return empty
+  if (platform !== 'netease' && platform !== 'tencent' && platform !== 'kugou') return empty
+
+  try {
+    const raw = await runRawValue(platform, (client) => client.song(sourceId))
+    const song = firstRawSong(raw)
+
+    if (platform === 'netease') {
+      return {
+        releaseDate: parseDateOnly(song.publishTime),
+        durationMs: parseFiniteInteger(song.dt),
+      }
+    }
+
+    if (platform === 'tencent') {
+      const album =
+        song.album && typeof song.album === 'object' ? (song.album as Record<string, unknown>) : {}
+      return {
+        releaseDate: parseDateOnly(song.time_public ?? album.time_public),
+        durationMs: parseFiniteInteger(song.interval, 1000),
+      }
+    }
+
+    if (platform === 'kugou') {
+      return {
+        releaseDate: null,
+        durationMs: parseFiniteInteger(song.timeLength, 1000),
+      }
+    }
+  } catch {
+    return empty
+  }
+
+  return empty
 }
 
 async function resolvePicById(platform: MusicPlatform, picId: string, fallback = '') {
@@ -273,19 +357,23 @@ function normalizeTrack(platform: MusicPlatform, track: MetingTrackRaw): MusicIm
     isInstrumental,
   }
 }
-
 async function enrichTrackCovers(platform: MusicPlatform, tracks: MusicImportTrack[]) {
-  const resolved: MusicImportTrack[] = []
-  for (const track of tracks) {
-    const cover = await resolvePicById(platform, track.picId, track.cover)
-    resolved.push({
-      ...track,
-      cover,
-    })
+  const resolved = new Array<MusicImportTrack>(tracks.length)
+  let nextIndex = 0
+  const workerCount = Math.min(4, tracks.length)
+
+  const resolveNext = async () => {
+    while (nextIndex < tracks.length) {
+      const index = nextIndex++
+      const track = tracks[index]
+      const cover = await resolvePicById(platform, track.picId, track.cover)
+      resolved[index] = { ...track, cover }
+    }
   }
+
+  await Promise.all(Array.from({ length: workerCount }, resolveNext))
   return resolved
 }
-
 function uniqueTracksBySourceId(tracks: MusicImportTrack[]) {
   const deduped = new Map<string, MusicImportTrack>()
   tracks.forEach((track) => {
@@ -505,14 +593,48 @@ export async function resolveAudioUrl(platform: MusicPlatform, urlId: string) {
   }
 
   if (platform === 'netease') {
-    return `https://music.163.com/song/media/outer/url?id=${urlId}.mp3`
+    return resolveNeteaseAudioUrl(urlId)
   }
 
   try {
     const client = createClient(platform, true)
     const raw = ensureString(await withTimeout(client.url(urlId, 320), METING_API_TIMEOUT_MS))
     const parsed = parseJsonSafe<unknown>(raw, {})
-    return extractSingleFieldAsString(parsed, 'url')
+    return upgradeToHttps(extractSingleFieldAsString(parsed, 'url'))
+  } catch {
+    return ''
+  }
+}
+
+async function resolveNeteaseAudioUrl(urlId: string) {
+  // 优先走官方 eapi 接口：返回 CDN 直链（http），升级为 https 避免混合内容拦截
+  try {
+    const client = createClient('netease', true)
+    const raw = ensureString(await withTimeout(client.url(urlId, 320), METING_API_TIMEOUT_MS))
+    const url = extractSingleFieldAsString(parseJsonSafe<unknown>(raw, {}), 'url')
+    if (url) {
+      return upgradeToHttps(url)
+    }
+  } catch {
+    // 继续尝试外链兜底
+  }
+
+  // 兜底：media/outer 会 302 重定向到 http CDN 地址，跟随重定向后升级为 https
+  // 不可播放的歌曲会重定向到 404 页面（HTTP 200、text/html），必须校验音频类型
+  try {
+    const response = await fetch(`https://music.163.com/song/media/outer/url?id=${urlId}.mp3`, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(METING_API_TIMEOUT_MS),
+    })
+    if (!response.ok) {
+      return ''
+    }
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.startsWith('audio/')) {
+      return ''
+    }
+    await response.body?.cancel()
+    return upgradeToHttps(response.url)
   } catch {
     return ''
   }

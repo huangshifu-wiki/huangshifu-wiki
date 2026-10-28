@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import {
-  ArrowLeft,
   Edit3,
   Link2,
   Heart,
@@ -13,21 +12,34 @@ import {
   Clock,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { Checkbox } from '@/src/components/ui'
+import { Checkbox, LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
+import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
 import { Lightbox } from '../components/Lightbox'
 import { CharacterCount } from '../components/CharacterCount'
 import { CommentActionMenu } from '../components/CommentActionMenu'
+import { ContentLinkList } from '../components/ContentLinkList'
+import MarkdownRenderer from '../components/MarkdownRenderer'
 import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import { useI18n } from '../lib/i18n'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
 import { formatDateOnly, formatDateTime } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
+import { validateMaxLength, validateRequiredText } from '../lib/clientValidation'
 import { submitFormOnModifierEnter } from '../lib/formShortcuts'
 import {
   shouldWaitForAnyGalleryThumbnail,
@@ -90,7 +102,6 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
 
 const GalleryDetail = () => {
   const { galleryId } = useParams()
-  const navigate = useNavigate()
   const location = useLocation()
   const { user, profile, isBanned } = useAuth()
   const dialog = useDialog()
@@ -99,6 +110,7 @@ const GalleryDetail = () => {
 
   const [gallery, setGallery] = useState<GalleryItem | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
 
@@ -129,11 +141,12 @@ const GalleryDetail = () => {
     if (!galleryId) return
     try {
       setLoading(true)
+      setLoadError(null)
       const data = await apiGet<GalleryDetailResponse>(`/api/galleries/${galleryId}`)
       setGallery(data.gallery)
     } catch (error) {
       console.error('Fetch gallery detail error:', error)
-      setGallery(null)
+      setLoadError(error)
     } finally {
       setLoading(false)
     }
@@ -257,6 +270,41 @@ const GalleryDetail = () => {
     [gallery?.images]
   )
 
+  // SEO 元数据：加载中/失败/未发布不可索引，成功后输出图集详情与 ImageGallery JSON-LD
+  const galleryPath = `/gallery/${galleryId}`
+  const galleryDescription = gallery
+    ? summarizeSeoText(gallery.description, `${gallery.title}，黄诗扶 Wiki 图集资料。`)
+    : ''
+  const galleryImageUrls = images
+    .map((image) => toAbsoluteSeoUrl(image.originalUrl || image.url))
+    .filter(Boolean)
+  const gallerySeoMetadata: SeoMetadata = gallery
+    ? {
+        title: `${gallery.title}｜${SEO_SITE_NAME}`,
+        description: galleryDescription,
+        canonicalPath: galleryPath,
+        robots: isGalleryPublished ? 'index,follow' : 'noindex,follow',
+        ogType: 'article',
+        ogImage: galleryImageUrls[0],
+        ogImageAlt: gallery.title,
+        jsonLd: {
+          '@context': 'https://schema.org',
+          '@type': 'ImageGallery',
+          name: gallery.title,
+          description: galleryDescription,
+          url: toAbsoluteSeoUrl(galleryPath),
+          image: galleryImageUrls,
+        },
+      }
+    : loading
+      ? getDetailFallbackSeo({ canonicalPath: galleryPath, title: SEO_SITE_NAME })
+      : getDetailFallbackSeo({
+          canonicalPath: galleryPath,
+          title: `图集不存在｜${SEO_SITE_NAME}`,
+          description: '当前图集不存在或尚未发布。',
+        })
+  useSeo(gallerySeoMetadata)
+
   const canManage = Boolean(
     user &&
     gallery &&
@@ -315,6 +363,7 @@ const GalleryDetail = () => {
           <span className="text-text-muted">{formatDateTime(comment.createdAt)}</span>
           <button
             type="button"
+            data-press-feedback="ripple"
             onClick={() => void handleToggleCommentLike(comment)}
             disabled={!user || isBanned || likingCommentId === comment.id || comment.isDeleted}
             className={clsx(
@@ -331,6 +380,7 @@ const GalleryDetail = () => {
           {canReplyComment(comment) && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={() => {
                 setReplyTo(comment)
                 scrollToCommentForm()
@@ -344,6 +394,7 @@ const GalleryDetail = () => {
           {canDeleteComment(comment) && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={() => void handleDeleteComment(comment)}
               disabled={deletingCommentId === comment.id}
               className="font-medium text-text-muted hover:text-red-500 disabled:opacity-50"
@@ -355,6 +406,7 @@ const GalleryDetail = () => {
           {isAdmin && showDeletedComments && comment.isDeleted && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={() => void handleRestoreComment(comment)}
               disabled={restoringCommentId === comment.id}
               className="font-medium text-brand-gold hover:underline disabled:opacity-50"
@@ -450,7 +502,7 @@ const GalleryDetail = () => {
     } catch (error) {
       setGallery(previous)
       console.error('Toggle gallery like error:', error)
-      show('图集点赞失败', { variant: 'error' })
+      show(getErrorMessage(error, '图集点赞失败'), { variant: 'error' })
     } finally {
       setLikingGallery(false)
     }
@@ -519,7 +571,7 @@ const GalleryDetail = () => {
     } catch (error) {
       setGallery(previous)
       console.error('Toggle gallery dislike error:', error)
-      show('图集点踩失败', { variant: 'error' })
+      show(getErrorMessage(error, '图集点踩失败'), { variant: 'error' })
     } finally {
       setDislikingGallery(false)
     }
@@ -561,7 +613,7 @@ const GalleryDetail = () => {
     } catch (error) {
       setGallery(previous)
       console.error('Toggle gallery favorite error:', error)
-      show('图集收藏失败', { variant: 'error' })
+      show(getErrorMessage(error, '图集收藏失败'), { variant: 'error' })
     } finally {
       setFavoritingGallery(false)
     }
@@ -592,7 +644,7 @@ const GalleryDetail = () => {
       )
     } catch (error) {
       console.error('Submit gallery review error:', error)
-      show(t('gallery.submitReviewFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.submitReviewFailed')), { variant: 'error' })
     } finally {
       setSubmittingReview(false)
     }
@@ -600,7 +652,15 @@ const GalleryDetail = () => {
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!gallery?.id || !user || !newComment.trim() || submittingComment) return
+    const comment = newComment.trim()
+    const commentError =
+      validateRequiredText(comment, 'comment', '评论') ||
+      validateMaxLength(comment, 'comment', '评论', CONTENT_LIMITS.gallery.comment)
+    if (commentError) {
+      show(commentError.message, { variant: 'error' })
+      return
+    }
+    if (!gallery?.id || !user || submittingComment) return
     if (isBanned) {
       show(t('gallery.bannedCannotComment'), { variant: 'error' })
       return
@@ -615,7 +675,7 @@ const GalleryDetail = () => {
       const data = await apiPost<{ comment: CommentItem }>(
         `/api/galleries/${gallery.id}/comments`,
         {
-          content: newComment,
+          content: comment,
           parentId: replyTo?.id || null,
         }
       )
@@ -628,7 +688,7 @@ const GalleryDetail = () => {
       setReplyTo(null)
     } catch (error) {
       console.error('Error adding comment:', error)
-      show(t('gallery.commentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.commentFailed')), { variant: 'error' })
     } finally {
       setSubmittingComment(false)
     }
@@ -662,6 +722,16 @@ const GalleryDetail = () => {
       })
       reason = promptValue?.trim() || null
       if (promptValue === null) return
+      const reasonError = validateMaxLength(
+        reason,
+        'reason',
+        '删除理由',
+        CONTENT_LIMITS.gallery.reviewNote
+      )
+      if (reasonError) {
+        show(reasonError.message, { variant: 'error' })
+        return
+      }
       if (!reason) {
         show('删除他人评论必须填写删除理由', { variant: 'error' })
         return
@@ -686,7 +756,7 @@ const GalleryDetail = () => {
       show(t('gallery.commentDeleted'))
     } catch (error) {
       console.error('Error deleting gallery comment:', error)
-      show(t('gallery.deleteCommentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.deleteCommentFailed')), { variant: 'error' })
     } finally {
       setDeletingCommentId(null)
     }
@@ -708,7 +778,7 @@ const GalleryDetail = () => {
       setComments((prev) => updateCommentLike(prev, comment.id, data))
     } catch (error) {
       console.error('Error toggling gallery comment like:', error)
-      show(t('gallery.commentLikeFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.commentLikeFailed')), { variant: 'error' })
     } finally {
       setLikingCommentId(null)
     }
@@ -724,26 +794,26 @@ const GalleryDetail = () => {
       show(t('gallery.commentRestored'))
     } catch (error) {
       console.error('Error restoring gallery comment:', error)
-      show(t('gallery.restoreCommentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.restoreCommentFailed')), { variant: 'error' })
     } finally {
       setRestoringCommentId(null)
     }
   }
 
-  if (loading) {
+  if (loading && !gallery) {
     return (
-      <div className="mobile-page-shell antique-detail">
+      <div className="mobile-page-shell antique-detail" role="status" aria-label="加载中">
         <div className="mobile-page-container">
-          <div className="mb-6 h-4 w-24 animate-pulse rounded bg-surface-alt" />
+          <Skeleton className="mb-6 h-4 w-24" />
           <div className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
-            <div className="mb-4 h-10 w-2/3 animate-pulse rounded bg-surface-alt" />
-            <div className="h-5 w-1/2 animate-pulse rounded bg-surface-alt" />
+            <Skeleton className="mb-4 h-10 w-2/3" />
+            <Skeleton className="h-5 w-1/2" />
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {[1, 2, 3, 4, 5, 6].map((item) => (
-              <div
+              <Skeleton
                 key={item}
-                className="aspect-[3/4] animate-pulse rounded border border-[var(--book-ink-line)] bg-surface-alt"
+                className="aspect-[3/4] rounded border border-[var(--book-ink-line)]"
               />
             ))}
           </div>
@@ -756,29 +826,38 @@ const GalleryDetail = () => {
     return (
       <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
-          <Link
-            to="/gallery"
+          <SmartBackLink
+            fallbackTo="/gallery"
+            fallbackLabel={t('gallery.backToList')}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={16} /> {t('gallery.backToList')}
-          </Link>
-          <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
-            {t('gallery.notFound')}
-          </div>
+          />
+          {loadError ? (
+            <LoadErrorState
+              error={loadError}
+              className="mt-8"
+              onRetry={() => void fetchGallery()}
+            />
+          ) : (
+            <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
+              {t('gallery.notFound')}
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="mobile-page-shell antique-detail">
+    <div className="mobile-page-shell antique-detail" aria-busy={loading}>
       <div className="mobile-page-container gallery-detail-page">
-        <Link
-          to="/gallery"
+        <SmartBackLink
+          fallbackTo="/gallery"
+          fallbackLabel={t('gallery.backToList')}
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-        >
-          <ArrowLeft size={16} /> {t('gallery.backToList')}
-        </Link>
+        />
+        {loadError && (
+          <LoadErrorState error={loadError} className="mb-6" onRetry={() => void fetchGallery()} />
+        )}
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">
@@ -800,6 +879,8 @@ const GalleryDetail = () => {
 
             <div className="mobile-action-row mt-1 justify-start sm:justify-end">
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={toggleGalleryLike}
                 disabled={likingGallery}
                 className={clsx(
@@ -814,6 +895,8 @@ const GalleryDetail = () => {
                 {gallery.likesCount || 0}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={toggleGalleryDislike}
                 disabled={dislikingGallery}
                 className={clsx(
@@ -827,6 +910,8 @@ const GalleryDetail = () => {
                 <ThumbsDown size={14} /> {gallery.dislikesCount || 0}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={toggleGalleryFavorite}
                 disabled={favoritingGallery}
                 className={clsx(
@@ -841,6 +926,8 @@ const GalleryDetail = () => {
                 {gallery.favoritesCount || 0}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={handleCopyLink}
                 className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 title={t('gallery.copyInternalLink')}
@@ -848,6 +935,8 @@ const GalleryDetail = () => {
                 <Link2 size={14} /> 复制内链
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={handleCopyLink}
                 className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 title="分享"
@@ -857,6 +946,7 @@ const GalleryDetail = () => {
               {canManage && (
                 <Link
                   to={`/gallery/${galleryPublicId}/edit`}
+                  state={{ editorBackground: location }}
                   data-pressable
                   className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
                 >
@@ -869,9 +959,15 @@ const GalleryDetail = () => {
           {gallery.status === 'rejected' && gallery.reviewNote ? (
             <p className="mt-2 text-sm theme-text-error">{gallery.reviewNote}</p>
           ) : null}
-          <p className="mt-3 max-w-3xl text-[0.95rem] leading-relaxed tracking-[0.03em] text-text-secondary">
-            {gallery.description || t('gallery.noDescription')}
-          </p>
+          {gallery.description ? (
+            <div className="prose mt-3 max-w-3xl font-body leading-relaxed text-text-secondary">
+              <MarkdownRenderer content={gallery.description} />
+            </div>
+          ) : (
+            <p className="mt-3 max-w-3xl text-[0.95rem] leading-relaxed tracking-[0.03em] text-text-secondary">
+              {t('gallery.noDescription')}
+            </p>
+          )}
           {gallery.copyright && <p className="mt-2 text-xs text-text-muted">{gallery.copyright}</p>}
 
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[0.8125rem] text-text-muted">
@@ -892,6 +988,8 @@ const GalleryDetail = () => {
           <SectionHeading>{t('gallery.imageCount', { count: images.length })}</SectionHeading>
           {canSubmitReview && (
             <button
+              type="button"
+              data-press-feedback="ripple"
               onClick={() => void handleSubmitReview()}
               disabled={submittingReview}
               className="rounded border border-[var(--book-ink-line)] px-4 py-2 text-xs text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50"
@@ -911,8 +1009,9 @@ const GalleryDetail = () => {
               >
                 <button
                   onClick={() => handleOpenLightbox(index)}
-                  className="h-full w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                  className="h-full w-full press-feedback-cover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
                   type="button"
+                  data-press-feedback="ripple"
                 >
                   {getThumbnailSrc(image) ? (
                     <SmartImage
@@ -928,7 +1027,7 @@ const GalleryDetail = () => {
                   )}
                 </button>
 
-                <div className="pointer-events-none absolute inset-0 bg-transparent transition-colors duration-300 group-hover:bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)]">
+                <div className="pointer-events-none absolute inset-0">
                   <div className="absolute bottom-3 right-3 rounded bg-[var(--book-panel-bg-strong)] px-2 py-1 text-xs text-brand-gold opacity-100 shadow-[0_6px_18px_rgba(42,37,32,0.08)] transition-opacity duration-300 md:opacity-0 md:group-hover:opacity-100">
                     {t('gallery.viewFullSize')}
                   </div>
@@ -937,6 +1036,16 @@ const GalleryDetail = () => {
             ))}
           </div>
         </section>
+
+        {/* Related links */}
+        {gallery.relatedLinks.length ? (
+          <div className="mb-10">
+            <ContentLinkList
+              title={<SectionHeading>相关链接</SectionHeading>}
+              links={gallery.relatedLinks}
+            />
+          </div>
+        ) : null}
 
         {/* Comments */}
         {isGalleryPublished && (
@@ -966,6 +1075,7 @@ const GalleryDetail = () => {
                     <span>{t('gallery.replyTo', { name: getCommentAuthorName(replyTo) })}</span>
                     <button
                       type="button"
+                      data-press-feedback="ripple"
                       onClick={() => setReplyTo(null)}
                       className="text-brand-gold transition-colors hover:text-text-primary"
                     >
@@ -1002,6 +1112,7 @@ const GalleryDetail = () => {
                       />
                       <button
                         type="submit"
+                        data-press-feedback="ripple"
                         disabled={!newComment.trim() || submittingComment}
                         className="min-h-10 rounded px-5 py-2 text-sm theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
                       >
@@ -1137,12 +1248,12 @@ const GalleryDetail = () => {
 
         {/* Back to list */}
         <div className="mt-10 border-t border-[var(--book-ink-line)] pt-6 text-right">
-          <button
-            onClick={() => navigate('/gallery')}
+          <SmartBackLink
+            fallbackTo="/gallery"
+            fallbackLabel={t('gallery.backToList')}
+            icon={null}
             className="text-xs text-text-muted transition-colors hover:text-brand-gold"
-          >
-            {t('gallery.backToList')}
-          </button>
+          />
         </div>
       </div>
 

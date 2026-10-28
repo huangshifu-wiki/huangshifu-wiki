@@ -6,6 +6,8 @@ import { SearchBox } from '../components/search/SearchBox'
 import { SearchFilters } from '../components/search/SearchFilters'
 import { SearchResults } from '../components/search/SearchResults'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
+import { Seo } from '../components/Seo'
+import { SEARCH_SEO_METADATA } from '../lib/seo'
 
 const Search: React.FC = () => {
   const { preferences, setViewMode } = useUserPreferences()
@@ -19,13 +21,16 @@ const Search: React.FC = () => {
     searchHistory,
     tabItems,
     performSearch,
+    searchCategoryPage,
     handleQueryChange,
     handleImageSearch,
+    toggleDetail,
     toggleTag,
     updateFilters,
     resetFilters,
     setActiveTab,
     setShowFilters,
+    fetchImageSearchPage,
     dismissSuggestions,
     removeSearchHistoryItem,
     clearSearchHistory,
@@ -39,6 +44,7 @@ const Search: React.FC = () => {
 
   return (
     <div className="gufeng-search-page mobile-page-shell">
+      <Seo metadata={SEARCH_SEO_METADATA} />
       <div className="mobile-page-container search-page">
         <header className="mobile-page-header">
           <div className="mobile-page-titlebar">
@@ -59,6 +65,7 @@ const Search: React.FC = () => {
           suggestions={state.suggestions}
           aiSearching={state.aiSearching}
           semanticImageSearch={state.filters.semanticImageSearch}
+          includeDetail={state.includeDetail}
           semanticSearchEnabled={semanticSearchEnabled}
           searchHistory={searchHistory}
           onQueryChange={handleQueryChange}
@@ -69,6 +76,7 @@ const Search: React.FC = () => {
               updateFilters({ semanticImageSearch: checked })
             }
           }}
+          onToggleDetail={toggleDetail}
           onDismissSuggestions={dismissSuggestions}
           onRemoveSearchHistoryItem={removeSearchHistoryItem}
           onClearSearchHistory={clearSearchHistory}
@@ -92,6 +100,16 @@ const Search: React.FC = () => {
           viewMode={viewMode}
           tabItems={tabItems}
           onTabChange={setActiveTab}
+          onCategoryPageChange={searchCategoryPage}
+          onMixedPageChange={fetchImageSearchPage}
+          onRetry={
+            state.query
+              ? () =>
+                  void performSearch(state.query, undefined, undefined, {
+                    preservePagination: true,
+                  })
+              : undefined
+          }
         />
       </div>
     </div>

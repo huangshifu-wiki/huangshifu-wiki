@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, RotateCw } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { apiPut } from '../../lib/apiClient'
+import { apiGet, apiPut } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
@@ -15,6 +16,7 @@ import {
   normalizeReviewFilter,
 } from './reviewQueue'
 import type { AdminReviewQueueMergedItem } from '../../types/api'
+import { LoadErrorState } from '@/src/components/ui'
 
 const getCurrentItemIndex = (items: AdminReviewQueueMergedItem[], currentKey: string | null) => {
   if (!items.length) return -1
@@ -60,12 +62,38 @@ const AdminReviewWorkbench = () => {
   const [items, setItems] = useState<AdminReviewQueueMergedItem[]>([])
   const [currentKey, setCurrentKey] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [actionLoading, setActionLoading] = useState<'approve' | 'reject' | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const loadRequestRef = useRef(0)
 
   const currentIndex = getCurrentItemIndex(items, currentKey)
   const currentItem = currentIndex >= 0 ? items[currentIndex] : null
+  const [ticketPreviewItem, setTicketPreviewItem] = useState<AdminReviewQueueMergedItem | null>(
+    null
+  )
+
+  useEffect(() => {
+    if (currentItem?.reviewType !== 'ticket') {
+      setTicketPreviewItem(null)
+      return
+    }
+    const controller = new AbortController()
+    setTicketPreviewItem(null)
+    void apiGet<{ item: AdminReviewQueueMergedItem }>(
+      `/api/admin/ticket-listings/${currentItem.reviewId}`,
+      undefined,
+      undefined,
+      controller.signal
+    )
+      .then(({ item }) => {
+        if (!controller.signal.aborted) setTicketPreviewItem({ ...currentItem, ...item })
+      })
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [currentItem?.reviewId, currentItem?.reviewType])
+
+  const previewItem = ticketPreviewItem || currentItem
   const isFirst = currentIndex <= 0
   const isLast = currentIndex < 0 || currentIndex >= items.length - 1
 
@@ -73,6 +101,7 @@ const AdminReviewWorkbench = () => {
     const requestId = loadRequestRef.current + 1
     loadRequestRef.current = requestId
     setLoading(true)
+    setLoadError(null)
     try {
       const nextItems = await fetchReviewQueue(filter)
       if (requestId !== loadRequestRef.current) return
@@ -90,7 +119,10 @@ const AdminReviewWorkbench = () => {
       setCurrentKey(nextKey)
     } catch (error) {
       console.error('Fetch review workbench queue failed:', error)
-      show('获取审核队列失败', { variant: 'error' })
+      setLoadError(error)
+      if (requestId === loadRequestRef.current) {
+        show(getErrorMessage(error, '获取审核队列失败'), { variant: 'error' })
+      }
     } finally {
       if (requestId === loadRequestRef.current) {
         setLoading(false)
@@ -99,9 +131,9 @@ const AdminReviewWorkbench = () => {
   }
 
   useEffect(() => {
+    setCurrentKey(null)
     void loadQueue()
   }, [filter])
-
   const scrollReviewPanelToTop = () => {
     const scrollContainer = rootRef.current?.closest('[data-admin-scroll-container]')
     if (scrollContainer instanceof HTMLElement) {
@@ -136,13 +168,28 @@ const AdminReviewWorkbench = () => {
         confirmText: '驳回',
         variant: 'warning',
         multiline: true,
-        maxLength: CONTENT_LIMITS.post.reviewNote,
+        maxLength:
+          currentItem.reviewType === 'ticket'
+            ? CONTENT_LIMITS.ticketListing.reviewNote
+            : CONTENT_LIMITS.post.reviewNote,
       })
       if (input === null) return
 
       note = input.trim()
       if (!note) {
         show('驳回原因不能为空', { variant: 'error' })
+        return
+      }
+      if (
+        note.length >
+        (currentItem.reviewType === 'ticket'
+          ? CONTENT_LIMITS.ticketListing.reviewNote
+          : CONTENT_LIMITS.post.reviewNote)
+      ) {
+        show(
+          `驳回原因不能超过${currentItem.reviewType === 'ticket' ? CONTENT_LIMITS.ticketListing.reviewNote : CONTENT_LIMITS.post.reviewNote}个字符`,
+          { variant: 'error' }
+        )
         return
       }
     }
@@ -171,7 +218,9 @@ const AdminReviewWorkbench = () => {
       })
     } catch (error) {
       console.error('Review action failed:', error)
-      show(action === 'approve' ? '审核通过失败' : '驳回失败', { variant: 'error' })
+      show(getErrorMessage(error, action === 'approve' ? '审核通过失败' : '驳回失败'), {
+        variant: 'error',
+      })
     } finally {
       setActionLoading(null)
     }
@@ -244,10 +293,20 @@ const AdminReviewWorkbench = () => {
         </div>
       </div>
 
-      {loading ? (
+      {loadError && currentItem && (
+        <LoadErrorState
+          className="py-5"
+          error={loadError}
+          description="审核队列可能不是最新内容。"
+          onRetry={() => void loadQueue(currentKey)}
+        />
+      )}
+      {loading && !currentItem ? (
         <div className="h-[520px] bg-surface border border-border rounded animate-pulse" />
+      ) : loadError && !currentItem ? (
+        <LoadErrorState error={loadError} onRetry={() => void loadQueue(currentKey)} />
       ) : currentItem ? (
-        <AdminReviewContentPreview item={currentItem} />
+        <AdminReviewContentPreview item={previewItem || currentItem} />
       ) : (
         <div className="bg-surface border border-border rounded py-20 px-6 text-center">
           <p className="text-lg font-semibold text-text-primary tracking-[0.08em]">

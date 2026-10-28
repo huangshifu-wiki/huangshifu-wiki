@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Routes,
   Route,
@@ -17,8 +17,6 @@ import {
   Share2,
   Plus,
   Clock,
-  User as UserIcon,
-  ArrowLeft,
   Save,
   X,
   Send,
@@ -34,12 +32,20 @@ import {
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import MarkdownEditor from '../components/MarkdownEditor'
+import { SmartBackLink } from '../components/SmartBackLink'
 import { CharacterCount } from '../components/CharacterCount'
 import { apiDelete, apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import { useDialog } from '../components/Dialog'
+import { FormModal } from '../components/Modal/FormModal'
 import { useToast } from '../components/Toast'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
-import { ContentStatus, getStatusClassName, getStatusText } from '../lib/contentUtils'
+import {
+  ContentStatus,
+  getStatusClassName,
+  getStatusText,
+  splitTagsInput,
+} from '../lib/contentUtils'
 import { formatDate } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import { LocationTagInput } from '../components/LocationTagInput'
@@ -47,8 +53,12 @@ import Pagination from '../components/Pagination'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
+import { useContentEditorNavigation } from '../hooks/useContentEditorNavigation'
 import { PageSkeleton } from '../components/PageSkeleton'
-import { RouteGuard } from '../components/RouteGuard'
+import { LoadErrorState, Spinner, TagInput } from '@/src/components/ui'
+import { useTagSuggestions } from '../hooks/useTagSuggestions'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../utils/formDirty'
 import { CommentActionMenu } from '../components/CommentActionMenu'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
 import { useI18n } from '../lib/i18n'
@@ -56,11 +66,22 @@ import { useToggleInteraction } from '../hooks/useToggleInteraction'
 import { submitFormOnModifierEnter } from '../lib/formShortcuts'
 import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
+import { validateMaxLength, validateRequiredText, validateTags } from '../lib/clientValidation'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import MentionTextarea from '../components/MentionTextarea'
 import MentionText from '../components/MentionText'
 import NotFound from './NotFound'
+import { ListPageContentState, ListPageLoadingBoundary } from '../components/ListPageState'
+import { getListLoadState } from '../lib/listLoadState'
 import { ForumFilters } from '../components/Forum/ForumFilters'
 import { PostCard } from '../components/Forum/PostCard'
 import {
@@ -149,13 +170,18 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
 
 const PostList = () => {
   const { t } = useI18n()
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const section = searchParams.get('section') || 'all'
   const sort = searchParams.get('sort') || 'latest'
   const [posts, setPosts] = useState<PostItem[]>([])
   const [sections, setSections] = useState<SectionItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [totalPages, setTotalPages] = useState<number>()
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
+  const [totalPagesState, setTotalPages] = useState<{ scope: string; total: number }>()
+  const scope = JSON.stringify([section])
+  const totalPages = totalPagesState?.scope === scope ? totalPagesState.total : undefined
   const { user, isBanned } = useAuth()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
   const viewMode = getScopedViewMode('forum')
@@ -168,19 +194,29 @@ const PostList = () => {
     enabled: !isIncrementalMode,
   })
   const fetchPostPage = useCallback(
-    async (page: number) => {
-      const data = await apiGet<{ posts: PostItem[]; totalPages: number }>('/api/posts', {
-        section,
-        sort,
-        page,
-        limit: DEFAULT_PAGE_SIZE,
-      })
+    async (page: number, signal?: AbortSignal) => {
+      const data = await apiGet<{
+        posts: PostItem[]
+        total?: number
+        totalPages: number
+        hasMore?: boolean
+      }>(
+        '/api/posts',
+        {
+          section,
+          sort,
+          page,
+          limit: DEFAULT_PAGE_SIZE,
+        },
+        undefined,
+        signal
+      )
 
       return {
         items: data.posts || [],
+        total: data.total ?? Math.max(0, (data.totalPages || 1) * DEFAULT_PAGE_SIZE),
+        hasMore: data.hasMore ?? page < (data.totalPages || 1),
         totalPages: data.totalPages || 1,
-        total: Math.max(0, (data.totalPages || 1) * DEFAULT_PAGE_SIZE),
-        hasMore: page < (data.totalPages || 1),
       }
     },
     [section, sort]
@@ -191,6 +227,7 @@ const PostList = () => {
     resetKey: `${section}:${sort}`,
     fetchPage: fetchPostPage,
     getItemKey: (post) => post.id,
+    preserveItemsOnReset: true,
   })
   const visiblePosts = isIncrementalMode ? incrementalList.items : posts
 
@@ -216,26 +253,46 @@ const PostList = () => {
       }
     }
 
-    fetchSections()
+    void fetchSections()
   }, [])
 
   useEffect(() => {
     if (isIncrementalMode) return
+    let cancelled = false
+    const abortController = new AbortController()
+
     const fetchPosts = async () => {
       try {
         setLoading(true)
-        const data = await fetchPostPage(pagination.page)
+        setLoadError(null)
+        const data = await fetchPostPage(pagination.page, abortController.signal)
+        if (cancelled) return
         setPosts(data.items)
-        setTotalPages(data.totalPages)
+        setTotalPages({ scope, total: data.totalPages })
       } catch (error) {
+        if (cancelled) return
         console.error('Error fetching posts:', error)
+        setLoadError(error)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
-    fetchPosts()
-  }, [fetchPostPage, isIncrementalMode, pagination.page])
+    void fetchPosts()
+
+    return () => {
+      cancelled = true
+      abortController.abort()
+    }
+  }, [fetchPostPage, isIncrementalMode, pagination.page, retryNonce, scope])
+
+  const forumState = getListLoadState({
+    items: visiblePosts,
+    loading,
+    error: loadError,
+    retry: () => setRetryNonce((value) => value + 1),
+    incremental: isIncrementalMode ? incrementalList : null,
+  })
 
   const getListUrl = (nextValues: { section?: string; sort?: string }) => {
     const next = new URLSearchParams(searchParams)
@@ -260,91 +317,105 @@ const PostList = () => {
   }
 
   return (
-    <div className="gufeng-forum-page mobile-page-shell">
-      <div className="mobile-page-container">
-        <header className="mobile-page-header">
-          <div className="mobile-page-titlebar">
-            <div className="min-w-0">
-              <h1 className="mobile-page-title">{t('forum.title')}</h1>
-              <div className="mt-3 flex">
-                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+    <ListPageLoadingBoundary variant="forum" isInitialLoading={forumState.isInitialLoading}>
+      <div className="gufeng-forum-page mobile-page-shell">
+        <div className="mobile-page-container" aria-busy={forumState.isRefreshing || undefined}>
+          <header className="mobile-page-header">
+            <div className="mobile-page-titlebar">
+              <div className="min-w-0">
+                <h1 className="mobile-page-title">{t('forum.title')}</h1>
+                <div className="mt-3 flex">
+                  <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+                </div>
+              </div>
+              <div className="mobile-action-row">
+                {forumState.isRefreshing && <Spinner size="sm" label="论坛刷新中" />}
+                {user && !isBanned && (
+                  <Link
+                    to="/forum/new"
+                    state={{ editorBackground: location }}
+                    data-pressable
+                    className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
+                  >
+                    <Plus size={15} aria-hidden="true" /> {t('forum.newPost')}
+                  </Link>
+                )}
               </div>
             </div>
-            <div className="mobile-action-row">
-              {user && !isBanned && (
-                <Link
-                  to="/forum/new"
-                  data-pressable
-                  className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
-                >
-                  <Plus size={15} aria-hidden="true" /> {t('forum.newPost')}
-                </Link>
-              )}
-            </div>
-          </div>
-        </header>
+          </header>
 
-        <ForumFilters
-          sections={sections}
-          activeSection={section}
-          activeSort={sort}
-          viewMode={viewMode}
-          getListUrl={getListUrl}
-          onViewModeChange={(mode) => void setScopedViewMode('forum', mode)}
-        />
+          <ForumFilters
+            sections={sections}
+            activeSection={section}
+            activeSort={sort}
+            viewMode={viewMode}
+            getListUrl={getListUrl}
+            onViewModeChange={(mode) => void setScopedViewMode('forum', mode)}
+          />
 
-        {(isIncrementalMode ? incrementalList.loadingInitial : loading) ? (
-          <PageSkeleton variant="forum" />
-        ) : visiblePosts.length > 0 ? (
-          <>
-            <div
-              className={clsx(
-                viewMode === 'list'
-                  ? 'shared-ink-list'
-                  : clsx(
-                      'mobile-grid grid items-start',
-                      viewMode === 'large' && 'forum-large-grid',
-                      VIEW_MODE_CONFIG[viewMode].gridCols,
-                      VIEW_MODE_CONFIG[viewMode].gap
-                    )
-              )}
-            >
-              {visiblePosts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  viewMode={viewMode}
-                  sectionName={sections.find((s) => s.id === post.section)?.name || post.section}
+          <ListPageContentState
+            hasItems={forumState.items.length > 0}
+            error={forumState.error}
+            onRetry={forumState.retry}
+            empty={
+              <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+                <MessageSquare size={48} className="mx-auto mb-6 text-border" />
+                <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
+                  {t('forum.emptyPosts')}
+                </p>
+              </div>
+            }
+          >
+            <>
+              <div
+                className={clsx(
+                  viewMode === 'list'
+                    ? 'shared-ink-list'
+                    : clsx(
+                        'mobile-grid grid items-start',
+                        viewMode === 'large' && 'forum-large-grid',
+                        VIEW_MODE_CONFIG[viewMode].gridCols,
+                        VIEW_MODE_CONFIG[viewMode].gap
+                      )
+                )}
+              >
+                {visiblePosts.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    viewMode={viewMode}
+                    sectionName={sections.find((s) => s.id === post.section)?.name || post.section}
+                  />
+                ))}
+              </div>
+              {isIncrementalMode ? (
+                <IncrementalLoadFooter
+                  hasMore={incrementalList.hasMore}
+                  loading={incrementalList.loadingMore}
+                  total={incrementalList.total}
+                  pageSize={pagination.pageSize}
+                  loaded={visiblePosts.length}
+                  onLoadMore={incrementalList.loadMore}
+                  sentinelRef={incrementalList.sentinelRef}
+                  error={
+                    forumState.loadMoreError
+                      ? getErrorMessage(forumState.loadMoreError, '加载失败，请重试')
+                      : undefined
+                  }
+                  onRetry={forumState.retry}
                 />
-              ))}
-            </div>
-            {isIncrementalMode ? (
-              <IncrementalLoadFooter
-                hasMore={incrementalList.hasMore}
-                loading={incrementalList.loadingMore}
-                total={incrementalList.total}
-                loaded={visiblePosts.length}
-                onLoadMore={incrementalList.loadMore}
-                sentinelRef={incrementalList.sentinelRef}
-              />
-            ) : pagination.totalPages > 1 ? (
-              <Pagination
-                page={pagination.page}
-                totalPages={pagination.totalPages}
-                onPageChange={pagination.handlePageChange}
-              />
-            ) : null}
-          </>
-        ) : (
-          <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
-            <MessageSquare size={48} className="mx-auto mb-6 text-border" />
-            <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
-              {t('forum.emptyPosts')}
-            </p>
-          </div>
-        )}
+              ) : pagination.hasMultiplePages ? (
+                <Pagination
+                  page={pagination.page}
+                  totalPages={pagination.totalPages}
+                  onPageChange={pagination.handlePageChange}
+                />
+              ) : null}
+            </>
+          </ListPageContentState>
+        </div>
       </div>
-    </div>
+    </ListPageLoadingBoundary>
   )
 }
 
@@ -421,7 +492,8 @@ const PostDetail = () => {
         setLoading(true)
         const data = await apiGet<{ post: PostItem; comments: CommentItem[] }>(
           `/api/posts/${postId}`,
-          { includeDeleted: isAdmin && showDeletedComments }
+          { includeDeleted: isAdmin && showDeletedComments },
+          { staleTime: 0, swr: false }
         )
         setPost(data.post)
         setComments(data.comments || [])
@@ -433,7 +505,7 @@ const PostDetail = () => {
     }
 
     fetchPost()
-  }, [postId, isAdmin, showDeletedComments])
+  }, [postId, isAdmin, showDeletedComments, user?.uid])
 
   useEffect(() => {
     if (!location.hash.startsWith('#comment-')) {
@@ -459,9 +531,49 @@ const PostDetail = () => {
     }
   }, [comments, location.hash])
 
+  // SEO 元数据：加载中/失败/未公开发布不可索引，公开已发布帖子才 index
+  const postPath = `/forum/${postId}`
+  const postSeoDescription = post
+    ? summarizeSeoText(post.content, `${post.title}，黄诗扶 Wiki 社区讨论。`)
+    : ''
+  const postSeoMetadata: SeoMetadata =
+    post && (!post.status || post.status === 'published')
+      ? {
+          title: `${post.title}｜${SEO_SITE_NAME}`,
+          description: postSeoDescription,
+          canonicalPath: postPath,
+          robots: 'index,follow',
+          ogType: 'article',
+          jsonLd: {
+            '@context': 'https://schema.org',
+            '@type': 'Article',
+            headline: post.title,
+            description: postSeoDescription,
+            mainEntityOfPage: toAbsoluteSeoUrl(`/forum/${post.slug || post.id}`),
+            ...(post.createdAt ? { datePublished: post.createdAt } : {}),
+            ...(post.updatedAt ? { dateModified: post.updatedAt } : {}),
+          },
+        }
+      : loading
+        ? getDetailFallbackSeo({ canonicalPath: postPath, title: SEO_SITE_NAME })
+        : getDetailFallbackSeo({
+            canonicalPath: postPath,
+            title: `帖子不存在｜${SEO_SITE_NAME}`,
+            description: '当前帖子不存在、尚未发布或已被删除。',
+          })
+  useSeo(postSeoMetadata)
+
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!post?.id || !user || !newComment.trim() || submittingComment) return
+    const comment = newComment.trim()
+    const commentError =
+      validateRequiredText(comment, 'comment', '评论') ||
+      validateMaxLength(comment, 'comment', '评论', CONTENT_LIMITS.post.comment)
+    if (commentError) {
+      show(commentError.message, { variant: 'error' })
+      return
+    }
+    if (!post?.id || !user || submittingComment) return
     if (isBanned) {
       show(t('forum.bannedCannotComment'), { variant: 'error' })
       return
@@ -474,7 +586,7 @@ const PostDetail = () => {
     try {
       setSubmittingComment(true)
       const data = await apiPost<{ comment: CommentItem }>(`/api/posts/${post.id}/comments`, {
-        content: newComment,
+        content: comment,
         parentId: replyTo?.id || null,
       })
 
@@ -487,7 +599,7 @@ const PostDetail = () => {
       setReplyTo(null)
     } catch (error) {
       console.error('Error adding comment:', error)
-      show(t('forum.commentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('forum.commentFailed')), { variant: 'error' })
     } finally {
       setSubmittingComment(false)
     }
@@ -521,6 +633,16 @@ const PostDetail = () => {
       })
       reason = promptValue?.trim() || null
       if (promptValue === null) return
+      const reasonError = validateMaxLength(
+        reason,
+        'reason',
+        '删除理由',
+        CONTENT_LIMITS.post.reviewNote
+      )
+      if (reasonError) {
+        show(reasonError.message, { variant: 'error' })
+        return
+      }
       if (!reason) {
         show('删除他人评论必须填写删除理由', { variant: 'error' })
         return
@@ -545,7 +667,7 @@ const PostDetail = () => {
       show(t('forum.commentDeleted'))
     } catch (error) {
       console.error('Error deleting comment:', error)
-      show(t('forum.deleteCommentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('forum.deleteCommentFailed')), { variant: 'error' })
     } finally {
       setDeletingCommentId(null)
     }
@@ -567,7 +689,7 @@ const PostDetail = () => {
       setComments((prev) => updateCommentLike(prev, comment.id, data))
     } catch (error) {
       console.error('Error toggling comment like:', error)
-      show(t('forum.commentLikeFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('forum.commentLikeFailed')), { variant: 'error' })
     } finally {
       setLikingCommentId(null)
     }
@@ -583,7 +705,7 @@ const PostDetail = () => {
       show(t('forum.commentRestored'))
     } catch (error) {
       console.error('Error restoring comment:', error)
-      show(t('forum.restoreCommentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('forum.restoreCommentFailed')), { variant: 'error' })
     } finally {
       setRestoringCommentId(null)
     }
@@ -615,12 +737,11 @@ const PostDetail = () => {
     return (
       <div className="mobile-page-shell antique-detail">
         <div className="mobile-page-container">
-          <Link
-            to="/forum"
+          <SmartBackLink
+            fallbackTo="/forum"
+            fallbackLabel={t('forum.backToList')}
             className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-          >
-            <ArrowLeft size={16} /> {t('forum.backToList')}
-          </Link>
+          />
           <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
             {t('forum.postNotFound')}
           </div>
@@ -750,7 +871,7 @@ const PostDetail = () => {
       show(t('forum.reviewSubmitted'))
     } catch (error) {
       console.error('Error submitting review:', error)
-      show(t('forum.submitReviewFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('forum.submitReviewFailed')), { variant: 'error' })
     } finally {
       setSubmittingReview(false)
     }
@@ -779,12 +900,11 @@ const PostDetail = () => {
   return (
     <div className="mobile-page-shell antique-detail text-[var(--color-text-antique)]">
       <div className="mobile-page-container wiki-detail-page">
-        <Link
-          to="/forum"
+        <SmartBackLink
+          fallbackTo="/forum"
+          fallbackLabel={t('forum.backToList')}
           className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
-        >
-          <ArrowLeft size={16} /> {t('forum.backToList')}
-        </Link>
+        />
 
         <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
           <div className="mobile-page-titlebar items-start">
@@ -814,6 +934,7 @@ const PostDetail = () => {
               {canEditPost && (
                 <Link
                   to={`/forum/${postPublicId}/edit`}
+                  state={{ editorBackground: location }}
                   data-pressable
                   className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
                 >
@@ -1213,11 +1334,12 @@ const PostDetail = () => {
   )
 }
 
-const PostEditor = () => {
+export const PostEditor = () => {
   const { t } = useI18n()
   const { postId } = useParams()
   const isEditing = Boolean(postId)
-  const navigate = useNavigate()
+  const missingPostMessage = t('forum.postNotExistOrNoPermission')
+  const editPermissionMessage = t('forum.noEditPermission')
   const { user, isAdmin, isBanned, loading: authLoading } = useAuth()
   const [searchParams] = useSearchParams()
   const musicDocIdParam = searchParams.get('musicDocId')
@@ -1232,14 +1354,25 @@ const PostEditor = () => {
     locationCode: null as string | null,
   })
   const [savingMode, setSavingMode] = useState<'draft' | 'pending' | null>(null)
-  const [loadingPost, setLoadingPost] = useState(false)
+  const [loadingPost, setLoadingPost] = useState(Boolean(postId))
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
   const [editablePostAuthorUid, setEditablePostAuthorUid] = useState<string | null>(null)
   const [editablePostId, setEditablePostId] = useState<string | null>(null)
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
+  const { closeEditor, navigateAfterSave } = useContentEditorNavigation()
   const dialog = useDialog()
   const { show } = useToast()
+  const tagSuggestions = useTagSuggestions('post')
+
+  // 基线在默认版块/内容或编辑帖回填落定后建立，避免加载期误判为已修改
+  const [baseline, setBaseline] = useState<typeof formData | null>(null)
+  const isDirty = useMemo(
+    () => baseline !== null && hasFormChanges(formData, baseline),
+    [formData, baseline]
+  )
+  const guard = useUnsavedChangesGuard(isDirty)
 
   useEffect(() => {
     const fetchSections = async () => {
@@ -1264,6 +1397,17 @@ const PostEditor = () => {
           locationName: prev.locationName,
           locationCode: prev.locationCode,
         }))
+        setBaseline(
+          (prev) =>
+            prev ?? {
+              title: '',
+              section: defaultSection,
+              content: defaultContent,
+              tags: '',
+              locationName: null,
+              locationCode: null,
+            }
+        )
       } catch (error) {
         console.error('Error fetching sections:', error)
       }
@@ -1272,67 +1416,101 @@ const PostEditor = () => {
     fetchSections()
   }, [musicDocIdParam, musicTitleParam])
 
-  useEffect(() => {
-    const fetchEditingPost = async () => {
-      if (!postId || !isEditing || authLoading) return
-      try {
-        setLoadingPost(true)
-        const data = await apiGet<{ post: PostItem }>(`/api/posts/${postId}`)
-        if (!data.post) {
-          show(t('forum.postNotExistOrNoPermission'), { variant: 'error' })
-          return
-        }
+  const loadEditingPost = useCallback(async () => {
+    if (!postId || authLoading) return
 
-        if (!user || (data.post.authorUid !== user.uid && !isAdmin)) {
-          show(t('forum.noEditPermission'), { variant: 'error' })
-          return
-        }
-
-        setEditablePostAuthorUid(data.post.authorUid)
-        setEditablePostId(data.post.id)
-        setFormData({
-          title: data.post.title,
-          section: data.post.section,
-          content: data.post.content,
-          tags: (data.post.tags || []).join(', '),
-          locationName: data.post.locationDetail || data.post.locationName || null,
-          locationCode: data.post.locationCode || null,
-        })
-      } catch (error) {
-        console.error('Error loading editable post:', error)
-        show(t('forum.loadPostFailed'), { variant: 'error' })
-      } finally {
-        setLoadingPost(false)
+    setLoadingPost(true)
+    setLoadError(null)
+    try {
+      const data = await apiGet<{ post: PostItem }>(`/api/posts/${postId}`)
+      if (!data.post) {
+        throw new Error(missingPostMessage)
       }
-    }
+      if (data.post.authorUid !== user?.uid && !isAdmin) {
+        throw new Error(editPermissionMessage)
+      }
 
-    fetchEditingPost()
-  }, [authLoading, isAdmin, isEditing, navigate, postId, show, user])
+      setEditablePostAuthorUid(data.post.authorUid)
+      setEditablePostId(data.post.id)
+      const nextFormData = {
+        title: data.post.title,
+        section: data.post.section,
+        content: data.post.content,
+        tags: (data.post.tags || []).join(', '),
+        locationName: data.post.locationDetail || data.post.locationName || null,
+        locationCode: data.post.locationCode || null,
+      }
+      setFormData(nextFormData)
+      setBaseline(nextFormData)
+    } catch (error) {
+      console.error('Error loading editable post:', error)
+      setLoadError(error)
+    } finally {
+      setLoadingPost(false)
+    }
+  }, [authLoading, editPermissionMessage, isAdmin, missingPostMessage, postId, user?.uid])
+
+  useEffect(() => {
+    if (isEditing) void loadEditingPost()
+  }, [isEditing, loadEditingPost])
 
   useEffect(() => {
     setDeleteReason('')
   }, [postId, editablePostAuthorUid])
 
   const handleSubmit = async (status: 'draft' | 'pending') => {
-    if (!user) return
+    if (
+      !user ||
+      loadingPost ||
+      loadError ||
+      baseline === null ||
+      (isEditing && editablePostId === null)
+    ) {
+      return
+    }
     if (isBanned) {
       show(t('forum.bannedCannotPost'), { variant: 'error' })
       return
     }
+    const title = formData.title.trim()
+    const section = formData.section.trim()
+    const content = formData.content.trim()
+    const tags = splitTagsInput(formData.tags)
+    const validationError =
+      validateRequiredText(title, 'title', '标题') ||
+      validateRequiredText(section, 'section', '版块') ||
+      validateRequiredText(content, 'content', '内容') ||
+      validateMaxLength(section, 'section', '版块', CONTENT_LIMITS.post.section) ||
+      validateMaxLength(content, 'content', '内容', CONTENT_LIMITS.post.content) ||
+      validateTags(tags, 'tags', '标签', CONTENT_LIMITS.post.tags, CONTENT_LIMITS.post.tag) ||
+      validateMaxLength(
+        formData.locationCode,
+        'locationCode',
+        '地点编码',
+        CONTENT_LIMITS.post.locationCode
+      ) ||
+      validateMaxLength(
+        formData.locationName,
+        'locationDetail',
+        '地点详情',
+        CONTENT_LIMITS.post.locationDetail
+      )
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
+
     setSavingMode(status)
     let redirectTarget: string | null = null
 
     try {
       const payload: Record<string, unknown> = {
-        title: formData.title,
-        section: formData.section,
-        content: formData.content,
-        tags: formData.tags
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean),
-        locationCode: formData.locationCode,
-        locationDetail: formData.locationName,
+        title,
+        section,
+        content,
+        tags,
+        locationCode: formData.locationCode?.trim() || null,
+        locationDetail: formData.locationName?.trim() || null,
         status,
       }
 
@@ -1342,8 +1520,11 @@ const PostEditor = () => {
 
       const data =
         isEditing && editablePostId
-          ? await apiPut<{ post: PostItem }>(`/api/posts/${editablePostId}`, payload)
-          : await apiPost<{ post: PostItem }>('/api/posts', payload)
+          ? await apiPut<{ post: PostItem & { slug: string } }>(
+              `/api/posts/${editablePostId}`,
+              payload
+            )
+          : await apiPost<{ post: PostItem & { slug: string } }>('/api/posts', payload)
 
       const savedPost = data.post
 
@@ -1355,16 +1536,21 @@ const PostEditor = () => {
         show(t('forum.draftSaved'))
       }
 
-      if (isEditing || savedPost.status === 'pending' || savedPost.status === 'published') {
-        invalidateApiCacheByPrefix('/api/posts')
-        redirectTarget = `/forum/${savedPost.slug || savedPost.id}`
+      invalidateApiCacheByPrefix('/api/posts')
+      if (!isEditing && savedPost.status === 'draft') {
+        redirectTarget = `/forum/${savedPost.slug}/edit`
+      } else if (isEditing || savedPost.status === 'pending' || savedPost.status === 'published') {
+        redirectTarget = `/forum/${savedPost.slug}`
       }
     } catch (error) {
       console.error('Error saving post:', error)
       show(
-        status === 'draft'
-          ? t('forum.saveDraftFailed')
-          : t(isAdmin ? 'forum.publishFailed' : 'forum.submitReviewFailed'),
+        getErrorMessage(
+          error,
+          status === 'draft'
+            ? t('forum.saveDraftFailed')
+            : t(isAdmin ? 'forum.publishFailed' : 'forum.submitReviewFailed')
+        ),
         {
           variant: 'error',
         }
@@ -1374,16 +1560,28 @@ const PostEditor = () => {
     }
 
     if (redirectTarget) {
-      navigate(redirectTarget)
+      guard.markClean()
+      navigateAfterSave(redirectTarget)
     }
   }
-
   const handleDelete = async () => {
     if (!postId || !isEditing || !editablePostAuthorUid || !editablePostId || isDeleting) return
     if (!user || (editablePostAuthorUid !== user.uid && !isAdmin)) return
 
     const isSelfDelete = editablePostAuthorUid === user.uid
     const reason = isSelfDelete ? null : deleteReason.trim()
+    if (!isSelfDelete) {
+      const reasonError = validateMaxLength(
+        reason,
+        'reason',
+        '删除理由',
+        CONTENT_LIMITS.post.reviewNote
+      )
+      if (reasonError) {
+        show(reasonError.message, { variant: 'error' })
+        return
+      }
+    }
     if (!isSelfDelete && !reason) {
       show('删除他人帖子必须填写删除理由', { variant: 'error' })
       return
@@ -1404,10 +1602,10 @@ const PostEditor = () => {
       await apiDelete(`/api/posts/${editablePostId}`, reason ? { reason } : {})
       invalidateApiCacheByPrefix('/api/posts')
       show(t('forum.postDeleted'), { variant: 'success' })
-      navigate('/forum')
+      guard.markClean()
+      navigateAfterSave('/forum')
     } catch (error) {
-      console.error('Error deleting post:', error)
-      show(error instanceof Error ? error.message : t('forum.deletePostFailed'), {
+      show(getErrorMessage(error, t('forum.deletePostFailed')), {
         variant: 'error',
       })
     } finally {
@@ -1423,211 +1621,222 @@ const PostEditor = () => {
     isEditing && editablePostAuthorUid && user && (editablePostAuthorUid === user.uid || isAdmin)
   )
 
-  if (loadingPost) {
-    return (
-      <BookEditorShell>
-        <div className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
-          <div className="mb-4 h-10 w-2/3 animate-pulse rounded bg-[var(--book-panel-bg)]" />
-          <div className="h-5 w-1/2 animate-pulse rounded bg-[var(--book-panel-bg)]" />
-        </div>
-        <PageSkeleton variant="forum" />
-      </BookEditorShell>
-    )
-  }
-
   return (
-    <BookEditorShell>
-      <BookEditorHeader
-        title={isEditing ? t('forum.editPost') : t('forum.createPost')}
-        description={
-          isEditing
-            ? '调整帖子内容、板块和地点信息，保存后回到帖子详情。'
-            : '写下你的讨论内容，可先保存草稿，也可以直接提交审核。'
-        }
-        onClose={() => navigate(-1)}
-        closeLabel={isEditing ? t('forum.editPost') : t('forum.createPost')}
-      />
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          handleSubmit('pending')
-        }}
-        className="space-y-7"
-      >
-        <BookEditorSection title="帖子信息" className="border-t-0 pt-0">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <BookFormField
-              label={t('forum.titleLabel')}
-              required
-              counter={
-                <CharacterCount current={formData.title.length} max={CONTENT_LIMITS.post.title} />
-              }
-            >
-              <input
-                type="text"
-                required
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                maxLength={CONTENT_LIMITS.post.title}
-                placeholder={t('forum.titlePlaceholder')}
-                className={bookInputClass}
-              />
-            </BookFormField>
-
-            <BookFormField label={t('forum.sectionLabel')} required>
-              <select
-                value={formData.section}
-                onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-                className={`${bookInputClass} appearance-none`}
-              >
-                {sections.map((sec) => (
-                  <option key={sec.id} value={sec.id}>
-                    {sec.name}
-                  </option>
-                ))}
-              </select>
-            </BookFormField>
-          </div>
-        </BookEditorSection>
-
-        <BookEditorSection title="附加信息">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <BookFormField
-              label={t('forum.tagsLabel')}
-              counter={
-                <CharacterCount
-                  current={formData.tags.length}
-                  max={CONTENT_LIMITS.post.tag * CONTENT_LIMITS.post.tags}
-                />
-              }
-            >
-              <input
-                type="text"
-                value={formData.tags}
-                onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                maxLength={CONTENT_LIMITS.post.tag * CONTENT_LIMITS.post.tags}
-                placeholder={t('forum.tagsPlaceholder')}
-                className={bookInputClass}
-              />
-            </BookFormField>
-
-            <BookFormField label={t('forum.locationLabel')}>
-              <LocationTagInput
-                value={formData.locationName}
-                locationCode={formData.locationCode}
-                onChange={(name, code) => {
-                  setFormData({
-                    ...formData,
-                    locationName: name,
-                    locationCode: code,
-                  })
-                }}
-                onClear={() => {
-                  setFormData({
-                    ...formData,
-                    locationName: null,
-                    locationCode: null,
-                  })
-                }}
-                variant="book"
-              />
-            </BookFormField>
-          </div>
-        </BookEditorSection>
-
-        <BookEditorSection title="正文">
-          <BookFormField
-            label={t('forum.contentLabel')}
-            required
-            counter={
-              <CharacterCount current={formData.content.length} max={CONTENT_LIMITS.post.content} />
-            }
+    <FormModal
+      open
+      onClose={() => {
+        if (savingMode || isDeleting) return
+        closeEditor()
+      }}
+      title={isEditing ? t('forum.editPost') : t('forum.createPost')}
+      subtitle={
+        isEditing
+          ? '调整帖子内容、板块和地点信息，保存后回到帖子详情。'
+          : '写下你的讨论内容，可先保存草稿，也可以直接提交审核。'
+      }
+      loading={Boolean(savingMode) || isDeleting}
+      maxWidth="max-w-6xl"
+    >
+      {loadingPost ? (
+        <div role="status" className="py-12 text-center text-text-muted">
+          正在加载帖子...
+        </div>
+      ) : loadError ? (
+        <LoadErrorState error={loadError} onRetry={() => void loadEditingPost()} />
+      ) : (
+        <BookEditorShell embedded>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleSubmit('pending')
+            }}
+            className="space-y-7"
           >
-            <MarkdownEditor
-              value={formData.content}
-              onChange={(content) =>
-                setFormData((prev) => (prev.content === content ? prev : { ...prev, content }))
-              }
-              height="400px"
-              placeholder={t('forum.contentPlaceholder')}
-              maxLength={CONTENT_LIMITS.post.content}
-              variant="book"
-            />
-          </BookFormField>
-        </BookEditorSection>
+            <BookEditorSection title="帖子信息" className="border-t-0 pt-0">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <BookFormField
+                  label={t('forum.titleLabel')}
+                  required
+                  counter={
+                    <CharacterCount
+                      current={formData.title.length}
+                      max={CONTENT_LIMITS.post.title}
+                    />
+                  }
+                >
+                  <input
+                    type="text"
+                    required
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    maxLength={CONTENT_LIMITS.post.title}
+                    placeholder={t('forum.titlePlaceholder')}
+                    className={bookInputClass}
+                  />
+                </BookFormField>
 
-        <BookEditorActions
-          leading={
-            canManageEditablePost ? (
+                <BookFormField label={t('forum.sectionLabel')} required>
+                  <select
+                    value={formData.section}
+                    onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                    className={`${bookInputClass} appearance-none`}
+                  >
+                    {sections.map((sec) => (
+                      <option key={sec.id} value={sec.id}>
+                        {sec.name}
+                      </option>
+                    ))}
+                  </select>
+                </BookFormField>
+              </div>
+            </BookEditorSection>
+
+            <BookEditorSection title="附加信息">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <BookFormField
+                  label={t('forum.tagsLabel')}
+                  htmlFor="forum-tags"
+                  counter={
+                    <CharacterCount
+                      current={formData.tags.length}
+                      max={CONTENT_LIMITS.post.tag * CONTENT_LIMITS.post.tags}
+                    />
+                  }
+                >
+                  <TagInput
+                    id="forum-tags"
+                    value={splitTagsInput(formData.tags)}
+                    onChange={(tags) => setFormData({ ...formData, tags: tags.join(', ') })}
+                    suggestions={tagSuggestions}
+                    placeholder="输入标签后按回车添加"
+                  />
+                </BookFormField>
+
+                <BookFormField label={t('forum.locationLabel')}>
+                  <LocationTagInput
+                    value={formData.locationName}
+                    locationCode={formData.locationCode}
+                    onChange={(name, code) => {
+                      setFormData({
+                        ...formData,
+                        locationName: name,
+                        locationCode: code,
+                      })
+                    }}
+                    onClear={() => {
+                      setFormData({
+                        ...formData,
+                        locationName: null,
+                        locationCode: null,
+                      })
+                    }}
+                    variant="book"
+                  />
+                </BookFormField>
+              </div>
+            </BookEditorSection>
+
+            <BookEditorSection title="正文">
+              <BookFormField
+                label={t('forum.contentLabel')}
+                required
+                counter={
+                  <CharacterCount
+                    current={formData.content.length}
+                    max={CONTENT_LIMITS.post.content}
+                  />
+                }
+              >
+                <MarkdownEditor
+                  value={formData.content}
+                  onChange={(content) =>
+                    setFormData((prev) => (prev.content === content ? prev : { ...prev, content }))
+                  }
+                  height="400px"
+                  placeholder={t('forum.contentPlaceholder')}
+                  maxLength={CONTENT_LIMITS.post.content}
+                  variant="book"
+                />
+              </BookFormField>
+            </BookEditorSection>
+
+            <BookEditorActions
+              leading={
+                canManageEditablePost ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedOptions((value) => !value)}
+                    aria-expanded={showAdvancedOptions}
+                    aria-controls="post-advanced-options"
+                    className="mr-auto flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
+                  >
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform ${showAdvancedOptions ? 'rotate-180' : ''}`}
+                    />{' '}
+                    {t('forum.advancedOptions')}
+                  </button>
+                ) : null
+              }
+            >
               <button
                 type="button"
-                onClick={() => setShowAdvancedOptions((value) => !value)}
-                aria-expanded={showAdvancedOptions}
-                aria-controls="post-advanced-options"
-                className="mr-auto flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
+                onClick={() => handleSubmit('draft')}
+                disabled={Boolean(savingMode)}
+                className={bookSecondaryButtonClass}
               >
-                <ChevronDown
-                  size={16}
-                  className={`transition-transform ${showAdvancedOptions ? 'rotate-180' : ''}`}
-                />{' '}
-                {t('forum.advancedOptions')}
+                <Save size={16} />{' '}
+                {savingMode === 'draft' ? t('forum.saving') : t('forum.saveDraft')}
               </button>
-            ) : null
-          }
-        >
-          <button
-            type="button"
-            onClick={() => handleSubmit('draft')}
-            disabled={Boolean(savingMode)}
-            className={bookSecondaryButtonClass}
-          >
-            <Save size={16} /> {savingMode === 'draft' ? t('forum.saving') : t('forum.saveDraft')}
-          </button>
-          <button
-            type="submit"
-            disabled={Boolean(savingMode)}
-            className="inline-flex items-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Send size={16} /> {submitButtonText}
-          </button>
-        </BookEditorActions>
-      </form>
+              <button
+                type="submit"
+                disabled={Boolean(savingMode)}
+                className="inline-flex items-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Send size={16} /> {submitButtonText}
+              </button>
+            </BookEditorActions>
+          </form>
 
-      {canManageEditablePost && showAdvancedOptions && (
-        <BookDangerZone
-          id="post-advanced-options"
-          title={t('forum.deleteZoneTitle')}
-          description={t('forum.deleteZoneDescription')}
-        >
-          {editablePostAuthorUid !== user?.uid && (
-            <label
-              htmlFor="post-delete-reason"
-              className="mt-4 block text-sm font-medium text-text-secondary"
+          {canManageEditablePost && showAdvancedOptions && (
+            <BookDangerZone
+              id="post-advanced-options"
+              title={t('forum.deleteZoneTitle')}
+              description={t('forum.deleteZoneDescription')}
             >
-              {t('forum.deleteReasonLabel')}
-              <textarea
-                id="post-delete-reason"
-                value={deleteReason}
-                onChange={(event) => setDeleteReason(event.target.value)}
-                maxLength={CONTENT_LIMITS.post.reviewNote}
-                rows={3}
-                className={`${bookCompactInputClass} mt-2 focus:border-danger`}
-              />
-            </label>
+              {editablePostAuthorUid !== user?.uid && (
+                <label
+                  htmlFor="post-delete-reason"
+                  className="mt-4 block text-sm font-medium text-text-secondary"
+                >
+                  {t('forum.deleteReasonLabel')}
+                  <span className="ml-1 theme-text-error" aria-hidden="true">
+                    *
+                  </span>
+                  <textarea
+                    id="post-delete-reason"
+                    value={deleteReason}
+                    onChange={(event) => setDeleteReason(event.target.value)}
+                    maxLength={CONTENT_LIMITS.post.reviewNote}
+                    rows={3}
+                    className={`${bookCompactInputClass} mt-2 focus:border-danger`}
+                  />
+                </label>
+              )}
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 size={16} />
+                {isDeleting ? t('forum.deletingPost') : t('forum.deletePost')}
+              </button>
+            </BookDangerZone>
           )}
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Trash2 size={16} />
-            {isDeleting ? t('forum.deletingPost') : t('forum.deletePost')}
-          </button>
-        </BookDangerZone>
+        </BookEditorShell>
       )}
-    </BookEditorShell>
+    </FormModal>
   )
 }
 
@@ -1635,28 +1844,6 @@ const Forum = () => {
   return (
     <Routes>
       <Route path="/" element={<PostList />} />
-      <Route
-        path="/new"
-        element={
-          <RouteGuard
-            title="发帖前需要先登录"
-            description="登录后可以发布帖子、保存草稿，并在审核通过后参与社区讨论。"
-          >
-            <PostEditor />
-          </RouteGuard>
-        }
-      />
-      <Route
-        path="/:postId/edit"
-        element={
-          <RouteGuard
-            title="编辑帖子前需要先登录"
-            description="登录后才可以继续编辑你创建的帖子，未登录状态下不会开放编辑入口。"
-          >
-            <PostEditor />
-          </RouteGuard>
-        }
-      />
       <Route path="/:postId" element={<PostDetail />} />
       <Route path="*" element={<NotFound homePath="/forum" homeLabel="返回论坛" />} />
     </Routes>

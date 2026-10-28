@@ -1,5 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
-import { Play, Pause, SkipBack, SkipForward, Volume2, X } from '@/src/components/icons'
+import { Music, Pause, Play, SkipBack, SkipForward, Volume2, X } from '@/src/components/icons'
+import { SmartImage } from './SmartImage'
+import { CoverPlaceholder } from './CoverPlaceholder'
 import { useMusic } from '../context/MusicContext'
 import { formatTime } from '../lib/formatUtils'
 import { formatMusicCredits } from '../lib/musicCredits'
@@ -42,6 +44,7 @@ export const GlobalMusicPlayer = () => {
     useState<ResolvedPlayUrlState>(EMPTY_RESOLVED_PLAY_URL)
   const [resolvingPlayUrl, setResolvingPlayUrl] = useState(false)
   const [playUrlError, setPlayUrlError] = useState('')
+  const [blockedSongDocId, setBlockedSongDocId] = useState('')
   const [volumeSliderExpanded, setVolumeSliderExpanded] = useState(false)
   const [audioStats, setAudioStats] = useState<AudioStats>({
     bufferHealth: 0,
@@ -56,8 +59,12 @@ export const GlobalMusicPlayer = () => {
   const currentSongDocId = currentSong?.docId || ''
   const currentResolvedPlayUrl =
     currentSongDocId && resolvedPlayUrl.docId === currentSongDocId ? resolvedPlayUrl.url : ''
-  const activeAudioUrl =
-    currentResolvedPlayUrl || currentSong?.playUrl || currentSong?.audioUrl || ''
+  const playbackBlocked =
+    currentSong?.playableOverride === 'disabled' ||
+    Boolean(currentSongDocId && currentSongDocId === blockedSongDocId)
+  const activeAudioUrl = playbackBlocked
+    ? ''
+    : currentResolvedPlayUrl || currentSong?.playUrl || currentSong?.audioUrl || ''
   const waitingForResolvedPlayUrl =
     Boolean(currentSongDocId) &&
     !activeAudioUrl &&
@@ -79,6 +86,7 @@ export const GlobalMusicPlayer = () => {
       if (!currentSong) {
         setResolvedPlayUrl(EMPTY_RESOLVED_PLAY_URL)
         setResolvingPlayUrl(false)
+        setBlockedSongDocId('')
         setPlayUrlError('')
         return
       }
@@ -101,15 +109,19 @@ export const GlobalMusicPlayer = () => {
         const data = await apiGet<MusicPlayUrlResponse>(
           `/api/music/${encodeURIComponent(currentSong.docId)}/play-url`
         )
+        if (cancelled) return
+        setBlockedSongDocId(data.mode === 'disabled' ? currentSong.docId : '')
         const nextUrl =
           data.playable !== false && typeof data.playUrl === 'string' && data.playUrl.trim()
             ? data.playUrl.trim()
-            : currentSong.playUrl || fallback
+            : data.mode === 'disabled'
+              ? ''
+              : currentSong.playUrl || fallback
         if (cancelled) return
         setResolvedPlayUrl({ docId: currentSong.docId, url: nextUrl })
         if (!nextUrl) {
           setIsPlaying(false)
-          setPlayUrlError('暂无可播放音源')
+          setPlayUrlError(data.mode === 'disabled' ? '该歌曲暂不可播放' : '暂无可播放音源')
         }
       } catch (error) {
         if (cancelled) return
@@ -163,7 +175,7 @@ export const GlobalMusicPlayer = () => {
       }
       audio.pause()
       setIsPlaying(false)
-      setPlayUrlError('暂无可播放音源')
+      setPlayUrlError(playbackBlocked ? '该歌曲暂不可播放' : '暂无可播放音源')
       return
     }
 
@@ -335,11 +347,18 @@ export const GlobalMusicPlayer = () => {
 
       <div className="mx-auto flex max-w-[1100px] items-center gap-2 px-3 py-[8px] sm:gap-4 sm:px-6 sm:py-[10px] md:px-[24px]">
         {/* Cover */}
-        <img
+        <SmartImage
           src={currentSong.coverThumbnail || currentSong.cover}
-          alt={currentSong?.title + ' 封面' || ''}
-          className="h-10 w-10 flex-shrink-0 rounded object-cover bg-surface-alt shadow-[0_6px_18px_rgba(72,53,25,0.12)] sm:h-11 sm:w-11"
-          referrerPolicy="no-referrer"
+          alt={`${currentSong.title} 封面`}
+          className="h-10 w-10 flex-shrink-0 rounded shadow-[0_6px_18px_rgba(72,53,25,0.12)] sm:h-11 sm:w-11"
+          lazy={false}
+          fallback={
+            <CoverPlaceholder
+              icon={<Music size={16} />}
+              label="无封面"
+              labelClassName="text-[0.65rem] leading-none"
+            />
+          }
         />
 
         {/* Info */}
@@ -404,7 +423,7 @@ export const GlobalMusicPlayer = () => {
           {volumePresence.mounted && (
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2">
               <div
-                className="floating-popover-up px-3 py-2 bg-[var(--book-panel-bg-strong)] rounded border border-[var(--book-ink-line)] flex items-center gap-2 shadow-[var(--book-panel-shadow)]"
+                className="floating-popover-up px-3 py-2 bg-[var(--ui-floating-bg)] rounded border border-[var(--book-ink-line)] flex items-center gap-2 shadow-[var(--book-panel-shadow)]"
                 data-state={volumePresence.state}
                 aria-hidden={!volumeSliderExpanded}
               >

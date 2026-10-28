@@ -6,27 +6,29 @@ import { clsx } from 'clsx'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { formatDate } from '../../lib/dateUtils'
+import { validateMaxLength, validateRequiredText } from '../../lib/clientValidation'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { submitFormOnModifierEnter } from '../../lib/formShortcuts'
 import type { WikiPullRequestItem, WikiPrDiffResponse } from './types'
 import { getPrStatusText } from './types'
-import { Button, Textarea } from '@/src/components/ui'
+import { Button, LoadErrorState, Skeleton, Spinner, Textarea } from '@/src/components/ui'
+import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiPullRequestDetail = () => {
   const { slug, prId } = useParams()
   const { user, isAdmin } = useAuth()
 
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [saving, setSaving] = useState(false)
   const [pullRequest, setPullRequest] = useState<WikiPullRequestItem | null>(null)
   const [diff, setDiff] = useState<WikiPrDiffResponse['diff'] | null>(null)
-  const [comment, setComment] = useState('')
-  const dialog = useDialog()
-  const { show } = useToast()
-
   const fetchDetail = async () => {
     if (!prId) return
     setLoading(true)
+    setLoadError(null)
     try {
       const [detailData, diffData] = await Promise.all([
         apiGet<{ pullRequest: WikiPullRequestItem }>(`/api/wiki/pull-requests/${prId}`),
@@ -36,29 +38,39 @@ const WikiPullRequestDetail = () => {
       setDiff(diffData.diff)
     } catch (error) {
       console.error('Fetch wiki PR detail error:', error)
-      setPullRequest(null)
-      setDiff(null)
+      setLoadError(error)
     } finally {
       setLoading(false)
     }
   }
+  const [comment, setComment] = useState('')
+  const dialog = useDialog()
+  const { show } = useToast()
 
   useEffect(() => {
     fetchDetail()
   }, [prId])
 
   const handleComment = async () => {
-    if (!prId || !comment.trim() || saving) return
+    const commentText = comment.trim()
+    const validationError =
+      validateRequiredText(commentText, 'comment', '评论') ||
+      validateMaxLength(commentText, 'comment', '评论', CONTENT_LIMITS.wiki.prComment)
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
+    if (!prId || saving) return
     try {
       setSaving(true)
       await apiPost(`/api/wiki/pull-requests/${prId}/comments`, {
-        content: comment.trim(),
+        content: commentText,
       })
       setComment('')
       await fetchDetail()
     } catch (error) {
       console.error('Create wiki PR comment error:', error)
-      show('评论失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '评论失败，请稍后重试'), { variant: 'error' })
     } finally {
       setSaving(false)
     }
@@ -75,8 +87,8 @@ const WikiPullRequestDetail = () => {
       })
       if (!confirmed) return
     }
-
     let note = ''
+
     if (action === 'reject') {
       note =
         (await dialog.prompt({
@@ -87,6 +99,11 @@ const WikiPullRequestDetail = () => {
           variant: 'warning',
           multiline: true,
         })) || ''
+      const noteError = validateMaxLength(note, 'note', '驳回说明', CONTENT_LIMITS.wiki.reviewNote)
+      if (noteError) {
+        show(noteError.message, { variant: 'error' })
+        return
+      }
     }
 
     try {
@@ -95,9 +112,13 @@ const WikiPullRequestDetail = () => {
       await fetchDetail()
     } catch (error) {
       console.error(`${action} wiki PR error:`, error)
-      show(action === 'merge' ? '合并失败，请稍后重试' : '驳回失败，请稍后重试', {
-        variant: 'error',
-      })
+      show(
+        getErrorMessage(
+          error,
+          action === 'merge' ? '合并失败，请稍后重试' : '驳回失败，请稍后重试'
+        ),
+        { variant: 'error' }
+      )
     } finally {
       setSaving(false)
     }
@@ -113,11 +134,17 @@ const WikiPullRequestDetail = () => {
     )
   }
 
-  if (loading) {
+  if (loading && !pullRequest) {
     return (
-      <div className="mobile-page-shell antique-page">
-        <div className="mobile-page-container text-center text-[var(--color-text-antique-muted)] italic">
-          加载 PR 详情中...
+      <div className="mobile-page-shell antique-page" role="status" aria-label="加载中">
+        <div className="mobile-page-container space-y-5">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-10 w-2/3" />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Skeleton className="h-80 w-full" />
+            <Skeleton className="h-80 w-full" />
+          </div>
+          <Skeleton className="h-48 w-full" />
         </div>
       </div>
     )
@@ -126,23 +153,29 @@ const WikiPullRequestDetail = () => {
   if (!pullRequest || (slug && pullRequest.pageSlug !== slug)) {
     return (
       <div className="mobile-page-shell antique-page">
-        <div className="mobile-page-container text-center text-[var(--color-text-antique-muted)] italic">
-          PR 不存在或无权限查看
+        <div className="mobile-page-container">
+          {loadError ? (
+            <LoadErrorState error={loadError} onRetry={() => void fetchDetail()} />
+          ) : (
+            <p className="text-center italic text-[var(--color-text-antique-muted)]">
+              PR 不存在或无权限查看
+            </p>
+          )}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="mobile-page-shell">
+    <div className="mobile-page-shell" aria-busy={loading}>
       <div className="mobile-page-container space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link
-            to={`/wiki/${pullRequest.pageSlug}/prs`}
+          <SmartBackLink
+            fallbackTo={`/wiki/${pullRequest.pageSlug}/prs`}
+            fallbackLabel="返回 PR 列表"
+            icon={<ArrowLeft size={18} />}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={18} /> 返回 PR 列表
-          </Link>
+          />
           <Link
             to={`/wiki/${pullRequest.pageSlug}`}
             className="text-xs text-brand-gold hover:underline"
@@ -150,6 +183,12 @@ const WikiPullRequestDetail = () => {
             查看页面：{pullRequest.page?.title || pullRequest.pageSlug}
           </Link>
         </div>
+        {loadError && <LoadErrorState error={loadError} onRetry={() => void fetchDetail()} />}
+        {loading && (
+          <div className="flex justify-end">
+            <Spinner size="sm" label="PR 详情刷新中" />
+          </div>
+        )}
 
         <div className="bg-surface rounded border border-border p-6 sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-3 mb-4">

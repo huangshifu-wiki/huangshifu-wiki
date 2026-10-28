@@ -49,6 +49,8 @@ export const CONTENT_LIMITS = {
     reviewNote: 1000,
     imageName: 255,
     imageUrl: 2048,
+    relatedLinkLabel: 80,
+    relatedLinks: 20,
   },
   event: {
     title: 200,
@@ -68,6 +70,16 @@ export const CONTENT_LIMITS = {
     externalLinks: 20,
     imageName: 255,
   },
+  ticketListing: {
+    customEventName: 200,
+    ticketTier: 100,
+    seat: 200,
+    quantity: 10000,
+    description: 500 * 1024,
+    contact: 100 * 1024,
+    reviewNote: 1000,
+  },
+
   announcement: {
     content: 5000,
     link: 2048,
@@ -82,6 +94,8 @@ export const CONTENT_LIMITS = {
     artist: 200,
     album: 200,
     description: 5000,
+    tag: 50,
+    tags: 30,
     audioUrl: 2048,
     lyric: 500 * 1024,
     platformId: 100,

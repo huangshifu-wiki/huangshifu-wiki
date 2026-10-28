@@ -8,18 +8,23 @@
  * 4. 测试后清理数据库数据
  */
 
-import { beforeAll, afterAll } from 'vitest'
+import { beforeAll, afterAll, beforeEach } from 'vitest'
 import dotenv from 'dotenv'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, type User } from '@prisma/client'
+import type { SignOptions } from 'jsonwebtoken'
 import { getPasswordSaltRounds } from '../../src/server/utils/password'
 import { allocateUserPublicId } from '../../src/server/utils/userPublicId'
+import { setLogLevel } from '../../src/server/utils/logger'
+
+beforeEach(() => {
+  setLogLevel('error')
+})
 
 // 加载测试环境变量
-dotenv.config({ path: '.env.test' })
+dotenv.config({ path: '.env.test', quiet: true })
 
 const verboseIntegrationLogging = process.env.DEBUG_INTEGRATION === '1'
 const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds()
-
 if (!verboseIntegrationLogging) {
   const originalConsoleLog = console.log.bind(console)
   const originalConsoleWarn = console.warn.bind(console)
@@ -32,6 +37,8 @@ if (!verboseIntegrationLogging) {
     '[CloudSync]',
     '[API]',
     '[SensitiveWord]',
+    '[Admin]',
+    '[Admin/RuntimeConfig]',
     '  - ',
   ]
 
@@ -43,23 +50,17 @@ if (!verboseIntegrationLogging) {
   }
 
   console.log = (...args: Parameters<typeof console.log>) => {
-    if (shouldSuppress(args)) {
-      return
-    }
+    if (shouldSuppress(args)) return
     originalConsoleLog(...args)
   }
 
   console.warn = (...args: Parameters<typeof console.warn>) => {
-    if (shouldSuppress(args)) {
-      return
-    }
+    if (shouldSuppress(args)) return
     originalConsoleWarn(...args)
   }
 
   console.error = (...args: Parameters<typeof console.error>) => {
-    if (shouldSuppress(args)) {
-      return
-    }
+    if (shouldSuppress(args)) return
     originalConsoleError(...args)
   }
 }
@@ -93,6 +94,15 @@ beforeAll(async () => {
     // 测试数据库连接
     await prisma.$connect()
     console.log('[Integration Test] Database connected successfully')
+
+    // Qdrant 配置从管理后台 runtime_config 读取（第二轮 env 迁移后无环境变量）。
+    // 覆写为测试专属集合名，避免触碰生产集合；URL 固定本机，与旧 .env.test 一致。
+    const { runtimeConfigService } = await import('../../src/server/services/runtimeConfig.service')
+    await runtimeConfigService.updateConfig({
+      qdrantUrl: 'http://127.0.0.1:6333',
+      qdrantCollection: 'hsf_image_embeddings_test',
+      qdrantTextCollection: 'hsf_text_embeddings_test',
+    })
 
     // 可选：清理测试数据库（根据需要启用）
     // await cleanupDatabase();
@@ -161,6 +171,11 @@ export async function cleanupDatabase() {
   console.log('[Integration Test] Database cleanup completed')
 }
 
+export interface TestUserCreated {
+  user: User
+  plainPassword: string
+}
+
 /**
  * 创建测试用户辅助函数
  */
@@ -204,7 +219,11 @@ export async function createTestUser(overrides?: {
 /**
  * 创建认证 token 辅助函数
  */
-export async function createTestToken(userUid: string, role: string = 'user'): Promise<string> {
+export async function createTestToken(
+  userUid: string,
+  role: 'user' | 'admin' | 'super_admin' = 'user',
+  expiresIn: SignOptions['expiresIn'] = '90d'
+): Promise<string> {
   const jwt = (await import('jsonwebtoken')).default
   const JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_replace_with_random_string'
   const { createSessionVersion } = await import('../../src/server/utils/auth-session')
@@ -224,7 +243,7 @@ export async function createTestToken(userUid: string, role: string = 'user'): P
       sessionVersion: createSessionVersion(user.passwordHash),
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn }
   )
 
   return token

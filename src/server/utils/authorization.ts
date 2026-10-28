@@ -47,6 +47,16 @@ export function canViewGallery(
   if (isAdminRole(authUser.role)) return true
   return gallery.authorUid === authUser.uid
 }
+export function canViewTicketListing(
+  listing: { status: ContentStatus | string; authorUid: string; deletedAt?: Date | null },
+  authUser?: ApiUser
+): boolean {
+  if (listing.deletedAt) return false
+  if (listing.status === 'published') return true
+  if (!authUser) return false
+  if (isAdminRole(authUser.role)) return true
+  return listing.authorUid === authUser.uid
+}
 
 export function canManageGallery(gallery: { authorUid: string }, authUser?: ApiUser) {
   if (!authUser) return false
@@ -91,9 +101,4 @@ export function buildGalleryVisibilityWhere(authUser?: ApiUser) {
     deletedAt: null,
     OR: [{ status: 'published' as ContentStatus }, { authorUid: authUser.uid }],
   }
-}
-
-export function canManageWikiPullRequest(pr: { createdByUid: string }, authUser: ApiUser) {
-  if (isAdminRole(authUser.role)) return true
-  return pr.createdByUid === authUser.uid
 }

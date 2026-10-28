@@ -1,19 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { clsx } from 'clsx'
 import {
   Calendar,
   Image as ImageIcon,
   Loader2,
   Plus,
-  Save,
   Trash2,
   Upload,
   X,
 } from '@/src/components/icons'
 import MarkdownEditor from '../../components/MarkdownEditor'
 import {
-  BookEditorHeader,
   BookEditorSection,
   BookEditorShell,
   bookCompactInputClass,
@@ -21,18 +19,28 @@ import {
   bookSecondaryButtonClass,
   bookSmallButtonClass,
 } from '../../components/BookEditor'
-import { PageSkeleton } from '../../components/PageSkeleton'
+import { FormModal } from '../../components/Modal/FormModal'
 import { SmartImage } from '../../components/SmartImage'
+import { CoverPlaceholder } from '../../components/CoverPlaceholder'
+import { LinkRowsEditor } from '../../components/LinkRowsEditor'
+import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { normalizeContentLinks, validateContentLinks } from '../../lib/contentLinks'
 import { splitTagsInput } from '../../lib/contentUtils'
+import { useTagSuggestions } from '../../hooks/useTagSuggestions'
+import { useFileDropZone } from '../../hooks/useFileDropZone'
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
+import { useContentEditorNavigation } from '../../hooks/useContentEditorNavigation'
 import {
   EVENT_ALLOWED_IMAGE_TYPES,
   EVENT_IMAGE_ACCEPT,
   getEventCoverSrc,
   isEventTicketPrice,
 } from '../../lib/eventFormat'
+import { validateMaxLength, validateRequiredText, validateTags } from '../../lib/clientValidation'
 import { formatUploadLimitWithSize, UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
 import { uploadImageWithStrategy } from '../../services/imageService'
 import type {
@@ -41,14 +49,17 @@ import type {
   EventCreateResponse,
 } from '../../types/api'
 import type {
-  EventExternalLink,
+  ContentLink,
   EventItem,
   EventPosterItem,
   EventSaleTime,
   EventTicketPrice,
   EventTimeSlot,
+  EventTimeStatus,
 } from '../../types/entities'
+import { LoadErrorState, TagInput } from '@/src/components/ui'
 import { runInBatches } from '../../utils/asyncBatch'
+import { hasFormChanges } from '../../utils/formDirty'
 
 type EditablePoster = {
   clientId: string
@@ -102,12 +113,13 @@ type EventDraft = {
   location: string
   content: string
   timeSlots: EventTimeSlot[]
+  timeStatus: EventTimeStatus | null
   ticketPrices: EditableTicketPrice[]
   saleTimes: EventSaleTime[]
   lineup: string[]
   tagsText: string
-  externalLinks: EventExternalLink[]
-  relatedLinks: EventExternalLink[]
+  externalLinks: ContentLink[]
+  relatedLinks: ContentLink[]
   coverAssetId: string | null
   coverUrl: string | null
   posters: EditablePoster[]
@@ -134,7 +146,8 @@ const createEmptyDraft = (): EventDraft => ({
   title: '',
   location: '',
   content: '',
-  timeSlots: [{ type: 'datetime', start: '', end: '' }],
+  timeSlots: [],
+  timeStatus: 'pending',
   ticketPrices: [createEmptyTicketPrice()],
   saleTimes: [],
   lineup: [''],
@@ -168,15 +181,16 @@ const createDraftFromEvent = (event: EventItem): EventDraft => ({
   title: event.title,
   location: event.location || '',
   content: event.content || '',
-  timeSlots: event.timeSlots.length ? event.timeSlots : [{ type: 'datetime', start: '', end: '' }],
+  timeSlots: event.timeStatus ? [] : event.timeSlots,
+  timeStatus: event.timeStatus ?? (event.timeSlots.length ? null : 'pending'),
   ticketPrices: event.ticketPrices.length
     ? event.ticketPrices.map(toEditableTicketPrice)
     : [createEmptyTicketPrice()],
   saleTimes: event.saleTimes,
   lineup: event.lineup.length ? event.lineup : [''],
   tagsText: (event.tags || []).join(', '),
-  externalLinks: event.externalLinks || [],
-  relatedLinks: event.relatedLinks || [],
+  externalLinks: event.externalLinks,
+  relatedLinks: event.relatedLinks,
   coverAssetId: event.coverAssetId,
   coverUrl: getEventCoverSrc(event),
   posters: event.posters.map(toEditablePoster),
@@ -218,10 +232,8 @@ const normalizeSaleTimes = (items: EventSaleTime[]) =>
     .map((item) => ({ time: item.time.trim(), note: item.note?.trim() || undefined }))
     .filter((item) => item.time)
 
-const normalizeExternalLinks = (items: EventExternalLink[]) =>
-  items
-    .map((item) => ({ label: item.label.trim(), url: item.url.trim() }))
-    .filter((item) => item.label && item.url)
+const EVENT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const EVENT_DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
 
 const normalizeTimeSlots = (items: EventTimeSlot[]) =>
   items
@@ -304,7 +316,7 @@ const normalizeJsonLineup = (value: unknown): string[] => {
   return value.length ? value : ['']
 }
 
-const normalizeJsonExternalLinks = (value: unknown): EventExternalLink[] => {
+const normalizeJsonExternalLinks = (value: unknown): ContentLink[] => {
   if (!Array.isArray(value)) throw new Error('外部链接必须是数组')
   return value.map((item) => {
     if (!isRecord(item) || typeof item.label !== 'string' || typeof item.url !== 'string') {
@@ -333,15 +345,47 @@ const toUploadProgress = (progress: number) => {
   return normalized >= 100 ? 95 : Math.min(normalized, 95)
 }
 
-const AdminEventEdit = () => {
-  const { eventId } = useParams()
+type AdminEventEditProps = {
+  eventId?: string
+  onClose?: () => void
+  onSaved?: () => void
+}
+
+const AdminEventEdit = ({ eventId, onClose, onSaved }: AdminEventEditProps) => {
   const isCreating = !eventId
-  const navigate = useNavigate()
+  const { closeEditor: closeRouteEditor, navigateAfterSave } = useContentEditorNavigation()
   const { show } = useToast()
+  const { confirm } = useDialog()
+  const tagSuggestions = useTagSuggestions('event')
   const [draft, setDraft] = useState<EventDraft>(createEmptyDraft)
   const [loading, setLoading] = useState(!isCreating)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [saving, setSaving] = useState(false)
   const [coverUpload, setCoverUpload] = useState<CoverUploadState | null>(null)
+  // 基线在加载/新建初始化后建立，避免异步回填误判未保存修改。
+  const [baseline, setBaseline] = useState<EventDraft | null>(null)
+  const isDirty = (baseline !== null && hasFormChanges(draft, baseline)) || coverUpload !== null
+  const guard = useUnsavedChangesGuard(isDirty)
+  const closeEditor = async () => {
+    if (saving) return
+    if (!onClose) {
+      closeRouteEditor()
+      return
+    }
+    if (
+      isDirty &&
+      !(await confirm({
+        title: '放弃编辑？',
+        message: '活动修改尚未保存，关闭后将丢失这些更改。',
+        confirmText: '放弃修改',
+        variant: 'warning',
+      }))
+    ) {
+      return
+    }
+    guard.markClean()
+    onClose()
+  }
   const [draggingPosterIndex, setDraggingPosterIndex] = useState<number | null>(null)
   const [jsonEditors, setJsonEditors] = useState(createJsonEditorStates)
   const coverInputRef = useRef<HTMLInputElement>(null)
@@ -377,21 +421,28 @@ const AdminEventEdit = () => {
 
   useEffect(() => {
     if (!eventId) {
-      setDraft(createEmptyDraft())
+      const next = createEmptyDraft()
+      setDraft(next)
+      setBaseline(next)
+      setLoadError(null)
       setLoading(false)
       return
     }
 
     let cancelled = false
     setLoading(true)
+    setLoadError(null)
     apiGet<AdminEventDetailResponse>(`/api/admin/events/${eventId}`)
       .then((data) => {
-        if (!cancelled) setDraft(createDraftFromEvent(data.item))
+        if (cancelled) return
+        const next = createDraftFromEvent(data.item)
+        setDraft(next)
+        setBaseline(next)
       })
       .catch((error) => {
+        if (cancelled) return
         console.error('Fetch event for edit failed:', error)
-        show('活动不存在或无法编辑', { variant: 'error' })
-        navigate('/admin/events')
+        setLoadError(error)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -400,7 +451,7 @@ const AdminEventEdit = () => {
     return () => {
       cancelled = true
     }
-  }, [eventId, navigate, show])
+  }, [eventId])
 
   const patchDraft = (patch: Partial<EventDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }))
@@ -453,7 +504,16 @@ const AdminEventEdit = () => {
   const applyJsonEditor = (field: JsonField, text: string) => {
     try {
       const value = JSON.parse(text) as unknown
-      patchDraft(JSON_FIELD_NORMALIZERS[field](value))
+      const patch = JSON_FIELD_NORMALIZERS[field](value)
+      if (field === 'timeSlots') {
+        const timeSlots = 'timeSlots' in patch ? (patch.timeSlots ?? []) : []
+        patchDraft({
+          ...patch,
+          timeStatus: timeSlots.length ? null : (draft.timeStatus ?? 'pending'),
+        })
+      } else {
+        patchDraft(patch)
+      }
       setJsonEditors((prev) => ({
         ...prev,
         [field]: { mode: 'form' },
@@ -486,11 +546,7 @@ const AdminEventEdit = () => {
     })
   }
 
-  const handleCoverChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-
+  const startCoverUpload = async (file: File) => {
     let previewUrl = ''
     let controller: AbortController | null = null
     try {
@@ -557,15 +613,21 @@ const AdminEventEdit = () => {
           previewUrl,
           progress: 0,
           status: 'error',
-          error: error instanceof Error ? error.message : '上传封面失败',
+          error: getErrorMessage(error, '上传封面失败'),
         })
       }
-      show(error instanceof Error ? error.message : '上传封面失败', { variant: 'error' })
+      show(getErrorMessage(error, '上传封面失败'), { variant: 'error' })
     } finally {
       if (controller && coverUploadControllerRef.current === controller) {
         coverUploadControllerRef.current = null
       }
     }
+  }
+
+  const handleCoverChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (file) void startCoverUpload(file)
   }
 
   const uploadPoster = async ({
@@ -642,7 +704,7 @@ const AdminEventEdit = () => {
       updatePosterUpload(clientId, {
         uploadStatus: 'error',
         progress: 0,
-        error: error instanceof Error ? error.message : '上传海报失败',
+        error: getErrorMessage(error, '上传海报失败'),
       })
       return 'failed'
     } finally {
@@ -674,11 +736,7 @@ const AdminEventEdit = () => {
     }
   }
 
-  const handlePostersChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || [])
-    event.target.value = ''
-    if (!files.length) return
-
+  const appendPosterFiles = (files: File[]) => {
     const queued: QueuedPosterUpload[] = []
     const placeholders: EditablePoster[] = []
     const invalidMessages: string[] = []
@@ -713,6 +771,29 @@ const AdminEventEdit = () => {
     }
   }
 
+  const handlePostersChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+    appendPosterFiles(files)
+  }
+
+  const handleDroppedFiles = (files: File[], zone: string | null) => {
+    if (zone === 'cover') {
+      if (files.length !== 1) {
+        show('封面区域一次只能拖入一张图片，多张请拖到其他区域上传为海报', { variant: 'error' })
+        return
+      }
+      void startCoverUpload(files[0])
+      return
+    }
+    appendPosterFiles(files)
+  }
+
+  const { isDraggingFiles, activeZone, rootHandlers } = useFileDropZone({
+    enabled: !saving,
+    onFiles: handleDroppedFiles,
+  })
+
   const reorderPosters = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex) return
 
@@ -737,6 +818,20 @@ const AdminEventEdit = () => {
     reorderPosters(sourceIndex, targetIndex)
   }
 
+  const updateTimeStatus = (timeStatus: EventTimeStatus | null) => {
+    if (timeStatus) {
+      patchDraft({ timeStatus, timeSlots: [] })
+      return
+    }
+
+    patchDraft({
+      timeStatus: null,
+      timeSlots: draft.timeSlots.length
+        ? draft.timeSlots
+        : [{ type: 'datetime', start: '', end: '' }],
+    })
+  }
+
   const updateTimeSlot = (index: number, patch: Partial<EventTimeSlot>) => {
     const next = draft.timeSlots.map((slot, currentIndex) =>
       currentIndex === index
@@ -747,10 +842,25 @@ const AdminEventEdit = () => {
           }
         : slot
     )
-    patchDraft({ timeSlots: next })
+    const hasTime = next.some((slot) => slot.start.trim())
+    const timeStatus = hasTime
+      ? null
+      : patch.start !== undefined
+        ? (draft.timeStatus ?? 'pending')
+        : draft.timeStatus
+    patchDraft({ timeSlots: next, timeStatus })
+  }
+
+  const removeTimeSlot = (index: number) => {
+    const timeSlots = draft.timeSlots.filter((_, currentIndex) => currentIndex !== index)
+    patchDraft({
+      timeSlots,
+      timeStatus: timeSlots.some((slot) => slot.start.trim()) ? null : 'pending',
+    })
   }
 
   const save = async () => {
+    if (saving || loading || loadError || baseline === null) return
     const hasPendingUploads =
       isBusyUploadStatus(coverUpload?.status) ||
       draft.posters.some((poster) => isBusyUploadStatus(poster.uploadStatus))
@@ -758,6 +868,86 @@ const AdminEventEdit = () => {
       coverUpload?.status === 'error' ||
       draft.posters.some((poster) => poster.uploadStatus === 'error')
     const hasUnsavedPoster = draft.posters.some((poster) => !poster.imageId && !poster.assetId)
+    const normalizedTimeSlots = normalizeTimeSlots(draft.timeSlots)
+    const validationError =
+      validateRequiredText(draft.title, 'title', '活动标题') ||
+      validateMaxLength(draft.title, 'title', '活动标题', CONTENT_LIMITS.event.title) ||
+      validateMaxLength(draft.location, 'location', '活动地点', CONTENT_LIMITS.event.location) ||
+      validateMaxLength(draft.content, 'content', '活动内容', CONTENT_LIMITS.event.content) ||
+      validateTags(
+        splitTagsInput(draft.tagsText),
+        'tags',
+        '标签',
+        CONTENT_LIMITS.event.tags,
+        CONTENT_LIMITS.event.tag
+      ) ||
+      (draft.lineup.length > CONTENT_LIMITS.event.lineup
+        ? { field: 'lineup', message: `阵容最多${CONTENT_LIMITS.event.lineup}项` }
+        : draft.lineup.some((item) => item.trim().length > CONTENT_LIMITS.event.lineupItem)
+          ? {
+              field: 'lineup',
+              message: `阵容单项长度不能超过${CONTENT_LIMITS.event.lineupItem}个字符`,
+            }
+          : null) ||
+      (draft.ticketPrices.length > CONTENT_LIMITS.event.ticketPrices
+        ? { field: 'ticketPrices', message: `票价最多${CONTENT_LIMITS.event.ticketPrices}项` }
+        : null) ||
+      (draft.timeSlots.length > CONTENT_LIMITS.event.timeSlots
+        ? { field: 'timeSlots', message: `时间最多${CONTENT_LIMITS.event.timeSlots}项` }
+        : null) ||
+      (draft.saleTimes.length > CONTENT_LIMITS.event.saleTimes
+        ? { field: 'saleTimes', message: `起售时间最多${CONTENT_LIMITS.event.saleTimes}项` }
+        : null)
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
+      return
+    }
+    if (!normalizedTimeSlots.length && !draft.timeStatus) {
+      show('活动必须至少填写一个时间，或标记为待定/推迟', { variant: 'error' })
+      return
+    }
+    if (normalizedTimeSlots.length && draft.timeStatus) {
+      show('明确时间与待定/推迟状态不能同时设置', { variant: 'error' })
+      return
+    }
+    const invalidTimeSlot = draft.timeSlots.find((slot) => {
+      const start = slot.start.trim()
+      const end = slot.end?.trim()
+      if (!start) return false
+      const pattern = slot.type === 'datetime' ? EVENT_DATETIME_PATTERN : EVENT_DATE_PATTERN
+      return !pattern.test(start) || Boolean(end && (!pattern.test(end) || end < start))
+    })
+    if (invalidTimeSlot) {
+      show('活动时间必须是有效日期，且结束时间不能早于开始时间', { variant: 'error' })
+      return
+    }
+    const invalidSaleTime = draft.saleTimes.find(
+      (item) => item.time.trim() && !EVENT_DATETIME_PATTERN.test(item.time.trim())
+    )
+    if (invalidSaleTime) {
+      show('起售时间必须是有效日期时间', { variant: 'error' })
+      return
+    }
+    const linkRules = {
+      labelLimit: CONTENT_LIMITS.event.externalLinkLabel,
+      maxItems: CONTENT_LIMITS.event.externalLinks,
+      allowInternalPath: false,
+    }
+    const linksError =
+      validateContentLinks(draft.externalLinks, {
+        ...linkRules,
+        field: 'externalLinks',
+        label: '外部链接',
+      }) ||
+      validateContentLinks(draft.relatedLinks, {
+        ...linkRules,
+        field: 'relatedLinks',
+        label: '其他相关链接',
+      })
+    if (linksError) {
+      show(linksError.message, { variant: 'error' })
+      return
+    }
 
     if (hasPendingUploads) {
       show('请等待图片上传完成后再保存', { variant: 'error' })
@@ -765,10 +955,6 @@ const AdminEventEdit = () => {
     }
     if (hasFailedUploads || hasUnsavedPoster) {
       show('请先删除或重新上传失败的图片', { variant: 'error' })
-      return
-    }
-    if (!draft.title.trim()) {
-      show('活动标题不能为空', { variant: 'error' })
       return
     }
     if (hasInvalidTicketPrice(draft.ticketPrices)) {
@@ -784,13 +970,14 @@ const AdminEventEdit = () => {
       title: draft.title.trim(),
       location: draft.location.trim(),
       content: draft.content,
-      timeSlots: normalizeTimeSlots(draft.timeSlots),
+      timeSlots: normalizedTimeSlots,
+      timeStatus: normalizedTimeSlots.length ? null : draft.timeStatus,
       ticketPrices: normalizeTicketPrices(draft.ticketPrices),
       saleTimes: normalizeSaleTimes(draft.saleTimes),
       lineup: normalizeStringList(draft.lineup),
       tags: splitTagsInput(draft.tagsText),
-      externalLinks: normalizeExternalLinks(draft.externalLinks),
-      relatedLinks: normalizeExternalLinks(draft.relatedLinks),
+      externalLinks: normalizeContentLinks(draft.externalLinks),
+      relatedLinks: normalizeContentLinks(draft.relatedLinks),
       coverAssetId: draft.coverAssetId,
       posters: draft.posters.flatMap<PosterSaveInstruction>((poster) => {
         if (poster.imageId) return [{ imageId: poster.imageId }]
@@ -808,16 +995,17 @@ const AdminEventEdit = () => {
       }
       invalidateApiCacheByPrefix('/api/events')
       invalidateApiCacheByPrefix('/api/admin/events')
+      invalidateApiCacheByPrefix('/api/ticket-listings')
       show('活动已保存', { variant: 'success' })
-      navigate('/admin/events', { replace: true })
+      guard.markClean()
+      if (onSaved) onSaved()
+      else navigateAfterSave('/admin/events')
     } catch (error) {
-      show(error instanceof Error ? error.message : '保存活动失败', { variant: 'error' })
+      show(getErrorMessage(error, '保存活动失败'), { variant: 'error' })
     } finally {
       setSaving(false)
     }
   }
-
-  if (loading) return <PageSkeleton />
 
   const isCoverUploading = isBusyUploadStatus(coverUpload?.status)
   const hasPendingUploads =
@@ -825,25 +1013,19 @@ const AdminEventEdit = () => {
   const coverDisplayUrl =
     coverUpload && coverUpload.status !== 'error' ? coverUpload.previewUrl : draft.coverUrl
 
-  return (
-    <BookEditorShell embedded>
-      <BookEditorHeader
-        title={isCreating ? '新增活动' : '编辑活动'}
-        description="维护活动正文、时间、票务、链接与图片资源，保存后回到活动管理。"
-        backTo="/admin/events"
-        backLabel="返回活动管理"
-        actions={
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={saving || hasPendingUploads}
-            className="inline-flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all disabled:cursor-wait disabled:opacity-60"
-          >
-            <Save size={14} />
-            {saving ? '保存中...' : '保存'}
-          </button>
-        }
-      />
+  const content = loading ? null : (
+    <>
+      {isDraggingFiles && activeZone !== 'cover'
+        ? createPortal(
+            <div className="pointer-events-none fixed inset-0 z-[1100] flex items-center justify-center bg-[color-mix(in_srgb,var(--color-bg-antique)_82%,transparent)] px-4">
+              <div className="w-full max-w-3xl rounded border-2 border-dashed border-brand-gold bg-[var(--book-panel-bg-strong)] px-8 py-12 text-center shadow-[var(--book-panel-shadow)]">
+                <p className="text-lg font-bold text-text-primary">松开鼠标上传为海报</p>
+                <p className="mt-2 text-sm text-text-muted">把单张图片拖到封面区域可上传为封面</p>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-7">
@@ -857,25 +1039,34 @@ const AdminEventEdit = () => {
             }
           >
             <div className="grid gap-4">
-              <input
-                value={draft.title}
-                onChange={(event) => patchDraft({ title: event.target.value })}
-                maxLength={CONTENT_LIMITS.event.title}
-                placeholder="活动标题"
-                className={bookCompactInputClass}
-              />
-              <input
-                value={draft.location}
-                onChange={(event) => patchDraft({ location: event.target.value })}
-                maxLength={CONTENT_LIMITS.event.location}
-                placeholder="地点"
-                className={bookCompactInputClass}
-              />
-              <input
-                value={draft.tagsText}
-                onChange={(event) => patchDraft({ tagsText: event.target.value })}
-                placeholder="标签，逗号分隔"
-                className={bookCompactInputClass}
+              <label className="grid gap-1">
+                <span className="text-xs text-text-muted">
+                  活动标题 <span className="theme-text-error">*</span>
+                </span>
+                <input
+                  value={draft.title}
+                  onChange={(event) => patchDraft({ title: event.target.value })}
+                  maxLength={CONTENT_LIMITS.event.title}
+                  placeholder="活动标题"
+                  className={bookCompactInputClass}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-text-muted">地点</span>
+                <input
+                  value={draft.location}
+                  onChange={(event) => patchDraft({ location: event.target.value })}
+                  maxLength={CONTENT_LIMITS.event.location}
+                  placeholder="地点"
+                  className={bookCompactInputClass}
+                />
+              </label>
+              <TagInput
+                id="event-tags"
+                value={splitTagsInput(draft.tagsText)}
+                onChange={(tags) => patchDraft({ tagsText: tags.join(', ') })}
+                suggestions={tagSuggestions}
+                placeholder="输入标签后按回车添加"
               />
             </div>
           </BookEditorSection>
@@ -900,11 +1091,29 @@ const AdminEventEdit = () => {
             onCloseJson={closeJsonEditor}
             onApplyJson={applyJsonEditor}
           >
+            <label className="grid gap-1">
+              <span className="text-xs text-text-muted">时间状态</span>
+              <select
+                aria-label="时间状态"
+                value={draft.timeStatus ?? ''}
+                onChange={(event) =>
+                  updateTimeStatus(
+                    event.target.value === '' ? null : (event.target.value as EventTimeStatus)
+                  )
+                }
+                className={bookCompactInputClass}
+              >
+                <option value="">有明确时间</option>
+                <option value="pending">待定</option>
+                <option value="postponed">推迟</option>
+              </select>
+            </label>
             <ListHeader
               title="时间段"
               onAdd={() =>
                 patchDraft({
                   timeSlots: [...draft.timeSlots, { type: 'datetime', start: '', end: '' }],
+                  timeStatus: null,
                 })
               }
             />
@@ -938,16 +1147,7 @@ const AdminEventEdit = () => {
                     onChange={(event) => updateTimeSlot(index, { end: event.target.value })}
                     className={bookCompactInputClass}
                   />
-                  <IconButton
-                    label="删除时间段"
-                    onClick={() =>
-                      patchDraft({
-                        timeSlots: draft.timeSlots.filter(
-                          (_, currentIndex) => currentIndex !== index
-                        ),
-                      })
-                    }
-                  />
+                  <IconButton label="删除时间段" onClick={() => removeTimeSlot(index)} />
                 </div>
               ))}
             </div>
@@ -1040,7 +1240,6 @@ const AdminEventEdit = () => {
 
           <EventLinksEditor
             title="外部链接"
-            deleteLabel="删除链接"
             field="externalLinks"
             values={draft.externalLinks}
             onChange={(externalLinks) => patchDraft({ externalLinks })}
@@ -1054,7 +1253,6 @@ const AdminEventEdit = () => {
           <EventLinksEditor
             title="其他相关链接"
             field="relatedLinks"
-            deleteLabel="删除相关链接"
             values={draft.relatedLinks}
             onChange={(relatedLinks) => patchDraft({ relatedLinks })}
             state={jsonEditors.relatedLinks}
@@ -1066,7 +1264,14 @@ const AdminEventEdit = () => {
         </div>
 
         <aside className="grid min-w-0 gap-5 md:grid-cols-2 xl:block xl:space-y-5">
-          <section className={clsx('min-w-0 p-5', bookPanelClass)}>
+          <section
+            data-file-drop-zone="cover"
+            className={clsx(
+              'min-w-0 p-5',
+              bookPanelClass,
+              activeZone === 'cover' && '!border-dashed !border-brand-gold'
+            )}
+          >
             <h2 className="mb-4 flex items-center gap-2 text-[0.9375rem] font-semibold tracking-[0.08em] text-text-primary">
               <ImageIcon size={16} className="text-brand-gold" />
               封面
@@ -1079,9 +1284,7 @@ const AdminEventEdit = () => {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-sm text-text-muted">
-                  暂无封面
-                </div>
+                <CoverPlaceholder icon={<ImageIcon size={20} />} label="无封面" />
               )}
               {coverUpload && coverUpload.status !== 'error' && (
                 <UploadProgressOverlay
@@ -1089,6 +1292,12 @@ const AdminEventEdit = () => {
                   progress={coverUpload.progress}
                   status={coverUpload.status}
                 />
+              )}
+              {activeZone === 'cover' && (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 rounded border-2 border-dashed border-brand-gold bg-[var(--book-panel-bg-strong)]/85 text-center">
+                  <p className="text-sm font-bold text-text-primary">松开鼠标上传为封面</p>
+                  <p className="text-xs text-text-muted">封面只接收单张图片</p>
+                </div>
               )}
             </div>
             {coverUpload?.status === 'error' && (
@@ -1131,7 +1340,7 @@ const AdminEventEdit = () => {
               type="file"
               accept={EVENT_IMAGE_ACCEPT}
               className="hidden"
-              onChange={(event) => void handleCoverChange(event)}
+              onChange={handleCoverChange}
             />
           </section>
 
@@ -1208,12 +1417,41 @@ const AdminEventEdit = () => {
               multiple
               accept={EVENT_IMAGE_ACCEPT}
               className="hidden"
-              onChange={(event) => void handlePostersChange(event)}
+              onChange={handlePostersChange}
             />
           </section>
         </aside>
       </div>
-    </BookEditorShell>
+    </>
+  )
+
+  return (
+    <FormModal
+      open
+      onClose={() => void closeEditor()}
+      title={isCreating ? '新增活动' : '编辑活动'}
+      subtitle="维护活动正文、时间、票务、链接与图片资源。"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void save()
+      }}
+      submitText="保存"
+      submitDisabled={loading || Boolean(loadError) || hasPendingUploads}
+      loading={saving}
+      maxWidth="max-w-6xl"
+    >
+      {loading ? (
+        <div role="status" className="py-12 text-center text-text-muted">
+          正在加载活动...
+        </div>
+      ) : loadError ? (
+        <LoadErrorState error={loadError} />
+      ) : (
+        <BookEditorShell embedded {...rootHandlers}>
+          {content}
+        </BookEditorShell>
+      )}
+    </FormModal>
   )
 }
 
@@ -1457,7 +1695,6 @@ const EventLinksEditor = ({
   title,
   field,
   values,
-  deleteLabel,
   onChange,
   state,
   getJsonText,
@@ -1467,61 +1704,32 @@ const EventLinksEditor = ({
 }: {
   title: string
   field: JsonField
-  values: EventExternalLink[]
-  deleteLabel: string
-  onChange: (values: EventExternalLink[]) => void
+  values: ContentLink[]
+  onChange: (values: ContentLink[]) => void
   state: JsonEditorState
   getJsonText: (field: JsonField) => string
   onOpenJson: (field: JsonField) => void
   onCloseJson: (field: JsonField) => void
   onApplyJson: (field: JsonField, text: string) => string | null
-}) => {
-  const appendItem = () => onChange([...values, { label: '', url: '' }])
-  const updateItem = (index: number, patch: Partial<EventExternalLink>) => {
-    onChange(
-      values.map((item, currentIndex) => (currentIndex === index ? { ...item, ...patch } : item))
-    )
-  }
-
-  return (
-    <JsonEditableSection
+}) => (
+  <JsonEditableSection
+    title={title}
+    field={field}
+    state={state}
+    getJsonText={getJsonText}
+    onOpenJson={onOpenJson}
+    onCloseJson={onCloseJson}
+    onApplyJson={onApplyJson}
+  >
+    <LinkRowsEditor
       title={title}
-      field={field}
-      state={state}
-      getJsonText={getJsonText}
-      onOpenJson={onOpenJson}
-      onCloseJson={onCloseJson}
-      onApplyJson={onApplyJson}
-    >
-      <ListHeader title={title} onAdd={appendItem} />
-      <div className="space-y-3">
-        {values.map((item, index) => (
-          <div
-            key={index}
-            className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-          >
-            <input
-              value={item.label}
-              onChange={(event) => updateItem(index, { label: event.target.value })}
-              placeholder="链接名称"
-              className={bookCompactInputClass}
-            />
-            <input
-              value={item.url}
-              onChange={(event) => updateItem(index, { url: event.target.value })}
-              placeholder="https://"
-              className={bookCompactInputClass}
-            />
-            <IconButton
-              label={deleteLabel}
-              onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
-            />
-          </div>
-        ))}
-      </div>
-    </JsonEditableSection>
-  )
-}
+      values={values}
+      labelMaxLength={CONTENT_LIMITS.event.externalLinkLabel}
+      urlPlaceholder="https://"
+      onChange={onChange}
+    />
+  </JsonEditableSection>
+)
 
 const StringListEditor = ({
   title,
@@ -1547,6 +1755,22 @@ const StringListEditor = ({
   onApplyJson: (field: JsonField, text: string) => string | null
 }) => {
   const inputRefs = useRef<Array<HTMLInputElement | null>>([])
+  const duplicateIndices = new Set<number>()
+  if (field === 'lineup') {
+    const firstIndexByValue = new Map<string, number>()
+    values.forEach((value, index) => {
+      const normalizedValue = value.trim()
+      if (!normalizedValue) return
+      const firstIndex = firstIndexByValue.get(normalizedValue)
+      if (firstIndex === undefined) {
+        firstIndexByValue.set(normalizedValue, index)
+      } else {
+        duplicateIndices.add(firstIndex)
+        duplicateIndices.add(index)
+      }
+    })
+  }
+
   const focusInput = (index: number) => {
     window.requestAnimationFrame(() => inputRefs.current[index]?.focus())
   }
@@ -1570,34 +1794,41 @@ const StringListEditor = ({
     >
       <ListHeader title={title} onAdd={appendItem} />
       <div className="space-y-3">
-        {values.map((value, index) => (
-          <div key={index} className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-            <input
-              ref={(element) => {
-                inputRefs.current[index] = element
-              }}
-              value={value}
-              onChange={(event) =>
-                onChange(
-                  values.map((item, currentIndex) =>
-                    currentIndex === index ? event.target.value : item
+        {values.map((value, index) => {
+          const isDuplicate = duplicateIndices.has(index)
+          return (
+            <div key={index} className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+              <input
+                ref={(element) => {
+                  inputRefs.current[index] = element
+                }}
+                value={value}
+                onChange={(event) =>
+                  onChange(
+                    values.map((item, currentIndex) =>
+                      currentIndex === index ? event.target.value : item
+                    )
                   )
-                )
-              }
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
-                event.preventDefault()
-                insertItem(index + 1)
-              }}
-              placeholder={placeholder}
-              className={bookCompactInputClass}
-            />
-            <IconButton
-              label={`删除${title}`}
-              onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
-            />
-          </div>
-        ))}
+                }
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+                  event.preventDefault()
+                  insertItem(index + 1)
+                }}
+                placeholder={placeholder}
+                className={clsx(
+                  bookCompactInputClass,
+                  isDuplicate &&
+                    '!border-[var(--color-warning)] focus:!border-[var(--color-warning)]'
+                )}
+              />
+              <IconButton
+                label={`删除${title}`}
+                onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
+              />
+            </div>
+          )
+        })}
       </div>
     </JsonEditableSection>
   )

@@ -10,38 +10,15 @@ import {
 import type { EventItem } from '../../types/entities'
 import type { ViewMode } from '../../types/userPreferences'
 import { EventCover } from './EventCover'
+import { EventDateOffset } from './EventDateOffset'
 
 interface EventCardProps {
   event: EventItem
   viewMode: ViewMode
 }
 
-const EventDateOffset = ({
-  dayOffset,
-  compact = false,
-}: {
-  dayOffset: number | null
-  compact?: boolean
-}) => {
-  if (dayOffset === null) return null
-
-  const isFutureOrToday = dayOffset >= 0
-
-  return (
-    <span
-      className={clsx(
-        'shrink-0 font-semibold tabular-nums',
-        compact ? 'text-[0.6875rem]' : 'text-xs',
-        isFutureOrToday ? 'theme-text-success' : 'theme-text-error'
-      )}
-    >
-      {isFutureOrToday ? `+${dayOffset}` : dayOffset}
-    </span>
-  )
-}
-
 const EventMeta = ({ event, compact = false }: { event: EventItem; compact?: boolean }) => {
-  const eventDate = formatEventListDate(event.timeSlots)
+  const eventDate = formatEventListDate(event.timeSlots, event.timeStatus)
 
   return (
     <div
@@ -89,12 +66,13 @@ const EventCard = React.memo(function EventCard({ event, viewMode }: EventCardPr
     return (
       <Link
         to={eventUrl}
+        data-press-feedback="state"
         className={clsx(
-          'group flex min-w-0 items-center gap-3.5 rounded px-3 py-3',
+          'group flex min-w-0 items-center gap-3 rounded px-2.5 py-2.5',
           'transition-all duration-300 hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]'
         )}
       >
-        <div className="relative h-[76px] w-[108px] shrink-0 overflow-hidden rounded bg-surface-alt shadow-[0_4px_20px_rgba(42,37,32,0.06)]">
+        <div className="relative h-[100px] w-[75px] shrink-0 overflow-hidden rounded bg-surface-alt shadow-[0_4px_20px_rgba(42,37,32,0.06)]">
           <EventCover
             event={event}
             imageClassName="transition-transform duration-500 group-hover:scale-[1.06]"
@@ -123,6 +101,7 @@ const EventCard = React.memo(function EventCard({ event, viewMode }: EventCardPr
   return (
     <Link
       to={eventUrl}
+      data-press-feedback="state"
       className={clsx(
         'group block min-w-0 overflow-hidden rounded-lg',
         'border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)]',

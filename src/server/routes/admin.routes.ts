@@ -17,6 +17,7 @@ import {
   adminBatchMusicDisplaySchema,
 } from '../schemas'
 import type { AuthenticatedRequest } from '../types'
+import type { ModerationTargetType, Prisma } from '@prisma/client'
 import {
   prisma,
   toWikiResponse,
@@ -25,12 +26,18 @@ import {
   toGalleryListResponse,
   toEventResponse,
   toEventListResponse,
+  toTicketListingResponse,
+  toTicketListingListResponse,
   toUserResponse,
   toEditLockResponse,
   toMusicResponse,
+  toAlbumResponse,
   parseContentStatus,
   parseDisplayAlbumMode,
+  parseMusicPlatform,
   parsePagination,
+  createPaginationMeta,
+  normalizeTrackDiscPayload,
   normalizeModerationTargetType,
   createNotification,
   parseDatabaseUrl,
@@ -59,10 +66,13 @@ import {
   resolveDeleteReason,
   normalizeDeleteReason,
   enhancedCache,
+  invalidateTicketListingCaches,
+  findMusicDocIdsByArtistPartial,
   CACHE_KEYS,
   clearWikiRelationCache,
   notifyMentionUsers,
 } from '../utils'
+import { formatMusicCredits } from '../../lib/musicCredits'
 import {
   cleanupUnusedMediaAssetById,
   cleanupUntrackedUploadImageByUrl,
@@ -91,7 +101,8 @@ import {
   switchWikiStorage,
 } from '../wiki/markdownLinkUpdater'
 import { isSensitiveWord, containsSensitive } from '../../lib/sensitiveWordFilter'
-import { variantCleanup, CleanupTrigger } from '../services/variantCleanup.service'
+import { collectMediaReferences, isMediaReferenced } from '../services/mediaAssetService'
+import { getMediaRetiredAt } from '../services/mediaConstants'
 import {
   deleteImageEmbeddingPointsBySource,
   deleteTextEmbeddingPointsBySource,
@@ -102,6 +113,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const router = createRouter()
+class ReviewActionConflictError extends Error {
+  readonly statusCode = 409
+
+  constructor() {
+    super('该盘票已被其他管理员处理或已删除')
+  }
+}
 const BACKUP_RESTORE_RESPONSE_TIMEOUT_MS = 15 * 60 * 1000
 
 const adminEventInclude = {
@@ -116,6 +134,34 @@ const adminEventInclude = {
   },
 }
 
+const adminTicketListingInclude = {
+  event: {
+    select: { id: true, slug: true, title: true, location: true, deletedAt: true },
+  },
+  author: { select: { publicId: true, displayName: true } },
+} as const
+const adminTicketListingListSelect = {
+  id: true,
+  slug: true,
+  type: true,
+  eventId: true,
+  customEventName: true,
+  quantity: true,
+  ticketTier: true,
+  seat: true,
+  authorUid: true,
+  status: true,
+  reviewNote: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  deletedAt: true,
+  deletedBy: true,
+  createdAt: true,
+  updatedAt: true,
+  event: adminTicketListingInclude.event,
+  author: adminTicketListingInclude.author,
+} as const
+
 function canManageTargetUserRole(
   operatorRole: AuthenticatedRequest['authUser']['role'] | undefined,
   targetRole: AuthenticatedRequest['authUser']['role']
@@ -125,6 +171,109 @@ function canManageTargetUserRole(
   return false
 }
 
+const ADMIN_MUSIC_PLATFORMS = ['netease', 'tencent', 'kugou', 'baidu', 'kuwo'] as const
+type AdminMusicSortBy = 'updatedAt' | 'releaseDate' | 'title' | 'artist'
+type AdminMusicSortOrder = 'asc' | 'desc'
+
+function normalizeAdminQuery(value: unknown, maxLength: number) {
+  return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
+}
+
+function parseAdminMusicSortBy(value: unknown): AdminMusicSortBy {
+  return value === 'releaseDate' || value === 'title' || value === 'artist' || value === 'updatedAt'
+    ? value
+    : 'updatedAt'
+}
+
+function parseAdminMusicSortOrder(value: unknown): AdminMusicSortOrder {
+  return value === 'asc' || value === 'desc' ? value : 'desc'
+}
+
+function parseAdminCoverFilter(value: unknown) {
+  return value === 'with' || value === 'without' ? value : 'all'
+}
+
+async function buildAdminMusicWhere(req: AuthenticatedRequest) {
+  const query = normalizeAdminQuery(req.query.q, CONTENT_LIMITS.music.title)
+  const platform = parseMusicPlatform(req.query.platform)
+  const cover = parseAdminCoverFilter(req.query.cover)
+  const displayAlbum = parseDisplayAlbumMode(req.query.displayAlbum)
+  const includeDeleted = includeDeletedFromQuery(req.query)
+  const where: Record<string, unknown> = {
+    ...deletedAtFilter(includeDeleted),
+  }
+
+  if (query) {
+    const artistMatchDocIds = await findMusicDocIdsByArtistPartial(query, undefined, includeDeleted)
+    where.OR = [
+      { title: { contains: query, mode: 'insensitive' } },
+      { album: { contains: query, mode: 'insensitive' } },
+      { manualAlbumName: { contains: query, mode: 'insensitive' } },
+      { externalSources: { some: { sourceId: { contains: query, mode: 'insensitive' } } } },
+      ...(artistMatchDocIds.length ? [{ docId: { in: artistMatchDocIds } }] : []),
+    ]
+  }
+  if (platform) where.externalSources = { some: { platform } }
+  if (cover === 'with') {
+    const coverWhere = [{ coverId: { not: null } }, { coverAlbumDocId: { not: null } }]
+    if (where.OR) {
+      where.AND = [{ OR: where.OR }, { OR: coverWhere }]
+      delete where.OR
+    } else {
+      where.OR = coverWhere
+    }
+  } else if (cover === 'without') {
+    where.AND = [...((where.AND as unknown[]) || []), { coverId: null }, { coverAlbumDocId: null }]
+  }
+  if (displayAlbum) where.displayAlbumMode = displayAlbum
+  return { where, query }
+}
+
+function compareAdminMusicRows(
+  a: { docId: string; title: string; artists: string[]; updatedAt: Date; releaseDate: Date | null },
+  b: { docId: string; title: string; artists: string[]; updatedAt: Date; releaseDate: Date | null },
+  sortBy: AdminMusicSortBy,
+  sortOrder: AdminMusicSortOrder
+) {
+  const direction = sortOrder === 'asc' ? 1 : -1
+  let result = 0
+  if (sortBy === 'title') result = a.title.localeCompare(b.title, 'zh-CN')
+  if (sortBy === 'artist') {
+    result = formatMusicCredits(a.artists, '').localeCompare(
+      formatMusicCredits(b.artists, ''),
+      'zh-CN'
+    )
+  }
+  if (sortBy === 'releaseDate') {
+    const aDate = a.releaseDate?.getTime() ?? Number.POSITIVE_INFINITY
+    const bDate = b.releaseDate?.getTime() ?? Number.POSITIVE_INFINITY
+    result = aDate - bDate
+  }
+  if (sortBy === 'updatedAt') result = a.updatedAt.getTime() - b.updatedAt.getTime()
+  if (result !== 0) return result * direction
+  return a.docId.localeCompare(b.docId)
+}
+
+function buildAdminAlbumWhere(req: AuthenticatedRequest) {
+  const query = normalizeAdminQuery(req.query.q, CONTENT_LIMITS.album.title)
+  const platform = parseMusicPlatform(req.query.platform)
+  const cover = parseAdminCoverFilter(req.query.cover)
+  const where: Record<string, unknown> = {
+    ...deletedAtFilter(includeDeletedFromQuery(req.query)),
+  }
+  if (query) {
+    where.OR = [
+      { title: { contains: query, mode: 'insensitive' } },
+      { artist: { contains: query, mode: 'insensitive' } },
+      { description: { contains: query, mode: 'insensitive' } },
+      { externalSources: { some: { sourceId: { contains: query, mode: 'insensitive' } } } },
+    ]
+  }
+  if (platform) where.externalSources = { some: { platform } }
+  if (cover === 'with') where.coverId = { not: null }
+  if (cover === 'without') where.coverId = null
+  return { where, query }
+}
 const execFileAsync = promisify(execFile)
 
 function isString(value: string | null): value is string {
@@ -139,7 +288,7 @@ function invalidateWikiContentCaches() {
 }
 
 async function getDeleteReasonsByTargetId(
-  targetType: 'wiki' | 'post' | 'gallery' | 'comment',
+  targetType: 'wiki' | 'post' | 'gallery' | 'comment' | 'ticketListing',
   targetIds: string[]
 ) {
   const uniqueTargetIds = [...new Set(targetIds.filter(Boolean))]
@@ -179,6 +328,46 @@ async function hasLatestPostSubmitLogForRepublishedEdit(targetId: string) {
   })
 
   return latestSubmitLog?.note === '编辑后重新提交审核'
+}
+
+const MODERATION_TARGET_TYPES: Record<string, ModerationTargetType> = {
+  wiki: 'wiki',
+  posts: 'post',
+  galleries: 'gallery',
+  events: 'event',
+  music: 'music',
+  albums: 'album',
+  announcements: 'announcement',
+  sections: 'section',
+  'wiki-categories': 'wikiCategory',
+  'image-maps': 'imageMap',
+  users: 'user',
+  'ticket-listings': 'ticketListing',
+}
+
+function getModerationTargetType(tab: string): ModerationTargetType {
+  const targetType = MODERATION_TARGET_TYPES[tab]
+  if (!targetType) {
+    throw new Error(`未知操作日志目标类型: ${tab}`)
+  }
+  return targetType
+}
+
+async function createModerationLog(
+  tx: Prisma.TransactionClient,
+  tab: string,
+  targetId: string,
+  operatorUid: string
+) {
+  await tx.moderationLog.create({
+    data: {
+      targetType: getModerationTargetType(tab),
+      targetId,
+      action: 'restore',
+      operatorUid,
+      note: null,
+    },
+  })
 }
 
 const backupsDir = path.join(__dirname, '..', '..', '..', 'backups')
@@ -246,9 +435,8 @@ async function handleBackupDelete(req: AuthenticatedRequest, res: Response) {
     res.status(500).json({ error: '删除备份失败' })
   }
 }
-const BACKUP_RETAIN_COUNT = Math.max(1, Number(process.env.BACKUP_RETAIN_COUNT || 20))
 
-async function permanentlyDeleteWikiById(id: string) {
+async function permanentlyDeleteWikiById(id: string, operatorUid: string) {
   const page = await prisma.wikiPage.findUnique({
     where: { id },
     select: { slug: true },
@@ -263,6 +451,15 @@ async function permanentlyDeleteWikiById(id: string) {
       tx.textEmbeddingChunk.deleteMany({ where: { sourceType: 'wiki', sourceId: page.slug } }),
     ])
     await tx.wikiPage.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'wiki',
+        targetId: page.slug,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
   })
 
   void Promise.allSettled([
@@ -279,7 +476,7 @@ async function permanentlyDeleteWikiById(id: string) {
   return page.slug
 }
 
-async function permanentlyDeletePostById(id: string) {
+async function permanentlyDeletePostById(id: string, operatorUid: string) {
   const post = await prisma.post.findUnique({
     where: { id },
     select: { id: true, title: true },
@@ -294,6 +491,15 @@ async function permanentlyDeletePostById(id: string) {
       tx.textEmbeddingChunk.deleteMany({ where: { sourceType: 'post', sourceId: post.id } }),
     ])
     await tx.post.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'post',
+        targetId: post.id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
   })
 
   void Promise.allSettled([
@@ -310,7 +516,7 @@ async function permanentlyDeletePostById(id: string) {
   return true
 }
 
-async function permanentlyDeleteGalleryById(id: string) {
+async function permanentlyDeleteGalleryById(id: string, operatorUid: string) {
   const gallery = await prisma.gallery.findUnique({
     where: { id },
     include: { images: true },
@@ -320,7 +526,18 @@ async function permanentlyDeleteGalleryById(id: string) {
   const assetIds = [...new Set(gallery.images.map((image) => image.assetId).filter(isString))]
   const imagesWithoutAsset = gallery.images.filter((image) => !image.assetId)
 
-  await prisma.gallery.delete({ where: { id } })
+  await prisma.$transaction(async (tx) => {
+    await tx.gallery.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'gallery',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
   await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
   await Promise.all(imagesWithoutAsset.map((image) => cleanupUntrackedUploadImageByUrl(image.url)))
@@ -328,7 +545,7 @@ async function permanentlyDeleteGalleryById(id: string) {
   return true
 }
 
-async function permanentlyDeleteEventById(id: string) {
+async function permanentlyDeleteEventById(id: string, operatorUid: string) {
   const event = await prisma.event.findUnique({
     where: { id },
     include: { posters: true },
@@ -348,11 +565,48 @@ async function permanentlyDeleteEventById(id: string) {
     ...(event.coverAssetId ? [] : [event.coverUrl].filter(isString)),
   ]
 
-  await prisma.event.delete({ where: { id } })
+  await prisma.$transaction(async (tx) => {
+    await tx.ticketListing.updateMany({
+      where: { eventId: id },
+      data: { eventId: null, customEventName: event.title },
+    })
+    await tx.event.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'event',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
   await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
   await Promise.all(imageUrlsWithoutAsset.map((url) => cleanupUntrackedUploadImageByUrl(url)))
 
+  return true
+}
+
+async function permanentlyDeleteTicketListingById(id: string, operatorUid: string) {
+  const listing = await prisma.ticketListing.findUnique({
+    where: { id },
+    select: { id: true },
+  })
+  if (!listing) return false
+
+  await prisma.$transaction(async (tx) => {
+    await tx.ticketListing.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'ticketListing',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
   return true
 }
 
@@ -379,6 +633,14 @@ function invalidateSoftDeleteCaches(
 
   if (tab === 'galleries') {
     enhancedCache.invalidateByPrefix('gallery_list_public:')
+    return
+  }
+  if (tab === 'events') {
+    invalidateTicketListingCaches()
+    return
+  }
+  if (tab === 'ticket-listings') {
+    invalidateTicketListingCaches()
     return
   }
 
@@ -413,7 +675,7 @@ async function notifyContentRestored(options: {
   recipientUid: string | null | undefined
   operatorUid: string
   operatorName?: string | null
-  targetType: 'wiki' | 'post'
+  targetType: 'wiki' | 'post' | 'ticketListing'
   targetId: string
   title: string
   status: string
@@ -445,7 +707,7 @@ async function notifyContentDeleted(options: {
   recipientUid: string | null | undefined
   operatorUid: string
   operatorName?: string | null
-  targetType: 'wiki' | 'post' | 'gallery'
+  targetType: 'wiki' | 'post' | 'gallery' | 'ticketListing'
   targetId: string
   title: string
   note: string
@@ -466,7 +728,7 @@ async function notifyContentDeleted(options: {
   })
 }
 
-async function permanentlyDeleteMusicTrackByDocId(docId: string) {
+async function permanentlyDeleteMusicTrackByDocId(docId: string, operatorUid: string) {
   const song = await prisma.musicTrack.findUnique({
     where: { docId },
     include: { covers: true },
@@ -476,11 +738,20 @@ async function permanentlyDeleteMusicTrackByDocId(docId: string) {
   const assetIds = [...new Set(song.covers.map((cover) => cover.assetId).filter(isString))]
   const coversWithoutAsset = song.covers.filter((cover) => !cover.assetId)
 
-  await prisma.$transaction([
-    prisma.favorite.deleteMany({ where: { targetType: 'music', targetId: docId } }),
-    prisma.browsingHistory.deleteMany({ where: { targetType: 'music', targetId: docId } }),
-    prisma.musicTrack.delete({ where: { docId } }),
-  ])
+  await prisma.$transaction(async (tx) => {
+    await tx.favorite.deleteMany({ where: { targetType: 'music', targetId: docId } })
+    await tx.browsingHistory.deleteMany({ where: { targetType: 'music', targetId: docId } })
+    await tx.musicTrack.delete({ where: { docId } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'music',
+        targetId: docId,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
   await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
   await Promise.all(
@@ -490,16 +761,19 @@ async function permanentlyDeleteMusicTrackByDocId(docId: string) {
   return true
 }
 
-async function permanentlyDeleteAlbumByDocId(docId: string) {
+async function permanentlyDeleteAlbumByDocId(
+  docId: string,
+  operatorUid: string
+): Promise<'not-found' | 'active' | 'deleted'> {
   const album = await prisma.album.findUnique({
     where: { docId },
     include: { covers: true },
   })
-  if (!album) return false
+  if (!album) return 'not-found'
+  if (!album.deletedAt) return 'active'
 
   const assetIds = [...new Set(album.covers.map((cover) => cover.assetId).filter(isString))]
   const coversWithoutAsset = album.covers.filter((cover) => !cover.assetId)
-
   await prisma.$transaction(async (tx) => {
     await tx.musicTrack.updateMany({
       where: { coverAlbumDocId: docId },
@@ -508,6 +782,15 @@ async function permanentlyDeleteAlbumByDocId(docId: string) {
 
     await tx.songAlbumRelation.deleteMany({ where: { albumDocId: docId } })
     await tx.album.delete({ where: { docId } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'album',
+        targetId: docId,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
   })
 
   await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
@@ -515,18 +798,43 @@ async function permanentlyDeleteAlbumByDocId(docId: string) {
     coversWithoutAsset.map((cover) => cleanupUntrackedUploadImageByUrl(cover.publicUrl))
   )
 
-  return true
+  return 'deleted'
 }
 
-async function permanentlyDeleteImageMapById(id: string) {
+async function permanentlyDeleteImageMapById(id: string, operatorUid: string) {
   const existing = await prisma.imageMap.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, localUrl: true, s3Url: true, externalUrl: true, variantStatus: true },
   })
   if (!existing) return false
-
-  await variantCleanup.cleanupByImageMapId(id, CleanupTrigger.ON_DELETE)
-  await prisma.imageMap.delete({ where: { id } })
+  const [activeClaims, references] = await Promise.all([
+    prisma.mediaAsset.count({ where: { imageMapId: id, status: { in: ['uploaded', 'ready'] } } }),
+    collectMediaReferences(),
+  ])
+  if (
+    activeClaims > 0 ||
+    isMediaReferenced(references, {
+      urls: [existing.localUrl, existing.s3Url, existing.externalUrl],
+    }) ||
+    existing.variantStatus === 'processing'
+  ) {
+    return false
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.imageMap.update({
+      where: { id },
+      data: { retiredAt: getMediaRetiredAt() },
+    })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'imageMap',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: '已登记延迟物理回收',
+      },
+    })
+  })
   return true
 }
 
@@ -545,7 +853,7 @@ const uploadBackup = multer({
 })
 
 async function handleReviewAction(
-  targetType: 'wiki' | 'post' | 'gallery',
+  targetType: 'wiki' | 'post' | 'gallery' | 'ticketListing',
   targetId: string,
   action: 'approve' | 'reject',
   reqAuthUser: { uid: string; role: string; displayName?: string | null },
@@ -666,6 +974,51 @@ async function handleReviewAction(
     }
   }
 
+  if (targetType === 'ticketListing') {
+    const updateResult = await prisma.ticketListing.updateMany({
+      where: { id: targetId, status: 'pending', deletedAt: null },
+      data: {
+        status: action === 'approve' ? 'published' : 'rejected',
+        reviewNote,
+        reviewedBy: reqAuthUser.uid,
+        reviewedAt,
+      },
+    })
+    if (!updateResult.count) throw new ReviewActionConflictError()
+    const listing = await prisma.ticketListing.findUnique({
+      where: { id: targetId },
+      include: adminTicketListingInclude,
+    })
+    if (!listing) throw new ReviewActionConflictError()
+
+    await prisma.moderationLog.create({
+      data: {
+        targetType: 'ticketListing',
+        targetId,
+        action,
+        operatorUid: reqAuthUser.uid,
+        note: reviewNote,
+      },
+    })
+
+    if (listing.authorUid !== reqAuthUser.uid) {
+      await createNotification(listing.authorUid, 'review_result', {
+        approved: action === 'approve',
+        targetType: 'ticketListing',
+        targetId,
+        targetSlug: listing.slug,
+        title: listing.event?.title || listing.customEventName || '盘票信息',
+        note: reviewNote,
+      })
+    }
+
+    invalidateTicketListingCaches()
+    return {
+      item: toTicketListingResponse(listing, { includePrivate: true }),
+      targetType,
+    }
+  }
+
   const nextStatus = action === 'approve' ? 'published' : 'rejected'
   const gallery = await prisma.gallery.update({
     where: { id: targetId },
@@ -707,12 +1060,13 @@ async function handleReviewAction(
       note: reviewNote,
     })
   }
-
   return { item: await toGalleryResponse(gallery), targetType }
 }
 
-function isReviewTargetType(value: unknown): value is 'wiki' | 'post' | 'gallery' {
-  return value === 'wiki' || value === 'post' || value === 'gallery'
+function isReviewTargetType(
+  value: unknown
+): value is 'wiki' | 'post' | 'gallery' | 'ticketListing' {
+  return value === 'wiki' || value === 'post' || value === 'gallery' || value === 'ticketListing'
 }
 
 /**
@@ -730,12 +1084,18 @@ router.get(
       const type = normalizeModerationTargetType(req.query.type)
       const status = parseContentStatus(req.query.status) || 'pending'
 
-      if (type && type !== 'wiki' && type !== 'post' && type !== 'gallery') {
-        res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' })
+      if (
+        type &&
+        type !== 'wiki' &&
+        type !== 'post' &&
+        type !== 'gallery' &&
+        type !== 'ticketListing'
+      ) {
+        res.status(400).json({ error: 'type 必须为 wiki、posts、galleries 或 tickets' })
         return
       }
 
-      const [wiki, posts, galleries] = await Promise.all([
+      const [wiki, posts, galleries, tickets] = await Promise.all([
         type && type !== 'wiki'
           ? Promise.resolve(0)
           : prisma.wikiPage.count({ where: { status, deletedAt: null } }),
@@ -745,9 +1105,16 @@ router.get(
         type && type !== 'gallery'
           ? Promise.resolve(0)
           : prisma.gallery.count({ where: { status, deletedAt: null } }),
+        type && type !== 'ticketListing'
+          ? Promise.resolve(0)
+          : prisma.ticketListing.count({ where: { status, deletedAt: null } }),
       ])
 
-      res.json({ status, counts: { wiki, posts, galleries }, total: wiki + posts + galleries })
+      res.json({
+        status,
+        counts: { wiki, posts, galleries, tickets },
+        total: wiki + posts + galleries + tickets,
+      })
     } catch (error) {
       logger.error({ err: error }, 'Fetch review queue count error')
       res.status(500).json({ error: '获取审核队列数量失败' })
@@ -761,81 +1128,238 @@ router.get(
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const type = normalizeModerationTargetType(req.query.type)
       const status = parseContentStatus(req.query.status) || 'pending'
 
-      if (!type) {
-        res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' })
+      if (req.query.type === 'all') {
+        const { limit, page, offset: skip } = parsePagination(req.query)
+        const take = skip + limit
+        const [
+          wikiItems,
+          postItems,
+          galleryItems,
+          ticketItems,
+          wikiTotal,
+          postTotal,
+          galleryTotal,
+          ticketTotal,
+        ] = await Promise.all([
+          prisma.wikiPage.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              lastEditor: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.post.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              author: { select: { displayName: true } },
+              sectionRef: { select: { name: true } },
+              location: true,
+            },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.gallery.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              images: {
+                include: { asset: true },
+                orderBy: { sortOrder: 'asc' },
+              },
+              location: true,
+            },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.ticketListing.findMany({
+            where: { status, deletedAt: null },
+            select: adminTicketListingListSelect,
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.wikiPage.count({ where: { status, deletedAt: null } }),
+          prisma.post.count({ where: { status, deletedAt: null } }),
+          prisma.gallery.count({ where: { status, deletedAt: null } }),
+          prisma.ticketListing.count({ where: { status, deletedAt: null } }),
+        ])
+        const mergedItems = [
+          ...wikiItems.map((item) => ({
+            data: {
+              ...toWikiResponse(item),
+              sensitiveWords: containsSensitive(item.content || ''),
+              reviewType: 'wiki' as const,
+              reviewId: item.slug,
+            },
+            sortKey: item.id,
+          })),
+          ...(await toGalleryListResponse(galleryItems)).map((item) => ({
+            data: {
+              ...item,
+              reviewType: 'gallery' as const,
+              reviewId: item.id,
+            },
+            sortKey: item.id,
+          })),
+          ...postItems.map((item) => ({
+            data: {
+              ...toPostResponse(item),
+              sectionName: item.sectionRef?.name || item.section,
+              sensitiveWords: containsSensitive(item.content || ''),
+              reviewType: 'post' as const,
+              reviewId: item.id,
+            },
+            sortKey: item.id,
+          })),
+          ...ticketItems.map((item) => ({
+            data: {
+              ...toTicketListingListResponse(item, { includePrivate: true }),
+              reviewType: 'ticket' as const,
+              reviewId: item.id,
+            },
+            sortKey: item.id,
+          })),
+        ].sort((left, right) => {
+          const updatedAtDifference =
+            new Date(String(right.data.updatedAt || 0)).getTime() -
+            new Date(String(left.data.updatedAt || 0)).getTime()
+          if (updatedAtDifference !== 0) return updatedAtDifference
+          const sortKeyDifference = right.sortKey.localeCompare(left.sortKey)
+          if (sortKeyDifference !== 0) return sortKeyDifference
+          return `${right.data.reviewType}:${right.data.reviewId}`.localeCompare(
+            `${left.data.reviewType}:${left.data.reviewId}`
+          )
+        })
+        const total = wikiTotal + postTotal + galleryTotal + ticketTotal
+        const items = mergedItems.slice(skip, skip + limit).map(({ data }) => data)
+        res.json({
+          type: 'all',
+          status,
+          items,
+          ...createPaginationMeta(total, page, limit, items.length),
+        })
         return
       }
 
-      if (type !== 'wiki' && type !== 'post' && type !== 'gallery') {
-        res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' })
+      const type = normalizeModerationTargetType(req.query.type)
+
+      if (!type) {
+        res.status(400).json({ error: 'type 必须为 wiki、posts、galleries 或 tickets' })
         return
       }
+
+      if (type !== 'wiki' && type !== 'post' && type !== 'gallery' && type !== 'ticketListing') {
+        res.status(400).json({ error: 'type 必须为 wiki、posts、galleries 或 tickets' })
+        return
+      }
+
+      const { limit, page, offset: skip } = parsePagination(req.query)
 
       if (type === 'wiki') {
-        const items = await prisma.wikiPage.findMany({
-          where: { status, deletedAt: null },
-          include: {
-            lastEditor: { select: { displayName: true } },
-            location: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 200,
-        })
+        const [items, total] = await Promise.all([
+          prisma.wikiPage.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              lastEditor: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+          prisma.wikiPage.count({ where: { status, deletedAt: null } }),
+        ])
+        const responseItems = items.map((item) => ({
+          ...toWikiResponse(item),
+          sensitiveWords: containsSensitive(item.content || ''),
+        }))
         res.json({
           type,
           status,
-          items: items.map((item) => ({
-            ...toWikiResponse(item),
-            sensitiveWords: containsSensitive(item.content || ''),
-          })),
+          items: responseItems,
+          ...createPaginationMeta(total, page, limit, responseItems.length),
+        })
+        return
+      }
+
+      if (type === 'ticketListing') {
+        const [items, total] = await Promise.all([
+          prisma.ticketListing.findMany({
+            where: { status, deletedAt: null },
+            select: adminTicketListingListSelect,
+            orderBy: { updatedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+          prisma.ticketListing.count({ where: { status, deletedAt: null } }),
+        ])
+        const responseItems = items.map((item) =>
+          toTicketListingListResponse(item, { includePrivate: true })
+        )
+        res.json({
+          type: 'tickets',
+          status,
+          items: responseItems,
+          ...createPaginationMeta(total, page, limit, responseItems.length),
         })
         return
       }
 
       if (type === 'gallery') {
-        const items = await prisma.gallery.findMany({
-          where: { status, deletedAt: null },
-          include: {
-            images: {
-              include: {
-                asset: true,
+        const [items, total] = await Promise.all([
+          prisma.gallery.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              images: {
+                include: {
+                  asset: true,
+                },
+                orderBy: { sortOrder: 'asc' },
               },
-              orderBy: { sortOrder: 'asc' },
+              location: true,
             },
-            location: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 200,
-        })
+            orderBy: { updatedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+          prisma.gallery.count({ where: { status, deletedAt: null } }),
+        ])
+        const responseItems = await toGalleryListResponse(items)
         res.json({
           type: 'galleries',
           status,
-          items: await toGalleryListResponse(items),
+          items: responseItems,
+          ...createPaginationMeta(total, page, limit, responseItems.length),
         })
         return
       }
 
-      const items = await prisma.post.findMany({
-        where: { status, deletedAt: null },
-        include: {
-          author: { select: { displayName: true } },
-          sectionRef: { select: { name: true } },
-          location: true,
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 200,
-      })
+      const [items, total] = await Promise.all([
+        prisma.post.findMany({
+          where: { status, deletedAt: null },
+          include: {
+            author: { select: { displayName: true } },
+            sectionRef: { select: { name: true } },
+            location: true,
+          },
+          orderBy: { updatedAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.post.count({ where: { status, deletedAt: null } }),
+      ])
+      const responseItems = items.map((item) => ({
+        ...toPostResponse(item),
+        sectionName: item.sectionRef?.name || item.section,
+        sensitiveWords: containsSensitive(item.content || ''),
+      }))
       res.json({
         type: 'posts',
         status,
-        items: items.map((item) => ({
-          ...toPostResponse(item),
-          sectionName: item.sectionRef?.name || item.section,
-          sensitiveWords: containsSensitive(item.content || ''),
-        })),
+        items: responseItems,
+        ...createPaginationMeta(total, page, limit, responseItems.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'Fetch review queue error')
@@ -862,6 +1386,10 @@ router.put(
       const result = await handleReviewAction(targetType, targetId, 'approve', reqAuthUser, '')
       res.json(result)
     } catch (error) {
+      if (error instanceof ReviewActionConflictError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
       logger.error({ err: error }, 'Approve review item error')
       res.status(500).json({ error: '审核通过失败' })
     }
@@ -889,7 +1417,9 @@ router.put(
       const reviewNoteLimit =
         targetType === 'gallery'
           ? CONTENT_LIMITS.gallery.reviewNote
-          : CONTENT_LIMITS.post.reviewNote
+          : targetType === 'ticketListing'
+            ? CONTENT_LIMITS.ticketListing.reviewNote
+            : CONTENT_LIMITS.post.reviewNote
       if (!ensureTextLimit(res, note, '审核备注', reviewNoteLimit)) {
         return
       }
@@ -897,6 +1427,10 @@ router.put(
       const result = await handleReviewAction(targetType, targetId, 'reject', reqAuthUser, note)
       res.json(result)
     } catch (error) {
+      if (error instanceof ReviewActionConflictError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
       logger.error({ err: error }, 'Reject review item error')
       res.status(500).json({ error: '驳回失败' })
     }
@@ -935,7 +1469,9 @@ router.post(
         const reviewNoteLimit =
           targetType === 'gallery'
             ? CONTENT_LIMITS.gallery.reviewNote
-            : CONTENT_LIMITS.post.reviewNote
+            : targetType === 'ticketListing'
+              ? CONTENT_LIMITS.ticketListing.reviewNote
+              : CONTENT_LIMITS.post.reviewNote
         if (!ensureTextLimit(res, rejectNote, '审核备注', reviewNoteLimit)) {
           return
         }
@@ -944,6 +1480,10 @@ router.post(
       const result = await handleReviewAction(targetType, id, action, req.authUser!, rejectNote)
       res.json(result)
     } catch (error) {
+      if (error instanceof ReviewActionConflictError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
       logger.error({ err: error }, 'Review action error')
       res.status(500).json({ error: '审核操作失败' })
     }
@@ -1039,16 +1579,29 @@ router.delete(
 router.get(
   '/locks',
   requireAdmin,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     try {
-      const locks = await prisma.editLock.findMany({
-        orderBy: {
-          createdAt: 'desc',
+      await prisma.editLock.deleteMany({
+        where: {
+          expiresAt: {
+            lt: new Date(),
+          },
         },
-        take: 200,
       })
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [locks, total] = await Promise.all([
+        prisma.editLock.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+        }),
+        prisma.editLock.count(),
+      ])
 
-      res.json({ locks: locks.map(toEditLockResponse) })
+      res.json({
+        locks: locks.map(toEditLockResponse),
+        ...createPaginationMeta(total, page, limit, locks.length),
+      })
     } catch (error) {
       logger.error({ err: error }, 'Fetch edit locks error')
       res.status(500).json({ error: '获取编辑锁列表失败' })
@@ -1204,17 +1757,22 @@ router.delete(
 router.get(
   '/moderation_logs',
   requireAdmin,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     try {
-      const logs = await prisma.moderationLog.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-        include: {
-          operator: {
-            select: { uid: true, displayName: true, email: true },
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [logs, total] = await Promise.all([
+        prisma.moderationLog.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+          include: {
+            operator: {
+              select: { uid: true, displayName: true, email: true },
+            },
           },
-        },
-      })
+        }),
+        prisma.moderationLog.count(),
+      ])
 
       res.json({
         logs: logs.map((log) => ({
@@ -1227,6 +1785,7 @@ router.get(
           note: log.note,
           createdAt: log.createdAt.toISOString(),
         })),
+        ...createPaginationMeta(total, page, limit, logs.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'Fetch moderation logs error')
@@ -1239,20 +1798,25 @@ router.get(
 router.get(
   '/ban_logs',
   requireAdmin,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     try {
-      const logs = await prisma.userBanLog.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-        include: {
-          target: {
-            select: { uid: true, displayName: true, email: true },
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [logs, total] = await Promise.all([
+        prisma.userBanLog.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+          include: {
+            target: {
+              select: { uid: true, displayName: true, email: true },
+            },
+            operator: {
+              select: { uid: true, displayName: true, email: true },
+            },
           },
-          operator: {
-            select: { uid: true, displayName: true, email: true },
-          },
-        },
-      })
+        }),
+        prisma.userBanLog.count(),
+      ])
 
       res.json({
         logs: logs.map((log) => ({
@@ -1265,6 +1829,7 @@ router.get(
           note: log.note,
           createdAt: log.createdAt.toISOString(),
         })),
+        ...createPaginationMeta(total, page, limit, logs.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'Fetch ban logs error')
@@ -1722,12 +2287,20 @@ router.post(
  * ==========================
  */
 
+// pg_dump 耗时较长，拒绝并发创建备份
+let backupCreateInFlight = false
+
 // POST /api/admin/backup/create - Create backup
 router.post(
   '/backup/create',
   requireSuperAdmin,
   validateBody(backupCreateSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    if (backupCreateInFlight) {
+      res.status(409).json({ error: '已有备份正在创建，请稍后再试' })
+      return
+    }
+    backupCreateInFlight = true
     try {
       const { note = '' } = req.body as { note?: string }
       const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '')
@@ -1798,7 +2371,7 @@ router.post(
       const stat = await fs.promises.stat(zipFilePath)
       const savedNote = note.trim() ? await writeBackupNote(zipFilename, note) : ''
 
-      await cleanupOldBackups()
+      const removedFilenames = await cleanupOldBackups()
 
       res.json({
         backup: {
@@ -1808,6 +2381,7 @@ router.post(
           createdAt: new Date().toISOString(),
           note: savedNote,
         },
+        removedFilenames,
       })
     } catch (error) {
       logger.error({ err: error }, 'Create backup error')
@@ -1816,6 +2390,8 @@ router.post(
         return
       }
       res.status(500).json({ error: '创建备份失败，请查看服务器日志' })
+    } finally {
+      backupCreateInFlight = false
     }
   })
 )
@@ -1923,7 +2499,7 @@ function pipeDownloadFile(
 async function restoreDatabaseFromZip(
   zipFilePath: string,
   dbConfig: { host: string; port: string; user: string; password: string; database: string },
-  legacyPassword?: string,
+  restorePassword?: string,
   sourceBackupFilename?: string,
   restoreSource: MediaRestoreSource = { type: 'upload' }
 ): Promise<RestoreFromZipResult> {
@@ -1942,55 +2518,49 @@ async function restoreDatabaseFromZip(
     const metadataEntry = zipEntries.find((e) => e.entryName === BACKUP_METADATA_ENTRY)
     const metadata = parseBackupMetadata(metadataEntry?.getData())
 
-    if (metadata?.encrypted) {
-      if (!BACKUP_PASSWORD) {
+    if (!metadata) {
+      return {
+        success: false,
+        error: '备份文件缺少 backup-meta.json 元数据，仅支持 v2 格式备份',
+        statusCode: 400,
+      }
+    }
+
+    if (metadata.encrypted) {
+      const candidatePasswords = [BACKUP_PASSWORD, restorePassword].filter(
+        (candidate, index, candidates): candidate is string =>
+          Boolean(candidate) && candidates.indexOf(candidate) === index
+      )
+
+      if (candidatePasswords.length === 0) {
         return {
           success: false,
-          error: '服务器未配置 BACKUP_PASSWORD，无法恢复加密备份',
+          error: '服务器未配置 BACKUP_PASSWORD，且未提供解密密码，无法恢复加密备份',
           statusCode: 400,
         }
       }
-      try {
-        sqlContent = decryptBuffer(encryptedContent, BACKUP_PASSWORD)
-      } catch {
+
+      let decrypted: Buffer | null = null
+      for (const candidate of candidatePasswords) {
+        try {
+          decrypted = decryptBuffer(encryptedContent, candidate)
+          break
+        } catch {
+          // 尝试下一个候选密码
+        }
+      }
+
+      if (!decrypted) {
         return {
           success: false,
-          error: '备份文件无法用服务器密钥解密，请确认 BACKUP_PASSWORD 配置',
+          error: '备份解密失败，请确认服务器 BACKUP_PASSWORD 或所提供密码与备份加密时一致',
           statusCode: 400,
         }
       }
-    } else if (metadata) {
-      sqlContent = encryptedContent
+
+      sqlContent = decrypted
     } else {
-      const rawContent = encryptedContent.toString('utf-8')
-      if (rawContent.includes('PostgreSQL database dump') || rawContent.includes('pg_dump')) {
-        sqlContent = encryptedContent
-      } else {
-        const candidatePasswords = [BACKUP_PASSWORD, legacyPassword].filter(
-          (candidate, index, candidates): candidate is string =>
-            Boolean(candidate) && candidates.indexOf(candidate) === index
-        )
-
-        let decrypted: Buffer | null = null
-        for (const candidate of candidatePasswords) {
-          try {
-            decrypted = decryptBuffer(encryptedContent, candidate)
-            break
-          } catch {
-            // Try the next compatible legacy password source.
-          }
-        }
-
-        if (!decrypted) {
-          return {
-            success: false,
-            error: '旧备份文件已加密，请配置 BACKUP_PASSWORD 或提供旧备份解密密码',
-            statusCode: 400,
-          }
-        }
-
-        sqlContent = decrypted
-      }
+      sqlContent = encryptedContent
     }
   } catch (error) {
     logger.error({ err: error }, 'Failed to parse backup zip')
@@ -2086,8 +2656,16 @@ async function restoreDatabaseFromZip(
   }
 
   // Execute restore
-  const tempSqlPath = path.join(backupsDir, `restore_${Date.now()}.sql`)
+  const restoreId = Date.now()
+  const tempSqlPath = path.join(backupsDir, `restore_${restoreId}.sql`)
+  const wipeSqlPath = path.join(backupsDir, `restore_${restoreId}_wipe.sql`)
   await fs.promises.writeFile(tempSqlPath, sqlContent)
+  // pg_dump --clean 只清理备份中已知的对象，目标库 schema 比备份新时（如备份后新增了表和外键）
+  // 残留的外键会阻塞主键删除，因此先重建 public schema 再重放备份
+  await fs.promises.writeFile(
+    wipeSqlPath,
+    'DROP SCHEMA IF EXISTS public CASCADE;\nCREATE SCHEMA public;\n'
+  )
 
   try {
     const psqlArgs = [
@@ -2103,6 +2681,8 @@ async function restoreDatabaseFromZip(
       '-v',
       'ON_ERROR_STOP=1',
       '-f',
+      wipeSqlPath,
+      '-f',
       tempSqlPath,
     ]
     const psqlEnv = { ...process.env, PGPASSWORD: dbConfig.password }
@@ -2116,9 +2696,14 @@ async function restoreDatabaseFromZip(
     if (isPostgresClientMissingError(psqlError)) {
       return { success: false, error: formatPostgresClientMissingError('psql'), statusCode: 500 }
     }
-    return { success: false, error: '恢复数据库失败，请查看服务器日志', statusCode: 500 }
+    return {
+      success: false,
+      error: '恢复数据库失败，数据库已回滚至恢复前状态，请查看服务器日志',
+      statusCode: 500,
+    }
   } finally {
     await fs.promises.unlink(tempSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'))
+    await fs.promises.unlink(wipeSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'))
   }
 
   try {
@@ -2142,7 +2727,7 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     req.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
     res.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
-    const { legacyPassword, confirm } = req.body as { legacyPassword?: string; confirm?: boolean }
+    const { password, confirm } = req.body as { password?: string; confirm?: boolean }
     const file = req.file
 
     if (!confirm) {
@@ -2163,7 +2748,7 @@ router.post(
     }
 
     try {
-      const result = await restoreDatabaseFromZip(file.path, dbConfig, legacyPassword, undefined, {
+      const result = await restoreDatabaseFromZip(file.path, dbConfig, password, undefined, {
         type: 'upload',
         filename: file.originalname,
       })
@@ -2193,7 +2778,7 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     req.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
     res.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
-    const { legacyPassword, confirm } = req.body as { legacyPassword?: string; confirm?: boolean }
+    const { password, confirm } = req.body as { password?: string; confirm?: boolean }
 
     if (!confirm) {
       res.status(400).json({ error: '恢复操作需要二次确认，请传入 confirm: true' })
@@ -2222,7 +2807,7 @@ router.post(
       return
     }
 
-    const result = await restoreDatabaseFromZip(filePath, dbConfig, legacyPassword, normalized, {
+    const result = await restoreDatabaseFromZip(filePath, dbConfig, password, normalized, {
       type: 'existing',
       filename: normalized,
     })
@@ -2275,14 +2860,8 @@ router.post(
   })
 )
 
-// GET /api/admin/backups - List backups
-router.get('/backups', requireSuperAdmin, asyncHandler(handleBackupList))
-
-// DELETE /api/admin/backup/:filename - Delete backup (legacy compatible)
+// POST /api/admin/backup/:filename/delete - Delete backup
 router.post('/backup/:filename/delete', requireSuperAdmin, asyncHandler(handleBackupDelete))
-
-// DELETE /api/admin/backups/:filename - Delete backup
-router.post('/backups/:filename/delete', requireSuperAdmin, asyncHandler(handleBackupDelete))
 
 router.post(
   '/wiki-categories',
@@ -2378,42 +2957,6 @@ router.patch(
   })
 )
 
-/**
- * ==========================
- * Admin Panel Stats & Data
- * ==========================
- */
-
-// GET /api/admin/stats - Get admin panel statistics
-router.get(
-  '/stats',
-  requireAdmin,
-  asyncHandler(async (_req, res) => {
-    try {
-      const [wikiCount, postCount, galleryCount, userCount, musicCount] = await Promise.all([
-        prisma.wikiPage.count({ where: { deletedAt: null } }),
-        prisma.post.count({ where: { deletedAt: null } }),
-        prisma.gallery.count({ where: { deletedAt: null } }),
-        prisma.user.count({ where: { deletedAt: null } }),
-        prisma.musicTrack.count({ where: { deletedAt: null } }),
-      ])
-
-      res.json({
-        stats: {
-          wiki: wikiCount,
-          posts: postCount,
-          galleries: galleryCount,
-          users: userCount,
-          music: musicCount,
-        },
-      })
-    } catch (error) {
-      logger.error({ err: error }, 'Fetch admin stats error')
-      res.status(500).json({ error: '获取统计数据失败' })
-    }
-  })
-)
-
 // GET /api/admin/:tab - Get admin data by tab
 router.get(
   '/:tab',
@@ -2424,16 +2967,22 @@ router.get(
       const includeDeleted = includeDeletedFromQuery(req.query)
       const activeWhere = deletedAtFilter(includeDeleted)
 
+      const { limit, page, offset: skip } = parsePagination(req.query)
+
       if (tab === 'wiki') {
-        const data = await prisma.wikiPage.findMany({
-          where: activeWhere,
-          include: {
-            lastEditor: { select: { displayName: true } },
-            location: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
-        })
+        const [data, total] = await Promise.all([
+          prisma.wikiPage.findMany({
+            where: activeWhere,
+            include: {
+              lastEditor: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.wikiPage.count({ where: activeWhere }),
+        ])
         const deleteReasonsBySlug = await getDeleteReasonsByTargetId(
           'wiki',
           data.filter((page) => page.deletedAt).map((page) => page.slug)
@@ -2443,20 +2992,25 @@ router.get(
             ...toWikiResponse(page),
             deletionReason: deleteReasonsBySlug.get(page.slug) ?? null,
           })),
+          ...createPaginationMeta(total, page, limit, data.length),
         })
         return
       }
 
       if (tab === 'posts') {
-        const data = await prisma.post.findMany({
-          where: activeWhere,
-          include: {
-            author: { select: { displayName: true } },
-            location: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
-        })
+        const [data, total] = await Promise.all([
+          prisma.post.findMany({
+            where: activeWhere,
+            include: {
+              author: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.post.count({ where: activeWhere }),
+        ])
         const deleteReasonsById = await getDeleteReasonsByTargetId(
           'post',
           data.filter((post) => post.deletedAt).map((post) => post.id)
@@ -2466,25 +3020,29 @@ router.get(
             ...toPostResponse(post),
             deletionReason: deleteReasonsById.get(post.id) ?? null,
           })),
+          ...createPaginationMeta(total, page, limit, data.length),
         })
         return
       }
-
       if (tab === 'galleries') {
-        const data = await prisma.gallery.findMany({
-          where: activeWhere,
-          include: {
-            images: {
-              include: {
-                asset: true,
+        const [data, total] = await Promise.all([
+          prisma.gallery.findMany({
+            where: activeWhere,
+            include: {
+              images: {
+                include: {
+                  asset: true,
+                },
+                orderBy: { sortOrder: 'asc' },
               },
-              orderBy: { sortOrder: 'asc' },
+              location: true,
             },
-            location: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
-        })
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.gallery.count({ where: activeWhere }),
+        ])
         const deleteReasonsById = await getDeleteReasonsByTargetId(
           'gallery',
           data.filter((gallery) => gallery.deletedAt).map((gallery) => gallery.id)
@@ -2495,98 +3053,250 @@ router.get(
             ...gallery,
             deletionReason: deleteReasonsById.get(gallery.id) ?? null,
           })),
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+
+      if (tab === 'ticket-listings') {
+        const [data, total] = await Promise.all([
+          prisma.ticketListing.findMany({
+            where: activeWhere,
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take: limit,
+            skip,
+            select: {
+              id: true,
+              slug: true,
+              type: true,
+              eventId: true,
+              customEventName: true,
+              quantity: true,
+              ticketTier: true,
+              seat: true,
+              authorUid: true,
+              status: true,
+              reviewNote: true,
+              reviewedBy: true,
+              reviewedAt: true,
+              deletedAt: true,
+              deletedBy: true,
+              createdAt: true,
+              updatedAt: true,
+              event: adminTicketListingInclude.event,
+              author: adminTicketListingInclude.author,
+            },
+          }),
+          prisma.ticketListing.count({ where: activeWhere }),
+        ])
+        const deleteReasonsById = await getDeleteReasonsByTargetId(
+          'ticketListing',
+          data.filter((listing) => listing.deletedAt).map((listing) => listing.id)
+        )
+        res.json({
+          data: data.map((listing) => ({
+            ...toTicketListingListResponse(listing, { includePrivate: true }),
+            deletionReason: deleteReasonsById.get(listing.id) ?? null,
+          })),
+          ...createPaginationMeta(total, page, limit, data.length),
         })
         return
       }
 
       if (tab === 'events') {
-        const data = await prisma.event.findMany({
-          where: activeWhere,
-          include: adminEventInclude,
-          orderBy: { updatedAt: 'desc' },
-          take: 100,
+        const [data, total] = await Promise.all([
+          prisma.event.findMany({
+            where: activeWhere,
+            include: adminEventInclude,
+            orderBy: [
+              { timeStatus: { sort: 'asc', nulls: 'last' } },
+              { sortStart: { sort: 'desc', nulls: 'last' } },
+              { createdAt: 'desc' },
+            ],
+            take: limit,
+            skip,
+          }),
+          prisma.event.count({ where: activeWhere }),
+        ])
+        res.json({
+          data: await toEventListResponse(data),
+          ...createPaginationMeta(total, page, limit, data.length),
         })
-        res.json({ data: await toEventListResponse(data) })
         return
       }
 
       if (tab === 'users') {
-        const data = await prisma.user.findMany({
-          where: activeWhere,
-          orderBy: { createdAt: 'desc' },
-          take: 100,
-          select: {
-            uid: true,
-            publicId: true,
-            email: true,
-            displayName: true,
-            photoURL: true,
-            role: true,
-            status: true,
-            banReason: true,
-            bannedAt: true,
-            emailVerifiedAt: true,
-            level: true,
-            signature: true,
-            bio: true,
-            deletedAt: true,
-            deletedBy: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        })
-        res.json({ data: data.map(toUserResponse) })
-        return
-      }
-
-      if (tab === 'locks') {
-        await prisma.editLock.deleteMany({
-          where: {
-            expiresAt: {
-              lt: new Date(),
-            },
-          },
-        })
-
-        const data = await prisma.editLock.findMany({
-          orderBy: { createdAt: 'desc' },
-          take: 200,
-        })
-        res.json({ data: data.map(toEditLockResponse) })
-        return
-      }
-
-      if (tab === 'music') {
-        const { limit, page, offset: skip } = parsePagination(req.query)
-        const [total, data] = await Promise.all([
-          prisma.musicTrack.count({ where: activeWhere }),
-          prisma.musicTrack.findMany({
+        const [data, total] = await Promise.all([
+          prisma.user.findMany({
             where: activeWhere,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip,
             select: {
-              docId: true,
-              slug: true,
-              title: true,
-              artists: true,
-              lyricists: true,
-              composers: true,
-              arrangers: true,
-              vocals: true,
-              album: true,
-              audioUrl: true,
-              lyric: true,
-              releaseDate: true,
-              durationMs: true,
-              coverId: true,
-              coverAlbumDocId: true,
-              displayAlbumMode: true,
-              manualAlbumName: true,
+              uid: true,
+              publicId: true,
+              email: true,
+              displayName: true,
+              photoURL: true,
+              role: true,
+              status: true,
+              banReason: true,
+              bannedAt: true,
+              emailVerifiedAt: true,
+              level: true,
+              signature: true,
+              bio: true,
               deletedAt: true,
               deletedBy: true,
               createdAt: true,
               updatedAt: true,
-              externalSources: {
-                orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            },
+          }),
+          prisma.user.count({ where: activeWhere }),
+        ])
+        res.json({
+          data: data.map(toUserResponse),
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+
+      if (tab === 'music') {
+        const sortBy = parseAdminMusicSortBy(req.query.sortBy)
+        const sortOrder = parseAdminMusicSortOrder(req.query.sortOrder)
+        const { where } = await buildAdminMusicWhere(req)
+        const select = {
+          docId: true,
+          slug: true,
+          title: true,
+          artists: true,
+          lyricists: true,
+          composers: true,
+          arrangers: true,
+          vocals: true,
+          album: true,
+          audioUrl: true,
+          lyric: true,
+          description: true,
+          tags: true,
+          customPlatformLinks: true,
+          releaseDate: true,
+          durationMs: true,
+          coverId: true,
+          coverAlbumDocId: true,
+          displayAlbumMode: true,
+          manualAlbumName: true,
+          deletedAt: true,
+          deletedBy: true,
+          createdAt: true,
+          updatedAt: true,
+          playableOverride: true,
+          externalSources: {
+            orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
+          },
+          covers: {
+            orderBy: { sortOrder: 'asc' as const },
+            select: { id: true, publicUrl: true, thumbnailUrl: true, isDefault: true },
+          },
+          albumRelations: {
+            select: {
+              album: {
+                select: {
+                  docId: true,
+                  coverId: true,
+                  covers: {
+                    orderBy: { sortOrder: 'asc' as const },
+                    select: { id: true, publicUrl: true, thumbnailUrl: true, isDefault: true },
+                  },
+                },
               },
+            },
+            where: { album: { deletedAt: null } },
+            orderBy: [{ discNumber: 'asc' as const }, { trackOrder: 'asc' as const }],
+          },
+        }
+        const fetchRows = () => {
+          if (sortBy === 'title' || sortBy === 'artist') {
+            return (async () => {
+              const orderedIds = (
+                await prisma.musicTrack.findMany({
+                  where: where as never,
+                  select: {
+                    docId: true,
+                    title: true,
+                    artists: true,
+                    updatedAt: true,
+                    releaseDate: true,
+                  },
+                })
+              )
+                .sort((a, b) => compareAdminMusicRows(a, b, sortBy, sortOrder))
+                .slice(skip, skip + limit)
+                .map((row) => row.docId)
+              if (!orderedIds.length) return []
+
+              const rows = await prisma.musicTrack.findMany({
+                where: { AND: [where, { docId: { in: orderedIds } }] } as never,
+                select,
+              })
+              const order = new Map(orderedIds.map((id, index) => [id, index]))
+              return rows.sort((a, b) => (order.get(a.docId) ?? 0) - (order.get(b.docId) ?? 0))
+            })()
+          }
+          if (sortBy === 'updatedAt') {
+            return prisma.musicTrack.findMany({
+              where: where as never,
+              select,
+              orderBy: [{ updatedAt: sortOrder }, { docId: 'asc' as const }],
+              skip,
+              take: limit,
+            })
+          }
+          return prisma.musicTrack.findMany({
+            where: where as never,
+            select,
+            orderBy: [
+              { releaseDate: { sort: sortOrder, nulls: 'last' as const } },
+              { updatedAt: 'desc' as const },
+              { docId: 'asc' as const },
+            ],
+            skip,
+            take: limit,
+          })
+        }
+        const [total, orderedRows] = await Promise.all([
+          prisma.musicTrack.count({ where: where as never }),
+          fetchRows(),
+        ])
+        res.json({
+          data: orderedRows.map((track) => toMusicResponse(track)),
+          ...createPaginationMeta(total, page, limit, orderedRows.length),
+        })
+        return
+      }
+
+      if (tab === 'albums') {
+        const sortBy = parseAdminMusicSortBy(req.query.sortBy)
+        const sortOrder = parseAdminMusicSortOrder(req.query.sortOrder)
+        const { where } = buildAdminAlbumWhere(req)
+        const [total, albums] = await Promise.all([
+          prisma.album.count({ where: where as never }),
+          prisma.album.findMany({
+            where: where as never,
+            select: {
+              docId: true,
+              slug: true,
+              title: true,
+              artist: true,
+              description: true,
+              tags: true,
+              tracks: true,
+              coverId: true,
+              releaseDate: true,
+              deletedAt: true,
+              deletedBy: true,
+              createdAt: true,
+              updatedAt: true,
               covers: {
                 orderBy: { sortOrder: 'asc' },
                 select: {
@@ -2594,73 +3304,90 @@ router.get(
                   publicUrl: true,
                   thumbnailUrl: true,
                   isDefault: true,
+                  sortOrder: true,
                 },
               },
-              albumRelations: {
-                select: {
-                  album: {
-                    select: {
-                      docId: true,
-                      coverId: true,
-                      covers: {
-                        orderBy: { sortOrder: 'asc' },
-                        select: {
-                          id: true,
-                          publicUrl: true,
-                          thumbnailUrl: true,
-                          isDefault: true,
-                        },
-                      },
-                    },
-                  },
-                },
-                orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+              externalSources: {
+                orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+              },
+              songRelations: {
+                where: { song: { deletedAt: null } },
+                select: { songDocId: true },
               },
             },
-            orderBy: { updatedAt: 'desc' },
+            orderBy:
+              sortBy === 'updatedAt'
+                ? [{ updatedAt: sortOrder }, { docId: 'asc' }]
+                : sortBy === 'releaseDate'
+                  ? [
+                      { releaseDate: { sort: sortOrder, nulls: 'last' } },
+                      { updatedAt: 'desc' },
+                      { docId: 'asc' },
+                    ]
+                  : sortBy === 'title'
+                    ? [{ title: sortOrder }, { updatedAt: 'desc' }, { docId: 'asc' }]
+                    : [{ artist: sortOrder }, { updatedAt: 'desc' }, { docId: 'asc' }],
             skip,
             take: limit,
           }),
         ])
-        const totalPages = Math.max(1, Math.ceil(total / limit))
         res.json({
-          data: data.map(toMusicResponse),
-          total,
-          page,
-          limit,
-          totalPages,
-          hasMore: skip + data.length < total,
+          data: albums.map((album) => ({
+            ...toAlbumResponse({ ...album, songRelations: undefined }),
+            trackCount: album.songRelations.length,
+            discCount: normalizeTrackDiscPayload(album.tracks).length,
+          })),
+          ...createPaginationMeta(total, page, limit, albums.length),
         })
         return
       }
-
       if (tab === 'announcements') {
-        const data = await prisma.announcement.findMany({
-          where: activeWhere,
-          orderBy: { createdAt: 'desc' },
-          take: 100,
+        const [data, total] = await Promise.all([
+          prisma.announcement.findMany({
+            where: activeWhere,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.announcement.count({ where: activeWhere }),
+        ])
+        res.json({
+          data,
+          ...createPaginationMeta(total, page, limit, data.length),
         })
-        res.json({ data })
         return
       }
-
       if (tab === 'sections') {
-        const data = await prisma.section.findMany({
-          where: activeWhere,
-          orderBy: { order: 'asc' },
-          take: 100,
+        const [data, total] = await Promise.all([
+          prisma.section.findMany({
+            where: activeWhere,
+            orderBy: { order: 'asc' },
+            take: limit,
+            skip,
+          }),
+          prisma.section.count({ where: activeWhere }),
+        ])
+        res.json({
+          data,
+          ...createPaginationMeta(total, page, limit, data.length),
         })
-        res.json({ data })
         return
       }
 
       if (tab === 'wiki-categories') {
-        const data = await prisma.wikiCategory.findMany({
-          where: activeWhere,
-          orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
-          take: 100,
+        const [data, total] = await Promise.all([
+          prisma.wikiCategory.findMany({
+            where: activeWhere,
+            orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+            take: limit,
+            skip,
+          }),
+          prisma.wikiCategory.count({ where: activeWhere }),
+        ])
+        res.json({
+          data,
+          ...createPaginationMeta(total, page, limit, data.length),
         })
-        res.json({ data })
         return
       }
 
@@ -2724,6 +3451,25 @@ router.get(
           return
         }
         res.json({ item: await toGalleryResponse(item) })
+        return
+      }
+
+      if (tab === 'ticket-listings') {
+        const item = await prisma.ticketListing.findUnique({
+          where: { id },
+          include: adminTicketListingInclude,
+        })
+        if (!item) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        const deleteReasons = await getDeleteReasonsByTargetId('ticketListing', [id])
+        res.json({
+          item: {
+            ...toTicketListingResponse(item, { includePrivate: true }),
+            deletionReason: deleteReasons.get(id) ?? null,
+          },
+        })
         return
       }
 
@@ -2950,6 +3696,56 @@ router.delete(
         return
       }
 
+      if (tab === 'ticket-listings') {
+        const listing = await prisma.ticketListing.findUnique({
+          where: { id },
+          include: { event: { select: { title: true } } },
+        })
+        if (!listing || listing.deletedAt) {
+          res.status(404).json({ error: '盘票信息不存在' })
+          return
+        }
+
+        const isSelfDelete = listing.authorUid === req.authUser!.uid
+        const reason = resolveDeleteReason(rawReason, isSelfDelete)
+        if (!isSelfDelete && !reason) {
+          res.status(400).json({ error: '删除理由不能为空' })
+          return
+        }
+        if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.ticketListing.reviewNote)) {
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.ticketListing.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'ticketListing',
+              targetId: id,
+              action: 'delete',
+              operatorUid: req.authUser!.uid,
+              note: reason,
+            },
+          })
+        })
+
+        if (!isSelfDelete) {
+          await notifyContentDeleted({
+            recipientUid: listing.authorUid,
+            operatorUid: req.authUser!.uid,
+            operatorName: req.authUser!.displayName,
+            targetType: 'ticketListing',
+            targetId: id,
+            title: listing.event?.title || listing.customEventName || '盘票信息',
+            note: reason,
+          })
+        }
+
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+
       if (tab === 'events') {
         const event = await prisma.event.findUnique({
           where: { id },
@@ -2978,6 +3774,14 @@ router.delete(
         return
       }
       if (tab === 'albums') {
+        const album = await prisma.album.findUnique({
+          where: { docId: id },
+          select: { deletedAt: true },
+        })
+        if (!album || album.deletedAt) {
+          res.status(404).json({ error: '专辑不存在' })
+          return
+        }
         await prisma.album.update({ where: { docId: id }, data: softDeleteData(req.authUser!.uid) })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
@@ -3037,7 +3841,16 @@ router.delete(
           return
         }
 
-        await prisma.user.update({ where: { uid: id }, data: softDeleteData(req.authUser!.uid) })
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({
+            where: { uid: id },
+            data: softDeleteData(req.authUser!.uid),
+          })
+          await tx.userApiKey.updateMany({
+            where: { userUid: id, revokedAt: null },
+            data: { revokedAt: new Date() },
+          })
+        })
         clearUserCache(id)
         res.json({ success: true })
         return
@@ -3074,11 +3887,18 @@ router.post(
           res.status(404).json({ error: '百科不存在' })
           return
         }
+        if (!page.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
 
-        await prisma.wikiPage.update({ where: { id }, data: restoreDeleteData })
+        await prisma.$transaction(async (tx) => {
+          await tx.wikiPage.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'wiki', page.slug, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab, { slug: page.slug })
         const recipient =
-          !page.deletedAt || page.lastEditorUid === req.authUser!.uid
+          page.lastEditorUid === req.authUser!.uid
             ? null
             : await prisma.user.findUnique({
                 where: { uid: page.lastEditorUid },
@@ -3093,7 +3913,7 @@ router.post(
           title: page.title,
           status: page.status,
           linkable: canOpenRestoredWikiNotification(page.status, recipient?.role),
-          wasDeleted: Boolean(page.deletedAt),
+          wasDeleted: true,
         })
         res.json({ success: true })
         return
@@ -3107,8 +3927,15 @@ router.post(
           res.status(404).json({ error: '帖子不存在' })
           return
         }
+        if (!post.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
 
-        await prisma.post.update({ where: { id }, data: restoreDeleteData })
+        await prisma.$transaction(async (tx) => {
+          await tx.post.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'posts', post.id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         await notifyContentRestored({
           recipientUid: post.authorUid,
@@ -3119,67 +3946,228 @@ router.post(
           title: post.title,
           status: post.status,
           linkable: true,
-          wasDeleted: Boolean(post.deletedAt),
+          wasDeleted: true,
         })
         res.json({ success: true })
         return
       }
       if (tab === 'galleries') {
-        await prisma.gallery.update({ where: { id }, data: restoreDeleteData })
+        const gallery = await prisma.gallery.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!gallery) {
+          res.status(404).json({ error: '图集不存在' })
+          return
+        }
+        if (!gallery.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.gallery.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'galleries', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
+      if (tab === 'ticket-listings') {
+        const listing = await prisma.ticketListing.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            slug: true,
+            status: true,
+            authorUid: true,
+            event: { select: { title: true } },
+            customEventName: true,
+            deletedAt: true,
+          },
+        })
+        if (!listing) {
+          res.status(404).json({ error: '盘票信息不存在' })
+          return
+        }
+        if (!listing.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.ticketListing.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'ticket-listings', id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        await notifyContentRestored({
+          recipientUid: listing.authorUid,
+          operatorUid: req.authUser!.uid,
+          operatorName: req.authUser!.displayName,
+          targetType: 'ticketListing',
+          targetId: listing.id,
+          title: listing.event?.title || listing.customEventName || '盘票信息',
+          status: listing.status,
+          linkable: true,
+          wasDeleted: true,
+        })
+        res.json({ success: true })
+        return
+      }
+
       if (tab === 'events') {
         const event = await prisma.event.findUnique({
           where: { id },
-          select: { id: true },
+          select: { id: true, deletedAt: true },
         })
         if (!event) {
           res.status(404).json({ error: '活动不存在' })
           return
         }
+        if (!event.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
 
-        await prisma.event.update({
-          where: { id: event.id },
-          data: { ...restoreDeleteData, updatedByUid: req.authUser!.uid },
+        await prisma.$transaction(async (tx) => {
+          await tx.event.update({
+            where: { id: event.id },
+            data: { ...restoreDeleteData, updatedByUid: req.authUser!.uid },
+          })
+          await createModerationLog(tx, 'events', event.id, req.authUser!.uid)
         })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'music') {
-        await prisma.musicTrack.update({ where: { docId: id }, data: restoreDeleteData })
+        const song = await prisma.musicTrack.findUnique({
+          where: { docId: id },
+          select: { deletedAt: true },
+        })
+        if (!song) {
+          res.status(404).json({ error: '歌曲不存在' })
+          return
+        }
+        if (!song.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.musicTrack.update({ where: { docId: id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'music', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'albums') {
-        await prisma.album.update({ where: { docId: id }, data: restoreDeleteData })
+        const album = await prisma.album.findUnique({
+          where: { docId: id },
+          select: { deletedAt: true },
+        })
+        if (!album) {
+          res.status(404).json({ error: '专辑不存在' })
+          return
+        }
+        if (!album.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.album.update({ where: { docId: id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'albums', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'announcements') {
-        await prisma.announcement.update({ where: { id }, data: restoreDeleteData })
+        const announcement = await prisma.announcement.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!announcement) {
+          res.status(404).json({ error: '公告不存在' })
+          return
+        }
+        if (!announcement.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.announcement.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'announcements', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'sections') {
-        await prisma.section.update({ where: { id }, data: restoreDeleteData })
+        const section = await prisma.section.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!section) {
+          res.status(404).json({ error: '版块不存在' })
+          return
+        }
+        if (!section.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.section.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'sections', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'wiki-categories') {
-        await prisma.wikiCategory.update({ where: { id }, data: restoreDeleteData })
+        const category = await prisma.wikiCategory.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!category) {
+          res.status(404).json({ error: '分类不存在' })
+          return
+        }
+        if (!category.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.wikiCategory.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'wiki-categories', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'image-maps') {
-        await prisma.imageMap.update({ where: { id }, data: restoreDeleteData })
+        const imageMap = await prisma.imageMap.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!imageMap) {
+          res.status(404).json({ error: '图片映射不存在' })
+          return
+        }
+        if (!imageMap.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.imageMap.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'image-maps', id, req.authUser!.uid)
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
@@ -3187,17 +4175,25 @@ router.post(
       if (tab === 'users') {
         const targetUser = await prisma.user.findUnique({
           where: { uid: id },
-          select: { uid: true, role: true },
+          select: { uid: true, role: true, deletedAt: true },
         })
         if (!targetUser) {
           res.status(404).json({ error: '用户不存在' })
+          return
+        }
+        if (!targetUser.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
           return
         }
         if (!canManageTargetUserRole(req.authUser?.role, targetUser.role)) {
           res.status(403).json({ error: '无权恢复该用户' })
           return
         }
-        await prisma.user.update({ where: { uid: id }, data: restoreDeleteData })
+
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({ where: { uid: id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'users', id, req.authUser!.uid)
+        })
         clearUserCache(id)
         res.json({ success: true })
         return
@@ -3221,7 +4217,7 @@ router.delete(
       const id = req.params.id
 
       if (tab === 'wiki') {
-        const deletedSlug = await permanentlyDeleteWikiById(id)
+        const deletedSlug = await permanentlyDeleteWikiById(id, req.authUser!.uid)
         if (!deletedSlug) {
           res.status(404).json({ error: '记录不存在' })
           return
@@ -3231,7 +4227,7 @@ router.delete(
         return
       }
       if (tab === 'posts') {
-        const deleted = await permanentlyDeletePostById(id)
+        const deleted = await permanentlyDeletePostById(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '记录不存在' })
           return
@@ -3241,7 +4237,7 @@ router.delete(
         return
       }
       if (tab === 'galleries') {
-        const deleted = await permanentlyDeleteGalleryById(id)
+        const deleted = await permanentlyDeleteGalleryById(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '图集不存在' })
           return
@@ -3250,8 +4246,19 @@ router.delete(
         res.json({ success: true })
         return
       }
+      if (tab === 'ticket-listings') {
+        const deleted = await permanentlyDeleteTicketListingById(id, req.authUser!.uid)
+        if (!deleted) {
+          res.status(404).json({ error: '盘票信息不存在' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+
       if (tab === 'events') {
-        const deleted = await permanentlyDeleteEventById(id)
+        const deleted = await permanentlyDeleteEventById(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '活动不存在' })
           return
@@ -3261,7 +4268,7 @@ router.delete(
         return
       }
       if (tab === 'music') {
-        const deleted = await permanentlyDeleteMusicTrackByDocId(id)
+        const deleted = await permanentlyDeleteMusicTrackByDocId(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '歌曲不存在' })
           return
@@ -3271,9 +4278,13 @@ router.delete(
         return
       }
       if (tab === 'albums') {
-        const deleted = await permanentlyDeleteAlbumByDocId(id)
-        if (!deleted) {
+        const result = await permanentlyDeleteAlbumByDocId(id, req.authUser!.uid)
+        if (result === 'not-found') {
           res.status(404).json({ error: '专辑不存在' })
+          return
+        }
+        if (result === 'active') {
+          res.status(400).json({ error: '请先软删除专辑' })
           return
         }
         invalidateSoftDeleteCaches(tab)
@@ -3281,13 +4292,35 @@ router.delete(
         return
       }
       if (tab === 'announcements') {
-        await prisma.announcement.delete({ where: { id } })
+        await prisma.$transaction(async (tx) => {
+          await tx.announcement.delete({ where: { id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'announcement',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'sections') {
-        await prisma.section.delete({ where: { id } })
+        await prisma.$transaction(async (tx) => {
+          await tx.section.delete({ where: { id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'section',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
@@ -3299,13 +4332,24 @@ router.delete(
           return
         }
 
-        await prisma.wikiCategory.delete({ where: { id } })
+        await prisma.$transaction(async (tx) => {
+          await tx.wikiCategory.delete({ where: { id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'wikiCategory',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
         invalidateSoftDeleteCaches(tab)
         res.json({ success: true })
         return
       }
       if (tab === 'image-maps') {
-        const deleted = await permanentlyDeleteImageMapById(id)
+        const deleted = await permanentlyDeleteImageMapById(id, req.authUser!.uid)
         if (!deleted) {
           res.status(404).json({ error: '图片映射不存在' })
           return
@@ -3331,7 +4375,18 @@ router.delete(
           res.status(403).json({ error: '无权彻底删除该用户' })
           return
         }
-        await prisma.user.delete({ where: { uid: id } })
+        await prisma.$transaction(async (tx) => {
+          await tx.user.delete({ where: { uid: id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'user',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
         clearUserCache(id)
         res.json({ success: true })
         return

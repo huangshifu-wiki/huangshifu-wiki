@@ -7,6 +7,7 @@ import {
   isPrismaTableMissingError,
 } from '../utils'
 import { prisma } from '../prisma'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 import {
   getEmbeddingModelName,
   getEmbeddingVectorSize,
@@ -41,10 +42,9 @@ import {
 
 const router = Router()
 
-const IMAGE_EMBEDDING_BATCH_SIZE = Math.max(
-  1,
-  Number(process.env.IMAGE_EMBEDDING_BATCH_SIZE || 100)
-)
+function getImageEmbeddingBatchSize(): number {
+  return runtimeConfigService.getConfig().imageEmbeddingBatchSize
+}
 
 type EmbeddingType = 'gallery' | 'wiki' | 'post' | 'all'
 type EmbeddingStatusKey = 'pending' | 'processing' | 'ready' | 'failed'
@@ -308,7 +308,7 @@ router.get('/status', requireAdmin, async (_req: AuthenticatedRequest, res) => {
 router.post('/enqueue-missing', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const type = parseType(req.body?.type)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 2000,
     })
@@ -354,7 +354,7 @@ router.post('/sync-batch', requireAdmin, async (req: AuthenticatedRequest, res) 
       .map((item: string) => item.trim())
       .filter(Boolean)
 
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
@@ -609,7 +609,7 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
 router.post('/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const type = parseType(req.body?.type)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
@@ -721,7 +721,7 @@ router.post('/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res
 router.post('/rebuild-all', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const type = parseType(req.body?.type)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
@@ -898,7 +898,7 @@ router.get('/text/status', requireAdmin, async (_req: AuthenticatedRequest, res)
 router.post('/text/enqueue', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const sourceType = parseTextSourceType(req.body?.sourceType)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 2000,
     })
@@ -952,7 +952,7 @@ router.post('/text/enqueue', requireAdmin, async (req: AuthenticatedRequest, res
 
 router.post('/text/sync', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
@@ -974,7 +974,7 @@ router.post('/text/sync', requireAdmin, async (req: AuthenticatedRequest, res) =
 router.post('/text/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const sourceType = parseTextSourceType(req.body?.sourceType)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
@@ -999,7 +999,7 @@ router.post('/text/retry-failed', requireAdmin, async (req: AuthenticatedRequest
 router.post('/text/rebuild-all', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const sourceType = parseTextSourceType(req.body?.sourceType)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })

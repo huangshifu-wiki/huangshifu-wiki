@@ -127,7 +127,7 @@ describe('Admin batch operations API', () => {
     expect(await prisma.galleryImage.count({ where: { galleryId: gallery.id } })).toBe(1)
   })
 
-  it('appends duplicate gallery asset ids as separate images', async () => {
+  it('拒绝追加重复 gallery asset id', async () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const gallery = await createTestGallery({
       title: `Admin Batch Gallery Duplicate Append ${suffix}`,
@@ -155,13 +155,12 @@ describe('Admin batch operations API', () => {
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({ assetIds: [asset.id, asset.id] })
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(400)
     const appended = await prisma.galleryImage.findMany({
       where: { galleryId: gallery.id, assetId: asset.id },
       orderBy: { sortOrder: 'asc' },
     })
-    expect(appended).toHaveLength(2)
-    expect(appended.map((image) => image.sortOrder)).toEqual([0, 1])
+    expect(appended).toHaveLength(0)
   })
 
   it('batch deletes song and album covers with default cover fallback', async () => {
@@ -362,5 +361,72 @@ describe('Admin batch operations API', () => {
       where: { songDocId: { in: songs.map((song) => song.docId) }, albumDocId: album.docId },
     })
     expect(displayRelations.every((relation) => relation.isDisplay)).toBe(true)
+  })
+  it('专辑软删除、重复删除和永久删除遵守状态边界', async () => {
+    const album = await prisma.album.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: `Batch Album Lifecycle ${Date.now()}`,
+        artist: '测试艺人',
+      },
+    })
+    const cover = await prisma.albumCover.create({
+      data: {
+        albumDocId: album.docId,
+        storageKey: `test-admin-batch/cover-${Date.now()}.jpg`,
+        publicUrl: '/uploads/test-admin-batch-cover.jpg',
+        thumbnailUrl: '/uploads/test-admin-batch-cover-thumb.jpg',
+        isDefault: true,
+      },
+    })
+    const activeAlbum = await prisma.album.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: `Batch Album Active ${Date.now()}`,
+        artist: '测试艺人',
+      },
+    })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const deleted = await agent
+      .delete(`/api/admin/albums/${album.docId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(deleted.status).toBe(200)
+
+    const duplicate = await agent
+      .delete(`/api/admin/albums/${album.docId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(duplicate.status).toBe(404)
+
+    const deletedCover = await agent
+      .delete(`/api/albums/${album.docId}/covers/${cover.id}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(deletedCover.status).toBe(404)
+    const defaultCover = await agent
+      .patch(`/api/albums/${album.docId}/covers/${cover.id}/default`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(defaultCover.status).toBe(404)
+
+    const permanentActive = await agent
+      .delete(`/api/admin/albums/${activeAlbum.docId}/permanent`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(permanentActive.status).toBe(400)
+    await expect(
+      prisma.album.findUnique({ where: { docId: activeAlbum.docId } })
+    ).resolves.toBeTruthy()
+
+    const permanent = await agent
+      .delete(`/api/admin/albums/${album.docId}/permanent`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(permanent.status).toBe(200)
+
+    const duplicatePermanent = await agent
+      .delete(`/api/admin/albums/${album.docId}/permanent`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(duplicatePermanent.status).toBe(404)
+    expect(await prisma.albumCover.count({ where: { albumDocId: album.docId } })).toBe(0)
   })
 })

@@ -11,6 +11,7 @@ import {
 import { apiGet } from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import { isBackdropClick } from '../../utils/modal'
 import type { WikiRelationType, WikiRelationRecord } from './types'
 import { RELATION_TYPE_LABELS } from './types'
 import RelationPreview from './RelationPreview'
@@ -449,6 +450,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
           sortStrategy !== DEFAULT_SORT_STRATEGY) && (
           <button
             type="button"
+            data-press-feedback="inline"
             onClick={() => {
               setFilterOptions(DEFAULT_FILTER_OPTIONS)
               setSortStrategy(DEFAULT_SORT_STRATEGY)
@@ -470,6 +472,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            data-press-feedback="ripple"
             onClick={() => setShowFilters(!showFilters)}
             className={clsx(
               'flex items-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium transition-all',
@@ -485,6 +488,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
           <button
             type="button"
             onClick={handleAddRelation}
+            data-press-feedback="ripple"
             className="rounded border border-[rgba(138,109,47,0.25)] px-4 py-1.5 text-xs font-medium text-brand-gold transition-all hover:border-brand-gold hover:bg-brand-gold hover:text-white"
           >
             + 添加关联
@@ -536,6 +540,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
           <p className="text-sm">没有符合筛选条件的关联</p>
           <button
             type="button"
+            data-press-feedback="inline"
             onClick={() => {
               setFilterOptions({
                 ...DEFAULT_FILTER_OPTIONS,
@@ -553,19 +558,19 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
       {/* 编辑关联弹窗 */}
       {editModalPresence.mounted && editingRelation && editingIndex !== null && (
         <div
-          className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="floating-overlay fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay-bg)] p-4"
           data-state={editModalPresence.state}
           aria-hidden={!editingRelation}
-          onClick={handleCancelEdit}
+          onClick={(event) => {
+            if (isBackdropClick(event)) handleCancelEdit()
+          }}
         >
-          <div
-            className="floating-panel w-full max-w-md rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] p-6 shadow-[var(--book-panel-shadow)]"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="floating-panel w-full max-w-md p-6">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-text-primary">编辑关联</h3>
               <button
                 type="button"
+                data-press-feedback="ripple"
                 onClick={handleCancelEdit}
                 className="rounded p-1.5 text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
               >
@@ -651,6 +656,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
             <div className="mt-6 flex gap-3">
               <button
                 type="button"
+                data-press-feedback="ripple"
                 onClick={handleCancelEdit}
                 className={`flex-1 ${bookSecondaryButtonClass}`}
               >
@@ -658,6 +664,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
               </button>
               <button
                 type="button"
+                data-press-feedback="ripple"
                 onClick={handleSaveEdit}
                 className="flex-1 rounded px-4 py-2 text-sm font-medium theme-button-primary transition-all"
               >
@@ -725,7 +732,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
             />
             {relationDropdownPresence.mounted && (
               <div
-                className="floating-dropdown absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] shadow-[var(--book-panel-shadow)] backdrop-blur-[12px]"
+                className="floating-dropdown absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] shadow-[var(--book-panel-shadow)]"
                 data-state={relationDropdownPresence.state}
                 aria-hidden={!showRelationDropdown}
               >

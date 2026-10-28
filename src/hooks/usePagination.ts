@@ -12,6 +12,7 @@ export interface UsePaginationReturn {
   page: number
   pageSize: number
   totalPages: number
+  hasMultiplePages: boolean
   handlePageChange: (newPage: number) => void
   handlePageSizeChange?: (newSize: number) => void
   setPage: (page: number) => void
@@ -37,6 +38,8 @@ export function usePagination(options: UsePaginationOptions = {}): UsePagination
     if (totalCount !== undefined) return Math.max(1, Math.ceil(totalCount / pageSize))
     return 1
   }, [serverTotalPages, totalCount, pageSize])
+  const hasMultiplePages =
+    (serverTotalPages !== undefined || totalCount !== undefined) && totalPages > 1
 
   const handlePageChange = useCallback(
     (newPage: number) => {
@@ -61,6 +64,7 @@ export function usePagination(options: UsePaginationOptions = {}): UsePagination
     page,
     pageSize,
     totalPages,
+    hasMultiplePages,
     handlePageChange,
     handlePageSizeChange,
     setPage,

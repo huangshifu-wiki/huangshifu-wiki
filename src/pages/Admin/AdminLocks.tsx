@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Lock, RefreshCw, Trash2 } from '@/src/components/icons'
-import { apiDelete, apiGet } from '../../lib/apiClient'
+import { apiDelete, apiGet, invalidateApiCacheByPrefix } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { formatDateTime } from '../../lib/dateUtils'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
+import { useScrollRestore } from '../../hooks/useScrollRestore'
 import type { EditLockItem } from '../../types/entities'
 import {
   Button,
@@ -15,36 +17,70 @@ import {
   TableHeader,
   TableRow,
 } from '@/src/components/ui'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
+import { LoadErrorState } from '@/src/components/ui'
 
 export const AdminLocks = () => {
   const [data, setData] = useState<EditLockItem[]>([])
+  const [total, setTotal] = useState<number | undefined>()
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchReleasing, setBatchReleasing] = useState(false)
   const dialog = useDialog()
   const { show } = useToast()
+  const saveScroll = useScrollRestore()
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
+  const requestIdRef = useRef(0)
 
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = async (options?: { silent?: boolean }) => {
+    const requestId = ++requestIdRef.current
+    const silent = options?.silent === true
+    if (silent) saveScroll()
+    else {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
-      const result = await apiGet<{ locks: EditLockItem[] }>('/api/admin/locks')
+      const result = await apiGet<{ locks: EditLockItem[]; total: number }>('/api/admin/locks', {
+        page: pagination.page,
+        limit: pagination.pageSize,
+      })
+      if (requestId !== requestIdRef.current) return
       const locks = result.locks || []
       setData(locks)
+      setTotal(result.total || 0)
+      setLoadError(null)
       setSelectedIds((prev) => {
         const existingIds = new Set(locks.map((lock) => lock.id))
         return new Set([...prev].filter((lockId) => existingIds.has(lockId)))
       })
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       console.error(e)
-      setData([])
+      setLoadError(e)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current && !silent) setLoading(false)
     }
   }
 
+  const refreshLocks = async () => {
+    invalidateApiCacheByPrefix('/api/admin/locks')
+    await fetchData({ silent: true })
+  }
+
   useEffect(() => {
-    fetchData()
-  }, [])
+    void fetchData()
+  }, [pagination.page, pagination.pageSize])
 
   const releaseLock = async (lock: EditLockItem) => {
     const confirmed = await dialog.confirm({
@@ -56,15 +92,10 @@ export const AdminLocks = () => {
     if (!confirmed) return
     try {
       await apiDelete(`/api/admin/locks/${lock.id}`)
-      setData((prev) => prev.filter((item) => item.id !== lock.id))
-      setSelectedIds((prev) => {
-        const next = new Set(prev)
-        next.delete(lock.id)
-        return next
-      })
+      await refreshLocks()
       show('已释放', { variant: 'success' })
     } catch (e) {
-      show('释放失败', { variant: 'error' })
+      show(getErrorMessage(e, '释放失败'), { variant: 'error' })
     }
   }
 
@@ -102,12 +133,17 @@ export const AdminLocks = () => {
       await apiDelete('/api/admin/locks', { lockIds })
       setData((prev) => prev.filter((item) => !lockIds.includes(item.id)))
       setSelectedIds(new Set())
+      await refreshLocks()
       show('已批量释放', { variant: 'success' })
     } catch (e) {
-      show('批量释放失败', { variant: 'error' })
+      show(getErrorMessage(e, '批量释放失败'), { variant: 'error' })
     } finally {
       setBatchReleasing(false)
     }
+  }
+
+  if (loading && data.length === 0) {
+    return <PageSkeleton variant="admin" />
   }
 
   return (
@@ -129,15 +165,25 @@ export const AdminLocks = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={fetchData}
+            onClick={() => void fetchData()}
             leftIcon={<RefreshCw size={14} />}
           >
             刷新
           </Button>
         </div>
       </div>
+      {loadError && data.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          error={loadError}
+          description="当前编辑锁列表可能不是最新内容。"
+          onRetry={() => void fetchData()}
+        />
+      )}
 
-      <div className="bg-surface border border-border rounded overflow-hidden">
+      {loadError && data.length === 0 ? (
+        <LoadErrorState error={loadError} onRetry={() => void fetchData()} />
+      ) : (
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -157,7 +203,7 @@ export const AdminLocks = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
+              {loading && data.length === 0 ? (
                 [1, 2, 3].map((i) => (
                   <TableRow key={i} className="animate-pulse">
                     <TableCell colSpan={5} className="px-5 py-4">
@@ -190,6 +236,7 @@ export const AdminLocks = () => {
                       <Button
                         type="button"
                         variant="warning"
+                        soft
                         size="sm"
                         onClick={() => releaseLock(item)}
                         leftIcon={<Lock size={14} />}
@@ -209,7 +256,18 @@ export const AdminLocks = () => {
             </TableBody>
           </Table>
         </div>
-      </div>
+      )}
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
     </div>
   )
 }

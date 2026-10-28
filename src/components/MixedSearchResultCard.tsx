@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { Image as ImageIcon, Book, MessageSquare, Sparkles, Clock } from '@/src/components/icons'
 import { SmartImage } from './SmartImage'
+import { CoverPlaceholder } from './CoverPlaceholder'
 import type { MixedSearchResult, ImageSourceType } from '../hooks/useSearch'
 import type { GalleryItem, WikiItem, PostItem } from '../types/entities'
 import { formatDate } from '../lib/dateUtils'
+import { summarizeSeoText } from '../lib/seo'
 import { getFirstGalleryImage, shouldWaitForGalleryThumbnail } from '../lib/galleryThumbnails'
 import type { ViewMode } from '../types/userPreferences'
 
@@ -69,26 +71,25 @@ export const MixedSearchResultCard = React.memo(
     const thumbnailPending = gallery ? shouldWaitForGalleryThumbnail(gallery) : false
     const displayImageUrl = sourceType === 'gallery' ? galleryThumb : imageUrl
     const isSmallGrid = viewMode === 'small'
-    const imageContent = displayImageUrl ? (
-      <SmartImage
-        src={displayImageUrl}
-        alt=""
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
-      />
-    ) : thumbnailPending ? (
-      <div className="flex h-full w-full items-center justify-center bg-surface-alt px-2 text-center text-xs text-text-muted">
-        生成中...
-      </div>
-    ) : (
-      <div className="flex h-full w-full items-center justify-center bg-surface-alt">
-        <SourceIcon size={20} className="text-brand-gold/40" />
-      </div>
-    )
 
     if (viewMode === 'list') {
+      const imageContent = displayImageUrl ? (
+        <SmartImage
+          src={displayImageUrl}
+          alt=""
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+        />
+      ) : thumbnailPending ? (
+        <div className="flex h-full w-full items-center justify-center bg-surface-alt px-2 text-center text-xs text-text-muted">
+          生成中...
+        </div>
+      ) : (
+        <CoverPlaceholder icon={<SourceIcon size={20} />} />
+      )
       return (
         <Link
           to={link}
+          data-press-feedback="state"
           className="group flex w-full gap-4 rounded px-3 py-3 transition-all duration-300 hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]"
         >
           <div className="mobile-list-thumb h-20 w-20 flex-shrink-0 overflow-hidden rounded bg-surface-alt">
@@ -110,7 +111,7 @@ export const MixedSearchResultCard = React.memo(
               {(data as GalleryItem | WikiItem | PostItem).title}
             </h3>
             <p className="mt-0.5 line-clamp-1 text-xs text-text-muted">
-              {sourceType === 'gallery' && (data as GalleryItem).description}
+              {gallery && summarizeSeoText(gallery.description, '', 80)}
               {sourceType === 'wiki' && (data as WikiItem).category}
               {sourceType === 'post' && (data as PostItem).section}
             </p>
@@ -126,6 +127,7 @@ export const MixedSearchResultCard = React.memo(
     return (
       <Link
         to={link}
+        data-press-feedback="state"
         className="group block min-w-0 overflow-hidden rounded-lg border border-[var(--book-ink-line)]/50 bg-[var(--book-panel-bg)] transition-all duration-300 hover:shadow-[0_14px_36px_rgba(72,53,25,0.1)]"
       >
         <div className="relative aspect-[4/3] flex-shrink-0 overflow-hidden bg-surface-alt">
@@ -168,7 +170,7 @@ export const MixedSearchResultCard = React.memo(
             {(data as GalleryItem | WikiItem | PostItem).title}
           </h3>
           <p className="mt-1 line-clamp-1 text-xs text-text-muted">
-            {sourceType === 'gallery' && ((data as GalleryItem).description || '暂无描述')}
+            {gallery && summarizeSeoText(gallery.description, '暂无描述', 80)}
             {sourceType === 'wiki' && (data as WikiItem).category}
             {sourceType === 'post' && (data as PostItem).section}
           </p>

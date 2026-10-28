@@ -1,54 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { axiosGet } = vi.hoisted(() => ({ axiosGet: vi.fn() }))
+const { axiosGet, getSecretsMock } = vi.hoisted(() => ({
+  axiosGet: vi.fn(),
+  getSecretsMock: vi.fn(),
+}))
 
 vi.mock('axios', () => ({ default: { get: axiosGet } }))
 
-import {
-  addressToCoordinate,
-  coordinateToAddress,
-  resolveCoordinateToRegion,
-  searchAddress,
-} from '../../src/server/location/geoService'
+vi.mock('../../src/server/services/secretsConfig.service', () => ({
+  secretsConfigService: { getSecrets: getSecretsMock },
+}))
+
+import { resolveCoordinateToRegion, searchAddress } from '../../src/server/location/geoService'
 
 describe('geoService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    process.env.AMAP_API_KEY = 'server-key'
-  })
-
-  it('未配置服务端 Key 时返回明确错误且不发请求', async () => {
-    delete process.env.AMAP_API_KEY
-
-    await expect(addressToCoordinate('北京市')).rejects.toMatchObject({
-      kind: 'not_configured',
-    })
-    expect(axiosGet).not.toHaveBeenCalled()
-  })
-
-  it('地理编码请求统一注入 Key、超时和 JSON 输出参数', async () => {
-    axiosGet.mockResolvedValue({
-      data: { status: '1', geocodes: [{ location: '116.397428,39.90923' }] },
-    })
-
-    await expect(addressToCoordinate('北京市东城区')).resolves.toEqual({
-      lng: 116.397428,
-      lat: 39.90923,
-    })
-    expect(axiosGet).toHaveBeenCalledWith(
-      'https://restapi.amap.com/v3/geocode/geo',
-      expect.objectContaining({
-        params: { address: '北京市东城区', output: 'json', key: 'server-key' },
-        timeout: 10000,
-      })
-    )
-  })
-
-  it('拒绝畸形地理编码坐标', async () => {
-    axiosGet.mockResolvedValue({
-      data: { status: '1', geocodes: [{ location: 'invalid' }] },
-    })
-    await expect(addressToCoordinate('未知地址')).resolves.toBeNull()
+    getSecretsMock.mockReturnValue({ amapApiKey: 'server-key' })
   })
 
   it('规范逆地理编码中的直辖市空 city 字段', async () => {
@@ -68,11 +36,6 @@ describe('geoService', () => {
       },
     })
 
-    await expect(coordinateToAddress(116.397428, 39.90923)).resolves.toMatchObject({
-      city: '',
-      province: '北京市',
-      adcode: '110101',
-    })
     await expect(resolveCoordinateToRegion(116.397428, 39.90923)).resolves.toMatchObject({
       provinceCode: '110000',
       cityCode: '110100',
