@@ -1164,6 +1164,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
             title: true,
             artist: true,
             description: true,
+            tags: true,
             tracks: true,
             releaseDate: true,
             coverId: true,

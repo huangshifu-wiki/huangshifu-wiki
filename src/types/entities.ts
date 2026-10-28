@@ -87,6 +87,7 @@ export interface AlbumItem {
   cover: string
   coverThumbnail?: string
   description?: string | null
+  tags?: string[]
   sources?: MusicExternalSource[]
   releaseDate?: string | null
   trackCount?: number

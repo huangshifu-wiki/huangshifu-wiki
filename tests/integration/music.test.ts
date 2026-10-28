@@ -57,6 +57,7 @@ const ALBUM_TEST_TITLE_PREFIXES = [
   'Album Admin Bugfix',
   'Duplicate Relation Test Album',
   'Album Release Sort',
+  'Album Tags Test',
 ] as const
 
 const startsWithAny = (prefixes: readonly string[]) =>
@@ -92,6 +93,74 @@ describe('Music API - 音乐接口测试', () => {
 
   afterEach(async () => {
     await cleanupMusicFixtures()
+  })
+
+  it('专辑标签支持维护、筛选与汇总', async () => {
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+    const tag = `专辑标签${Date.now()}`
+    const otherTag = `${tag}其他`
+    const first = await agent
+      .post('/api/albums')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: 'Album Tags Test One',
+        artist: '测试',
+        tags: [` ${tag} `, tag, ''],
+      })
+    const second = await agent
+      .post('/api/albums')
+      .set('X-XSRF-TOKEN', xsrfToken)
+      .send({
+        title: 'Album Tags Test Two',
+        artist: '测试',
+        tags: [otherTag],
+      })
+    expect(first.status).toBe(201)
+    expect(second.status).toBe(201)
+    expect(first.body.album.tags).toEqual([tag])
+    const album = first.body.album
+    const detail = await request(app).get(`/api/albums/${album.slug}`)
+    expect(detail.body.album.tags).toEqual([tag])
+    const admin = await agent.get('/api/admin/albums').query({ q: 'Album Tags Test One' })
+    expect(
+      admin.body.data.find((item: { docId: string }) => item.docId === album.docId).tags
+    ).toEqual([tag])
+    const search = await request(app)
+      .get('/api/search')
+      .query({ q: 'Album Tags Test One', type: 'albums' })
+    expect(
+      search.body.albums.items.find((item: { docId: string }) => item.docId === album.docId).tags
+    ).toEqual([tag])
+
+    const filtered = await request(app).get('/api/albums').query({ tag, limit: 1 })
+    const other = await request(app).get('/api/albums').query({ tag: otherTag, limit: 1 })
+    expect(filtered.body.total).toBe(1)
+    expect(filtered.body.albums[0].docId).toBe(album.docId)
+    expect(other.body.total).toBe(1)
+    expect(other.body.albums[0].docId).toBe(second.body.album.docId)
+    const pageTwo = await request(app).get('/api/albums').query({ tag, limit: 1, page: 2 })
+    expect(pageTwo.body.albums).toEqual([])
+    await prisma.album.update({
+      where: { docId: second.body.album.docId },
+      data: { deletedAt: new Date() },
+    })
+    const suggestions = await request(app).get('/api/albums/tags')
+    expect(suggestions.body.tags).toContain(tag)
+    expect(suggestions.body.tags).not.toContain(otherTag)
+
+    const patch = (body: Record<string, unknown>) =>
+      agent.patch(`/api/albums/${album.docId}`).set('X-XSRF-TOKEN', xsrfToken).send(body)
+    expect((await patch({ description: '更新' })).body.album.tags).toEqual([tag])
+    expect((await patch({ tags: ['字'.repeat(51)] })).status).toBe(400)
+    expect(
+      (await patch({ tags: Array.from({ length: 31 }, (_, index) => `标签${index}`) })).status
+    ).toBe(400)
+    expect((await patch({ tags: [] })).body.album.tags).toEqual([])
+    const cleared = await request(app).get('/api/albums').query({ tag })
+    expect(cleared.body.total).toBe(0)
   })
 
   it('更新歌曲描述时应保留 Markdown 源文本首尾空白', async () => {

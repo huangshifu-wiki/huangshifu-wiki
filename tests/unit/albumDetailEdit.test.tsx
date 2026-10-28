@@ -47,6 +47,25 @@ const renderAlbum = (slug?: string) => {
   )
 }
 describe('AlbumDetail 曲目列表', () => {
+  it('展示专辑标签并链接到对应筛选', async () => {
+    mockedApiGet.mockResolvedValueOnce({
+      album: {
+        docId: 'album-db-id',
+        slug: '456',
+        title: '测试专辑',
+        artist: '歌手',
+        cover: '',
+        tracks: [],
+        tags: ['古风 & 民谣'],
+      },
+    } as never)
+    renderAlbum('456')
+    expect(await screen.findByRole('link', { name: '古风 & 民谣' })).toHaveAttribute(
+      'href',
+      '/music?tab=albums&albumTag=%E5%8F%A4%E9%A3%8E%20%26%20%E6%B0%91%E8%B0%A3'
+    )
+  })
+
   it('按 Disc 分组并显示连续序号，同时保持播放顺序', async () => {
     mockedApiGet.mockResolvedValueOnce({
       album: {
@@ -83,6 +102,34 @@ describe('AlbumDetail 曲目列表', () => {
 })
 
 describe('AlbumDetail 管理员编辑入口', () => {
+  it('编辑时保留已有标签并可添加新标签', async () => {
+    mockedUseAuth.mockReturnValue({ user: null, isAdmin: true } as never)
+    mockedApiGet.mockResolvedValueOnce({
+      album: {
+        docId: 'album-db-id',
+        slug: '456',
+        title: '测试专辑',
+        artist: '歌手',
+        cover: '',
+        tracks: [],
+        tags: ['古风/民谣'],
+      },
+    } as never)
+    vi.mocked(apiPatch).mockResolvedValue({} as never)
+    renderAlbum('456')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: '编辑' }))
+    expect(await screen.findByRole('button', { name: '删除标签：古风/民谣' })).toBeInTheDocument()
+    await user.type(screen.getByPlaceholderText('输入标签后按回车添加'), '现场{Enter}')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() =>
+      expect(vi.mocked(apiPatch)).toHaveBeenCalledWith(
+        '/api/albums/album-db-id',
+        expect.objectContaining({ tags: ['古风/民谣', '现场'] })
+      )
+    )
+  })
+
   it('管理员可以在专辑详情管理曲目，普通用户不可见', async () => {
     mockedUseAuth.mockReturnValue({ user: null, isAdmin: true } as never)
     const view = renderAlbum('456')

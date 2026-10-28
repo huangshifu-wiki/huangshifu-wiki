@@ -1122,6 +1122,7 @@ export function toAlbumResponse(album: {
   title: string
   artist: string
   description: string | null
+  tags?: Prisma.JsonValue
   tracks?: Prisma.JsonValue
   releaseDate?: Date | null
   coverId: string | null
@@ -1176,6 +1177,7 @@ export function toAlbumResponse(album: {
     cover: coverUrl,
     coverThumbnail,
     description: album.description,
+    tags: serializeTags(album.tags),
     sources: serializeMusicExternalSources(album.externalSources || []),
     releaseDate: formatDateOnly(album.releaseDate),
     tracks: album.tracks || [],

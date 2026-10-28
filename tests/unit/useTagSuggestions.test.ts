@@ -10,7 +10,7 @@ vi.mock('../../src/lib/apiClient', () => ({
 
 const mockedApiGet = vi.mocked(apiGet)
 
-const endpointByResource: Record<TagSuggestionResource, string> = {
+const endpointByResource: Record<Exclude<TagSuggestionResource, 'album'>, string> = {
   wiki: '/api/wiki/tags',
   post: '/api/posts/tags',
   gallery: '/api/galleries/tags',

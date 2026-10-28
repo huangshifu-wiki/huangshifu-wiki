@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiGet } from '../lib/apiClient'
 
-export type TagSuggestionResource = 'wiki' | 'post' | 'gallery' | 'event' | 'music'
+export type TagSuggestionResource = 'wiki' | 'post' | 'gallery' | 'event' | 'music' | 'album'
 
 const TAG_SUGGESTION_ENDPOINTS: Record<TagSuggestionResource, string> = {
   wiki: '/api/wiki/tags',
@@ -9,6 +9,7 @@ const TAG_SUGGESTION_ENDPOINTS: Record<TagSuggestionResource, string> = {
   gallery: '/api/galleries/tags',
   event: '/api/events/tags',
   music: '/api/music/tags',
+  album: '/api/albums/tags',
 }
 
 export const useTagSuggestions = (

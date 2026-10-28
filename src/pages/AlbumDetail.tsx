@@ -68,6 +68,7 @@ type AlbumResponse = {
     cover: string
     coverThumbnail?: string
     description?: string | null
+    tags?: string[]
     sources?: MusicExternalSource[]
     releaseDate?: string | null
     tracks: SongItem[]
@@ -360,6 +361,20 @@ const AlbumDetail = () => {
             <p className="text-base text-text-secondary tracking-[0.08em] mb-4">
               {album.artist} · {album.tracks.length} 首歌曲
             </p>
+            {!!album.tags?.length && (
+              <div className="mb-4 flex flex-wrap gap-1.5">
+                {album.tags.map((tag) => (
+                  <Link
+                    key={tag}
+                    to={`/music?tab=albums&albumTag=${encodeURIComponent(tag)}`}
+                    data-press-feedback="inline"
+                    className="min-w-0 max-w-full rounded-sm border border-[var(--book-ink-line)] px-1.5 py-0.5 text-wrap-anywhere text-xs text-text-secondary transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
+                  >
+                    {tag}
+                  </Link>
+                ))}
+              </div>
+            )}
             <div className="mobile-action-row justify-start">
               <button
                 type="button"

@@ -29,6 +29,7 @@ import {
 import { MediaAssetRequestError, releaseMediaAsset } from '../services/mediaAssetService'
 import type { AuthenticatedRequest } from '../types'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { normalizeStringListInput } from '../../lib/musicCredits'
 
 const router = createRouter()
 
@@ -42,6 +43,16 @@ function ensureAlbumTextLimits(
   res: Parameters<typeof ensureTextLimit>[0],
   input: Record<string, unknown>
 ) {
+  const tags = normalizeStringListInput(input.tags)
+  if (tags.some((item) => item.length > CONTENT_LIMITS.music.tag)) {
+    res.status(400).json({ error: `标签单项长度不能超过 ${CONTENT_LIMITS.music.tag} 个字符` })
+    return false
+  }
+  if (tags.length > CONTENT_LIMITS.music.tags) {
+    res.status(400).json({ error: `标签最多 ${CONTENT_LIMITS.music.tags} 个` })
+    return false
+  }
+
   return (
     ensureTextLimit(res, input.title, '专辑标题', CONTENT_LIMITS.album.title) &&
     ensureTextLimit(res, input.artist, '艺人', CONTENT_LIMITS.album.artist) &&
@@ -106,6 +117,7 @@ async function deleteAlbumCoverById(albumDocId: string, coverId: string) {
 router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
     const platform = parseMusicPlatform(req.query.platform)
+    const tag = typeof req.query.tag === 'string' ? req.query.tag.trim() : ''
     const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 })
     const page = parseInteger(req.query.page, 1, { min: 1 })
     const skip = (page - 1) * limit
@@ -114,10 +126,11 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     const where = {
       deletedAt: null,
       ...(platform ? { externalSources: { some: { platform } } } : {}),
+      ...(tag ? { tags: { array_contains: [tag] } } : {}),
     }
 
     if (!req.authUser) {
-      const cacheKey = `album_list:${platform || 'all'}:${sortOrder}:${page}:${limit}`
+      const cacheKey = `album_list:${platform || 'all'}:${sortOrder}:${page}:${limit}:${JSON.stringify(tag)}`
       const cached = enhancedCache.get(cacheKey)
       if (cached) {
         res.json(cached)
@@ -134,6 +147,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
           title: true,
           artist: true,
           description: true,
+          tags: true,
           coverId: true,
           releaseDate: true,
           createdAt: true,
@@ -179,7 +193,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     }
 
     if (!req.authUser) {
-      const cacheKey = `album_list:${platform || 'all'}:${sortOrder}:${page}:${limit}`
+      const cacheKey = `album_list:${platform || 'all'}:${sortOrder}:${page}:${limit}:${JSON.stringify(tag)}`
       enhancedCache.set(cacheKey, result, 120)
     }
 
@@ -188,6 +202,17 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     console.error('Fetch albums error:', error)
     res.status(500).json({ error: '获取专辑失败' })
   }
+})
+
+router.get('/tags', async (_req, res) => {
+  const rows = await prisma.$queryRaw<Array<{ tag: string }>>`
+    SELECT DISTINCT album_tag.tag AS tag
+    FROM "Album"
+    CROSS JOIN LATERAL jsonb_array_elements_text("Album"."tags") AS album_tag(tag)
+    WHERE "Album"."deletedAt" IS NULL AND btrim(album_tag.tag) <> ''
+  `
+  const tags = rows.map((row) => row.tag).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+  res.json({ tags })
 })
 
 // Get album by public numeric slug
@@ -390,6 +415,7 @@ router.post('/', requireAdmin, async (req, res) => {
           title,
           artist,
           description,
+          tags: normalizeStringListInput(body.tags),
           releaseDate,
           tracks,
           ...(sources.length
@@ -493,6 +519,9 @@ router.patch('/:docId', requireAdmin, async (req, res) => {
     }
     if (!ensureAlbumTextLimits(res, body)) {
       return
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'tags')) {
+      updateData.tags = normalizeStringListInput(body.tags)
     }
 
     const normalizedTracks =

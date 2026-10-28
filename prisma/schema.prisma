@@ -940,6 +940,7 @@ model Album {
   title              String
   artist             String
   description        String?
+  tags               Json                @default("[]")
   tracks             Json?
   releaseDate        DateTime?           @db.Date
   coverId            String?
@@ -959,6 +960,7 @@ model Album {
   @@index([coverId])
   @@index([createdAt])
   @@index([deletedAt])
+  @@index([tags], map: "album_tags_gin", type: Gin)
 }
 
 model MusicTrack {

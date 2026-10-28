@@ -3289,6 +3289,7 @@ router.get(
               title: true,
               artist: true,
               description: true,
+              tags: true,
               tracks: true,
               coverId: true,
               releaseDate: true,
