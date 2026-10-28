@@ -90,15 +90,16 @@ const WikiPullRequestDetail = () => {
     let note = ''
 
     if (action === 'reject') {
-      note =
-        (await dialog.prompt({
-          title: '驳回 PR',
-          message: '请填写驳回说明（可选）',
-          defaultValue: '请根据评审意见调整后重提',
-          confirmText: '驳回',
-          variant: 'warning',
-          multiline: true,
-        })) || ''
+      const input = await dialog.prompt({
+        title: '驳回 PR',
+        message: '请填写驳回说明（可选）',
+        placeholder: '填写驳回说明（可选）',
+        confirmText: '驳回',
+        variant: 'warning',
+        multiline: true,
+      })
+      if (input === null) return
+      note = input.trim()
       const noteError = validateMaxLength(note, 'note', '驳回说明', CONTENT_LIMITS.wiki.reviewNote)
       if (noteError) {
         show(noteError.message, { variant: 'error' })

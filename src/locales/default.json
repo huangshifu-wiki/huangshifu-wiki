@@ -262,7 +262,6 @@
     "updatedAt": "更新",
     "tags": "标签",
     "location": "地点",
-    "musicReviewTemplate": "*本文为《{{title}}》的乐评*",
     "postNotExistOrNoPermission": "帖子不存在或无权编辑",
     "noEditPermission": "你无权编辑此帖子",
     "loadPostFailed": "加载帖子失败，请稍后重试",
