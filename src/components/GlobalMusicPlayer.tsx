@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { Music, Pause, Play, SkipBack, SkipForward, Volume2, X } from '@/src/components/icons'
+import { Spinner } from '@/src/components/ui'
 import { SmartImage } from './SmartImage'
 import { CoverPlaceholder } from './CoverPlaceholder'
 import { useMusic } from '../context/MusicContext'
@@ -7,6 +8,7 @@ import { formatTime } from '../lib/formatUtils'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { apiGet } from '../lib/apiClient'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import { getI18n } from '../lib/i18n'
 import type { MusicPlayUrlResponse } from '../types/api'
 
 interface AudioStats {
@@ -16,11 +18,14 @@ interface AudioStats {
   readyState: number
 }
 
+type PlaybackPhase = 'idle' | 'loading' | 'playing' | 'buffering' | 'paused' | 'ended' | 'error'
+
 type ResolvedPlayUrlState = {
   docId: string
   url: string
 }
 
+const { t } = getI18n()
 const EMPTY_RESOLVED_PLAY_URL: ResolvedPlayUrlState = { docId: '', url: '' }
 
 export const GlobalMusicPlayer = () => {
@@ -30,6 +35,7 @@ export const GlobalMusicPlayer = () => {
     isPlaying,
     setIsPlaying,
     playNext,
+    playlist,
     playPrevious,
     currentTime: contextCurrentTime,
     duration: contextDuration,
@@ -45,8 +51,10 @@ export const GlobalMusicPlayer = () => {
   const [resolvingPlayUrl, setResolvingPlayUrl] = useState(false)
   const [playUrlError, setPlayUrlError] = useState('')
   const [blockedSongDocId, setBlockedSongDocId] = useState('')
+  const [phase, setPhase] = useState<PlaybackPhase>('idle')
+  const [resolveAttempt, setResolveAttempt] = useState(0)
   const [volumeSliderExpanded, setVolumeSliderExpanded] = useState(false)
-  const [audioStats, setAudioStats] = useState<AudioStats>({
+  const audioStatsRef = useRef<AudioStats>({
     bufferHealth: 0,
     isStalling: false,
     stallCount: 0,
@@ -56,6 +64,9 @@ export const GlobalMusicPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null)
   const timeUpdateRef = useRef<number>(0)
   const previousAudioUrlRef = useRef('')
+  const previousSongRef = useRef<typeof currentSong>(null)
+  const hasPlayedRef = useRef(false)
+  const failedSourceRef = useRef('')
   const currentSongDocId = currentSong?.docId || ''
   const currentResolvedPlayUrl =
     currentSongDocId && resolvedPlayUrl.docId === currentSongDocId ? resolvedPlayUrl.url : ''
@@ -69,6 +80,19 @@ export const GlobalMusicPlayer = () => {
     Boolean(currentSongDocId) &&
     !activeAudioUrl &&
     (resolvingPlayUrl || resolvedPlayUrl.docId !== currentSongDocId)
+  const sourceKey = JSON.stringify([currentSongDocId || currentSong?.title, activeAudioUrl])
+  const statusError = playbackBlocked ? t('music.unplayable') : playUrlError
+  const displayPhase = phase === 'error' ? 'idle' : phase
+  const statusPhase =
+    isPlaying && (displayPhase === 'idle' || displayPhase === 'loading')
+      ? waitingForResolvedPlayUrl
+        ? 'resolving'
+        : 'loading'
+      : displayPhase
+  const statusText = statusError || t(`music.${statusPhase}`)
+  const showSpinner =
+    !statusError &&
+    (statusPhase === 'loading' || statusPhase === 'buffering' || statusPhase === 'resolving')
 
   useEffect(() => {
     return () => {
@@ -103,7 +127,6 @@ export const GlobalMusicPlayer = () => {
         prev.docId === currentSong.docId ? prev : { docId: currentSong.docId, url: '' }
       )
       setResolvingPlayUrl(true)
-      setPlayUrlError('')
 
       try {
         const data = await apiGet<MusicPlayUrlResponse>(
@@ -117,17 +140,22 @@ export const GlobalMusicPlayer = () => {
             : data.mode === 'disabled'
               ? ''
               : currentSong.playUrl || fallback
-        if (cancelled) return
         setResolvedPlayUrl({ docId: currentSong.docId, url: nextUrl })
         if (!nextUrl) {
           setIsPlaying(false)
-          setPlayUrlError(data.mode === 'disabled' ? '该歌曲暂不可播放' : '暂无可播放音源')
+          setPlayUrlError(data.mode === 'disabled' ? t('music.unplayable') : t('music.noSource'))
+          setPhase('error')
         }
       } catch (error) {
         if (cancelled) return
         console.error('Resolve play url failed:', error)
-        setResolvedPlayUrl({ docId: currentSong.docId, url: currentSong.playUrl || fallback })
-        setPlayUrlError('播放地址获取失败，已使用备用链接')
+        const fallbackUrl = currentSong.playUrl || fallback
+        setResolvedPlayUrl({ docId: currentSong.docId, url: fallbackUrl })
+        if (!fallbackUrl) {
+          setIsPlaying(false)
+          setPlayUrlError(t('music.resolveFailed'))
+          setPhase('error')
+        }
       } finally {
         if (!cancelled) {
           setResolvingPlayUrl(false)
@@ -139,26 +167,35 @@ export const GlobalMusicPlayer = () => {
     return () => {
       cancelled = true
     }
-  }, [currentSong, setIsPlaying])
+  }, [currentSong, setIsPlaying, resolveAttempt, t])
 
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
 
-    if (activeAudioUrl !== previousAudioUrlRef.current) {
+    const songChanged = previousSongRef.current !== currentSong
+    if (activeAudioUrl !== previousAudioUrlRef.current || songChanged) {
+      previousSongRef.current = currentSong
       previousAudioUrlRef.current = activeAudioUrl
+      hasPlayedRef.current = false
       audio.currentTime = 0
       seekTo(0)
       contextSetDuration(0)
-      setPlayUrlError('')
-      setAudioStats({
+      if (songChanged) {
+        failedSourceRef.current = ''
+        setPlayUrlError('')
+      }
+      setPhase((prev) =>
+        isPlaying ? 'loading' : !songChanged && prev === 'paused' ? 'paused' : 'idle'
+      )
+      audioStatsRef.current = {
         bufferHealth: 0,
         isStalling: false,
         stallCount: 0,
         readyState: 0,
-      })
+      }
     }
-  }, [activeAudioUrl, contextSetDuration, seekTo])
+  }, [activeAudioUrl, currentSong, contextSetDuration, seekTo])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -166,40 +203,43 @@ export const GlobalMusicPlayer = () => {
 
     if (!isPlaying) {
       audio.pause()
+      setPhase((prev) =>
+        prev === 'loading' || prev === 'playing' || prev === 'buffering' ? 'paused' : prev
+      )
       return
     }
 
     if (!activeAudioUrl) {
-      if (waitingForResolvedPlayUrl) {
-        return
-      }
+      if (waitingForResolvedPlayUrl || playUrlError) return
       audio.pause()
       setIsPlaying(false)
-      setPlayUrlError(playbackBlocked ? '该歌曲暂不可播放' : '暂无可播放音源')
+      setPlayUrlError(playbackBlocked ? t('music.unplayable') : t('music.noSource'))
+      setPhase('error')
       return
     }
 
+    setPhase('loading')
+
     let cancelled = false
-    const playUrl = activeAudioUrl
     audio.play().catch((e) => {
-      if (cancelled || audioRef.current !== audio || previousAudioUrlRef.current !== playUrl) {
-        return
-      }
+      if (cancelled || audioRef.current !== audio) return
       console.error('Playback failed:', e)
+      failedSourceRef.current = sourceKey
       setIsPlaying(false)
-      setPlayUrlError('播放启动失败，请再次点击播放')
+      setPlayUrlError(t('music.startFailed'))
+      setPhase('error')
     })
 
     return () => {
       cancelled = true
     }
-  }, [activeAudioUrl, isPlaying, setIsPlaying, waitingForResolvedPlayUrl])
+  }, [activeAudioUrl, currentSong, isPlaying, setIsPlaying, waitingForResolvedPlayUrl, t])
 
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = contextIsMuted ? 0 : contextVolume
     }
-  }, [contextVolume, contextIsMuted])
+  }, [contextVolume, contextIsMuted, sourceKey])
 
   useEffect(() => {
     if (audioRef.current && Math.abs(audioRef.current.currentTime - contextCurrentTime) > 0.5) {
@@ -223,7 +263,16 @@ export const GlobalMusicPlayer = () => {
 
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setIsPlaying(!isPlaying)
+    if (isPlaying) {
+      setPhase('paused')
+      setIsPlaying(false)
+    } else if (!playbackBlocked) {
+      setPhase('loading')
+      if (!activeAudioUrl && !waitingForResolvedPlayUrl) {
+        setResolveAttempt((attempt) => attempt + 1)
+      }
+      setIsPlaying(true)
+    }
   }
 
   const handlePlayPrevious = (e: React.MouseEvent) => {
@@ -253,11 +302,8 @@ export const GlobalMusicPlayer = () => {
         bufferHealth = bufferedEnd - audio.currentTime
       }
 
-      setAudioStats((prev) => ({
-        ...prev,
-        bufferHealth,
-        readyState: audio.readyState,
-      }))
+      audioStatsRef.current.bufferHealth = bufferHealth
+      audioStatsRef.current.readyState = audio.readyState
     }
   }, [seekTo])
 
@@ -267,23 +313,28 @@ export const GlobalMusicPlayer = () => {
     }
   }, [contextSetDuration])
 
-  // 卡顿检测
   const onWaiting = useCallback(() => {
-    setAudioStats((prev) => ({
-      ...prev,
-      isStalling: true,
-      stallCount: prev.stallCount + 1,
-    }))
-    console.warn('[音频缓冲] 正在等待数据...')
-  }, [])
+    if (!isPlaying) return
+    setPhase(hasPlayedRef.current ? 'buffering' : 'loading')
+    audioStatsRef.current.isStalling = true
+    audioStatsRef.current.stallCount += 1
+  }, [isPlaying])
 
   const onCanPlay = useCallback(() => {
-    setAudioStats((prev) => ({
-      ...prev,
-      isStalling: false,
-    }))
+    audioStatsRef.current.isStalling = false
+    if (failedSourceRef.current && failedSourceRef.current !== sourceKey) {
+      failedSourceRef.current = ''
+      setPlayUrlError('')
+    }
+  }, [sourceKey])
+
+  const onPlaying = useCallback(() => {
+    if (!isPlaying) return
+    hasPlayedRef.current = true
     setPlayUrlError('')
-  }, [])
+    setPhase('playing')
+    audioStatsRef.current.isStalling = false
+  }, [isPlaying])
 
   const onError = useCallback(
     (e: React.SyntheticEvent<HTMLAudioElement>) => {
@@ -294,10 +345,12 @@ export const GlobalMusicPlayer = () => {
         readyState: audio.readyState,
         currentSrc: audio.currentSrc,
       })
+      failedSourceRef.current = sourceKey
       setIsPlaying(false)
-      setPlayUrlError('音频加载失败，请检查网络连接')
+      setPhase('error')
+      setPlayUrlError(t('music.audioFailed'))
     },
-    [setIsPlaying]
+    [setIsPlaying, sourceKey, t]
   )
 
   const handleProgressChange = useCallback(
@@ -369,10 +422,18 @@ export const GlobalMusicPlayer = () => {
           <p className="text-xs text-text-muted truncate mt-0.5">
             {formatMusicCredits(currentSong.artists, '未知歌手')}
           </p>
-          {audioStats.isStalling && (
-            <p className="text-[0.7rem] theme-text-warning animate-pulse">缓冲中...</p>
-          )}
-          {playUrlError && <p className="text-[0.7rem] theme-text-error">{playUrlError}</p>}
+          <div
+            className={`mt-0.5 flex min-w-0 items-center gap-1 text-[0.7rem] ${statusError ? 'theme-text-error' : 'text-text-muted'}`}
+            aria-live="polite"
+            role={statusError ? 'alert' : undefined}
+          >
+            {showSpinner && (
+              <span aria-hidden="true" className="shrink-0">
+                <Spinner size="sm" className="h-3 w-3" />
+              </span>
+            )}
+            <span className="truncate">{statusText}</span>
+          </div>
         </div>
 
         {/* Controls */}
@@ -454,16 +515,41 @@ export const GlobalMusicPlayer = () => {
       </div>
 
       <audio
+        key={sourceKey}
         ref={audioRef}
         src={activeAudioUrl}
         preload="auto"
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
+        onLoadStart={() => {
+          if (isPlaying) setPhase('loading')
+        }}
+        onPlaying={onPlaying}
+        onPause={() => {
+          if (!audioRef.current?.ended) {
+            setPhase((prev) => (prev === 'error' ? prev : 'paused'))
+            if (isPlaying) setIsPlaying(false)
+          }
+        }}
+        onSeeking={onWaiting}
+        onSeeked={() => {
+          const audio = audioRef.current
+          if (!audio || !isPlaying) return
+          if (audio.paused || audio.seeking || audio.readyState < 3) onWaiting()
+        }}
+        onStalled={onWaiting}
         onWaiting={onWaiting}
         onCanPlay={onCanPlay}
         onCanPlayThrough={onCanPlay}
         onError={onError}
-        onEnded={playNext}
+        onEnded={() => {
+          if (playlist.length > 1) {
+            playNext()
+          } else {
+            setIsPlaying(false)
+            setPhase('ended')
+          }
+        }}
       />
     </div>
   )
