@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { StrictMode, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import { DialogProvider } from './components/Dialog'
@@ -57,6 +57,12 @@ if (typeof window !== 'undefined') {
     setTimeout(initThirdPartyScripts, 3000)
   }
 }
+function StartupReady() {
+  useEffect(() => {
+    window.hideStaticFallback?.()
+  }, [])
+  return null
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -67,9 +73,6 @@ createRoot(document.getElementById('root')!).render(
         </DialogProvider>
       </ToastProvider>
     </ErrorBoundary>
+    <StartupReady />
   </StrictMode>
 )
-
-if (typeof window.hideStaticFallback === 'function') {
-  window.hideStaticFallback()
-}

@@ -360,24 +360,27 @@ export const DefaultHome = () => {
   const [loadState, setLoadState] = useState<HomeLoadState>(initialLoadState)
   const [retryNonce, setRetryNonce] = useState<HomeRetryState>(initialRetryState)
   const previousRetryNonceRef = useRef<HomeRetryState | null>(null)
-  const initialRequestPendingRef = useRef(false)
+  const requestVersionsRef = useRef<HomeRetryState>({ ...initialRetryState })
   const { currentSong, isPlaying, playAlbumTracks } = useMusic()
 
+  useEffect(
+    () => () => {
+      // 卸载或 StrictMode 重启时使所有未完成的结果失效。
+      previousRetryNonceRef.current = null
+      homeSections.forEach((section) => {
+        requestVersionsRef.current[section] += 1
+      })
+    },
+    []
+  )
+
   useEffect(() => {
-    let cancelled = false
     const previousRetryNonce = previousRetryNonceRef.current
     previousRetryNonceRef.current = retryNonce
-    const changedSections = previousRetryNonce
+    const sectionsToLoad = previousRetryNonce
       ? homeSections.filter((section) => retryNonce[section] !== previousRetryNonce[section])
       : homeSections
-    const sectionsToLoad =
-      changedSections.length > 0
-        ? changedSections
-        : initialRequestPendingRef.current
-          ? homeSections
-          : []
     if (sectionsToLoad.length === 0) return
-    initialRequestPendingRef.current = true
     if (previousRetryNonce) {
       setLoadState((current) => {
         const next = { ...current }
@@ -417,42 +420,34 @@ export const DefaultHome = () => {
       }
     }
 
-    const loadHomeContent = async () => {
-      const results = await Promise.allSettled(sectionsToLoad.map(loadSection))
-      if (cancelled) return
-      initialRequestPendingRef.current = false
-      results.forEach((result) => {
-        if (result.status !== 'fulfilled') return
-        switch (result.value.section) {
-          case 'events':
-            setEvents(result.value.items)
-            break
-          case 'galleries':
-            setGalleries(result.value.items)
-            break
-          case 'songs':
-            setSongs(result.value.items)
-            break
-          case 'albums':
-            setAlbums(result.value.items)
-            break
+    sectionsToLoad.forEach((section) => {
+      const version = ++requestVersionsRef.current[section]
+
+      void loadSection(section).then(
+        (result) => {
+          if (requestVersionsRef.current[section] !== version) return
+          switch (result.section) {
+            case 'events':
+              setEvents(result.items)
+              break
+            case 'galleries':
+              setGalleries(result.items)
+              break
+            case 'songs':
+              setSongs(result.items)
+              break
+            case 'albums':
+              setAlbums(result.items)
+              break
+          }
+          setLoadState((current) => ({ ...current, [section]: 'ready' }))
+        },
+        () => {
+          if (requestVersionsRef.current[section] !== version) return
+          setLoadState((current) => ({ ...current, [section]: 'error' }))
         }
-      })
-
-      setLoadState((current) => {
-        const next = { ...current }
-        results.forEach((result, index) => {
-          next[sectionsToLoad[index]] = result.status === 'fulfilled' ? 'ready' : 'error'
-        })
-        return next
-      })
-    }
-
-    void loadHomeContent()
-
-    return () => {
-      cancelled = true
-    }
+      )
+    })
   }, [retryNonce])
 
   const retrySection = useCallback((section: HomeSection) => {

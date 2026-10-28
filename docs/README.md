@@ -17,6 +17,7 @@
 - [S3 安全优化](S3_SECURITY_OPTIMIZATION.md)
 - [支持的外部嵌入平台](supported-embed-platforms.md)
 - [微信小程序闭环](p2-wechat-mini-program.md)
+- [首屏加载与性能验收](startup-performance.md)
 
 ## 接口辅助
 

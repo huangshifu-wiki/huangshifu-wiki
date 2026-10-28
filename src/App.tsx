@@ -65,7 +65,7 @@ const UiShowcase = import.meta.env.DEV ? lazy(() => import('./pages/UiShowcase')
 
 const MainLayout = () => {
   const { currentSong } = useMusic()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { isOnline } = useNetworkStatus()
   const location = useLocation()
   const viewLocation = getContentBackgroundLocation(location)
@@ -75,10 +75,18 @@ const MainLayout = () => {
   // 布局级 SEO：详情路径返回 null，由详情组件自行管理元数据
   const layoutSeo = getStaticRouteSeo(path, viewLocation.search)
   const [setupStatus, setSetupStatus] = React.useState<SetupStatus | null>(null)
-  const [setupStatusLoaded, setSetupStatusLoaded] = React.useState(false)
 
   React.useEffect(() => {
     let cancelled = false
+
+    const handleSetupComplete = () => {
+      cancelled = true
+      setSetupStatus({
+        initialized: true,
+        requiresSetup: false,
+      })
+    }
+    window.addEventListener('hsf:setup-complete', handleSetupComplete)
 
     getSetupStatus()
       .then((status) => {
@@ -89,28 +97,9 @@ const MainLayout = () => {
       .catch((error) => {
         console.error('Failed to load setup status:', error)
       })
-      .finally(() => {
-        if (!cancelled) {
-          setSetupStatusLoaded(true)
-        }
-      })
 
     return () => {
       cancelled = true
-    }
-  }, [])
-
-  React.useEffect(() => {
-    const handleSetupComplete = () => {
-      setSetupStatus({
-        initialized: true,
-        requiresSetup: false,
-      })
-      setSetupStatusLoaded(true)
-    }
-
-    window.addEventListener('hsf:setup-complete', handleSetupComplete)
-    return () => {
       window.removeEventListener('hsf:setup-complete', handleSetupComplete)
     }
   }, [])
@@ -126,11 +115,7 @@ const MainLayout = () => {
     )
   }
 
-  if (!setupStatusLoaded) {
-    return <PageSkeleton />
-  }
-
-  if (setupStatus?.requiresSetup && !user) {
+  if (setupStatus?.requiresSetup === true && !authLoading && user === null) {
     return <Navigate to="/setup" replace />
   }
 
