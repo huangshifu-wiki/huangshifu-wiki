@@ -1,5 +1,5 @@
 // 版本升级后等待旧页面退出，再激活新 Worker 并清理本站旧缓存。
-const SW_CACHE_VERSION = { major: 32, minor: 0 }
+const SW_CACHE_VERSION = { major: 32, minor: 1 }
 const CACHE_PREFIX = 'huangshifu-wiki-v'
 const CACHE_NAME = `${CACHE_PREFIX}${SW_CACHE_VERSION.major}.${SW_CACHE_VERSION.minor}`
 const OFFLINE_SHELL = '/index.html'
@@ -42,17 +42,26 @@ function fetchHashedAsset(request, cache) {
   return pending
 }
 
-function canCache(response) {
+function allowsStorage(response) {
   return (
     response.status === 200 &&
     response.type === 'basic' &&
-    !/\b(?:private|no-store)\b/i.test(response.headers.get('Cache-Control') || '') &&
-    !/text\/html/i.test(response.headers.get('Content-Type') || '')
+    !/\b(?:private|no-store)\b/i.test(response.headers.get('Cache-Control') || '')
   )
 }
 
+function canCache(response) {
+  return allowsStorage(response) && !/text\/html/i.test(response.headers.get('Content-Type') || '')
+}
+
 async function cacheOfflineShell(response) {
-  if (response.status !== 200 || !/text\/html/i.test(response.headers.get('Content-Type') || ''))
+  if (!allowsStorage(response)) return
+  const url = new URL(response.url)
+  if (
+    url.origin !== self.location.origin ||
+    (url.pathname !== '/' && url.pathname !== OFFLINE_SHELL) ||
+    !/text\/html/i.test(response.headers.get('Content-Type') || '')
+  )
     return
   // SPA 壳只包含这一项服务端认证启动数据，离线副本统一按游客启动。
   const html = (await response.text()).replace(

@@ -7,7 +7,7 @@ import { promisify } from 'node:util'
 import { chromium } from 'playwright'
 
 let browser, context, page, server, origin
-let revision, htmlVersion, blocked, assets, statuses, requestCounts, onRequest
+let revision, htmlVersion, htmlCacheControl, blocked, assets, statuses, requestCounts, onRequest
 const source = await readFile(new URL('../../public/sw.js', import.meta.url), 'utf8')
 const assetPath = '/assets/app-Ab12cD_9.js'
 
@@ -27,6 +27,7 @@ before(async () => {
       res.end(source.replace(/minor: \d+/, `minor: ${revision}`))
     } else if (path === '/' || path === '/index.html' || path === '/settings') {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Cache-Control', htmlCacheControl)
       res.end(
         `<html><head><title>${htmlVersion}</title></head><body><script>window.__HSF_BOOTSTRAP_AUTH_UID__ = "private-user-id"</script><h1>${htmlVersion}</h1></body></html>`
       )
@@ -52,6 +53,7 @@ after(async () => {
 beforeEach(async () => {
   revision = 0
   htmlVersion = '首页版本一'
+  htmlCacheControl = 'no-cache'
   blocked = new Map()
   assets = new Map([[assetPath, 'cached-chunk']])
   statuses = new Map()
@@ -150,6 +152,37 @@ describe('静态资源缓存', () => {
     await page.goto(`${origin}/settings`)
     assert.equal(await page.title(), htmlVersion)
     assert.equal(await page.evaluate(() => window.__HSF_BOOTSTRAP_AUTH_UID__), null)
+  })
+
+  it('安装和首页更新均不缓存 private 或 no-store HTML', async () => {
+    for (const directive of ['private', 'no-store']) {
+      htmlCacheControl = directive
+      htmlVersion = `不可缓存：${directive}`
+      await page.reload({ waitUntil: 'networkidle' })
+      assert.equal(await page.title(), htmlVersion)
+      assert.equal(
+        await page.evaluate(async () =>
+          (await (await caches.match('/index.html')).text()).includes('首页版本一')
+        ),
+        true
+      )
+
+      const freshContext = await browser.newContext()
+      try {
+        const freshPage = await freshContext.newPage()
+        await freshPage.goto(origin)
+        await freshPage.evaluate(async () => {
+          await navigator.serviceWorker.register('/sw.js')
+          await navigator.serviceWorker.ready
+        })
+        assert.equal(
+          await freshPage.evaluate(async () => Boolean(await caches.match('/index.html'))),
+          false
+        )
+      } finally {
+        await freshContext.close()
+      }
+    }
   })
 
   it('新 Worker 等待旧页面退出，旧 Chunk 在交接前可继续使用', async () => {

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { apiGet } from '../lib/apiClient'
 import { dismissAnnouncement, isAnnouncementDismissed } from '../lib/announcementDismissal'
 import type { AnnouncementItem } from '../types/entities'
+import { ErrorBoundary } from './ErrorBoundary'
 
 const AnnouncementBanner = lazy(() => import('./AnnouncementBanner'))
 
@@ -46,13 +47,15 @@ export const AnnouncementBar = () => {
   if (!announcement) return null
 
   return (
-    <Suspense fallback={null}>
-      <AnnouncementBanner
-        announcement={announcement}
-        visible={isVisible}
-        onDismiss={handleDismiss}
-        onClose={() => setIsVisible(false)}
-      />
-    </Suspense>
+    <ErrorBoundary fallback={<></>}>
+      <Suspense fallback={null}>
+        <AnnouncementBanner
+          announcement={announcement}
+          visible={isVisible}
+          onDismiss={handleDismiss}
+          onClose={() => setIsVisible(false)}
+        />
+      </Suspense>
+    </ErrorBoundary>
   )
 }

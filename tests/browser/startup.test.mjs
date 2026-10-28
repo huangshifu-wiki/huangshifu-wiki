@@ -55,19 +55,28 @@ describe('生产首屏', () => {
     await page.getByRole('dialog').waitFor()
   })
 
-  it('登录 Chunk 下载失败时显示现有错误边界及返回首页入口', async () => {
-    await page.route('**/assets/*AuthModal*.js', (route) => route.abort())
+  it('登录 Chunk 下载失败后刷新页面可重新打开登录窗口', async () => {
+    const chunkPattern = '**/assets/*AuthModal*.js'
+    await page.route(chunkPattern, (route) => route.abort())
     await page.goto(origin, { waitUntil: 'networkidle' })
     await page.getByRole('button', { name: '打开菜单' }).click()
     await page
       .locator('#site-mobile-menu')
       .getByRole('button', { name: '登录', exact: true })
       .click()
-    const alert = page.getByRole('alert').filter({ hasText: '页面出错了' })
+    const alert = page.getByRole('alert').filter({ hasText: '登录窗口加载失败' })
     await alert.waitFor()
-    await alert.getByRole('link', { name: '返回首页' }).click()
-    await page.locator('#home-title').waitFor()
-    assert.equal(await page.getByRole('navigation', { name: '主导航' }).isVisible(), true)
+    await page.unroute(chunkPattern)
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle' }),
+      alert.getByRole('button', { name: '刷新页面' }).click(),
+    ])
+    await page.getByRole('button', { name: '打开菜单' }).click()
+    await page
+      .locator('#site-mobile-menu')
+      .getByRole('button', { name: '登录', exact: true })
+      .click()
+    await page.getByRole('dialog').waitFor()
   })
 
   it('首页请求仍未完成时，在 React 提交后退出启动占位', async () => {

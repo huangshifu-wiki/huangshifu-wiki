@@ -14,7 +14,7 @@ import { useDismissableLayer } from '../hooks/useClickOutside'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import styles from './Navbar.module.css'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
-import { IconButton } from '@/src/components/ui'
+import { Button, IconButton } from '@/src/components/ui'
 
 const AuthModal = lazy(() => import('./Navbar/AuthModal').then((m) => ({ default: m.AuthModal })))
 
@@ -129,7 +129,14 @@ export const Navbar = () => {
       />
 
       {authModalMounted && (
-        <ErrorBoundary>
+        <ErrorBoundary
+          fallback={
+            <div role="alert">
+              <p>登录窗口加载失败，请刷新页面后重试。</p>
+              <Button onClick={() => window.location.reload()}>刷新页面</Button>
+            </div>
+          }
+        >
           <Suspense fallback={null}>
             <AuthModal
               open={authModalOpen}
