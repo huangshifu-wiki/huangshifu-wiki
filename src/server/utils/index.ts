@@ -8,14 +8,7 @@ export {
   backupsDir,
   DEFAULT_MUSIC_PLATFORMS,
   BACKUP_PASSWORD,
-  BACKUP_RETAIN_COUNT,
-  GALLERY_ADMIN_ONLY,
-  WECHAT_MP_APPID,
-  WECHAT_MP_APP_SECRET,
   WECHAT_LOGIN_MOCK,
-  UPLOAD_SESSION_TTL_MINUTES,
-  PLAY_URL_CACHE_TTL_MS,
-  playUrlCache,
   defaultUploadsDir,
   isSemanticSearchEnabled,
 } from './config'
@@ -23,6 +16,9 @@ export {
 // === 通用解析与验证 ===
 export {
   parseDate,
+  normalizeOptionalDateOnly,
+  normalizeOptionalDateOnlyString,
+  normalizeOptionalDurationMs,
   parseInteger,
   firstString,
   parseQueryString,
@@ -42,15 +38,14 @@ export {
   normalizeWikiWriteStatus,
   normalizePostWriteStatus,
   normalizeGalleryWriteStatus,
+  normalizeTicketListingWriteStatus,
   parseFavoriteType,
   parseMusicPlatform,
   parseDisplayAlbumMode,
-  parseMusicCollectionType,
-  parseBrowsingTargetType,
-  parseModerationTargetType,
   normalizeModerationTargetType,
   parsePostSort,
   parsePagination,
+  createPaginationMeta,
 } from './parsers'
 
 export {
@@ -59,30 +54,28 @@ export {
   nullableLimitedString,
   limitedStringArray,
   ensureTextLimit,
-  trimText,
 } from './textLimits'
+
+export { allocateNumericSlug, isNumericSlug, withNumericSlugTransaction } from './numericSlug'
+export { createApiKeyMaterial, hashApiKeyToken, toApiKeyResponse } from './api-keys'
+export {
+  getSharpInputPixelLimit,
+  isSharpPixelLimitError,
+  resolveSharpInputPixelLimit,
+} from './sharpSafe'
+export { normalizeLyricStorage } from './lyrics'
+export { allocateUserPublicId, isUserPublicId } from './userPublicId'
 
 export {
   buildUniqueDisplayNameFallback,
   normalizeDisplayNameFallback,
   validateUserDisplayName,
-  type DisplayNameValidationResult,
 } from './display-name'
 
 // === Wiki 关系引擎 ===
 export {
-  RELATION_LABEL_TO_TYPE,
-  normalizeWikiRelationType,
-  normalizeWikiRelationLabel,
-  normalizeWikiRelationList,
   normalizeWikiRelationListForWrite,
   serializeRelations,
-  relationTypeLabel,
-  relationIdentityKey,
-  buildWikiReverseRelationIndex,
-  buildResolvedWikiRelations,
-  buildWikiRelationGraph,
-  findWikiRelationCenterPage,
   buildWikiRelationBundle,
   clearWikiRelationCache,
 } from './wiki-relations'
@@ -92,21 +85,20 @@ export {
   canViewWikiPage,
   canViewPost,
   canViewGallery,
+  canViewTicketListing,
   canManageGallery,
   buildWikiVisibilityWhere,
   buildPostVisibilityWhere,
   buildGalleryVisibilityWhere,
-  canManageWikiPullRequest,
 } from './authorization'
+export { fetchVisibleTagSuggestions } from './tagSuggestions'
 
 export {
   SOFT_DELETE_TABS,
-  isSoftDeleteTab,
   includeDeletedFromQuery,
   deletedAtFilter,
   softDeleteData,
   restoreDeleteData,
-  SELF_DELETE_REASON,
   normalizeDeleteReason,
   resolveDeleteReason,
 } from './soft-delete'
@@ -120,18 +112,20 @@ export {
   toPostResponse,
   toCommentResponse,
   toGalleryResponse,
+  toTicketListingResponse,
+  toTicketListingListResponse,
   toGalleryListResponse,
+  toEventResponse,
+  toEventListResponse,
   toMusicResponse,
   toEditLockResponse,
   toUserResponse,
   toUploadSessionResponse,
-  toMediaAssetResponse,
   toSongResponse,
   toAlbumResponse,
 } from './response-transformers'
 
 export {
-  buildCommentResponses,
   fetchPostCommentsForResponse,
   fetchPostCommentsPageForResponse,
   fetchGalleryCommentsForResponse,
@@ -140,30 +134,51 @@ export {
   deleteCommentLike,
 } from './comments'
 
+export { localizeImageUrlAsMediaAsset } from './remoteImageAsset'
+
 // === 音乐全链路 ===
 export {
   resolveSongDisplayAlbum,
   resolveSongCoverUrl,
-  normalizeSongCustomPlatformLinkUrl,
+  resolveAlbumCoverUrl,
+  resolveSongCoverThumbnailUrl,
+  resolveAlbumCoverThumbnailUrl,
   normalizeSongCustomPlatformLinks,
-  getPlatformSourceId,
-  getPlatformSourceField,
-  buildPlaybackPlatformCandidates,
-  clearExpiredPlayUrlCache,
-  getCachedPlayUrl,
-  setCachedPlayUrl,
+  normalizeMusicExternalSourceInputs,
+  findDuplicateSongSources,
+  findDuplicateAlbumSources,
   resolveMusicPlayUrl,
   normalizeMusicImportTracks,
+  buildMusicMetadataFillUpdateData,
   buildAlbumTracksPayload,
   applyAlbumTracksToRelations,
   addSongCoverFromAsset,
+  addSongCoverFromUrl,
+  addAlbumCoverFromUrl,
   addAlbumCoverFromAsset,
   createOrUpdateImportedSong,
   autoLinkInstrumental,
   fetchSongsWithRelations,
+  fetchSongsWithRelationsByDocIds,
   fetchSongWithRelationsByDocId,
+  findMusicDocIdsByArtistPartial,
   ensureDisplayRelation,
 } from './music'
+export { batchMatchAndDiffImportTracks } from './musicImportMatch'
+export type {
+  DuplicateSongSourceWarning,
+  DuplicateAlbumSourceWarning,
+  SongDuplicateStrategy,
+  MusicMetadataFields,
+} from './music'
+export type {
+  SongImportMatchStatus,
+  SongImportDiffFieldStatus,
+  SongImportFieldDiff,
+  SongImportExistingSongSummary,
+  SongImportMatchResult,
+  SongImportMatchSummary,
+} from './musicImportMatch'
 
 // === 通知与用户行为 ===
 export {
@@ -175,14 +190,13 @@ export {
 } from './notifications'
 
 export {
-  resolveMentionTargetsForNames,
   resolveMentionTargetsForText,
   buildMentionTargetsByTextKey,
   notifyMentionUsers,
 } from './mentions'
 
 // === 帖子热度 ===
-export { calculatePostHotScore, refreshPostHotScore } from './post-scoring'
+export { calculatePostHotScore } from './post-scoring'
 
 // === 微信登录 ===
 export {
@@ -207,11 +221,12 @@ export {
   verifyEmailVerificationToken,
 } from './email-verification'
 
+// === 人机验证（Cloudflare Turnstile） ===
+export { isTurnstileEnabled, getTurnstilePublicConfig, verifyTurnstileToken } from './turnstile'
+
 // === 文件上传与存储 ===
 export {
   normalizeTrackDiscPayload,
-  normalizeEditLockCollection,
-  normalizeEditLockRecordId,
   createUploadSessionExpiresAt,
   isUploadSessionExpired,
   buildUploadPublicUrl,
@@ -219,25 +234,28 @@ export {
   resolveUploadPathByUrl,
   extractStorageKeyFromUploadUrl,
   safeDeleteUploadFileByStorageKey,
-  safeDeleteUploadFileByUrl,
   uploadFileToS3,
-  uploadFileToExternal,
   uploadToSuperbed,
   deleteFromSuperbed,
   validateUploadedImage,
-  detectImageMimeType,
-  getUploadFileStorageKey,
 } from './upload'
 
 // === 备份与安全工具 ===
 export {
   parseDatabaseUrl,
-  verifyBackupPassword,
   sanitizeFilename,
+  formatBackupTimestamp,
   formatFileSize,
   cleanupOldBackups,
+  readBackupNote,
+  writeBackupNote,
+  deleteBackupNote,
+  BACKUP_METADATA_ENTRY,
+  serializeBackupMetadata,
+  parseBackupMetadata,
   encryptBuffer,
   decryptBuffer,
+  type BackupArchiveMetadata,
   validateSqlContent,
   getPostgresClientExecutable,
   isPostgresClientMissingError,
@@ -256,6 +274,27 @@ export {
   isRegistrationOpen,
 } from './registration'
 
+export {
+  SEARCH_HOT_KEYWORDS_CONFIG_KEY,
+  SEARCH_HOT_KEYWORDS_CACHE_KEY,
+  getSearchHotKeywordsConfig,
+  setSearchHotKeywordsConfig,
+  isSearchHotKeywordsEnabled,
+} from './search-hot-keywords'
+
 // === 已有独立模块（保持原导出方式）===
 export * from './cache'
-export { calculateFileMD5, calculateBufferMD5 } from './hash'
+export { calculateFileMD5 } from './hash'
+
+// === 管理后台仪表盘 ===
+export { getDashboardOverview } from './adminDashboardStats'
+
+// === SEO（robots / sitemap / 文档 X-Robots-Tag）===
+export {
+  getPublicSiteUrl,
+  buildSitemapXml,
+  buildSitemapIndexXml,
+  getRobotsDirective,
+  isDocumentPath,
+} from './seo'
+export type { SitemapEntry } from './seo'

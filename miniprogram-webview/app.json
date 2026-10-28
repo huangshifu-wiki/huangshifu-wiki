@@ -1,8 +1,5 @@
 {
-  "pages": [
-    "pages/index/index",
-    "pages/webview/webview"
-  ],
+  "pages": ["pages/index/index", "pages/webview/webview"],
   "window": {
     "navigationBarTitleText": "诗扶小筑"
   },

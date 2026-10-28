@@ -1,24 +1,24 @@
-import type { Router } from 'express';
-import { createRouter } from '../utils/typed-router';
-import { requireAuth } from '../middleware/auth';
-import { prisma, toNotificationResponse, parsePagination } from '../utils';
-import type { AuthenticatedRequest } from '../types';
+import type { Router } from 'express'
+import { createRouter } from '../utils/typed-router'
+import { requireAuth } from '../middleware/auth'
+import { prisma, toNotificationResponse, parsePagination, createPaginationMeta } from '../utils'
+import type { AuthenticatedRequest } from '../types'
 
-const router = createRouter();
+const router = createRouter()
 
 // List user notifications
 router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const userUid = req.authUser!.uid;
-    const { limit, page, offset: skip } = parsePagination(req.query);
-    const unreadOnly = req.query.unread === 'true';
-    const typeFilter = typeof req.query.type === 'string' && req.query.type ? req.query.type : null;
+    const userUid = req.authUser!.uid
+    const { limit, page, offset: skip } = parsePagination(req.query)
+    const unreadOnly = req.query.unread === 'true'
+    const typeFilter = typeof req.query.type === 'string' && req.query.type ? req.query.type : null
 
     const where: Record<string, unknown> = {
       userUid,
       ...(unreadOnly ? { isRead: false } : {}),
       ...(typeFilter ? { type: typeFilter } : {}),
-    };
+    }
 
     const [notifications, total, unreadCount] = await Promise.all([
       prisma.notification.findMany({
@@ -29,105 +29,103 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       }),
       prisma.notification.count({ where }),
       prisma.notification.count({ where: { userUid, isRead: false } }),
-    ]);
+    ])
 
     res.json({
       notifications: notifications.map(toNotificationResponse),
-      total,
       unreadCount,
-      page,
-      limit,
-    });
+      ...createPaginationMeta(total, page, limit, notifications.length),
+    })
   } catch (error) {
-    console.error('Fetch notifications error:', error);
-    res.status(500).json({ error: '获取通知失败' });
+    console.error('Fetch notifications error:', error)
+    res.status(500).json({ error: '获取通知失败' })
   }
-});
+})
 
 // Mark notification as read
 router.post('/:id/read', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const userUid = req.authUser!.uid;
-    const notificationId = req.params.id;
+    const userUid = req.authUser!.uid
+    const notificationId = req.params.id
 
     const notification = await prisma.notification.findUnique({
       where: { id: notificationId },
       select: { id: true, userUid: true, isRead: true },
-    });
+    })
 
     if (!notification) {
-      res.status(404).json({ error: '通知不存在' });
-      return;
+      res.status(404).json({ error: '通知不存在' })
+      return
     }
 
     if (notification.userUid !== userUid) {
-      res.status(403).json({ error: '无权操作该通知' });
-      return;
+      res.status(403).json({ error: '无权操作该通知' })
+      return
     }
 
     if (!notification.isRead) {
       await prisma.notification.update({
         where: { id: notificationId },
         data: { isRead: true },
-      });
+      })
     }
 
-    res.json({ success: true });
+    res.json({ success: true })
   } catch (error) {
-    console.error('Mark notification read error:', error);
-    res.status(500).json({ error: '标记已读失败' });
+    console.error('Mark notification read error:', error)
+    res.status(500).json({ error: '标记已读失败' })
   }
-});
+})
 
 // Mark all notifications as read
 router.post('/read-all', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const userUid = req.authUser!.uid;
+    const userUid = req.authUser!.uid
 
     await prisma.notification.updateMany({
       where: { userUid, isRead: false },
       data: { isRead: true },
-    });
+    })
 
-    res.json({ success: true });
+    res.json({ success: true })
   } catch (error) {
-    console.error('Mark all notifications read error:', error);
-    res.status(500).json({ error: '全部标记已读失败' });
+    console.error('Mark all notifications read error:', error)
+    res.status(500).json({ error: '全部标记已读失败' })
   }
-});
+})
 
 // Delete notification
 router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const userUid = req.authUser!.uid;
-    const notificationId = req.params.id;
+    const userUid = req.authUser!.uid
+    const notificationId = req.params.id
 
     const notification = await prisma.notification.findUnique({
       where: { id: notificationId },
       select: { id: true, userUid: true },
-    });
+    })
 
     if (!notification) {
-      res.status(404).json({ error: '通知不存在' });
-      return;
+      res.status(404).json({ error: '通知不存在' })
+      return
     }
 
     if (notification.userUid !== userUid) {
-      res.status(403).json({ error: '无权操作该通知' });
-      return;
+      res.status(403).json({ error: '无权操作该通知' })
+      return
     }
 
     await prisma.notification.delete({
       where: { id: notificationId },
-    });
+    })
 
-    res.json({ success: true });
+    res.json({ success: true })
   } catch (error) {
-    console.error('Delete notification error:', error);
-    res.status(500).json({ error: '删除通知失败' });
+    console.error('Delete notification error:', error)
+    res.status(500).json({ error: '删除通知失败' })
   }
-});
+})
 
 export function registerNotificationsRoutes(app: Router) {
-  app.use('/api/notifications', router);
+  app.use('/api/notifications', router)
 }

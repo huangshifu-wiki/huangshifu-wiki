@@ -8,7 +8,9 @@
 - `postgres`：PostgreSQL 16，数据保存在 Docker volume，仅在 Compose 内部网络暴露
 - `qdrant`：仅在 `ENABLE_SEMANTIC_SEARCH=true` 时通过 `semantic` profile 启动
 
-默认关闭图片语义搜索，避免首次上线时被 Qdrant 和 CLIP 模型下载阻塞。
+默认不启动 Qdrant，避免首次上线时被 Qdrant 镜像和 CLIP 模型下载阻塞。
+服务端语义搜索功能开关位于管理后台「系统参数」，部署后请按需调整；
+若未启动 Qdrant 而功能开关为开启，语义搜索接口会返回错误。
 
 ## 1. 服务器准备
 
@@ -35,8 +37,9 @@ cp .env.docker.example .env
 编辑 `.env`：
 
 - `CORS_ORIGIN`：生产域名，例如 `https://wiki.example.com`
-- `JWT_SECRET`、`POSTGRES_PASSWORD`、`BACKUP_PASSWORD`：部署脚本会自动替换模板占位值，也可以手动改为自己的强密钥
-- `S3_*`、`WECHAT_MP_*`、`AMAP_*`：按实际功能启用
+- `JWT_SECRET`、`POSTGRES_PASSWORD`、`BACKUP_PASSWORD`、`SECRETS_ENCRYPTION_KEY`：部署脚本会自动替换模板占位值，也可以手动改为自己的强密钥
+- `SECRETS_ENCRYPTION_KEY` 为服务凭证加密主密钥（base64 编码 32 字节），缺失时管理后台凭证管理禁用
+- S3 / Qdrant / 图床与微信等参数与凭证无需环境变量，部署后通过管理后台「站点设置」配置
 
 执行部署：
 
@@ -53,6 +56,15 @@ chmod +x scripts/deploy-docker.sh
 - 执行 `npm run db:seed`
 - 启动应用容器
 - 检查 `http://127.0.0.1:3003/healthz`
+
+部署脚本会自动处理重复部署留下的资源：
+
+- `docker compose up --remove-orphans` 会移除不再由当前 Compose 配置管理的孤儿容器
+- 关闭语义搜索时，会停止并移除之前启动的 Qdrant 容器，但保留 `qdrant_storage` 数据卷
+- 会移除被中断的迁移或 seed 产生的一次性容器
+- 默认不执行全局的 `docker image prune`；如确认需要清理整个 Docker 主机上的悬挂镜像，可设置 `PRUNE_IMAGES=1`
+
+脚本不会删除 PostgreSQL、Qdrant 或 Transformers 数据卷，也不会删除 `uploads/` 和 `backups/`。
 
 空数据库首次访问站点时，会进入 `/setup` 页面创建超级管理员账号。
 
@@ -101,15 +113,38 @@ docker compose logs -f postgres
 docker compose ps
 ```
 
-## 4. 启用图片语义搜索
+### 3.1 从旧版本升级（凭证迁移）
 
-编辑 `.env`：
+旧版 `.env` 中可能缺少 `SECRETS_ENCRYPTION_KEY`（服务凭证加密主密钥）。重新运行 `./scripts/deploy-docker.sh` 时，脚本检测到缺失会**自动补写**随机密钥并提示，无需手动操作；已有行不会被覆盖。
+
+如需自定义密钥（例如多台机器共用同一主密钥），也可手动生成并填入：
+
+```bash
+# 生成 base64 编码的 32 字节随机密钥
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+将输出填入 `.env`：
 
 ```env
-ENABLE_SEMANTIC_SEARCH="true"
-QDRANT_URL="http://qdrant:6333"
+SECRETS_ENCRYPTION_KEY="<上一步的输出>"
+```
+
+**注意**：该密钥用于加密存储的服务凭证，更换会导致已保存的凭证无法解密（需在面板重新配置）。
+升级前若 S3 / 微信等凭证仅在旧 `.env` 中，迁移到面板后请删除旧变量以免混淆。
+
+## 4. 启用图片语义搜索
+
+如需定制模型缓存路径，编辑 `.env`：
+
+```env
 TRANSFORMERS_CACHE="/app/models/transformers"
 ```
+
+Qdrant 地址、API Key 与集合名已移至管理后台「站点设置 → 向量检索」，不再使用环境变量（服务端「服务凭证」中可配置 Qdrant API Key）。
+
+语义搜索默认关闭（服务端开关默认关闭，避免未部署 Qdrant 时搜索报错）；
+启用时需在管理后台「系统参数」中打开「语义搜索」开关，并确认 Qdrant 已启动。
 
 重新部署：
 

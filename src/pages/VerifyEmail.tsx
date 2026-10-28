@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { AlertCircle, Loader2, MailCheck } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { AlertCircle, Loader2, MailCheck } from '@/src/components/icons'
 import { verifyEmail } from '../lib/auth'
 import { useAuth } from '../context/AuthContext'
+import { LinkButton } from '@/src/components/ui'
 
 type VerifyState =
   | { status: 'loading'; message: string }
@@ -35,10 +36,7 @@ const VerifyEmail = () => {
         if (cancelled) return
         setState({
           status: 'success',
-          message:
-            result.purpose === 'change_email'
-              ? '邮箱验证成功'
-              : '邮箱验证成功',
+          message: result.purpose === 'change_email' ? '邮箱验证成功' : '邮箱验证成功',
         })
       })
       .catch((error) => {
@@ -58,8 +56,8 @@ const VerifyEmail = () => {
   const isSuccess = state.status === 'success'
 
   return (
-    <div className="flex min-h-[calc(100vh-60px)] items-center justify-center bg-bg-primary px-6 py-12">
-      <section className="w-full max-w-md rounded border border-border bg-surface p-6 text-center shadow-sm">
+    <div className="mobile-page-shell flex min-h-[calc(100vh-60px)] items-center justify-center px-6 py-12">
+      <section className="theme-panel relative z-10 w-full max-w-md rounded-sm p-6 text-center">
         <div className="mb-4 flex justify-center">
           {isLoading ? (
             <Loader2 size={32} className="animate-spin text-brand-gold" />
@@ -69,30 +67,19 @@ const VerifyEmail = () => {
             <AlertCircle size={32} className="text-[var(--color-error)]" />
           )}
         </div>
-        <h1 className="text-lg font-semibold text-text-primary">邮箱验证</h1>
+        <h1 className="font-[var(--book-title-font)] text-3xl font-normal tracking-[0.1em] text-text-primary">
+          邮箱验证
+        </h1>
         <p className="mt-3 text-sm leading-6 text-text-secondary">{state.message}</p>
         <div className="mt-6 flex justify-center gap-3">
           {isSuccess && authLoading ? null : isSuccess && user ? (
-            <Link
-              to="/settings/account"
-              className="theme-button-primary rounded px-4 py-2 text-sm font-medium transition-all"
-            >
-              查看账户
-            </Link>
+            <LinkButton to="/settings/account">查看账户</LinkButton>
           ) : isSuccess ? (
-            <Link
-              to="/login"
-              className="theme-button-primary rounded px-4 py-2 text-sm font-medium transition-all"
-            >
-              去登录
-            </Link>
+            <LinkButton to="/login">去登录</LinkButton>
           ) : (
-            <Link
-              to="/"
-              className="theme-button-secondary rounded px-4 py-2 text-sm font-medium transition-all"
-            >
+            <LinkButton to="/" variant="secondary">
               返回首页
-            </Link>
+            </LinkButton>
           )}
         </div>
       </section>

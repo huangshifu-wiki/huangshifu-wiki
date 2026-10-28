@@ -19,9 +19,7 @@ describe('Sections API - 版块接口测试', () => {
 
   async function createAuthenticatedAgent(email: string, password: string) {
     const agent = request.agent(app)
-    const loginResponse = await agent
-      .post('/api/auth/login')
-      .send({ email, password })
+    const loginResponse = await agent.post('/api/auth/login').send({ email, password })
 
     expect(loginResponse.status).toBe(200)
     const xsrfToken = findCookieValue(loginResponse.headers['set-cookie'], 'XSRF-TOKEN')
@@ -78,14 +76,11 @@ describe('Sections API - 版块接口测试', () => {
       adminUser.plainPassword
     )
 
-    const createResponse = await agent
-      .post('/api/sections')
-      .set('X-XSRF-TOKEN', xsrfToken)
-      .send({
-        name: 'Test Section 100',
-        description: 'integration test section',
-        order: 3,
-      })
+    const createResponse = await agent.post('/api/sections').set('X-XSRF-TOKEN', xsrfToken).send({
+      name: 'Test Section 100',
+      description: 'integration test section',
+      order: 3,
+    })
 
     expect(createResponse.status).toBe(201)
     expect(createResponse.body.section).toMatchObject({

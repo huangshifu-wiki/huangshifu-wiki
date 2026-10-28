@@ -1,0 +1,501 @@
+import React from 'react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogCancel,
+  Button,
+  LoadErrorState,
+  Checkbox,
+  Spinner,
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Field,
+  FullscreenSurface,
+  Input,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  SegmentedControl,
+  SettingRow,
+  SettingsSection,
+  Select,
+  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  ToastProvider,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  useToast,
+} from '@/src/components/ui'
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+describe('UI 设计系统', () => {
+  it('Button 在加载时禁用并暴露 busy 状态', () => {
+    render(
+      <Button loading loadingText="保存中">
+        保存
+      </Button>
+    )
+    const button = screen.getByRole('button', { name: '保存中' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-busy', 'true')
+  })
+  it('Spinner 暴露可访问文案并支持尺寸', () => {
+    render(
+      <>
+        <Spinner size="sm" label="列表加载中" />
+        <Spinner size="lg" />
+      </>
+    )
+
+    const statuses = screen.getAllByRole('status')
+    expect(statuses).toHaveLength(2)
+    expect(statuses[0]).toHaveTextContent('列表加载中')
+    expect(statuses[0].querySelector('svg')).toHaveClass('h-4', 'w-4')
+    expect(statuses[1].querySelector('svg')).toHaveClass('h-7', 'w-7')
+  })
+
+  it('Spinner tail 变体渲染拖尾圆环并支持 className 覆盖尺寸', () => {
+    render(<Spinner variant="tail" size="lg" label="拖尾加载中" className="h-10 w-10" />)
+
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('拖尾加载中')
+    const ring = status.querySelector('.spinner-tail')
+    expect(ring).toBeInTheDocument()
+    expect(ring).toHaveClass('h-10', 'w-10')
+    expect(ring?.querySelector('svg')).toBeNull()
+  })
+
+  it('LoadErrorState 显示错误信息并支持重试', () => {
+    const onRetry = vi.fn()
+    render(
+      <LoadErrorState
+        title="读取失败"
+        error={new Error('服务不可用')}
+        retryLabel="再次加载"
+        onRetry={onRetry}
+      />
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('读取失败')
+    expect(screen.getByRole('alert')).toHaveTextContent('服务不可用')
+    fireEvent.click(screen.getByRole('button', { name: '再次加载' }))
+    expect(onRetry).toHaveBeenCalledOnce()
+  })
+
+  it('Button soft 变体使用浅色底与语义文字色', () => {
+    render(
+      <>
+        <Button variant="warning" soft>
+          强制释放
+        </Button>
+        <Button variant="info" soft>
+          备注
+        </Button>
+      </>
+    )
+    const warning = screen.getByRole('button', { name: '强制释放' })
+    const info = screen.getByRole('button', { name: '备注' })
+    expect(warning).toHaveClass('btn-warning-bg', 'text-warning', 'border-0', 'min-h-0')
+    expect(warning).not.toHaveClass('theme-button-warning')
+    expect(info).toHaveClass('btn-info-bg', 'text-info')
+  })
+
+  it('Button soft 在 primary 与 ghost 下等同原样式', () => {
+    render(
+      <>
+        <Button variant="primary" soft>
+          保存
+        </Button>
+        <Button variant="primary">保存</Button>
+      </>
+    )
+    const [softButton, plainButton] = screen.getAllByRole('button', { name: '保存' })
+    expect(softButton.className).toBe(plainButton.className)
+  })
+
+  it('Field 自动关联 label、说明和错误', () => {
+    render(
+      <Field label="标题" description="公开显示" error="标题不能为空" required>
+        <Input />
+      </Field>
+    )
+    const input = screen.getByRole('textbox', { name: /标题/ })
+    const describedBy = input.getAttribute('aria-describedby') ?? ''
+    expect(input).toBeRequired()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(describedBy.split(' ')).toHaveLength(2)
+    expect(screen.getByRole('alert')).toHaveTextContent('标题不能为空')
+  })
+
+  it('Select 显示下拉标记并保留原生选择行为', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <Field label="分类">
+        <Select defaultValue="music" onChange={onChange}>
+          <option value="music">音乐</option>
+          <option value="event">事件</option>
+        </Select>
+      </Field>
+    )
+
+    const select = screen.getByRole('combobox', { name: '分类' })
+    expect(select).toHaveClass('peer', 'appearance-none', 'pr-10')
+    expect(select.parentElement).toHaveClass('relative')
+    expect(select.parentElement?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+
+    await user.selectOptions(select, 'event')
+    expect(onChange).toHaveBeenCalledOnce()
+    expect(select).toHaveValue('event')
+  })
+
+  it('Switch 支持键盘切换', async () => {
+    const user = userEvent.setup()
+    render(<Switch label="公开" />)
+    const control = screen.getByRole('switch', { name: '公开' })
+    control.focus()
+    await user.keyboard(' ')
+    expect(control).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('Switch 传递新状态并保留选中样式', async () => {
+    const user = userEvent.setup()
+    const onCheckedChange = vi.fn()
+    const { rerender } = render(
+      <Switch label="公开" checked={false} onCheckedChange={onCheckedChange} />
+    )
+    const control = screen.getByRole('switch', { name: '公开' })
+
+    await user.click(screen.getByText('公开'))
+    expect(onCheckedChange).toHaveBeenLastCalledWith(true)
+
+    rerender(<Switch label="公开" checked onCheckedChange={onCheckedChange} />)
+    expect(control).toHaveAttribute('data-state', 'checked')
+    expect(control).toHaveAttribute('aria-checked', 'true')
+    expect(control).not.toHaveClass('bg-surface-alt')
+    expect(control.className).toContain('data-[state=checked]:bg-')
+
+    rerender(<Switch label="公开" checked disabled onCheckedChange={onCheckedChange} />)
+    await user.click(screen.getByText('公开'))
+    expect(onCheckedChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('Checkbox 支持受控状态、标签点击和禁用态', async () => {
+    const user = userEvent.setup()
+    const onCheckedChange = vi.fn()
+    const { rerender } = render(
+      <Checkbox label="允许评论" checked={false} onCheckedChange={onCheckedChange} />
+    )
+    const control = screen.getByRole('checkbox', { name: '允许评论' })
+
+    await user.click(screen.getByText('允许评论'))
+    expect(onCheckedChange).toHaveBeenLastCalledWith(true)
+
+    rerender(<Checkbox label="允许评论" checked onCheckedChange={onCheckedChange} />)
+    expect(control).toHaveAttribute('data-state', 'checked')
+    expect(control).toHaveAttribute('aria-checked', 'true')
+
+    rerender(<Checkbox label="允许评论" checked disabled onCheckedChange={onCheckedChange} />)
+    await user.click(screen.getByText('允许评论'))
+    expect(onCheckedChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('Dialog 限制焦点并在关闭后恢复触发点', async () => {
+    const user = userEvent.setup()
+    render(
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button>打开编辑</Button>
+        </DialogTrigger>
+        <DialogContent title="编辑条目">
+          <div className="p-4">
+            <Input aria-label="标题" />
+            <Button>保存</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+    const trigger = screen.getByRole('button', { name: '打开编辑' })
+    await user.click(trigger)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('DropdownMenu 与 Tabs 支持方向键导航', async () => {
+    const user = userEvent.setup()
+    render(
+      <>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button>操作</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem>编辑</DropdownMenuItem>
+            <DropdownMenuItem>删除</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Tabs defaultValue="a">
+          <TabsList>
+            <TabsTrigger value="a">资料</TabsTrigger>
+            <TabsTrigger value="b">修订</TabsTrigger>
+          </TabsList>
+          <TabsContent value="a">资料页</TabsContent>
+          <TabsContent value="b">修订页</TabsContent>
+        </Tabs>
+      </>
+    )
+    await user.click(screen.getByRole('button', { name: '操作' }))
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('menuitem', { name: '编辑' })).toHaveFocus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('menuitem', { name: '删除' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+
+    const firstTab = screen.getByRole('tab', { name: '资料' })
+    firstTab.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('tab', { name: '修订' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('Popover 与 Tooltip 可通过标准交互打开', async () => {
+    const user = userEvent.setup()
+    render(
+      <TooltipProvider delayDuration={0}>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button>说明</Button>
+          </PopoverTrigger>
+          <PopoverContent>浮层内容</PopoverContent>
+        </Popover>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button>提示</Button>
+          </TooltipTrigger>
+          <TooltipContent>提示内容</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )
+    await user.click(screen.getByRole('button', { name: '说明' }))
+    expect(screen.getByText('浮层内容')).toBeVisible()
+    await user.hover(screen.getByRole('button', { name: '提示' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('提示内容')
+  })
+
+  it('Toast 到期后自动移除', () => {
+    vi.useFakeTimers()
+    const Trigger = () => {
+      const { show } = useToast()
+      return <Button onClick={() => show('保存成功', { duration: 1200 })}>显示通知</Button>
+    }
+    render(
+      <ToastProvider>
+        <Trigger />
+      </ToastProvider>
+    )
+    fireEvent.click(screen.getByRole('button', { name: '显示通知' }))
+    expect(screen.getByText('保存成功')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(1300))
+    expect(screen.queryByRole('button', { name: '关闭通知' })).not.toBeInTheDocument()
+  })
+
+  it('Table 保留原生表格语义', () => {
+    render(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>标题</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell>山鬼</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    )
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '标题' })).toHaveAttribute('scope', 'col')
+    expect(screen.getByRole('cell', { name: '山鬼' })).toBeInTheDocument()
+  })
+
+  it('SettingsSection 自动关联标题并允许设置项标签控制开关', async () => {
+    const user = userEvent.setup()
+    render(
+      <SettingsSection title="外观">
+        <SettingRow
+          label="显示序号"
+          labelFor="sequence-toggle"
+          control={<Switch id="sequence-toggle" />}
+        />
+      </SettingsSection>
+    )
+
+    const section = screen.getByRole('region', { name: '外观' })
+    const control = screen.getByRole('switch', { name: '显示序号' })
+    expect(section).toBeInTheDocument()
+    await user.click(screen.getByText('显示序号'))
+    expect(control).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('SegmentedControl 暴露选中状态并传递新值', async () => {
+    const user = userEvent.setup()
+    const onValueChange = vi.fn()
+    render(
+      <SegmentedControl
+        value="pagination"
+        options={[
+          { value: 'pagination', label: '分页模式' },
+          { value: 'incremental', label: '分段加载' },
+        ]}
+        onValueChange={onValueChange}
+        aria-label="加载方式"
+      />
+    )
+
+    expect(screen.getByRole('button', { name: '分页模式' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: '分段加载' }))
+    expect(onValueChange).toHaveBeenCalledWith('incremental')
+  })
+})
+
+describe('FullscreenSurface', () => {
+  it('脱离渲染容器铺满视口，Escape 回调请求关闭', async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    const { container } = render(
+      <FullscreenSurface open onOpenChange={onOpenChange} label="全屏编辑">
+        <Button>退出全屏</Button>
+      </FullscreenSurface>
+    )
+
+    const surface = screen.getByRole('dialog', { name: '全屏编辑' })
+    expect(container.contains(surface)).toBe(false)
+    expect(document.body.contains(surface)).toBe(true)
+
+    await user.keyboard('{Escape}')
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('嵌在 Dialog 内时焦点留在浮层，Escape 只关浮层不关外层弹窗', async () => {
+    const user = userEvent.setup()
+
+    const NestedDemo = () => {
+      const [formOpen, setFormOpen] = React.useState(true)
+      const [fullscreen, setFullscreen] = React.useState(false)
+      const [lyrics, setLyrics] = React.useState('第一行')
+      return (
+        <Dialog open={formOpen} onOpenChange={setFormOpen}>
+          <DialogContent title="编辑歌曲" description="表单弹窗">
+            <Button onClick={() => setFullscreen(true)}>全屏</Button>
+            <output aria-label="歌词草稿">{lyrics}</output>
+            <FullscreenSurface open={fullscreen} onOpenChange={setFullscreen} label="歌词编辑">
+              <Input
+                aria-label="歌词"
+                value={lyrics}
+                onChange={(event) => setLyrics(event.target.value)}
+              />
+            </FullscreenSurface>
+          </DialogContent>
+        </Dialog>
+      )
+    }
+
+    render(<NestedDemo />)
+    await user.click(screen.getByRole('button', { name: '全屏' }))
+
+    const input = screen.getByRole('textbox', { name: '歌词' })
+    await user.click(input)
+    // 外层弹窗的 trapped FocusScope 会被整屏浮层暂停，焦点不会被抢回弹窗
+    expect(document.activeElement).toBe(input)
+    await user.type(input, '，第二行')
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: '歌词编辑' })).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: '编辑歌曲' })).toBeInTheDocument()
+    expect(screen.getByLabelText('歌词草稿')).toHaveTextContent('第一行，第二行')
+  })
+})
+
+describe('弹窗内的辅助浮层', () => {
+  it('菜单动作更新结果并恢复焦点，Tooltip 和确认取消保留外层草稿', async () => {
+    function Editor() {
+      const [result, setResult] = React.useState('未选择')
+      return (
+        <Dialog defaultOpen>
+          <DialogContent title="编辑草稿">
+            <Input aria-label="草稿正文" defaultValue="仍未保存" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>编辑菜单</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onSelect={() => setResult('已标记原创')}>
+                  标记原创
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <output>{result}</output>
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button>编辑提示</Button>
+                </TooltipTrigger>
+                <TooltipContent>草稿不会自动保存</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button>放弃草稿</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent title="确认放弃" description="取消后继续编辑">
+                <AlertDialogCancel asChild>
+                  <Button>继续编辑</Button>
+                </AlertDialogCancel>
+              </AlertDialogContent>
+            </AlertDialog>
+          </DialogContent>
+        </Dialog>
+      )
+    }
+    const user = userEvent.setup()
+    render(<Editor />)
+    const menu = screen.getByRole('button', { name: '编辑菜单' })
+    await user.click(menu)
+    await user.click(screen.getByRole('menuitem', { name: '标记原创' }))
+    expect(screen.getByText('已标记原创')).toBeInTheDocument()
+    await waitFor(() => expect(menu).toHaveFocus())
+    await user.tab()
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('草稿不会自动保存')
+    await user.click(screen.getByRole('button', { name: '放弃草稿' }))
+    const confirmation = screen.getByRole('alertdialog', { name: '确认放弃' })
+    await user.click(within(confirmation).getByRole('button', { name: '继续编辑' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('草稿正文')).toHaveValue('仍未保存')
+    expect(screen.getByRole('dialog', { name: '编辑草稿' })).toBeInTheDocument()
+  })
+})

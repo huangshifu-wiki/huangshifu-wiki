@@ -12,8 +12,8 @@ interface RouteGuardProps {
 }
 
 const LoadingState = () => (
-  <div className="flex min-h-[calc(100vh-60px)] items-center justify-center bg-bg-primary">
-    <div className="text-center">
+  <div className="mobile-page-shell flex min-h-[calc(100vh-60px)] items-center justify-center">
+    <div className="relative z-10 text-center">
       <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border border-t-brand-gold" />
       <p className="text-sm text-text-muted">正在确认登录状态...</p>
     </div>
@@ -21,9 +21,11 @@ const LoadingState = () => (
 )
 
 const DefaultForbiddenFallback = () => (
-  <div className="flex min-h-[calc(100vh-60px)] items-center justify-center bg-bg-primary px-6">
-    <div className="max-w-md text-center">
-      <p className="text-lg font-semibold text-text-primary">访问受限</p>
+  <div className="mobile-page-shell flex min-h-[calc(100vh-60px)] items-center justify-center px-6">
+    <div className="relative z-10 max-w-md text-center">
+      <p className="font-[var(--book-title-font)] text-3xl font-normal tracking-[0.1em] text-text-primary">
+        访问受限
+      </p>
       <p className="mt-3 text-sm leading-7 text-text-secondary">当前账号没有权限访问此页面。</p>
     </div>
   </div>

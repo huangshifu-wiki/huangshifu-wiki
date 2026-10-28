@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: 账号、隐私或安全问题
-    url: https://github.com/yangwenjie1231/huangshifu-wiki/security/advisories/new
+    url: https://github.com/huangshifu-wiki/huangshifu-wiki/security/advisories/new
     about: 如果涉及账号异常、隐私泄露、绕过权限或数据安全，请用这里私下报告，不要公开发 issue。

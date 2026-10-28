@@ -42,11 +42,14 @@ vi.mock('../../../src/lib/i18n', () => ({
         'auth.backToLogin': '返回登录',
         'auth.mockCodeHint': 'mock code hint',
         'auth.loginFailed': '登录失败',
-        'auth.anonymousUser': '匿名用户',
       }
       return map[key] || key
     },
   }),
+}))
+
+vi.mock('../../../src/hooks/useTurnstileConfig', () => ({
+  useTurnstileConfig: () => ({ enabled: false, siteKey: '' }),
 }))
 
 vi.mock('../../../src/lib/auth', () => ({
@@ -90,23 +93,13 @@ describe('AuthModal', () => {
 
     rerender(
       <ToastProvider>
-        <AuthModal
-          open={false}
-          initialMode="login"
-          onClose={vi.fn()}
-          onAuthSuccess={vi.fn()}
-        />
+        <AuthModal open={false} initialMode="login" onClose={vi.fn()} onAuthSuccess={vi.fn()} />
       </ToastProvider>
     )
 
     rerender(
       <ToastProvider>
-        <AuthModal
-          open
-          initialMode="register"
-          onClose={vi.fn()}
-          onAuthSuccess={vi.fn()}
-        />
+        <AuthModal open initialMode="register" onClose={vi.fn()} onAuthSuccess={vi.fn()} />
       </ToastProvider>
     )
 
@@ -117,13 +110,13 @@ describe('AuthModal', () => {
     const user = userEvent.setup()
     renderAuthModal(true, 'login')
 
-    const loginPasswordInput = screen.getByLabelText('密码') as HTMLInputElement
+    const loginPasswordInput = screen.getByLabelText(/密码\s*\*/) as HTMLInputElement
     expect(loginPasswordInput).not.toHaveAttribute('minLength')
     expect(loginPasswordInput).toHaveAttribute('placeholder', '密码')
 
     await user.click(screen.getByRole('button', { name: '没有账号，去注册' }))
 
-    const registerPasswordInput = screen.getByLabelText('密码') as HTMLInputElement
+    const registerPasswordInput = screen.getByLabelText(/密码\s*\*/) as HTMLInputElement
     expect(registerPasswordInput).toHaveAttribute('minLength', '8')
     expect(registerPasswordInput).toHaveAttribute('placeholder', '密码（至少 8 位）')
   })
@@ -143,18 +136,26 @@ describe('AuthModal', () => {
 
     renderAuthModal(true, 'register')
 
-    expect(screen.getByLabelText('显示名称')).toHaveAttribute('placeholder', '昵称（可选，留空将自动生成）')
+    expect(screen.getByLabelText('显示名称')).toHaveAttribute(
+      'placeholder',
+      '昵称（可选，留空将自动生成）'
+    )
 
-    fireEvent.change(screen.getByLabelText('邮箱'), {
+    fireEvent.change(screen.getByLabelText(/邮箱\s*\*/), {
       target: { value: 'averylonglocalpart@example.com' },
     })
-    fireEvent.change(screen.getByLabelText('密码'), {
+    fireEvent.change(screen.getByLabelText(/密码\s*\*/), {
       target: { value: 'ValidPassword123!' },
     })
     fireEvent.submit(screen.getByRole('button', { name: '注册' }).closest('form')!)
 
     await waitFor(() => {
-      expect(registerMock).toHaveBeenCalledWith('averylonglocalpart@example.com', 'ValidPassword123!', '')
+      expect(registerMock).toHaveBeenCalledWith(
+        'averylonglocalpart@example.com',
+        'ValidPassword123!',
+        '',
+        undefined
+      )
     })
   })
 
@@ -170,15 +171,15 @@ describe('AuthModal', () => {
 
     await user.click(screen.getByRole('button', { name: '忘记密码？' }))
     expect(screen.getByRole('heading', { name: '找回密码' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('密码')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/密码\s*\*/)).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('邮箱'), {
+    fireEvent.change(screen.getByLabelText(/邮箱\s*\*/), {
       target: { value: 'reset@example.com' },
     })
     fireEvent.submit(screen.getByRole('button', { name: '发送重置邮件' }).closest('form')!)
 
     await waitFor(() => {
-      expect(requestPasswordResetMock).toHaveBeenCalledWith('reset@example.com')
+      expect(requestPasswordResetMock).toHaveBeenCalledWith('reset@example.com', undefined)
     })
     expect(await screen.findByRole('heading', { name: '账号登录' })).toBeInTheDocument()
   })

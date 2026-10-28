@@ -1,9 +1,7 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { RouteGuard } from '../../components/RouteGuard'
-import WikiEditorComponent from '../../components/wiki/WikiEditor'
 import WikiList from './WikiList'
-import WikiTimeline from './WikiTimeline'
 import WikiPageView from './WikiPageView'
 import WikiBranchWorkspace from './WikiBranchWorkspace'
 import WikiPullRequestList from './WikiPullRequestList'
@@ -15,18 +13,6 @@ const Wiki = () => {
   return (
     <Routes>
       <Route path="/" element={<WikiList />} />
-      <Route
-        path="/new"
-        element={
-          <RouteGuard
-            title="创建百科前需要先登录"
-            description="登录后可以新建百科页面、保存草稿并继续参与协作编辑。"
-          >
-            <WikiEditorComponent />
-          </RouteGuard>
-        }
-      />
-      <Route path="/timeline" element={<WikiTimeline />} />
       <Route path="/:slug" element={<WikiPageView />} />
       <Route
         path="/:slug/branches"
@@ -58,17 +44,6 @@ const Wiki = () => {
             description="登录后才能查看协作 PR 的具体差异、评论与处理结果。"
           >
             <WikiPullRequestDetail />
-          </RouteGuard>
-        }
-      />
-      <Route
-        path="/:slug/edit"
-        element={
-          <RouteGuard
-            title="编辑百科前需要先登录"
-            description="登录后才可以修改百科内容、保存更改并继续协作编辑。"
-          >
-            <WikiEditorComponent />
           </RouteGuard>
         }
       />

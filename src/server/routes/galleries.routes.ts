@@ -3,41 +3,60 @@ import { createRouter } from '../utils/typed-router'
 import { requireAuth, requireActiveUser, requireAdmin, isAdminRole } from '../middleware/auth'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { galleryWriteLimiter } from '../middleware/rateLimiter'
-import { adminBatchGalleryImagesSchema, galleryDeleteSchema, validateBody } from '../schemas'
+import {
+  adminBatchGalleryImagesSchema,
+  galleryDeleteSchema,
+  galleryRelatedLinksSchema,
+  validateBody,
+} from '../schemas'
 import type { ApiUser, AuthenticatedRequest, ContentStatus } from '../types'
+import type { ContentLink } from '../../types/entities'
 import {
   serializeTags,
   normalizeTagList,
   parseAssetIdList,
   parseBoolean,
   parsePagination,
+  createPaginationMeta,
+  normalizeOptionalDateOnlyString,
   normalizeGalleryWriteStatus,
   canViewGallery,
-  createUploadSessionExpiresAt,
-  isUploadSessionExpired,
-  safeDeleteUploadFileByStorageKey,
-  uploadFileToS3,
-  uploadFileToExternal,
   toCommentResponse,
   toGalleryResponse,
   toGalleryListResponse,
+  logger,
   enhancedCache,
   fetchGalleryCommentsForResponse,
   resolveCommentReplyTarget,
   notifyCommentReply,
-  GALLERY_ADMIN_ONLY,
   ensureTextLimit,
   softDeleteData,
   resolveDeleteReason,
   createNotification,
   notifyMentionUsers,
   resolveMentionTargetsForText,
+  allocateNumericSlug,
+  isNumericSlug,
+  fetchVisibleTagSuggestions,
 } from '../utils'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { enqueueGalleryImageEmbeddings } from '../vector/embeddingSync'
 import { prisma } from '../prisma'
-import { syncGalleryImageToImageMapWithVariant } from '../services/galleryImageSyncService'
-import { cleanupUnusedMediaAssetById, cleanupUntrackedUploadImageByUrl } from '../services/mediaAssetCleanupService'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
+import {
+  cleanupUnusedMediaAssetById,
+  cleanupUntrackedUploadImageByUrl,
+} from '../services/mediaAssetCleanupService'
+import {
+  assertUploadSessionAssets,
+  getCanonicalMediaUrl,
+  getReadyAssetsForOwner,
+  MediaAssetRequestError,
+} from '../services/mediaAssetService'
+import type { ReadyMediaAsset } from '../services/mediaAssetService'
+function isGalleryAdminOnly(): boolean {
+  return runtimeConfigService.getConfig().galleryAdminOnly
+}
 
 function ensureGalleryTextLimits(
   res: Parameters<typeof ensureTextLimit>[0],
@@ -58,24 +77,36 @@ function ensureGalleryTextLimits(
   )
 }
 
+// 图集写入接口无法整体走 validateBody（它会用解析结果替换 req.body），因此对链接单独校验。
+// 返回 null 表示校验失败且已写出 400；空数组是合法的「清空链接」，不能按真值判断。
+function parseGalleryRelatedLinks(
+  res: Parameters<typeof ensureTextLimit>[0],
+  value: unknown
+): ContentLink[] | null {
+  const result = galleryRelatedLinksSchema.safeParse(value)
+  if (!result.success) {
+    res.status(400).json({ error: result.error.issues[0].message })
+    return null
+  }
+  return result.data
+}
+
 function canManageGallery(gallery: { authorUid: string }, authUser?: ApiUser) {
   if (!authUser) return false
   if (isAdminRole(authUser.role)) return true
-  if (GALLERY_ADMIN_ONLY) return false
+  if (isGalleryAdminOnly()) return false
   return gallery.authorUid === authUser.uid
 }
 
 function canCreateGallery(authUser?: ApiUser) {
   if (!authUser) return false
   if (isAdminRole(authUser.role)) return true
-  return !GALLERY_ADMIN_ONLY
+  return !isGalleryAdminOnly()
 }
 
 const router = createRouter()
 
-async function cleanupRemovedGalleryImages(
-  images: Array<{ assetId: string | null; url: string }>
-) {
+async function cleanupRemovedGalleryImages(images: Array<{ assetId: string | null; url: string }>) {
   await Promise.all(
     images.map(async (image) => {
       if (image.assetId) {
@@ -106,9 +137,7 @@ function parseAppendAssetIdList(value: unknown) {
     return [] as string[]
   }
 
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean)
+  return value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
 }
 
 function resolveGalleryRequestedStatus(
@@ -120,7 +149,11 @@ function resolveGalleryRequestedStatus(
     return normalizeGalleryWriteStatus(body.status, authUser)
   }
   if (body.published !== undefined) {
-    return resolveGalleryPublishStatus(parseBoolean(body.published, false), authUser, fallbackStatus)
+    return resolveGalleryPublishStatus(
+      parseBoolean(body.published, false),
+      authUser,
+      fallbackStatus
+    )
   }
   return normalizeGalleryWriteStatus(undefined, authUser)
 }
@@ -212,11 +245,13 @@ async function updateGalleryStatusWithSubmitLog(
 async function attachGalleryInteractions<T extends { id: string }>(
   gallery: T,
   authUser?: ApiUser
-): Promise<T & {
-  likedByMe: boolean
-  dislikedByMe: boolean
-  favoritedByMe: boolean
-}> {
+): Promise<
+  T & {
+    likedByMe: boolean
+    dislikedByMe: boolean
+    favoritedByMe: boolean
+  }
+> {
   if (!authUser) {
     return {
       ...gallery,
@@ -268,11 +303,15 @@ async function attachGalleryInteractions<T extends { id: string }>(
 async function attachGalleryListInteractions<T extends { id: string }>(
   galleries: T[],
   authUser?: ApiUser
-): Promise<Array<T & {
-  likedByMe: boolean
-  dislikedByMe: boolean
-  favoritedByMe: boolean
-}>> {
+): Promise<
+  Array<
+    T & {
+      likedByMe: boolean
+      dislikedByMe: boolean
+      favoritedByMe: boolean
+    }
+  >
+> {
   if (!authUser || galleries.length === 0) {
     return galleries.map((gallery) => ({
       ...gallery,
@@ -324,28 +363,83 @@ function isString(value: string | null): value is string {
   return typeof value === 'string'
 }
 
-router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { limit, page, offset: skip } = parsePagination(req.query)
-    const refreshThumbnails = parseBoolean(req.query.refreshThumbnails, false)
+router.get(
+  '/',
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const refreshThumbnails = parseBoolean(req.query.refreshThumbnails, false)
 
-    const where = {
-      status: 'published' as ContentStatus,
-      deletedAt: null,
+      const where = {
+        status: 'published' as ContentStatus,
+        deletedAt: null,
+      }
+
+      if (!req.authUser && !refreshThumbnails) {
+        const cacheKey = `gallery_list_public:${page}:${limit}`
+        const cached = enhancedCache.get(cacheKey)
+        if (cached) {
+          res.json(cached)
+          return
+        }
+      }
+
+      const [galleries, total] = await Promise.all([
+        prisma.gallery.findMany({
+          where,
+          include: {
+            images: {
+              include: {
+                asset: true,
+              },
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
+          orderBy: [{ eventDate: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+          take: limit,
+          skip,
+        }),
+        prisma.gallery.count({ where }),
+      ])
+
+      const result = {
+        galleries: await toGalleryListResponse(
+          await attachGalleryListInteractions(galleries, req.authUser)
+        ),
+        ...createPaginationMeta(total, page, limit, galleries.length),
+      }
+
+      if (!req.authUser) {
+        const cacheKey = `gallery_list_public:${page}:${limit}`
+        enhancedCache.set(cacheKey, result, 120)
+      }
+
+      res.json(result)
+    } catch (error) {
+      console.error('Fetch galleries error:', error)
+      res.status(500).json({ error: '获取图集失败' })
     }
+  })
+)
+router.get(
+  '/tags',
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const tags = await fetchVisibleTagSuggestions('gallery', req.authUser)
+    res.json({ tags })
+  })
+)
 
-    if (!req.authUser && !refreshThumbnails) {
-      const cacheKey = `gallery_list_public:${page}:${limit}`
-      const cached = enhancedCache.get(cacheKey)
-      if (cached) {
-        res.json(cached)
+router.get(
+  '/:slug',
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!isNumericSlug(req.params.slug)) {
+        res.status(404).json({ error: '图集不存在' })
         return
       }
-    }
 
-    const [galleries, total] = await Promise.all([
-      prisma.gallery.findMany({
-        where,
+      const gallery = await prisma.gallery.findUnique({
+        where: { slug: req.params.slug },
         include: {
           images: {
             include: {
@@ -354,369 +448,475 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
             orderBy: { sortOrder: 'asc' },
           },
         },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip,
-      }),
-      prisma.gallery.count({ where }),
-    ])
-
-    const result = {
-      galleries: await toGalleryListResponse(await attachGalleryListInteractions(galleries, req.authUser)),
-      total,
-      page,
-      limit,
-      hasMore: skip + galleries.length < total,
-    }
-
-    if (!req.authUser) {
-      const cacheKey = `gallery_list_public:${page}:${limit}`
-      enhancedCache.set(cacheKey, result, 120)
-    }
-
-    res.json(result)
-  } catch (error) {
-    console.error('Fetch galleries error:', error)
-    res.status(500).json({ error: '获取图集失败' })
-  }
-}))
-
-router.get('/:id', asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: req.params.id },
-      include: {
-        images: {
-          include: {
-            asset: true,
-          },
-          orderBy: { sortOrder: 'asc' },
-        },
-      },
-    })
-
-    if (!gallery || gallery.deletedAt) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    if (!canViewGallery(gallery, req.authUser)) {
-      res.status(403).json({ error: '该图集尚未发布' })
-      return
-    }
-
-    res.json({ gallery: await toGalleryResponse(await attachGalleryInteractions(gallery, req.authUser)) })
-  } catch (error) {
-    console.error('Fetch gallery detail error:', error)
-    res.status(500).json({ error: '获取图集详情失败' })
-  }
-}))
-
-router.post('/:id/like', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const galleryId = req.params.id
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: galleryId },
-      select: {
-        id: true,
-        status: true,
-        published: true,
-        authorUid: true,
-        deletedAt: true,
-      },
-    })
-
-    if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.galleryDislike.deleteMany({
-        where: { galleryId, userUid: req.authUser!.uid },
       })
 
-      try {
-        await tx.galleryLike.create({
-          data: {
+      if (!gallery || gallery.deletedAt) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      if (!canViewGallery(gallery, req.authUser)) {
+        res.status(403).json({ error: '该图集尚未发布' })
+        return
+      }
+
+      res.json({
+        gallery: await toGalleryResponse(await attachGalleryInteractions(gallery, req.authUser)),
+      })
+    } catch (error) {
+      console.error('Fetch gallery detail error:', error)
+      res.status(500).json({ error: '获取图集详情失败' })
+    }
+  })
+)
+
+router.post(
+  '/:id/like',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const galleryId = req.params.id
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: galleryId },
+        select: {
+          id: true,
+          status: true,
+          published: true,
+          authorUid: true,
+          deletedAt: true,
+        },
+      })
+
+      if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.galleryDislike.deleteMany({
+          where: { galleryId, userUid: req.authUser!.uid },
+        })
+
+        try {
+          await tx.galleryLike.create({
+            data: {
+              galleryId,
+              userUid: req.authUser!.uid,
+            },
+          })
+        } catch {
+          // already liked
+        }
+
+        const [likesCount, dislikesCount] = await Promise.all([
+          tx.galleryLike.count({ where: { galleryId } }),
+          tx.galleryDislike.count({ where: { galleryId } }),
+        ])
+
+        await tx.gallery.update({
+          where: { id: galleryId },
+          data: { likesCount, dislikesCount },
+        })
+      })
+
+      const [likesCount, dislikesCount] = await Promise.all([
+        prisma.galleryLike.count({ where: { galleryId } }),
+        prisma.galleryDislike.count({ where: { galleryId } }),
+      ])
+
+      if (gallery.authorUid !== req.authUser!.uid) {
+        await createNotification(gallery.authorUid, 'like', {
+          galleryId,
+          targetType: 'gallery',
+          actorUid: req.authUser!.uid,
+          actorName: req.authUser!.displayName,
+        })
+      }
+
+      res.json({ liked: true, likesCount, dislikesCount })
+    } catch (error) {
+      console.error('Like gallery error:', error)
+      res.status(500).json({ error: '点赞失败' })
+    }
+  })
+)
+
+router.delete(
+  '/:id/like',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const galleryId = req.params.id
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: galleryId },
+        select: { id: true, status: true, published: true, authorUid: true, deletedAt: true },
+      })
+
+      if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const deleted = await tx.galleryLike.deleteMany({
+          where: {
             galleryId,
             userUid: req.authUser!.uid,
           },
         })
-      } catch {
-        // already liked
-      }
 
-      const [likesCount, dislikesCount] = await Promise.all([
-        tx.galleryLike.count({ where: { galleryId } }),
-        tx.galleryDislike.count({ where: { galleryId } }),
-      ])
+        if (!deleted.count) return
 
-      await tx.gallery.update({
+        const likesCount = await tx.galleryLike.count({ where: { galleryId } })
+        await tx.gallery.update({
+          where: { id: galleryId },
+          data: { likesCount },
+        })
+      })
+
+      const likesCount = await prisma.galleryLike.count({ where: { galleryId } })
+      res.json({ liked: false, likesCount })
+    } catch (error) {
+      console.error('Unlike gallery error:', error)
+      res.status(500).json({ error: '取消点赞失败' })
+    }
+  })
+)
+
+router.post(
+  '/:id/dislike',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const galleryId = req.params.id
+      const gallery = await prisma.gallery.findUnique({
         where: { id: galleryId },
-        data: { likesCount, dislikesCount },
-      })
-    })
-
-    const [likesCount, dislikesCount] = await Promise.all([
-      prisma.galleryLike.count({ where: { galleryId } }),
-      prisma.galleryDislike.count({ where: { galleryId } }),
-    ])
-
-    if (gallery.authorUid !== req.authUser!.uid) {
-      await createNotification(gallery.authorUid, 'like', {
-        galleryId,
-        targetType: 'gallery',
-        actorUid: req.authUser!.uid,
-        actorName: req.authUser!.displayName,
-      })
-    }
-
-    res.json({ liked: true, likesCount, dislikesCount })
-  } catch (error) {
-    console.error('Like gallery error:', error)
-    res.status(500).json({ error: '点赞失败' })
-  }
-}))
-
-router.delete('/:id/like', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const galleryId = req.params.id
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: galleryId },
-      select: { id: true, status: true, published: true, authorUid: true, deletedAt: true },
-    })
-
-    if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    await prisma.$transaction(async (tx) => {
-      const deleted = await tx.galleryLike.deleteMany({
-        where: {
-          galleryId,
-          userUid: req.authUser!.uid,
+        select: {
+          id: true,
+          status: true,
+          published: true,
+          authorUid: true,
+          deletedAt: true,
         },
       })
 
-      if (!deleted.count) return
+      if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
 
-      const likesCount = await tx.galleryLike.count({ where: { galleryId } })
-      await tx.gallery.update({
-        where: { id: galleryId },
-        data: { likesCount },
+      await prisma.$transaction(async (tx) => {
+        await tx.galleryLike.deleteMany({
+          where: { galleryId, userUid: req.authUser!.uid },
+        })
+
+        try {
+          await tx.galleryDislike.create({
+            data: {
+              galleryId,
+              userUid: req.authUser!.uid,
+            },
+          })
+        } catch {
+          // already disliked
+        }
+
+        const [likesCount, dislikesCount] = await Promise.all([
+          tx.galleryLike.count({ where: { galleryId } }),
+          tx.galleryDislike.count({ where: { galleryId } }),
+        ])
+
+        await tx.gallery.update({
+          where: { id: galleryId },
+          data: { likesCount, dislikesCount },
+        })
       })
-    })
 
-    const likesCount = await prisma.galleryLike.count({ where: { galleryId } })
-    res.json({ liked: false, likesCount })
-  } catch (error) {
-    console.error('Unlike gallery error:', error)
-    res.status(500).json({ error: '取消点赞失败' })
-  }
-}))
+      const [likesCount, dislikesCount] = await Promise.all([
+        prisma.galleryLike.count({ where: { galleryId } }),
+        prisma.galleryDislike.count({ where: { galleryId } }),
+      ])
 
-router.post('/:id/dislike', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const galleryId = req.params.id
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: galleryId },
-      select: {
-        id: true,
-        status: true,
-        published: true,
-        authorUid: true,
-        deletedAt: true,
-      },
-    })
-
-    if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
-      res.status(404).json({ error: '图集不存在' })
-      return
+      res.json({ disliked: true, dislikesCount, likesCount })
+    } catch (error) {
+      console.error('Dislike gallery error:', error)
+      res.status(500).json({ error: '踩失败' })
     }
+  })
+)
 
-    await prisma.$transaction(async (tx) => {
-      await tx.galleryLike.deleteMany({
-        where: { galleryId, userUid: req.authUser!.uid },
+router.delete(
+  '/:id/dislike',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const galleryId = req.params.id
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: galleryId },
+        select: { id: true, status: true, published: true, authorUid: true, deletedAt: true },
       })
 
-      try {
-        await tx.galleryDislike.create({
-          data: {
+      if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const deleted = await tx.galleryDislike.deleteMany({
+          where: {
             galleryId,
             userUid: req.authUser!.uid,
           },
         })
-      } catch {
-        // already disliked
+
+        if (!deleted.count) return
+
+        const dislikesCount = await tx.galleryDislike.count({ where: { galleryId } })
+        await tx.gallery.update({
+          where: { id: galleryId },
+          data: { dislikesCount },
+        })
+      })
+
+      const dislikesCount = await prisma.galleryDislike.count({ where: { galleryId } })
+      res.json({ disliked: false, dislikesCount })
+    } catch (error) {
+      console.error('Undislike gallery error:', error)
+      res.status(500).json({ error: '取消踩失败' })
+    }
+  })
+)
+
+router.post(
+  '/',
+  galleryWriteLimiter,
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!canCreateGallery(req.authUser)) {
+        res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
+        return
       }
 
-      const [likesCount, dislikesCount] = await Promise.all([
-        tx.galleryLike.count({ where: { galleryId } }),
-        tx.galleryDislike.count({ where: { galleryId } }),
-      ])
+      const {
+        title,
+        description,
+        tags,
+        images,
+        assetIds,
+        uploadSessionId,
+        locationCode,
+        locationDetail,
+        copyright,
+        eventDate,
+      } = req.body as {
+        title?: string
+        description?: string
+        tags?: string[]
+        images?: Array<{ assetId?: string; url?: string; name?: string }>
+        assetIds?: string[]
+        uploadSessionId?: string
+        locationCode?: string
+        locationDetail?: string
+        copyright?: string
+        eventDate?: string | null
+      }
 
-      await tx.gallery.update({
-        where: { id: galleryId },
-        data: { likesCount, dislikesCount },
-      })
-    })
+      const normalizedEventDate =
+        eventDate === undefined ? null : normalizeOptionalDateOnlyString(eventDate)
+      if (normalizedEventDate === undefined) {
+        res.status(400).json({ error: '日期格式无效，请使用 yyyy-MM-dd 格式' })
+        return
+      }
 
-    const [likesCount, dislikesCount] = await Promise.all([
-      prisma.galleryLike.count({ where: { galleryId } }),
-      prisma.galleryDislike.count({ where: { galleryId } }),
-    ])
+      const normalizedCopyright =
+        copyright !== undefined
+          ? typeof copyright === 'string'
+            ? copyright.trim()
+            : null
+          : undefined
+      if (
+        !ensureGalleryTextLimits(res, {
+          title,
+          description,
+          locationCode,
+          locationDetail,
+          copyright: normalizedCopyright,
+        })
+      ) {
+        return
+      }
 
-    res.json({ disliked: true, dislikesCount, likesCount })
-  } catch (error) {
-    console.error('Dislike gallery error:', error)
-    res.status(500).json({ error: '踩失败' })
-  }
-}))
+      const relatedLinks = parseGalleryRelatedLinks(res, req.body?.relatedLinks)
+      if (relatedLinks === null) return
 
-router.delete('/:id/dislike', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const galleryId = req.params.id
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: galleryId },
-      select: { id: true, status: true, published: true, authorUid: true, deletedAt: true },
-    })
+      const rawImages = Array.isArray(images) ? images : []
+      const imageAssetIds = rawImages
+        .map((image) => (typeof image?.assetId === 'string' ? image.assetId.trim() : ''))
+        .filter(Boolean)
+      const normalizedAssetIds = parseAssetIdList(assetIds)
+      const requestedAssetIds = normalizedAssetIds.length ? normalizedAssetIds : imageAssetIds
 
-    if (!gallery || gallery.deletedAt || !canViewGallery(gallery, req.authUser)) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
+      if (requestedAssetIds.length > 0) {
+        if (new Set(requestedAssetIds).size !== requestedAssetIds.length) {
+          throw new MediaAssetRequestError(400, '图片列表包含重复资源')
+        }
+        if (rawImages.length > 0 && imageAssetIds.length !== rawImages.length) {
+          throw new MediaAssetRequestError(400, '图片列表包含无效资源')
+        }
 
-    await prisma.$transaction(async (tx) => {
-      const deleted = await tx.galleryDislike.deleteMany({
-        where: {
-          galleryId,
-          userUid: req.authUser!.uid,
-        },
-      })
+        const namesByAssetId = new Map(
+          rawImages
+            .filter((image) => typeof image?.assetId === 'string' && image.assetId.trim())
+            .map((image) => [image.assetId!.trim(), image.name?.trim() || ''])
+        )
+        const finalTitle = typeof title === 'string' && title.trim() ? title.trim() : '默认图集'
+        const finalDescription = typeof description === 'string' ? description.trim() : ''
+        const finalTags = normalizeTagList(tags)
+        const nextStatus = resolveGalleryRequestedStatus(
+          req.body as Record<string, unknown>,
+          req.authUser!
+        )
 
-      if (!deleted.count) return
+        const { gallery } = await prisma.$transaction(async (tx) => {
+          if (uploadSessionId) {
+            await assertUploadSessionAssets(
+              tx,
+              uploadSessionId,
+              req.authUser!.uid,
+              requestedAssetIds
+            )
+          }
+          const orderedAssets = await getReadyAssetsForOwner(
+            tx,
+            requestedAssetIds,
+            req.authUser!.uid
+          )
+          if (
+            new Set(orderedAssets.map((asset) => asset.imageMapId)).size !== orderedAssets.length
+          ) {
+            throw new MediaAssetRequestError(400, '图片列表包含重复图片内容')
+          }
+          const slug = await allocateNumericSlug(tx, 'Gallery')
+          const created = await tx.gallery.create({
+            data: {
+              slug,
+              title: finalTitle,
+              description: finalDescription,
+              authorUid: req.authUser!.uid,
+              authorName: req.authUser!.displayName,
+              tags: finalTags,
+              relatedLinks,
+              eventDate: normalizedEventDate,
+              locationCode: locationCode?.trim() || null,
+              locationDetail: locationDetail?.trim() || null,
+              copyright: normalizedCopyright,
+              ...galleryStatusData(nextStatus),
+              images: {
+                create: orderedAssets.map((asset, index) => ({
+                  assetId: asset.id,
+                  url: getCanonicalMediaUrl(asset),
+                  name: namesByAssetId.get(asset.id) || asset.fileName || `image-${index + 1}`,
+                  sortOrder: index,
+                })),
+              },
+            },
+            include: {
+              images: {
+                orderBy: { sortOrder: 'asc' },
+                include: { asset: { include: { imageMap: true } } },
+              },
+            },
+          })
+          const submissionLog = gallerySubmissionLogData(created.id, nextStatus, req.authUser!)
+          if (submissionLog) await tx.moderationLog.create({ data: submissionLog })
+          return { gallery: created }
+        })
 
-      const dislikesCount = await tx.galleryDislike.count({ where: { galleryId } })
-      await tx.gallery.update({
-        where: { id: galleryId },
-        data: { dislikesCount },
-      })
-    })
+        res.status(201).json({ gallery: await toGalleryResponse(gallery) })
+        return
+      }
 
-    const dislikesCount = await prisma.galleryDislike.count({ where: { galleryId } })
-    res.json({ disliked: false, dislikesCount })
-  } catch (error) {
-    console.error('Undislike gallery error:', error)
-    res.status(500).json({ error: '取消踩失败' })
-  }
-}))
-
-router.post('/', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    if (!canCreateGallery(req.authUser)) {
-      res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
-      return
-    }
-
-    const { title, description, tags, images, assetIds, uploadSessionId, locationCode, locationDetail, copyright } = req.body as {
-      title?: string
-      description?: string
-      tags?: string[]
-      images?: { url: string; name: string }[]
-      assetIds?: string[]
-      uploadSessionId?: string
-      locationCode?: string
-      locationDetail?: string
-      copyright?: string
-    }
-
-    const normalizedAssetIds = parseAssetIdList(assetIds)
-    const normalizedCopyright =
-      copyright !== undefined ? (typeof copyright === 'string' ? copyright.trim() : null) : undefined
-    if (!ensureGalleryTextLimits(res, { title, description, locationCode, locationDetail, copyright: normalizedCopyright })) {
-      return
-    }
-
-    if (normalizedAssetIds.length > 0) {
-      const finalTitle = typeof title === 'string' && title.trim() ? title.trim() : '默认图集'
-      const finalDescription = typeof description === 'string' ? description.trim() : ''
-      const finalTags = normalizeTagList(tags)
+      if (!rawImages.length) {
+        res.status(400).json({ error: '图集至少需要一张图片' })
+        return
+      }
+      const normalizedTitle = typeof title === 'string' && title.trim() ? title.trim() : '默认图集'
+      const normalizedDescription = typeof description === 'string' ? description.trim() : ''
+      const normalizedTags = normalizeTagList(tags)
       const nextStatus = resolveGalleryRequestedStatus(
         req.body as Record<string, unknown>,
         req.authUser!
       )
-
-      const assets = await prisma.mediaAsset.findMany({
-        where: {
-          id: { in: normalizedAssetIds },
-          ownerUid: req.authUser!.uid,
-          status: 'ready',
-        },
-        orderBy: { createdAt: 'asc' },
-      })
-
-      if (assets.length !== normalizedAssetIds.length) {
-        res.status(400).json({ error: '包含无效或无权限的图片资源' })
+      const normalizedImages = rawImages
+        .map((image, index) => {
+          if (!image || typeof image.url !== 'string') return null
+          const url = image.url.trim()
+          if (!url || !url.startsWith('/uploads/')) return null
+          const name = image.name?.trim() || `image-${index + 1}`
+          if (
+            url.length > CONTENT_LIMITS.gallery.imageUrl ||
+            name.length > CONTENT_LIMITS.gallery.imageName
+          ) {
+            return null
+          }
+          return { url, name }
+        })
+        .filter((item): item is { url: string; name: string } => Boolean(item))
+      if (normalizedImages.length !== rawImages.length) {
+        res.status(400).json({ error: '图片地址不合法，请重新上传' })
         return
       }
 
-      if (uploadSessionId && typeof uploadSessionId === 'string') {
-        const session = await prisma.uploadSession.findUnique({
-          where: { id: uploadSessionId },
-          select: {
-            id: true,
-            ownerUid: true,
-            status: true,
-            expiresAt: true,
-          },
-        })
-
-        if (!session || session.ownerUid !== req.authUser!.uid) {
-          res.status(400).json({ error: '上传会话不存在' })
-          return
-        }
-
-        if (session.status === 'expired' || isUploadSessionExpired(session.expiresAt)) {
-          if (session.status !== 'expired') {
-            await prisma.uploadSession.update({
-              where: { id: session.id },
-              data: { status: 'expired' },
-            })
-          }
-          res.status(410).json({ error: '上传会话已过期，请重新上传' })
-          return
-        }
-
-        if (session.status !== 'finalized') {
-          res.status(400).json({ error: '请先完成上传会话' })
-          return
-        }
+      const fallbackAssets = await prisma.mediaAsset.findMany({
+        where: {
+          ownerUid: req.authUser!.uid,
+          status: 'ready',
+          publicUrl: { in: normalizedImages.map((image) => image.url) },
+        },
+        select: { id: true, publicUrl: true },
+      })
+      const assetByUrl = new Map(fallbackAssets.map((asset) => [asset.publicUrl, asset.id]))
+      if (assetByUrl.size !== normalizedImages.length) {
+        res.status(400).json({ error: '图片地址未关联当前用户的媒体资源，请重新上传' })
+        return
+      }
+      const fallbackAssetIds = normalizedImages.map((image) => assetByUrl.get(image.url)!)
+      if (new Set(fallbackAssetIds).size !== fallbackAssetIds.length) {
+        res.status(400).json({ error: '图片列表包含重复资源' })
+        return
       }
 
-      const assetsById = new Map(assets.map((asset) => [asset.id, asset]))
-      const orderedAssets = normalizedAssetIds
-        .map((id) => assetsById.get(id))
-        .filter((asset): asset is typeof assets[number] => Boolean(asset))
-
       const gallery = await prisma.$transaction(async (tx) => {
+        if (uploadSessionId) {
+          await assertUploadSessionAssets(tx, uploadSessionId, req.authUser!.uid, fallbackAssetIds)
+        }
+        const orderedAssets = await getReadyAssetsForOwner(tx, fallbackAssetIds, req.authUser!.uid)
+        const slug = await allocateNumericSlug(tx, 'Gallery')
         const created = await tx.gallery.create({
           data: {
-            title: finalTitle,
-            description: finalDescription,
+            slug,
+            title: normalizedTitle,
+            description: normalizedDescription,
             authorUid: req.authUser!.uid,
             authorName: req.authUser!.displayName,
-            tags: finalTags,
-            locationCode: locationCode || null,
-            locationDetail: locationDetail || null,
+            tags: normalizedTags,
+            relatedLinks,
+            eventDate: normalizedEventDate,
+            locationCode: locationCode?.trim() || null,
+            locationDetail: locationDetail?.trim() || null,
             copyright: normalizedCopyright,
             ...galleryStatusData(nextStatus),
             images: {
               create: orderedAssets.map((asset, index) => ({
                 assetId: asset.id,
-                url: asset.publicUrl,
-                name: asset.fileName || `image-${index + 1}`,
+                url: getCanonicalMediaUrl(asset),
+                name: normalizedImages[index].name,
                 sortOrder: index,
               })),
             },
@@ -724,576 +924,544 @@ router.post('/', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandl
           include: {
             images: {
               orderBy: { sortOrder: 'asc' },
-              include: {
-                asset: true,
-              },
+              include: { asset: { include: { imageMap: true } } },
             },
           },
         })
         const submissionLog = gallerySubmissionLogData(created.id, nextStatus, req.authUser!)
-        if (submissionLog) {
-          await tx.moderationLog.create({ data: submissionLog })
-        }
+        if (submissionLog) await tx.moderationLog.create({ data: submissionLog })
         return created
       })
-
       try {
         await enqueueGalleryImageEmbeddings(
           prisma,
-          gallery.images.map((image) => image.id),
+          gallery.images.map((image) => image.id)
         )
       } catch (error) {
-        console.error('Enqueue gallery image embeddings error:', error)
+        logger.error(
+          { err: error, galleryId: gallery.id },
+          'Enqueue gallery image embeddings error'
+        )
       }
-
-      try {
-        for (const asset of orderedAssets) {
-          await syncGalleryImageToImageMapWithVariant(asset.publicUrl, asset.storageKey)
-        }
-      } catch (error) {
-        console.error('Sync gallery images to ImageMap error:', error)
-      }
-
       res.status(201).json({ gallery: await toGalleryResponse(gallery) })
-      return
-    }
-
-    if (!images || !Array.isArray(images) || images.length === 0) {
-      res.status(400).json({ error: '图集至少需要一张图片' })
-      return
-    }
-
-    const normalizedTitle = typeof title === 'string' && title.trim() ? title.trim() : '默认图集'
-    const normalizedDescription = typeof description === 'string' ? description.trim() : ''
-    const normalizedTags = normalizeTagList(tags)
-    const nextStatus = resolveGalleryRequestedStatus(req.body as Record<string, unknown>, req.authUser!)
-
-    const normalizedImages = images
-      .map((image, index) => {
-        if (!image || typeof image.url !== 'string') {
-          return null
-        }
-        const url = image.url.trim()
-        if (!url || !url.startsWith('/uploads/')) {
-          return null
-        }
-        const fallbackName = `image-${index + 1}`
-        const name = typeof image.name === 'string' && image.name.trim() ? image.name.trim() : fallbackName
-        if (
-          url.length > CONTENT_LIMITS.gallery.imageUrl ||
-          name.length > CONTENT_LIMITS.gallery.imageName
-        ) {
-          return null
-        }
-        return {
-          url,
-          name,
-        }
-      })
-      .filter((item): item is { url: string; name: string } => Boolean(item))
-
-    if (!normalizedImages.length || normalizedImages.length !== images.length) {
-      res.status(400).json({ error: '图片地址不合法，请重新上传' })
-      return
-    }
-
-    const fallbackAssets = await prisma.mediaAsset.findMany({
-      where: {
-        ownerUid: req.authUser!.uid,
-        status: 'ready',
-        publicUrl: {
-          in: normalizedImages.map((item) => item.url),
-        },
-      },
-      select: {
-        id: true,
-        publicUrl: true,
-      },
-    })
-    const assetByUrl = new Map(fallbackAssets.map((item) => [item.publicUrl, item.id]))
-
-    const gallery = await prisma.$transaction(async (tx) => {
-      const created = await tx.gallery.create({
-        data: {
-          title: normalizedTitle,
-          description: normalizedDescription,
-          authorUid: req.authUser!.uid,
-          authorName: req.authUser!.displayName,
-          tags: normalizedTags,
-          locationCode: locationCode || null,
-          locationDetail: locationDetail || null,
-          copyright: normalizedCopyright,
-          ...galleryStatusData(nextStatus),
-          images: {
-            create: normalizedImages.map((image, index) => ({
-              assetId: assetByUrl.get(image.url),
-              url: image.url,
-              name: image.name,
-              sortOrder: index,
-            })),
-          },
-        },
-        include: {
-          images: {
-            orderBy: { sortOrder: 'asc' },
-            include: {
-              asset: true,
-            },
-          },
-        },
-      })
-      const submissionLog = gallerySubmissionLogData(created.id, nextStatus, req.authUser!)
-      if (submissionLog) {
-        await tx.moderationLog.create({ data: submissionLog })
-      }
-      return created
-    })
-
-    try {
-      await enqueueGalleryImageEmbeddings(
-        prisma,
-        gallery.images.map((image) => image.id),
-      )
     } catch (error) {
-      console.error('Enqueue gallery image embeddings error:', error)
-    }
-
-    try {
-      for (const asset of fallbackAssets) {
-        const assetRecord = await prisma.mediaAsset.findUnique({
-          where: { id: asset.id },
-        })
-        if (assetRecord) {
-          await syncGalleryImageToImageMapWithVariant(assetRecord.publicUrl, assetRecord.storageKey)
-        }
-      }
-    } catch (error) {
-      console.error('Sync gallery images to ImageMap error:', error)
-    }
-
-    res.status(201).json({ gallery: await toGalleryResponse(gallery) })
-  } catch (error) {
-    console.error('Create gallery error:', error)
-    res.status(500).json({ error: '创建图集失败' })
-  }
-}))
-
-router.patch('/:id', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
-      res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
-      return
-    }
-
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: req.params.id },
-      select: {
-        id: true,
-        authorUid: true,
-        status: true,
-        published: true,
-      },
-    })
-
-    if (!gallery) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    if (!canManageGallery(gallery, req.authUser)) {
-      res.status(403).json({ error: '无权限编辑该图集' })
-      return
-    }
-
-    const title = typeof req.body?.title === 'string' ? req.body.title.trim() : undefined
-    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : undefined
-    const tags = req.body?.tags !== undefined ? normalizeTagList(req.body.tags) : undefined
-    const locationCode = req.body?.locationCode !== undefined ? (typeof req.body.locationCode === 'string' && req.body.locationCode.length > 0 ? req.body.locationCode : null) : undefined
-    const locationDetail = req.body?.locationDetail !== undefined ? (typeof req.body.locationDetail === 'string' && req.body.locationDetail.length > 0 ? req.body.locationDetail : null) : undefined
-    const copyright = req.body?.copyright !== undefined ? (typeof req.body.copyright === 'string' ? req.body.copyright.trim() : null) : undefined
-    if (!ensureGalleryTextLimits(res, { title, description, locationCode, locationDetail, copyright })) {
-      return
-    }
-    const requestedStatus =
-      req.body?.status !== undefined || req.body?.published !== undefined
-        ? resolveGalleryRequestedStatus(req.body as Record<string, unknown>, req.authUser!, gallery.status)
-        : undefined
-    const nextStatus = resolveGalleryUpdateStatus(
-      requestedStatus,
-      gallery.status as ContentStatus,
-      req.authUser!
-    )
-    const imagesRaw = Array.isArray(req.body?.images) ? req.body.images : undefined
-    const imageInstructions = imagesRaw?.map((item) => {
-      if (!item || typeof item !== 'object') {
-        return null
-      }
-      const parsed = item as Record<string, unknown>
-      const imageId = typeof parsed.imageId === 'string'
-        ? parsed.imageId.trim()
-        : ''
-      const assetId = typeof parsed.assetId === 'string'
-        ? parsed.assetId.trim()
-        : ''
-      const url = typeof parsed.url === 'string'
-        ? parsed.url.trim()
-        : ''
-      const name = typeof parsed.name === 'string' && parsed.name.trim()
-        ? parsed.name.trim()
-        : ''
-      if (
-        url.length > CONTENT_LIMITS.gallery.imageUrl ||
-        name.length > CONTENT_LIMITS.gallery.imageName
-      ) {
-        return null
-      }
-      if (imageId && !assetId) {
-        return { kind: 'existing' as const, imageId }
-      }
-      if (assetId && !imageId) {
-        return { kind: 'asset' as const, assetId }
-      }
-      if (url && !imageId && !assetId && url.startsWith('/uploads/')) {
-        return { kind: 'url' as const, url, name }
-      }
-      return null
-    }) ?? undefined
-
-    const data: {
-      title?: string
-      description?: string
-      tags?: string[]
-      locationCode?: string | null
-      locationDetail?: string | null
-      copyright?: string | null
-      status?: ReturnType<typeof normalizeGalleryWriteStatus>
-      reviewNote?: string | null
-      reviewedBy?: string | null
-      reviewedAt?: Date | null
-      published?: boolean
-      publishedAt?: Date | null
-    } = {}
-
-    if (title !== undefined && title.length > 0) {
-      data.title = title
-    }
-    if (description !== undefined) {
-      data.description = description
-    }
-    if (tags !== undefined) {
-      data.tags = tags
-    }
-    if (locationCode !== undefined) {
-      data.locationCode = locationCode
-    }
-    if (locationDetail !== undefined) {
-      data.locationDetail = locationDetail
-    }
-    if (copyright !== undefined) {
-      data.copyright = copyright
-    }
-    if (nextStatus !== gallery.status) {
-      Object.assign(data, galleryStatusData(nextStatus))
-    }
-
-    if (imageInstructions !== undefined) {
-      if (!imageInstructions.length || imageInstructions.some((item) => !item)) {
-        res.status(400).json({ error: '图片保存数据无效' })
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
         return
       }
+      logger.error({ err: error }, 'Create gallery error')
+      res.status(500).json({ error: '创建图集失败' })
     }
+  })
+)
 
-    if (!Object.keys(data).length && imageInstructions === undefined) {
-      res.status(400).json({ error: '没有可更新的字段' })
-      return
-    }
-
-    const newImageIds: string[] = []
-    const removedImages: Array<{ id: string; assetId: string | null; url: string }> = []
-
-    const updated = await prisma.$transaction(async (tx) => {
-      if (Object.keys(data).length) {
-        await tx.gallery.update({
-          where: { id: req.params.id },
-          data,
-        })
+router.patch(
+  '/:id',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
+        res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
+        return
       }
 
-      const submissionLog = gallerySubmissionLogData(
-        req.params.id,
-        nextStatus,
-        req.authUser!,
-        !isAdminRole(req.authUser!.role) && gallery.status === 'published'
-          ? '编辑后重新提交审核'
-          : null
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true,
+          authorUid: true,
+          status: true,
+          published: true,
+        },
+      })
+
+      if (!gallery) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      if (!canManageGallery(gallery, req.authUser)) {
+        res.status(403).json({ error: '无权限编辑该图集' })
+        return
+      }
+
+      const title = typeof req.body?.title === 'string' ? req.body.title.trim() : undefined
+      const description =
+        typeof req.body?.description === 'string' ? req.body.description.trim() : undefined
+      const tags = req.body?.tags !== undefined ? normalizeTagList(req.body.tags) : undefined
+      const locationCode =
+        req.body?.locationCode !== undefined
+          ? typeof req.body.locationCode === 'string' && req.body.locationCode.length > 0
+            ? req.body.locationCode
+            : null
+          : undefined
+      const locationDetail =
+        req.body?.locationDetail !== undefined
+          ? typeof req.body.locationDetail === 'string' && req.body.locationDetail.length > 0
+            ? req.body.locationDetail
+            : null
+          : undefined
+      const copyright =
+        req.body?.copyright !== undefined
+          ? typeof req.body.copyright === 'string'
+            ? req.body.copyright.trim()
+            : null
+          : undefined
+      const hasEventDate = Object.prototype.hasOwnProperty.call(req.body || {}, 'eventDate')
+      const eventDate = hasEventDate
+        ? normalizeOptionalDateOnlyString(req.body?.eventDate)
+        : undefined
+      if (hasEventDate && eventDate === undefined) {
+        res.status(400).json({ error: '日期格式无效，请使用 yyyy-MM-dd 格式' })
+        return
+      }
+      if (
+        !ensureGalleryTextLimits(res, {
+          title,
+          description,
+          locationCode,
+          locationDetail,
+          copyright,
+        })
+      ) {
+        return
+      }
+      // undefined = 本次不改链接；null = 校验失败（已返回 400）；数组 = 整体覆盖，含清空
+      const relatedLinks = Object.prototype.hasOwnProperty.call(req.body || {}, 'relatedLinks')
+        ? parseGalleryRelatedLinks(res, req.body.relatedLinks)
+        : undefined
+      if (relatedLinks === null) return
+      const requestedStatus =
+        req.body?.status !== undefined || req.body?.published !== undefined
+          ? resolveGalleryRequestedStatus(
+              req.body as Record<string, unknown>,
+              req.authUser!,
+              gallery.status
+            )
+          : undefined
+      const nextStatus = resolveGalleryUpdateStatus(
+        requestedStatus,
+        gallery.status as ContentStatus,
+        req.authUser!
       )
-      if (submissionLog) {
-        await tx.moderationLog.create({ data: submissionLog })
+      const imagesRaw = Array.isArray(req.body?.images) ? req.body.images : undefined
+      const imageInstructions =
+        imagesRaw?.map((item) => {
+          if (!item || typeof item !== 'object') {
+            return null
+          }
+          const parsed = item as Record<string, unknown>
+          const imageId = typeof parsed.imageId === 'string' ? parsed.imageId.trim() : ''
+          const assetId = typeof parsed.assetId === 'string' ? parsed.assetId.trim() : ''
+          const url = typeof parsed.url === 'string' ? parsed.url.trim() : ''
+          const name =
+            typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : ''
+          if (
+            url.length > CONTENT_LIMITS.gallery.imageUrl ||
+            name.length > CONTENT_LIMITS.gallery.imageName
+          ) {
+            return null
+          }
+          if (imageId && !assetId) {
+            return { kind: 'existing' as const, imageId }
+          }
+          if (assetId && !imageId) {
+            return { kind: 'asset' as const, assetId }
+          }
+          if (url && !imageId && !assetId && url.startsWith('/uploads/')) {
+            return { kind: 'url' as const, url, name }
+          }
+          return null
+        }) ?? undefined
+      const uploadSessionId =
+        typeof req.body?.uploadSessionId === 'string' ? req.body.uploadSessionId.trim() : ''
+
+      const data: {
+        title?: string
+        description?: string
+        tags?: string[]
+        relatedLinks?: ContentLink[]
+        eventDate?: string | null
+        locationCode?: string | null
+        locationDetail?: string | null
+        copyright?: string | null
+        status?: ReturnType<typeof normalizeGalleryWriteStatus>
+        reviewNote?: string | null
+        reviewedBy?: string | null
+        reviewedAt?: Date | null
+        published?: boolean
+        publishedAt?: Date | null
+      } = {}
+
+      if (title !== undefined && title.length > 0) {
+        data.title = title
+      }
+      if (description !== undefined) {
+        data.description = description
+      }
+      if (tags !== undefined) {
+        data.tags = tags
+      }
+      if (relatedLinks !== undefined) {
+        data.relatedLinks = relatedLinks
+      }
+      if (hasEventDate) {
+        data.eventDate = eventDate ?? null
+      }
+      if (locationCode !== undefined) {
+        data.locationCode = locationCode
+      }
+      if (locationDetail !== undefined) {
+        data.locationDetail = locationDetail
+      }
+      if (copyright !== undefined) {
+        data.copyright = copyright
+      }
+      if (nextStatus !== gallery.status) {
+        Object.assign(data, galleryStatusData(nextStatus))
       }
 
       if (imageInstructions !== undefined) {
-        const validatedInstructions = imageInstructions.filter(
-          (item): item is
-            | { kind: 'existing'; imageId: string }
-            | { kind: 'asset'; assetId: string }
-            | { kind: 'url'; url: string; name: string } => Boolean(item),
-        )
-        if (validatedInstructions.length !== imageInstructions.length) {
-          throw new Error('图片保存数据无效')
+        if (!imageInstructions.length || imageInstructions.some((item) => !item)) {
+          res.status(400).json({ error: '图片保存数据无效' })
+          return
         }
+      }
 
-        const existingImages = await tx.galleryImage.findMany({
-          where: { galleryId: req.params.id },
-          select: {
-            id: true,
-            assetId: true,
-            url: true,
-          },
-        })
+      if (!Object.keys(data).length && imageInstructions === undefined) {
+        res.status(400).json({ error: '没有可更新的字段' })
+        return
+      }
 
-        const existingImageMap = new Map(existingImages.map((item) => [item.id, item]))
-        const existingIdsInPayload = validatedInstructions
-          .filter((item): item is { kind: 'existing'; imageId: string } => item?.kind === 'existing')
-          .map((item) => item.imageId)
-        if (new Set(existingIdsInPayload).size !== existingIdsInPayload.length) {
-          throw new Error('排序列表包含重复图片')
-        }
-        if (existingIdsInPayload.some((imageId) => !existingImageMap.has(imageId))) {
-          throw new Error('排序列表包含无效图片')
-        }
+      const newImageIds: string[] = []
+      const removedImages: Array<{ id: string; assetId: string | null; url: string }> = []
 
-        const assetIdsInPayload = validatedInstructions
-          .filter((item): item is { kind: 'asset'; assetId: string } => item?.kind === 'asset')
-          .map((item) => item.assetId)
-        if (new Set(assetIdsInPayload).size !== assetIdsInPayload.length) {
-          throw new Error('图片列表包含重复资源')
-        }
-
-        const assets: Array<{ id: string; publicUrl: string; fileName: string | null }> = assetIdsInPayload.length
-          ? await tx.mediaAsset.findMany({
-              select: {
-                id: true,
-                publicUrl: true,
-                fileName: true,
-              },
-              where: {
-                id: { in: assetIdsInPayload },
-                ownerUid: req.authUser!.uid,
-                status: 'ready',
-              },
-            })
-          : []
-        if (assets.length !== assetIdsInPayload.length) {
-          throw new Error('图片列表包含无效或无权限的资源')
-        }
-        const assetMap = new Map(assets.map((asset) => [asset.id, asset]))
-
-        const urlsInPayload = validatedInstructions
-          .filter((item): item is { kind: 'url'; url: string; name: string } => item?.kind === 'url')
-          .map((item) => item.url)
-        const urlAssets: Array<{ id: string; publicUrl: string; fileName: string | null }> = urlsInPayload.length
-          ? await tx.mediaAsset.findMany({
-              select: {
-                id: true,
-                publicUrl: true,
-                fileName: true,
-              },
-              where: {
-                ownerUid: req.authUser!.uid,
-                status: 'ready',
-                publicUrl: {
-                  in: urlsInPayload,
-                },
-              },
-            })
-          : []
-        const assetByUrl = new Map(urlAssets.map((asset) => [asset.publicUrl, asset]))
-
-        const keptIds = new Set(existingIdsInPayload)
-        removedImages.push(...existingImages.filter((item) => !keptIds.has(item.id)))
-        if (
-          removedImages.length === existingImages.length
-          && assetIdsInPayload.length === 0
-          && urlsInPayload.length === 0
-        ) {
-          throw new Error('图集至少需要保留一张图片')
-        }
-
-        if (removedImages.length) {
-          await tx.galleryImage.deleteMany({
-            where: { id: { in: removedImages.map((item) => item.id) } },
+      const updated = await prisma.$transaction(async (tx) => {
+        if (Object.keys(data).length) {
+          await tx.gallery.update({
+            where: { id: req.params.id },
+            data,
           })
         }
 
-        for (const [index, instruction] of validatedInstructions.entries()) {
-          if (instruction.kind === 'existing') {
-            await tx.galleryImage.update({
-              where: { id: instruction.imageId },
-              data: { sortOrder: index },
-            })
-            continue
+        const submissionLog = gallerySubmissionLogData(
+          req.params.id,
+          nextStatus,
+          req.authUser!,
+          !isAdminRole(req.authUser!.role) && gallery.status === 'published'
+            ? '编辑后重新提交审核'
+            : null
+        )
+        if (submissionLog) {
+          await tx.moderationLog.create({ data: submissionLog })
+        }
+
+        if (imageInstructions !== undefined) {
+          const validatedInstructions = imageInstructions.filter(
+            (
+              item
+            ): item is
+              | { kind: 'existing'; imageId: string }
+              | { kind: 'asset'; assetId: string }
+              | { kind: 'url'; url: string; name: string } => Boolean(item)
+          )
+          if (validatedInstructions.length !== imageInstructions.length) {
+            throw new Error('图片保存数据无效')
           }
 
-          if (instruction.kind === 'url') {
-            const asset = assetByUrl.get(instruction.url) || null
+          const existingImages = await tx.galleryImage.findMany({
+            where: { galleryId: req.params.id },
+            select: {
+              id: true,
+              assetId: true,
+              url: true,
+              asset: { select: { imageMapId: true } },
+            },
+          })
+
+          const existingImageMap = new Map(existingImages.map((item) => [item.id, item]))
+          const existingIdsInPayload = validatedInstructions
+            .filter(
+              (item): item is { kind: 'existing'; imageId: string } => item?.kind === 'existing'
+            )
+            .map((item) => item.imageId)
+          if (new Set(existingIdsInPayload).size !== existingIdsInPayload.length) {
+            throw new Error('排序列表包含重复图片')
+          }
+          if (existingIdsInPayload.some((imageId) => !existingImageMap.has(imageId))) {
+            throw new Error('排序列表包含无效图片')
+          }
+
+          const assetIdsInPayload = validatedInstructions
+            .filter((item): item is { kind: 'asset'; assetId: string } => item?.kind === 'asset')
+            .map((item) => item.assetId)
+          if (new Set(assetIdsInPayload).size !== assetIdsInPayload.length) {
+            throw new Error('图片列表包含重复资源')
+          }
+          const urlsInPayload = validatedInstructions
+            .filter(
+              (item): item is { kind: 'url'; url: string; name: string } => item?.kind === 'url'
+            )
+            .map((item) => item.url)
+          const urlRows = urlsInPayload.length
+            ? await tx.mediaAsset.findMany({
+                select: { id: true, publicUrl: true },
+                where: {
+                  ownerUid: req.authUser!.uid,
+                  status: 'ready',
+                  publicUrl: { in: urlsInPayload },
+                },
+              })
+            : []
+          const allAssetIds = [...assetIdsInPayload, ...urlRows.map((row) => row.id)]
+          const assetMap = new Map<string, ReadyMediaAsset>()
+          const readyAssets = await getReadyAssetsForOwner(tx, allAssetIds, req.authUser!.uid)
+          for (const asset of readyAssets) assetMap.set(asset.id, asset)
+          const assetByUrl = new Map<string, ReadyMediaAsset>()
+          for (const row of urlRows) {
+            const asset = assetMap.get(row.id)
+            if (asset && row.publicUrl) assetByUrl.set(row.publicUrl, asset)
+          }
+          if (assetByUrl.size !== urlsInPayload.length) {
+            throw new MediaAssetRequestError(400, '图片地址未关联当前用户的媒体资源，请重新上传')
+          }
+          if (uploadSessionId) {
+            await assertUploadSessionAssets(tx, uploadSessionId, req.authUser!.uid, [
+              ...assetIdsInPayload,
+              ...[...assetByUrl.values()].map((asset) => asset.id),
+            ])
+          }
+
+          const finalImageMapIds = validatedInstructions.map((instruction) => {
+            if (instruction.kind === 'existing') {
+              return (
+                existingImageMap.get(instruction.imageId)?.asset?.imageMapId ||
+                `legacy:${instruction.imageId}`
+              )
+            }
+            if (instruction.kind === 'asset') return assetMap.get(instruction.assetId)?.imageMapId
+            return assetByUrl.get(instruction.url)?.imageMapId
+          })
+          if (
+            finalImageMapIds.some((id) => !id) ||
+            new Set(finalImageMapIds).size !== finalImageMapIds.length
+          ) {
+            throw new MediaAssetRequestError(400, '图片列表包含重复图片内容')
+          }
+
+          const keptIds = new Set(existingIdsInPayload)
+          removedImages.push(...existingImages.filter((item) => !keptIds.has(item.id)))
+          if (
+            removedImages.length === existingImages.length &&
+            assetIdsInPayload.length === 0 &&
+            urlsInPayload.length === 0
+          ) {
+            throw new Error('图集至少需要保留一张图片')
+          }
+
+          if (removedImages.length) {
+            await tx.galleryImage.deleteMany({
+              where: { id: { in: removedImages.map((item) => item.id) } },
+            })
+          }
+
+          for (const [index, instruction] of validatedInstructions.entries()) {
+            if (instruction.kind === 'existing') {
+              await tx.galleryImage.update({
+                where: { id: instruction.imageId },
+                data: { sortOrder: index },
+              })
+              continue
+            }
+
+            if (instruction.kind === 'url') {
+              const asset = assetByUrl.get(instruction.url)
+              if (!asset) {
+                throw new Error('图片地址未关联本站媒体资源，请重新上传')
+              }
+              const created = await tx.galleryImage.create({
+                data: {
+                  galleryId: req.params.id,
+                  assetId: asset.id,
+                  url: getCanonicalMediaUrl(asset),
+                  name: instruction.name || asset.fileName || `image-${index + 1}`,
+                  sortOrder: index,
+                },
+                select: { id: true },
+              })
+              newImageIds.push(created.id)
+              continue
+            }
+
+            const asset = assetMap.get(instruction.assetId)
+            if (!asset) {
+              throw new Error('图片列表包含无效或无权限的资源')
+            }
             const created = await tx.galleryImage.create({
               data: {
                 galleryId: req.params.id,
-                assetId: asset?.id || null,
-                url: instruction.url,
-                name: instruction.name || asset?.fileName || `image-${index + 1}`,
+                assetId: asset.id,
+                url: getCanonicalMediaUrl(asset),
+                name: asset.fileName || `image-${index + 1}`,
                 sortOrder: index,
               },
               select: { id: true },
             })
             newImageIds.push(created.id)
-            continue
           }
+        }
 
-          const asset = assetMap.get(instruction.assetId)
-          if (!asset) {
-            throw new Error('图片列表包含无效或无权限的资源')
-          }
-          const created = await tx.galleryImage.create({
-            data: {
-              galleryId: req.params.id,
-              assetId: asset.id,
-              url: asset.publicUrl,
-              name: asset.fileName || `image-${index + 1}`,
-              sortOrder: index,
+        return tx.gallery.findUnique({
+          where: { id: req.params.id },
+          include: {
+            images: {
+              include: {
+                asset: true,
+              },
+              orderBy: { sortOrder: 'asc' },
             },
-            select: { id: true },
-          })
-          newImageIds.push(created.id)
+          },
+        })
+      })
+
+      if (!updated) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      if (newImageIds.length) {
+        try {
+          await enqueueGalleryImageEmbeddings(prisma, newImageIds)
+        } catch (error) {
+          console.error('Enqueue gallery image embeddings error:', error)
         }
       }
 
-      return tx.gallery.findUnique({
+      if (removedImages.length) {
+        await cleanupRemovedGalleryImages(removedImages)
+      }
+
+      res.json({ gallery: await toGalleryResponse(updated) })
+    } catch (error) {
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      console.error('Update gallery error:', error)
+      if (
+        error instanceof Error &&
+        (error.message.includes('图片') ||
+          error.message.includes('图集至少需要保留一张图片') ||
+          error.message.includes('排序列表'))
+      ) {
+        res.status(400).json({ error: error.message })
+        return
+      }
+      res.status(500).json({ error: '更新图集失败' })
+    }
+  })
+)
+
+router.patch(
+  '/:id/publish',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
+        res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
+        return
+      }
+
+      const gallery = await prisma.gallery.findUnique({
         where: { id: req.params.id },
-        include: {
-          images: {
-            include: {
-              asset: true,
-            },
-            orderBy: { sortOrder: 'asc' },
-          },
+        select: {
+          id: true,
+          authorUid: true,
+          status: true,
+          published: true,
         },
       })
-    })
 
-    if (!updated) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    if (newImageIds.length) {
-      try {
-        await enqueueGalleryImageEmbeddings(prisma, newImageIds)
-      } catch (error) {
-        console.error('Enqueue gallery image embeddings error:', error)
+      if (!gallery) {
+        res.status(404).json({ error: '图集不存在' })
+        return
       }
+
+      if (!canManageGallery(gallery, req.authUser)) {
+        res.status(403).json({ error: '无权限修改图集发布状态' })
+        return
+      }
+
+      const nextPublished = parseBoolean(req.body?.published, gallery.status !== 'published')
+      const nextStatus = resolveGalleryPublishStatus(
+        nextPublished,
+        req.authUser!,
+        gallery.status as ContentStatus
+      )
+      const updated = await updateGalleryStatusWithSubmitLog(
+        req.params.id,
+        nextStatus,
+        req.authUser!
+      )
+
+      res.json({ gallery: await toGalleryResponse(updated) })
+    } catch (error) {
+      console.error('Update gallery publish status error:', error)
+      res.status(500).json({ error: '修改图集发布状态失败' })
     }
+  })
+)
 
-    if (removedImages.length) {
-      await cleanupRemovedGalleryImages(removedImages)
+router.post(
+  '/:id/submit',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
+        res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
+        return
+      }
+
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true,
+          authorUid: true,
+          status: true,
+        },
+      })
+
+      if (!gallery) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      if (!canManageGallery(gallery, req.authUser)) {
+        res.status(403).json({ error: '无权限提交该图集' })
+        return
+      }
+
+      const nextStatus = resolveGalleryUpdateStatus(
+        'pending',
+        gallery.status as ContentStatus,
+        req.authUser!
+      )
+      const updated = await updateGalleryStatusWithSubmitLog(
+        req.params.id,
+        nextStatus,
+        req.authUser!
+      )
+
+      res.json({ gallery: await toGalleryResponse(updated) })
+    } catch (error) {
+      console.error('Submit gallery review error:', error)
+      res.status(500).json({ error: '提交审核失败' })
     }
-
-    res.json({ gallery: await toGalleryResponse(updated) })
-  } catch (error) {
-    console.error('Update gallery error:', error)
-    res.status(500).json({ error: '更新图集失败' })
-  }
-}))
-
-router.patch('/:id/publish', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
-      res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
-      return
-    }
-
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: req.params.id },
-      select: {
-        id: true,
-        authorUid: true,
-        status: true,
-        published: true,
-      },
-    })
-
-    if (!gallery) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    if (!canManageGallery(gallery, req.authUser)) {
-      res.status(403).json({ error: '无权限修改图集发布状态' })
-      return
-    }
-
-    const nextPublished = parseBoolean(req.body?.published, gallery.status !== 'published')
-    const nextStatus = resolveGalleryPublishStatus(
-      nextPublished,
-      req.authUser!,
-      gallery.status as ContentStatus
-    )
-    const updated = await updateGalleryStatusWithSubmitLog(
-      req.params.id,
-      nextStatus,
-      req.authUser!
-    )
-
-    res.json({ gallery: await toGalleryResponse(updated) })
-  } catch (error) {
-    console.error('Update gallery publish status error:', error)
-    res.status(500).json({ error: '修改图集发布状态失败' })
-  }
-}))
-
-router.post('/:id/submit', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
-      res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
-      return
-    }
-
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: req.params.id },
-      select: {
-        id: true,
-        authorUid: true,
-        status: true,
-      },
-    })
-
-    if (!gallery) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    if (!canManageGallery(gallery, req.authUser)) {
-      res.status(403).json({ error: '无权限提交该图集' })
-      return
-    }
-
-    const nextStatus = resolveGalleryUpdateStatus(
-      'pending',
-      gallery.status as ContentStatus,
-      req.authUser!
-    )
-    const updated = await updateGalleryStatusWithSubmitLog(
-      req.params.id,
-      nextStatus,
-      req.authUser!
-    )
-
-    res.json({ gallery: await toGalleryResponse(updated) })
-  } catch (error) {
-    console.error('Submit gallery review error:', error)
-    res.status(500).json({ error: '提交审核失败' })
-  }
-}))
+  })
+)
 
 router.delete(
   '/:id',
@@ -1367,139 +1535,130 @@ router.delete(
   })
 )
 
-router.post('/:id/images', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
-      res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
-      return
-    }
+router.post(
+  '/:id/images',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
+        res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
+        return
+      }
 
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: req.params.id },
-      include: {
-        images: {
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: req.params.id },
+        select: { id: true, authorUid: true },
+      })
+      if (!gallery) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+      if (!canManageGallery(gallery, req.authUser)) {
+        res.status(403).json({ error: '无权限编辑该图集' })
+        return
+      }
+
+      const assetIds = parseAppendAssetIdList(req.body?.assetIds)
+      if (!assetIds.length) {
+        res.status(400).json({ error: '请提供至少一个图片资源' })
+        return
+      }
+      if (new Set(assetIds).size !== assetIds.length) {
+        res.status(400).json({ error: '图片列表包含重复资源' })
+        return
+      }
+      const uploadSessionId =
+        typeof req.body?.uploadSessionId === 'string' ? req.body.uploadSessionId.trim() : ''
+
+      const updated = await prisma.$transaction(async (tx) => {
+        if (uploadSessionId) {
+          await assertUploadSessionAssets(tx, uploadSessionId, req.authUser!.uid, assetIds)
+        }
+        const lockedGallery = await tx.gallery.findUnique({
+          where: { id: gallery.id },
           select: {
             id: true,
-            sortOrder: true,
+            images: {
+              select: {
+                id: true,
+                sortOrder: true,
+                assetId: true,
+                asset: { select: { imageMapId: true } },
+              },
+            },
           },
-        },
-      },
-    })
+        })
+        if (!lockedGallery) throw new MediaAssetRequestError(404, '图集不存在')
 
-    if (!gallery) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    if (!canManageGallery(gallery, req.authUser)) {
-      res.status(403).json({ error: '无权限编辑该图集' })
-      return
-    }
-
-    const assetIds = parseAppendAssetIdList(req.body?.assetIds)
-    if (!assetIds.length) {
-      res.status(400).json({ error: '请提供至少一个图片资源' })
-      return
-    }
-
-    const uploadSessionId = typeof req.body?.uploadSessionId === 'string' ? req.body.uploadSessionId.trim() : ''
-    if (uploadSessionId) {
-      const session = await prisma.uploadSession.findUnique({
-        where: { id: uploadSessionId },
-        select: {
-          id: true,
-          ownerUid: true,
-          status: true,
-          expiresAt: true,
-        },
-      })
-      if (!session || session.ownerUid !== req.authUser!.uid) {
-        res.status(400).json({ error: '上传会话不存在' })
-        return
-      }
-      if (session.status === 'expired' || isUploadSessionExpired(session.expiresAt)) {
-        if (session.status !== 'expired') {
-          await prisma.uploadSession.update({
-            where: { id: session.id },
-            data: { status: 'expired' },
-          })
+        const existingAssetIds = new Set(
+          lockedGallery.images
+            .map((image) => image.assetId)
+            .filter((id): id is string => Boolean(id))
+        )
+        if (assetIds.some((assetId) => existingAssetIds.has(assetId))) {
+          throw new MediaAssetRequestError(400, '图片列表包含已存在的资源')
         }
-        res.status(410).json({ error: '上传会话已过期，请重新上传' })
-        return
-      }
-      if (session.status !== 'finalized') {
-        res.status(400).json({ error: '请先完成上传会话' })
-        return
-      }
-    }
+        const existingImageMapIds = new Set(
+          lockedGallery.images
+            .map((image) => image.asset?.imageMapId)
+            .filter((id): id is string => Boolean(id))
+        )
+        const orderedAssets = await getReadyAssetsForOwner(tx, assetIds, req.authUser!.uid)
+        const requestedImageMapIds = orderedAssets.map((asset) => asset.imageMapId)
+        if (
+          new Set(requestedImageMapIds).size !== requestedImageMapIds.length ||
+          requestedImageMapIds.some((imageMapId) => existingImageMapIds.has(imageMapId))
+        ) {
+          throw new MediaAssetRequestError(400, '图片列表包含已存在的相同图片内容')
+        }
 
-    const uniqueAssetIds = [...new Set(assetIds)]
-    const assets = await prisma.mediaAsset.findMany({
-      where: {
-        id: { in: uniqueAssetIds },
-        ownerUid: req.authUser!.uid,
-        status: 'ready',
-      },
-      orderBy: { createdAt: 'asc' },
-    })
+        const baseSortOrder = lockedGallery.images.length
+          ? Math.max(...lockedGallery.images.map((image) => image.sortOrder)) + 1
+          : 0
+        return tx.gallery.update({
+          where: { id: lockedGallery.id },
+          data: {
+            images: {
+              create: orderedAssets.map((asset, index) => ({
+                assetId: asset.id,
+                url: getCanonicalMediaUrl(asset),
+                name: asset.fileName || `image-${baseSortOrder + index + 1}`,
+                sortOrder: baseSortOrder + index,
+              })),
+            },
+          },
+          include: {
+            images: {
+              orderBy: { sortOrder: 'asc' },
+              include: { asset: { include: { imageMap: true } } },
+            },
+          },
+        })
+      })
 
-    if (assets.length !== uniqueAssetIds.length) {
-      res.status(400).json({ error: '包含无效或无权限的图片资源' })
-      return
-    }
-
-    const assetMap = new Map(assets.map((asset) => [asset.id, asset]))
-    const orderedAssets = assetIds
-      .map((id) => assetMap.get(id))
-      .filter((asset): asset is typeof assets[number] => Boolean(asset))
-    const baseSortOrder = gallery.images.length
-      ? Math.max(...gallery.images.map((item) => item.sortOrder)) + 1
-      : 0
-
-    await prisma.gallery.update({
-      where: { id: gallery.id },
-      data: {
-        images: {
-          create: orderedAssets.map((asset, index) => ({
-            assetId: asset.id,
-            url: asset.publicUrl,
-            name: asset.fileName || `image-${baseSortOrder + index + 1}`,
-            sortOrder: baseSortOrder + index,
-          })),
-        },
-      },
-    })
-
-    const updated = await fetchGalleryForResponse(gallery.id)
-
-    if (updated) {
       try {
         await enqueueGalleryImageEmbeddings(
           prisma,
-          updated.images.map((image) => image.id),
+          updated.images.map((image) => image.id)
         )
       } catch (error) {
-        console.error('Enqueue gallery image embeddings error:', error)
+        logger.error(
+          { err: error, galleryId: updated.id },
+          'Enqueue gallery image embeddings error'
+        )
       }
-
-      try {
-        for (const asset of orderedAssets) {
-          await syncGalleryImageToImageMapWithVariant(asset.publicUrl, asset.storageKey)
-        }
-      } catch (error) {
-        console.error('Sync gallery images to ImageMap error:', error)
-      }
-
       res.json({ gallery: await toGalleryResponse(updated) })
-      return
+    } catch (error) {
+      if (error instanceof MediaAssetRequestError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      logger.error({ err: error }, 'Append gallery images error')
+      res.status(500).json({ error: '追加图集图片失败' })
     }
-
-    res.status(404).json({ error: '图集不存在' })
-  } catch (error) {
-    console.error('Append gallery images error:', error)
-    res.status(500).json({ error: '追加图集图片失败' })
-  }
-}))
+  })
+)
 
 router.delete(
   '/:id/images',
@@ -1508,7 +1667,7 @@ router.delete(
   validateBody(adminBatchGalleryImagesSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
         res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
         return
       }
@@ -1593,307 +1752,326 @@ router.delete(
   })
 )
 
-router.delete('/:id/images/:imageId', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
-      res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
-      return
-    }
-
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: req.params.id },
-      select: {
-        id: true,
-        authorUid: true,
-      },
-    })
-
-    if (!gallery) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    if (!canManageGallery(gallery, req.authUser)) {
-      res.status(403).json({ error: '无权限编辑该图集' })
-      return
-    }
-
-    const image = await prisma.galleryImage.findUnique({
-      where: { id: req.params.imageId },
-      select: {
-        id: true,
-        galleryId: true,
-        assetId: true,
-        url: true,
-      },
-    })
-
-    if (!image || image.galleryId !== gallery.id) {
-      res.status(404).json({ error: '图片不存在' })
-      return
-    }
-
-    const imageCount = await prisma.galleryImage.count({ where: { galleryId: gallery.id } })
-    if (imageCount <= 1) {
-      res.status(400).json({ error: '图集至少需要保留一张图片' })
-      return
-    }
-
-    await prisma.galleryImage.delete({ where: { id: image.id } })
-
-    await cleanupRemovedGalleryImages([image])
-
-    const remaining = await prisma.galleryImage.findMany({
-      where: { galleryId: gallery.id },
-      orderBy: { sortOrder: 'asc' },
-      select: { id: true },
-    })
-
-    await Promise.all(
-      remaining.map((item, index) =>
-        prisma.galleryImage.update({
-          where: { id: item.id },
-          data: { sortOrder: index },
-        }),
-      ),
-    )
-
-    const updated = await fetchGalleryForResponse(gallery.id)
-
-    if (!updated) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    enhancedCache.invalidateByPrefix('gallery_list_public:')
-    res.json({ gallery: await toGalleryResponse(updated) })
-  } catch (error) {
-    console.error('Delete gallery image error:', error)
-    res.status(500).json({ error: '删除图集图片失败' })
-  }
-}))
-
-router.patch('/:id/images/reorder', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    if (GALLERY_ADMIN_ONLY && !isAdminRole(req.authUser?.role)) {
-      res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
-      return
-    }
-
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: req.params.id },
-      select: {
-        id: true,
-        authorUid: true,
-      },
-    })
-
-    if (!gallery) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    if (!canManageGallery(gallery, req.authUser)) {
-      res.status(403).json({ error: '无权限编辑该图集' })
-      return
-    }
-
-    const imageIdsRaw = Array.isArray(req.body?.imageIds) ? req.body.imageIds : []
-    const imageIds = imageIdsRaw
-      .filter((item): item is string => typeof item === 'string')
-      .map((item) => item.trim())
-      .filter(Boolean)
-
-    if (!imageIds.length) {
-      res.status(400).json({ error: '请提供图片排序列表' })
-      return
-    }
-
-    const existing = await prisma.galleryImage.findMany({
-      where: { galleryId: gallery.id },
-      select: { id: true },
-    })
-    const existingIds = existing.map((item) => item.id)
-    if (existingIds.length !== imageIds.length) {
-      res.status(400).json({ error: '排序列表与当前图片数量不一致' })
-      return
-    }
-    const existingSet = new Set(existingIds)
-    if (imageIds.some((id) => !existingSet.has(id))) {
-      res.status(400).json({ error: '排序列表包含无效图片' })
-      return
-    }
-
-    await prisma.$transaction(
-      imageIds.map((imageId, index) =>
-        prisma.galleryImage.update({
-          where: { id: imageId },
-          data: { sortOrder: index },
-        }),
-      ),
-    )
-
-    const updated = await fetchGalleryForResponse(gallery.id)
-
-    if (!updated) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    enhancedCache.invalidateByPrefix('gallery_list_public:')
-    res.json({ gallery: await toGalleryResponse(updated) })
-  } catch (error) {
-    console.error('Reorder gallery images error:', error)
-    res.status(500).json({ error: '重排图集图片失败' })
-  }
-}))
-
-router.get('/:id/comments', asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const includeDeletedComments =
-      isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true'
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: req.params.id },
-      select: {
-        id: true,
-        status: true,
-        published: true,
-        authorUid: true,
-      },
-    })
-
-    if (!gallery) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    if (!canViewGallery(gallery, req.authUser)) {
-      res.status(403).json({ error: '该图集尚未发布' })
-      return
-    }
-
-    const comments = await fetchGalleryCommentsForResponse(req.params.id, {
-      authUserUid: req.authUser?.uid,
-      includeDeleted: includeDeletedComments,
-    })
-
-    res.json({
-      comments,
-    })
-  } catch (error) {
-    console.error('Fetch gallery comments error:', error)
-    res.status(500).json({ error: '获取图集评论失败' })
-  }
-}))
-
-router.post('/:id/comments', galleryWriteLimiter, requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { content, parentId } = req.body as {
-      content?: string
-      parentId?: string | null
-    }
-
-    if (!content || !content.trim()) {
-      res.status(400).json({ error: '评论内容不能为空' })
-      return
-    }
-    if (!ensureTextLimit(res, content, '评论内容', CONTENT_LIMITS.gallery.comment)) {
-      return
-    }
-
-    const gallery = await prisma.gallery.findUnique({
-      where: { id: req.params.id },
-      select: {
-        id: true,
-        status: true,
-        published: true,
-        authorUid: true,
-      },
-    })
-
-    if (!gallery || !canViewGallery(gallery, req.authUser)) {
-      res.status(404).json({ error: '图集不存在' })
-      return
-    }
-
-    if (gallery.status !== 'published') {
-      res.status(403).json({ error: '仅已发布内容可评论' })
-      return
-    }
-
-    let replyTargetUid: string | null = null
-    let rootParentId: string | null = null
-    let replyToId: string | null = null
-    if (parentId) {
-      const replyTarget = await resolveCommentReplyTarget(parentId, { galleryId: req.params.id })
-      if (!replyTarget) {
-        res.status(400).json({ error: '回复目标不存在' })
+router.delete(
+  '/:id/images/:imageId',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
+        res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
         return
       }
-      rootParentId = replyTarget.parentId
-      replyToId = replyTarget.replyToId
-      replyTargetUid = replyTarget.replyTargetUid
-    }
 
-    const comment = await prisma.postComment.create({
-      data: {
-        galleryId: req.params.id,
-        authorUid: req.authUser!.uid,
-        content,
-        parentId: rootParentId,
-        replyToId,
-      },
-      include: {
-        author: {
-          select: { displayName: true, photoURL: true },
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true,
+          authorUid: true,
         },
-        replyTo: {
-          select: {
-            authorUid: true,
-            author: {
-              select: { displayName: true },
+      })
+
+      if (!gallery) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      if (!canManageGallery(gallery, req.authUser)) {
+        res.status(403).json({ error: '无权限编辑该图集' })
+        return
+      }
+
+      const image = await prisma.galleryImage.findUnique({
+        where: { id: req.params.imageId },
+        select: {
+          id: true,
+          galleryId: true,
+          assetId: true,
+          url: true,
+        },
+      })
+
+      if (!image || image.galleryId !== gallery.id) {
+        res.status(404).json({ error: '图片不存在' })
+        return
+      }
+
+      const imageCount = await prisma.galleryImage.count({ where: { galleryId: gallery.id } })
+      if (imageCount <= 1) {
+        res.status(400).json({ error: '图集至少需要保留一张图片' })
+        return
+      }
+
+      await prisma.galleryImage.delete({ where: { id: image.id } })
+
+      await cleanupRemovedGalleryImages([image])
+
+      const remaining = await prisma.galleryImage.findMany({
+        where: { galleryId: gallery.id },
+        orderBy: { sortOrder: 'asc' },
+        select: { id: true },
+      })
+
+      await Promise.all(
+        remaining.map((item, index) =>
+          prisma.galleryImage.update({
+            where: { id: item.id },
+            data: { sortOrder: index },
+          })
+        )
+      )
+
+      const updated = await fetchGalleryForResponse(gallery.id)
+
+      if (!updated) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      enhancedCache.invalidateByPrefix('gallery_list_public:')
+      res.json({ gallery: await toGalleryResponse(updated) })
+    } catch (error) {
+      console.error('Delete gallery image error:', error)
+      res.status(500).json({ error: '删除图集图片失败' })
+    }
+  })
+)
+
+router.patch(
+  '/:id/images/reorder',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      if (isGalleryAdminOnly() && !isAdminRole(req.authUser?.role)) {
+        res.status(403).json({ error: '当前图集已临时限制为仅管理员可操作' })
+        return
+      }
+
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true,
+          authorUid: true,
+        },
+      })
+
+      if (!gallery) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      if (!canManageGallery(gallery, req.authUser)) {
+        res.status(403).json({ error: '无权限编辑该图集' })
+        return
+      }
+
+      const imageIdsRaw = Array.isArray(req.body?.imageIds) ? req.body.imageIds : []
+      const imageIds = imageIdsRaw
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean)
+
+      if (!imageIds.length) {
+        res.status(400).json({ error: '请提供图片排序列表' })
+        return
+      }
+
+      const existing = await prisma.galleryImage.findMany({
+        where: { galleryId: gallery.id },
+        select: { id: true },
+      })
+      const existingIds = existing.map((item) => item.id)
+      if (existingIds.length !== imageIds.length) {
+        res.status(400).json({ error: '排序列表与当前图片数量不一致' })
+        return
+      }
+      const existingSet = new Set(existingIds)
+      if (imageIds.some((id) => !existingSet.has(id))) {
+        res.status(400).json({ error: '排序列表包含无效图片' })
+        return
+      }
+
+      await prisma.$transaction(
+        imageIds.map((imageId, index) =>
+          prisma.galleryImage.update({
+            where: { id: imageId },
+            data: { sortOrder: index },
+          })
+        )
+      )
+
+      const updated = await fetchGalleryForResponse(gallery.id)
+
+      if (!updated) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      enhancedCache.invalidateByPrefix('gallery_list_public:')
+      res.json({ gallery: await toGalleryResponse(updated) })
+    } catch (error) {
+      console.error('Reorder gallery images error:', error)
+      res.status(500).json({ error: '重排图集图片失败' })
+    }
+  })
+)
+
+router.get(
+  '/:id/comments',
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const includeDeletedComments =
+        isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true'
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true,
+          status: true,
+          published: true,
+          authorUid: true,
+        },
+      })
+
+      if (!gallery) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      if (!canViewGallery(gallery, req.authUser)) {
+        res.status(403).json({ error: '该图集尚未发布' })
+        return
+      }
+
+      const comments = await fetchGalleryCommentsForResponse(req.params.id, {
+        authUserUid: req.authUser?.uid,
+        includeDeleted: includeDeletedComments,
+      })
+
+      res.json({
+        comments,
+      })
+    } catch (error) {
+      console.error('Fetch gallery comments error:', error)
+      res.status(500).json({ error: '获取图集评论失败' })
+    }
+  })
+)
+
+router.post(
+  '/:id/comments',
+  galleryWriteLimiter,
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { content, parentId } = req.body as {
+        content?: string
+        parentId?: string | null
+      }
+
+      if (!content || !content.trim()) {
+        res.status(400).json({ error: '评论内容不能为空' })
+        return
+      }
+      if (!ensureTextLimit(res, content, '评论内容', CONTENT_LIMITS.gallery.comment)) {
+        return
+      }
+
+      const gallery = await prisma.gallery.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true,
+          status: true,
+          published: true,
+          authorUid: true,
+        },
+      })
+
+      if (!gallery || !canViewGallery(gallery, req.authUser)) {
+        res.status(404).json({ error: '图集不存在' })
+        return
+      }
+
+      if (gallery.status !== 'published') {
+        res.status(403).json({ error: '仅已发布内容可评论' })
+        return
+      }
+
+      let replyTargetUid: string | null = null
+      let rootParentId: string | null = null
+      let replyToId: string | null = null
+      if (parentId) {
+        const replyTarget = await resolveCommentReplyTarget(parentId, { galleryId: req.params.id })
+        if (!replyTarget) {
+          res.status(400).json({ error: '回复目标不存在' })
+          return
+        }
+        rootParentId = replyTarget.parentId
+        replyToId = replyTarget.replyToId
+        replyTargetUid = replyTarget.replyTargetUid
+      }
+
+      const comment = await prisma.postComment.create({
+        data: {
+          galleryId: req.params.id,
+          authorUid: req.authUser!.uid,
+          content,
+          parentId: rootParentId,
+          replyToId,
+        },
+        include: {
+          author: {
+            select: { publicId: true, displayName: true, photoURL: true },
+          },
+          replyTo: {
+            select: {
+              authorUid: true,
+              author: {
+                select: { publicId: true, displayName: true },
+              },
             },
           },
+          _count: {
+            select: { likes: true },
+          },
         },
-        _count: {
-          select: { likes: true },
-        },
-      },
-    })
+      })
 
-    await notifyCommentReply({
-      ownerUid: gallery.authorUid,
-      replyTargetUid,
-      actorUid: req.authUser!.uid,
-      actorName: req.authUser!.displayName,
-      commentId: comment.id,
-      content: comment.content,
-      parentId: comment.parentId,
-      target: { type: 'gallery', id: req.params.id },
-    })
-    const mentionTargets = await resolveMentionTargetsForText(comment.content)
-    const replyRecipientUid = replyTargetUid || gallery.authorUid
-    await notifyMentionUsers({
-      content: comment.content,
-      mentionTargets,
-      actorUid: req.authUser!.uid,
-      actorName: req.authUser!.displayName,
-      target: { type: 'gallery', id: req.params.id, commentId: comment.id },
-      excludeUserUids:
-        replyRecipientUid && replyRecipientUid !== req.authUser!.uid ? [replyRecipientUid] : [],
-    })
-
-    res.status(201).json({
-      comment: toCommentResponse({
-        ...comment,
+      await notifyCommentReply({
+        ownerUid: gallery.authorUid,
+        replyTargetUid,
+        actorUid: req.authUser!.uid,
+        actorName: req.authUser!.displayName,
+        commentId: comment.id,
+        content: comment.content,
+        parentId: comment.parentId,
+        target: { type: 'gallery', id: req.params.id },
+      })
+      const mentionTargets = await resolveMentionTargetsForText(comment.content)
+      const replyRecipientUid = replyTargetUid || gallery.authorUid
+      await notifyMentionUsers({
+        content: comment.content,
         mentionTargets,
-      }),
-    })
-  } catch (error) {
-    console.error('Create gallery comment error:', error)
-    res.status(500).json({ error: '发表评论失败' })
-  }
-}))
+        actorUid: req.authUser!.uid,
+        actorName: req.authUser!.displayName,
+        target: { type: 'gallery', id: req.params.id, commentId: comment.id },
+        excludeUserUids:
+          replyRecipientUid && replyRecipientUid !== req.authUser!.uid ? [replyRecipientUid] : [],
+      })
+
+      res.status(201).json({
+        comment: toCommentResponse({
+          ...comment,
+          mentionTargets,
+        }),
+      })
+    } catch (error) {
+      console.error('Create gallery comment error:', error)
+      res.status(500).json({ error: '发表评论失败' })
+    }
+  })
+)
 
 export function registerGalleriesRoutes(app: Router) {
   app.use('/api/galleries', router)

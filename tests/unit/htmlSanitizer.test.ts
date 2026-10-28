@@ -1,91 +1,91 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { MemoryRouter } from 'react-router-dom';
+import { describe, expect, it } from 'vitest'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { MemoryRouter } from 'react-router-dom'
 
-import { isTrustedIframeDomain } from '../../src/lib/htmlSanitizer';
-import MarkdownRenderer from '../../src/components/MarkdownRenderer';
-import WikiMarkdown from '../../src/pages/wiki/WikiMarkdown';
+import { isTrustedIframeDomain } from '../../src/lib/htmlSanitizer'
+import MarkdownRenderer from '../../src/components/MarkdownRenderer'
+import WikiMarkdown from '../../src/pages/wiki/WikiMarkdown'
 
 describe('htmlSanitizer', () => {
   describe('isTrustedIframeDomain', () => {
     it('returns true for bilibili player', () => {
-      expect(isTrustedIframeDomain('player.bilibili.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('player.bilibili.com')).toBe(true)
+    })
 
     it('returns true for music.163.com', () => {
-      expect(isTrustedIframeDomain('music.163.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('music.163.com')).toBe(true)
+    })
 
     it('returns true for qq music', () => {
-      expect(isTrustedIframeDomain('y.qq.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('y.qq.com')).toBe(true)
+    })
 
     it('returns true for youtube', () => {
-      expect(isTrustedIframeDomain('www.youtube.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('www.youtube.com')).toBe(true)
+    })
 
     it('returns true for youtube without www', () => {
-      expect(isTrustedIframeDomain('youtube.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('youtube.com')).toBe(true)
+    })
 
     it('returns true for youku player', () => {
-      expect(isTrustedIframeDomain('player.youku.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('player.youku.com')).toBe(true)
+    })
 
     it('returns true for iqiyi open platform', () => {
-      expect(isTrustedIframeDomain('open.iqiyi.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('open.iqiyi.com')).toBe(true)
+    })
 
     it('returns true for weibo', () => {
-      expect(isTrustedIframeDomain('weibo.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('weibo.com')).toBe(true)
+    })
 
     it('returns true for vimeo', () => {
-      expect(isTrustedIframeDomain('vimeo.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('vimeo.com')).toBe(true)
+    })
 
     it('returns true for protocol-relative URLs', () => {
-      expect(isTrustedIframeDomain('//player.bilibili.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('//player.bilibili.com')).toBe(true)
+    })
 
     it('returns true for URLs with full protocol', () => {
-      expect(isTrustedIframeDomain('https://player.bilibili.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('https://player.bilibili.com')).toBe(true)
+    })
 
     it('returns true for HTTP URLs', () => {
-      expect(isTrustedIframeDomain('http://player.bilibili.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('http://player.bilibili.com')).toBe(true)
+    })
 
     it('returns false for untrusted domains', () => {
-      expect(isTrustedIframeDomain('evil.com')).toBe(false);
-    });
+      expect(isTrustedIframeDomain('evil.com')).toBe(false)
+    })
 
     it('returns false for random subdomains of untrusted domains', () => {
-      expect(isTrustedIframeDomain('bilibili.evil.com')).toBe(false);
-    });
+      expect(isTrustedIframeDomain('bilibili.evil.com')).toBe(false)
+    })
 
     it('returns false for undefined', () => {
-      expect(isTrustedIframeDomain(undefined)).toBe(false);
-    });
+      expect(isTrustedIframeDomain(undefined)).toBe(false)
+    })
 
     it('returns false for empty string', () => {
-      expect(isTrustedIframeDomain('')).toBe(false);
-    });
+      expect(isTrustedIframeDomain('')).toBe(false)
+    })
 
     it('returns true for subdomains of trusted domains', () => {
-      expect(isTrustedIframeDomain('player.music.163.com')).toBe(true);
-    });
+      expect(isTrustedIframeDomain('player.music.163.com')).toBe(true)
+    })
 
     it('returns false for invalid URLs', () => {
-      expect(isTrustedIframeDomain('not-a-valid-url')).toBe(false);
-    });
-  });
+      expect(isTrustedIframeDomain('not-a-valid-url')).toBe(false)
+    })
+  })
 
   describe('WikiMarkdown', () => {
     const renderWikiMarkdown = (content: string) =>
-      renderToStaticMarkup(createElement(WikiMarkdown, { content }));
+      renderToStaticMarkup(createElement(WikiMarkdown, { content }))
 
     it('sanitizes dangerous raw html while keeping trusted embeds', () => {
       const output = renderWikiMarkdown(`
@@ -96,28 +96,28 @@ describe('htmlSanitizer', () => {
 <a href="javascript:alert(1)" target="_self" rel="opener">bad</a>
 <iframe src="https://player.bilibili.com/video/BV1" width="640" height="360" style="border-radius: 12px;" allowfullscreen></iframe>
 <iframe src="https://evil.com/embed"></iframe>
-`);
+`)
 
-      expect(output).not.toContain('<script');
-      expect(output).not.toContain('onerror=');
-      expect(output).not.toContain('javascript:');
-      expect(output).toContain('https://player.bilibili.com/video/BV1');
-      expect(output).toContain('border-radius');
-      expect(output).not.toContain('https://evil.com/embed');
-    });
+      expect(output).not.toContain('<script')
+      expect(output).not.toContain('onerror=')
+      expect(output).not.toContain('javascript:')
+      expect(output).toContain('https://player.bilibili.com/video/BV1')
+      expect(output).toContain('border-radius')
+      expect(output).not.toContain('https://evil.com/embed')
+    })
 
     it('forces safe attributes on external links', () => {
       const output = renderWikiMarkdown(
-        '<a href="https://example.com" target="_self" rel="opener">example</a>',
-      );
+        '<a href="https://example.com" target="_self" rel="opener">example</a>'
+      )
 
-      expect(output).toContain('href="https://example.com"');
-      expect(output).toContain('target="_blank"');
-      expect(output).toContain('rel="noopener noreferrer"');
-      expect(output).not.toContain('target="_self"');
-      expect(output).not.toContain('rel="opener"');
-    });
-  });
+      expect(output).toContain('href="https://example.com"')
+      expect(output).toContain('target="_blank"')
+      expect(output).toContain('rel="noopener noreferrer"')
+      expect(output).not.toContain('target="_self"')
+      expect(output).not.toContain('rel="opener"')
+    })
+  })
 
   describe('MarkdownRenderer', () => {
     const renderMarkdown = (content: string, enableWikiLinks = false) =>
@@ -125,9 +125,9 @@ describe('htmlSanitizer', () => {
         createElement(
           MemoryRouter,
           null,
-          createElement(MarkdownRenderer, { content, enableWikiLinks }),
-        ),
-      );
+          createElement(MarkdownRenderer, { content, enableWikiLinks })
+        )
+      )
 
     it('renders GitHub alerts and safe heading anchors in the shared renderer', () => {
       const output = renderMarkdown(`
@@ -135,24 +135,24 @@ describe('htmlSanitizer', () => {
 
 > [!NOTE]
 > 这是一条提示
-`);
+`)
 
-      expect(output).toContain('id="user-content-location"');
-      expect(output).toContain('href="#user-content-location"');
-      expect(output).not.toContain('id="location"');
-      expect(output).toContain('markdown-heading-anchor');
-      expect(output).toContain('markdown-alert markdown-alert-note');
-      expect(output).toContain('markdown-alert-title');
-      expect(output).toContain('<svg');
-      expect(output).toContain('<path');
-    });
+      expect(output).toContain('id="user-content-location"')
+      expect(output).toContain('href="#user-content-location"')
+      expect(output).not.toContain('id="location"')
+      expect(output).toContain('markdown-heading-anchor')
+      expect(output).toContain('markdown-alert markdown-alert-note')
+      expect(output).toContain('markdown-alert-title')
+      expect(output).toContain('<svg')
+      expect(output).toContain('<path')
+    })
 
     it('only converts wiki links when wiki mode is enabled', () => {
-      expect(renderMarkdown('[[页面标题]]')).toContain('[[页面标题]]');
+      expect(renderMarkdown('[[页面标题]]')).toContain('[[页面标题]]')
       expect(renderMarkdown('[[页面标题]]', true)).toContain(
-        'href="/wiki/%E9%A1%B5%E9%9D%A2%E6%A0%87%E9%A2%98"',
-      );
-    });
+        'href="/wiki/%E9%A1%B5%E9%9D%A2%E6%A0%87%E9%A2%98"'
+      )
+    })
 
     it('renders mention links without changing code spans', () => {
       const output = renderToStaticMarkup(
@@ -162,44 +162,44 @@ describe('htmlSanitizer', () => {
           createElement(MarkdownRenderer, {
             content: '正文 @黄诗扶 `@代码` @未知',
             enableMentions: true,
-            mentionTargets: [{ uid: 'user-1', displayName: '黄诗扶' }],
-          }),
-        ),
-      );
+            mentionTargets: [{ uid: 'user-1', publicId: '1', displayName: '黄诗扶' }],
+          })
+        )
+      )
 
-      expect(output).toContain('href="/users/user-1"');
-      expect(output).toContain('class="mention-highlight"');
-      expect(output).toContain('<code>@代码</code>');
-      expect(output).toContain('<span class="mention-highlight">@未知</span>');
-    });
+      expect(output).toContain('href="/users/1"')
+      expect(output).toContain('class="mention-highlight"')
+      expect(output).toContain('<code>@代码</code>')
+      expect(output).toContain('<span class="mention-highlight">@未知</span>')
+    })
 
     it('uses the shared iframe whitelist for all renderer consumers', () => {
       const output = renderMarkdown(`
 <iframe src="https://player.bilibili.com/video/BV1"></iframe>
 <iframe src="https://evil.com/embed"></iframe>
 <svg onload="alert(1)"><path d="M0 0" onclick="alert(1)"></path></svg>
-`);
+`)
 
-      expect(output).toContain('https://player.bilibili.com/video/BV1');
-      expect(output).not.toContain('https://evil.com/embed');
-      expect(output).toContain('<svg');
-      expect(output).toContain('<path d="M0 0"');
-      expect(output).not.toContain('onload');
-      expect(output).not.toContain('onclick');
-    });
+      expect(output).toContain('https://player.bilibili.com/video/BV1')
+      expect(output).not.toContain('https://evil.com/embed')
+      expect(output).toContain('<svg')
+      expect(output).toContain('<path d="M0 0"')
+      expect(output).not.toContain('onload')
+      expect(output).not.toContain('onclick')
+    })
 
     it('keeps GFM footnote links connected after sanitizing ids', () => {
       const output = renderMarkdown(`
 脚注引用[^1]
 
 [^1]: 脚注内容
-`);
+`)
 
-      expect(output).toContain('id="user-content-user-content-fnref-1"');
-      expect(output).toContain('href="#user-content-user-content-fn-1"');
-      expect(output).toContain('id="user-content-user-content-fn-1"');
-      expect(output).toContain('href="#user-content-user-content-fnref-1"');
-    });
+      expect(output).toContain('id="user-content-user-content-fnref-1"')
+      expect(output).toContain('href="#user-content-user-content-fn-1"')
+      expect(output).toContain('id="user-content-user-content-fn-1"')
+      expect(output).toContain('href="#user-content-user-content-fnref-1"')
+    })
 
     it('renders common markdown structures with preserved GFM attributes', () => {
       const output = renderMarkdown(`
@@ -211,18 +211,61 @@ describe('htmlSanitizer', () => {
 | 左 | 右 | 中 |
 | :- | -: | :-: |
 | a | b | c |
-`);
+`)
 
-      expect(output).toContain('<strong>加粗</strong>');
-      expect(output).toContain('<em>斜体</em>');
-      expect(output).toContain('<del>删除</del>');
-      expect(output).toContain('class="contains-task-list"');
-      expect(output).toContain('type="checkbox"');
-      expect(output).toContain('checked=""');
-      expect(output).toContain('style="text-align:left"');
-      expect(output).toContain('style="text-align:right"');
-      expect(output).toContain('style="text-align:center"');
-    });
+      expect(output).toContain('<strong>加粗</strong>')
+      expect(output).toContain('<em>斜体</em>')
+      expect(output).toContain('<del>删除</del>')
+      expect(output).toContain('class="contains-task-list"')
+      expect(output).toContain('type="checkbox"')
+      expect(output).toContain('checked=""')
+      expect(output).toContain('style="text-align:left"')
+      expect(output).toContain('style="text-align:right"')
+      expect(output).toContain('style="text-align:center"')
+    })
+
+    it('renders plain text fences as prose without parsing Markdown', () => {
+      const output = renderMarkdown(
+        [
+          '```plain',
+          '# 这不是标题',
+          '*这不是斜体*',
+          '[这不是链接](https://example.com)',
+          '保留  连续空格',
+          '下一行',
+          '```',
+        ].join('\n')
+      )
+
+      expect(output).toContain('class="markdown-plain-text"')
+      expect(output).toContain('# 这不是标题')
+      expect(output).toContain('*这不是斜体*')
+      expect(output).toContain('[这不是链接](https://example.com)')
+      expect(output).not.toMatch(/<pre(?:\s|>)/)
+      expect(output).not.toMatch(/<h1(?:\s|>)/)
+      expect(output).not.toMatch(/<em(?:\s|>)/)
+      expect(output).not.toMatch(/<a(?:\s|>)/)
+      expect(output).toMatch(/保留  连续空格\n[\s\S]*下一行/)
+    })
+
+    it('supports the text alias and preserves normal code block rendering', () => {
+      const textOutput = renderMarkdown(['```text', '纯文本别名', '```'].join('\n'))
+      expect(textOutput).toContain('class="markdown-plain-text"')
+      expect(textOutput).not.toMatch(/<pre(?:\s|>)/)
+
+      const codeOutput = renderMarkdown(['```ts', 'const value = 1', '```'].join('\n'))
+      expect(codeOutput).toMatch(/<pre(?:\s|>)/)
+      expect(codeOutput).toContain('language-ts')
+      expect(codeOutput).not.toContain('markdown-plain-text')
+    })
+
+    it('preserves raw pre elements with plain-looking code classes', () => {
+      const output = renderMarkdown('<pre><code class="language-plain">raw</code></pre>')
+
+      expect(output).toMatch(/<pre(?:\s|>)/)
+      expect(output).not.toContain('markdown-plain-text')
+      expect(output).toContain('raw')
+    })
 
     it('renders code highlighting, line numbers and highlighted lines from code meta', () => {
       const output = renderMarkdown(`
@@ -230,13 +273,13 @@ describe('htmlSanitizer', () => {
 const x = 1
 const y = 2
 \`\`\`
-`);
+`)
 
-      expect(output).toContain('class="language-js code-highlight"');
-      expect(output).toContain('token keyword');
-      expect(output).toContain('code-line line-number highlight-line');
-      expect(output).toContain('line="1"');
-      expect(output).not.toContain('metastring=');
-    });
-  });
-});
+      expect(output).toContain('class="language-js code-highlight"')
+      expect(output).toContain('token keyword')
+      expect(output).toContain('code-line line-number highlight-line')
+      expect(output).toContain('line="1"')
+      expect(output).not.toContain('metastring=')
+    })
+  })
+})

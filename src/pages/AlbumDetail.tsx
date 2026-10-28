@@ -1,232 +1,422 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Disc3, Play, Heart, ExternalLink, Link2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
-import { clsx } from 'clsx';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import {
+  Disc3,
+  Edit3,
+  Play,
+  Heart,
+  Link2,
+  List,
+  ChevronDown,
+  ChevronUp,
+} from '@/src/components/icons'
+import { clsx } from 'clsx'
 
-import { apiDelete, apiGet, apiPost } from '../lib/apiClient';
-import { useMusic } from '../context/MusicContext';
-import { useAuth } from '../context/AuthContext';
-import { useDialog } from '../components/Dialog';
-import { useToast } from '../components/Toast';
-import { CoverManager } from '../components/CoverManager';
-import { SmartImage } from '../components/SmartImage';
-import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink';
-import { Platform, PlatformIds } from '../types/PlatformIds';
+import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
+import { useMusic } from '../context/MusicContext'
+import { useAuth } from '../context/AuthContext'
+import { useToast } from '../components/Toast'
+import { SmartBackLink } from '../components/SmartBackLink'
+import { SmartImage } from '../components/SmartImage'
+import { CoverPlaceholder } from '../components/CoverPlaceholder'
+import { Lightbox } from '../components/Lightbox'
+import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
+import { toDateValue } from '../lib/dateUtils'
+import { formatMusicCredits } from '../lib/musicCredits'
+import { isPlayableSong } from '../lib/musicPlayback'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
+import { Button, LoadErrorState } from '@/src/components/ui'
+import type { MusicExternalSource } from '../types/entities'
+
+const AlbumFormModal = lazy(() =>
+  import('../components/AlbumFormModal').then((module) => ({ default: module.AlbumFormModal }))
+)
+const AlbumTrackEditor = lazy(() => import('../components/AlbumTrackEditor'))
 
 type SongItem = {
-  docId: string;
-  id: string;
-  title: string;
-  artist: string;
-  album: string;
-  cover: string;
-  audioUrl: string;
-  sourceUrl?: string | null;
-  lyric?: string | null;
-  favoritedByMe?: boolean;
-  trackOrder?: number;
-  primaryPlatform?: Platform | null;
-  platformIds?: PlatformIds;
-};
+  docId: string
+  slug?: string
+  title: string
+  artists: string[]
+  album: string
+  cover: string
+  coverThumbnail?: string
+  audioUrl: string
+  sourceUrl?: string | null
+  lyric?: string | null
+  favoritedByMe?: boolean
+  trackOrder?: number
+  discNumber?: number
+  sources?: MusicExternalSource[]
+  playable?: boolean
+}
 
 type AlbumResponse = {
   album: {
-    id: string;
-    title: string;
-    artist: string;
-    cover: string;
-    description?: string | null;
-    platformUrl?: string | null;
-    tracks: SongItem[];
-  };
-};
+    docId: string
+    slug?: string
+    title: string
+    artist: string
+    cover: string
+    coverThumbnail?: string
+    description?: string | null
+    tags?: string[]
+    sources?: MusicExternalSource[]
+    releaseDate?: string | null
+    tracks: SongItem[]
+    discs?: Array<{ disc: number; name: string }>
+  }
+}
+
+const compareTracks = (a: SongItem, b: SongItem) =>
+  (a.discNumber ?? 1) - (b.discNumber ?? 1) || (a.trackOrder ?? 0) - (b.trackOrder ?? 0)
+
+// JSON-LD 只使用详情 API 已返回的字段
+const buildAlbumJsonLd = (
+  album: NonNullable<AlbumResponse['album']>,
+  url: string
+): Record<string, unknown> => {
+  const jsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'MusicAlbum',
+    name: album.title,
+    url,
+    byArtist: album.artist,
+    numTracks: album.tracks.length,
+  }
+  if (album.cover) {
+    jsonLd.image = toAbsoluteSeoUrl(album.cover)
+  }
+  if (toDateValue(album.releaseDate)) {
+    jsonLd.datePublished = album.releaseDate
+  }
+  return jsonLd
+}
 
 const AlbumDetail = () => {
-  const { albumId } = useParams();
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [album, setAlbum] = useState<AlbumResponse['album'] | null>(null);
-  const [favoriting, setFavoriting] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [descExpanded, setDescExpanded] = useState(false);
-  const [descNeedExpand, setDescNeedExpand] = useState(false);
-  const descRef = useRef<HTMLDivElement>(null);
-  const { user, isAdmin } = useAuth();
-  const dialog = useDialog();
+  const { albumId } = useParams()
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
+  const [album, setAlbum] = useState<AlbumResponse['album'] | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [managingTracks, setManagingTracks] = useState(false)
+  const previousAlbumIdRef = useRef<string | undefined>(undefined)
+  const [favoriting, setFavoriting] = useState<string | null>(null)
+  const [descExpanded, setDescExpanded] = useState(false)
+  const [descNeedExpand, setDescNeedExpand] = useState(false)
+  const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
+  const descRef = useRef<HTMLDivElement>(null)
+  const { user, isAdmin } = useAuth()
+  const editableAlbum = useMemo(
+    () => (editing && album ? { ...album, description: album.description ?? undefined } : null),
+    [album, editing]
+  )
 
   useEffect(() => {
     if (descRef.current && !descExpanded) {
-      setDescNeedExpand(descRef.current.scrollHeight > descRef.current.clientHeight + 1);
+      setDescNeedExpand(descRef.current.scrollHeight > descRef.current.clientHeight + 1)
     }
-  }, [album?.description, descExpanded]);
-  const { currentSong, playAlbumTracks } = useMusic();
-  const { show } = useToast();
+  }, [album?.description, descExpanded])
+  const { currentSong, playAlbumTracks } = useMusic()
+  const { show } = useToast()
 
-  const fetchAlbum = async () => {
-    if (!albumId) return;
-    setLoading(true);
-    try {
-      const response = await apiGet<AlbumResponse>(`/api/albums/${albumId}`);
-      setAlbum(response.album || null);
-    } catch (error) {
-      console.error('Fetch album detail error:', error);
-      setAlbum(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const sortedTracks = useMemo(
+    () => [...(album?.tracks || [])].sort(compareTracks),
+    [album?.tracks]
+  )
+  const displayTracks = useMemo(() => {
+    let previousDisc = 0
+    let discIndex = 0
+    return sortedTracks.map((track) => {
+      const disc = track.discNumber ?? 1
+      const firstInDisc = disc !== previousDisc
+      discIndex = firstInDisc ? 1 : discIndex + 1
+      previousDisc = disc
+      return { track, disc, discIndex, firstInDisc }
+    })
+  }, [sortedTracks])
+
+  const playableTracks = useMemo(() => sortedTracks.filter(isPlayableSong), [sortedTracks])
 
   useEffect(() => {
-    fetchAlbum();
-  }, [albumId]);
+    if (!albumId) {
+      previousAlbumIdRef.current = undefined
+      setLoading(false)
+      setLoadError(null)
+      setAlbum(null)
+      return
+    }
+
+    const preserveAlbum = previousAlbumIdRef.current === albumId
+    previousAlbumIdRef.current = albumId
+    let cancelled = false
+    setLoading(true)
+    setLoadError(null)
+    if (!preserveAlbum) setAlbum(null)
+    apiGet<AlbumResponse>(`/api/albums/${albumId}`)
+      .then((response) => {
+        if (!cancelled) setAlbum(response.album || null)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        console.error('Fetch album detail error:', error)
+        setLoadError(error)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [albumId, retryNonce])
 
   const handlePlay = (index = 0) => {
-    if (!album) return;
-    const tracks = [...album.tracks].sort((a, b) => (a.trackOrder || 0) - (b.trackOrder || 0));
-    playAlbumTracks(album.id, album.title, tracks, index);
-  };
+    if (!album) return
+    if (!playableTracks.length) {
+      show('当前专辑暂无可播放音源', { variant: 'error' })
+      return
+    }
+
+    const selectedTrack = sortedTracks[index]
+    if (selectedTrack && !isPlayableSong(selectedTrack)) {
+      show('这首歌暂无可播放音源', { variant: 'error' })
+      return
+    }
+
+    const playableIndex = selectedTrack
+      ? Math.max(
+          0,
+          playableTracks.findIndex((track) => track.docId === selectedTrack.docId)
+        )
+      : 0
+    playAlbumTracks(album.docId, album.title, playableTracks, playableIndex)
+  }
 
   const toggleFavorite = async (song: SongItem) => {
     if (!user || !song.docId || favoriting === song.docId) {
-      if (!user) show('请先登录后收藏', { variant: 'error' });
-      return;
+      if (!user) show('请先登录后收藏', { variant: 'error' })
+      return
     }
 
-    setFavoriting(song.docId);
+    setFavoriting(song.docId)
     try {
       if (song.favoritedByMe) {
-        await apiDelete(`/api/favorites/music/${song.docId}`);
+        await apiDelete(`/api/favorites/music/${song.docId}`)
       } else {
         await apiPost('/api/favorites', {
           targetType: 'music',
           targetId: song.docId,
-        });
+        })
       }
 
       setAlbum((prev) => {
-        if (!prev) return prev;
+        if (!prev) return prev
         return {
           ...prev,
-          tracks: prev.tracks.map((track) => (
-            track.docId === song.docId
-              ? { ...track, favoritedByMe: !track.favoritedByMe }
-              : track
-          )),
-        };
-      });
+          tracks: prev.tracks.map((track) =>
+            track.docId === song.docId ? { ...track, favoritedByMe: !track.favoritedByMe } : track
+          ),
+        }
+      })
     } catch (error) {
-      console.error('Toggle favorite in album detail error:', error);
-      show('收藏操作失败，请稍后重试', { variant: 'error' });
+      console.error('Toggle favorite in album detail error:', error)
+      show(getErrorMessage(error, '收藏操作失败，请稍后重试'), { variant: 'error' })
     } finally {
-      setFavoriting(null);
+      setFavoriting(null)
     }
-  };
+  }
 
   const handleCopyAlbumLink = async () => {
-    if (!album?.id) return;
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/album/${album.id}`));
+    const albumPublicId = album?.slug || album?.docId
+    if (!albumPublicId) return
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/album/${albumPublicId}`))
     if (copied) {
-      show('专辑内链已复制');
-      return;
+      show('专辑内链已复制')
+      return
     }
-    show('复制链接失败，请稍后重试', { variant: 'error' });
-  };
+    show('复制链接失败，请稍后重试', { variant: 'error' })
+  }
 
-  const handleDeleteAlbum = async () => {
-    if (!albumId || !album || isDeleting) return;
-    const confirmed = await dialog.confirm({
-      title: '删除专辑',
-      message: `确定要删除专辑《${album.title}》吗？删除后可在回收站恢复。`,
-      confirmText: '删除',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
+  // SEO 元数据：加载中/失败不可索引，成功后输出专辑详情与 MusicAlbum JSON-LD
+  const albumPath = `/album/${albumId}`
+  const albumSeoMetadata: SeoMetadata = album
+    ? {
+        title: `${album.title}｜${SEO_SITE_NAME}`,
+        description: summarizeSeoText(
+          album.description,
+          `${album.artist}的专辑，共 ${album.tracks.length} 首歌曲。`
+        ),
+        canonicalPath: albumPath,
+        robots: 'index,follow',
+        ogType: 'music.album',
+        ogImage: album.cover || album.coverThumbnail || undefined,
+        ogImageAlt: album.title,
+        jsonLd: buildAlbumJsonLd(album, toAbsoluteSeoUrl(albumPath)),
+      }
+    : loading
+      ? getDetailFallbackSeo({ canonicalPath: albumPath, title: SEO_SITE_NAME })
+      : getDetailFallbackSeo({
+          canonicalPath: albumPath,
+          title: `专辑不存在｜${SEO_SITE_NAME}`,
+          description: '当前专辑不存在或已被删除。',
+        })
+  useSeo(albumSeoMetadata)
 
-    try {
-      setIsDeleting(true);
-      await apiDelete(`/api/albums/${albumId}`);
-      show('专辑已删除');
-      navigate('/music');
-    } catch (error) {
-      console.error('Delete album failed:', error);
-      show(error instanceof Error ? error.message : '删除专辑失败', { variant: 'error' });
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  if (loading) {
+  if (loadError && !album) {
     return (
-      <div
-        className="min-h-screen antique-page bg-bg-primary"
-      >
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container">
+          <SmartBackLink
+            fallbackTo="/music"
+            fallbackLabel="返回音乐馆"
+            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+          />
+          <LoadErrorState
+            error={loadError}
+            className="mt-6"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (loading && !album) {
+    return (
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container">
           <div className="h-40 bg-surface-alt rounded animate-pulse" />
         </div>
       </div>
-    );
+    )
   }
 
   if (!album) {
     return (
-      <div
-        className="min-h-screen antique-page bg-bg-primary"
-      >
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-          <Link to="/music" className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors">
-            <ArrowLeft size={16} /> 返回音乐馆
-          </Link>
+      <div className="mobile-page-shell antique-page">
+        <div className="mobile-page-container">
+          <SmartBackLink
+            fallbackTo="/music"
+            fallbackLabel="返回音乐馆"
+            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+          />
           <div className="mt-6 bg-surface rounded border border-border p-10 text-center text-text-muted italic tracking-[0.1em]">
             专辑不存在或已被删除
           </div>
         </div>
       </div>
-    );
+    )
   }
+
+  const coverPreviewSrc = album.coverThumbnail || album.cover
 
   return (
     <div
-      className="min-h-screen antique-detail text-[var(--color-text-antique)] bg-bg-primary"
+      className="mobile-page-shell antique-detail text-[var(--color-text-antique)]"
+      aria-busy={loading || undefined}
     >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-        <Link to="/music" className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5">
-          <ArrowLeft size={16} /> 返回音乐馆
-        </Link>
+      <div className="mobile-page-container">
+        <SmartBackLink
+          fallbackTo="/music"
+          fallbackLabel="返回音乐馆"
+          className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
+        />
+        {loadError && (
+          <LoadErrorState
+            className="mb-5"
+            error={loadError}
+            description="专辑内容可能不是最新内容。"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
+        )}
 
         {/* Detail Header */}
-        <div className="flex flex-col md:flex-row gap-5 mb-6 pb-6 border-b border-border">
-          <SmartImage
-            src={album.cover}
-            alt={album.title}
-            className="w-40 h-40 md:w-44 md:h-44 object-cover flex-shrink-0 rounded bg-surface-alt"
-          />
+        <div className="mb-6 flex flex-col gap-5 border-b border-border pb-6 sm:flex-row">
+          <button
+            type="button"
+            data-press-feedback="ripple"
+            onClick={() => setCoverLightboxOpen(true)}
+            className="h-40 w-40 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary press-feedback-cover sm:h-44 sm:w-44"
+            aria-label={`查看 ${album.title} 封面原图`}
+          >
+            <SmartImage
+              src={coverPreviewSrc}
+              alt={album.title}
+              className="w-full h-full object-cover"
+              fallback={<CoverPlaceholder icon={<Disc3 size={24} />} label="无封面" />}
+            />
+          </button>
           <div className="flex-1 flex flex-col justify-center min-w-0">
-            <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em] mb-1.5">{album.title}</h1>
-            <p className="text-base text-text-secondary tracking-[0.08em] mb-4">{album.artist} · {album.tracks.length} 首歌曲</p>
-            <div className="flex flex-wrap gap-3">
+            <h1 className="mobile-page-title mb-1.5">{album.title}</h1>
+            <p className="text-base text-text-secondary tracking-[0.08em] mb-4">
+              {album.artist} · {album.tracks.length} 首歌曲
+            </p>
+            {!!album.tags?.length && (
+              <div className="mb-4 flex flex-wrap gap-1.5">
+                {album.tags.map((tag) => (
+                  <Link
+                    key={tag}
+                    to={`/music?tab=albums&albumTag=${encodeURIComponent(tag)}`}
+                    data-press-feedback="inline"
+                    className="min-w-0 max-w-full rounded-sm border border-[var(--book-ink-line)] px-1.5 py-0.5 text-wrap-anywhere text-xs text-text-secondary transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
+                  >
+                    {tag}
+                  </Link>
+                ))}
+              </div>
+            )}
+            <div className="mobile-action-row justify-start">
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={() => handlePlay(0)}
-                disabled={album.tracks.length === 0}
-                className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all disabled:opacity-50"
+                disabled={playableTracks.length === 0}
+                className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Play size={16} /> 播放专辑
+                <Play size={16} /> {playableTracks.length > 0 ? '播放专辑' : '暂无音源'}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={handleCopyAlbumLink}
                 className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
               >
                 <Link2 size={15} /> 复制内链
               </button>
-              {album.platformUrl ? (
-                <a
-                  href={album.platformUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
+              {isAdmin && (
+                <Button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  variant="secondary"
+                  size="md"
+                  leftIcon={<Edit3 size={15} />}
+                  className="border-border bg-transparent px-5 py-2.5 text-[0.9375rem] hover:border-brand-gold"
                 >
-                  <ExternalLink size={15} /> 原始链接
-                </a>
-              ) : null}
+                  编辑
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  type="button"
+                  onClick={() => setManagingTracks(true)}
+                  variant="secondary"
+                  size="md"
+                  leftIcon={<List size={15} />}
+                  className="border-border bg-transparent px-5 py-2.5 text-[0.9375rem] hover:border-brand-gold"
+                >
+                  管理
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -238,18 +428,30 @@ const AlbumDetail = () => {
               <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
               专辑简介
             </h2>
-            <div ref={descRef} className={clsx('text-text-secondary leading-relaxed whitespace-pre-wrap', !descExpanded && 'line-clamp-3')}>
+            <div
+              ref={descRef}
+              className={clsx(
+                'text-text-secondary leading-relaxed whitespace-pre-wrap',
+                !descExpanded && 'line-clamp-3'
+              )}
+            >
               {album.description}
             </div>
             {descNeedExpand && (
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={() => setDescExpanded(!descExpanded)}
                 className="text-xs px-3 py-1.5 border border-border text-text-muted hover:text-brand-gold hover:border-brand-gold rounded transition-all duration-300 mt-3 inline-flex items-center gap-0.5"
               >
                 {descExpanded ? (
-                  <>收起 <ChevronUp size={12} /></>
+                  <>
+                    收起 <ChevronUp size={12} />
+                  </>
                 ) : (
-                  <>展开 <ChevronDown size={12} /></>
+                  <>
+                    展开 <ChevronDown size={12} />
+                  </>
                 )}
               </button>
             )}
@@ -263,39 +465,75 @@ const AlbumDetail = () => {
             曲目列表
           </h2>
           <div className="flex flex-col">
-            {album.tracks.map((track, index) => (
-              <div
-                key={track.docId}
-                onClick={() => navigate(`/music/${track.docId}`)}
-                className={clsx(
-                  'flex items-center gap-4 py-3 px-1 border-b border-border cursor-pointer transition-colors',
-                  currentSong?.docId === track.docId && 'bg-brand-gold/10'
-                )}
-              >
-                <span className="text-sm text-text-muted w-7 text-right flex-shrink-0">{(track.trackOrder ?? index) + 1}</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handlePlay(index); }}
-                  className="w-8 h-8 flex items-center justify-center text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded-full transition-all flex-shrink-0"
-                >
-                  <Play size={14} />
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-base text-text-primary truncate hover:text-brand-gold transition-colors">{track.title}</p>
-                  <p className="text-xs text-text-muted truncate">{track.artist}</p>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); toggleFavorite(track); }}
-                  disabled={favoriting === track.docId}
-                  className={clsx(
-                    'p-2 transition-colors flex-shrink-0',
-                    track.favoritedByMe ? 'theme-text-error' : 'text-text-muted theme-icon-button-danger',
-                    favoriting === track.docId && 'opacity-50 cursor-not-allowed',
+            {displayTracks.map(({ track, disc, discIndex, firstInDisc }, index) => {
+              const playable = isPlayableSong(track)
+              return (
+                <React.Fragment key={track.docId}>
+                  {firstInDisc && (
+                    <h3 className="pt-5 pb-2 text-sm font-semibold text-text-secondary">
+                      {album.discs?.find((item) => item.disc === disc)?.name || `Disc ${disc}`}
+                    </h3>
                   )}
-                >
-                  <Heart size={15} />
-                </button>
-              </div>
-            ))}
+                  <div
+                    className={clsx(
+                      'flex items-center gap-3 py-3 px-1 border-b border-border transition-colors sm:gap-4',
+                      currentSong?.docId === track.docId && 'bg-brand-gold/10'
+                    )}
+                  >
+                    <span className="w-7 flex-shrink-0 text-right text-sm text-text-muted">
+                      {discIndex}
+                    </span>
+                    <button
+                      type="button"
+                      data-press-feedback="ripple"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handlePlay(index)
+                      }}
+                      disabled={!playable}
+                      className="w-8 h-8 flex items-center justify-center text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded-full transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-text-secondary disabled:hover:bg-transparent"
+                      title={playable ? '播放' : '暂无可播放音源'}
+                    >
+                      <Play size={14} />
+                    </button>
+                    <Link
+                      to={`/music/${track.slug || track.docId}`}
+                      className="flex min-h-11 min-w-0 flex-1 flex-col justify-center"
+                      data-pressable
+                      data-press-feedback="state"
+                    >
+                      <p className="text-base text-text-primary truncate hover:text-brand-gold transition-colors">
+                        {track.title}
+                      </p>
+                      <p className="text-xs text-text-muted truncate">
+                        {formatMusicCredits(track.artists, '未知歌手')}
+                      </p>
+                      {!playable ? (
+                        <p className="text-xs text-text-muted truncate">暂无可播放音源</p>
+                      ) : null}
+                    </Link>
+                    <button
+                      type="button"
+                      data-press-feedback="ripple"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleFavorite(track)
+                      }}
+                      disabled={favoriting === track.docId}
+                      className={clsx(
+                        'p-2 transition-colors flex-shrink-0',
+                        track.favoritedByMe
+                          ? 'theme-text-error'
+                          : 'text-text-muted theme-icon-button-danger',
+                        favoriting === track.docId && 'opacity-50 cursor-not-allowed'
+                      )}
+                    >
+                      <Heart size={15} />
+                    </button>
+                  </div>
+                </React.Fragment>
+              )
+            })}
           </div>
           {album.tracks.length === 0 ? (
             <div className="py-10 text-center text-text-muted italic">
@@ -304,34 +542,44 @@ const AlbumDetail = () => {
             </div>
           ) : null}
         </div>
-
-        {/* Admin */}
-        {isAdmin && albumId && (
-          <div className="mb-10">
-            <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 flex items-center gap-2">
-              <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-              管理功能
-            </h2>
-            <div className="flex flex-wrap gap-3">
-              <CoverManager
-                resourceType="album"
-                resourceId={albumId}
-                currentCover={album.cover}
-                onCoverUpdated={(newCoverUrl) => setAlbum((prev) => prev ? { ...prev, cover: newCoverUrl } : prev)}
-              />
-              <button
-                onClick={handleDeleteAlbum}
-                disabled={isDeleting}
-                className="inline-flex items-center gap-2 px-5 py-2 theme-button-danger rounded text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Trash2 size={15} /> {isDeleting ? '删除中...' : '删除专辑'}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
-    </div>
-  );
-};
 
-export default AlbumDetail;
+      <Lightbox
+        open={coverLightboxOpen}
+        images={[
+          {
+            id: album.docId,
+            url: coverPreviewSrc,
+            originalUrl: album.cover,
+            name: `${album.title} 封面`,
+          },
+        ]}
+        initialIndex={0}
+        onClose={() => setCoverLightboxOpen(false)}
+      />
+      {isAdmin && editing && (
+        <Suspense fallback={<div role="status">编辑器加载中...</div>}>
+          <AlbumFormModal
+            open
+            mode="edit"
+            album={editableAlbum}
+            onClose={() => setEditing(false)}
+            onSuccess={() => setRetryNonce((value) => value + 1)}
+          />
+        </Suspense>
+      )}
+      {isAdmin && managingTracks && (
+        <Suspense fallback={<div role="status">曲目管理加载中...</div>}>
+          <AlbumTrackEditor
+            open
+            album={{ docId: album.docId, slug: album.slug, title: album.title }}
+            onClose={() => setManagingTracks(false)}
+            onChanged={() => setRetryNonce((value) => value + 1)}
+          />
+        </Suspense>
+      )}
+    </div>
+  )
+}
+
+export default AlbumDetail

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock, MapPin, Tag, User as UserIcon } from 'lucide-react'
+import { Clock, MapPin, Tag, User as UserIcon } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { Lightbox } from '../../components/Lightbox'
 import MarkdownRenderer from '../../components/MarkdownRenderer'
@@ -7,25 +7,25 @@ import { SmartImage } from '../../components/SmartImage'
 import WikiMarkdown from '../wiki/WikiMarkdown'
 import { formatDate, formatDateTime } from '../../lib/dateUtils'
 import type { AdminReviewQueueMergedItem } from '../../types/api'
+import { useWikiCategories } from '../../hooks/useWikiCategories'
+import { Button } from '@/src/components/ui'
 
 type AdminReviewContentPreviewProps = {
   item: AdminReviewQueueMergedItem
 }
 
-const wikiCategoryLabels: Record<string, string> = {
-  biography: '人物',
-  music: '音乐',
-  album: '专辑',
-  timeline: '时间线',
-  event: '事件',
-}
-
 const formatDateValue = (value: string | undefined, pattern: string) =>
   value ? formatDate(value, pattern) : 'N/A'
 
+const WikiCategoryLabel = ({ category }: { category?: string }) => {
+  const { getCategoryLabel } = useWikiCategories()
+
+  return <>{category ? getCategoryLabel(category) : '百科'}</>
+}
+
 const getContentLabel = (item: AdminReviewQueueMergedItem) => {
   if (item.reviewType === 'wiki') {
-    return wikiCategoryLabels[item.category || ''] || item.category || '百科'
+    return <WikiCategoryLabel category={item.category} />
   }
 
   if (item.reviewType === 'gallery') {
@@ -46,6 +46,7 @@ const getAuthorLabel = (item: AdminReviewQueueMergedItem) => {
 const getReviewTypeLabel = (item: AdminReviewQueueMergedItem) => {
   if (item.reviewType === 'wiki') return '百科'
   if (item.reviewType === 'gallery') return '图集'
+  if (item.reviewType === 'ticket') return '盘票'
   return '帖子'
 }
 
@@ -132,9 +133,9 @@ const renderArticlePreview = (item: AdminReviewQueueMergedItem) => (
       </div>
     </header>
 
-    <div className="flex items-end justify-between border-b border-border mb-5">
+    <div className="flex items-end justify-between mb-5">
       <div className="flex gap-5 items-center">
-        <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
+        <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold">
           {getContentLabel(item)}
         </span>
       </div>
@@ -178,17 +179,19 @@ const renderGalleryPreview = (
             {getReviewTypeLabel(item)}
           </span>
         </div>
-        <p className="mt-2 text-text-secondary leading-relaxed">
-          {item.description || '暂无描述'}
-        </p>
-        {item.copyright && (
-          <p className="text-xs text-text-muted mt-1">{item.copyright}</p>
+        {item.description ? (
+          <div className="prose mt-2 max-w-none font-body leading-relaxed text-text-secondary">
+            <MarkdownRenderer content={item.description} />
+          </div>
+        ) : (
+          <p className="mt-2 text-text-secondary leading-relaxed">暂无描述</p>
         )}
+        {item.copyright && <p className="text-xs text-text-muted mt-1">{item.copyright}</p>}
       </header>
 
-      <div className="flex items-end justify-between border-b border-border mb-6 pb-2">
+      <div className="flex items-end justify-between mb-6 pb-2">
         <div className="flex items-center gap-4 flex-wrap">
-          <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
+          <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold">
             图片（{images.length}）
           </span>
         </div>
@@ -208,11 +211,13 @@ const renderGalleryPreview = (
             const previewSrc = image.thumbnailUrl || image.url || ''
 
             return (
-              <button
+              <Button
                 key={image.id}
                 type="button"
+                variant="ghost"
+                data-press-feedback="ripple"
                 onClick={() => onOpenLightbox(index)}
-                className="group relative aspect-[3/4] cursor-zoom-in overflow-hidden rounded"
+                className="group relative aspect-[3/4] h-auto cursor-zoom-in overflow-hidden rounded border-0 p-0 press-feedback-cover"
               >
                 {previewSrc ? (
                   <SmartImage
@@ -230,7 +235,7 @@ const renderGalleryPreview = (
                     查看原图
                   </div>
                 </div>
-              </button>
+              </Button>
             )
           })}
         </div>
@@ -239,12 +244,43 @@ const renderGalleryPreview = (
       {(item.tags?.length || item.locationDetail || item.locationName) && (
         <div className="grid grid-cols-1 gap-8 border-t border-border lg:grid-cols-[1fr_280px]">
           <div />
-          <aside>{renderTags(item.tags)}{renderLocation(item)}</aside>
+          <aside>
+            {renderTags(item.tags)}
+            {renderLocation(item)}
+          </aside>
         </div>
       )}
     </>
   )
 }
+const renderTicketPreview = (item: AdminReviewQueueMergedItem) => (
+  <>
+    <header className="mb-7">
+      <div className="flex items-end justify-between flex-wrap gap-3">
+        <h1 className="text-[1.75rem] font-semibold tracking-[0.12em] text-text-primary">
+          {item.eventName || item.customEventName || '盘票信息'}
+        </h1>
+        <span className="px-3 py-1 rounded bg-surface-alt text-brand-gold text-xs font-medium">
+          {item.type === 'offer' ? '出票' : '收票'}
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-text-secondary md:grid-cols-4">
+        <span>数量：{item.quantity || 0}</span>
+        <span>票档：{item.ticketTier || '未填写'}</span>
+        <span>座位：{item.seat || '未填写'}</span>
+        <span>作者：{getAuthorLabel(item)}</span>
+      </div>
+    </header>
+    <section className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
+      <div className="prose prose-lg max-w-none font-body leading-relaxed text-text-primary">
+        <MarkdownRenderer content={item.description || ''} />
+        <h3>联系方式</h3>
+        <MarkdownRenderer content={item.contact || ''} />
+      </div>
+      {renderSidebar(item)}
+    </section>
+  </>
+)
 
 const AdminReviewContentPreview = ({ item }: AdminReviewContentPreviewProps) => {
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -258,7 +294,7 @@ const AdminReviewContentPreview = ({ item }: AdminReviewContentPreviewProps) => 
 
   return (
     <div
-      className="min-h-[calc(100vh-10rem)] bg-bg-primary rounded border border-border"
+      className="min-h-[calc(100vh-10rem)] bg-[var(--color-bg-antique)] rounded border border-border"
       style={{
         fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
         lineHeight: 1.8,
@@ -267,7 +303,9 @@ const AdminReviewContentPreview = ({ item }: AdminReviewContentPreviewProps) => 
       <div className="max-w-[1100px] mx-auto px-6 py-8 pb-16 wiki-detail-page">
         {item.reviewType === 'gallery'
           ? renderGalleryPreview(item, handleOpenLightbox)
-          : renderArticlePreview(item)}
+          : item.reviewType === 'ticket'
+            ? renderTicketPreview(item)
+            : renderArticlePreview(item)}
       </div>
 
       {item.reviewType === 'gallery' ? (

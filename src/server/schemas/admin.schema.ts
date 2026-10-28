@@ -1,17 +1,45 @@
 import { z } from 'zod'
 import { passwordSchema } from './auth.schema'
 import {
+  CONTENT_LIMITS,
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   PROFILE_SIGNATURE_MAX_LENGTH,
   WIKI_MAX_CONTENT_SIZE,
 } from '../../lib/contentLimits'
 
 export const backupRestoreSchema = z.object({
-  password: z.string().min(1),
+  confirm: z.preprocess((value) => value === true || value === 'true', z.literal(true)),
+  password: z.string().optional(),
 })
+
+export const backupNoteSchema = z
+  .object({
+    note: z
+      .string()
+      .max(
+        CONTENT_LIMITS.admin.backupNote,
+        `备份备注不能超过${CONTENT_LIMITS.admin.backupNote}个字符`
+      ),
+  })
+  .strip()
+
+export const backupCreateSchema = z.preprocess(
+  (value) => value ?? {},
+  backupNoteSchema.partial().strip()
+)
 
 export const adminResetUserPasswordSchema = z.object({
   newPassword: passwordSchema,
+})
+
+export const adminUpdateUserRoleSchema = z.object({
+  role: z.enum(['user', 'admin', 'super_admin'], {
+    error: '无效角色',
+  }),
+  currentPassword: z
+    .string({ error: '当前密码必须是字符串' })
+    .min(1, '当前密码不能为空')
+    .optional(),
 })
 
 const adminUserEmailSchema = z
@@ -71,9 +99,15 @@ export const adminUpdateUserSchema = z
 
 const idListSchema = (fieldName: string) =>
   z
-    .array(z.string({ error: `${fieldName} 必须是字符串` }).trim().min(1, `${fieldName} 不能为空`), {
-      error: `${fieldName} 必须是数组`,
-    })
+    .array(
+      z
+        .string({ error: `${fieldName} 必须是字符串` })
+        .trim()
+        .min(1, `${fieldName} 不能为空`),
+      {
+        error: `${fieldName} 必须是数组`,
+      }
+    )
     .min(1, `请选择${fieldName}`)
     .max(200, `一次最多处理 200 个${fieldName}`)
     .transform((items) => [...new Set(items)])
@@ -121,4 +155,48 @@ export const adminBatchMusicDisplaySchema = z
         message: '手动专辑名不能为空',
       })
     }
+  })
+const adminAlbumTrackSongSchema = z.object({
+  songDocId: z.string({ error: '歌曲 ID 必须是字符串' }).trim().min(1, '歌曲 ID 不能为空').max(191),
+  trackOrder: z.number({ error: '轨序必须是数字' }).int().min(0).max(5000),
+})
+
+const adminAlbumTrackDiscSchema = z.object({
+  disc: z.number({ error: 'Disc 编号必须是数字' }).int().min(1).max(20),
+  name: z
+    .string({ error: 'Disc 名称必须是字符串' })
+    .trim()
+    .min(1, 'Disc 名称不能为空')
+    .max(CONTENT_LIMITS.album.discName),
+  songs: z.array(adminAlbumTrackSongSchema).max(5000),
+})
+
+export const adminAlbumTrackReorderSchema = z
+  .object({
+    updatedAt: z.iso.datetime(),
+    tracks: z.array(adminAlbumTrackDiscSchema).max(20),
+  })
+  .superRefine((value, ctx) => {
+    const discs = new Set<number>()
+    const songs = new Set<string>()
+    value.tracks.forEach((disc, discIndex) => {
+      if (discs.has(disc.disc)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tracks', discIndex, 'disc'],
+          message: 'Disc 编号不能重复',
+        })
+      }
+      discs.add(disc.disc)
+      disc.songs.forEach((song, songIndex) => {
+        if (songs.has(song.songDocId)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['tracks', discIndex, 'songs', songIndex, 'songDocId'],
+            message: '歌曲不能重复出现在多个曲目位置',
+          })
+        }
+        songs.add(song.songDocId)
+      })
+    })
   })

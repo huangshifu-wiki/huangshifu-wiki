@@ -1,9 +1,5 @@
 import dotenv from 'dotenv'
-import {
-  assertSafeProductionEnv,
-  isProductionRuntime,
-  isTestRuntime,
-} from './utils/runtimeEnv'
+import { assertSafeProductionEnv, isProductionRuntime, isTestRuntime } from './utils/runtimeEnv'
 
 const isTestEnv = isTestRuntime()
 

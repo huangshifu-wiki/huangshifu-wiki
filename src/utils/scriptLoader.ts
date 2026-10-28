@@ -4,13 +4,13 @@
  */
 
 export interface ScriptConfig {
-  src: string;
-  async?: boolean;
-  defer?: boolean;
-  module?: boolean;
-  crossOrigin?: 'anonymous' | 'use-credentials';
-  integrity?: string;
-  id?: string;
+  src: string
+  async?: boolean
+  defer?: boolean
+  module?: boolean
+  crossOrigin?: 'anonymous' | 'use-credentials'
+  integrity?: string
+  id?: string
   /**
    * 加载时机策略
    * - 'immediate': 立即加载（仅用于关键脚本）
@@ -18,81 +18,90 @@ export interface ScriptConfig {
    * - 'interaction': 用户首次交互后加载
    * - 'visible': 页面可见后加载
    */
-  loadStrategy?: 'immediate' | 'idle' | 'interaction' | 'visible';
+  loadStrategy?: 'immediate' | 'idle' | 'interaction' | 'visible'
   /**
    * 延迟时间（毫秒），在 loadStrategy 为 'idle' 时作为保底超时
    */
-  delay?: number;
+  delay?: number
   /**
    * 加载超时时间（毫秒）
    */
-  timeout?: number;
+  timeout?: number
 }
 
 /**
  * 已加载脚本的缓存
  */
-const loadedScripts = new Set<string>();
+const loadedScripts = new Set<string>()
 
 /**
  * 检查脚本是否已加载
  */
 export function isScriptLoaded(src: string): boolean {
-  return loadedScripts.has(src) || document.querySelector(`script[src="${src}"]`) !== null;
+  return loadedScripts.has(src) || document.querySelector(`script[src="${src}"]`) !== null
 }
 
 /**
  * 加载单个脚本
  */
 export function loadScript(config: ScriptConfig): Promise<HTMLScriptElement> {
-  const { src, async = true, defer = true, module = false, crossOrigin, integrity, id, timeout = 10000 } = config;
+  const {
+    src,
+    async = true,
+    defer = true,
+    module = false,
+    crossOrigin,
+    integrity,
+    id,
+    timeout = 10000,
+  } = config
 
   // 避免重复加载
   if (isScriptLoaded(src)) {
-    const existingScript = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement;
-    return Promise.resolve(existingScript);
+    const existingScript = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement
+    return Promise.resolve(existingScript)
   }
 
   return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = async;
-    script.defer = defer;
+    const script = document.createElement('script')
+    script.src = src
+    script.async = async
+    script.defer = defer
 
     if (module) {
-      script.type = 'module';
+      script.type = 'module'
     }
 
     if (crossOrigin) {
-      script.crossOrigin = crossOrigin;
+      script.crossOrigin = crossOrigin
     }
 
     if (integrity) {
-      script.integrity = integrity;
+      script.integrity = integrity
     }
 
     if (id) {
-      script.id = id;
+      script.id = id
     }
 
     // 超时处理
     const timeoutId = setTimeout(() => {
-      reject(new Error(`Script load timeout: ${src}`));
-    }, timeout);
+      reject(new Error(`Script load timeout: ${src}`))
+    }, timeout)
 
     script.onload = () => {
-      clearTimeout(timeoutId);
-      loadedScripts.add(src);
-      resolve(script);
-    };
+      clearTimeout(timeoutId)
+      loadedScripts.add(src)
+      resolve(script)
+    }
 
     script.onerror = () => {
-      clearTimeout(timeoutId);
-      reject(new Error(`Failed to load script: ${src}`));
-    };
+      clearTimeout(timeoutId)
+      reject(new Error(`Failed to load script: ${src}`))
+    }
 
-    document.head.appendChild(script);
-  });
+    document.head.appendChild(script)
+  })
 }
 
 /**
@@ -102,31 +111,31 @@ export function loadScript(config: ScriptConfig): Promise<HTMLScriptElement> {
 export function loadScriptWhenIdle(config: ScriptConfig): Promise<HTMLScriptElement> {
   return new Promise((resolve, reject) => {
     const load = () => {
-      loadScript(config).then(resolve).catch(reject);
-    };
+      loadScript(config).then(resolve).catch(reject)
+    }
 
     // 保底延迟时间
-    const delay = config.delay || 2000;
+    const delay = config.delay || 2000
 
     // 如果 requestIdleCallback 可用，使用它
     if ('requestIdleCallback' in window) {
       const idleCallbackId = requestIdleCallback(
         () => {
-          load();
+          load()
         },
         { timeout: delay }
-      );
+      )
 
       // 同时设置保底超时
       setTimeout(() => {
-        cancelIdleCallback(idleCallbackId);
-        load();
-      }, delay);
+        cancelIdleCallback(idleCallbackId)
+        load()
+      }, delay)
     } else {
       // 降级方案：使用 setTimeout
-      setTimeout(load, delay);
+      setTimeout(load, delay)
     }
-  });
+  })
 }
 
 /**
@@ -134,29 +143,32 @@ export function loadScriptWhenIdle(config: ScriptConfig): Promise<HTMLScriptElem
  */
 export function loadScriptOnInteraction(config: ScriptConfig): Promise<HTMLScriptElement> {
   return new Promise((resolve, reject) => {
-    const events = ['click', 'touchstart', 'keydown', 'scroll', 'mousemove'];
-    let loaded = false;
+    const events = ['click', 'touchstart', 'keydown', 'scroll', 'mousemove']
+    let loaded = false
 
     const handler = () => {
-      if (loaded) return;
-      loaded = true;
+      if (loaded) return
+      loaded = true
 
       // 移除所有事件监听
-      events.forEach(event => {
-        window.removeEventListener(event, handler, { capture: true } as EventListenerOptions);
-      });
+      events.forEach((event) => {
+        window.removeEventListener(event, handler, { capture: true } as EventListenerOptions)
+      })
 
-      loadScript(config).then(resolve).catch(reject);
-    };
+      loadScript(config).then(resolve).catch(reject)
+    }
 
     // 监听用户交互事件
-    events.forEach(event => {
-      window.addEventListener(event, handler, { capture: true, passive: true } as EventListenerOptions);
-    });
+    events.forEach((event) => {
+      window.addEventListener(event, handler, {
+        capture: true,
+        passive: true,
+      } as EventListenerOptions)
+    })
 
     // 保底：5秒后自动加载
-    setTimeout(handler, 5000);
-  });
+    setTimeout(handler, 5000)
+  })
 }
 
 /**
@@ -165,63 +177,65 @@ export function loadScriptOnInteraction(config: ScriptConfig): Promise<HTMLScrip
 export function loadScriptOnVisible(config: ScriptConfig): Promise<HTMLScriptElement> {
   return new Promise((resolve, reject) => {
     if (document.visibilityState === 'visible') {
-      loadScript(config).then(resolve).catch(reject);
-      return;
+      loadScript(config).then(resolve).catch(reject)
+      return
     }
 
     const handler = () => {
       if (document.visibilityState === 'visible') {
-        document.removeEventListener('visibilitychange', handler);
-        loadScript(config).then(resolve).catch(reject);
+        document.removeEventListener('visibilitychange', handler)
+        loadScript(config).then(resolve).catch(reject)
       }
-    };
+    }
 
-    document.addEventListener('visibilitychange', handler);
+    document.addEventListener('visibilitychange', handler)
 
     // 保底：5秒后自动加载
     setTimeout(() => {
-      document.removeEventListener('visibilitychange', handler);
-      loadScript(config).then(resolve).catch(reject);
-    }, 5000);
-  });
+      document.removeEventListener('visibilitychange', handler)
+      loadScript(config).then(resolve).catch(reject)
+    }, 5000)
+  })
 }
 
 /**
  * 根据策略加载脚本
  */
 export function loadScriptWithStrategy(config: ScriptConfig): Promise<HTMLScriptElement> {
-  const strategy = config.loadStrategy || 'idle';
+  const strategy = config.loadStrategy || 'idle'
 
   switch (strategy) {
     case 'immediate':
-      return loadScript(config);
+      return loadScript(config)
     case 'interaction':
-      return loadScriptOnInteraction(config);
+      return loadScriptOnInteraction(config)
     case 'visible':
-      return loadScriptOnVisible(config);
+      return loadScriptOnVisible(config)
     case 'idle':
     default:
-      return loadScriptWhenIdle(config);
+      return loadScriptWhenIdle(config)
   }
 }
 
 /**
  * 批量加载脚本（按顺序）
  */
-export async function loadScriptsSequentially(configs: ScriptConfig[]): Promise<HTMLScriptElement[]> {
-  const results: HTMLScriptElement[] = [];
+export async function loadScriptsSequentially(
+  configs: ScriptConfig[]
+): Promise<HTMLScriptElement[]> {
+  const results: HTMLScriptElement[] = []
 
   for (const config of configs) {
     try {
-      const script = await loadScriptWithStrategy(config);
-      results.push(script);
+      const script = await loadScriptWithStrategy(config)
+      results.push(script)
     } catch (error) {
-      console.warn(`Failed to load script: ${config.src}`, error);
+      console.warn(`Failed to load script: ${config.src}`, error)
       // 继续加载下一个脚本
     }
   }
 
-  return results;
+  return results
 }
 
 /**
@@ -229,53 +243,58 @@ export async function loadScriptsSequentially(configs: ScriptConfig[]): Promise<
  */
 export function loadScriptsInParallel(configs: ScriptConfig[]): Promise<HTMLScriptElement[]> {
   return Promise.all(
-    configs.map(config =>
-      loadScriptWithStrategy(config).catch(error => {
-        console.warn(`Failed to load script: ${config.src}`, error);
-        return null;
+    configs.map((config) =>
+      loadScriptWithStrategy(config).catch((error) => {
+        console.warn(`Failed to load script: ${config.src}`, error)
+        return null
       })
     )
-  ).then(results => results.filter((script): script is HTMLScriptElement => script !== null));
+  ).then((results) => results.filter((script): script is HTMLScriptElement => script !== null))
 }
 
 /**
  * 预连接到第三方域名（DNS 预解析和预连接）
  */
 export function preconnectToDomains(domains: string[]): void {
-  domains.forEach(domain => {
+  domains.forEach((domain) => {
     // DNS 预解析
-    const dnsLink = document.createElement('link');
-    dnsLink.rel = 'dns-prefetch';
-    dnsLink.href = domain;
-    document.head.appendChild(dnsLink);
+    const dnsLink = document.createElement('link')
+    dnsLink.rel = 'dns-prefetch'
+    dnsLink.href = domain
+    document.head.appendChild(dnsLink)
 
     // 预连接
-    const preconnectLink = document.createElement('link');
-    preconnectLink.rel = 'preconnect';
-    preconnectLink.href = domain;
-    preconnectLink.crossOrigin = 'anonymous';
-    document.head.appendChild(preconnectLink);
-  });
+    const preconnectLink = document.createElement('link')
+    preconnectLink.rel = 'preconnect'
+    preconnectLink.href = domain
+    preconnectLink.crossOrigin = 'anonymous'
+    document.head.appendChild(preconnectLink)
+  })
 }
 
 /**
  * 预加载关键资源
  */
-export function preloadResource(href: string, as: string, type?: string, crossOrigin?: string): void {
-  const link = document.createElement('link');
-  link.rel = 'preload';
-  link.href = href;
-  link.as = as;
+export function preloadResource(
+  href: string,
+  as: string,
+  type?: string,
+  crossOrigin?: string
+): void {
+  const link = document.createElement('link')
+  link.rel = 'preload'
+  link.href = href
+  link.as = as
 
   if (type) {
-    link.type = type;
+    link.type = type
   }
 
   if (crossOrigin) {
-    link.crossOrigin = crossOrigin;
+    link.crossOrigin = crossOrigin
   }
 
-  document.head.appendChild(link);
+  document.head.appendChild(link)
 }
 
 /**
@@ -303,18 +322,7 @@ export const commonThirdPartyScripts = {
     loadStrategy: 'idle',
     delay: 4000,
   }),
-
-  /**
-   * 高德地图 SDK
-   */
-  amap: (config: { key: string; version?: string }): ScriptConfig => ({
-    src: `https://webapi.amap.com/maps?v=${config.version || '2.0'}&key=${config.key}`,
-    async: true,
-    defer: true,
-    loadStrategy: 'idle',
-    delay: 2000,
-  }),
-};
+}
 
 /**
  * 初始化第三方脚本加载（在应用启动后调用）
@@ -326,14 +334,14 @@ export function initThirdPartyScripts(): void {
     'https://gator.volces.com',
     'https://analysis.chatglm.cn',
     'https://webapi.amap.com',
-    'https://restapi.amap.com',
-  ]);
+  ])
 
   // 延迟加载非关键脚本
   // 注意：这里只是示例，实际项目中根据需要使用
   // 使用类型断言避免 ImportMetaEnv 类型问题
-  const isProd = (import.meta as unknown as { env: { PROD?: boolean; MODE?: string } }).env?.PROD ??
-    (import.meta as unknown as { env: { MODE?: string } }).env?.MODE === 'production';
+  const isProd =
+    (import.meta as unknown as { env: { PROD?: boolean; MODE?: string } }).env?.PROD ??
+    (import.meta as unknown as { env: { MODE?: string } }).env?.MODE === 'production'
 
   if (isProd) {
     // 生产环境下延迟加载分析脚本
@@ -356,4 +364,4 @@ export default {
   isScriptLoaded,
   initThirdPartyScripts,
   commonThirdPartyScripts,
-};
+}

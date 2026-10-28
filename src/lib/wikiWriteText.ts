@@ -3,18 +3,11 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
 export type WikiWriteMode = 'draft' | 'pending'
 export type WikiWriteStatus = 'draft' | 'pending' | 'published'
 
-export function getWikiDraftButtonText(
-  t: Translate,
-  savingMode: WikiWriteMode | null,
-) {
+export function getWikiDraftButtonText(t: Translate, savingMode: WikiWriteMode | null) {
   return savingMode === 'draft' ? t('wiki.saving') : t('wiki.saveDraft')
 }
 
-export function getWikiSubmitButtonText(
-  t: Translate,
-  isAdmin: boolean,
-  submitting: boolean,
-) {
+export function getWikiSubmitButtonText(t: Translate, isAdmin: boolean, submitting: boolean) {
   if (submitting) {
     return isAdmin ? t('wiki.publishing') : t('wiki.submitting')
   }

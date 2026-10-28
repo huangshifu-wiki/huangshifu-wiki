@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import {
-  ArrowLeft,
   Edit3,
   Link2,
   Heart,
@@ -11,22 +10,36 @@ import {
   Trash2,
   User as UserIcon,
   Clock,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { clsx } from 'clsx'
+import { Checkbox, LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
+import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
 import { Lightbox } from '../components/Lightbox'
 import { CharacterCount } from '../components/CharacterCount'
 import { CommentActionMenu } from '../components/CommentActionMenu'
+import { ContentLinkList } from '../components/ContentLinkList'
+import MarkdownRenderer from '../components/MarkdownRenderer'
 import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
 import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
+import { getErrorMessage } from '../lib/errorHandler'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
 import { useI18n } from '../lib/i18n'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
-import { formatDateTime } from '../lib/dateUtils'
+import { formatDateOnly, formatDateTime } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
+import { validateMaxLength, validateRequiredText } from '../lib/clientValidation'
 import { submitFormOnModifierEnter } from '../lib/formShortcuts'
 import {
   shouldWaitForAnyGalleryThumbnail,
@@ -77,11 +90,18 @@ const getThumbnailSrc = (image: Pick<GalleryImageItem, 'thumbnailUrl' | 'url'>) 
 
 const COMMENT_HIGHLIGHT_DURATION_MS = 3200
 const HIGHLIGHTED_COMMENT_CLASS =
-  'bg-[color-mix(in_srgb,var(--color-theme-accent)_18%,var(--color-surface))]'
+  'bg-[color-mix(in_srgb,var(--color-theme-accent)_14%,var(--book-panel-bg))]'
+const GALLERY_IMAGE_FILTER = 'brightness(0.97) saturate(0.92)'
+
+const SectionHeading = ({ children }: { children: React.ReactNode }) => (
+  <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold tracking-[0.1em] text-text-primary">
+    <span className="inline-block h-4 w-[3px] rounded-[1px] bg-brand-gold opacity-60" />
+    {children}
+  </h2>
+)
 
 const GalleryDetail = () => {
   const { galleryId } = useParams()
-  const navigate = useNavigate()
   const location = useLocation()
   const { user, profile, isBanned } = useAuth()
   const dialog = useDialog()
@@ -90,6 +110,7 @@ const GalleryDetail = () => {
 
   const [gallery, setGallery] = useState<GalleryItem | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
 
@@ -114,16 +135,18 @@ const GalleryDetail = () => {
   const commentFormRef = useRef<HTMLFormElement | null>(null)
   const commentInputRef = useRef<HTMLTextAreaElement | null>(null)
   const hasPendingThumbnails = shouldWaitForAnyGalleryThumbnail(gallery)
+  const galleryPublicId = gallery?.slug || galleryId
 
   const fetchGallery = async () => {
     if (!galleryId) return
     try {
       setLoading(true)
+      setLoadError(null)
       const data = await apiGet<GalleryDetailResponse>(`/api/galleries/${galleryId}`)
       setGallery(data.gallery)
     } catch (error) {
       console.error('Fetch gallery detail error:', error)
-      setGallery(null)
+      setLoadError(error)
     } finally {
       setLoading(false)
     }
@@ -134,7 +157,7 @@ const GalleryDetail = () => {
   }, [galleryId])
 
   useEffect(() => {
-    if (!galleryId || !hasPendingThumbnails) return
+    if (!galleryPublicId || !hasPendingThumbnails) return
 
     const abortController = new AbortController()
     let attempts = 0
@@ -145,7 +168,7 @@ const GalleryDetail = () => {
       attempts += 1
       try {
         const data = await apiGet<GalleryDetailResponse>(
-          `/api/galleries/${galleryId}`,
+          `/api/galleries/${galleryPublicId}`,
           undefined,
           THUMBNAIL_POLL_DEDUP_OPTIONS,
           abortController.signal
@@ -173,7 +196,7 @@ const GalleryDetail = () => {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [galleryId, hasPendingThumbnails])
+  }, [galleryPublicId, hasPendingThumbnails])
 
   useEffect(() => {
     const fetchGalleryAccess = async () => {
@@ -190,10 +213,10 @@ const GalleryDetail = () => {
   }, [])
 
   const fetchComments = async () => {
-    if (!galleryId) return
+    if (!gallery?.id) return
     try {
       const data = await apiGet<{ comments: CommentItem[] }>(
-        `/api/galleries/${galleryId}/comments`,
+        `/api/galleries/${gallery.id}/comments`,
         {
           includeDeleted: isAdmin && showDeletedComments,
         }
@@ -213,10 +236,10 @@ const GalleryDetail = () => {
   }, [isAdmin, location.hash, showDeletedComments])
 
   useEffect(() => {
-    if (isGalleryPublished && galleryId) {
+    if (isGalleryPublished && gallery?.id) {
       fetchComments()
     }
-  }, [isGalleryPublished, galleryId, isAdmin, showDeletedComments])
+  }, [isGalleryPublished, gallery?.id, isAdmin, showDeletedComments])
 
   useEffect(() => {
     if (!location.hash.startsWith('#comment-')) {
@@ -247,6 +270,41 @@ const GalleryDetail = () => {
     [gallery?.images]
   )
 
+  // SEO 元数据：加载中/失败/未发布不可索引，成功后输出图集详情与 ImageGallery JSON-LD
+  const galleryPath = `/gallery/${galleryId}`
+  const galleryDescription = gallery
+    ? summarizeSeoText(gallery.description, `${gallery.title}，黄诗扶 Wiki 图集资料。`)
+    : ''
+  const galleryImageUrls = images
+    .map((image) => toAbsoluteSeoUrl(image.originalUrl || image.url))
+    .filter(Boolean)
+  const gallerySeoMetadata: SeoMetadata = gallery
+    ? {
+        title: `${gallery.title}｜${SEO_SITE_NAME}`,
+        description: galleryDescription,
+        canonicalPath: galleryPath,
+        robots: isGalleryPublished ? 'index,follow' : 'noindex,follow',
+        ogType: 'article',
+        ogImage: galleryImageUrls[0],
+        ogImageAlt: gallery.title,
+        jsonLd: {
+          '@context': 'https://schema.org',
+          '@type': 'ImageGallery',
+          name: gallery.title,
+          description: galleryDescription,
+          url: toAbsoluteSeoUrl(galleryPath),
+          image: galleryImageUrls,
+        },
+      }
+    : loading
+      ? getDetailFallbackSeo({ canonicalPath: galleryPath, title: SEO_SITE_NAME })
+      : getDetailFallbackSeo({
+          canonicalPath: galleryPath,
+          title: `图集不存在｜${SEO_SITE_NAME}`,
+          description: '当前图集不存在或尚未发布。',
+        })
+  useSeo(gallerySeoMetadata)
+
   const canManage = Boolean(
     user &&
     gallery &&
@@ -256,10 +314,10 @@ const GalleryDetail = () => {
   const isOwner = Boolean(user && gallery && gallery.authorUid === user.uid)
   const canSubmitReview = Boolean(
     !isBanned &&
-      canManage &&
-      isOwner &&
-      gallery &&
-      (gallery.status === 'draft' || gallery.status === 'rejected')
+    canManage &&
+    isOwner &&
+    gallery &&
+    (gallery.status === 'draft' || gallery.status === 'rejected')
   )
   const rootComments = comments.filter((comment) => !comment.parentId)
   const getReplies = (parentId: string) =>
@@ -305,6 +363,7 @@ const GalleryDetail = () => {
           <span className="text-text-muted">{formatDateTime(comment.createdAt)}</span>
           <button
             type="button"
+            data-press-feedback="ripple"
             onClick={() => void handleToggleCommentLike(comment)}
             disabled={!user || isBanned || likingCommentId === comment.id || comment.isDeleted}
             className={clsx(
@@ -321,6 +380,7 @@ const GalleryDetail = () => {
           {canReplyComment(comment) && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={() => {
                 setReplyTo(comment)
                 scrollToCommentForm()
@@ -334,6 +394,7 @@ const GalleryDetail = () => {
           {canDeleteComment(comment) && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={() => void handleDeleteComment(comment)}
               disabled={deletingCommentId === comment.id}
               className="font-medium text-text-muted hover:text-red-500 disabled:opacity-50"
@@ -345,6 +406,7 @@ const GalleryDetail = () => {
           {isAdmin && showDeletedComments && comment.isDeleted && (
             <button
               type="button"
+              data-press-feedback="ripple"
               onClick={() => void handleRestoreComment(comment)}
               disabled={restoringCommentId === comment.id}
               className="font-medium text-brand-gold hover:underline disabled:opacity-50"
@@ -370,8 +432,8 @@ const GalleryDetail = () => {
   }
 
   const handleCopyLink = async () => {
-    if (!gallery?.id) return
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/gallery/${gallery.id}`))
+    if (!galleryPublicId) return
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/gallery/${galleryPublicId}`))
     if (copied) {
       show(t('gallery.linkCopied'))
       return
@@ -440,7 +502,7 @@ const GalleryDetail = () => {
     } catch (error) {
       setGallery(previous)
       console.error('Toggle gallery like error:', error)
-      show('图集点赞失败', { variant: 'error' })
+      show(getErrorMessage(error, '图集点赞失败'), { variant: 'error' })
     } finally {
       setLikingGallery(false)
     }
@@ -509,7 +571,7 @@ const GalleryDetail = () => {
     } catch (error) {
       setGallery(previous)
       console.error('Toggle gallery dislike error:', error)
-      show('图集点踩失败', { variant: 'error' })
+      show(getErrorMessage(error, '图集点踩失败'), { variant: 'error' })
     } finally {
       setDislikingGallery(false)
     }
@@ -551,16 +613,16 @@ const GalleryDetail = () => {
     } catch (error) {
       setGallery(previous)
       console.error('Toggle gallery favorite error:', error)
-      show('图集收藏失败', { variant: 'error' })
+      show(getErrorMessage(error, '图集收藏失败'), { variant: 'error' })
     } finally {
       setFavoritingGallery(false)
     }
   }
 
   const handleCopyCommentLink = async (comment: CommentItem) => {
-    if (!gallery?.id) return
+    if (!galleryPublicId) return
     const copied = await copyToClipboard(
-      toAbsoluteInternalUrl(`/gallery/${gallery.id}#comment-${comment.id}`)
+      toAbsoluteInternalUrl(`/gallery/${galleryPublicId}#comment-${comment.id}`)
     )
     if (copied) {
       show(t('gallery.commentLinkCopied'))
@@ -575,10 +637,14 @@ const GalleryDetail = () => {
     try {
       const data = await apiPost<GalleryDetailResponse>(`/api/galleries/${gallery.id}/submit`)
       setGallery(data.gallery)
-      show(data.gallery.status === 'published' ? t('gallery.galleryPublished') : t('gallery.reviewSubmitted'))
+      show(
+        data.gallery.status === 'published'
+          ? t('gallery.galleryPublished')
+          : t('gallery.reviewSubmitted')
+      )
     } catch (error) {
       console.error('Submit gallery review error:', error)
-      show(t('gallery.submitReviewFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.submitReviewFailed')), { variant: 'error' })
     } finally {
       setSubmittingReview(false)
     }
@@ -586,7 +652,15 @@ const GalleryDetail = () => {
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!galleryId || !user || !newComment.trim() || submittingComment) return
+    const comment = newComment.trim()
+    const commentError =
+      validateRequiredText(comment, 'comment', '评论') ||
+      validateMaxLength(comment, 'comment', '评论', CONTENT_LIMITS.gallery.comment)
+    if (commentError) {
+      show(commentError.message, { variant: 'error' })
+      return
+    }
+    if (!gallery?.id || !user || submittingComment) return
     if (isBanned) {
       show(t('gallery.bannedCannotComment'), { variant: 'error' })
       return
@@ -598,10 +672,13 @@ const GalleryDetail = () => {
 
     try {
       setSubmittingComment(true)
-      const data = await apiPost<{ comment: CommentItem }>(`/api/galleries/${galleryId}/comments`, {
-        content: newComment,
-        parentId: replyTo?.id || null,
-      })
+      const data = await apiPost<{ comment: CommentItem }>(
+        `/api/galleries/${gallery.id}/comments`,
+        {
+          content: comment,
+          parentId: replyTo?.id || null,
+        }
+      )
 
       if (data.comment) {
         setComments((prev) => [...prev, data.comment])
@@ -611,7 +688,7 @@ const GalleryDetail = () => {
       setReplyTo(null)
     } catch (error) {
       console.error('Error adding comment:', error)
-      show(t('gallery.commentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.commentFailed')), { variant: 'error' })
     } finally {
       setSubmittingComment(false)
     }
@@ -645,6 +722,16 @@ const GalleryDetail = () => {
       })
       reason = promptValue?.trim() || null
       if (promptValue === null) return
+      const reasonError = validateMaxLength(
+        reason,
+        'reason',
+        '删除理由',
+        CONTENT_LIMITS.gallery.reviewNote
+      )
+      if (reasonError) {
+        show(reasonError.message, { variant: 'error' })
+        return
+      }
       if (!reason) {
         show('删除他人评论必须填写删除理由', { variant: 'error' })
         return
@@ -669,7 +756,7 @@ const GalleryDetail = () => {
       show(t('gallery.commentDeleted'))
     } catch (error) {
       console.error('Error deleting gallery comment:', error)
-      show(t('gallery.deleteCommentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.deleteCommentFailed')), { variant: 'error' })
     } finally {
       setDeletingCommentId(null)
     }
@@ -691,7 +778,7 @@ const GalleryDetail = () => {
       setComments((prev) => updateCommentLike(prev, comment.id, data))
     } catch (error) {
       console.error('Error toggling gallery comment like:', error)
-      show(t('gallery.commentLikeFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.commentLikeFailed')), { variant: 'error' })
     } finally {
       setLikingCommentId(null)
     }
@@ -707,17 +794,29 @@ const GalleryDetail = () => {
       show(t('gallery.commentRestored'))
     } catch (error) {
       console.error('Error restoring gallery comment:', error)
-      show(t('gallery.restoreCommentFailed'), { variant: 'error' })
+      show(getErrorMessage(error, t('gallery.restoreCommentFailed')), { variant: 'error' })
     } finally {
       setRestoringCommentId(null)
     }
   }
 
-  if (loading) {
+  if (loading && !gallery) {
     return (
-      <div className="min-h-[calc(100vh-60px)] antique-page bg-bg-primary">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-          <div className="h-48 bg-surface-alt rounded animate-pulse" />
+      <div className="mobile-page-shell antique-detail" role="status" aria-label="加载中">
+        <div className="mobile-page-container">
+          <Skeleton className="mb-6 h-4 w-24" />
+          <div className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
+            <Skeleton className="mb-4 h-10 w-2/3" />
+            <Skeleton className="h-5 w-1/2" />
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map((item) => (
+              <Skeleton
+                key={item}
+                className="aspect-[3/4] rounded border border-[var(--book-ink-line)]"
+              />
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -725,49 +824,50 @@ const GalleryDetail = () => {
 
   if (!gallery) {
     return (
-      <div className="min-h-[calc(100vh-60px)] antique-page bg-bg-primary">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-          <Link
-            to="/gallery"
+      <div className="mobile-page-shell antique-detail">
+        <div className="mobile-page-container">
+          <SmartBackLink
+            fallbackTo="/gallery"
+            fallbackLabel={t('gallery.backToList')}
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-          >
-            <ArrowLeft size={16} /> {t('gallery.backToList')}
-          </Link>
-          <div className="mt-6 bg-surface rounded border border-border p-10 text-center text-text-muted italic tracking-[0.1em]">
-            {t('gallery.notFound')}
-          </div>
+          />
+          {loadError ? (
+            <LoadErrorState
+              error={loadError}
+              className="mt-8"
+              onRetry={() => void fetchGallery()}
+            />
+          ) : (
+            <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
+              {t('gallery.notFound')}
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 gallery-detail-page">
-        <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px] lg:items-start">
-          <div className="min-w-0">
-            <Link
-              to="/gallery"
-              className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
-            >
-              <ArrowLeft size={16} /> {t('gallery.backToList')}
-            </Link>
+    <div className="mobile-page-shell antique-detail" aria-busy={loading}>
+      <div className="mobile-page-container gallery-detail-page">
+        <SmartBackLink
+          fallbackTo="/gallery"
+          fallbackLabel={t('gallery.backToList')}
+          className="mb-5 inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+        />
+        {loadError && (
+          <LoadErrorState error={loadError} className="mb-6" onRetry={() => void fetchGallery()} />
+        )}
 
-            <header>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[1.75rem] font-semibold tracking-[0.12em] text-text-primary">
-                  {gallery.title}
-                </h1>
+        <header className="mb-8 border-b border-[var(--book-ink-line)] pb-8">
+          <div className="mobile-page-titlebar items-start">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-start gap-2">
+                <h1 className="mobile-page-title">{gallery.title}</h1>
                 {gallery.status && gallery.status !== 'published' ? (
                   <span
                     className={clsx(
-                      'px-2 py-0.5 text-xs font-medium rounded',
+                      'mt-2 rounded px-2 py-0.5 text-xs font-medium',
                       getStatusClassName(gallery.status)
                     )}
                   >
@@ -775,139 +875,150 @@ const GalleryDetail = () => {
                   </span>
                 ) : null}
               </div>
-              {gallery.status === 'rejected' && gallery.reviewNote ? (
-                <p className="mt-2 text-sm theme-text-error">{gallery.reviewNote}</p>
-              ) : null}
-              <p className="mt-2 text-text-secondary leading-relaxed">
-                {gallery.description || t('gallery.noDescription')}
-              </p>
-              {gallery.copyright && (
-                <p className="text-xs text-text-muted mt-1">{gallery.copyright}</p>
-              )}
-            </header>
-          </div>
-
-          <div className="lg:pt-0">
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              <button
-                onClick={handleCopyLink}
-                className="px-4 py-2 text-[0.9375rem] rounded theme-button-secondary transition-all flex items-center gap-2"
-                title={t('gallery.copyInternalLink')}
-              >
-                <Link2 size={16} /> 复制链接
-              </button>
-              {canManage && (
-                <Link
-                  to={`/gallery/${gallery.id}/edit`}
-                  className="px-4 py-2 text-[0.9375rem] rounded theme-button-primary transition-all flex items-center gap-2"
-                >
-                  <Edit3 size={16} /> 编辑
-                </Link>
-              )}
             </div>
 
-            <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="mobile-action-row mt-1 justify-start sm:justify-end">
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={toggleGalleryLike}
                 disabled={likingGallery}
                 className={clsx(
-                  'flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed',
+                  'inline-flex items-center gap-2 rounded border px-4 py-2 text-[0.875rem] transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50',
                   gallery.likedByMe
-                    ? 'theme-button-danger border border-transparent'
-                    : 'bg-surface border theme-button-danger-outline text-text-secondary'
+                    ? 'border-[color-mix(in_srgb,var(--color-error)_22%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_6%,transparent)] text-[var(--color-error)]'
+                    : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
                 )}
                 title={gallery.likedByMe ? '取消点赞' : '点赞'}
               >
-                <Heart size={15} fill={gallery.likedByMe ? 'currentColor' : 'none'} />{' '}
+                <Heart size={14} fill={gallery.likedByMe ? 'currentColor' : 'none'} />
                 {gallery.likesCount || 0}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={toggleGalleryDislike}
                 disabled={dislikingGallery}
                 className={clsx(
-                  'flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed',
+                  'inline-flex items-center gap-2 rounded border px-4 py-2 text-[0.875rem] transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50',
                   gallery.dislikedByMe
-                    ? 'theme-button-warning border border-transparent'
-                    : 'bg-surface border theme-button-warning-outline text-text-secondary'
+                    ? 'border-[color-mix(in_srgb,var(--color-warning)_28%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_8%,transparent)] text-[var(--color-warning)]'
+                    : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
                 )}
                 title={gallery.dislikedByMe ? '取消点踩' : '点踩'}
               >
-                <ThumbsDown size={15} /> {gallery.dislikesCount || 0}
+                <ThumbsDown size={14} /> {gallery.dislikesCount || 0}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={toggleGalleryFavorite}
                 disabled={favoritingGallery}
                 className={clsx(
-                  'flex-1 px-3 py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed',
+                  'inline-flex items-center gap-2 rounded border px-4 py-2 text-[0.875rem] transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50',
                   gallery.favoritedByMe
-                    ? 'bg-[var(--color-theme-accent)] text-white border border-transparent'
-                    : 'bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
+                    ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
+                    : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
                 )}
                 title={gallery.favoritedByMe ? '取消收藏' : '收藏'}
               >
-                <Save size={15} /> {gallery.favoritedByMe ? '已收藏' : '收藏'}{' '}
+                <Save size={14} /> {gallery.favoritedByMe ? '已收藏' : '收藏'}{' '}
                 {gallery.favoritesCount || 0}
               </button>
               <button
+                type="button"
+                data-press-feedback="ripple"
                 onClick={handleCopyLink}
-                className="flex-1 px-3 py-2 rounded text-sm font-medium bg-surface border border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold transition-all flex items-center justify-center gap-1.5"
+                className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
+                title={t('gallery.copyInternalLink')}
+              >
+                <Link2 size={14} /> 复制内链
+              </button>
+              <button
+                type="button"
+                data-press-feedback="ripple"
+                onClick={handleCopyLink}
+                className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 title="分享"
               >
-                <Share2 size={15} /> 分享
+                <Share2 size={14} /> 分享
               </button>
+              {canManage && (
+                <Link
+                  to={`/gallery/${galleryPublicId}/edit`}
+                  state={{ editorBackground: location }}
+                  data-pressable
+                  className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
+                >
+                  <Edit3 size={14} /> 编辑
+                </Link>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Info bar */}
-        <div className="flex items-end justify-between border-b border-border mb-6 pb-2">
-          <div className="flex items-center gap-4 flex-wrap">
-            <span className="text-[1.125rem] pb-2 relative tracking-[0.05em] text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]">
-              {t('gallery.imageCount', { count: images.length })}
-            </span>
-            {canSubmitReview && (
-              <button
-                onClick={() => void handleSubmitReview()}
-                disabled={submittingReview}
-                className="px-3 py-1 text-[0.8125rem] rounded theme-status-warning hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all self-center mb-1"
-              >
-                {submittingReview ? t('gallery.submitting') : t('gallery.submitReview')}
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
-            <span className="flex items-center gap-1">
-              <Clock size={14} /> {formatDateTime(gallery.createdAt)}
-            </span>
-            <span className="flex items-center gap-1">
-              <UserIcon size={14} /> {gallery.authorName || gallery.authorUid?.slice(0, 8)}
-            </span>
-            {gallery.publishedAt ? (
-              <span>
-                {t('gallery.publishedAt')} {formatDateTime(gallery.publishedAt)}
+          {gallery.status === 'rejected' && gallery.reviewNote ? (
+            <p className="mt-2 text-sm theme-text-error">{gallery.reviewNote}</p>
+          ) : null}
+          {gallery.description ? (
+            <div className="prose mt-3 max-w-3xl font-body leading-relaxed text-text-secondary">
+              <MarkdownRenderer content={gallery.description} />
+            </div>
+          ) : (
+            <p className="mt-3 max-w-3xl text-[0.95rem] leading-relaxed tracking-[0.03em] text-text-secondary">
+              {t('gallery.noDescription')}
+            </p>
+          )}
+          {gallery.copyright && <p className="mt-2 text-xs text-text-muted">{gallery.copyright}</p>}
+
+          <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[0.8125rem] text-text-muted">
+            {gallery.eventDate ? (
+              <span className="flex items-center gap-1">
+                <Clock size={14} /> {formatDateOnly(gallery.eventDate)}
               </span>
             ) : null}
+            <span className="flex items-center gap-1">
+              <UserIcon size={14} />{' '}
+              {gallery.authorName ||
+                (gallery.authorPublicId ? `#${gallery.authorPublicId}` : '匿名')}
+            </span>
           </div>
+        </header>
+
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <SectionHeading>{t('gallery.imageCount', { count: images.length })}</SectionHeading>
+          {canSubmitReview && (
+            <button
+              type="button"
+              data-press-feedback="ripple"
+              onClick={() => void handleSubmitReview()}
+              disabled={submittingReview}
+              className="rounded border border-[var(--book-ink-line)] px-4 py-2 text-xs text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submittingReview ? t('gallery.submitting') : t('gallery.submitReview')}
+            </button>
+          )}
         </div>
 
         {/* Images Grid */}
         <section className="mb-10">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
             {images.map((image, index) => (
               <div
                 key={image.clientId || image.id}
-                className="relative aspect-[3/4] cursor-zoom-in overflow-hidden rounded group"
+                className="group relative aspect-[3/4] cursor-zoom-in overflow-hidden rounded border border-[var(--book-ink-line)]/60 bg-[var(--book-panel-bg)] shadow-[0_10px_30px_rgba(42,37,32,0.06)]"
               >
                 <button
                   onClick={() => handleOpenLightbox(index)}
-                  className="w-full h-full"
+                  className="h-full w-full press-feedback-cover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
                   type="button"
+                  data-press-feedback="ripple"
                 >
                   {getThumbnailSrc(image) ? (
                     <SmartImage
                       src={getThumbnailSrc(image)}
                       alt={image.name || ''}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                      style={{ filter: GALLERY_IMAGE_FILTER }}
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center bg-surface-alt px-2 text-center text-xs text-text-muted">
@@ -916,8 +1027,8 @@ const GalleryDetail = () => {
                   )}
                 </button>
 
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300 pointer-events-none">
-                  <div className="absolute bottom-3 right-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 bg-black/40 text-white text-xs px-2 py-1 rounded">
+                <div className="pointer-events-none absolute inset-0">
+                  <div className="absolute bottom-3 right-3 rounded bg-[var(--book-panel-bg-strong)] px-2 py-1 text-xs text-brand-gold opacity-100 shadow-[0_6px_18px_rgba(42,37,32,0.08)] transition-opacity duration-300 md:opacity-0 md:group-hover:opacity-100">
                     {t('gallery.viewFullSize')}
                   </div>
                 </div>
@@ -926,50 +1037,63 @@ const GalleryDetail = () => {
           </div>
         </section>
 
+        {/* Related links */}
+        {gallery.relatedLinks.length ? (
+          <div className="mb-10">
+            <ContentLinkList
+              title={<SectionHeading>相关链接</SectionHeading>}
+              links={gallery.relatedLinks}
+            />
+          </div>
+        ) : null}
+
         {/* Comments */}
         {isGalleryPublished && (
-          <section className="border-t border-border pt-8">
-            <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-6 pb-2.5 border-b border-border flex items-center gap-2">
-              <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-              {t('gallery.comments')}
-            </h2>
-            {isAdmin && (
-              <label className="mb-5 flex items-center gap-2 text-xs text-text-muted">
-                <input
-                  type="checkbox"
-                  checked={showDeletedComments}
-                  onChange={(event) => setShowDeletedComments(event.target.checked)}
-                  className="accent-brand-gold"
-                />
-                {t('gallery.showDeletedComments')}
-              </label>
-            )}
+          <section className="border-t border-[var(--book-ink-line)] pt-8">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <SectionHeading>{t('gallery.comments')}</SectionHeading>
+              {isAdmin && (
+                <label
+                  htmlFor="gallery-show-deleted-comments"
+                  className="flex items-center gap-2 text-xs text-text-muted"
+                >
+                  <Checkbox
+                    id="gallery-show-deleted-comments"
+                    checked={showDeletedComments}
+                    onCheckedChange={(checked) => setShowDeletedComments(checked === true)}
+                    aria-label={t('gallery.showDeletedComments')}
+                  />
+                  {t('gallery.showDeletedComments')}
+                </label>
+              )}
+            </div>
 
             {user && !isBanned && (
               <form ref={commentFormRef} onSubmit={handleAddComment} className="mb-8">
                 {replyTo && (
-                  <div className="flex items-center gap-2 mb-2 text-xs text-text-muted">
+                  <div className="mb-3 flex items-center justify-between gap-3 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-2 text-xs text-text-muted">
                     <span>{t('gallery.replyTo', { name: getCommentAuthorName(replyTo) })}</span>
                     <button
                       type="button"
+                      data-press-feedback="ripple"
                       onClick={() => setReplyTo(null)}
-                      className="text-brand-gold hover:underline"
+                      className="text-brand-gold transition-colors hover:text-text-primary"
                     >
                       {t('gallery.cancel')}
                     </button>
                   </div>
                 )}
                 <div className="flex gap-3">
-                  <div className="w-10 h-10 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
+                  <div className="hidden h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-[var(--book-ink-line)] bg-surface-alt sm:block">
                     <img
                       src={user.photoURL || DEFAULT_AVATAR}
                       alt=""
-                      className="w-full h-full object-cover"
+                      className="h-full w-full object-cover"
                       referrerPolicy="no-referrer"
                       onError={handleAvatarError}
                     />
                   </div>
-                  <div className="relative flex-grow">
+                  <div className="relative min-w-0 flex-grow">
                     <MentionTextarea
                       textareaRef={commentInputRef}
                       value={newComment}
@@ -977,7 +1101,7 @@ const GalleryDetail = () => {
                       maxLength={CONTENT_LIMITS.gallery.comment}
                       onKeyDown={submitFormOnModifierEnter}
                       placeholder={t('gallery.commentPlaceholder')}
-                      className="theme-input w-full px-4 py-3 rounded resize-none text-base"
+                      className="theme-input w-full resize-none rounded px-4 py-3 text-base"
                       rows={3}
                     />
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -988,8 +1112,9 @@ const GalleryDetail = () => {
                       />
                       <button
                         type="submit"
+                        data-press-feedback="ripple"
                         disabled={!newComment.trim() || submittingComment}
-                        className="px-5 py-2 theme-button-primary text-sm rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="min-h-10 rounded px-5 py-2 text-sm theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {submittingComment ? t('gallery.sending') : t('gallery.send')}
                       </button>
@@ -1000,18 +1125,18 @@ const GalleryDetail = () => {
             )}
 
             {user && isBanned && (
-              <p className="text-center text-text-muted italic mb-8">
+              <p className="mb-8 border-y border-[var(--book-ink-line)] py-6 text-center text-sm italic text-text-muted">
                 {t('gallery.bannedCannotComment')}
               </p>
             )}
 
             {!user && (
-              <p className="text-center text-text-muted italic mb-8">
+              <p className="mb-8 border-y border-[var(--book-ink-line)] py-6 text-center text-sm italic text-text-muted">
                 {t('gallery.loginToComment')}
               </p>
             )}
 
-            <div className="space-y-6">
+            <div className="flex flex-col">
               {rootComments.length > 0 ? (
                 rootComments.map((comment) => (
                   <div
@@ -1020,29 +1145,29 @@ const GalleryDetail = () => {
                     onMouseMove={() => showCommentMenu(comment.id)}
                     onMouseLeave={() => hideCommentMenu(comment.id)}
                     className={clsx(
-                      'scroll-mt-24 space-y-4 px-3 py-2 transition-colors',
+                      'scroll-mt-24 border-b border-[var(--book-ink-line)] px-1 py-5 transition-colors',
                       highlightedCommentId === comment.id && HIGHLIGHTED_COMMENT_CLASS
                     )}
                   >
                     <div className="flex gap-3">
-                      <div className="w-10 h-10 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
+                      <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-[var(--book-ink-line)] bg-surface-alt">
                         {comment.isDeleted && !showDeletedComments ? null : (
                           <img
                             src={comment.authorPhoto || DEFAULT_AVATAR}
                             alt=""
-                            className="w-full h-full object-cover"
+                            className="h-full w-full object-cover"
                             referrerPolicy="no-referrer"
                             onError={handleAvatarError}
                           />
                         )}
                       </div>
-                      <div className="flex-grow">
+                      <div className="min-w-0 flex-grow">
                         {comment.isDeleted && !showDeletedComments ? null : (
-                          <div className="mb-1 text-sm font-semibold text-text-primary">
+                          <div className="mb-1 text-sm font-semibold tracking-[0.03em] text-text-primary">
                             {getCommentAuthorName(comment)}
                           </div>
                         )}
-                        <p className="text-text-secondary text-sm leading-relaxed mb-2">
+                        <p className="mb-2 text-sm leading-relaxed text-text-secondary">
                           <span
                             className={comment.isDeleted ? 'italic text-text-muted' : undefined}
                           >
@@ -1057,7 +1182,7 @@ const GalleryDetail = () => {
                     </div>
 
                     {getReplies(comment.id).length > 0 && (
-                      <div className="ml-14 space-y-4 border-l-2 border-border pl-6">
+                      <div className="ml-4 mt-4 flex flex-col gap-4 border-l border-[var(--book-ink-line)] pl-4 sm:ml-14 sm:pl-6">
                         {getReplies(comment.id).map((reply) => (
                           <div
                             id={`comment-${reply.id}`}
@@ -1068,21 +1193,21 @@ const GalleryDetail = () => {
                             }}
                             onMouseLeave={() => hideCommentMenu(reply.id)}
                             className={clsx(
-                              'flex scroll-mt-24 gap-3 px-3 py-2 transition-colors',
+                              'flex scroll-mt-24 gap-3 rounded px-3 py-2 transition-colors',
                               highlightedCommentId === reply.id && HIGHLIGHTED_COMMENT_CLASS
                             )}
                           >
-                            <div className="w-8 h-8 rounded bg-surface-alt flex-shrink-0 overflow-hidden">
+                            <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full border border-[var(--book-ink-line)] bg-surface-alt">
                               <img
                                 src={reply.authorPhoto || DEFAULT_AVATAR}
                                 alt=""
-                                className="w-full h-full object-cover"
+                                className="h-full w-full object-cover"
                                 referrerPolicy="no-referrer"
                                 onError={handleAvatarError}
                               />
                             </div>
-                            <div className="flex-grow">
-                              <p className="text-text-secondary text-xs leading-relaxed">
+                            <div className="min-w-0 flex-grow">
+                              <p className="text-xs leading-relaxed text-text-secondary">
                                 <span className="font-semibold text-text-primary">
                                   {getCommentAuthorName(reply)}
                                 </span>
@@ -1096,7 +1221,8 @@ const GalleryDetail = () => {
                                     </span>
                                   </>
                                 ) : null}
-                                <span>：
+                                <span>
+                                  ：
                                   <MentionText
                                     text={reply.content}
                                     targets={reply.mentionTargets || []}
@@ -1112,20 +1238,22 @@ const GalleryDetail = () => {
                   </div>
                 ))
               ) : (
-                <p className="text-center text-text-muted italic py-8">{t('gallery.noComments')}</p>
+                <p className="border-y border-[var(--book-ink-line)] py-8 text-center italic text-text-muted">
+                  {t('gallery.noComments')}
+                </p>
               )}
             </div>
           </section>
         )}
 
         {/* Back to list */}
-        <div className="mt-10 pt-6 border-t border-border text-right">
-          <button
-            onClick={() => navigate('/gallery')}
-            className="text-xs text-text-muted hover:text-brand-gold transition-colors"
-          >
-            {t('gallery.backToList')}
-          </button>
+        <div className="mt-10 border-t border-[var(--book-ink-line)] pt-6 text-right">
+          <SmartBackLink
+            fallbackTo="/gallery"
+            fallbackLabel={t('gallery.backToList')}
+            icon={null}
+            className="text-xs text-text-muted transition-colors hover:text-brand-gold"
+          />
         </div>
       </div>
 

@@ -6,7 +6,7 @@ type ClickOutsideHandler = (event: PointerEvent) => void
 export const useClickOutside = (
   ref: RefObject<HTMLElement | null>,
   onClickOutside: ClickOutsideHandler,
-  enabled: boolean,
+  enabled: boolean
 ) => {
   useEffect(() => {
     if (!enabled) {
@@ -32,7 +32,7 @@ type DismissHandler = () => void
 export const useDismissableLayer = (
   ref: RefObject<HTMLElement | null>,
   onDismiss: DismissHandler,
-  enabled: boolean,
+  enabled: boolean
 ) => {
   useClickOutside(ref, onDismiss, enabled)
 

@@ -3,31 +3,51 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { formatDateTime } from '../../lib/dateUtils'
 import {
-  fetchReviewQueue,
+  fetchReviewQueuePage,
   invalidateReviewQueueCaches,
   normalizeReviewFilter,
   REVIEW_FILTER_OPTIONS,
 } from './reviewQueue'
 import type { AdminReviewQueueMergedItem } from '../../types/api'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
+import { Button, LoadErrorState } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
 
 export const AdminReviews = () => {
   const [items, setItems] = useState<AdminReviewQueueMergedItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const [totalState, setTotal] = useState<{ scope: string; total: number }>()
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const filter = normalizeReviewFilter(searchParams.get('type'))
+  const scope = JSON.stringify([filter])
+  const total = totalState?.scope === scope ? totalState.total : undefined
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: 20,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
   const loadRequestRef = useRef(0)
 
   const fetchQueue = async () => {
     const requestId = loadRequestRef.current + 1
     loadRequestRef.current = requestId
     setLoading(true)
+    setLoadError(null)
     try {
-      const nextItems = await fetchReviewQueue(filter)
+      const result = await fetchReviewQueuePage(filter, pagination.page, pagination.pageSize)
       if (requestId !== loadRequestRef.current) return
-      setItems(nextItems)
+      setItems(result.items)
+      setTotal({ scope, total: result.total })
+      setLoadError(null)
     } catch (e) {
       console.error(e)
+      if (requestId === loadRequestRef.current) setLoadError(e)
     } finally {
       if (requestId === loadRequestRef.current) {
         setLoading(false)
@@ -37,7 +57,7 @@ export const AdminReviews = () => {
 
   useEffect(() => {
     void fetchQueue()
-  }, [filter])
+  }, [filter, pagination.page, pagination.pageSize])
 
   const handleRefreshQueue = () => {
     invalidateReviewQueueCaches()
@@ -49,34 +69,51 @@ export const AdminReviews = () => {
     navigate(`/admin/reviews/workbench?type=${filter}`)
   }
 
+  if (loading && items.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
+  if (loadError && items.length === 0) {
+    return <LoadErrorState error={loadError} onRetry={() => void fetchQueue()} />
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">审核队列</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleRefreshQueue}
-            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
-          >
+          <Button type="button" variant="secondary" onClick={handleRefreshQueue}>
             刷新队列
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
             onClick={handleStartReview}
             disabled={loading || items.length === 0}
-            className="px-4 py-2 rounded text-sm theme-button-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             开始审核
-          </button>
+          </Button>
         </div>
       </div>
+      {loadError && items.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          error={loadError}
+          description="审核队列可能不是最新内容。"
+          onRetry={() => void fetchQueue()}
+        />
+      )}
 
       <div className="bg-surface border border-border rounded p-4 flex flex-wrap items-center gap-3">
         {REVIEW_FILTER_OPTIONS.map((item) => (
-          <button
+          <Button
+            type="button"
+            size="sm"
+            variant={filter === item.id ? 'primary' : 'secondary'}
             key={item.id}
             onClick={() => {
+              if (item.id === filter) return
               setSearchParams((prev) => {
                 const next = new URLSearchParams(prev)
+                next.delete('page')
                 if (item.id === 'all') {
                   next.delete('type')
                 } else {
@@ -85,25 +122,14 @@ export const AdminReviews = () => {
                 return next
               })
             }}
-            className={clsx(
-              'px-4 py-2 rounded text-xs font-medium transition-all',
-              filter === item.id
-                ? 'bg-brand-gold-dark text-white'
-                : 'bg-surface-alt text-text-secondary hover:bg-bg-tertiary'
-            )}
+            aria-pressed={filter === item.id}
           >
             {item.label}
-          </button>
+          </Button>
         ))}
       </div>
 
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-28 bg-surface border border-border rounded animate-pulse" />
-          ))}
-        </div>
-      ) : items.length > 0 ? (
+      {items.length > 0 ? (
         <div className="space-y-3">
           {items.map((item) => (
             <div
@@ -120,21 +146,36 @@ export const AdminReviews = () => {
                           ? 'bg-surface-alt text-brand-gold'
                           : item.reviewType === 'gallery'
                             ? 'theme-status-success'
-                          : 'bg-bg-tertiary text-text-secondary'
+                            : item.reviewType === 'ticket'
+                              ? 'theme-status-warning'
+                              : 'bg-bg-tertiary text-text-secondary'
                       )}
                     >
-                      {item.reviewType === 'wiki' ? '百科' : item.reviewType === 'gallery' ? '图集' : '帖子'}
+                      {item.reviewType === 'wiki'
+                        ? '百科'
+                        : item.reviewType === 'gallery'
+                          ? '图集'
+                          : item.reviewType === 'ticket'
+                            ? '盘票'
+                            : '帖子'}
                     </span>
                     <span className="px-2 py-0.5 text-[10px] font-medium rounded theme-status-warning">
                       待审核
                     </span>
                   </div>
                   <p className="font-semibold text-text-primary mb-1">
-                    {item.title || item.slug || item.id}
+                    {item.title || item.eventName || item.slug || item.id}
                   </p>
                   <p className="text-xs text-text-muted line-clamp-2">
-                    {(String(item.reviewType === 'gallery' ? item.description || '' : item.content || '')).replace(/[#*`]/g, '').slice(0, 160) ||
-                      '无内容摘要'}
+                    {String(
+                      item.reviewType === 'gallery'
+                        ? item.description || ''
+                        : item.reviewType === 'ticket'
+                          ? `${item.eventName || item.customEventName || '未命名活动'} · ${item.quantity || 0}张 · ${item.ticketTier || '未填写票档'}`
+                          : item.content || ''
+                    )
+                      .replace(/[#*`]/g, '')
+                      .slice(0, 160) || '无内容摘要'}
                   </p>
                   <p className="text-[10px] text-text-muted mt-2">
                     更新时间：{formatDateTime(item.updatedAt, 'N/A')}
@@ -161,6 +202,17 @@ export const AdminReviews = () => {
           当前没有待审核内容
         </div>
       )}
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
     </div>
   )
 }

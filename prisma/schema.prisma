@@ -30,12 +30,31 @@ enum ContentStatus {
   published
   rejected
 }
+enum EventTimeStatus {
+  pending
+  postponed
+}
+
+enum TicketListingType {
+  offer
+  request
+}
 
 enum ModerationTargetType {
   wiki
   post
   gallery
   comment
+  music
+  album
+  event
+  announcement
+  section
+  imageMap
+  wikiCategory
+  config
+  user
+  ticketListing
 }
 
 enum ModerationAction {
@@ -44,6 +63,9 @@ enum ModerationAction {
   reject
   rollback
   delete
+  restore
+  permanentDelete
+  update
 }
 
 enum FavoriteTargetType {
@@ -98,15 +120,21 @@ enum MusicPlatform {
   kuwo
 }
 
+enum LyricType {
+  plain
+  line
+  word
+}
+
 enum DisplayAlbumMode {
   none
   linked
   manual
 }
 
-enum MusicCollectionType {
+enum MusicExternalResourceType {
+  song
   album
-  playlist
 }
 
 enum StorageType {
@@ -146,10 +174,12 @@ enum WikiPullRequestStatus {
 
 model User {
   uid           String         @id @default(cuid())
+  publicId      String         @unique
   email         String         @unique
   passwordHash  String
   displayName   String
   photoURL      String?
+  photoAssetId  String?
   wechatOpenId  String?        @unique
   wechatUnionId String?
   role          UserRole       @default(user)
@@ -165,6 +195,7 @@ model User {
   deletedBy     String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+  apiKeys UserApiKey[]
   posts         Post[]         @relation("UserPosts")
   comments      PostComment[]  @relation("UserComments")
   postCommentLikes PostCommentLike[]
@@ -175,7 +206,8 @@ model User {
   wikiReviewedPullRequests WikiPullRequest[] @relation("WikiPullRequestReviewer")
   wikiPullRequestComments WikiPullRequestComment[] @relation("WikiPRCommentAuthor")
   galleries     Gallery[]      @relation("UserGalleries")
-  musicAdded    MusicTrack[]   @relation("MusicAddedBy")
+  createdEvents Event[]        @relation("EventCreator")
+  updatedEvents Event[]        @relation("EventUpdater")
   postLikes     PostLike[]
   postDislikes  PostDislike[] @relation("UserDislikes")
   wikiLikes     WikiLike[]
@@ -190,13 +222,31 @@ model User {
   browsingHistories BrowsingHistory[]
   uploadSessions UploadSession[]
   mediaAssets   MediaAsset[]
+  photoAsset    MediaAsset?    @relation("UserPhotoAsset", fields: [photoAssetId], references: [id], onDelete: SetNull)
   editLocks     EditLock[]
   emailVerificationTokens EmailVerificationToken[]
+  ticketListings TicketListing[] @relation("UserTicketListings")
+  @@index([photoAssetId])
 
   @@index([status, createdAt])
   @@index([wechatUnionId])
   @@index([deletedAt])
   @@index([emailVerifiedAt])
+}
+
+model UserApiKey {
+  id         String    @id @default(cuid())
+  userUid    String
+  name       String
+  tokenHash  String    @unique
+  prefix     String
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  user       User      @relation(fields: [userUid], references: [uid], onDelete: Cascade)
+
+  @@index([userUid, createdAt])
 }
 
 model EmailVerificationToken {
@@ -253,8 +303,25 @@ model Section {
   @@index([deletedAt])
 }
 
+model WikiCategory {
+  id                String     @id
+  name              String
+  description       String     @default("")
+  order             Int        @default(0)
+  requiresAdminEdit Boolean    @default(false)
+  deletedAt         DateTime?
+  deletedBy         String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  pages             WikiPage[]
+
+  @@index([order, createdAt])
+  @@index([deletedAt])
+}
+
 model Post {
   id            String        @id @default(cuid())
+  slug          String        @unique
   title         String
   section       String
   musicDocId    String?
@@ -379,6 +446,7 @@ model WikiPage {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   lastEditor    User           @relation("WikiLastEditor", fields: [lastEditorUid], references: [uid], onDelete: Cascade)
+  categoryRef   WikiCategory   @relation(fields: [category], references: [id], onDelete: Restrict)
   location      Region?        @relation(fields: [locationCode], references: [code])
   revisions     WikiRevision[]
   branches      WikiBranch[]
@@ -618,11 +686,14 @@ model Announcement {
 
 model Gallery {
   id         String         @id @default(cuid())
+  slug       String         @unique
   title      String
   description String
   authorUid  String
   authorName String
   tags       Json?
+  relatedLinks Json     @default("[]")
+  eventDate  String?
   locationCode  String?
   locationDetail String?
   copyright  String?
@@ -647,6 +718,7 @@ model Gallery {
   dislikes   GalleryDislike[]
 
   @@index([createdAt])
+  @@index([eventDate])
   @@index([published, updatedAt], map: "Gallery_published_idx")
   @@index([published, createdAt(sort: Desc)])
   @@index([status, authorUid])
@@ -688,25 +760,32 @@ model UploadSession {
 }
 
 model MediaAsset {
-  id         String          @id @default(cuid())
-  ownerUid   String
-  sessionId  String?
-  storageKey String          @unique
-  publicUrl  String
-  fileName   String
-  mimeType   String
-  sizeBytes  Int
-  status     MediaAssetStatus @default(ready)
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  owner      User            @relation(fields: [ownerUid], references: [uid], onDelete: Cascade)
-  session    UploadSession?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  galleryImages GalleryImage[] @relation("GalleryImageAsset")
-  songCovers SongCover[]     @relation("SongCoverAsset")
-  albumCovers AlbumCover[]   @relation("AlbumCoverAsset")
+  id            String          @id @default(cuid())
+  ownerUid      String
+  sessionId     String?
+  imageMapId    String?
+  storageKey    String?
+  publicUrl     String?
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  status        MediaAssetStatus @default(ready)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  owner         User            @relation(fields: [ownerUid], references: [uid], onDelete: Cascade)
+  session       UploadSession?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  imageMap      ImageMap?       @relation(fields: [imageMapId], references: [id], onDelete: Restrict)
+  photoUsers    User[]          @relation("UserPhotoAsset")
+  galleryImages GalleryImage[]  @relation("GalleryImageAsset")
+  eventCovers   Event[]         @relation("EventCoverAsset")
+  eventPosters  EventPoster[]   @relation("EventPosterAsset")
+  songCovers    SongCover[]     @relation("SongCoverAsset")
+  albumCovers   AlbumCover[]    @relation("AlbumCoverAsset")
 
   @@index([ownerUid, createdAt])
   @@index([sessionId])
+  @@index([imageMapId])
+  @@index([status])
 }
 
 model GalleryImage {
@@ -722,6 +801,90 @@ model GalleryImage {
 
   @@index([galleryId, sortOrder])
   @@index([assetId])
+}
+
+model Event {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  title        String
+  location     String
+  content      String
+  timeSlots    Json     @default("[]")
+  timeStatus   EventTimeStatus?
+  ticketPrices Json     @default("[]")
+  saleTimes    Json     @default("[]")
+  lineup       Json     @default("[]")
+  tags         Json     @default("[]")
+  externalLinks Json    @default("[]")
+  relatedLinks Json     @default("[]")
+  sortStart    String?
+  sortEnd      String?
+  coverAssetId String?
+  coverUrl     String?
+  coverName    String?
+  createdByUid String
+  updatedByUid String?
+  deletedAt    DateTime?
+  deletedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  coverAsset   MediaAsset? @relation("EventCoverAsset", fields: [coverAssetId], references: [id], onDelete: SetNull)
+  createdBy    User     @relation("EventCreator", fields: [createdByUid], references: [uid], onDelete: Cascade)
+  updatedBy    User?    @relation("EventUpdater", fields: [updatedByUid], references: [uid], onDelete: SetNull)
+  posters      EventPoster[]
+  ticketListings TicketListing[]
+
+  @@index([sortStart])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([deletedAt])
+  @@index([coverAssetId])
+  @@index([createdByUid])
+  @@index([tags], map: "Event_tags_gin", type: Gin)
+  @@index([slug(ops: raw("gin_trgm_ops"))], map: "Event_slug_trgm_idx", type: Gin)
+  @@index([title(ops: raw("gin_trgm_ops"))], map: "Event_title_trgm_idx", type: Gin)
+}
+
+model EventPoster {
+  id        String   @id @default(cuid())
+  eventId   String
+  assetId   String?
+  url       String
+  name      String
+  sortOrder Int      @default(0)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  asset     MediaAsset? @relation("EventPosterAsset", fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, sortOrder])
+  @@index([assetId])
+}
+model TicketListing {
+  id             String           @id @default(cuid())
+  slug           String           @unique
+  type           TicketListingType
+  eventId        String?
+  customEventName String?
+  quantity       Int
+  ticketTier     String
+  seat           String           @default("")
+  description    String           @default("")
+  contact        String
+  authorUid      String
+  status         ContentStatus    @default(draft)
+  reviewNote     String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  deletedAt      DateTime?
+  deletedBy      String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  event          Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  author         User             @relation("UserTicketListings", fields: [authorUid], references: [uid], onDelete: Cascade)
+
+  @@index([status, updatedAt])
+  @@index([authorUid, updatedAt])
+  @@index([eventId, status, createdAt])
+  @@index([deletedAt])
 }
 
 model ImageEmbedding {
@@ -773,88 +936,119 @@ model PostImageEmbedding {
 
 model Album {
   docId              String              @id @default(cuid())
-  id                 String              @unique
-  resourceType       MusicCollectionType @default(album)
-  platform           MusicPlatform
-  sourceId           String
+  slug               String              @unique
   title              String
   artist             String
-  cover              String
   description        String?
-  platformUrl        String?
+  tags               Json                @default("[]")
   tracks             Json?
-  defaultCoverSource String?
+  releaseDate        DateTime?           @db.Date
+  coverId            String?
   deletedAt          DateTime?
   deletedBy          String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
-  covers             AlbumCover[]
+  covers             AlbumCover[]        @relation("AlbumCovers")
+  selectedCover      AlbumCover?         @relation("SelectedAlbumCover", fields: [coverId], references: [id], onDelete: SetNull)
   songRelations      SongAlbumRelation[]
   posts              Post[]
+  externalSources    MusicExternalSource[]
+  coverForSongs      MusicTrack[]        @relation("SongCoverAlbum")
 
-  @@unique([platform, sourceId, resourceType])
   @@index([title])
   @@index([artist])
+  @@index([coverId])
   @@index([createdAt])
   @@index([deletedAt])
+  @@index([tags], map: "album_tags_gin", type: Gin)
 }
 
 model MusicTrack {
   docId     String   @id @default(cuid())
-  id        String   @unique
+  slug      String   @unique
   title     String
-  artist    String
+  artists   String[] @default([])
+  lyricists String[] @default([])
+  composers String[] @default([])
+  arrangers String[] @default([])
+  vocals    String[] @default([])
   album     String   @default("")
-  cover     String   @default("")
   audioUrl  String   @default("")
+  playableOverride MusicPlayableOverride @default(auto)
   lyric     String?
+  lyricType LyricType?
+  lyricPlain String?
+  lyricSource MusicPlatform?
   description String?
-  primaryPlatform    MusicPlatform   @default(netease)
-  enabledPlatform    MusicPlatform?
-  neteaseId          String?
-  tencentId          String?
-  kugouId            String?
-  baiduId            String?
-  kuwoId             String?
-  customPlatformIds  Json?
+  tags       Json     @default("[]")
+  releaseDate DateTime? @db.Date
+  durationMs  Int?
   customPlatformLinks Json?
   displayAlbumMode   DisplayAlbumMode @default(linked)
   manualAlbumName    String?
-  defaultCoverSource String?
-  addedBy   String?
+  coverId   String?
+  coverAlbumDocId String?
   deletedAt DateTime?
   deletedBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  adder     User?    @relation("MusicAddedBy", fields: [addedBy], references: [uid], onDelete: SetNull)
   posts     Post[]
-  covers    SongCover[]
+  covers    SongCover[] @relation("SongCovers")
+  selectedCover SongCover? @relation("SelectedSongCover", fields: [coverId], references: [id], onDelete: SetNull)
+  coverAlbum Album? @relation("SongCoverAlbum", fields: [coverAlbumDocId], references: [docId], onDelete: SetNull)
   albumRelations SongAlbumRelation[]
   instrumentalLinks   SongInstrumentalRelation[] @relation("SongInstrumentalSource")
   instrumentalForLinks SongInstrumentalRelation[] @relation("SongInstrumentalTarget")
+  externalSources MusicExternalSource[]
 
-  @@index([primaryPlatform])
-  @@index([enabledPlatform])
-  @@index([neteaseId])
-  @@index([tencentId])
-  @@index([kugouId])
-  @@index([baiduId])
-  @@index([kuwoId])
+  @@index([coverId])
+  @@index([coverAlbumDocId])
   @@index([createdAt])
   @@index([deletedAt])
+  @@index([tags], map: "music_tags_gin", type: Gin)
+}
+
+enum MusicPlayableOverride {
+  auto
+  enabled
+  disabled
+}
+
+model MusicExternalSource {
+  id           String                    @id @default(cuid())
+  resourceType MusicExternalResourceType
+  songDocId    String?
+  albumDocId   String?
+  platform     MusicPlatform
+  sourceId     String
+  sourceUrl    String?
+  isPrimary    Boolean                   @default(false)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  song         MusicTrack?                @relation(fields: [songDocId], references: [docId], onDelete: Cascade)
+  album        Album?                     @relation(fields: [albumDocId], references: [docId], onDelete: Cascade)
+
+  @@index([songDocId])
+  @@index([albumDocId])
+  @@index([platform, sourceId])
 }
 
 model SongCover {
-  id         String    @id @default(cuid())
-  songDocId  String
-  assetId    String?
-  storageKey String    @unique
-  publicUrl  String
-  isDefault  Boolean   @default(false)
+  id                  String        @id @default(cuid())
+  songDocId           String
+  assetId             String?
+  storageKey          String
+  publicUrl           String
+  thumbnailUrl        String?
+  variantStatus       VariantStatus @default(pending)
+  variantGeneratedAt  DateTime?
+  lastError           String?
+  isDefault           Boolean       @default(false)
   sortOrder  Int       @default(0)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-  song       MusicTrack @relation(fields: [songDocId], references: [docId], onDelete: Cascade)
+  song       MusicTrack @relation("SongCovers", fields: [songDocId], references: [docId], onDelete: Cascade)
+  selectedBySongs MusicTrack[] @relation("SelectedSongCover")
   asset      MediaAsset? @relation("SongCoverAsset", fields: [assetId], references: [id], onDelete: SetNull)
 
   @@index([songDocId, sortOrder])
@@ -862,16 +1056,21 @@ model SongCover {
 }
 
 model AlbumCover {
-  id         String    @id @default(cuid())
-  albumDocId String
-  assetId    String?
-  storageKey String    @unique
-  publicUrl  String
-  isDefault  Boolean   @default(false)
+  id                  String        @id @default(cuid())
+  albumDocId          String
+  assetId             String?
+  storageKey          String
+  publicUrl           String
+  thumbnailUrl        String?
+  variantStatus       VariantStatus @default(pending)
+  variantGeneratedAt  DateTime?
+  lastError           String?
+  isDefault           Boolean       @default(false)
   sortOrder  Int       @default(0)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-  album      Album     @relation(fields: [albumDocId], references: [docId], onDelete: Cascade)
+  album      Album     @relation("AlbumCovers", fields: [albumDocId], references: [docId], onDelete: Cascade)
+  selectedByAlbums Album[] @relation("SelectedAlbumCover")
   asset      MediaAsset? @relation("AlbumCoverAsset", fields: [assetId], references: [id], onDelete: SetNull)
 
   @@index([albumDocId, sortOrder])
@@ -925,22 +1124,26 @@ model MusicPlatformConfig {
 }
 
 model ImageMap {
-  id            String        @id
-  md5           String        @unique
-  localUrl      String
-  externalUrl   String?
-  s3Url         String?
-  storageType   StorageType   @default(local)
-  blurhash      String?
-  thumbhash     String?
-  thumbnailUrl  String?
-  variantStatus VariantStatus @default(pending)
+  id              String          @id
+  md5             String          @unique
+  localUrl        String
+  externalUrl     String?
+  s3Url           String?
+  s3Key           String?
+  storageType     StorageType     @default(local)
+  blurhash        String?
+  thumbhash       String?
+  thumbnailUrl    String?
+  variantStatus   VariantStatus   @default(pending)
   cloudSyncStatus CloudSyncStatus @default(pending)
-  deletedAt     DateTime?
-  deletedBy     String?
-  createdAt     DateTime      @default(now())
+  deletedAt       DateTime?
+  deletedBy       String?
+  retiredAt       DateTime?
+  createdAt       DateTime        @default(now())
+  mediaAssets     MediaAsset[]
 
   @@index([deletedAt])
+  @@index([retiredAt])
 }
 
 model SiteConfig {
@@ -973,6 +1176,7 @@ model BrowsingHistory {
   createdAt  DateTime          @default(now())
   user       User              @relation(fields: [userUid], references: [uid], onDelete: Cascade)
 
+  @@unique([userUid, targetType, targetId])
   @@index([userUid, createdAt])
   @@index([userUid, targetType, createdAt])
   @@index([targetType, targetId, createdAt])

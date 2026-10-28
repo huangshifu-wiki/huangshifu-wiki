@@ -1,10 +1,23 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { FileText, Shield, RefreshCw } from 'lucide-react'
+import { FileText, Shield, RefreshCw } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { apiGet } from '../../lib/apiClient'
 import { formatDateTime } from '../../lib/dateUtils'
 import type { AdminDataItem } from '../../types/entities'
+import {
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/src/components/ui'
+import { LoadErrorState } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 
 function getModerationActionLabel(action: string | undefined) {
   if (action === 'approve') return '通过'
@@ -12,12 +25,17 @@ function getModerationActionLabel(action: string | undefined) {
   if (action === 'submit') return '提交'
   if (action === 'rollback') return '回滚'
   if (action === 'delete') return '删除'
+  if (action === 'permanentDelete') return '彻底删除'
+  if (action === 'restore') return '恢复'
+  if (action === 'update') return '更新'
   return action || '-'
 }
 
 function getModerationActionClassName(action: string | undefined) {
-  if (action === 'approve') return 'theme-status-success'
-  if (action === 'reject' || action === 'delete') return 'theme-status-error'
+  if (action === 'approve' || action === 'restore') return 'theme-status-success'
+  if (action === 'reject' || action === 'delete' || action === 'permanentDelete') {
+    return 'theme-status-error'
+  }
   return 'bg-surface-alt text-text-muted'
 }
 
@@ -26,26 +44,52 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
   const logType = propType || paramType || 'moderation_logs'
   const [data, setData] = useState<AdminDataItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState<number | undefined>()
+  const [loadError, setLoadError] = useState<unknown | null>(null)
 
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
+  const requestIdRef = useRef(0)
   const fetchData = async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
+    setLoadError(null)
     try {
-      const result = await apiGet<{ logs: AdminDataItem[] }>(`/api/admin/${logType}`)
+      const result = await apiGet<{ logs: AdminDataItem[]; total: number }>(
+        `/api/admin/${logType}`,
+        {
+          page: pagination.page,
+          limit: pagination.pageSize,
+        }
+      )
+      if (requestId !== requestIdRef.current) return
       setData(result.logs || [])
+      setTotal(result.total || 0)
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       console.error(e)
-      setData([])
+      setLoadError(e)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchData()
-  }, [logType])
+    void fetchData()
+  }, [logType, pagination.page, pagination.pageSize])
 
   const Icon = logType === 'ban_logs' ? Shield : FileText
   const title = logType === 'ban_logs' ? '封禁日志' : '操作日志'
+
+  if (loading && data.length === 0) {
+    return <PageSkeleton variant="admin" />
+  }
 
   return (
     <div className="space-y-5">
@@ -53,100 +97,112 @@ export const AdminLogs = ({ type: propType }: { type?: 'moderation_logs' | 'ban_
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em] flex items-center gap-2">
           <Icon size={24} className="text-brand-gold" /> {title}
         </h1>
-        <button
+        <Button
+          type="button"
+          variant="secondary"
           onClick={fetchData}
-          className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
+          leftIcon={<RefreshCw size={14} />}
         >
-          <RefreshCw size={14} className="inline mr-1" /> 刷新
-        </button>
+          刷新
+        </Button>
       </div>
+      {loadError && data.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          error={loadError}
+          description="当前日志列表可能不是最新内容。"
+          onRetry={() => void fetchData()}
+        />
+      )}
 
-      <div className="bg-surface border border-border rounded overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-surface-alt border-b border-border">
-                {['时间', '操作者', '目标', '操作类型', '备注'].map((col) => (
-                  <th
-                    key={col}
-                    className="px-5 py-3 text-[11px] font-semibold text-text-muted uppercase tracking-wider"
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {loading ? (
-                [1, 2, 3, 4, 5].map((i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td colSpan={5} className="px-5 py-4">
-                      <div className="h-6 bg-surface-alt rounded" />
-                    </td>
-                  </tr>
-                ))
-              ) : data.length > 0 ? (
-                data.map((item) => (
-                  <tr key={item.id} className="hover:bg-surface-alt transition-colors">
-                    <td className="px-5 py-4 text-sm text-text-muted whitespace-nowrap">
-                      {formatDateTime(item.createdAt, 'N/A')}
-                    </td>
-                    <td className="px-5 py-4 text-sm font-medium text-text-primary">
-                      {item.operatorName || item.operatorUid}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-text-secondary">
-                      {logType === 'ban_logs' ? (
-                        <span className="font-medium text-text-primary">
-                          {item.targetName || item.targetUid}
-                        </span>
-                      ) : (
-                        <div>
-                          <span className="px-2 py-0.5 bg-surface-alt text-brand-gold text-[10px] font-medium rounded">
-                            {item.targetType}
-                          </span>
-                          <span className="ml-2 text-text-muted font-mono text-xs">
-                            {item.targetId}
-                          </span>
-                        </div>
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-surface-alt">
+            {['时间', '操作者', '目标', '操作类型', '备注'].map((col) => (
+              <TableHead key={col} className="px-5 py-3 text-[11px] uppercase tracking-wider">
+                {col}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {loadError && data.length === 0 ? (
+            <tr>
+              <TableCell colSpan={5}>
+                <LoadErrorState error={loadError} onRetry={() => void fetchData()} />
+              </TableCell>
+            </tr>
+          ) : data.length > 0 ? (
+            data.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell className="px-5 py-4 text-text-muted whitespace-nowrap">
+                  {formatDateTime(item.createdAt, 'N/A')}
+                </TableCell>
+                <TableCell className="px-5 py-4 font-medium">
+                  {item.operatorName || item.operatorUid}
+                </TableCell>
+                <TableCell className="px-5 py-4 text-text-secondary">
+                  {logType === 'ban_logs' ? (
+                    <span className="font-medium text-text-primary">
+                      {item.targetName || item.targetUid}
+                    </span>
+                  ) : (
+                    <div>
+                      <span className="px-2 py-0.5 bg-surface-alt text-brand-gold text-[10px] font-medium rounded">
+                        {item.targetType}
+                      </span>
+                      <span className="ml-2 break-all text-text-muted font-mono text-xs">
+                        {item.targetId}
+                      </span>
+                    </div>
+                  )}
+                </TableCell>
+                <TableCell className="px-5 py-4">
+                  {logType === 'ban_logs' ? (
+                    <span
+                      className={clsx(
+                        'px-2 py-0.5 rounded text-[10px] font-medium',
+                        item.action === 'ban' ? 'theme-status-error' : 'theme-status-success'
                       )}
-                    </td>
-                    <td className="px-5 py-4">
-                      {logType === 'ban_logs' ? (
-                        <span
-                          className={clsx(
-                            'px-2 py-0.5 rounded text-[10px] font-medium',
-                            item.action === 'ban' ? 'theme-status-error' : 'theme-status-success'
-                          )}
-                        >
-                          {item.action === 'ban' ? '封禁' : '解封'}
-                        </span>
-                      ) : (
-                        <span
-                          className={clsx(
-                            'px-2 py-0.5 rounded text-[10px] font-medium',
-                            getModerationActionClassName(item.action)
-                          )}
-                        >
-                          {getModerationActionLabel(item.action)}
-                        </span>
+                    >
+                      {item.action === 'ban' ? '封禁' : '解封'}
+                    </span>
+                  ) : (
+                    <span
+                      className={clsx(
+                        'px-2 py-0.5 rounded text-[10px] font-medium',
+                        getModerationActionClassName(item.action)
                       )}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-text-muted max-w-[200px] truncate">
-                      {item.note || '-'}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
-                    暂无数据
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                    >
+                      {getModerationActionLabel(item.action)}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="max-w-[200px] truncate px-5 py-4 text-text-muted">
+                  {item.note || '-'}
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={5} className="px-5 py-16 text-center text-text-muted italic">
+                暂无数据
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
     </div>
   )
 }

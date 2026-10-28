@@ -1,11 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-type AuthModule = typeof import('../../src/lib/auth');
-type User = import('../../src/lib/auth').User;
+type AuthModule = typeof import('../../src/lib/auth')
+type User = import('../../src/lib/auth').User
 
 function createMockUser(overrides?: Partial<User>): User {
   return {
     uid: 'u_1',
+    publicId: '1',
     email: 'test@example.com',
     displayName: '测试用户',
     photoURL: null,
@@ -21,73 +22,73 @@ function createMockUser(overrides?: Partial<User>): User {
     tenantId: null,
     providerData: [],
     ...overrides,
-  };
+  }
 }
 
 describe('auth module', () => {
-  const fetchMock = vi.fn<typeof fetch>();
+  const fetchMock = vi.fn<typeof fetch>()
 
   async function loadAuthModule(): Promise<AuthModule> {
-    vi.stubGlobal('fetch', fetchMock);
-    return import('../../src/lib/auth');
+    vi.stubGlobal('fetch', fetchMock)
+    return import('../../src/lib/auth')
   }
 
   beforeEach(() => {
-    vi.resetModules();
-    fetchMock.mockReset();
-    vi.unstubAllGlobals();
-  });
+    vi.resetModules()
+    fetchMock.mockReset()
+    vi.unstubAllGlobals()
+  })
 
   afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+    vi.unstubAllGlobals()
+  })
 
   it('refreshAuthState updates auth.currentUser from /api/auth/me', async () => {
-    const { auth, refreshAuthState } = await loadAuthModule();
-    const user = createMockUser();
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }));
+    const { auth, refreshAuthState } = await loadAuthModule()
+    const user = createMockUser()
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }))
 
-    const current = await refreshAuthState();
-    expect(current?.uid).toBe('u_1');
-    expect(auth.currentUser?.email).toBe('test@example.com');
+    const current = await refreshAuthState()
+    expect(current?.uid).toBe('u_1')
+    expect(auth.currentUser?.email).toBe('test@example.com')
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/auth/me',
-      expect.objectContaining({ credentials: 'include' }),
-    );
-  });
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
 
   it('onAuthStateChanged emits initial and refreshed state', async () => {
-    const { onAuthStateChanged } = await loadAuthModule();
-    const user = createMockUser({ uid: 'u_2' });
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }));
+    const { onAuthStateChanged } = await loadAuthModule()
+    const user = createMockUser({ uid: 'u_2' })
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }))
 
-    const received: Array<string | null> = [];
+    const received: Array<string | null> = []
     const unsubscribe = onAuthStateChanged({}, (current) => {
-      received.push(current?.uid ?? null);
-    });
+      received.push(current?.uid ?? null)
+    })
 
     for (let i = 0; i < 20; i += 1) {
       if (received.includes('u_2')) {
-        break;
+        break
       }
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0))
     }
-    expect(received).toContain('u_2');
+    expect(received).toContain('u_2')
 
-    expect(received[0]).toBe('u_2');
+    expect(received[0]).toBe('u_2')
 
-    unsubscribe();
-  });
+    unsubscribe()
+  })
 
   it('login performs login request then refreshes auth state', async () => {
-    const { auth, login } = await loadAuthModule();
-    const user = createMockUser({ uid: 'u_login' });
+    const { auth, login } = await loadAuthModule()
+    const user = createMockUser({ uid: 'u_login' })
     fetchMock
       .mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }))
 
-    await login('test@example.com', 'secret123');
+    await login('test@example.com', 'secret123')
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -97,19 +98,19 @@ describe('auth module', () => {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: 'test@example.com', password: 'secret123' }),
-      }),
-    );
+      })
+    )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       '/api/auth/me',
-      expect.objectContaining({ credentials: 'include' }),
-    );
-    expect(auth.currentUser?.uid).toBe('u_login');
-  });
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(auth.currentUser?.uid).toBe('u_login')
+  })
 
   it('register performs register request without refreshing auth state', async () => {
-    const { auth, register } = await loadAuthModule();
-    const user = createMockUser({ uid: 'u_register' });
+    const { auth, register } = await loadAuthModule()
+    const user = createMockUser({ uid: 'u_register' })
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -118,48 +119,52 @@ describe('auth module', () => {
           verificationEmailSent: false,
           user,
         }),
-        { status: 201 },
-      ),
-    );
+        { status: 201 }
+      )
+    )
 
-    const result = await register('new@example.com', 'pw123456', '新用户');
+    const result = await register('new@example.com', 'pw123456', '新用户')
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       '/api/auth/register',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ email: 'new@example.com', password: 'pw123456', displayName: '新用户' }),
-      }),
-    );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(result.requiresEmailVerification).toBe(false);
-    expect(result.verificationEmailSent).toBe(false);
-    expect(auth.currentUser).toBeNull();
-  });
+        body: JSON.stringify({
+          email: 'new@example.com',
+          password: 'pw123456',
+          displayName: '新用户',
+        }),
+      })
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result.requiresEmailVerification).toBe(false)
+    expect(result.verificationEmailSent).toBe(false)
+    expect(auth.currentUser).toBeNull()
+  })
 
   it('loginWithWeChat returns response payload and refreshes auth state', async () => {
-    const { auth, loginWithWeChat } = await loadAuthModule();
-    const user = createMockUser({ uid: 'u_wx' });
+    const { auth, loginWithWeChat } = await loadAuthModule()
+    const user = createMockUser({ uid: 'u_wx' })
     fetchMock
       .mockResolvedValueOnce(new Response(JSON.stringify({ token: 't', user }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }))
 
-    const data = await loginWithWeChat<{ token: string }>('mock:openid', { displayName: 'wx' });
-    expect(data.token).toBe('t');
-    expect(auth.currentUser?.uid).toBe('u_wx');
-  });
+    const data = await loginWithWeChat<{ token: string }>('mock:openid', { displayName: 'wx' })
+    expect(data.token).toBe('t')
+    expect(auth.currentUser?.uid).toBe('u_wx')
+  })
 
   it('verifyEmail sends XSRF token when available', async () => {
-    const { verifyEmail } = await loadAuthModule();
+    const { verifyEmail } = await loadAuthModule()
     vi.stubGlobal('document', {
       cookie: 'XSRF-TOKEN=test-xsrf-token',
-    });
+    })
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ success: true, purpose: 'change_email' }), { status: 200 }),
-    );
+      new Response(JSON.stringify({ success: true, purpose: 'change_email' }), { status: 200 })
+    )
 
-    const result = await verifyEmail('email-token');
+    const result = await verifyEmail('email-token')
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/auth/verify-email',
@@ -171,21 +176,21 @@ describe('auth module', () => {
           'X-XSRF-TOKEN': 'test-xsrf-token',
         },
         body: JSON.stringify({ token: 'email-token' }),
-      }),
-    );
-    expect(result.purpose).toBe('change_email');
-  });
+      })
+    )
+    expect(result.purpose).toBe('change_email')
+  })
 
   it('requestPasswordReset sends XSRF token when available', async () => {
-    const { requestPasswordReset } = await loadAuthModule();
+    const { requestPasswordReset } = await loadAuthModule()
     vi.stubGlobal('document', {
       cookie: 'XSRF-TOKEN=test-xsrf-token',
-    });
+    })
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ success: true, message: 'sent' }), { status: 200 }),
-    );
+      new Response(JSON.stringify({ success: true, message: 'sent' }), { status: 200 })
+    )
 
-    const result = await requestPasswordReset('user@example.com');
+    const result = await requestPasswordReset('user@example.com')
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/auth/password-reset/request',
@@ -197,26 +202,26 @@ describe('auth module', () => {
           'X-XSRF-TOKEN': 'test-xsrf-token',
         },
         body: JSON.stringify({ email: 'user@example.com' }),
-      }),
-    );
-    expect(result.success).toBe(true);
-  });
+      })
+    )
+    expect(result.success).toBe(true)
+  })
 
   it('confirmPasswordReset sends token and refreshes auth state after success', async () => {
-    const { auth, confirmPasswordReset, refreshAuthState } = await loadAuthModule();
+    const { auth, confirmPasswordReset, refreshAuthState } = await loadAuthModule()
     vi.stubGlobal('document', {
       cookie: 'XSRF-TOKEN=test-xsrf-token',
-    });
-    const user = createMockUser({ uid: 'stale-user' });
+    })
+    const user = createMockUser({ uid: 'stale-user' })
     fetchMock
       .mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ user: null }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ user: null }), { status: 200 }))
 
-    await refreshAuthState();
-    expect(auth.currentUser?.uid).toBe('stale-user');
+    await refreshAuthState()
+    expect(auth.currentUser?.uid).toBe('stale-user')
 
-    const result = await confirmPasswordReset('reset-token', 'NewPassword123!');
+    const result = await confirmPasswordReset('reset-token', 'NewPassword123!')
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
@@ -229,33 +234,33 @@ describe('auth module', () => {
           'X-XSRF-TOKEN': 'test-xsrf-token',
         },
         body: JSON.stringify({ token: 'reset-token', newPassword: 'NewPassword123!' }),
-      }),
-    );
+      })
+    )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
       '/api/auth/me',
-      expect.objectContaining({ credentials: 'include' }),
-    );
-    expect(result.success).toBe(true);
-    expect(auth.currentUser).toBeNull();
-  });
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(result.success).toBe(true)
+    expect(auth.currentUser).toBeNull()
+  })
 
   it('logoutRequest clears auth state via refresh', async () => {
-    const { auth, logoutRequest, refreshAuthState } = await loadAuthModule();
-    const user = createMockUser({ uid: 'u_before_logout' });
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }));
-    await refreshAuthState();
-    expect(auth.currentUser?.uid).toBe('u_before_logout');
+    const { auth, logoutRequest, refreshAuthState } = await loadAuthModule()
+    const user = createMockUser({ uid: 'u_before_logout' })
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ user }), { status: 200 }))
+    await refreshAuthState()
+    expect(auth.currentUser?.uid).toBe('u_before_logout')
 
     vi.stubGlobal('document', {
       cookie: 'XSRF-TOKEN=test-xsrf-token',
-    });
+    })
 
     fetchMock
       .mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ user: null }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ user: null }), { status: 200 }))
 
-    await logoutRequest();
+    await logoutRequest()
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       '/api/auth/logout',
@@ -263,54 +268,69 @@ describe('auth module', () => {
         method: 'POST',
         credentials: 'include',
         headers: { 'X-XSRF-TOKEN': 'test-xsrf-token' },
-      }),
-    );
-    expect(auth.currentUser).toBeNull();
-  });
+      })
+    )
+    expect(auth.currentUser).toBeNull()
+  })
 
   describe('password strength validation', () => {
     it('returns 400 when registering with password shorter than 8 characters', async () => {
-      const { register } = await loadAuthModule();
+      const { register } = await loadAuthModule()
       fetchMock.mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          error: 'Validation failed',
-          fields: { password: '密码至少8个字符' },
-        }), { status: 400 }),
-      );
+        new Response(
+          JSON.stringify({
+            error: 'Validation failed',
+            fields: { password: '密码至少8个字符' },
+          }),
+          { status: 400 }
+        )
+      )
 
-      await expect(register('test@example.com', 'short', '测试用户')).rejects.toThrow('密码至少8个字符');
+      await expect(register('test@example.com', 'short', '测试用户')).rejects.toThrow(
+        '密码至少8个字符'
+      )
 
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/auth/register',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ email: 'test@example.com', password: 'short', displayName: '测试用户' }),
-        }),
-      );
-    });
+          body: JSON.stringify({
+            email: 'test@example.com',
+            password: 'short',
+            displayName: '测试用户',
+          }),
+        })
+      )
+    })
 
     it('prefers field-level validation messages for login requests', async () => {
-      const { login } = await loadAuthModule();
+      const { login } = await loadAuthModule()
       fetchMock.mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          error: 'Validation failed',
-          fields: { email: '邮箱不能为空' },
-        }), { status: 400 }),
-      );
+        new Response(
+          JSON.stringify({
+            error: 'Validation failed',
+            fields: { email: '邮箱不能为空' },
+          }),
+          { status: 400 }
+        )
+      )
 
-      await expect(login('', '')).rejects.toThrow('邮箱不能为空');
-    });
+      await expect(login('', '')).rejects.toThrow('邮箱不能为空')
+    })
 
     it('shows the empty-email message for whitespace-only auth inputs', async () => {
-      const { register } = await loadAuthModule();
+      const { register } = await loadAuthModule()
       fetchMock.mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          error: 'Validation failed',
-          fields: { email: '邮箱不能为空' },
-        }), { status: 400 }),
-      );
+        new Response(
+          JSON.stringify({
+            error: 'Validation failed',
+            fields: { email: '邮箱不能为空' },
+          }),
+          { status: 400 }
+        )
+      )
 
-      await expect(register('   ', 'ValidPassword123!', '测试用户')).rejects.toThrow('邮箱不能为空');
-    });
-  });
-});
+      await expect(register('   ', 'ValidPassword123!', '测试用户')).rejects.toThrow('邮箱不能为空')
+    })
+  })
+})

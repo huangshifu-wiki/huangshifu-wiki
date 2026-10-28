@@ -10,6 +10,7 @@ import {
 } from '../schemas'
 import {
   prisma,
+  fetchVisibleTagSuggestions,
   toWikiResponse,
   toWikiListResponse,
   buildWikiVisibilityWhere,
@@ -26,9 +27,12 @@ import {
   clearWikiRelationCache,
   logger,
   parsePagination,
+  createPaginationMeta,
   ensureTextLimit,
   createNotification,
   softDeleteData,
+  allocateNumericSlug,
+  isNumericSlug,
 } from '../utils'
 import { CONTENT_LIMITS, WIKI_MAX_CONTENT_SIZE } from '../../lib/contentLimits'
 import { enhancedCache, CACHE_KEYS } from '../utils/cache'
@@ -41,7 +45,6 @@ import type {
   WikiPullRequestWithRelations,
 } from '../types'
 import { buildWikiBacklinkSearchTerms } from '../../lib/wikiLinkParser'
-import { normalizeWikiPageSlug } from '../../lib/wikiSlug'
 import {
   buildLegacyDuplicateWikiTitleKey,
   getWikiUniqueConflictMessage,
@@ -64,6 +67,18 @@ const wikiPageResponseInclude = {
   location: true,
 } satisfies Prisma.WikiPageInclude
 
+const wikiCategoryResponseSelect = {
+  id: true,
+  name: true,
+  description: true,
+  order: true,
+  requiresAdminEdit: true,
+} satisfies Prisma.WikiCategorySelect
+
+const wikiCategoryWriteSelect = {
+  requiresAdminEdit: true,
+} satisfies Prisma.WikiCategorySelect
+
 function sendWikiUniqueConflict(error: unknown, res: Response) {
   const message = getWikiUniqueConflictMessage(error)
   if (!message) {
@@ -82,7 +97,26 @@ function clearWikiPageCache(slug: string) {
 function clearWikiListCaches() {
   enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`)
   enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`)
-  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_TIMELINE}:`)
+}
+
+async function resolveWritableWikiCategory(
+  categoryId: string,
+  authUser: NonNullable<AuthenticatedRequest['authUser']>
+) {
+  const category = await prisma.wikiCategory.findFirst({
+    where: { id: categoryId, deletedAt: null },
+    select: wikiCategoryWriteSelect,
+  })
+
+  if (!category) {
+    return { ok: false as const, status: 400, error: '分类不存在' }
+  }
+
+  if (category.requiresAdminEdit && !isAdminRole(authUser.role)) {
+    return { ok: false as const, status: 403, error: '只有管理员可以编辑该分类内容' }
+  }
+
+  return { ok: true as const, category }
 }
 
 async function updateWikiPinState(req: AuthenticatedRequest, res: Response, isPinned: boolean) {
@@ -316,10 +350,7 @@ router.get(
           likedByMe: likedWikiSet.has(p.slug),
           dislikedByMe: dislikedWikiSet.has(p.slug),
         })),
-        total,
-        page,
-        limit,
-        hasMore: page * limit < total,
+        ...createPaginationMeta(total, page, limit, pages.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'Fetch wiki pages error')
@@ -336,9 +367,7 @@ mpWikiRouter.get('/', async (req: AuthenticatedRequest, res) => {
   res.setHeader('Expires', '0')
   try {
     const category = typeof req.query.category === 'string' ? req.query.category : 'all'
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100)
-    const page = Math.max(Number(req.query.page) || 1, 1)
-    const skip = (page - 1) * limit
+    const { limit, page, offset: skip } = parsePagination(req.query)
 
     const where = {
       ...buildWikiVisibilityWhere(req.authUser),
@@ -376,92 +405,13 @@ mpWikiRouter.get('/', async (req: AuthenticatedRequest, res) => {
         favoritesCount: page.favoritesCount,
         updatedAt: page.updatedAt.toISOString(),
       })),
-      total,
-      page,
-      limit,
+      ...createPaginationMeta(total, page, limit, pages.length),
     })
   } catch (error) {
     logger.error({ err: error }, 'Fetch mp wiki list error')
     res.status(500).json({ error: '获取小程序百科失败' })
   }
 })
-
-router.get(
-  '/timeline',
-  asyncHandler(async (req: AuthenticatedRequest, res) => {
-    try {
-      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500)
-      const page = Math.max(Number(req.query.page) || 1, 1)
-      const skip = (page - 1) * limit
-
-      const where = {
-        ...buildWikiVisibilityWhere(req.authUser),
-        eventDate: {
-          not: null,
-        },
-      }
-
-      const [pages, total] = await Promise.all([
-        prisma.wikiPage.findMany({
-          where,
-          orderBy: {
-            eventDate: 'asc',
-          },
-          take: limit,
-          skip,
-          select: {
-            id: true,
-            slug: true,
-            title: true,
-            category: true,
-            tags: true,
-            eventDate: true,
-            status: true,
-            favoritesCount: true,
-            isPinned: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        }),
-        prisma.wikiPage.count({ where }),
-      ])
-
-      const favoritedWikiSet = new Set<string>()
-      if (req.authUser && pages.length) {
-        const favorites = await prisma.favorite.findMany({
-          where: {
-            userUid: req.authUser.uid,
-            targetType: 'wiki',
-            targetId: { in: pages.map((item) => item.slug) },
-          },
-          select: { targetId: true },
-        })
-        favorites.forEach((item) => favoritedWikiSet.add(item.targetId))
-      }
-
-      res.json({
-        events: pages.map((page) => ({
-          slug: page.slug,
-          title: page.title,
-          category: page.category,
-          tags: serializeTags(page.tags),
-          eventDate: page.eventDate,
-          status: page.status,
-          favoritesCount: page.favoritesCount,
-          favoritedByMe: favoritedWikiSet.has(page.slug),
-          createdAt: page.createdAt.toISOString(),
-          updatedAt: page.updatedAt.toISOString(),
-        })),
-        total,
-        page,
-        limit,
-      })
-    } catch (error) {
-      logger.error({ err: error }, 'Fetch wiki timeline error')
-      res.status(500).json({ error: '获取时间轴失败' })
-    }
-  })
-)
 
 router.get(
   '/recommended',
@@ -556,6 +506,31 @@ router.get(
 )
 
 router.get(
+  '/categories',
+  asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    try {
+      const categories = await prisma.wikiCategory.findMany({
+        where: { deletedAt: null },
+        orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+        select: wikiCategoryResponseSelect,
+      })
+
+      res.json({ categories })
+    } catch (error) {
+      logger.error({ err: error }, 'Fetch wiki categories error')
+      res.status(500).json({ error: '获取百科分类失败' })
+    }
+  })
+)
+router.get(
+  '/tags',
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const tags = await fetchVisibleTagSuggestions('wiki', req.authUser)
+    res.json({ tags })
+  })
+)
+
+router.get(
   '/:slug',
   validateWikiSlugParam,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -567,6 +542,10 @@ router.get(
     res.setHeader('Expires', '0')
     try {
       const { slug } = req.params
+      if (!isNumericSlug(slug)) {
+        res.status(404).json({ error: '页面未找到' })
+        return
+      }
       const cacheKey = `${CACHE_KEYS.WIKI_PAGE}:${slug}`
 
       // 尝试读取缓存（仅对未登录用户启用缓存）
@@ -964,7 +943,7 @@ router.get(
   '/:slug/history',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const page = await prisma.wikiPage.findUnique({
+      const wikiPage = await prisma.wikiPage.findUnique({
         where: { slug: req.params.slug },
         select: {
           slug: true,
@@ -973,40 +952,45 @@ router.get(
         },
       })
 
-      if (!page) {
+      if (!wikiPage) {
         res.status(404).json({ error: '页面未找到' })
         return
       }
 
-      if (!canViewWikiPage(page, req.authUser)) {
+      if (!canViewWikiPage(wikiPage, req.authUser)) {
         res.status(404).json({ error: '页面未找到' })
         return
       }
 
-      const revisions = await prisma.wikiRevision.findMany({
-        where: { pageSlug: req.params.slug },
-        orderBy: { createdAt: 'desc' },
-        take: Math.min(Math.max(Number(req.query.limit) || 50, 1), 200),
-        skip: Math.max(Number(req.query.skip) || 0, 0),
-        select: {
-          id: true,
-          pageSlug: true,
-          branchId: true,
-          title: true,
-          slug: true,
-          category: true,
-          editorUid: true,
-          editorName: true,
-          isAutoSave: true,
-          createdAt: true,
-        },
-      })
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [revisions, total] = await Promise.all([
+        prisma.wikiRevision.findMany({
+          where: { pageSlug: req.params.slug },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+          select: {
+            id: true,
+            pageSlug: true,
+            branchId: true,
+            title: true,
+            slug: true,
+            category: true,
+            editorUid: true,
+            editorName: true,
+            isAutoSave: true,
+            createdAt: true,
+          },
+        }),
+        prisma.wikiRevision.count({ where: { pageSlug: req.params.slug } }),
+      ])
 
       res.json({
         revisions: revisions.map((revision) => ({
           ...revision,
           createdAt: revision.createdAt.toISOString(),
         })),
+        ...createPaginationMeta(total, page, limit, revisions.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'Fetch wiki history error')
@@ -1071,6 +1055,7 @@ router.post(
         where: { slug },
         select: {
           slug: true,
+          category: true,
           lastEditorUid: true,
           status: true,
         },
@@ -1084,6 +1069,12 @@ router.post(
       const isOwner = page.lastEditorUid === req.authUser!.uid
       if (!isOwner && !isAdminRole(req.authUser!.role)) {
         res.status(403).json({ error: '无权提交该页面' })
+        return
+      }
+
+      const categoryResult = await resolveWritableWikiCategory(page.category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 
@@ -1161,7 +1152,6 @@ router.post(
       const hasRelationsInPayload = Object.prototype.hasOwnProperty.call(req.body, 'relations')
       const {
         title,
-        slug,
         category,
         content,
         tags,
@@ -1172,7 +1162,6 @@ router.post(
         locationDetail,
       } = req.body as {
         title?: string
-        slug?: string
         category?: string
         content?: string
         tags?: string[]
@@ -1183,10 +1172,9 @@ router.post(
         locationDetail?: string
       }
 
-      const pageSlug = normalizeWikiPageSlug(slug)
       const titleKey = typeof title === 'string' ? normalizeWikiTitleKey(title) : ''
 
-      if (!titleKey || !pageSlug || !category || !content) {
+      if (!titleKey || !category || !content) {
         res.status(400).json({ error: '缺少必要字段' })
         return
       }
@@ -1196,18 +1184,20 @@ router.post(
         return
       }
 
-      if (category === 'music' && req.authUser?.role === 'user') {
-        res.status(403).json({ error: '只有管理员可以编辑音乐分类内容' })
+      const categoryResult = await resolveWritableWikiCategory(category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 
       const nextStatus = normalizeWikiWriteStatus(status, req.authUser!)
-      const normalizedRelations = hasRelationsInPayload
-        ? await normalizeWikiRelationListForWrite(relations, pageSlug)
-        : []
       const normalizedTags = hasTagsInPayload ? (Array.isArray(tags) ? tags : []) : []
 
       const page = await prisma.$transaction(async (tx) => {
+        const pageSlug = await allocateNumericSlug(tx, 'WikiPage')
+        const normalizedRelations = hasRelationsInPayload
+          ? await normalizeWikiRelationListForWrite(relations, pageSlug)
+          : []
         const createdPage = await tx.wikiPage.create({
           include: wikiPageResponseInclude,
           data: {
@@ -1275,7 +1265,7 @@ router.post(
         return createdPage
       })
 
-      clearWikiPageCache(pageSlug)
+      clearWikiPageCache(page.slug)
       clearWikiListCaches()
       res.status(201).json({ page: toWikiResponse(page) })
     } catch (error) {
@@ -1346,6 +1336,12 @@ router.put(
       })
       if (!page) {
         res.status(404).json({ error: '页面未找到' })
+        return
+      }
+
+      const categoryResult = await resolveWritableWikiCategory(category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 
@@ -1524,6 +1520,12 @@ router.post(
       const page = await prisma.wikiPage.findUnique({ where: { slug: pageSlug } })
       if (!page || !canViewWikiPage(page, req.authUser)) {
         res.status(404).json({ error: '页面未找到' })
+        return
+      }
+
+      const categoryResult = await resolveWritableWikiCategory(page.category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 
@@ -1762,20 +1764,24 @@ router.post(
       const hasTagsInPayload = Object.prototype.hasOwnProperty.call(req.body, 'tags')
       const hasRelationsInPayload = Object.prototype.hasOwnProperty.call(req.body, 'relations')
 
-      const { title, content, slug, category, tags, relations, eventDate, isAutoSave } =
-        req.body as {
-          title?: string
-          content?: string
-          slug?: string
-          category?: string
-          tags?: string[]
-          relations?: unknown
-          eventDate?: string | null
-          isAutoSave?: boolean
-        }
+      const { title, content, category, tags, relations, eventDate, isAutoSave } = req.body as {
+        title?: string
+        content?: string
+        category?: string
+        tags?: string[]
+        relations?: unknown
+        eventDate?: string | null
+        isAutoSave?: boolean
+      }
 
       if (!title || !content || !category) {
         res.status(400).json({ error: '缺少必要字段' })
+        return
+      }
+
+      const categoryResult = await resolveWritableWikiCategory(category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 
@@ -1800,7 +1806,7 @@ router.post(
           branchId: branch.id,
           title,
           content,
-          slug: normalizeWikiPageSlug(slug || branch.pageSlug),
+          slug: branch.pageSlug,
           category,
           tags: normalizedTags,
           relations: normalizedRelations,
@@ -1951,28 +1957,41 @@ router.get(
     try {
       const status =
         req.query.status === 'merged' || req.query.status === 'rejected' ? req.query.status : 'open'
-      const where = isAdminRole(req.authUser!.role)
+      const pageSlug = typeof req.query.pageSlug === 'string' ? req.query.pageSlug.trim() : ''
+      const branchId = typeof req.query.branchId === 'string' ? req.query.branchId.trim() : ''
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const baseWhere = isAdminRole(req.authUser!.role)
         ? { status: status as WikiPullRequestStatus }
         : { status: status as WikiPullRequestStatus, createdByUid: req.authUser!.uid }
+      const where = {
+        ...baseWhere,
+        ...(pageSlug ? { pageSlug } : {}),
+        ...(branchId ? { branchId } : {}),
+      }
 
-      const pullRequests = await prisma.wikiPullRequest.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          branch: {
-            include: {
-              page: { select: { slug: true, title: true, category: true } },
+      const [pullRequests, total] = await Promise.all([
+        prisma.wikiPullRequest.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            branch: {
+              include: {
+                page: { select: { slug: true, title: true, category: true } },
+              },
             },
+            page: { select: { slug: true, title: true, category: true } },
           },
-          page: { select: { slug: true, title: true, category: true } },
-        },
-        take: 200,
-      })
+          take: limit,
+          skip,
+        }),
+        prisma.wikiPullRequest.count({ where }),
+      ])
 
       res.json({
         pullRequests: pullRequests.map((pr) =>
           toWikiPullRequestResponse(pr as WikiPullRequestWithRelations)
         ),
+        ...createPaginationMeta(total, page, limit, pullRequests.length),
       })
     } catch (error) {
       logger.error({ err: error }, 'List wiki pull requests error')
@@ -2355,7 +2374,7 @@ router.post(
   wikiWriteLimiter,
   requireAuth,
   requireActiveUser,
-  validateBody(wikiRevisionSchema.omit({ slug: true, isAutoSave: true })),
+  validateBody(wikiRevisionSchema.omit({ isAutoSave: true })),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
       const branch = await prisma.wikiBranch.findUnique({ where: { id: req.params.branchId } })
@@ -2389,6 +2408,12 @@ router.post(
       }
       if (!payload.title || !payload.content || !payload.category) {
         res.status(400).json({ error: '缺少必要字段' })
+        return
+      }
+
+      const categoryResult = await resolveWritableWikiCategory(payload.category, req.authUser!)
+      if (!categoryResult.ok) {
+        res.status(categoryResult.status).json({ error: categoryResult.error })
         return
       }
 

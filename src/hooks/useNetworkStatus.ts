@@ -1,13 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react'
 
 export interface NetworkStatus {
   isOnline: boolean
   lastChangedAt: Date | null
 }
 
-export const useNetworkStatus = (): NetworkStatus & { goOnline: () => void; goOffline: () => void } => {
+export const useNetworkStatus = (): NetworkStatus & {
+  goOnline: () => void
+  goOffline: () => void
+} => {
   const [isOnline, setIsOnline] = useState<boolean>(
-    typeof navigator !== 'undefined' ? navigator.onLine : true,
+    typeof navigator !== 'undefined' ? navigator.onLine : true
   )
   const [lastChangedAt, setLastChangedAt] = useState<Date | null>(null)
 

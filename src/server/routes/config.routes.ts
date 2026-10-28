@@ -4,7 +4,6 @@ import { requireAuth, requireAdmin, requireActiveUser, requireSuperAdmin } from 
 import type { AuthenticatedRequest } from '../types'
 import {
   prisma,
-  GALLERY_ADMIN_ONLY,
   getEmailVerificationConfig,
   setEmailVerificationConfig,
   toEmailVerificationPublicConfig,
@@ -13,16 +12,20 @@ import {
   getRegistrationConfig,
   setRegistrationConfig,
   isRegistrationOpen,
+  getSearchHotKeywordsConfig,
+  setSearchHotKeywordsConfig,
+  isSearchHotKeywordsEnabled,
+  getTurnstilePublicConfig,
   parseQueryString,
   parseRouteParam,
 } from '../utils'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
 import { enhancedCache, CACHE_KEYS } from '../utils/cache'
 import {
   getUserPresignedUploadUrl,
   getPresignedDownloadUrl,
   getPresignedDeleteUrl,
   getPublicConfig,
-  validateS3Config,
 } from '../s3/s3Service'
 import {
   startSyncTask,
@@ -36,7 +39,7 @@ const router = createRouter()
 // GET /api/config/gallery-access - Get gallery write access mode
 router.get('/gallery-access', async (_req, res) => {
   try {
-    res.json({ adminOnly: GALLERY_ADMIN_ONLY })
+    res.json({ adminOnly: runtimeConfigService.getConfig().galleryAdminOnly })
   } catch (error) {
     console.error('Get gallery access mode error:', error)
     res.status(500).json({ error: '获取图集权限配置失败' })
@@ -49,10 +52,33 @@ router.get('/features', async (_req, res) => {
     res.json({
       semanticSearch: isSemanticSearchEnabled(),
       registrationEnabled: await isRegistrationOpen(),
+      searchHotKeywordsEnabled: await isSearchHotKeywordsEnabled(),
     })
   } catch (error) {
     console.error('Get public features error:', error)
     res.status(500).json({ error: '获取站点功能配置失败' })
+  }
+})
+
+// GET /api/config/turnstile - Get public Turnstile config
+router.get('/turnstile', async (_req, res) => {
+  try {
+    res.json(getTurnstilePublicConfig())
+  } catch (error) {
+    console.error('Get turnstile config error:', error)
+    res.status(500).json({ error: '获取人机验证配置失败' })
+  }
+})
+
+// GET /api/config/admin-permissions - Get admin UI permission flags
+router.get('/admin-permissions', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    res.json({
+      allowSuperAdminRoleChanges: runtimeConfigService.getConfig().allowSuperAdminManageSuperAdmins,
+    })
+  } catch (error) {
+    console.error('Get admin permissions error:', error)
+    res.status(500).json({ error: '获取后台权限配置失败' })
   }
 })
 
@@ -81,6 +107,34 @@ router.patch('/registration', requireAuth, requireSuperAdmin, async (req, res) =
   } catch (error) {
     console.error('Update registration config error:', error)
     res.status(500).json({ error: '更新注册配置失败' })
+  }
+})
+
+// GET /api/config/search-hot-keywords/admin - Get search hot keywords config
+router.get('/search-hot-keywords/admin', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    const config = await getSearchHotKeywordsConfig()
+    res.json(config)
+  } catch (error) {
+    console.error('Get search hot keywords config error:', error)
+    res.status(500).json({ error: '获取搜索热词配置失败' })
+  }
+})
+
+// PATCH /api/config/search-hot-keywords - Update search hot keywords config
+router.patch('/search-hot-keywords', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { enabled } = req.body as { enabled?: unknown }
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: 'enabled 必须是布尔值' })
+      return
+    }
+
+    const config = await setSearchHotKeywordsConfig({ enabled })
+    res.json({ success: true, config })
+  } catch (error) {
+    console.error('Update search hot keywords config error:', error)
+    res.status(500).json({ error: '更新搜索热词配置失败' })
   }
 })
 
@@ -121,6 +175,12 @@ router.patch('/email-verification', requireAuth, requireSuperAdmin, async (req, 
       smtpFrom,
       smtpPass,
       clearSmtpPass,
+      verificationSubject,
+      verificationTextBody,
+      verificationHtmlBody,
+      resetSubject,
+      resetTextBody,
+      resetHtmlBody,
     } = body
 
     if (typeof enabled !== 'boolean') {
@@ -187,6 +247,12 @@ router.patch('/email-verification', requireAuth, requireSuperAdmin, async (req, 
       smtpFrom: normalizedSmtpFrom,
       ...(typeof smtpPass === 'string' && smtpPass ? { smtpPass } : {}),
       ...(clearSmtpPass === true ? { smtpPass: '' } : {}),
+      ...(typeof verificationSubject === 'string' ? { verificationSubject } : {}),
+      ...(typeof verificationTextBody === 'string' ? { verificationTextBody } : {}),
+      ...(typeof verificationHtmlBody === 'string' ? { verificationHtmlBody } : {}),
+      ...(typeof resetSubject === 'string' ? { resetSubject } : {}),
+      ...(typeof resetTextBody === 'string' ? { resetTextBody } : {}),
+      ...(typeof resetHtmlBody === 'string' ? { resetHtmlBody } : {}),
     })
     res.json({ success: true, config: toEmailVerificationAdminConfig(config) })
   } catch (error) {
@@ -402,34 +468,39 @@ router.get('/s3/config', requireAuth, requireAdmin, async (_req, res) => {
 })
 
 // GET /api/s3/presign-upload - Get S3 presigned upload URL
-router.get('/s3/presign-upload', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const filename = parseQueryString(req.query.filename)
-    const contentType = parseQueryString(req.query.contentType) || undefined
-    const contentMd5 = parseQueryString(req.query.contentMd5) || undefined
-    const fileSize = parseQueryString(req.query.fileSize) || undefined
+router.get(
+  '/s3/presign-upload',
+  requireAuth,
+  requireActiveUser,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const filename = parseQueryString(req.query.filename)
+      const contentType = parseQueryString(req.query.contentType) || undefined
+      const contentMd5 = parseQueryString(req.query.contentMd5) || undefined
+      const fileSize = parseQueryString(req.query.fileSize) || undefined
 
-    if (!filename) {
-      res.status(400).json({ error: '缺少 filename 参数' })
-      return
+      if (!filename) {
+        res.status(400).json({ error: '缺少 filename 参数' })
+        return
+      }
+
+      const result = await getUserPresignedUploadUrl({
+        userUid: req.authUser!.uid,
+        filename,
+        contentType,
+        contentMd5,
+        fileSize,
+      })
+
+      res.json(result)
+    } catch (error) {
+      console.error('[S3] 生成上传签名失败:', error)
+      const message = error instanceof Error ? error.message : '生成上传签名失败'
+      const status = message.includes('验证失败') || message.includes('必须') ? 400 : 500
+      res.status(status).json({ error: message })
     }
-
-    const result = await getUserPresignedUploadUrl({
-      userUid: req.authUser!.uid,
-      filename,
-      contentType,
-      contentMd5,
-      fileSize,
-    })
-
-    res.json(result)
-  } catch (error) {
-    console.error('[S3] 生成上传签名失败:', error)
-    const message = error instanceof Error ? error.message : '生成上传签名失败'
-    const status = message.includes('验证失败') || message.includes('必须') ? 400 : 500
-    res.status(status).json({ error: message })
   }
-})
+)
 
 // GET /api/s3/presign-download/*key - Get S3 presigned download URL
 router.get('/s3/presign-download/*key', requireAuth, async (req, res) => {

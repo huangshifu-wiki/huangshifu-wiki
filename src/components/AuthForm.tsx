@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react'
 import { login, loginWithWeChat, register, requestPasswordReset } from '../lib/auth'
+import { useTurnstileChallenge } from '../hooks/useTurnstileChallenge'
 import { PROFILE_DISPLAY_NAME_MAX_LENGTH } from '../lib/contentLimits'
 import { useI18n } from '../lib/i18n'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
+import {
+  validateEmail,
+  validateMaxLength,
+  validatePassword,
+  validateRequiredText,
+  validateUrl,
+} from '../lib/clientValidation'
 import { CharacterCount } from './CharacterCount'
+import { TurnstileWidget } from './TurnstileWidget'
 import { useToast } from './Toast'
+import { Button, Input } from '@/src/components/ui'
 import type { AuthMode } from './Navbar/types'
 
 interface AuthFormProps {
@@ -31,33 +41,65 @@ export const AuthForm = ({
   const [authLoading, setAuthLoading] = useState(false)
   const { show } = useToast()
   const { t } = useI18n()
+  const turnstile = useTurnstileChallenge()
   const isRegisterMode = authMode === 'register' && allowRegister
   const isForgotPasswordMode = authMode === 'forgot-password'
+  const requiresTurnstile = turnstile.enabled && (isRegisterMode || isForgotPasswordMode)
 
   useEffect(() => {
     setAuthMode(initialMode === 'register' && !allowRegister ? 'login' : initialMode)
   }, [allowRegister, initialMode])
 
+  // 切换模式后旧 token 已被消费，清空并重置挂件
+  useEffect(() => {
+    turnstile.reset()
+  }, [authMode, turnstile.reset])
+
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (authMode === 'wechat') {
-      if (!wechatCode.trim()) return
-    } else if (isForgotPasswordMode) {
-      if (!email) return
-    } else if (!email || !password) {
+    const validationError =
+      authMode === 'wechat'
+        ? validateRequiredText(wechatCode, 'wechatCode', '微信登录码') ||
+          validateMaxLength(wechatCode, 'wechatCode', '微信登录码', 256) ||
+          validateUrl(wechatPhotoURL, 'wechatPhotoURL', '头像地址')
+        : validateEmail(email, 'email', '邮箱') ||
+          (isRegisterMode
+            ? validatePassword(password, 'password', '密码') ||
+              validateMaxLength(
+                displayName,
+                'displayName',
+                '显示名称',
+                PROFILE_DISPLAY_NAME_MAX_LENGTH
+              )
+            : isForgotPasswordMode
+              ? null
+              : validateRequiredText(password, 'password', '密码'))
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
       return
     }
+    if (requiresTurnstile && turnstile.blocked) {
+      show('请先完成人机验证', { variant: 'error' })
+      return
+    }
+    const normalizedEmail = email.trim()
+    const normalizedDisplayName = displayName.trim()
 
     try {
       setAuthLoading(true)
       if (authMode === 'login') {
-        await login(email, password)
+        await login(normalizedEmail, password)
         onAuthSuccess()
       } else if (isRegisterMode) {
-        const result = await register(email, password, displayName)
-        setAuthMode('login')
+        const result = await register(
+          normalizedEmail,
+          password,
+          normalizedDisplayName,
+          turnstile.token ?? undefined
+        )
         setPassword('')
+        turnstile.reset()
         show(
           result.verificationEmailSent
             ? '注册成功，验证邮件已发送，可登录后在设置中查看状态'
@@ -65,19 +107,19 @@ export const AuthForm = ({
           { duration: 4000 }
         )
       } else if (authMode === 'forgot-password') {
-        const result = await requestPasswordReset(email)
+        const result = await requestPasswordReset(normalizedEmail, turnstile.token ?? undefined)
         setAuthMode('login')
-        setPassword('')
         show(result.message || '如果该邮箱存在，我们会发送一封密码重置邮件', { duration: 5000 })
       } else {
-        await loginWithWeChat(wechatCode, {
-          displayName: displayName || undefined,
-          photoURL: wechatPhotoURL || undefined,
+        await loginWithWeChat(wechatCode.trim(), {
+          displayName: normalizedDisplayName || undefined,
+          photoURL: wechatPhotoURL.trim() || undefined,
         })
         onAuthSuccess()
       }
     } catch (error) {
       console.error('Auth failed:', error)
+      turnstile.reset()
       show(error instanceof Error ? error.message : t('auth.loginFailed'), {
         variant: 'error',
       })
@@ -89,7 +131,7 @@ export const AuthForm = ({
   return (
     <>
       <div className="mb-5">
-        <h1 className="text-lg font-bold text-text-primary">
+        <h1 className="font-[var(--book-title-font)] text-3xl font-normal tracking-[0.1em] text-text-primary">
           {authMode === 'wechat'
             ? t('auth.wechatLogin')
             : authMode === 'forgot-password'
@@ -100,13 +142,13 @@ export const AuthForm = ({
         </h1>
       </div>
 
-      <form onSubmit={handleAuthSubmit} className="space-y-3">
+      <form onSubmit={handleAuthSubmit} className="space-y-3.5">
         {(isRegisterMode || authMode === 'wechat') && (
           <div>
             <label htmlFor="auth-display-name" className="sr-only">
               {t('auth.labelDisplayName')}
             </label>
-            <input
+            <Input
               id="auth-display-name"
               type="text"
               value={displayName}
@@ -118,11 +160,14 @@ export const AuthForm = ({
               }
               autoFocus={autoFocus}
               maxLength={isRegisterMode ? PROFILE_DISPLAY_NAME_MAX_LENGTH : undefined}
-              className="theme-input w-full rounded px-4 py-2.5 text-sm"
+              className="theme-input"
             />
             {isRegisterMode && (
               <div className="mt-1 flex justify-end">
-                <CharacterCount current={displayName.length} max={PROFILE_DISPLAY_NAME_MAX_LENGTH} />
+                <CharacterCount
+                  current={displayName.length}
+                  max={PROFILE_DISPLAY_NAME_MAX_LENGTH}
+                />
               </div>
             )}
           </div>
@@ -130,10 +175,10 @@ export const AuthForm = ({
         {authMode === 'wechat' ? (
           <>
             <div>
-              <label htmlFor="auth-wechat-code" className="sr-only">
-                {t('auth.labelWechatCode')}
+              <label htmlFor="auth-wechat-code" className="block text-sm text-text-secondary">
+                {t('auth.labelWechatCode')} <span className="theme-text-error">*</span>
               </label>
-              <input
+              <Input
                 id="auth-wechat-code"
                 type="text"
                 required
@@ -141,20 +186,20 @@ export const AuthForm = ({
                 onChange={(e) => setWechatCode(e.target.value)}
                 placeholder={t('auth.placeholderWechatCode')}
                 autoFocus={autoFocus}
-                className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                className="theme-input"
               />
             </div>
             <div>
               <label htmlFor="auth-wechat-photo" className="sr-only">
                 {t('auth.labelPhotoURL')}
               </label>
-              <input
+              <Input
                 id="auth-wechat-photo"
                 type="url"
                 value={wechatPhotoURL}
                 onChange={(e) => setWechatPhotoURL(e.target.value)}
                 placeholder={t('auth.placeholderPhotoURL')}
-                className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                className="theme-input"
               />
             </div>
             <p className="text-xs leading-relaxed text-text-muted">{t('auth.mockCodeHint')}</p>
@@ -162,10 +207,10 @@ export const AuthForm = ({
         ) : (
           <>
             <div>
-              <label htmlFor="auth-email" className="sr-only">
-                {t('auth.labelEmail')}
+              <label htmlFor="auth-email" className="block text-sm text-text-secondary">
+                {t('auth.labelEmail')} <span className="theme-text-error">*</span>
               </label>
-              <input
+              <Input
                 id="auth-email"
                 type="email"
                 required
@@ -174,15 +219,15 @@ export const AuthForm = ({
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t('auth.placeholderEmail')}
                 autoFocus={autoFocus}
-                className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                className="theme-input"
               />
             </div>
             {!isForgotPasswordMode && (
               <div>
-                <label htmlFor="auth-password" className="sr-only">
-                  {t('auth.labelPassword')}
+                <label htmlFor="auth-password" className="block text-sm text-text-secondary">
+                  {t('auth.labelPassword')} <span className="theme-text-error">*</span>
                 </label>
-                <input
+                <Input
                   id="auth-password"
                   type="password"
                   required
@@ -196,7 +241,7 @@ export const AuthForm = ({
                       ? t('auth.placeholderRegisterPassword')
                       : t('auth.placeholderPassword')
                   }
-                  className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                  className="theme-input"
                 />
                 {isRegisterMode && (
                   <div className="mt-1 flex justify-end">
@@ -208,11 +253,16 @@ export const AuthForm = ({
           </>
         )}
 
-        <button
-          type="submit"
-          disabled={authLoading}
-          className="theme-button-primary w-full rounded px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.98] disabled:opacity-50"
-        >
+        {requiresTurnstile && (
+          <TurnstileWidget
+            siteKey={turnstile.siteKey}
+            onToken={turnstile.setToken}
+            onLoadError={turnstile.markLoadFailed}
+            resetSignal={turnstile.resetSignal}
+          />
+        )}
+
+        <Button type="submit" loading={authLoading} fullWidth>
           {authLoading
             ? authMode === 'login'
               ? t('auth.loggingIn')
@@ -228,46 +278,54 @@ export const AuthForm = ({
                 : authMode === 'forgot-password'
                   ? t('auth.sendResetEmail')
                   : t('auth.wechatLogin')}
-        </button>
+        </Button>
       </form>
 
       {isForgotPasswordMode ? (
         <div className="mt-4 flex items-center justify-start text-sm pb-safe">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
             onClick={() => setAuthMode('login')}
-            className="font-medium text-brand-gold hover:underline"
+            className="h-auto min-h-0 p-0 text-brand-gold hover:bg-transparent hover:underline"
           >
             {t('auth.backToLogin')}
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm pb-safe">
           {(allowRegister || authMode !== 'login') && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
               onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
-              className="font-medium text-brand-gold hover:underline"
+              className="h-auto min-h-0 p-0 text-brand-gold hover:bg-transparent hover:underline"
             >
               {authMode === 'login' ? t('auth.noAccountGoRegister') : t('auth.hasAccountGoLogin')}
-            </button>
+            </Button>
           )}
           {authMode === 'login' && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
               onClick={() => setAuthMode('forgot-password')}
-              className="font-medium text-brand-gold hover:underline"
+              className="h-auto min-h-0 p-0 text-brand-gold hover:bg-transparent hover:underline"
             >
               {t('auth.forgotPassword')}
-            </button>
+            </Button>
           )}
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
             onClick={() => setAuthMode(authMode === 'wechat' ? 'login' : 'wechat')}
-            className="font-medium text-brand-gold hover:underline"
+            className="h-auto min-h-0 p-0 text-brand-gold hover:bg-transparent hover:underline"
           >
             {authMode === 'wechat' ? t('auth.switchToAccount') : t('auth.switchToWechat')}
-          </button>
+          </Button>
         </div>
       )}
     </>

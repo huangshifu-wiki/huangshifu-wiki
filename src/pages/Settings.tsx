@@ -1,5 +1,6 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   BookOpen,
   Camera,
   ChevronDown,
@@ -8,24 +9,31 @@ import {
   FileText,
   Image as ImageIcon,
   KeyRound,
-  Loader2,
   Mail,
   MailCheck,
   MessageSquare,
   Save,
   Shield,
   SlidersHorizontal,
+  Ticket,
   UserRound,
-} from 'lucide-react'
+} from '@/src/components/icons'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
 import { AvatarCropModal } from '../components/AvatarCropModal'
+import Pagination from '../components/Pagination'
 import { CharacterCount } from '../components/CharacterCount'
+import { TurnstileWidget } from '../components/TurnstileWidget'
 import MarkdownEditor from '../components/MarkdownEditor'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useToast } from '../components/Toast'
+import { useDialog } from '../components/Dialog'
+import { useRoutedPagination } from '../hooks/useRoutedPagination'
+import { useTurnstileChallenge } from '../hooks/useTurnstileChallenge'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../utils/formDirty'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import {
@@ -33,7 +41,11 @@ import {
   PROFILE_SIGNATURE_MAX_LENGTH,
   WIKI_MAX_CONTENT_SIZE,
 } from '../lib/contentLimits'
-import { apiGet, apiPatch, apiPost, apiPut } from '../lib/apiClient'
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiRequest } from '../lib/apiClient'
+import { resendEmailVerification } from '../lib/auth'
+import { copyToClipboard } from '../lib/copyLink'
+import { getErrorMessage } from '../lib/errorHandler'
+import { formatDateOnly } from '../lib/dateUtils'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import {
   shouldWaitForGalleryThumbnail,
@@ -42,16 +54,46 @@ import {
   THUMBNAIL_POLL_MAX_ATTEMPTS,
 } from '../lib/galleryThumbnails'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
+import {
+  validateEmail,
+  validateMaxLength,
+  validatePassword,
+  validateRequiredText,
+} from '../lib/clientValidation'
 import { getStatusClassName, getStatusText } from '../lib/contentUtils'
-import type { CommentItem, GalleryItem, PostItem } from '../types/entities'
+import type { CommentItem, GalleryItem, PostItem, TicketListingSummary } from '../types/entities'
 import type { ContentStatus } from '../types/common'
-import type { EmailVerificationPublicConfig } from '../types/api'
+import type {
+  CreatePersonalApiKeyRequest,
+  CreatePersonalApiKeyResponse,
+  EmailVerificationPublicConfig,
+  PersonalApiKey,
+  PersonalApiKeyListResponse,
+  TicketListingMineResponse,
+} from '../types/api'
+import type { ListLoadMode } from '../types/userPreferences'
+import {
+  Button,
+  Field,
+  IconButton,
+  Input,
+  LoadErrorState,
+  SegmentedControl,
+  Select,
+  SettingRow,
+  SettingsSection,
+  Skeleton,
+  Spinner,
+  Switch,
+  Textarea,
+} from '@/src/components/ui'
 
 type PublicProfileForm = {
   displayName: string
   signature: string
   bio: string
   photoURL: string
+  photoAssetId: string | null
 }
 
 type EmailForm = {
@@ -65,13 +107,37 @@ type PasswordForm = {
   confirmPassword: string
 }
 
-type SettingsSection = 'profile' | 'content' | 'privacy' | 'account' | 'appearance'
-type ContentTab = 'posts' | 'wiki' | 'galleries' | 'comments'
+const EMPTY_EMAIL_FORM: EmailForm = { newEmail: '', currentPassword: '' }
+const EMPTY_PASSWORD_FORM: PasswordForm = {
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: '',
+}
+
+type PersonalApiKeyExpiry = NonNullable<CreatePersonalApiKeyRequest['expiry']>
+type PersonalApiKeyListState = { ownerUid: string; keys: PersonalApiKey[] }
+type RevealedPersonalApiKey = {
+  ownerUid: string
+  token: string
+}
+
+const PERSONAL_API_KEY_EXPIRY_OPTIONS: Array<{
+  value: PersonalApiKeyExpiry
+  label: string
+}> = [
+  { value: '30d', label: '30 天' },
+  { value: '90d', label: '90 天（默认）' },
+  { value: '365d', label: '365 天' },
+  { value: 'never', label: '永久' },
+]
+
+type SettingsSection = 'profile' | 'content' | 'privacy' | 'account' | 'api-keys' | 'appearance'
+type ContentTab = 'posts' | 'wiki' | 'galleries' | 'comments' | 'tickets'
 
 type UserCommentItem = CommentItem & {
   targetType?: 'post' | 'gallery'
-  target?: { id: string; title: string; status?: string; published?: boolean } | null
-  gallery?: { id: string; title: string; published: boolean } | null
+  target?: { id: string; slug?: string; title: string; status?: string; published?: boolean } | null
+  gallery?: { id: string; slug?: string; title: string; published: boolean } | null
   deletionReason?: string | null
 }
 
@@ -86,10 +152,6 @@ type UserWikiItem = {
   editedAt?: string
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback
-}
-
 const WECHAT_PLACEHOLDER_EMAIL_SUFFIX = '@wechat.local'
 
 function isWechatPlaceholderEmail(email?: string | null) {
@@ -100,24 +162,32 @@ const SECTION_NAV = [
   { id: 'profile', label: '公开资料', icon: UserRound, path: '/settings/profile' },
   { id: 'privacy', label: '隐私设置', icon: Eye, path: '/settings/privacy' },
   { id: 'account', label: '账户', icon: Shield, path: '/settings/account' },
+  { id: 'api-keys', label: 'API 密钥', icon: KeyRound, path: '/settings/api-keys' },
   { id: 'appearance', label: '外观', icon: SlidersHorizontal, path: '/settings/appearance' },
 ] as const
 const CONTENT_SECTION_NAV = [
   { id: 'content', label: '内容管理', icon: FileText, path: '/settings/content' },
 ] as const
 
+const LIST_LOAD_MODE_OPTIONS: Array<{ value: ListLoadMode; label: string }> = [
+  { value: 'pagination', label: '分页模式' },
+  { value: 'incremental', label: '分段加载' },
+]
+
 const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'profile',
   'content',
   'privacy',
   'account',
+  'api-keys',
   'appearance',
 ])
-const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'wiki', 'galleries', 'comments'])
+const CONTENT_TAB_SET = new Set<ContentTab>(['posts', 'wiki', 'galleries', 'comments', 'tickets'])
 const CONTENT_ITEM_LINK_CLASS =
-  'group -mx-3 block px-3 transition-colors hover:bg-surface-alt/70'
-const CONTENT_META_ROW_CLASS = 'flex items-start justify-between gap-3 text-xs text-text-muted'
-const CONTENT_STATUS_BADGE_CLASS = 'rounded border px-1.5 py-0.5 text-[10px]'
+  'group -mx-3 block max-w-[calc(100%+1.5rem)] px-3 transition-colors hover:bg-surface-alt/70'
+const CONTENT_META_ROW_CLASS =
+  'flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1 text-xs text-text-muted'
+const CONTENT_STATUS_BADGE_CLASS = 'max-w-full break-words rounded border px-1.5 py-0.5 text-[10px]'
 
 function SettingsNavLink({
   item,
@@ -166,62 +236,44 @@ function PrivacySwitch({
   id,
   label,
   checked,
-  onToggle,
+  onCheckedChange,
 }: {
   id: string
   label: string
   checked: boolean
-  onToggle: () => void
+  onCheckedChange: (checked: boolean) => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-border pb-5 last:border-b-0">
-      <label htmlFor={id} className="text-sm font-medium text-text-primary">
-        {label}
-      </label>
-      <button
-        type="button"
-        id={id}
-        role="switch"
-        aria-checked={checked}
-        onClick={onToggle}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold focus:ring-offset-2 ${
-          checked ? 'bg-[var(--color-theme-accent)]' : 'bg-border'
-        }`}
-      >
-        <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-            checked ? 'translate-x-6' : 'translate-x-1'
-          }`}
-        />
-      </button>
-    </div>
+    <SettingRow
+      label={label}
+      labelFor={id}
+      control={<Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />}
+      className="border-t-0 border-b pb-5 pt-0 last:border-b-0"
+    />
   )
 }
 
 const Settings = () => {
-  const { user, profile, refreshAuth } = useAuth()
+  const { user, profile, refreshAuth, isBanned } = useAuth()
   const { preferences, updatePreferences } = useUserPreferences()
   const { section } = useParams<{ section?: string }>()
   const [searchParams] = useSearchParams()
   const { show } = useToast()
+  const dialog = useDialog()
   const activeSection = resolveSettingsSection(section)
   const activeContentTab = resolveContentTab(searchParams.get('tab'))
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin'
+  const userPublicId = user?.publicId
+  const personalApiKeyScope = activeSection === 'api-keys' && user ? user.uid : null
   const [profileForm, setProfileForm] = useState<PublicProfileForm>({
     displayName: '',
     signature: '',
     bio: '',
     photoURL: '',
+    photoAssetId: null,
   })
-  const [emailForm, setEmailForm] = useState<EmailForm>({
-    newEmail: '',
-    currentPassword: '',
-  })
-  const [passwordForm, setPasswordForm] = useState<PasswordForm>({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  })
+  const [emailForm, setEmailForm] = useState(EMPTY_EMAIL_FORM)
+  const [passwordForm, setPasswordForm] = useState(EMPTY_PASSWORD_FORM)
   const [isEmailEditorOpen, setIsEmailEditorOpen] = useState(false)
   const [isPasswordEditorOpen, setIsPasswordEditorOpen] = useState(false)
   const [avatarModalOpen, setAvatarModalOpen] = useState(false)
@@ -230,30 +282,86 @@ const Settings = () => {
   const [sendingEmailVerification, setSendingEmailVerification] = useState(false)
   const [emailVerificationConfig, setEmailVerificationConfig] =
     useState<EmailVerificationPublicConfig>({ enabled: false })
+  const turnstile = useTurnstileChallenge()
   const [savingPassword, setSavingPassword] = useState(false)
-  const [contentLoading, setContentLoading] = useState(false)
+  const [personalApiKeys, setPersonalApiKeys] = useState<PersonalApiKeyListState | null>(null)
+  const [personalApiKeysLoading, setPersonalApiKeysLoading] = useState(false)
+  const [personalApiKeysError, setPersonalApiKeysError] = useState<unknown | null>(null)
+  const [personalApiKeysRetry, setPersonalApiKeysRetry] = useState(0)
+  const [personalApiKeyName, setPersonalApiKeyName] = useState('')
+  const [personalApiKeyExpiry, setPersonalApiKeyExpiry] = useState<PersonalApiKeyExpiry>('90d')
+  const [creatingPersonalApiKey, setCreatingPersonalApiKey] = useState(false)
+  const [revealedPersonalApiKey, setRevealedPersonalApiKey] =
+    useState<RevealedPersonalApiKey | null>(null)
+  const [revokingPersonalApiKeyId, setRevokingPersonalApiKeyId] = useState<string | null>(null)
+  const [contentLoading, setContentLoading] = useState(
+    () => activeSection === 'content' && Boolean(userPublicId)
+  )
+  const [contentError, setContentError] = useState<unknown | null>(null)
+  const [contentTotalState, setContentTotal] = useState<{ scope: string; total: number }>()
+  const contentScope = JSON.stringify([userPublicId, activeSection, activeContentTab])
+  const contentTotal =
+    contentTotalState?.scope === contentScope ? contentTotalState.total : undefined
+  const pagination = useRoutedPagination({
+    totalCount: contentTotal,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'contentPage',
+    pageSizeParam: 'contentPageSize',
+    showPageSizeSelector: true,
+    enabled: activeSection === 'content',
+  })
+  const [contentRetry, setContentRetry] = useState(0)
+  const personalApiKeyRequestIdRef = useRef(0)
+  const personalApiKeyCreateControllerRef = useRef<AbortController | null>(null)
+  const personalApiKeyRevokeControllerRef = useRef<AbortController | null>(null)
+  const personalApiKeyScopeIdRef = useRef(0)
   const [myPosts, setMyPosts] = useState<PostItem[]>([])
   const [myWikiPages, setMyWikiPages] = useState<UserWikiItem[]>([])
   const [myGalleries, setMyGalleries] = useState<GalleryItem[]>([])
+  const [myTicketListings, setMyTicketListings] = useState<TicketListingSummary[]>([])
   const [myComments, setMyComments] = useState<UserCommentItem[]>([])
+
+  // 基线在资料回填落定后建立，避免加载期误判为已修改；邮箱/密码面板以空表单为基线
+  const [profileBaseline, setProfileBaseline] = useState<PublicProfileForm | null>(null)
+  const isDirty =
+    (profileBaseline !== null && hasFormChanges(profileForm, profileBaseline)) ||
+    hasFormChanges(emailForm, EMPTY_EMAIL_FORM) ||
+    hasFormChanges(passwordForm, EMPTY_PASSWORD_FORM)
+  const guard = useUnsavedChangesGuard(isDirty)
   const hasPendingGalleryThumbnails = myGalleries.some(shouldWaitForGalleryThumbnail)
+  const activeContentHasItems =
+    activeContentTab === 'posts'
+      ? myPosts.length > 0
+      : activeContentTab === 'wiki'
+        ? myWikiPages.length > 0
+        : activeContentTab === 'galleries'
+          ? myGalleries.length > 0
+          : activeContentTab === 'tickets'
+            ? myTicketListings.length > 0
+            : myComments.length > 0
 
   useEffect(() => {
     if (!user) return
 
-    setProfileForm({
+    const nextProfileForm = {
       displayName: profile?.displayName || user.displayName || '',
       signature: profile?.signature || '',
       bio: profile?.bio || '',
       photoURL: profile?.photoURL || user.photoURL || '',
-    })
+      photoAssetId: user.photoAssetId || profile?.photoAssetId || null,
+    }
+    setProfileForm(nextProfileForm)
+    setProfileBaseline(nextProfileForm)
   }, [
     profile?.bio,
     profile?.displayName,
     profile?.photoURL,
+    profile?.photoAssetId,
     profile?.signature,
     user?.displayName,
     user?.email,
+    user?.photoAssetId,
     user?.photoURL,
     user?.uid,
   ])
@@ -276,43 +384,148 @@ const Settings = () => {
   }, [activeSection, user?.uid])
 
   useEffect(() => {
-    if (!user || activeSection !== 'content') return
+    personalApiKeyScopeIdRef.current += 1
+    setRevealedPersonalApiKey(null)
+    setPersonalApiKeyName('')
+    setCreatingPersonalApiKey(false)
+    setRevokingPersonalApiKeyId(null)
+
+    return () => {
+      personalApiKeyCreateControllerRef.current?.abort()
+      personalApiKeyRevokeControllerRef.current?.abort()
+      personalApiKeyCreateControllerRef.current = null
+      personalApiKeyRevokeControllerRef.current = null
+      personalApiKeyScopeIdRef.current += 1
+    }
+  }, [personalApiKeyScope])
+
+  useEffect(() => {
+    const ownerUid = user?.uid
+    const requestId = ++personalApiKeyRequestIdRef.current
+    let cancelled = false
+
+    if (!ownerUid || activeSection !== 'api-keys') {
+      setPersonalApiKeys(null)
+      setPersonalApiKeysLoading(false)
+      setPersonalApiKeysError(null)
+      return () => {
+        cancelled = true
+        personalApiKeyRequestIdRef.current += 1
+      }
+    }
+
+    const controller = new AbortController()
+    const isCurrentRequest = () => !cancelled && requestId === personalApiKeyRequestIdRef.current
+
+    setPersonalApiKeys((current) => (current?.ownerUid === ownerUid ? current : null))
+    setPersonalApiKeysLoading(true)
+    setPersonalApiKeysError(null)
+
+    void apiRequest<PersonalApiKeyListResponse>('/api/users/me/api-keys', {
+      method: 'GET',
+      dedup: false,
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (isCurrentRequest()) {
+          setPersonalApiKeys((current) => {
+            const currentKeys = current?.ownerUid === ownerUid ? current.keys : []
+            const responseIds = new Set(response.keys.map((key) => key.id))
+            return {
+              ownerUid,
+              keys: [...response.keys, ...currentKeys.filter((key) => !responseIds.has(key.id))],
+            }
+          })
+        }
+      })
+      .catch((error) => {
+        if (isCurrentRequest() && !controller.signal.aborted) {
+          setPersonalApiKeysError(error)
+        }
+      })
+      .finally(() => {
+        if (isCurrentRequest()) setPersonalApiKeysLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+      controller.abort()
+      personalApiKeyRequestIdRef.current += 1
+    }
+  }, [activeSection, personalApiKeysRetry, user?.uid])
+
+  useEffect(() => {
+    if (!userPublicId || activeSection !== 'content') return
 
     let cancelled = false
     const run = async () => {
       setContentLoading(true)
+      setContentError(null)
       try {
+        const params = { page: pagination.page, limit: pagination.pageSize }
         if (activeContentTab === 'posts') {
-          const data = await apiGet<{ posts: PostItem[] }>(`/api/users/${user.uid}/posts`, {
-            limit: 50,
-          })
-          if (!cancelled) setMyPosts(data.posts || [])
+          const data = await apiGet<{ posts: PostItem[]; total: number }>(
+            `/api/users/${userPublicId}/posts`,
+            params
+          )
+          if (!cancelled) {
+            setMyPosts(data.posts || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
           return
         }
 
         if (activeContentTab === 'wiki') {
-          const data = await apiGet<{ pages: UserWikiItem[] }>(`/api/users/${user.uid}/wiki`, {
-            limit: 50,
-          })
-          if (!cancelled) setMyWikiPages(data.pages || [])
+          const data = await apiGet<{ pages: UserWikiItem[]; total: number }>(
+            `/api/users/${userPublicId}/wiki`,
+            params
+          )
+          if (!cancelled) {
+            setMyWikiPages(data.pages || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
           return
         }
 
         if (activeContentTab === 'galleries') {
-          const data = await apiGet<{ galleries: GalleryItem[] }>(`/api/users/${user.uid}/galleries`, {
-            limit: 50,
-          })
-          if (!cancelled) setMyGalleries(data.galleries || [])
+          const data = await apiGet<{ galleries: GalleryItem[]; total: number }>(
+            `/api/users/${userPublicId}/galleries`,
+            params
+          )
+          if (!cancelled) {
+            setMyGalleries(data.galleries || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
           return
         }
 
-        const data = await apiGet<{ comments: UserCommentItem[] }>(`/api/users/${user.uid}/comments`, {
-          limit: 50,
-        })
-        if (!cancelled) setMyComments(data.comments || [])
+        if (activeContentTab === 'tickets') {
+          const data = await apiRequest<TicketListingMineResponse>('/api/ticket-listings/mine', {
+            method: 'GET',
+            query: params,
+            dedup: false,
+          })
+          if (!cancelled) {
+            setMyTicketListings(data.listings || [])
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
+          }
+          return
+        }
+
+        const data = await apiGet<{ comments: UserCommentItem[]; total: number }>(
+          `/api/users/${userPublicId}/comments`,
+          params
+        )
+        if (!cancelled) {
+          setMyComments(data.comments || [])
+          setContentTotal({ scope: contentScope, total: data.total || 0 })
+        }
       } catch (error) {
         console.error('Fetch content management data error:', error)
-        show('内容加载失败', { variant: 'error' })
+        if (!cancelled) {
+          setContentError(error)
+          show(getErrorMessage(error, '内容加载失败'), { variant: 'error' })
+        }
       } finally {
         if (!cancelled) setContentLoading(false)
       }
@@ -322,11 +535,20 @@ const Settings = () => {
     return () => {
       cancelled = true
     }
-  }, [activeContentTab, activeSection, show, user])
+  }, [
+    activeContentTab,
+    activeSection,
+    contentScope,
+    contentRetry,
+    pagination.page,
+    pagination.pageSize,
+    show,
+    userPublicId,
+  ])
 
   useEffect(() => {
     if (
-      !user ||
+      !userPublicId ||
       activeSection !== 'content' ||
       activeContentTab !== 'galleries' ||
       !hasPendingGalleryThumbnails
@@ -342,15 +564,19 @@ const Settings = () => {
     const poll = async () => {
       attempts += 1
       try {
-        const data = await apiGet<{ galleries: GalleryItem[] }>(
-          `/api/users/${user.uid}/galleries`,
+        const data = await apiGet<{ galleries: GalleryItem[]; total: number }>(
+          `/api/users/${userPublicId}/galleries`,
           {
-            limit: 50,
+            page: pagination.page,
+            limit: pagination.pageSize,
           },
           THUMBNAIL_POLL_DEDUP_OPTIONS,
           abortController.signal
         )
-        if (!stopped) setMyGalleries(data.galleries || [])
+        if (!stopped) {
+          setMyGalleries(data.galleries || [])
+          setContentTotal({ scope: contentScope, total: data.total || 0 })
+        }
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           console.error('Poll my gallery thumbnails error:', error)
@@ -371,7 +597,15 @@ const Settings = () => {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [activeContentTab, activeSection, hasPendingGalleryThumbnails, user])
+  }, [
+    activeContentTab,
+    activeSection,
+    contentScope,
+    hasPendingGalleryThumbnails,
+    pagination.page,
+    pagination.pageSize,
+    userPublicId,
+  ])
 
   if (!activeSection) {
     return <Navigate to="/settings/profile" replace />
@@ -389,13 +623,30 @@ const Settings = () => {
   const canSendEmailVerification =
     emailVerificationConfig.enabled && !user.emailVerified && hasDeliverableEmail
 
-  const handleAvatarSuccess = async (photoURL: string) => {
-    setProfileForm((current) => ({ ...current, photoURL }))
+  const handleAvatarSuccess = async (result: { assetId: string; url: string }) => {
+    const previousAvatar = {
+      photoURL: profileForm.photoURL,
+      photoAssetId: profileForm.photoAssetId,
+    }
+    setProfileForm((current) => ({
+      ...current,
+      photoURL: result.url,
+      photoAssetId: result.assetId,
+    }))
+    let profileSaved = false
     try {
-      await apiPatch('/api/users/me', { photoURL })
+      await apiPatch('/api/users/me', { photoURL: result.url, photoAssetId: result.assetId })
+      profileSaved = true
+      guard.markClean()
       await refreshAuth()
       show('头像更新成功')
     } catch (error) {
+      if (!profileSaved) {
+        setProfileForm((current) => ({ ...current, ...previousAvatar }))
+        await apiDelete(`/api/uploads/assets/${result.assetId}`).catch((cleanupError) =>
+          console.error('Error releasing unsaved avatar asset:', cleanupError)
+        )
+      }
       console.error('Error saving avatar:', error)
       show(getErrorMessage(error, '头像保存失败，请稍后重试'), { variant: 'error' })
     }
@@ -403,14 +654,30 @@ const Settings = () => {
 
   const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const profileError =
+      validateMaxLength(
+        profileForm.displayName,
+        'displayName',
+        '昵称',
+        PROFILE_DISPLAY_NAME_MAX_LENGTH
+      ) ||
+      validateMaxLength(profileForm.signature, 'signature', '签名', PROFILE_SIGNATURE_MAX_LENGTH) ||
+      validateMaxLength(profileForm.bio, 'bio', '个人简介', WIKI_MAX_CONTENT_SIZE)
+    if (profileError) {
+      show(profileError.message, { variant: 'error' })
+      return
+    }
+
     setSavingProfile(true)
     try {
       await apiPatch('/api/users/me', {
-        displayName: profileForm.displayName,
-        signature: profileForm.signature,
-        bio: profileForm.bio,
+        displayName: profileForm.displayName.trim(),
+        signature: profileForm.signature.trim(),
+        bio: profileForm.bio.trim(),
         photoURL: profileForm.photoURL,
+        photoAssetId: profileForm.photoAssetId,
       })
+      guard.markClean()
       await refreshAuth()
       show('公开资料已保存')
     } catch (error) {
@@ -422,10 +689,7 @@ const Settings = () => {
   }
 
   const openEmailEditor = () => {
-    setEmailForm({
-      newEmail: '',
-      currentPassword: '',
-    })
+    setEmailForm(EMPTY_EMAIL_FORM)
     setIsEmailEditorOpen(true)
   }
 
@@ -440,24 +704,25 @@ const Settings = () => {
   const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!emailForm.currentPassword.trim()) {
-      show('当前密码不能为空', { variant: 'error' })
-      return
-    }
-
-    if (!emailForm.newEmail.trim()) {
-      show('新邮箱不能为空', { variant: 'error' })
+    const emailError =
+      validateRequiredText(emailForm.currentPassword, 'currentPassword', '当前密码') ||
+      validateEmail(emailForm.newEmail, 'newEmail', '新邮箱')
+    if (emailError) {
+      show(emailError.message, { variant: 'error' })
       return
     }
 
     setSavingEmail(true)
     try {
       await apiPut('/api/users/email', {
-        newEmail: emailForm.newEmail,
+        newEmail: emailForm.newEmail.trim(),
         currentPassword: emailForm.currentPassword,
       })
+      guard.markClean()
       await refreshAuth()
-      setEmailForm((current) => ({ ...current, currentPassword: '' }))
+      // 整体重置而非只清密码：残留 newEmail 会让 isDirty 在 markClean 后又被还原，
+      // 守卫处于"脏但未安装"状态，后续站内离开将不再提示
+      setEmailForm(EMPTY_EMAIL_FORM)
       setIsEmailEditorOpen(false)
       show('邮箱已更新，可按需发送验证邮件', { duration: 4000 })
     } catch (error) {
@@ -476,12 +741,19 @@ const Settings = () => {
       return
     }
 
+    if (turnstile.blocked) {
+      show('请先完成人机验证', { variant: 'error' })
+      return
+    }
+
     setSendingEmailVerification(true)
     try {
-      await apiPost('/api/auth/resend-verification', { email: user.email })
+      await resendEmailVerification(user.email, turnstile.token ?? undefined)
+      turnstile.reset()
       show('验证邮件已发送，请查收邮箱', { duration: 4000 })
     } catch (error) {
       console.error('Error sending verification email:', error)
+      turnstile.reset()
       show(getErrorMessage(error, '验证邮件发送失败，请稍后重试'), { variant: 'error' })
     } finally {
       setSendingEmailVerification(false)
@@ -489,28 +761,23 @@ const Settings = () => {
   }
 
   const openPasswordEditor = () => {
-    setPasswordForm({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    })
+    setPasswordForm(EMPTY_PASSWORD_FORM)
     setIsPasswordEditorOpen(true)
   }
 
   const closePasswordEditor = () => {
     setIsPasswordEditorOpen(false)
-    setPasswordForm({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    })
+    setPasswordForm(EMPTY_PASSWORD_FORM)
   }
 
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!passwordForm.currentPassword.trim()) {
-      show('当前密码不能为空', { variant: 'error' })
+    const passwordError =
+      validateRequiredText(passwordForm.currentPassword, 'currentPassword', '当前密码') ||
+      validatePassword(passwordForm.newPassword, 'newPassword', '新密码')
+    if (passwordError) {
+      show(passwordError.message, { variant: 'error' })
       return
     }
 
@@ -518,13 +785,13 @@ const Settings = () => {
       show('两次输入的新密码不一致', { variant: 'error' })
       return
     }
-
     setSavingPassword(true)
     try {
       await apiPut('/api/users/password', {
         currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword,
       })
+      guard.markClean()
       await refreshAuth()
       closePasswordEditor()
       show('密码已更新')
@@ -537,13 +804,17 @@ const Settings = () => {
   }
 
   const renderContentPanel = () => {
-    if (contentLoading) {
+    if (contentLoading && !activeContentHasItems) {
       return (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={24} className="animate-spin text-brand-gold" />
+        <div className="space-y-3 py-8" role="status" aria-label="加载中">
+          {[1, 2, 3, 4].map((item) => (
+            <Skeleton key={item} className="h-12 w-full" />
+          ))}
         </div>
       )
     }
+
+    if (contentError && !activeContentHasItems) return null
 
     if (activeContentTab === 'posts') {
       return myPosts.length ? (
@@ -551,15 +822,15 @@ const Settings = () => {
           {myPosts.map((post) => (
             <li key={post.id} className="border-b border-border last:border-b-0">
               <Link
-                to={`/forum/${post.id}`}
+                to={`/forum/${post.slug || post.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={clsx(CONTENT_ITEM_LINK_CLASS, 'py-3')}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="min-w-0 flex-1">
                     <div className={CONTENT_META_ROW_CLASS}>
-                      <span className="min-w-0 text-text-muted">{post.section}</span>
+                      <span className="min-w-0 break-words text-text-muted">{post.section}</span>
                       {post.status && post.status !== 'published' ? (
                         <span
                           className={clsx(
@@ -602,10 +873,10 @@ const Settings = () => {
                 rel="noopener noreferrer"
                 className={clsx(CONTENT_ITEM_LINK_CLASS, 'py-3')}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="min-w-0 flex-1">
                     <div className={CONTENT_META_ROW_CLASS}>
-                      <span className="min-w-0 text-text-muted">{page.category}</span>
+                      <span className="min-w-0 break-words text-text-muted">{page.category}</span>
                       {page.status && page.status !== 'published' ? (
                         <span
                           className={clsx(
@@ -643,7 +914,7 @@ const Settings = () => {
           {myGalleries.map((gallery) => (
             <li key={gallery.id} className="border-b border-border last:border-b-0">
               <Link
-                to={`/gallery/${gallery.id}`}
+                to={`/gallery/${gallery.slug || gallery.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={clsx(CONTENT_ITEM_LINK_CLASS, 'flex gap-3 py-3')}
@@ -660,9 +931,16 @@ const Settings = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className={CONTENT_META_ROW_CLASS}>
-                    <span className="min-w-0 text-text-muted">{gallery.images?.length || 0} 张</span>
+                    <span className="min-w-0 text-text-muted">
+                      {gallery.images?.length || 0} 张
+                    </span>
                     {gallery.status && gallery.status !== 'published' ? (
-                      <span className={clsx(CONTENT_STATUS_BADGE_CLASS, getStatusClassName(gallery.status))}>
+                      <span
+                        className={clsx(
+                          CONTENT_STATUS_BADGE_CLASS,
+                          getStatusClassName(gallery.status)
+                        )}
+                      >
                         {getStatusText(gallery.status)}
                         {gallery.status === 'rejected' && gallery.reviewNote
                           ? `（原因：${gallery.reviewNote}）`
@@ -678,7 +956,9 @@ const Settings = () => {
                     {gallery.title}
                   </p>
                   <p className="mt-1 text-xs text-text-muted">
-                    {format(new Date(gallery.createdAt), 'MM-dd HH:mm')}
+                    {gallery.eventDate
+                      ? formatDateOnly(gallery.eventDate, 'MM-dd')
+                      : format(new Date(gallery.createdAt), 'MM-dd HH:mm')}
                   </p>
                 </div>
               </Link>
@@ -690,6 +970,55 @@ const Settings = () => {
       )
     }
 
+    if (activeContentTab === 'tickets') {
+      return myTicketListings.length ? (
+        <ul>
+          {myTicketListings.map((listing) => (
+            <li key={listing.id} className="border-b border-border last:border-b-0">
+              <Link
+                to={`/tickets/${listing.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={clsx(CONTENT_ITEM_LINK_CLASS, 'py-3')}
+              >
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className={CONTENT_META_ROW_CLASS}>
+                      <span className="min-w-0 break-words text-text-muted">
+                        {listing.type === 'offer' ? '出票' : '收票'} · {listing.quantity}张 ·{' '}
+                        {listing.ticketTier}
+                      </span>
+                      {listing.status ? (
+                        <span
+                          className={clsx(
+                            CONTENT_STATUS_BADGE_CLASS,
+                            getStatusClassName(listing.status)
+                          )}
+                        >
+                          {getStatusText(listing.status)}
+                          {listing.status === 'rejected' && listing.reviewNote
+                            ? `（原因：${listing.reviewNote}）`
+                            : ''}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 truncate text-sm font-medium text-text-primary group-hover:text-brand-gold">
+                      {listing.eventName || listing.customEventName || '未命名活动'}
+                    </p>
+                  </div>
+                  <p className="shrink-0 whitespace-nowrap text-xs text-text-muted">
+                    {format(new Date(listing.updatedAt), 'MM-dd HH:mm')}
+                  </p>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <EmptyState message="暂无盘票信息" />
+      )
+    }
+
     return myComments.length ? (
       <ul>
         {myComments.map((comment) => {
@@ -697,7 +1026,11 @@ const Settings = () => {
           const isGalleryComment = comment.targetType === 'gallery' || Boolean(comment.gallery)
           const isReply = Boolean(comment.parentId)
           const canOpenComment = Boolean(target && (!comment.isDeleted || isAdmin))
-          const sourceHref = target ? (isGalleryComment ? `/gallery/${target.id}` : `/forum/${target.id}`) : '#'
+          const sourceHref = target
+            ? isGalleryComment
+              ? `/gallery/${target.slug || target.id}`
+              : `/forum/${target.slug || target.id}`
+            : '#'
           const commentHref = canOpenComment ? `${sourceHref}#comment-${comment.id}` : '#'
           return (
             <li
@@ -716,7 +1049,12 @@ const Settings = () => {
                   className="absolute inset-0 z-0"
                 />
               ) : null}
-              <div className={clsx('relative z-10 flex flex-col gap-2 py-3', target && 'pointer-events-none')}>
+              <div
+                className={clsx(
+                  'relative z-10 flex flex-col gap-2 py-3',
+                  target && 'pointer-events-none'
+                )}
+              >
                 <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
                   <span>
                     {isReply
@@ -729,17 +1067,19 @@ const Settings = () => {
                         to={sourceHref}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="pointer-events-auto text-brand-gold hover:underline"
+                        className="pointer-events-auto min-w-0 break-words text-brand-gold hover:underline"
                       >
                         {target.title}
                       </Link>
                       {isReply ? <span>下的评论</span> : null}
                     </>
                   ) : (
-                    <span className={clsx(
-                      CONTENT_STATUS_BADGE_CLASS,
-                      'border-[color-mix(in_srgb,var(--color-warning)_46%,transparent)] text-[color-mix(in_srgb,var(--color-warning)_78%,var(--color-text-primary))]'
-                    )}>
+                    <span
+                      className={clsx(
+                        CONTENT_STATUS_BADGE_CLASS,
+                        'border-[color-mix(in_srgb,var(--color-warning)_46%,transparent)] text-[color-mix(in_srgb,var(--color-warning)_78%,var(--color-text-primary))]'
+                      )}
+                    >
                       原内容不可见
                     </span>
                   )}
@@ -751,11 +1091,13 @@ const Settings = () => {
                   ) : null}
                 </div>
                 {canOpenComment ? (
-                  <p className="max-w-[72ch] text-sm leading-7 text-text-secondary group-hover:text-brand-gold">
+                  <p className="max-w-[72ch] break-words text-sm leading-7 text-text-secondary group-hover:text-brand-gold">
                     {comment.content}
                   </p>
                 ) : (
-                  <p className="max-w-[72ch] text-sm leading-7 text-text-secondary">{comment.content}</p>
+                  <p className="max-w-[72ch] break-words text-sm leading-7 text-text-secondary">
+                    {comment.content}
+                  </p>
                 )}
                 <p className="text-xs text-text-muted">
                   {format(new Date(comment.createdAt), 'MM-dd HH:mm')}
@@ -770,38 +1112,150 @@ const Settings = () => {
     )
   }
 
+  const visiblePersonalApiKeys = personalApiKeys?.ownerUid === user.uid ? personalApiKeys.keys : []
+  const visibleRevealedPersonalApiKey =
+    revealedPersonalApiKey?.ownerUid === user.uid &&
+    activeSection === 'api-keys' &&
+    revealedPersonalApiKey
+
+  const handlePersonalApiKeyCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const name = personalApiKeyName.trim()
+    if (!name || name.length > 100) {
+      show('密钥名称须为 1 到 100 个字符', { variant: 'error' })
+      return
+    }
+    if (isBanned || visibleRevealedPersonalApiKey) return
+
+    const ownerUid = user.uid
+    const scopeId = personalApiKeyScopeIdRef.current
+    const controller = new AbortController()
+    personalApiKeyCreateControllerRef.current = controller
+    setCreatingPersonalApiKey(true)
+
+    try {
+      const response = await apiPost<CreatePersonalApiKeyResponse>(
+        '/api/users/me/api-keys',
+        { name, expiry: personalApiKeyExpiry },
+        controller.signal
+      )
+      if (
+        scopeId !== personalApiKeyScopeIdRef.current ||
+        activeSection !== 'api-keys' ||
+        user.uid !== ownerUid
+      ) {
+        return
+      }
+
+      setPersonalApiKeys((current) => ({
+        ownerUid,
+        keys: [
+          response.key,
+          ...(current?.ownerUid === ownerUid
+            ? current.keys.filter((key) => key.id !== response.key.id)
+            : []),
+        ],
+      }))
+      setRevealedPersonalApiKey({ ownerUid, token: response.token })
+      setPersonalApiKeyName('')
+      show('API 密钥已创建，请立即复制保存', { variant: 'info', duration: 5000 })
+    } catch (error) {
+      if (
+        !controller.signal.aborted &&
+        scopeId === personalApiKeyScopeIdRef.current &&
+        user.uid === ownerUid
+      ) {
+        show(getErrorMessage(error, '创建 API 密钥失败'), { variant: 'error' })
+      }
+    } finally {
+      if (personalApiKeyCreateControllerRef.current === controller) {
+        personalApiKeyCreateControllerRef.current = null
+      }
+      if (scopeId === personalApiKeyScopeIdRef.current) {
+        setCreatingPersonalApiKey(false)
+      }
+    }
+  }
+
+  const handlePersonalApiKeyRevoke = async (key: PersonalApiKey) => {
+    const ownerUid = user.uid
+    const scopeId = personalApiKeyScopeIdRef.current
+    const confirmed = await dialog.confirm({
+      title: '撤销 API 密钥？',
+      message: `撤销“${key.name}”后，使用该密钥的请求将无法再通过认证。`,
+      confirmText: '撤销密钥',
+      variant: 'danger',
+    })
+    if (
+      !confirmed ||
+      scopeId !== personalApiKeyScopeIdRef.current ||
+      activeSection !== 'api-keys' ||
+      user.uid !== ownerUid
+    ) {
+      return
+    }
+
+    const controller = new AbortController()
+    personalApiKeyRevokeControllerRef.current = controller
+    setRevokingPersonalApiKeyId(key.id)
+    try {
+      await apiDelete(`/api/users/me/api-keys/${encodeURIComponent(key.id)}`, controller.signal)
+      if (
+        scopeId !== personalApiKeyScopeIdRef.current ||
+        activeSection !== 'api-keys' ||
+        user.uid !== ownerUid
+      ) {
+        return
+      }
+
+      const revokedAt = new Date().toISOString()
+      setPersonalApiKeys((current) =>
+        current?.ownerUid === ownerUid
+          ? {
+              ...current,
+              keys: current.keys.map((currentKey) =>
+                currentKey.id === key.id ? { ...currentKey, revokedAt } : currentKey
+              ),
+            }
+          : current
+      )
+      setPersonalApiKeysRetry((current) => current + 1)
+      show('API 密钥已撤销')
+    } catch (error) {
+      if (!controller.signal.aborted && scopeId === personalApiKeyScopeIdRef.current) {
+        show(getErrorMessage(error, '撤销 API 密钥失败'), { variant: 'error' })
+      }
+    } finally {
+      if (personalApiKeyRevokeControllerRef.current === controller) {
+        personalApiKeyRevokeControllerRef.current = null
+      }
+      if (scopeId === personalApiKeyScopeIdRef.current) {
+        setRevokingPersonalApiKeyId(null)
+      }
+    }
+  }
+
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="mx-auto max-w-[1180px] px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mobile-page-shell">
+      <div className="mobile-page-container max-w-[1180px]">
         <div className="mb-8 border-b border-border pb-4">
-          <h1 className="text-2xl font-bold text-text-primary">设置</h1>
+          <h1 className="mobile-page-title">设置</h1>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <aside className="lg:sticky lg:top-[84px] lg:self-start lg:border-r lg:border-border lg:pr-4">
-            <nav className="flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:gap-5 lg:overflow-visible lg:pb-0" aria-label="设置分类">
-              <div className="flex gap-1 lg:flex-col">
+        <div className="grid min-w-0 gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <aside className="min-w-0 max-w-full lg:sticky lg:top-[84px] lg:self-start lg:border-r lg:border-border lg:pr-4">
+            <nav
+              className="flex max-w-full gap-1 overflow-x-auto overscroll-x-contain pb-2 lg:flex-col lg:gap-5 lg:overflow-visible lg:pb-0"
+              aria-label="设置分类"
+            >
+              <div className="flex shrink-0 gap-1 lg:flex-col">
                 {SECTION_NAV.map((item) => (
-                  <SettingsNavLink
-                    key={item.id}
-                    item={item}
-                    isActive={activeSection === item.id}
-                  />
+                  <SettingsNavLink key={item.id} item={item} isActive={activeSection === item.id} />
                 ))}
               </div>
-              <div className="flex gap-1 lg:flex-col lg:border-t lg:border-border lg:pt-4">
+              <div className="flex shrink-0 gap-1 lg:flex-col lg:border-t lg:border-border lg:pt-4">
                 {CONTENT_SECTION_NAV.map((item) => (
-                  <SettingsNavLink
-                    key={item.id}
-                    item={item}
-                    isActive={activeSection === item.id}
-                  />
+                  <SettingsNavLink key={item.id} item={item} isActive={activeSection === item.id} />
                 ))}
               </div>
             </nav>
@@ -809,16 +1263,13 @@ const Settings = () => {
 
           <main className="min-w-0 space-y-12">
             {activeSection === 'profile' && (
-              <section className="space-y-6" aria-labelledby="settings-public-profile">
-                <div className="flex items-center gap-2 border-b border-border pb-3">
-                  <UserRound size={18} className="text-brand-gold" />
-                  <h2 id="settings-public-profile" className="text-base font-semibold text-text-primary">
-                    公开资料
-                  </h2>
-                </div>
-
-                <form onSubmit={handleProfileSubmit} className="max-w-3xl space-y-6">
-                  <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+              <SettingsSection
+                title="公开资料"
+                headingId="settings-public-profile"
+                icon={<UserRound size={18} />}
+              >
+                <form onSubmit={handleProfileSubmit} className="w-full max-w-3xl space-y-6">
+                  <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start">
                     <div className="relative w-24 shrink-0">
                       <img
                         src={profileForm.photoURL || DEFAULT_AVATAR}
@@ -827,17 +1278,18 @@ const Settings = () => {
                         referrerPolicy="no-referrer"
                         onError={handleAvatarError}
                       />
-                      <button
+                      <IconButton
                         type="button"
+                        variant="ghost"
                         onClick={() => setAvatarModalOpen(true)}
-                        className="absolute inset-0 flex items-center justify-center rounded-full bg-black/35 text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+                        className="absolute inset-0 h-full w-full rounded-full bg-black/35 text-white opacity-0 transition-opacity hover:bg-black/35 hover:text-white hover:opacity-100 focus-visible:opacity-100"
                         aria-label="修改头像"
                       >
                         <Camera size={20} />
-                      </button>
+                      </IconButton>
                     </div>
 
-                    <div className="grid flex-1 gap-4">
+                    <div className="grid min-w-0 w-full flex-1 gap-4">
                       <div className="block">
                         <div className="mb-1 flex items-center justify-between gap-3">
                           <label
@@ -851,7 +1303,7 @@ const Settings = () => {
                             max={PROFILE_DISPLAY_NAME_MAX_LENGTH}
                           />
                         </div>
-                        <input
+                        <Input
                           id="settings-display-name"
                           type="text"
                           value={profileForm.displayName}
@@ -879,7 +1331,7 @@ const Settings = () => {
                             max={PROFILE_SIGNATURE_MAX_LENGTH}
                           />
                         </div>
-                        <textarea
+                        <Textarea
                           id="settings-signature"
                           value={profileForm.signature}
                           onChange={(event) =>
@@ -899,54 +1351,57 @@ const Settings = () => {
                           <span className="text-sm font-medium text-text-secondary">
                             个人简介（支持 Markdown）
                           </span>
-                          <CharacterCount current={profileForm.bio.length} max={WIKI_MAX_CONTENT_SIZE} />
+                          <CharacterCount
+                            current={profileForm.bio.length}
+                            max={WIKI_MAX_CONTENT_SIZE}
+                          />
                         </div>
-                        <MarkdownEditor
-                          value={profileForm.bio}
-                          onChange={(bio) =>
-                            setProfileForm((current) => ({
-                              ...current,
-                              bio,
-                            }))
-                          }
-                          height="260px"
-                          placeholder="写下更完整的个人介绍..."
-                          ariaLabel="个人简介（支持 Markdown）"
-                          maxLength={WIKI_MAX_CONTENT_SIZE}
-                        />
+                        <div className="min-w-0 max-w-full overflow-hidden">
+                          <MarkdownEditor
+                            value={profileForm.bio}
+                            onChange={(bio) =>
+                              setProfileForm((current) => ({
+                                ...current,
+                                bio,
+                              }))
+                            }
+                            height="260px"
+                            placeholder="写下更完整的个人介绍..."
+                            ariaLabel="个人简介（支持 Markdown）"
+                            maxLength={WIKI_MAX_CONTENT_SIZE}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex justify-end">
-                    <button
+                    <Button
                       type="submit"
-                      disabled={savingProfile}
-                      className="theme-button-primary inline-flex items-center gap-2 rounded px-5 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                      loading={savingProfile}
+                      loadingText="保存中..."
+                      leftIcon={<Save size={14} />}
                     >
-                      {savingProfile ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                      {savingProfile ? '保存中...' : '保存公开资料'}
-                    </button>
+                      保存公开资料
+                    </Button>
                   </div>
                 </form>
-              </section>
+              </SettingsSection>
             )}
 
             {activeSection === 'content' && (
-              <section className="space-y-6" aria-labelledby="settings-content">
-                <div className="flex items-center gap-2 border-b border-border pb-3">
-                  <FileText size={18} className="text-brand-gold" />
-                  <h2 id="settings-content" className="text-base font-semibold text-text-primary">
-                    内容管理
-                  </h2>
-                </div>
-
-                <div className="max-w-3xl">
+              <SettingsSection
+                title="内容管理"
+                headingId="settings-content"
+                icon={<FileText size={18} />}
+              >
+                <div className="min-w-0 w-full max-w-3xl">
                   <div className="flex flex-wrap gap-2">
                     {[
                       { id: 'posts', label: '帖子', icon: FileText },
                       { id: 'wiki', label: '编辑过的百科', icon: BookOpen },
                       { id: 'galleries', label: '图集', icon: ImageIcon },
+                      { id: 'tickets', label: '盘票', icon: Ticket },
                       { id: 'comments', label: '评论', icon: MessageSquare },
                     ].map((item) => {
                       const Icon = item.icon
@@ -955,6 +1410,7 @@ const Settings = () => {
                         <Link
                           key={item.id}
                           to={`/settings/content?tab=${item.id}`}
+                          data-pressable
                           className={clsx(
                             'inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm transition-colors',
                             isActive
@@ -969,28 +1425,49 @@ const Settings = () => {
                     })}
                   </div>
 
-                  <div className="mt-4">{renderContentPanel()}</div>
+                  <div className="mt-4" aria-busy={contentLoading}>
+                    {contentError && (
+                      <LoadErrorState
+                        error={contentError}
+                        onRetry={() => setContentRetry((current) => current + 1)}
+                      />
+                    )}
+                    {contentLoading && activeContentHasItems && (
+                      <div className="mb-3 flex justify-end">
+                        <Spinner size="sm" label="内容刷新中" />
+                      </div>
+                    )}
+                    {renderContentPanel()}
+                  </div>
+                  {activeContentHasItems && pagination.hasMultiplePages ? (
+                    <Pagination
+                      page={pagination.page}
+                      totalPages={pagination.totalPages}
+                      onPageChange={pagination.handlePageChange}
+                      pageSize={pagination.pageSize}
+                      onPageSizeChange={pagination.handlePageSizeChange}
+                      pageSizeOptions={[20, 50, 100]}
+                      showPageSizeSelector
+                    />
+                  ) : null}
                 </div>
-              </section>
+              </SettingsSection>
             )}
 
             {activeSection === 'privacy' && (
-              <section className="space-y-6" aria-labelledby="settings-privacy">
-                <div className="flex items-center gap-2 border-b border-border pb-3">
-                  <Eye size={18} className="text-brand-gold" />
-                  <h2 id="settings-privacy" className="text-base font-semibold text-text-primary">
-                    隐私设置
-                  </h2>
-                </div>
-
+              <SettingsSection
+                title="隐私设置"
+                headingId="settings-privacy"
+                icon={<Eye size={18} />}
+              >
                 <div className="max-w-3xl space-y-5">
                   <PrivacySwitch
                     id="settings-public-favorites-toggle"
                     label="公开我的收藏"
                     checked={preferences.publicFavorites}
-                    onToggle={() =>
+                    onCheckedChange={(checked) =>
                       void updatePreferences({
-                        publicFavorites: !preferences.publicFavorites,
+                        publicFavorites: checked,
                       })
                     }
                   />
@@ -998,26 +1475,23 @@ const Settings = () => {
                     id="settings-public-history-toggle"
                     label="公开我的浏览历史"
                     checked={preferences.publicHistory}
-                    onToggle={() =>
+                    onCheckedChange={(checked) =>
                       void updatePreferences({
-                        publicHistory: !preferences.publicHistory,
+                        publicHistory: checked,
                       })
                     }
                   />
                 </div>
-              </section>
+              </SettingsSection>
             )}
 
             {activeSection === 'account' && (
-              <section className="space-y-6" aria-labelledby="settings-account">
-                <div className="flex items-center gap-2 border-b border-border pb-3">
-                  <Shield size={18} className="text-brand-gold" />
-                  <h2 id="settings-account" className="text-base font-semibold text-text-primary">
-                    账户
-                  </h2>
-                </div>
-
-                <div className="max-w-3xl">
+              <SettingsSection
+                title="账户"
+                headingId="settings-account"
+                icon={<Shield size={18} />}
+              >
+                <div className="min-w-0 w-full max-w-3xl">
                   <div className="pb-5">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                       <div className="min-w-0 space-y-1">
@@ -1025,7 +1499,9 @@ const Settings = () => {
                           <Mail size={16} className="text-brand-gold" />
                           <h3 className="text-sm font-semibold text-text-primary">邮箱</h3>
                         </div>
-                        <p className="truncate text-sm text-text-secondary">{user.email || '未设置'}</p>
+                        <p className="break-all text-sm text-text-secondary">
+                          {user.email || '未设置'}
+                        </p>
                         <div className="flex flex-wrap items-center gap-2 text-xs">
                           <span
                             className={clsx(
@@ -1048,43 +1524,52 @@ const Settings = () => {
                             )}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {canSendEmailVerification && (
-                          <button
-                            type="button"
-                            onClick={handleSendEmailVerification}
-                            disabled={sendingEmailVerification}
-                            className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
-                          >
-                            {sendingEmailVerification ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <MailCheck size={14} />
-                            )}
-                            {sendingEmailVerification ? '发送中...' : '发送验证邮件'}
-                          </button>
+                      <div className="flex max-w-full flex-wrap gap-2">
+                        {canSendEmailVerification && turnstile.enabled && (
+                          <TurnstileWidget
+                            siteKey={turnstile.siteKey}
+                            onToken={turnstile.setToken}
+                            onLoadError={turnstile.markLoadFailed}
+                            resetSignal={turnstile.resetSignal}
+                          />
                         )}
-                        <button
+                        {canSendEmailVerification && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={handleSendEmailVerification}
+                            loading={sendingEmailVerification}
+                            loadingText="发送中..."
+                            leftIcon={<MailCheck size={14} />}
+                          >
+                            发送验证邮件
+                          </Button>
+                        )}
+                        <Button
                           type="button"
+                          variant="secondary"
                           onClick={isEmailEditorOpen ? closeEmailEditor : openEmailEditor}
-                          className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
+                          leftIcon={
+                            isEmailEditorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+                          }
                           aria-expanded={isEmailEditorOpen}
                           aria-controls="email-editor"
                         >
-                          {isEmailEditorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                           {isEmailEditorOpen ? '收起' : '修改邮箱'}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                     {isEmailEditorOpen && (
                       <form
                         id="email-editor"
                         onSubmit={handleEmailSubmit}
-                        className="mt-5 grid max-w-xl gap-4"
+                        className="mt-5 grid min-w-0 w-full max-w-xl gap-4"
                       >
                         <label className="block">
-                          <span className="mb-1 block text-xs font-medium text-text-muted">当前密码</span>
-                          <input
+                          <span className="mb-1 block text-xs font-medium text-text-muted">
+                            当前密码 <span className="theme-text-error">*</span>
+                          </span>
+                          <Input
                             type="password"
                             value={emailForm.currentPassword}
                             onChange={(event) =>
@@ -1098,33 +1583,34 @@ const Settings = () => {
                           />
                         </label>
                         <label className="block">
-                          <span className="mb-1 block text-xs font-medium text-text-muted">新邮箱</span>
-                          <input
+                          <span className="mb-1 block text-xs font-medium text-text-muted">
+                            新邮箱 <span className="theme-text-error">*</span>
+                          </span>
+                          <Input
                             type="email"
                             value={emailForm.newEmail}
                             onChange={(event) =>
-                              setEmailForm((current) => ({ ...current, newEmail: event.target.value }))
+                              setEmailForm((current) => ({
+                                ...current,
+                                newEmail: event.target.value,
+                              }))
                             }
                             autoComplete="email"
                             className="theme-input w-full rounded px-4 py-2.5 text-sm"
                           />
                         </label>
                         <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={closeEmailEditor}
-                            className="theme-button-secondary rounded px-4 py-2 text-sm font-medium transition-all"
-                          >
+                          <Button type="button" variant="secondary" onClick={closeEmailEditor}>
                             取消
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="submit"
-                            disabled={savingEmail}
-                            className="theme-button-primary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                            loading={savingEmail}
+                            loadingText="更新中..."
+                            leftIcon={<Save size={14} />}
                           >
-                            {savingEmail ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                            {savingEmail ? '更新中...' : '保存邮箱'}
-                          </button>
+                            保存邮箱
+                          </Button>
                         </div>
                       </form>
                     )}
@@ -1138,26 +1624,30 @@ const Settings = () => {
                           <h3 className="text-sm font-semibold text-text-primary">密码</h3>
                         </div>
                       </div>
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
                         onClick={isPasswordEditorOpen ? closePasswordEditor : openPasswordEditor}
-                        className="theme-button-secondary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all"
+                        leftIcon={
+                          isPasswordEditorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+                        }
                         aria-expanded={isPasswordEditorOpen}
                         aria-controls="password-editor"
                       >
-                        {isPasswordEditorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         {isPasswordEditorOpen ? '收起' : '修改密码'}
-                      </button>
+                      </Button>
                     </div>
                     {isPasswordEditorOpen && (
                       <form
                         id="password-editor"
                         onSubmit={handlePasswordSubmit}
-                        className="mt-5 grid max-w-xl gap-4"
+                        className="mt-5 grid min-w-0 w-full max-w-xl gap-4"
                       >
                         <label className="block">
-                          <span className="mb-1 block text-xs font-medium text-text-muted">当前密码</span>
-                          <input
+                          <span className="mb-1 block text-xs font-medium text-text-muted">
+                            当前密码 <span className="theme-text-error">*</span>
+                          </span>
+                          <Input
                             type="password"
                             value={passwordForm.currentPassword}
                             onChange={(event) =>
@@ -1172,12 +1662,18 @@ const Settings = () => {
                         </label>
                         <div className="block">
                           <div className="mb-1 flex items-center justify-between gap-3">
-                            <label htmlFor="settings-new-password" className="text-xs font-medium text-text-muted">
-                              新密码
+                            <label
+                              htmlFor="settings-new-password"
+                              className="text-xs font-medium text-text-muted"
+                            >
+                              新密码 <span className="theme-text-error">*</span>
                             </label>
-                            <CharacterCount current={passwordForm.newPassword.length} max={PASSWORD_MAX_LENGTH} />
+                            <CharacterCount
+                              current={passwordForm.newPassword.length}
+                              max={PASSWORD_MAX_LENGTH}
+                            />
                           </div>
-                          <input
+                          <Input
                             id="settings-new-password"
                             type="password"
                             value={passwordForm.newPassword}
@@ -1199,11 +1695,14 @@ const Settings = () => {
                               htmlFor="settings-confirm-password"
                               className="text-xs font-medium text-text-muted"
                             >
-                              确认新密码
+                              确认新密码 <span className="theme-text-error">*</span>
                             </label>
-                            <CharacterCount current={passwordForm.confirmPassword.length} max={PASSWORD_MAX_LENGTH} />
+                            <CharacterCount
+                              current={passwordForm.confirmPassword.length}
+                              max={PASSWORD_MAX_LENGTH}
+                            />
                           </div>
-                          <input
+                          <Input
                             id="settings-confirm-password"
                             type="password"
                             value={passwordForm.confirmPassword}
@@ -1220,71 +1719,314 @@ const Settings = () => {
                           />
                         </div>
                         <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={closePasswordEditor}
-                            className="theme-button-secondary rounded px-4 py-2 text-sm font-medium transition-all"
-                          >
+                          <Button type="button" variant="secondary" onClick={closePasswordEditor}>
                             取消
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="submit"
-                            disabled={savingPassword}
-                            className="theme-button-primary inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                            loading={savingPassword}
+                            loadingText="更新中..."
+                            leftIcon={<Save size={14} />}
                           >
-                            {savingPassword ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                            {savingPassword ? '更新中...' : '保存密码'}
-                          </button>
+                            保存密码
+                          </Button>
                         </div>
                       </form>
                     )}
                   </div>
                 </div>
-              </section>
+              </SettingsSection>
+            )}
+
+            {activeSection === 'api-keys' && (
+              <SettingsSection
+                title="API 密钥"
+                headingId="settings-api-keys"
+                icon={<KeyRound size={18} />}
+              >
+                <div className="min-w-0 w-full max-w-3xl space-y-6">
+                  <div className="flex items-start gap-2 rounded-lg p-3 text-sm leading-6 theme-status-warning theme-text-warning">
+                    <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    <p>如果你不知道这是什么，请忽略此页面的内容。</p>
+                  </div>
+
+                  {isBanned && (
+                    <p className="mt-4 text-sm theme-text-warning">
+                      账号封禁期间不能创建密钥，仍可查看或撤销已有密钥。
+                    </p>
+                  )}
+                  <form
+                    onSubmit={handlePersonalApiKeyCreate}
+                    className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_auto] sm:items-end"
+                  >
+                    <Field label="密钥名称">
+                      <Input
+                        value={personalApiKeyName}
+                        onChange={(event) => setPersonalApiKeyName(event.target.value)}
+                        maxLength={100}
+                        required
+                        placeholder="例如：定时备份、数据同步"
+                      />
+                    </Field>
+                    <Field label="有效期">
+                      <Select
+                        value={personalApiKeyExpiry}
+                        className="w-full"
+                        onChange={(event) =>
+                          setPersonalApiKeyExpiry(event.target.value as PersonalApiKeyExpiry)
+                        }
+                      >
+                        {PERSONAL_API_KEY_EXPIRY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Button
+                      type="submit"
+                      loading={creatingPersonalApiKey}
+                      className="w-full sm:w-auto"
+                      loadingText="创建中..."
+                      disabled={isBanned || Boolean(visibleRevealedPersonalApiKey)}
+                    >
+                      创建密钥
+                    </Button>
+                  </form>
+                  {visibleRevealedPersonalApiKey && (
+                    <div
+                      className="space-y-4 rounded-lg border border-[var(--color-warning)]/50 bg-surface-alt p-5 sm:p-6"
+                      role="status"
+                    >
+                      <p className="text-sm font-medium text-text-primary">
+                        密钥仅显示一次，请复制并安全保存。
+                      </p>
+                      <Field label="新 API 密钥">
+                        <Input
+                          value={visibleRevealedPersonalApiKey.token}
+                          readOnly
+                          onFocus={(event) => event.currentTarget.select()}
+                          className="font-mono text-xs"
+                        />
+                      </Field>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={async () => {
+                            const copied = await copyToClipboard(
+                              visibleRevealedPersonalApiKey.token
+                            )
+                            show(copied ? 'API 密钥已复制' : '复制失败，请手动选择并复制密钥', {
+                              variant: copied ? 'success' : 'error',
+                            })
+                          }}
+                        >
+                          复制密钥
+                        </Button>
+                        <Button type="button" onClick={() => setRevealedPersonalApiKey(null)}>
+                          我已保存
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-text-primary">已创建的密钥</h3>
+                    {personalApiKeysError && (
+                      <LoadErrorState
+                        error={personalApiKeysError}
+                        description="API 密钥列表加载失败，请重试。"
+                        onRetry={() => setPersonalApiKeysRetry((current) => current + 1)}
+                        className="mt-4"
+                      />
+                    )}
+                    {!personalApiKeys && !personalApiKeysError && (
+                      <div className="mt-4 space-y-3" role="status" aria-label="正在加载 API 密钥">
+                        {[1, 2].map((item) => (
+                          <Skeleton key={item} className="h-16 w-full" />
+                        ))}
+                      </div>
+                    )}
+                    {personalApiKeys?.ownerUid === user.uid &&
+                      personalApiKeys.keys.length === 0 &&
+                      !personalApiKeysLoading && (
+                        <p className="mt-4 text-sm text-text-muted">尚未创建 API 密钥。</p>
+                      )}
+                    {visiblePersonalApiKeys.length > 0 && (
+                      <ul className="divide-y divide-border">
+                        {visiblePersonalApiKeys.map((key) => {
+                          const revoked = Boolean(key.revokedAt)
+                          const expired =
+                            key.expiresAt !== null && Date.parse(key.expiresAt) <= Date.now()
+                          const status = revoked ? '已撤销' : expired ? '已过期' : '有效'
+                          const statusClass = revoked
+                            ? 'theme-status-error theme-text-error'
+                            : expired
+                              ? 'theme-status-warning theme-text-warning'
+                              : 'theme-status-success theme-text-success'
+
+                          return (
+                            <li
+                              key={key.id}
+                              className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between"
+                            >
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="break-all text-sm font-medium text-text-primary">
+                                    {key.name}
+                                  </span>
+                                  <span
+                                    className={clsx(
+                                      'rounded border px-2 py-0.5 text-xs',
+                                      statusClass
+                                    )}
+                                  >
+                                    {status}
+                                  </span>
+                                </div>
+                                <code className="block break-all text-xs text-text-muted">
+                                  {key.prefix}…
+                                </code>
+                                <dl className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                                  <div className="flex gap-2">
+                                    <dt className="text-text-muted">创建</dt>
+                                    <dd className="text-text-secondary">
+                                      {format(new Date(key.createdAt), 'yyyy-MM-dd HH:mm')}
+                                    </dd>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <dt className="text-text-muted">到期</dt>
+                                    <dd className="text-text-secondary">
+                                      {key.expiresAt
+                                        ? format(new Date(key.expiresAt), 'yyyy-MM-dd HH:mm')
+                                        : '永久'}
+                                    </dd>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <dt className="text-text-muted">最近使用</dt>
+                                    <dd className="text-text-secondary">
+                                      {key.lastUsedAt
+                                        ? format(new Date(key.lastUsedAt), 'yyyy-MM-dd HH:mm')
+                                        : '未使用'}
+                                    </dd>
+                                  </div>
+                                </dl>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="danger"
+                                size="sm"
+                                className="self-start"
+                                disabled={revoked || revokingPersonalApiKeyId !== null}
+                                loading={revokingPersonalApiKeyId === key.id}
+                                onClick={() => void handlePersonalApiKeyRevoke(key)}
+                              >
+                                撤销
+                              </Button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="space-y-3 border-t border-border pt-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <details className="min-w-0 w-full">
+                        <summary className="cursor-pointer text-sm text-text-secondary">
+                          调用示例与说明
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                          <p className="text-sm leading-6 text-text-secondary">
+                            通过 Authorization Bearer 请求头发送密钥，不要放入 URL。 对外调用请使用
+                            HTTPS。
+                          </p>
+                          <pre className="max-w-full overflow-x-auto rounded-lg border border-border bg-surface-alt px-4 py-4 text-xs leading-6 text-text-primary sm:text-sm">
+                            <code>
+                              curl -H 'Authorization: Bearer &lt;API_KEY&gt;'
+                              {' \\\n  https://<本站域名>/api/users/me'}
+                            </code>
+                          </pre>
+                          <p className="text-xs leading-6 text-text-muted">
+                            写请求无需浏览器 Cookie 或 XSRF 令牌。JSON 请求使用 Content-Type:
+                            application/json；上传沿用上传会话和 multipart 文件接口。
+                          </p>
+                          <p className="text-xs leading-6 text-text-muted">
+                            修改密码或退出登录不会撤销密钥；泄露后请手动撤销。
+                          </p>
+                        </div>
+                      </details>
+                      <a
+                        href="/api-docs.md"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-brand-gold underline underline-offset-4 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4"
+                      >
+                        查看 API 文档
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </SettingsSection>
             )}
 
             {activeSection === 'appearance' && (
-              <section className="space-y-6" aria-labelledby="settings-appearance">
-                <div className="flex items-center gap-2 border-b border-border pb-3">
-                  <SlidersHorizontal size={18} className="text-brand-gold" />
-                  <h2 id="settings-appearance" className="text-base font-semibold text-text-primary">
-                    外观
-                  </h2>
+              <SettingsSection
+                title="外观"
+                headingId="settings-appearance"
+                icon={<SlidersHorizontal size={18} />}
+              >
+                <div className="w-full max-w-3xl">
+                  <ThemeToggle compact fullWidth />
                 </div>
 
-                <div className="max-w-3xl">
-                  <ThemeToggle compact />
-                </div>
-
-                <div className="flex max-w-3xl items-center justify-between gap-4 border-t border-border pt-6">
-                  <label
-                    htmlFor="settings-character-count-toggle"
-                    className="text-sm font-medium text-text-primary"
-                  >
-                    展示字数限制
-                  </label>
-                  <button
-                    type="button"
-                    id="settings-character-count-toggle"
-                    role="switch"
-                    aria-checked={preferences.showCharacterCount}
-                    onClick={() =>
-                      void updatePreferences({
-                        showCharacterCount: !preferences.showCharacterCount,
-                      })
-                    }
-                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold focus:ring-offset-2 ${
-                      preferences.showCharacterCount ? 'bg-[var(--color-theme-accent)]' : 'bg-border'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                        preferences.showCharacterCount ? 'translate-x-6' : 'translate-x-1'
-                      }`}
+                <SettingRow
+                  label="列表加载方式"
+                  stackOnMobile
+                  control={
+                    <SegmentedControl
+                      value={preferences.listLoadMode}
+                      options={LIST_LOAD_MODE_OPTIONS}
+                      onValueChange={(value) =>
+                        void updatePreferences({ listLoadMode: value as ListLoadMode })
+                      }
+                      aria-label="列表加载方式"
                     />
-                  </button>
-                </div>
-              </section>
+                  }
+                />
+
+                <SettingRow
+                  label="展示字数限制"
+                  labelFor="settings-character-count-toggle"
+                  control={
+                    <Switch
+                      id="settings-character-count-toggle"
+                      checked={preferences.showCharacterCount}
+                      onCheckedChange={(checked) =>
+                        void updatePreferences({
+                          showCharacterCount: checked,
+                        })
+                      }
+                    />
+                  }
+                />
+
+                <SettingRow
+                  label="手机端显示歌曲序号"
+                  labelFor="settings-mobile-song-sequence-toggle"
+                  control={
+                    <Switch
+                      id="settings-mobile-song-sequence-toggle"
+                      checked={preferences.showMobileSongSequence}
+                      onCheckedChange={(checked) =>
+                        void updatePreferences({
+                          showMobileSongSequence: checked,
+                        })
+                      }
+                    />
+                  }
+                />
+              </SettingsSection>
             )}
           </main>
         </div>

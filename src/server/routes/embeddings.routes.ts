@@ -1,10 +1,26 @@
-import { Router } from 'express';
-import { requireAdmin, type AuthenticatedRequest } from '../middleware/auth';
-import { parseInteger, parseBoolean, doesPublicTableExist, isPrismaTableMissingError } from '../utils';
-import { prisma } from '../prisma';
-import { getEmbeddingModelName, getEmbeddingVectorSize, getModelCacheDir, isImageModelLoaded, isTextModelLoaded, isTokenizerLoaded, getModelLoadError, isModelScopeActive, getActualDtype } from '../vector/clipEmbedding';
-import { getQdrantCollectionName, getTextCollectionName } from '../vector/qdrantService';
-import { enqueueMissingImageEmbeddings, syncImageEmbeddingBatch } from '../vector/embeddingSync';
+import { Router } from 'express'
+import { requireAdmin, type AuthenticatedRequest } from '../middleware/auth'
+import {
+  parseInteger,
+  parseBoolean,
+  doesPublicTableExist,
+  isPrismaTableMissingError,
+} from '../utils'
+import { prisma } from '../prisma'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
+import {
+  getEmbeddingModelName,
+  getEmbeddingVectorSize,
+  getModelCacheDir,
+  isImageModelLoaded,
+  isTextModelLoaded,
+  isTokenizerLoaded,
+  getModelLoadError,
+  isModelScopeActive,
+  getActualDtype,
+} from '../vector/clipEmbedding'
+import { getQdrantCollectionName, getTextCollectionName } from '../vector/qdrantService'
+import { enqueueMissingImageEmbeddings, syncImageEmbeddingBatch } from '../vector/embeddingSync'
 import {
   enqueueMissingWikiImageEmbeddings,
   enqueueMissingPostImageEmbeddings,
@@ -12,7 +28,7 @@ import {
   enqueuePostImageEmbeddings,
   syncWikiImageEmbeddingBatch,
   syncPostImageEmbeddingBatch,
-} from '../vector/wikiPostEmbedding';
+} from '../vector/wikiPostEmbedding'
 import {
   enqueueMissingTextEmbeddings,
   enqueueWikiTextEmbeddings,
@@ -22,15 +38,23 @@ import {
   syncTextEmbeddingBatch,
   retryFailedTextEmbeddings,
   rebuildAllTextEmbeddings,
-} from '../vector/textEmbeddingSync';
+} from '../vector/textEmbeddingSync'
 
-const router = Router();
+const router = Router()
 
-const IMAGE_EMBEDDING_BATCH_SIZE = Math.max(1, Number(process.env.IMAGE_EMBEDDING_BATCH_SIZE || 100));
+function getImageEmbeddingBatchSize(): number {
+  return runtimeConfigService.getConfig().imageEmbeddingBatchSize
+}
 
-type EmbeddingType = 'gallery' | 'wiki' | 'post' | 'all';
+type EmbeddingType = 'gallery' | 'wiki' | 'post' | 'all'
 type EmbeddingStatusKey = 'pending' | 'processing' | 'ready' | 'failed'
-type EmbeddingSummary = { pending: number; processing: number; ready: number; failed: number; total: number }
+type EmbeddingSummary = {
+  pending: number
+  processing: number
+  ready: number
+  failed: number
+  total: number
+}
 type ImageSummaryKey = 'gallery' | 'wiki' | 'post'
 type ImageSummary = Record<ImageSummaryKey, EmbeddingSummary>
 type ImageSourceAvailability = Record<ImageSummaryKey, boolean>
@@ -70,9 +94,7 @@ function createDefaultImageSourceAvailability(): ImageSourceAvailability {
   }
 }
 
-async function getEmbeddingSummary(
-  countByStatus: (status: EmbeddingStatusKey) => Promise<number>
-) {
+async function getEmbeddingSummary(countByStatus: (status: EmbeddingStatusKey) => Promise<number>) {
   const [pending, processing, ready, failed] = await Promise.all(
     EMBEDDING_STATUSES.map((status) => countByStatus(status))
   )
@@ -220,9 +242,9 @@ async function getImageSourceAvailability() {
 
 function parseType(type: unknown): EmbeddingType {
   if (type === 'gallery' || type === 'wiki' || type === 'post' || type === 'all') {
-    return type;
+    return type
   }
-  return 'all';
+  return 'all'
 }
 
 router.get('/status', requireAdmin, async (_req: AuthenticatedRequest, res) => {
@@ -237,21 +259,20 @@ router.get('/status', requireAdmin, async (_req: AuthenticatedRequest, res) => {
       textEmbeddingReady,
       textEmbeddingTableMissing,
       textEmbeddingWarning,
-    } = await Promise.all([
-      getImageSummary(),
-      getTextSummary(),
-    ]).then(([imageState, textState]) => ({
-      ...imageState,
-      ...textState,
-    }))
+    } = await Promise.all([getImageSummary(), getTextSummary()]).then(
+      ([imageState, textState]) => ({
+        ...imageState,
+        ...textState,
+      })
+    )
 
     // 获取模型加载状态
-    const modelLoaded = isImageModelLoaded();
-    const textModelLoaded = isTextModelLoaded();
-    const tokenizerLoaded = isTokenizerLoaded();
-    const modelErrors = getModelLoadError();
-    const usingModelScope = isModelScopeActive();
-    const actualDtype = getActualDtype();
+    const modelLoaded = isImageModelLoaded()
+    const textModelLoaded = isTextModelLoaded()
+    const tokenizerLoaded = isTokenizerLoaded()
+    const modelErrors = getModelLoadError()
+    const usingModelScope = isModelScopeActive()
+    const actualDtype = getActualDtype()
 
     res.json({
       modelName: getEmbeddingModelName(),
@@ -277,50 +298,50 @@ router.get('/status', requireAdmin, async (_req: AuthenticatedRequest, res) => {
       textEmbeddingReady,
       textEmbeddingTableMissing,
       textEmbeddingWarning,
-    });
+    })
   } catch (error) {
-    console.error('Fetch embeddings status error:', error);
-    res.status(500).json({ error: '获取向量状态失败' });
+    console.error('Fetch embeddings status error:', error)
+    res.status(500).json({ error: '获取向量状态失败' })
   }
-});
+})
 
 router.post('/enqueue-missing', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const type = parseType(req.body?.type);
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const type = parseType(req.body?.type)
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 2000,
-    });
+    })
 
     const result: {
-      gallery?: { requested: number; queued: number };
-      wiki?: { requested: number; queued: number };
-      post?: { requested: number; queued: number };
-      limit: number;
-      type: EmbeddingType;
+      gallery?: { requested: number; queued: number }
+      wiki?: { requested: number; queued: number }
+      post?: { requested: number; queued: number }
+      limit: number
+      type: EmbeddingType
     } = {
       limit,
       type,
-    };
+    }
 
     if (type === 'all' || type === 'gallery') {
-      result.gallery = await enqueueMissingImageEmbeddings(prisma, limit);
+      result.gallery = await enqueueMissingImageEmbeddings(prisma, limit)
     }
 
     if (type === 'all' || type === 'wiki') {
-      result.wiki = await enqueueMissingWikiImageEmbeddings(prisma, limit);
+      result.wiki = await enqueueMissingWikiImageEmbeddings(prisma, limit)
     }
 
     if (type === 'all' || type === 'post') {
-      result.post = await enqueueMissingPostImageEmbeddings(prisma, limit);
+      result.post = await enqueueMissingPostImageEmbeddings(prisma, limit)
     }
 
-    res.json(result);
+    res.json(result)
   } catch (error) {
-    console.error('Enqueue missing embeddings error:', error);
-    res.status(500).json({ error: '补齐向量队列失败' });
+    console.error('Enqueue missing embeddings error:', error)
+    res.status(500).json({ error: '补齐向量队列失败' })
   }
-});
+})
 
 router.post('/sync-batch', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
@@ -333,7 +354,7 @@ router.post('/sync-batch', requireAdmin, async (req: AuthenticatedRequest, res) 
       .map((item: string) => item.trim())
       .filter(Boolean)
 
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
@@ -394,15 +415,13 @@ router.post('/sync-batch', requireAdmin, async (req: AuthenticatedRequest, res) 
 
 router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const type = parseType(req.query.type);
+    const type = parseType(req.query.type)
     const limit = parseInteger(req.query.limit, 20, {
       min: 1,
       max: 200,
-    });
+    })
     const imageSourceAvailability = await getImageSourceAvailability()
-    const requestedTypes = type === 'all'
-      ? (['gallery', 'wiki', 'post'] as const)
-      : [type]
+    const requestedTypes = type === 'all' ? (['gallery', 'wiki', 'post'] as const) : [type]
     const unavailableRequestedTypes = requestedTypes.filter((sourceType) => {
       if (sourceType === 'gallery') return !imageSourceAvailability.gallery
       if (sourceType === 'wiki') return !imageSourceAvailability.wiki
@@ -410,25 +429,25 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
     })
 
     const errors: Array<{
-      id: string;
-      sourceType: 'gallery' | 'wiki' | 'post';
-      sourceId?: string;
-      galleryImageId?: string | null;
-      galleryId?: string | null;
-      galleryTitle?: string | null;
-      wikiPageSlug?: string | null;
-      postId?: string | null;
-      imageUrl: string;
-      modelName: string;
-      vectorSize: number;
-      status: string;
-      errorMessage: string | null;
-      retryCount: number;
-      embeddedAt: string | null;
-      createdAt: string;
-      updatedAt: string;
-      gallery?: { id: string; title: string } | null;
-    }> = [];
+      id: string
+      sourceType: 'gallery' | 'wiki' | 'post'
+      sourceId?: string
+      galleryImageId?: string | null
+      galleryId?: string | null
+      galleryTitle?: string | null
+      wikiPageSlug?: string | null
+      postId?: string | null
+      imageUrl: string
+      modelName: string
+      vectorSize: number
+      status: string
+      errorMessage: string | null
+      retryCount: number
+      embeddedAt: string | null
+      createdAt: string
+      updatedAt: string
+      gallery?: { id: string; title: string } | null
+    }> = []
 
     const warnings: string[] = []
     if (unavailableRequestedTypes.length > 0) {
@@ -469,31 +488,33 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
           updatedAt: 'desc',
         },
         take: limit,
-      });
+      })
 
-      errors.push(...galleryFailed.map((item) => ({
-        id: item.id,
-        sourceType: 'gallery' as const,
-        sourceId: item.galleryImageId,
-        galleryImageId: item.galleryImageId,
-        galleryId: item.galleryImage.galleryId,
-        galleryTitle: item.galleryImage.gallery.title,
-        wikiPageSlug: null,
-        postId: null,
-        imageUrl: item.galleryImage.asset?.publicUrl || item.galleryImage.url,
-        modelName: item.modelName,
-        vectorSize: item.vectorSize,
-        status: item.status,
-        errorMessage: item.lastError,
-        retryCount: item.status === 'failed' ? 1 : 0,
-        embeddedAt: item.embeddedAt ? item.embeddedAt.toISOString() : null,
-        createdAt: item.createdAt.toISOString(),
-        updatedAt: item.updatedAt.toISOString(),
-        gallery: {
-          id: item.galleryImage.gallery.id,
-          title: item.galleryImage.gallery.title,
-        },
-      })));
+      errors.push(
+        ...galleryFailed.map((item) => ({
+          id: item.id,
+          sourceType: 'gallery' as const,
+          sourceId: item.galleryImageId,
+          galleryImageId: item.galleryImageId,
+          galleryId: item.galleryImage.galleryId,
+          galleryTitle: item.galleryImage.gallery.title,
+          wikiPageSlug: null,
+          postId: null,
+          imageUrl: item.galleryImage.asset?.publicUrl || item.galleryImage.url,
+          modelName: item.modelName,
+          vectorSize: item.vectorSize,
+          status: item.status,
+          errorMessage: item.lastError,
+          retryCount: item.status === 'failed' ? 1 : 0,
+          embeddedAt: item.embeddedAt ? item.embeddedAt.toISOString() : null,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+          gallery: {
+            id: item.galleryImage.gallery.id,
+            title: item.galleryImage.gallery.title,
+          },
+        }))
+      )
     }
 
     // Wiki errors
@@ -506,28 +527,30 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
           updatedAt: 'desc',
         },
         take: limit,
-      });
+      })
 
-      errors.push(...wikiFailed.map((item) => ({
-        id: item.id,
-        sourceType: 'wiki' as const,
-        sourceId: item.wikiPageSlug,
-        galleryImageId: null,
-        galleryId: null,
-        galleryTitle: null,
-        wikiPageSlug: item.wikiPageSlug,
-        postId: null,
-        imageUrl: item.imageUrl,
-        modelName: item.modelName,
-        vectorSize: item.vectorSize,
-        status: item.status,
-        errorMessage: item.lastError,
-        retryCount: item.status === 'failed' ? 1 : 0,
-        embeddedAt: item.embeddedAt ? item.embeddedAt.toISOString() : null,
-        createdAt: item.createdAt.toISOString(),
-        updatedAt: item.updatedAt.toISOString(),
-        gallery: null,
-      })));
+      errors.push(
+        ...wikiFailed.map((item) => ({
+          id: item.id,
+          sourceType: 'wiki' as const,
+          sourceId: item.wikiPageSlug,
+          galleryImageId: null,
+          galleryId: null,
+          galleryTitle: null,
+          wikiPageSlug: item.wikiPageSlug,
+          postId: null,
+          imageUrl: item.imageUrl,
+          modelName: item.modelName,
+          vectorSize: item.vectorSize,
+          status: item.status,
+          errorMessage: item.lastError,
+          retryCount: item.status === 'failed' ? 1 : 0,
+          embeddedAt: item.embeddedAt ? item.embeddedAt.toISOString() : null,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+          gallery: null,
+        }))
+      )
     }
 
     // Post errors
@@ -540,33 +563,35 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
           updatedAt: 'desc',
         },
         take: limit,
-      });
+      })
 
-      errors.push(...postFailed.map((item) => ({
-        id: item.id,
-        sourceType: 'post' as const,
-        sourceId: item.postId,
-        galleryImageId: null,
-        galleryId: null,
-        galleryTitle: null,
-        wikiPageSlug: null,
-        postId: item.postId,
-        imageUrl: item.imageUrl,
-        modelName: item.modelName,
-        vectorSize: item.vectorSize,
-        status: item.status,
-        errorMessage: item.lastError,
-        retryCount: item.status === 'failed' ? 1 : 0,
-        embeddedAt: item.embeddedAt ? item.embeddedAt.toISOString() : null,
-        createdAt: item.createdAt.toISOString(),
-        updatedAt: item.updatedAt.toISOString(),
-        gallery: null,
-      })));
+      errors.push(
+        ...postFailed.map((item) => ({
+          id: item.id,
+          sourceType: 'post' as const,
+          sourceId: item.postId,
+          galleryImageId: null,
+          galleryId: null,
+          galleryTitle: null,
+          wikiPageSlug: null,
+          postId: item.postId,
+          imageUrl: item.imageUrl,
+          modelName: item.modelName,
+          vectorSize: item.vectorSize,
+          status: item.status,
+          errorMessage: item.lastError,
+          retryCount: item.status === 'failed' ? 1 : 0,
+          embeddedAt: item.embeddedAt ? item.embeddedAt.toISOString() : null,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+          gallery: null,
+        }))
+      )
     }
 
     // 按 updatedAt 排序并限制数量
-    errors.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    const limitedErrors = errors.slice(0, limit);
+    errors.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    const limitedErrors = errors.slice(0, limit)
 
     res.json({
       errors: limitedErrors,
@@ -574,26 +599,32 @@ router.get('/errors', requireAdmin, async (req: AuthenticatedRequest, res) => {
       type,
       warnings,
       imageSourceAvailability,
-    });
+    })
   } catch (error) {
-    console.error('Fetch embedding errors error:', error);
-    res.status(500).json({ error: '获取向量失败记录失败' });
+    console.error('Fetch embedding errors error:', error)
+    res.status(500).json({ error: '获取向量失败记录失败' })
   }
-});
+})
 
 router.post('/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const type = parseType(req.body?.type)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
 
     const uploadsDir = process.env.UPLOADS_PATH || 'uploads'
     const result: {
-      gallery?: { resetCount: number; processedCount: number } & Awaited<ReturnType<typeof syncImageEmbeddingBatch>>
-      wiki?: { resetCount: number; processedCount: number } & Awaited<ReturnType<typeof syncWikiImageEmbeddingBatch>>
-      post?: { resetCount: number; processedCount: number } & Awaited<ReturnType<typeof syncPostImageEmbeddingBatch>>
+      gallery?: { resetCount: number; processedCount: number } & Awaited<
+        ReturnType<typeof syncImageEmbeddingBatch>
+      >
+      wiki?: { resetCount: number; processedCount: number } & Awaited<
+        ReturnType<typeof syncWikiImageEmbeddingBatch>
+      >
+      post?: { resetCount: number; processedCount: number } & Awaited<
+        ReturnType<typeof syncPostImageEmbeddingBatch>
+      >
       limit: number
       type: EmbeddingType
     } = {
@@ -690,7 +721,7 @@ router.post('/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res
 router.post('/rebuild-all', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const type = parseType(req.body?.type)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
@@ -774,67 +805,69 @@ router.post('/rebuild-all', requireAdmin, async (req: AuthenticatedRequest, res)
 // 同步指定 Wiki 页面的图片向量
 router.post('/sync-wiki', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const slugsRaw = Array.isArray(req.body?.slugs)
-      ? req.body.slugs
-      : [];
+    const slugsRaw = Array.isArray(req.body?.slugs) ? req.body.slugs : []
     const slugs = slugsRaw
       .filter((item: unknown): item is string => typeof item === 'string')
       .map((item: string) => item.trim())
-      .filter(Boolean);
+      .filter(Boolean)
 
     if (slugs.length === 0) {
-      res.status(400).json({ error: '请提供至少一个 Wiki 页面 slug' });
-      return;
+      res.status(400).json({ error: '请提供至少一个 Wiki 页面 slug' })
+      return
     }
 
-    const result = await enqueueWikiImageEmbeddings(prisma, slugs);
+    const result = await enqueueWikiImageEmbeddings(prisma, slugs)
 
     res.json({
       ...result,
       slugs,
       modelName: getEmbeddingModelName(),
       vectorSize: getEmbeddingVectorSize(),
-    });
+    })
   } catch (error) {
-    console.error('Sync wiki embeddings error:', error);
-    res.status(500).json({ error: '同步 Wiki 页面向量失败' });
+    console.error('Sync wiki embeddings error:', error)
+    res.status(500).json({ error: '同步 Wiki 页面向量失败' })
   }
-});
+})
 
 // 同步指定 Post 的图片向量
 router.post('/sync-post', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const idsRaw = Array.isArray(req.body?.ids)
-      ? req.body.ids
-      : [];
+    const idsRaw = Array.isArray(req.body?.ids) ? req.body.ids : []
     const ids = idsRaw
       .filter((item: unknown): item is string => typeof item === 'string')
       .map((item: string) => item.trim())
-      .filter(Boolean);
+      .filter(Boolean)
 
     if (ids.length === 0) {
-      res.status(400).json({ error: '请提供至少一个 Post ID' });
-      return;
+      res.status(400).json({ error: '请提供至少一个 Post ID' })
+      return
     }
 
-    const result = await enqueuePostImageEmbeddings(prisma, ids);
+    const result = await enqueuePostImageEmbeddings(prisma, ids)
 
     res.json({
       ...result,
       ids,
       modelName: getEmbeddingModelName(),
       vectorSize: getEmbeddingVectorSize(),
-    });
+    })
   } catch (error) {
-    console.error('Sync post embeddings error:', error);
-    res.status(500).json({ error: '同步 Post 向量失败' });
+    console.error('Sync post embeddings error:', error)
+    res.status(500).json({ error: '同步 Post 向量失败' })
   }
-});
+})
 
 type TextSourceType = 'wiki' | 'post' | 'music' | 'album' | 'all'
 
 function parseTextSourceType(type: unknown): TextSourceType {
-  if (type === 'wiki' || type === 'post' || type === 'music' || type === 'album' || type === 'all') {
+  if (
+    type === 'wiki' ||
+    type === 'post' ||
+    type === 'music' ||
+    type === 'album' ||
+    type === 'all'
+  ) {
     return type
   }
   return 'all'
@@ -842,12 +875,8 @@ function parseTextSourceType(type: unknown): TextSourceType {
 
 router.get('/text/status', requireAdmin, async (_req: AuthenticatedRequest, res) => {
   try {
-    const {
-      textSummary,
-      textEmbeddingReady,
-      textEmbeddingTableMissing,
-      textEmbeddingWarning,
-    } = await getTextSummary()
+    const { textSummary, textEmbeddingReady, textEmbeddingTableMissing, textEmbeddingWarning } =
+      await getTextSummary()
 
     res.json({
       summary: textSummary,
@@ -869,22 +898,18 @@ router.get('/text/status', requireAdmin, async (_req: AuthenticatedRequest, res)
 router.post('/text/enqueue', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const sourceType = parseTextSourceType(req.body?.sourceType)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 2000,
     })
 
-    const slugsRaw = Array.isArray(req.body?.slugs)
-      ? req.body.slugs
-      : []
+    const slugsRaw = Array.isArray(req.body?.slugs) ? req.body.slugs : []
     const slugs = slugsRaw
       .filter((item: unknown): item is string => typeof item === 'string')
       .map((item: string) => item.trim())
       .filter(Boolean)
 
-    const idsRaw = Array.isArray(req.body?.ids)
-      ? req.body.ids
-      : []
+    const idsRaw = Array.isArray(req.body?.ids) ? req.body.ids : []
     const ids = idsRaw
       .filter((item: unknown): item is string => typeof item === 'string')
       .map((item: string) => item.trim())
@@ -927,7 +952,7 @@ router.post('/text/enqueue', requireAdmin, async (req: AuthenticatedRequest, res
 
 router.post('/text/sync', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
@@ -949,7 +974,7 @@ router.post('/text/sync', requireAdmin, async (req: AuthenticatedRequest, res) =
 router.post('/text/retry-failed', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const sourceType = parseTextSourceType(req.body?.sourceType)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
@@ -974,7 +999,7 @@ router.post('/text/retry-failed', requireAdmin, async (req: AuthenticatedRequest
 router.post('/text/rebuild-all', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const sourceType = parseTextSourceType(req.body?.sourceType)
-    const limit = parseInteger(req.body?.limit, IMAGE_EMBEDDING_BATCH_SIZE, {
+    const limit = parseInteger(req.body?.limit, getImageEmbeddingBatchSize(), {
       min: 1,
       max: 500,
     })
@@ -997,5 +1022,5 @@ router.post('/text/rebuild-all', requireAdmin, async (req: AuthenticatedRequest,
 })
 
 export function registerEmbeddingsRoutes(app: Router) {
-  app.use('/api/embeddings', router);
+  app.use('/api/embeddings', router)
 }

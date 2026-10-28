@@ -1,0 +1,1 @@
+ALTER TABLE "WikiCategory" ALTER COLUMN "updatedAt" DROP DEFAULT;

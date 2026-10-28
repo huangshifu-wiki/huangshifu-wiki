@@ -1,96 +1,190 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, ExternalLink, Heart, Link2, MessageSquare, Play, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
-import { clsx } from 'clsx';
-import { format } from 'date-fns';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useParams } from 'react-router-dom'
+import {
+  Clock,
+  Edit3,
+  ExternalLink,
+  Heart,
+  Link2,
+  MessageSquare,
+  Music,
+  Play,
+  ChevronDown,
+  ChevronUp,
+} from '@/src/components/icons'
+import { clsx } from 'clsx'
+import { format } from 'date-fns'
 
-import { apiDelete, apiGet } from '../lib/apiClient';
-import { useAuth } from '../context/AuthContext';
-import { useMusic } from '../context/MusicContext';
-import { useDialog } from '../components/Dialog';
-import { useToast } from '../components/Toast';
-import { useToggleInteraction } from '../hooks/useToggleInteraction';
-import { useI18n } from '../lib/i18n';
-import { CoverManager } from '../components/CoverManager';
-import { SmartImage } from '../components/SmartImage';
-import { SongEditModal } from '../components/SongEditModal';
-import { LyricsDisplay } from '../components/LyricsDisplay';
-import MarkdownRenderer from '../components/MarkdownRenderer';
-import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink';
-import { getPlatformExternalUrl } from '../lib/musicPlatformUrls';
-import { Platform, PlatformIds } from '../types/PlatformIds';
+import { apiGet } from '../lib/apiClient'
+import { Button, LoadErrorState, Skeleton } from '@/src/components/ui'
+import { useAuth } from '../context/AuthContext'
+import { useMusic } from '../context/MusicContext'
+import { useToast } from '../components/Toast'
+import { useToggleInteraction } from '../hooks/useToggleInteraction'
+import { useI18n } from '../lib/i18n'
+import { SmartBackLink } from '../components/SmartBackLink'
+import { SmartImage } from '../components/SmartImage'
+import { CoverPlaceholder } from '../components/CoverPlaceholder'
+import { Lightbox } from '../components/Lightbox'
+import { LyricsDisplay } from '../components/LyricsDisplay'
+import MarkdownRenderer from '../components/MarkdownRenderer'
+import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
+import { getPlatformExternalUrl } from '../lib/musicPlatformUrls'
+import { toDateValue } from '../lib/dateUtils'
+import { formatMusicCredits } from '../lib/musicCredits'
+import { formatTime } from '../lib/formatUtils'
+import { isPlayableSong } from '../lib/musicPlayback'
+import { parseLyrics } from '../lib/lrcParser'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
+import type { MusicExternalSource } from '../types/entities'
+
+const SongFormModal = lazy(() =>
+  import('../components/SongFormModal').then((module) => ({ default: module.SongFormModal }))
+)
+
+const SourceLink = ({ source }: { source: MusicExternalSource }) => {
+  const label = `${source.platform} / ${source.sourceId}`
+  // 优先由平台 ID 实时构建官方跳转地址；sourceUrl 仅作冗合层数，避免存量脏链接生效
+  const url = getPlatformExternalUrl(source.platform, source.sourceId) || source.sourceUrl || null
+  if (!url) {
+    return (
+      <span className="flex-1 min-w-0 max-w-full text-wrap-anywhere text-right text-text-primary">
+        {label}
+      </span>
+    )
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-press-feedback="inline"
+      className="flex-1 min-w-0 max-w-full text-wrap-anywhere text-right text-text-primary hover:text-brand-gold transition-colors"
+    >
+      {label}
+    </a>
+  )
+}
 
 type CustomPlatformLink = {
-  label: string;
-  url: string;
-};
-
-type CustomPlatformConfig = {
-  key: string;
-  label: string;
-  urlPattern: string;
-  color: string;
-  bgColor: string;
-};
+  label: string
+  url: string
+}
 
 type SongItem = {
-  docId: string;
-  id: string;
-  title: string;
-  artist: string;
-  album: string;
-  cover: string;
-  audioUrl: string;
-  lyric?: string | null;
-  description?: string | null;
-  primaryPlatform?: Platform | null;
-  favoritedByMe?: boolean;
-  platformIds?: PlatformIds;
-  customPlatformIds?: Record<string, string>;
-  customPlatformLinks?: CustomPlatformLink[];
-};
+  docId: string
+  slug?: string
+  title: string
+  artists: string[]
+  lyricists?: string[]
+  composers?: string[]
+  arrangers?: string[]
+  vocals?: string[]
+  album: string
+  cover: string
+  coverThumbnail?: string
+  audioUrl: string
+  lyric?: string | null
+  lyricPlain?: string | null
+  description?: string | null
+  releaseDate?: string | null
+  durationMs?: number | null
+  favoritedByMe?: boolean
+  tags?: string[]
+  customPlatformLinks?: CustomPlatformLink[]
+  sources?: MusicExternalSource[]
+  playable?: boolean
+}
 
 type SongDetailResponse = {
-  song: SongItem & { platformIds?: PlatformIds };
-};
+  song: SongItem
+}
 
 type PostItem = {
-  id: string;
-  title: string;
-  likesCount: number;
-  commentsCount: number;
-  updatedAt: string;
-};
+  id: string
+  slug?: string
+  title: string
+  likesCount: number
+  commentsCount: number
+  updatedAt: string
+}
 
-const getSongExternalUrl = (song: SongItem) => {
-  const id = (song.id || '').trim();
-  if (!id) return '#';
-  return getPlatformExternalUrl(song.primaryPlatform || 'netease', id) || '#';
-};
+const COVER_FILTER = 'brightness(0.96) saturate(0.92)'
+
+// 时长毫秒转 ISO 8601 时长（PT3M45S），用于 JSON-LD
+const formatIsoDuration = (durationMs: number): string => {
+  const totalSeconds = Math.round(durationMs / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  let value = 'PT'
+  if (hours > 0) value += `${hours}H`
+  if (minutes > 0) value += `${minutes}M`
+  if (seconds > 0 || (hours === 0 && minutes === 0)) value += `${seconds}S`
+  return value
+}
+
+// JSON-LD 只输出数据库确实存在且格式有效的字段
+const buildMusicRecordingJsonLd = (song: SongItem, url: string): Record<string, unknown> => {
+  const jsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'MusicRecording',
+    name: song.title,
+    url,
+    byArtist: formatMusicCredits(song.artists, '未知歌手'),
+  }
+  if (song.album) {
+    jsonLd.inAlbum = { '@type': 'MusicAlbum', name: song.album }
+  }
+  if (toDateValue(song.releaseDate)) {
+    jsonLd.datePublished = song.releaseDate
+  }
+  if (song.cover) {
+    jsonLd.image = toAbsoluteSeoUrl(song.cover)
+  }
+  if (typeof song.durationMs === 'number' && song.durationMs > 0) {
+    jsonLd.duration = formatIsoDuration(song.durationMs)
+  }
+  return jsonLd
+}
 
 const formatDate = (value: string | null | undefined) => {
-  if (!value) return '刚刚';
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? '刚刚' : format(parsed, 'yyyy-MM-dd');
-};
+  if (!value) return '刚刚'
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? '刚刚' : format(parsed, 'yyyy-MM-dd')
+}
+
+const SectionHeading = ({ children }: { children: React.ReactNode }) => (
+  <h2 className="text-[0.9375rem] font-semibold text-text-primary tracking-[0.1em] flex items-center gap-2">
+    <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
+    {children}
+  </h2>
+)
 
 const MusicDetail = () => {
-  const { songId } = useParams();
-  const navigate = useNavigate();
-  const [song, setSong] = useState<SongItem | null>(null);
-  const [posts, setPosts] = useState<PostItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [customPlatforms, setCustomPlatforms] = useState<CustomPlatformConfig[]>([]);
-  const [descExpanded, setDescExpanded] = useState(false);
-  const [lyricsExpanded, setLyricsExpanded] = useState(false);
-  const [lyricsCopied, setLyricsCopied] = useState(false);
-  const { user, isAdmin } = useAuth();
-  const { setCurrentSong, setIsPlaying, setPlaylist } = useMusic();
-  const dialog = useDialog();
-  const { show } = useToast();
-  const { t } = useI18n();
+  const { songId } = useParams()
+  const location = useLocation()
+  const [song, setSong] = useState<SongItem | null>(null)
+  const [posts, setPosts] = useState<PostItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [descExpanded, setDescExpanded] = useState(false)
+  const [lyricsExpanded, setLyricsExpanded] = useState(false)
+  const [lyricsCopied, setLyricsCopied] = useState(false)
+  const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const requestRef = useRef(0)
+  const { user, isAdmin } = useAuth()
+  const { currentSong, currentTime, setCurrentSong, setIsPlaying, setPlaylist } = useMusic()
+  const { show } = useToast()
+  const { t } = useI18n()
 
   const { toggleFavorite, favoriting } = useToggleInteraction({
     entity: song,
@@ -100,243 +194,346 @@ const MusicDetail = () => {
     entityId: song?.docId,
     toast: { show },
     t,
-  });
+  })
 
-  useEffect(() => {
-    apiGet<{ platforms: CustomPlatformConfig[] }>('/api/music-platforms')
-      .then(data => setCustomPlatforms(data.platforms || []))
-      .catch(() => setCustomPlatforms([]));
-  }, []);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!songId) return;
-      setLoading(true);
-      try {
-        const detail = await apiGet<SongDetailResponse>(`/api/music/${songId}`);
-        const currentSong = detail.song || null;
-        setSong(currentSong);
-        if (currentSong?.docId) {
-          const postResult = await apiGet<{ posts: PostItem[] }>(`/api/music/${currentSong.docId}/posts`);
-          setPosts(postResult.posts || []);
-        } else {
-          setPosts([]);
+  const fetchData = async () => {
+    if (!songId) return
+    const request = ++requestRef.current
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const detail = await apiGet<SongDetailResponse>(`/api/music/${songId}`, undefined, {
+        staleTime: 0,
+        swr: false,
+      })
+      if (requestRef.current !== request) return
+      const currentSong = detail.song || null
+      setSong(currentSong)
+      if (currentSong?.docId) {
+        try {
+          const postResult = await apiGet<{ posts: PostItem[] }>(
+            `/api/music/${currentSong.docId}/posts`
+          )
+          if (requestRef.current === request) setPosts(postResult.posts || [])
+        } catch (error) {
+          if (requestRef.current === request)
+            console.error('Fetch song related posts failed:', error)
         }
-      } catch (error) {
-        console.error('Fetch song detail failed:', error);
-        setSong(null);
-        setPosts([]);
-      } finally {
-        setLoading(false);
+      } else {
+        setPosts([])
       }
-    };
+    } catch (error) {
+      if (requestRef.current === request) {
+        console.error('Fetch song detail failed:', error)
+        setLoadError(error)
+      }
+    } finally {
+      if (requestRef.current === request) setLoading(false)
+    }
+  }
 
-    fetchData();
-  }, [songId]);
+  useEffect(() => {
+    void fetchData()
+    return () => {
+      requestRef.current += 1
+    }
+  }, [songId, user?.uid])
 
-  const customPlatformLinks = song?.customPlatformLinks || [];
+  // SEO 元数据：加载中/失败不可索引，成功后输出歌曲详情与 MusicRecording JSON-LD
+  const songPath = `/music/${songId}`
+  const songSeoMetadata: SeoMetadata = song
+    ? {
+        title: `${song.title}｜${SEO_SITE_NAME}`,
+        description: summarizeSeoText(
+          [song.title, formatMusicCredits(song.artists, '未知歌手'), song.album, song.description]
+            .filter(Boolean)
+            .join('，'),
+          `${song.title}，黄诗扶 Wiki 歌曲资料。`
+        ),
+        canonicalPath: songPath,
+        robots: 'index,follow',
+        ogType: 'music.song',
+        ogImage: song.cover || song.coverThumbnail || undefined,
+        ogImageAlt: song.title,
+        jsonLd: buildMusicRecordingJsonLd(song, toAbsoluteSeoUrl(songPath)),
+      }
+    : loading
+      ? getDetailFallbackSeo({ canonicalPath: songPath, title: SEO_SITE_NAME })
+      : getDetailFallbackSeo({
+          canonicalPath: songPath,
+          title: `歌曲不存在｜${SEO_SITE_NAME}`,
+          description: '当前歌曲不存在或已被删除。',
+        })
+  useSeo(songSeoMetadata)
+
+  const customPlatformLinks = song?.customPlatformLinks || []
 
   const handlePlay = () => {
-    if (!song) return;
-    setPlaylist([song]);
-    setCurrentSong(song);
-    setIsPlaying(true);
-  };
+    if (!song) return
+    if (!isPlayableSong(song)) {
+      show('暂无可播放音源', { variant: 'error' })
+      return
+    }
+    setPlaylist([song])
+    setCurrentSong(song)
+    setIsPlaying(true)
+  }
 
   const handleCopyLink = async () => {
-    if (!song?.docId) return;
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/music/${song.docId}`));
+    const songPublicId = song?.slug || song?.docId
+    if (!songPublicId) return
+    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/music/${songPublicId}`))
     if (copied) {
-      show('歌曲内链已复制');
-      return;
+      show('歌曲内链已复制')
+      return
     }
-    show('复制链接失败，请稍后重试', { variant: 'error' });
-  };
+    show('复制链接失败，请稍后重试', { variant: 'error' })
+  }
 
   const handleCopyLyrics = async () => {
-    if (!song?.lyric) return;
+    if (!song?.lyric) return
+    const plainLyrics = song.lyricPlain || parseLyrics(song.lyric).plainText
     try {
-      await navigator.clipboard.writeText(song.lyric);
-      setLyricsCopied(true);
-      setTimeout(() => setLyricsCopied(false), 2000);
+      await navigator.clipboard.writeText(plainLyrics)
+      setLyricsCopied(true)
+      setTimeout(() => setLyricsCopied(false), 2000)
     } catch {
-      show('复制失败，请手动复制', { variant: 'error' });
+      show('复制失败，请手动复制', { variant: 'error' })
     }
-  };
+  }
 
-  const handleDeleteSong = async () => {
-    if (!song?.docId || isDeleting) return;
-    const confirmed = await dialog.confirm({
-      title: '删除歌曲',
-      message: `确定要删除歌曲《${song.title}》吗？删除后可在回收站恢复。`,
-      confirmText: '删除',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
-
-    try {
-      setIsDeleting(true);
-      await apiDelete(`/api/music/${song.docId}`);
-      show('歌曲已删除');
-      navigate('/music');
-    } catch (error) {
-      console.error('Delete song failed:', error);
-      show(error instanceof Error ? error.message : '删除歌曲失败', { variant: 'error' });
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  if (loading) {
+  if (loading && !song) {
     return (
-      <div
-        className="min-h-screen antique-page bg-bg-primary"
-      >
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-          <div className="h-48 bg-surface-alt rounded animate-pulse" />
+      <div className="mobile-page-shell antique-detail" role="status" aria-label="加载中">
+        <div className="mobile-page-container">
+          <Skeleton className="mb-6 h-4 w-24" />
+          <div className="mb-8 flex flex-col gap-5 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row">
+            <Skeleton className="h-40 w-40 flex-shrink-0 rounded-lg" />
+            <div className="flex-1 space-y-3 py-2">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-40" />
+              <div className="mt-4 flex gap-2.5">
+                <Skeleton className="h-9 w-20" />
+                <Skeleton className="h-9 w-16" />
+                <Skeleton className="h-9 w-20" />
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-5" style={{ width: `${90 - i * 12}%` }} />
+            ))}
+          </div>
         </div>
       </div>
-    );
+    )
   }
 
   if (!song) {
     return (
-      <div
-        className="min-h-screen antique-page bg-bg-primary"
-      >
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-          <Link to="/music" className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors">
-            <ArrowLeft size={16} /> 返回音乐馆
-          </Link>
-          <div className="mt-6 bg-surface rounded border border-border p-10 text-center text-text-muted italic tracking-[0.1em]">
-            歌曲不存在或已被删除
-          </div>
+      <div className="mobile-page-shell antique-detail">
+        <div className="mobile-page-container">
+          <SmartBackLink
+            fallbackTo="/music"
+            fallbackLabel="返回音乐馆"
+            className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
+          />
+          {loadError ? (
+            <LoadErrorState error={loadError} className="mt-8" onRetry={() => void fetchData()} />
+          ) : (
+            <div className="mt-8 py-16 text-center">
+              <p className="text-[0.9rem] tracking-[0.08em] text-text-muted">
+                歌曲不存在或已被删除
+              </p>
+            </div>
+          )}
         </div>
       </div>
-    );
+    )
   }
+
+  const artistsText = formatMusicCredits(song.artists, '未知歌手')
+  const canPlay = isPlayableSong(song)
+  const primarySource = song.sources?.find((item) => item.isPrimary) || song.sources?.[0]
+  const otherSources = (song.sources || []).filter((item) => item.id !== primarySource?.id)
+  const coverPreviewSrc = song.coverThumbnail || song.cover
+  const creditRows = [
+    { label: '作词', value: formatMusicCredits(song.lyricists) },
+    { label: '作曲', value: formatMusicCredits(song.composers) },
+    { label: '编曲', value: formatMusicCredits(song.arrangers) },
+    { label: '演唱', value: formatMusicCredits(song.vocals) },
+  ].filter((item) => item.value)
 
   return (
     <div
-      className="min-h-screen antique-detail text-[var(--color-text-antique)] bg-bg-primary"
+      className="mobile-page-shell antique-detail text-[var(--color-text-antique)]"
+      aria-busy={loading}
     >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-        <Link to="/music" className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5">
-          <ArrowLeft size={16} /> 返回音乐馆
-        </Link>
+      <div className="mobile-page-container">
+        <SmartBackLink
+          fallbackTo="/music"
+          fallbackLabel="返回音乐馆"
+          className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors mb-5"
+        />
+        {loadError && (
+          <LoadErrorState error={loadError} className="mb-6" onRetry={() => void fetchData()} />
+        )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
+        <div className="mobile-detail-grid">
           {/* Main Content */}
           <div>
             {/* Detail Header */}
-            <div className="flex flex-col md:flex-row gap-5 mb-6 pb-6 border-b border-border">
-              <SmartImage
-                src={song.cover}
-                alt={song.title}
-                className="w-40 h-40 md:w-44 md:h-44 object-cover flex-shrink-0 rounded bg-surface-alt"
-              />
+            <div className="mb-8 flex flex-col gap-6 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row">
+              <button
+                type="button"
+                data-press-feedback="ripple"
+                onClick={() => setCoverLightboxOpen(true)}
+                className="h-40 w-40 flex-shrink-0 overflow-hidden rounded-lg shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-400 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary press-feedback-cover sm:h-44 sm:w-44"
+                aria-label={`查看 ${song.title} 封面原图`}
+              >
+                <SmartImage
+                  src={coverPreviewSrc}
+                  alt={song.title}
+                  className="w-full h-full object-cover"
+                  style={{ filter: COVER_FILTER }}
+                  fallback={<CoverPlaceholder icon={<Music size={24} />} label="无封面" />}
+                />
+              </button>
               <div className="flex-1 flex flex-col justify-center min-w-0">
-                <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em] mb-1.5">{song.title}</h1>
-                <p className="text-base text-text-secondary tracking-[0.08em] mb-3">{song.artist}</p>
-                <div className="flex flex-wrap gap-x-5 gap-y-2 mb-4 text-sm text-text-muted">
-                  <span>专辑：{song.album}</span>
-                  <span>ID：{song.id}</span>
+                <h1 className="mobile-page-title mb-2">{song.title}</h1>
+                <p className="mb-3 min-w-0 max-w-full text-wrap-anywhere text-[0.95rem] text-text-secondary tracking-[0.06em]">
+                  {artistsText}
+                </p>
+                <div className="flex flex-wrap gap-x-5 gap-y-2 mb-5 text-[0.8125rem] text-text-muted">
+                  <span className="min-w-0 max-w-full text-wrap-anywhere">专辑：{song.album}</span>
                 </div>
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
                   <button
+                    type="button"
+                    data-press-feedback="ripple"
                     onClick={handlePlay}
-                    className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all"
+                    disabled={!canPlay}
+                    className={clsx(
+                      'inline-flex items-center gap-2 px-5 py-2 rounded',
+                      'border border-[rgba(138,109,47,0.25)] text-brand-gold',
+                      'transition-all duration-300',
+                      canPlay
+                        ? 'bg-transparent hover:bg-brand-gold hover:text-white hover:border-brand-gold hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]'
+                        : 'opacity-50 cursor-not-allowed'
+                    )}
                   >
-                    <Play size={16} /> 播放
+                    <Play size={15} fill="currentColor" className="ml-0.5" />
+                    <span className="text-[0.875rem] tracking-[0.06em]">
+                      {canPlay ? '播放' : '暂无音源'}
+                    </span>
                   </button>
                   <button
+                    type="button"
+                    data-press-feedback="ripple"
                     onClick={toggleFavorite}
                     disabled={favoriting}
                     className={clsx(
-                      'inline-flex items-center gap-2 px-5 py-2.5 border text-[0.9375rem] rounded transition-all',
+                      'inline-flex items-center gap-2 px-4 py-2 rounded border transition-all duration-300',
                       song.favoritedByMe
-                        ? 'theme-border-error-soft theme-text-error theme-bg-error-soft'
-                        : 'theme-button-danger-outline text-text-secondary',
-                      favoriting && 'opacity-50 cursor-not-allowed',
+                        ? 'border-[color-mix(in_srgb,var(--color-error)_22%,transparent)] text-[var(--color-error)] bg-[color-mix(in_srgb,var(--color-error)_6%,transparent)]'
+                        : 'border-[var(--book-ink-line)] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50',
+                      favoriting && 'opacity-50 cursor-not-allowed'
                     )}
                   >
-                    <Heart size={15} /> {song.favoritedByMe ? '已收藏' : '收藏'}
+                    <Heart size={14} fill={song.favoritedByMe ? 'currentColor' : 'none'} />
+                    <span className="text-[0.875rem]">
+                      {song.favoritedByMe ? '已收藏' : '收藏'}
+                    </span>
                   </button>
                   <button
+                    type="button"
+                    data-press-feedback="ripple"
                     onClick={handleCopyLink}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded border border-[var(--book-ink-line)] text-[0.875rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                   >
-                    <Link2 size={15} /> 复制内链
+                    <Link2 size={14} /> 复制内链
                   </button>
-                  <a
-                    href={getSongExternalUrl(song)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
-                  >
-                    <ExternalLink size={15} /> 原始链接
-                  </a>
+                  {isAdmin && (
+                    <Button
+                      type="button"
+                      onClick={() => setEditing(true)}
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<Edit3 size={14} />}
+                      className="min-h-0 bg-transparent px-4 py-2 text-[0.875rem] transition-all duration-300"
+                    >
+                      编辑
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Lyrics */}
             <div className="mb-10">
-              <div className="flex items-center gap-3 mb-4">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  歌词
-                </h2>
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <SectionHeading>歌词</SectionHeading>
                 {song?.lyric && (
                   <div className="flex items-center gap-2">
                     <button
+                      type="button"
+                      data-press-feedback="ripple"
                       onClick={handleCopyLyrics}
-                      className="text-xs px-3 py-1.5 border border-border text-text-muted hover:text-brand-gold hover:border-brand-gold rounded transition-all duration-300"
+                      className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
                       {lyricsCopied ? '已复制' : '复制歌词'}
                     </button>
                     <button
+                      type="button"
+                      data-press-feedback="ripple"
                       onClick={() => setLyricsExpanded(!lyricsExpanded)}
-                      className="text-xs px-3 py-1.5 border border-border text-text-muted hover:text-brand-gold hover:border-brand-gold rounded transition-all duration-300"
+                      className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
                       {lyricsExpanded ? '收起' : '展开'}
                     </button>
                   </div>
                 )}
               </div>
-                <div
+              <div
                 className={clsx(
-                  'text-lg leading-normal text-text-secondary whitespace-pre-line tracking-[0.04em] py-3 px-1 overflow-hidden transition-all',
+                  'text-[1.0625rem] leading-[2] text-text-secondary whitespace-pre-line tracking-[0.03em] py-4 px-1 overflow-hidden transition-all',
                   !lyricsExpanded && 'max-h-[300px]'
                 )}
               >
-                <LyricsDisplay lyric={song?.lyric || ''} />
+                <LyricsDisplay
+                  lyric={song?.lyric || ''}
+                  currentTime={song?.docId === currentSong?.docId ? currentTime : undefined}
+                />
               </div>
             </div>
 
             {/* Description */}
             {song?.description && (
               <div className="mb-10">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 pb-2.5 border-b border-border flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  歌曲描述
-                </h2>
+                <SectionHeading>歌曲描述</SectionHeading>
                 <div
                   className={clsx(
-                    'prose max-w-none text-text-secondary overflow-hidden transition-all',
-                    !descExpanded && 'max-h-[16rem]',
+                    'prose max-w-none text-text-secondary overflow-hidden transition-all mt-4',
+                    !descExpanded && 'max-h-[16rem]'
                   )}
                 >
                   <MarkdownRenderer content={song.description || ''} />
                 </div>
                 <button
+                  type="button"
+                  data-press-feedback="ripple"
                   onClick={() => setDescExpanded(!descExpanded)}
-                  className="text-xs px-3 py-1.5 border border-border text-text-muted hover:text-brand-gold hover:border-brand-gold rounded transition-all duration-300 mt-3 inline-flex items-center gap-1"
+                  className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300 mt-3 inline-flex items-center gap-1"
                 >
                   {descExpanded ? (
-                    <>收起 <ChevronUp size={14} /></>
+                    <>
+                      收起 <ChevronUp size={14} />
+                    </>
                   ) : (
-                    <>展开 <ChevronDown size={14} /></>
+                    <>
+                      展开 <ChevronDown size={14} />
+                    </>
                   )}
                 </button>
               </div>
@@ -344,15 +541,15 @@ const MusicDetail = () => {
 
             {/* Related Posts */}
             <div className="mb-10">
-              <div className="flex items-center justify-between mb-4 pb-2.5 border-b border-border">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  关联乐评
-                </h2>
-                  <Link
-                    to={`/forum/new?musicDocId=${song.docId}&musicTitle=${encodeURIComponent(song.title)}`}
-                    className="px-4 py-2 theme-button-primary rounded text-xs font-semibold transition-all"
-                  >
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <SectionHeading>关联乐评</SectionHeading>
+                <Link
+                  to={`/forum/new?musicDocId=${song.docId}&musicTitle=${encodeURIComponent(song.title)}`}
+                  state={{ editorBackground: location }}
+                  data-pressable
+                  data-press-feedback="state"
+                  className="px-4 py-2 theme-button-primary rounded text-xs font-semibold transition-all"
+                >
                   发表乐评
                 </Link>
               </div>
@@ -362,146 +559,167 @@ const MusicDetail = () => {
                   {posts.map((post) => (
                     <Link
                       key={post.id}
-                      to={`/forum/${post.id}`}
-                      className="py-3.5 border-b border-border transition-colors group"
+                      to={`/forum/${post.slug || post.id}`}
+                      data-press-feedback="state"
+                      className="py-3.5 border-b border-[var(--book-ink-line)] transition-colors group hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)] -mx-1 px-1 rounded"
                     >
-                      <p className="text-[0.9375rem] text-text-primary mb-1 tracking-[0.04em] group-hover:text-brand-gold transition-colors">{post.title}</p>
+                      <p className="text-[0.9375rem] text-text-primary mb-1 tracking-[0.04em] group-hover:text-brand-gold transition-colors">
+                        {post.title}
+                      </p>
                       <div className="flex items-center gap-3 text-xs text-text-muted">
-                        <span className="flex items-center gap-1"><Heart size={12} /> {post.likesCount || 0}</span>
-                        <span className="flex items-center gap-1"><MessageSquare size={12} /> {post.commentsCount || 0}</span>
-                        <span className="flex items-center gap-1"><Clock size={12} /> {formatDate(post.updatedAt)}</span>
+                        <span className="flex items-center gap-1">
+                          <Heart size={12} /> {post.likesCount || 0}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MessageSquare size={12} /> {post.commentsCount || 0}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock size={12} /> {formatDate(post.updatedAt)}
+                        </span>
                       </div>
                     </Link>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-text-muted italic tracking-[0.1em] py-6">暂无乐评，快来发表第一篇吧！</div>
+                <div className="text-sm text-text-muted italic tracking-[0.08em] py-6">
+                  暂无乐评，快来发表第一篇吧！
+                </div>
               )}
             </div>
 
             {/* Custom Platform Links */}
             {customPlatformLinks.length > 0 && (
               <div className="mb-10">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 pb-2.5 border-b border-border flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  更多平台
-                </h2>
-                <div className="flex flex-col">
+                <SectionHeading>更多平台</SectionHeading>
+                <div className="flex flex-col mt-4">
                   {customPlatformLinks.map((link) => (
                     <a
                       key={`${link.label}-${link.url}`}
                       href={link.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2.5 py-2.5 border-b border-border text-sm text-text-secondary hover:text-brand-gold hover:pl-1 transition-all"
+                      className="flex min-w-0 items-center gap-2.5 py-2.5 border-b border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:pl-1 transition-all"
                     >
                       <ExternalLink size={16} className="text-text-muted flex-shrink-0" />
-                      <span className="truncate">{link.label}</span>
+                      <span className="min-w-0 max-w-full flex-1 truncate">{link.label}</span>
                     </a>
                   ))}
-                </div>
-              </div>
-            )}
-
-            {/* Preset Platforms */}
-            {customPlatforms.length > 0 && song?.customPlatformIds && Object.keys(song.customPlatformIds).length > 0 && (
-              <div className="mb-10">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 pb-2.5 border-b border-border flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  预设平台
-                </h2>
-                <div className="flex flex-wrap gap-2">
-                  {customPlatforms
-                    .filter(p => song.customPlatformIds?.[p.key])
-                    .map(platform => {
-                      const id = song.customPlatformIds![platform.key];
-                      const url = platform.urlPattern.replace('{id}', id);
-                      return (
-                        <a
-                          key={platform.key}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all hover:text-[var(--color-accent-antique)] border-b border-transparent hover:border-[var(--color-accent-antique)] text-[var(--color-text-antique-muted)]"
-                        >
-                          {platform.label}
-                          <ExternalLink size={12} />
-                        </a>
-                      );
-                    })}
-                </div>
-              </div>
-            )}
-
-            {/* Admin */}
-            {isAdmin && song?.docId && (
-              <div className="mb-10">
-                <h2 className="text-base font-semibold text-text-primary tracking-[0.12em] mb-4 pb-2.5 border-b border-border flex items-center gap-2">
-                  <span className="w-[3px] h-4 bg-brand-gold rounded-[1px] opacity-60 inline-block" />
-                  管理功能
-                </h2>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={() => setIsEditModalOpen(true)}
-                    className="px-5 py-2 border border-border text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
-                  >
-                    编辑歌曲
-                  </button>
-                  <button
-                    onClick={handleDeleteSong}
-                    disabled={isDeleting}
-                    className="inline-flex items-center gap-2 px-5 py-2 theme-button-danger rounded text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 size={15} /> {isDeleting ? '删除中...' : '删除歌曲'}
-                  </button>
-                  <CoverManager
-                    resourceType="song"
-                    resourceId={song.docId}
-                    currentCover={song.cover}
-                    onCoverUpdated={(newCoverUrl) => setSong((prev) => prev ? { ...prev, cover: newCoverUrl } : prev)}
-                  />
                 </div>
               </div>
             )}
           </div>
 
           {/* Sidebar */}
-          <aside className="lg:sticky lg:top-20">
-            <div className="py-5 border-b border-border">
-              <h3 className="text-[0.875rem] font-semibold text-text-secondary tracking-[0.12em] uppercase mb-3.5">歌曲信息</h3>
-              <div className="flex flex-col gap-2.5 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-text-muted">歌手</span>
-                  <span className="text-text-primary">{song.artist}</span>
+          <aside className="mobile-detail-aside">
+            <div className="py-5">
+              <div className="flex justify-center mb-4">
+                <div className="h-px w-8 bg-gradient-to-r from-transparent via-brand-gold/30 to-transparent" />
+              </div>
+              <h3 className="text-[0.8125rem] tracking-[0.14em] text-text-muted uppercase mb-4 text-center">
+                歌曲信息
+              </h3>
+              <div className="flex flex-col gap-3 text-sm">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <span className="shrink-0 text-text-muted">歌手</span>
+                  <span className="min-w-0 max-w-full flex-1 text-right text-wrap-anywhere text-text-primary">
+                    {artistsText}
+                  </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-text-muted">专辑</span>
-                  <span className="text-text-primary">{song.album}</span>
+                {(song.tags?.length ?? 0) > 0 && (
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <span className="shrink-0 text-text-muted">标签</span>
+                    <span className="flex min-w-0 max-w-full flex-1 flex-wrap justify-end gap-1">
+                      {song.tags!.map((tag) => (
+                        <Link
+                          key={tag}
+                          to={`/music?tag=${encodeURIComponent(tag)}`}
+                          data-press-feedback="inline"
+                          className="min-w-0 max-w-full rounded-sm border border-[var(--book-ink-line)] px-1.5 py-0.5 text-wrap-anywhere text-xs text-text-secondary transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
+                        >
+                          {tag}
+                        </Link>
+                      ))}
+                    </span>
+                  </div>
+                )}
+                {creditRows.map((row) => (
+                  <div className="flex min-w-0 items-start justify-between gap-3" key={row.label}>
+                    <span className="shrink-0 text-text-muted">{row.label}</span>
+                    <span className="min-w-0 max-w-full flex-1 text-right text-wrap-anywhere text-text-primary">
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+                {song.releaseDate && (
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <span className="shrink-0 text-text-muted">发行日期</span>
+                    <span className="min-w-0 max-w-full flex-1 text-right text-wrap-anywhere text-text-primary">
+                      {song.releaseDate}
+                    </span>
+                  </div>
+                )}
+                {typeof song.durationMs === 'number' && (
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <span className="shrink-0 text-text-muted">时长</span>
+                    <span className="min-w-0 max-w-full flex-1 text-right text-wrap-anywhere text-text-primary">
+                      {formatTime(song.durationMs / 1000)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <span className="shrink-0 text-text-muted">专辑</span>
+                  <span className="min-w-0 max-w-full flex-1 text-right text-wrap-anywhere text-text-primary">
+                    {song.album}
+                  </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-text-muted">平台 ID</span>
-                  <span className="text-text-primary">{song.id}</span>
-                </div>
+                {primarySource && (
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <span className="shrink-0 text-text-muted">主来源</span>
+                    <SourceLink source={primarySource} />
+                  </div>
+                )}
+                {otherSources.length > 0 && (
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <span className="shrink-0 text-text-muted">其他来源</span>
+                    <span className="flex min-w-0 max-w-full flex-1 flex-col items-stretch gap-1">
+                      {otherSources.map((source) => (
+                        <SourceLink key={source.id} source={source} />
+                      ))}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </aside>
         </div>
       </div>
 
-      {isAdmin && song && (
-        <SongEditModal
-          open={isEditModalOpen}
-          onClose={() => setIsEditModalOpen(false)}
-          onSuccess={() => {
-            if (songId) {
-              apiGet<SongDetailResponse>(`/api/music/${songId}`).then((res) => setSong(res.song));
-            }
-          }}
-          song={song}
-        />
+      <Lightbox
+        open={coverLightboxOpen}
+        images={[
+          {
+            id: song.docId,
+            url: coverPreviewSrc,
+            originalUrl: song.cover,
+            name: `${song.title} 封面`,
+          },
+        ]}
+        initialIndex={0}
+        onClose={() => setCoverLightboxOpen(false)}
+      />
+      {isAdmin && editing && (
+        <Suspense fallback={<div role="status">编辑器加载中...</div>}>
+          <SongFormModal
+            open
+            mode="edit"
+            song={song}
+            onClose={() => setEditing(false)}
+            onSuccess={() => void fetchData()}
+          />
+        </Suspense>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default MusicDetail;
+export default MusicDetail

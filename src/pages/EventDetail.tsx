@@ -1,0 +1,482 @@
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { Calendar, Edit3, MapPin, Tag } from '@/src/components/icons'
+import { useAuth } from '../context/AuthContext'
+import { ContentLinkList } from '../components/ContentLinkList'
+import { SmartBackLink } from '../components/SmartBackLink'
+import { SmartImage } from '../components/SmartImage'
+import { CoverPlaceholder } from '../components/CoverPlaceholder'
+import { Lightbox } from '../components/Lightbox'
+import MarkdownRenderer from '../components/MarkdownRenderer'
+import { apiGet } from '../lib/apiClient'
+import { formatDateTime, toDateValue } from '../lib/dateUtils'
+import {
+  formatEventTicketPrices,
+  formatEventTimeSlot,
+  formatEventTimeStatus,
+  getEventCoverSrc,
+} from '../lib/eventFormat'
+import {
+  getDetailFallbackSeo,
+  SEO_SITE_NAME,
+  summarizeSeoText,
+  toAbsoluteSeoUrl,
+  useSeo,
+} from '../lib/seo'
+import type { SeoMetadata } from '../lib/seo'
+import type { EventDetailResponse } from '../types/api'
+import type { EventItem } from '../types/entities'
+import { Button, LoadErrorState } from '@/src/components/ui'
+
+const AdminEventEdit = lazy(() => import('./Admin/AdminEventEdit'))
+
+type EventPosterImage = {
+  id: string
+  url: string
+  originalUrl?: string | null
+  name?: string | null
+}
+
+const COVER_FILTER = 'brightness(0.97) saturate(0.92)'
+
+// JSON-LD：只有 sortStart 能解析为有效日期时才输出 startDate，不猜测活动时间
+const buildEventJsonLd = (
+  event: EventItem,
+  url: string,
+  description: string,
+  coverUrl: string
+): Record<string, unknown> => {
+  const jsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: event.title,
+    url,
+    description,
+  }
+  if (coverUrl) {
+    jsonLd.image = toAbsoluteSeoUrl(coverUrl)
+  }
+  if (event.location) {
+    jsonLd.location = event.location
+  }
+  if (toDateValue(event.sortStart)) {
+    jsonLd.startDate = event.sortStart
+  }
+  return jsonLd
+}
+
+const SectionHeading = ({ children }: { children: React.ReactNode }) => (
+  <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold tracking-[0.1em] text-text-primary">
+    <span className="inline-block h-4 w-[3px] rounded-[1px] bg-brand-gold opacity-60" />
+    {children}
+  </h2>
+)
+
+const EventDetail = () => {
+  const { slug } = useParams()
+  const { isAdmin } = useAuth()
+  const [editing, setEditing] = useState(false)
+  const [event, setEvent] = useState<EventItem | null>(null)
+  const previousSlugRef = useRef<string | undefined>(undefined)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
+
+  useEffect(() => {
+    if (!slug) {
+      previousSlugRef.current = undefined
+      setLoading(false)
+      setLoadError(null)
+      setEvent(null)
+      return
+    }
+
+    const preserveEvent = previousSlugRef.current === slug
+    previousSlugRef.current = slug
+    let cancelled = false
+    setLoading(true)
+    setLoadError(null)
+    if (!preserveEvent) setEvent(null)
+    apiGet<EventDetailResponse>(`/api/events/${slug}`)
+      .then((data) => {
+        if (!cancelled) setEvent(data.event)
+      })
+      .catch((error) => {
+        console.error('Fetch event detail failed:', error)
+        if (!cancelled) setLoadError(error)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [retryNonce, slug])
+
+  const posterImages = useMemo<EventPosterImage[]>(() => {
+    if (!event) return []
+
+    const coverUrl = getEventCoverSrc(event, true)
+    const coverImage = coverUrl
+      ? [
+          {
+            id: `${event.id}-cover`,
+            url: getEventCoverSrc(event),
+            originalUrl: coverUrl,
+            name: `${event.title} 封面`,
+          },
+        ]
+      : []
+
+    return [
+      ...coverImage,
+      ...event.posters.map((poster) => ({
+        id: poster.id,
+        url: poster.url,
+        originalUrl: poster.originalUrl || poster.url,
+        name: poster.name,
+      })),
+    ]
+  }, [event])
+  const handleOpenLightbox = (index: number) => {
+    setLightboxIndex(index)
+    setLightboxOpen(true)
+  }
+
+  // SEO 元数据：加载中/失败不可索引，成功后输出活动详情与 Event JSON-LD
+  const eventPath = `/events/${slug}`
+  const eventCoverUrl = event ? getEventCoverSrc(event) : ''
+  const eventDescription = event
+    ? summarizeSeoText(event.content, `${event.location || '未知地点'}的活动记录，黄诗扶 Wiki。`)
+    : ''
+  // loadError 置位后立即切错误标题：错误 UI 条件是 loadError && !event，
+  // SEO 若只看 loading，会与 alert 分属两次渲染，标题短暂停留在默认值
+  const eventSeoMetadata: SeoMetadata = event
+    ? {
+        title: `${event.title}｜${SEO_SITE_NAME}`,
+        description: eventDescription,
+        canonicalPath: eventPath,
+        robots: 'index,follow',
+        ogType: 'article',
+        ogImage: eventCoverUrl || undefined,
+        ogImageAlt: event.title,
+        jsonLd: buildEventJsonLd(
+          event,
+          toAbsoluteSeoUrl(eventPath),
+          eventDescription,
+          eventCoverUrl
+        ),
+      }
+    : loadError || !loading
+      ? getDetailFallbackSeo({
+          canonicalPath: eventPath,
+          title: `活动不存在｜${SEO_SITE_NAME}`,
+          description: '当前活动不存在或已被删除。',
+        })
+      : getDetailFallbackSeo({ canonicalPath: eventPath, title: SEO_SITE_NAME })
+  useSeo(eventSeoMetadata)
+
+  if (loadError && !event) {
+    return (
+      <div className="mobile-page-shell antique-detail">
+        <div className="mobile-page-container">
+          <SmartBackLink
+            fallbackTo="/events"
+            fallbackLabel="返回游记"
+            className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
+          />
+          <LoadErrorState
+            error={loadError}
+            className="mt-6"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (loading && !event) {
+    return (
+      <div className="mobile-page-shell antique-detail">
+        <div className="mobile-page-container">
+          <div className="mb-6 h-4 w-24 animate-pulse rounded bg-surface-alt" />
+          <div className="mb-8 flex flex-col gap-5 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row">
+            <div className="h-56 w-40 shrink-0 animate-pulse rounded-lg bg-surface-alt sm:h-72 sm:w-52" />
+            <div className="flex-1 space-y-3 py-2">
+              <div className="h-9 w-2/3 animate-pulse rounded bg-surface-alt" />
+              <div className="h-5 w-1/2 animate-pulse rounded bg-surface-alt" />
+              <div className="h-5 w-1/3 animate-pulse rounded bg-surface-alt" />
+              <div className="mt-4 flex gap-2.5">
+                <div className="h-8 w-20 animate-pulse rounded bg-surface-alt" />
+                <div className="h-8 w-24 animate-pulse rounded bg-surface-alt" />
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((item) => (
+              <div
+                key={item}
+                className="h-5 animate-pulse rounded bg-surface-alt"
+                style={{ width: `${90 - item * 12}%` }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!event) {
+    return (
+      <div className="mobile-page-shell antique-detail">
+        <div className="mobile-page-container">
+          <SmartBackLink
+            fallbackTo="/events"
+            fallbackLabel="返回活动"
+            className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
+          />
+          <div className="mt-8 border-y border-[var(--book-ink-line)] py-16 text-center text-[0.9375rem] tracking-[0.08em] text-text-muted">
+            活动不存在或已删除
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const coverSrc = getEventCoverSrc(event)
+  const ticketPrices = formatEventTicketPrices(event.ticketPrices)
+
+  return (
+    <div
+      className="mobile-page-shell antique-detail text-[var(--color-text-antique)]"
+      aria-busy={loading || undefined}
+    >
+      <div className="mobile-page-container max-w-[1000px]">
+        <SmartBackLink
+          fallbackTo="/events"
+          fallbackLabel="返回活动"
+          className="mb-6 inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
+        />
+        {loadError && (
+          <LoadErrorState
+            className="mb-6"
+            error={loadError}
+            description="活动内容可能不是最新内容。"
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
+        )}
+
+        <article className="space-y-10">
+          <header className="flex flex-col gap-6 border-b border-[var(--book-ink-line)] pb-8 sm:flex-row sm:items-start">
+            <div className="flex w-full shrink-0 items-start justify-center overflow-hidden sm:w-auto sm:justify-start">
+              {coverSrc ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  data-press-feedback="ripple"
+                  onClick={() => handleOpenLightbox(0)}
+                  className="block h-auto max-h-56 max-w-56 overflow-hidden rounded-lg border-0 p-0 press-feedback-cover shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-300 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] sm:max-h-72 sm:max-w-72"
+                  aria-label={`查看 ${event.title} 封面`}
+                >
+                  <img
+                    src={coverSrc}
+                    alt={event.title}
+                    className="block h-auto max-h-56 w-auto max-w-56 object-contain sm:max-h-72 sm:max-w-72"
+                    style={{ filter: COVER_FILTER }}
+                    loading="eager"
+                    fetchPriority="high"
+                  />
+                </Button>
+              ) : (
+                <CoverPlaceholder
+                  icon={<Calendar size={32} />}
+                  label="无封面"
+                  className="h-56 w-56 rounded-lg border border-[var(--book-ink-line)] sm:h-72 sm:w-72"
+                  bgClassName="bg-[var(--book-panel-bg)]"
+                  labelClassName="text-sm"
+                />
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1 py-1">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <h1 className="mobile-page-title">{event.title}</h1>
+                {isAdmin && event.id && (
+                  <Button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    variant="secondary"
+                    size="md"
+                    leftIcon={<Edit3 size={14} />}
+                    className="shrink-0 bg-transparent px-4 py-2 text-[0.875rem] transition-all duration-300"
+                  >
+                    编辑
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-3 text-[0.9375rem] text-text-secondary">
+                <div className="flex gap-2">
+                  <Calendar size={16} className="mt-1 shrink-0 text-brand-gold" />
+                  <div className="space-y-1 leading-relaxed">
+                    {event.timeSlots.length ? (
+                      event.timeSlots.map((slot, index) => (
+                        <p key={`${slot.start}-${index}`}>{formatEventTimeSlot(slot)}</p>
+                      ))
+                    ) : (
+                      <p>{formatEventTimeStatus(event.timeStatus) || '时间待定'}</p>
+                    )}
+                  </div>
+                </div>
+                <p className="flex items-center gap-2">
+                  <MapPin size={16} className="text-brand-gold" />
+                  {event.location || '地点待定'}
+                </p>
+                {event.tags.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Tag size={16} className="text-brand-gold" />
+                    {event.tags.map((tag) => (
+                      <Link
+                        key={tag}
+                        to={`/events?tag=${encodeURIComponent(tag)}`}
+                        data-press-feedback="inline"
+                        className="rounded-sm px-2 py-0.5 text-xs theme-tag"
+                      >
+                        {tag}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </header>
+
+          {event.content ? (
+            <section>
+              <div className="mb-4">
+                <SectionHeading>游记</SectionHeading>
+              </div>
+              <div className="prose prose-lg max-w-none font-body leading-relaxed text-text-primary">
+                <MarkdownRenderer content={event.content} />
+              </div>
+            </section>
+          ) : null}
+
+          <section className="grid gap-x-6 gap-y-0 md:grid-cols-2">
+            <div className="border-y border-[var(--book-ink-line)] py-5">
+              <div className="mb-3">
+                <SectionHeading>票价</SectionHeading>
+              </div>
+              {ticketPrices ? (
+                <p className="text-sm leading-relaxed text-text-secondary">{ticketPrices}</p>
+              ) : (
+                <p className="text-sm italic tracking-[0.06em] text-text-muted">暂无票价信息</p>
+              )}
+            </div>
+
+            <div className="border-y border-[var(--book-ink-line)] py-5">
+              <div className="mb-3">
+                <SectionHeading>起售时间</SectionHeading>
+              </div>
+              {event.saleTimes.length ? (
+                <ul className="space-y-2 text-sm text-text-secondary">
+                  {event.saleTimes.map((saleTime, index) => (
+                    <li key={`${saleTime.time}-${index}`}>
+                      {formatDateTime(saleTime.time)}
+                      {saleTime.note ? ` · ${saleTime.note}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm italic tracking-[0.06em] text-text-muted">暂无起售信息</p>
+              )}
+            </div>
+
+            <div className="border-y border-[var(--book-ink-line)] py-5">
+              <div className="mb-3">
+                <SectionHeading>阵容</SectionHeading>
+              </div>
+              {event.lineup.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {event.lineup.map((item, index) => (
+                    <span
+                      key={`${item}-${index}`}
+                      className="rounded-sm px-2 py-1 text-xs theme-tag"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm italic tracking-[0.06em] text-text-muted">暂无阵容信息</p>
+              )}
+            </div>
+
+            <ContentLinkList
+              title={<SectionHeading>外部链接</SectionHeading>}
+              emptyText="暂无外部链接"
+              links={event.externalLinks}
+            />
+            {event.relatedLinks.length ? (
+              <ContentLinkList
+                title={<SectionHeading>其他相关链接</SectionHeading>}
+                emptyText="暂无其他相关链接"
+                links={event.relatedLinks}
+              />
+            ) : null}
+          </section>
+
+          {posterImages.length ? (
+            <section>
+              <div className="mb-4">
+                <SectionHeading>海报</SectionHeading>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {posterImages.map((poster, index) => (
+                  <Button
+                    key={poster.id}
+                    type="button"
+                    variant="ghost"
+                    data-press-feedback="ripple"
+                    onClick={() => handleOpenLightbox(index)}
+                    className="group aspect-[3/4] h-auto overflow-hidden rounded border border-[var(--book-ink-line)]/60 bg-[var(--book-panel-bg)] p-0 press-feedback-cover shadow-[0_10px_30px_rgba(42,37,32,0.06)]"
+                  >
+                    <SmartImage
+                      src={poster.url}
+                      alt={poster.name}
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                      style={{ filter: COVER_FILTER }}
+                    />
+                  </Button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </article>
+
+        <Lightbox
+          images={posterImages}
+          initialIndex={lightboxIndex}
+          open={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+        />
+        {isAdmin && editing && (
+          <Suspense fallback={<div role="status">编辑器加载中...</div>}>
+            <AdminEventEdit
+              eventId={event.id}
+              onClose={() => setEditing(false)}
+              onSaved={() => {
+                setEditing(false)
+                setRetryNonce((value) => value + 1)
+              }}
+            />
+          </Suspense>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default EventDetail

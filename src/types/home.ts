@@ -1,30 +1,30 @@
 export interface AnimatedStatProps {
-  value: number;
-  suffix?: string;
-  label: string;
-  icon: React.ReactNode;
+  value: number
+  suffix?: string
+  label: string
+  icon: React.ReactNode
 }
 
 export interface CategoryCardProps {
   cat: {
-    title: string;
-    icon: React.ReactNode;
-    desc: string;
-    link: string;
-  };
+    title: string
+    icon: React.ReactNode
+    desc: string
+    link: string
+  }
 }
 
 export interface HomeFeedResponse {
-  hotPosts?: PostItem[];
-  recentPosts?: PostItem[];
+  hotPosts?: PostItem[]
+  recentPosts?: PostItem[]
 }
 
 export interface PostItem {
-  id: string;
-  title: string;
-  section: string;
-  content: string;
-  commentsCount?: number;
-  likesCount?: number;
-  updatedAt?: string;
+  id: string
+  title: string
+  section: string
+  content: string
+  commentsCount?: number
+  likesCount?: number
+  updatedAt?: string
 }

@@ -21,25 +21,38 @@ describe('music response transformers', () => {
 
     const baseSong = {
       docId: 'song-doc-1',
-      id: 'song-1',
       title: '测试歌曲',
-      artist: '歌手',
+      artists: ['歌手'],
+      lyricists: [],
+      composers: [],
+      arrangers: [],
+      vocals: [],
       album: '专辑',
-      cover: '',
       audioUrl: '',
       lyric: '歌词',
+      lyricType: 'word',
+      lyricPlain: '歌词',
+      lyricSource: 'tencent',
       description: 'Markdown 描述',
-      primaryPlatform: 'netease',
-      enabledPlatform: null,
-      neteaseId: null,
-      tencentId: null,
-      kugouId: null,
-      baiduId: null,
-      kuwoId: null,
+      releaseDate: null,
+      durationMs: null,
+      coverId: null,
+      coverAlbumDocId: null,
+      externalSources: [
+        {
+          id: 'source-1',
+          resourceType: 'song',
+          platform: 'netease',
+          sourceId: '12345',
+          sourceUrl: null,
+          isPrimary: true,
+          createdAt: new Date('2024-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+        },
+      ],
       customPlatformLinks: null,
       displayAlbumMode: 'linked',
       manualAlbumName: null,
-      defaultCoverSource: null,
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
       updatedAt: new Date('2024-01-02T00:00:00.000Z'),
       covers: [],
@@ -50,6 +63,17 @@ describe('music response transformers', () => {
     const detail = toSongResponse(baseSong as Parameters<typeof toSongResponse>[0])
     expect(detail.description).toBe('Markdown 描述')
     expect(detail.lyric).toBe('歌词')
+    expect(detail.lyricType).toBe('word')
+    expect(detail.lyricPlain).toBe('歌词')
+    expect(detail.lyricSource).toBe('tencent')
+    expect(detail.playable).toBe(true)
+    expect(detail.sources).toEqual([
+      expect.objectContaining({
+        platform: 'netease',
+        sourceId: '12345',
+        isPrimary: true,
+      }),
+    ])
 
     const listItem = toSongResponse(baseSong as Parameters<typeof toSongResponse>[0], {
       excludeLyric: true,
@@ -57,5 +81,88 @@ describe('music response transformers', () => {
     })
     expect(listItem.description).toBeUndefined()
     expect(listItem.lyric).toBeUndefined()
+    expect(listItem.lyricType).toBeUndefined()
+    expect(listItem.lyricPlain).toBeUndefined()
+    expect(listItem.lyricSource).toBeUndefined()
+  })
+
+  it('resolves song covers in compact music responses', async () => {
+    const { toMusicResponse } = await import('../../src/server/utils/response-transformers')
+
+    const response = toMusicResponse({
+      docId: 'song-doc-1',
+      title: '测试歌曲',
+      artists: ['歌手'],
+      album: '专辑',
+      audioUrl: '',
+      releaseDate: null,
+      durationMs: null,
+      coverId: 'cover-2',
+      coverAlbumDocId: null,
+      covers: [
+        {
+          id: 'cover-1',
+          publicUrl: '/uploads/cover-1.jpg',
+          thumbnailUrl: '/uploads/cover-1-thumb.webp',
+          isDefault: true,
+        },
+        {
+          id: 'cover-2',
+          publicUrl: '/uploads/cover-2.jpg',
+          thumbnailUrl: '/uploads/cover-2-thumb.webp',
+          isDefault: false,
+        },
+      ],
+      albumRelations: [],
+      externalSources: [],
+      displayAlbumMode: 'linked',
+      manualAlbumName: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+    })
+
+    expect(response.cover).toBe('/uploads/cover-2.jpg')
+    expect(response.coverThumbnail).toBe('/uploads/cover-2-thumb.webp')
+  })
+
+  it('resolves inherited album covers in compact music responses', async () => {
+    const { toMusicResponse } = await import('../../src/server/utils/response-transformers')
+
+    const response = toMusicResponse({
+      docId: 'song-doc-1',
+      title: '测试歌曲',
+      artists: ['歌手'],
+      album: '专辑',
+      audioUrl: '',
+      releaseDate: null,
+      durationMs: null,
+      coverId: null,
+      coverAlbumDocId: 'album-doc-1',
+      covers: [],
+      albumRelations: [
+        {
+          album: {
+            docId: 'album-doc-1',
+            coverId: 'album-cover-1',
+            covers: [
+              {
+                id: 'album-cover-1',
+                publicUrl: '/uploads/album-cover-1.jpg',
+                thumbnailUrl: '/uploads/album-cover-1-thumb.webp',
+                isDefault: true,
+              },
+            ],
+          },
+        },
+      ],
+      externalSources: [],
+      displayAlbumMode: 'linked',
+      manualAlbumName: null,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+    })
+
+    expect(response.cover).toBe('/uploads/album-cover-1.jpg')
+    expect(response.coverThumbnail).toBe('/uploads/album-cover-1-thumb.webp')
   })
 })

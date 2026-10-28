@@ -1,140 +1,153 @@
-import React, { useCallback, useRef, useState } from 'react';
-import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
-import { X, Upload, Loader2 } from 'lucide-react';
+import React, { useCallback, useRef, useState } from 'react'
+import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop'
+import { X, Upload, Loader2 } from '@/src/components/icons'
 
-import { uploadAvatar, type UploadImageResult } from '../services/imageService';
-import { useFloatingPresence } from '../hooks/useFloatingPresence';
+import { uploadAvatar, type UploadImageResult } from '../services/imageService'
+import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import { isBackdropClick } from '../utils/modal'
 
 interface AvatarCropModalProps {
-  open: boolean;
-  onClose: () => void;
-  onSuccess: (photoURL: string) => void;
+  open: boolean
+  onClose: () => void
+  onSuccess: (result: Pick<UploadImageResult, 'assetId' | 'url'>) => void
 }
 
 // 限制头像最大输出边长（足以覆盖 2x DPR 的 256 显示），避免超大 canvas 浪费内存
-const MAX_AVATAR_SIZE = 512;
+const MAX_AVATAR_SIZE = 512
 // 客户端允许的图片 MIME 白名单，与服务端保持一致
-const ALLOWED_AVATAR_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp']);
+const ALLOWED_AVATAR_MIME = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/bmp',
+])
 
 function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: number): Crop {
   return centerCrop(
     makeAspectCrop({ unit: '%', width: 90 }, aspect, mediaWidth, mediaHeight),
     mediaWidth,
-    mediaHeight,
-  );
+    mediaHeight
+  )
 }
 
 export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalProps) => {
-  const presence = useFloatingPresence(open);
-  const [imageSrc, setImageSrc] = useState<string>('');
-  const [crop, setCrop] = useState<Crop>();
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
+  const presence = useFloatingPresence(open)
+  const [imageSrc, setImageSrc] = useState<string>('')
+  const [crop, setCrop] = useState<Crop>()
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
   // 记录原图 MIME，用于决定输出格式（PNG 保留透明，JPG/WEBP 用有损）
-  const [imageMime, setImageMime] = useState<string>('image/jpeg');
-  const imgRef = useRef<HTMLImageElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [imageMime, setImageMime] = useState<string>('image/jpeg')
+  const imgRef = useRef<HTMLImageElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    const { naturalWidth, naturalHeight } = e.currentTarget;
-    setCrop(centerAspectCrop(naturalWidth, naturalHeight, 1));
-  }, []);
+    const { naturalWidth, naturalHeight } = e.currentTarget
+    setCrop(centerAspectCrop(naturalWidth, naturalHeight, 1))
+  }, [])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setError('');
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const mime = (file.type || '').toLowerCase();
+    setError('')
+    const file = e.target.files?.[0]
+    if (!file) return
+    const mime = (file.type || '').toLowerCase()
     if (!ALLOWED_AVATAR_MIME.has(mime)) {
-      setError('仅支持 JPG、PNG、WEBP、GIF、BMP 图片');
-      return;
+      setError('仅支持 JPG、PNG、WEBP、GIF、BMP 图片')
+      return
     }
-    setImageMime(mime);
-    const reader = new FileReader();
-    reader.onload = () => setImageSrc(reader.result?.toString() || '');
-    reader.readAsDataURL(file);
-  };
+    setImageMime(mime)
+    const reader = new FileReader()
+    reader.onload = () => setImageSrc(reader.result?.toString() || '')
+    reader.readAsDataURL(file)
+  }
 
   const getCroppedBlob = (): Promise<Blob | null> => {
     return new Promise((resolve) => {
-      if (!imgRef.current || !crop) { resolve(null); return; }
-      const image = imgRef.current;
+      if (!imgRef.current || !crop) {
+        resolve(null)
+        return
+      }
+      const image = imgRef.current
       // 使用原图自然像素而不是 CSS 显示尺寸做裁剪坐标，避免高分辨率原图被压成 256px 模糊头像
-      const naturalW = image.naturalWidth;
-      const naturalH = image.naturalHeight;
+      const naturalW = image.naturalWidth
+      const naturalH = image.naturalHeight
       // crop 单位为百分比时直接乘以原图自然像素
-      const cropX = (crop.x / 100) * naturalW;
-      const cropY = (crop.y / 100) * naturalH;
-      const cropWidth = (crop.width / 100) * naturalW;
-      const cropHeight = (crop.height / 100) * naturalH;
+      const cropX = (crop.x / 100) * naturalW
+      const cropY = (crop.y / 100) * naturalH
+      const cropWidth = (crop.width / 100) * naturalW
+      const cropHeight = (crop.height / 100) * naturalH
       // aspect=1 强制 1:1 裁剪，因此 cropWidth === cropHeight
-      const sourceSize = Math.min(cropWidth, cropHeight);
+      const sourceSize = Math.min(cropWidth, cropHeight)
       // 但仍设置上限以避免过大 canvas
-      const outputSize = Math.min(Math.round(sourceSize), MAX_AVATAR_SIZE);
-      if (outputSize <= 0) { resolve(null); return; }
+      const outputSize = Math.min(Math.round(sourceSize), MAX_AVATAR_SIZE)
+      if (outputSize <= 0) {
+        resolve(null)
+        return
+      }
 
-      const canvas = document.createElement('canvas');
-      canvas.width = outputSize;
-      canvas.height = outputSize;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { resolve(null); return; }
+      const canvas = document.createElement('canvas')
+      canvas.width = outputSize
+      canvas.height = outputSize
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        resolve(null)
+        return
+      }
       // 提升缩放质量
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
 
-      ctx.drawImage(
-        image,
-        cropX,
-        cropY,
-        sourceSize,
-        sourceSize,
-        0,
-        0,
-        outputSize,
-        outputSize,
-      );
+      ctx.drawImage(image, cropX, cropY, sourceSize, sourceSize, 0, 0, outputSize, outputSize)
       // PNG 保留透明通道，其它格式用 webp/jpeg 压缩
-      const outputMime = imageMime === 'image/png' ? 'image/png' : 'image/jpeg';
-      const quality = outputMime === 'image/png' ? undefined : 0.9;
-      canvas.toBlob((blob) => resolve(blob), outputMime, quality);
-    });
-  };
+      const outputMime = imageMime === 'image/png' ? 'image/png' : 'image/jpeg'
+      const quality = outputMime === 'image/png' ? undefined : 0.9
+      canvas.toBlob((blob) => resolve(blob), outputMime, quality)
+    })
+  }
 
   const handleConfirm = async () => {
-    if (!crop) return;
-    setUploading(true);
-    setError('');
+    if (!crop) return
+    setUploading(true)
+    setError('')
     try {
-      const blob = await getCroppedBlob();
-      if (!blob) { setError('裁剪图片失败'); setUploading(false); return; }
-      const result: UploadImageResult = await uploadAvatar(blob);
-      onSuccess(result.url);
-      handleClose();
+      const blob = await getCroppedBlob()
+      if (!blob) {
+        setError('裁剪图片失败')
+        setUploading(false)
+        return
+      }
+      const result: UploadImageResult = await uploadAvatar(blob)
+      onSuccess({ assetId: result.assetId, url: result.url })
+      handleClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '上传失败');
+      setError(err instanceof Error ? err.message : '上传失败')
     } finally {
-      setUploading(false);
+      setUploading(false)
     }
-  };
+  }
 
   const handleClose = () => {
-    setImageSrc('');
-    setCrop(undefined);
-    setError('');
-    setImageMime('image/jpeg');
-    if (inputRef.current) inputRef.current.value = '';
-    onClose();
-  };
+    setImageSrc('')
+    setCrop(undefined)
+    setError('')
+    setImageMime('image/jpeg')
+    if (inputRef.current) inputRef.current.value = ''
+    onClose()
+  }
 
-  if (!presence.mounted) return null;
+  if (!presence.mounted) return null
 
   return (
     <div
-      className="floating-overlay fixed inset-0 z-[120] bg-black/40 p-4 flex items-center justify-center"
+      className="floating-overlay fixed inset-0 z-[120] bg-[var(--ui-overlay-bg)] p-4 flex items-center justify-center"
       data-state={presence.state}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) handleClose()
+      }}
     >
-      <div className="floating-panel w-full max-w-md bg-surface rounded border border-border flex flex-col overflow-hidden">
+      <div className="floating-panel w-full max-w-md flex flex-col overflow-hidden">
         <header className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-text-primary">修改头像</h3>
@@ -189,7 +202,10 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
               </div>
               <p className="text-xs text-text-muted">拖动裁剪框调整头像区域</p>
               <button
-                onClick={() => { setImageSrc(''); if (inputRef.current) inputRef.current.value = ''; }}
+                onClick={() => {
+                  setImageSrc('')
+                  if (inputRef.current) inputRef.current.value = ''
+                }}
                 className="text-sm text-text-secondary hover:text-brand-gold underline"
               >
                 重新选择
@@ -197,7 +213,9 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
             </div>
           )}
           {error && (
-            <p className="text-sm theme-text-error text-center theme-bg-error-soft rounded px-3 py-2">{error}</p>
+            <p className="text-sm theme-text-error text-center theme-bg-error-soft rounded px-3 py-2">
+              {error}
+            </p>
           )}
         </div>
 
@@ -219,5 +237,5 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
         </footer>
       </div>
     </div>
-  );
-};
+  )
+}

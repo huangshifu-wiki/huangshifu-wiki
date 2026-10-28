@@ -1,8 +1,8 @@
-import React from 'react';
-import { DefaultHome } from './home/DefaultHome';
+import React from 'react'
+import { DefaultHome } from './home/DefaultHome'
 
 const Home = () => {
-  return <DefaultHome />;
-};
+  return <DefaultHome />
+}
 
-export default Home;
+export default Home

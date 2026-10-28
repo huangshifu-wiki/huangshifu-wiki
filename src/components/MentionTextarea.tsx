@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { clsx } from 'clsx'
 import { apiGet } from '../lib/apiClient'
 import type { MentionTarget } from '../lib/mentions'
+import { Popover, PopoverAnchor, PopoverContent } from '@/src/components/ui'
 
 interface MentionTextareaProps {
   value: string
@@ -95,21 +96,6 @@ export default function MentionTextarea({
     }
   }, [activeToken?.query, disabled])
 
-  useEffect(() => {
-    if (!suggestions.length) return
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (inputRef.current?.contains(target) || dropdownRef.current?.contains(target)) {
-        return
-      }
-      setSuggestions([])
-    }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    return () => document.removeEventListener('mousedown', handlePointerDown)
-  }, [inputRef, suggestions.length])
-
   const updateCursor = () => {
     const nextCursor = inputRef.current?.selectionStart ?? 0
     setCursor(nextCursor)
@@ -166,39 +152,57 @@ export default function MentionTextarea({
 
     if (event.key === 'Escape') {
       event.preventDefault()
+      event.stopPropagation()
       setSuggestions([])
     }
   }
 
   return (
-    <>
-      <textarea
-        ref={inputRef}
-        value={value}
-        onChange={handleChange}
-        onClick={updateCursor}
-        onKeyUp={updateCursor}
-        onFocus={updateCursor}
-        onCompositionStart={() => {
-          isComposingRef.current = true
-        }}
-        onCompositionEnd={() => {
-          isComposingRef.current = false
-        }}
-        maxLength={maxLength}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        rows={rows}
-        disabled={disabled}
-        className={className}
-      />
+    <Popover
+      open={!disabled && suggestions.length > 0}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setSuggestions([])
+      }}
+    >
+      <PopoverAnchor asChild>
+        <textarea
+          ref={inputRef}
+          value={value}
+          onChange={handleChange}
+          onClick={updateCursor}
+          onKeyUp={updateCursor}
+          onFocus={updateCursor}
+          onBlur={(event) => {
+            const target = event.relatedTarget as Node | null
+            if (!target || !dropdownRef.current?.contains(target)) setSuggestions([])
+          }}
+          onCompositionStart={() => {
+            isComposingRef.current = true
+          }}
+          onCompositionEnd={() => {
+            isComposingRef.current = false
+          }}
+          maxLength={maxLength}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          rows={rows}
+          disabled={disabled}
+          className={className}
+        />
+      </PopoverAnchor>
       {suggestions.length > 0 && (
-        <div
+        <PopoverContent
           ref={dropdownRef}
-          className="floating-dropdown absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded border border-border bg-surface"
-          data-state="open"
+          align="start"
+          sideOffset={4}
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          onInteractOutside={(event) => {
+            if (inputRef.current?.contains(event.target as Node)) event.preventDefault()
+          }}
+          className="w-[var(--radix-popper-anchor-width)] max-h-[min(15rem,var(--radix-popover-content-available-height))] overflow-y-auto p-0"
           role="listbox"
-          aria-hidden={false}
+          aria-label="提及候选"
         >
           {suggestions.map((suggestion, index) => (
             <button
@@ -206,22 +210,24 @@ export default function MentionTextarea({
               type="button"
               role="option"
               aria-selected={index === selectedIndex}
-              onMouseDown={(event) => {
+              onPointerDown={(event) => {
                 event.preventDefault()
                 handleSelect(suggestion)
               }}
               className={clsx(
-                'flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
-                index === selectedIndex ? 'bg-[var(--color-theme-accent)] text-white' : 'hover:bg-surface-alt'
+                'flex w-full items-center gap-2 border-b border-[var(--book-ink-line)] px-3 py-2 text-left text-sm transition-colors last:border-0',
+                index === selectedIndex
+                  ? 'bg-[var(--color-theme-accent)] text-white'
+                  : 'hover:bg-surface-alt'
               )}
             >
               <span className="min-w-0 flex-1 truncate">{suggestion.displayName}</span>
-              <span className="text-xs opacity-75">{suggestion.uid.slice(0, 8)}</span>
+              <span className="text-xs opacity-75">#{suggestion.publicId}</span>
             </button>
           ))}
           {loading && <div className="px-3 py-2 text-xs text-text-muted">搜索中...</div>}
-        </div>
+        </PopoverContent>
       )}
-    </>
+    </Popover>
   )
 }

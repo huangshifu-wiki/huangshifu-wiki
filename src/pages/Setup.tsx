@@ -3,10 +3,17 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { CharacterCount } from '../components/CharacterCount'
 import { PageSkeleton } from '../components/PageSkeleton'
 import { useToast } from '../components/Toast'
+import { Button, Input } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { PROFILE_DISPLAY_NAME_MAX_LENGTH } from '../lib/contentLimits'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../lib/passwordRules'
 import { clearSetupStatusCache, getSetupStatus, initializeSetup } from '../lib/setup'
+import {
+  validateEmail,
+  validateMaxLength,
+  validatePassword,
+  validateRequiredText,
+} from '../lib/clientValidation'
 
 const Setup = () => {
   const navigate = useNavigate()
@@ -45,15 +52,21 @@ const Setup = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!email.trim() || !displayName.trim() || !password) {
+    const validationError =
+      validateEmail(email, 'email', '邮箱') ||
+      validateRequiredText(displayName, 'displayName', '显示名称') ||
+      validateMaxLength(displayName, 'displayName', '显示名称', PROFILE_DISPLAY_NAME_MAX_LENGTH) ||
+      validatePassword(password, 'password', '密码')
+    if (validationError) {
+      show(validationError.message, { variant: 'error' })
       return
     }
 
     try {
       setSubmitting(true)
       await initializeSetup({
-        email,
-        displayName,
+        email: email.trim(),
+        displayName: displayName.trim(),
         password,
       })
       clearSetupStatusCache()
@@ -79,24 +92,20 @@ const Setup = () => {
   }
 
   return (
-    <div
-      className="flex min-h-screen items-center justify-center bg-bg-primary px-6 py-12"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-      }}
-    >
-      <div className="w-full max-w-md">
+    <div className="mobile-page-shell flex min-h-screen items-center justify-center px-6 py-12">
+      <div className="theme-panel relative z-10 w-full max-w-md rounded-sm p-6 sm:p-8">
         <div className="mb-6">
-          <p className="mb-2 text-xs font-medium tracking-[0.14em] text-text-muted">INITIAL SETUP</p>
-          <h1 className="text-xl font-bold text-text-primary">初始化超级管理员</h1>
+          <h1 className="font-[var(--book-title-font)] text-3xl font-normal tracking-[0.1em] text-text-primary">
+            初始化超级管理员
+          </h1>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label htmlFor="setup-email" className="sr-only">
-              管理员邮箱
+            <label htmlFor="setup-email" className="block text-sm text-text-secondary">
+              管理员邮箱 <span className="theme-text-error">*</span>
             </label>
-            <input
+            <Input
               id="setup-email"
               type="email"
               required
@@ -105,15 +114,15 @@ const Setup = () => {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="管理员邮箱"
               autoFocus
-              className="theme-input w-full rounded px-4 py-2.5 text-sm"
+              className="theme-input"
             />
           </div>
 
           <div>
-            <label htmlFor="setup-display-name" className="sr-only">
-              显示名称
+            <label htmlFor="setup-display-name" className="block text-sm text-text-secondary">
+              显示名称 <span className="theme-text-error">*</span>
             </label>
-            <input
+            <Input
               id="setup-display-name"
               type="text"
               required
@@ -121,21 +130,18 @@ const Setup = () => {
               onChange={(event) => setDisplayName(event.target.value)}
               placeholder="显示名称"
               maxLength={PROFILE_DISPLAY_NAME_MAX_LENGTH}
-              className="theme-input w-full rounded px-4 py-2.5 text-sm"
+              className="theme-input"
             />
             <div className="mt-1 flex justify-end">
-              <CharacterCount
-                current={displayName.length}
-                max={PROFILE_DISPLAY_NAME_MAX_LENGTH}
-              />
+              <CharacterCount current={displayName.length} max={PROFILE_DISPLAY_NAME_MAX_LENGTH} />
             </div>
           </div>
 
           <div>
-            <label htmlFor="setup-password" className="sr-only">
-              登录密码
+            <label htmlFor="setup-password" className="block text-sm text-text-secondary">
+              登录密码 <span className="theme-text-error">*</span>
             </label>
-            <input
+            <Input
               id="setup-password"
               type="password"
               required
@@ -145,20 +151,16 @@ const Setup = () => {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder={`登录密码（至少 ${PASSWORD_MIN_LENGTH} 位）`}
-              className="theme-input w-full rounded px-4 py-2.5 text-sm"
+              className="theme-input"
             />
             <div className="mt-1 flex justify-end">
               <CharacterCount current={password.length} max={PASSWORD_MAX_LENGTH} />
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="theme-button-primary w-full rounded px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.98] disabled:opacity-50"
-          >
+          <Button type="submit" loading={submitting} fullWidth>
             {submitting ? '初始化中' : '创建超级管理员'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

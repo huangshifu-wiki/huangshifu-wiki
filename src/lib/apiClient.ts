@@ -1,5 +1,6 @@
 import {
   classifyError,
+  getApiErrorMessage,
   logApiError,
   NetworkError,
   type ApiErrorContext,
@@ -55,12 +56,7 @@ function buildUrl(path: string, query?: RequestOptions['query']) {
   return qs ? `${path}?${qs}` : path
 }
 
-function getResponseErrorMessage(data: unknown) {
-  if (!data || typeof data !== 'object' || !('error' in data)) return ''
-  return String((data as Record<string, unknown>).error)
-}
-
-function shouldRefreshAuthState(status: number, data: unknown) {
+function shouldRefreshAuthState(status: number, data: unknown, message: string) {
   if (status === 401) return true
   if (status !== 403) return false
 
@@ -70,7 +66,6 @@ function shouldRefreshAuthState(status: number, data: unknown) {
       : ''
   if (code === 'USER_BANNED') return true
 
-  const message = getResponseErrorMessage(data)
   return (
     message.includes('账号已被封禁') ||
     message === '需要管理员权限' ||
@@ -102,7 +97,7 @@ async function parseResponse<T>(
     }
 
     const authErrorCallback = getAuthErrorCallback()
-    if (authErrorCallback && shouldRefreshAuthState(response.status, data)) {
+    if (authErrorCallback && shouldRefreshAuthState(response.status, data, error.message)) {
       authErrorCallback(error)
     }
 
@@ -153,8 +148,8 @@ async function executeRequest<T>(path: string, options: RequestOptions = {}): Pr
 export async function apiRequest<T>(path: string, options: RequestOptions = {}) {
   const { dedup = true, dedupOptions, method = 'GET', body } = options
 
-  // 只有 GET 请求默认启用去重
-  const shouldDedup = dedup && method.toUpperCase() === 'GET'
+  // 可取消请求不能参与共享去重，否则一个组件卸载会取消其他调用方的请求
+  const shouldDedup = dedup && method.toUpperCase() === 'GET' && !options.signal
 
   if (shouldDedup) {
     const url = buildUrl(path, options.query)
@@ -229,11 +224,16 @@ export async function apiDelete<T>(
   })
 }
 
-export function apiDownload(path: string): Promise<Response> {
+export function apiDownload(path: string, options: RequestInit = {}): Promise<Response> {
+  const { headers, ...rest } = options
   const xsrfToken = getXsrfToken()
   return fetch(path, {
+    ...rest,
     credentials: 'include',
-    headers: xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {},
+    headers: {
+      ...(xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {}),
+      ...(headers || {}),
+    },
   })
 }
 
@@ -367,6 +367,19 @@ export { invalidateCache as invalidateApiCache }
  * 使匹配前缀的所有缓存失效
  */
 export { invalidateCacheByPrefix as invalidateApiCacheByPrefix }
+
+/** 使音乐管理、公开音乐、专辑和搜索缓存同时失效。 */
+export function invalidateMusicApiCaches() {
+  for (const prefix of [
+    '/api/admin/music',
+    '/api/admin/albums',
+    '/api/music',
+    '/api/albums',
+    '/api/search',
+  ]) {
+    invalidateCacheByPrefix(prefix)
+  }
+}
 
 /**
  * 预加载数据到缓存

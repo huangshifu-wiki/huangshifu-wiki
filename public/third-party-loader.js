@@ -27,20 +27,17 @@
     if (processedScripts.has(src)) return
     processedScripts.add(src)
 
-    runWhenIdle(
-      function () {
-        var script = document.createElement('script')
-        script.src = src
-        script.async = true
-        script.defer = true
+    runWhenIdle(function () {
+      var script = document.createElement('script')
+      script.src = src
+      script.async = true
+      script.defer = true
 
-        if (options.id) script.id = options.id
-        if (options.crossOrigin) script.crossOrigin = options.crossOrigin
+      if (options.id) script.id = options.id
+      if (options.crossOrigin) script.crossOrigin = options.crossOrigin
 
-        document.head.appendChild(script)
-      },
-      options.delay || 3000,
-    )
+      document.head.appendChild(script)
+    }, options.delay || 3000)
   }
 
   function loadScriptOnInteraction(src, options) {

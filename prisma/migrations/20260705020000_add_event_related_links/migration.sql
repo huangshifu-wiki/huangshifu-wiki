@@ -1,0 +1,1 @@
+ALTER TABLE "Event" ADD COLUMN "relatedLinks" JSONB NOT NULL DEFAULT '[]';

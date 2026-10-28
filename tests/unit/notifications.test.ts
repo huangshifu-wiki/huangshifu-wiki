@@ -202,9 +202,9 @@ describe('getNotificationText', () => {
 
   it('renders like and review_result text', () => {
     expect(getNotificationText(makeNotification('like', { postId: 'p1' }))).toBe('赞了你的帖子')
-    expect(getNotificationText(makeNotification('like', { postId: 'p1', actorName: '黄诗扶' }))).toBe(
-      '黄诗扶 赞了你的帖子'
-    )
+    expect(
+      getNotificationText(makeNotification('like', { postId: 'p1', actorName: '黄诗扶' }))
+    ).toBe('黄诗扶 赞了你的帖子')
     expect(
       getNotificationText(
         makeNotification('review_result', { targetType: 'wiki', approved: true, title: '测试条目' })

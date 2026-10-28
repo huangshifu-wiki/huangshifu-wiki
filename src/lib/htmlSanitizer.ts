@@ -1,6 +1,6 @@
-import { defaultSchema, type Options as Schema } from 'rehype-sanitize';
+import { defaultSchema, type Options as Schema } from 'rehype-sanitize'
 
-type AttributeDefinition = NonNullable<Schema['attributes']>[string][number];
+type AttributeDefinition = NonNullable<Schema['attributes']>[string][number]
 
 const IFRAME_WHITELIST = [
   'player.bilibili.com',
@@ -15,10 +15,12 @@ const IFRAME_WHITELIST = [
   'www.weibo.com',
   'vimeo.com',
   'player.vimeo.com',
-];
+]
 
 const withoutAttribute = (attributes: AttributeDefinition[] | undefined, name: string) =>
-  (attributes ?? []).filter((attribute) => (typeof attribute === 'string' ? attribute : attribute[0]) !== name);
+  (attributes ?? []).filter(
+    (attribute) => (typeof attribute === 'string' ? attribute : attribute[0]) !== name
+  )
 
 export const customSchema: Schema = {
   ...defaultSchema,
@@ -58,28 +60,28 @@ export const customSchema: Schema = {
       'width',
     ],
   },
-};
+}
 
 export function isTrustedIframeDomain(src: string | undefined): boolean {
-  if (!src) return false;
+  if (!src) return false
 
   try {
-    let url: URL;
+    let url: URL
     if (src.startsWith('//')) {
-      url = new URL('https:' + src);
+      url = new URL('https:' + src)
     } else if (!src.startsWith('http://') && !src.startsWith('https://')) {
-      url = new URL('https://' + src);
+      url = new URL('https://' + src)
     } else {
-      url = new URL(src);
+      url = new URL(src)
     }
 
-    const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '')
 
     return IFRAME_WHITELIST.some((domain) => {
-      const d = domain.toLowerCase().replace(/^www\./, '');
-      return hostname === d || hostname.endsWith('.' + d);
-    });
+      const d = domain.toLowerCase().replace(/^www\./, '')
+      return hostname === d || hostname.endsWith('.' + d)
+    })
   } catch {
-    return false;
+    return false
   }
 }

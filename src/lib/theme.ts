@@ -1,8 +1,15 @@
 import {
   DEFAULT_PREFERENCES,
+  DEFAULT_VIEW_MODES,
+  LIST_LOAD_MODES,
+  THEME_MODES,
+  VIEW_MODE_SCOPES,
+  VIEW_MODES,
+  type ListLoadMode,
   type ThemeMode,
   type UserPreferences,
   type ViewMode,
+  type ViewModePreferences,
 } from '../types/userPreferences'
 import { readBootstrapAuthUid } from './auth'
 import { THEME_META_COLOR } from './colorTokens'
@@ -17,8 +24,12 @@ type ThemeStorageState = {
   users: Record<string, Partial<UserPreferences>>
 }
 
+function isOneOf<const T extends readonly string[]>(values: T, value: unknown): value is T[number] {
+  return typeof value === 'string' && values.includes(value)
+}
+
 export function isThemeMode(value: unknown): value is ThemeMode {
-  return value === 'default' || value === 'dark' || value === 'system'
+  return isOneOf(THEME_MODES, value)
 }
 
 export function normalizeThemeMode(value: unknown): ThemeMode {
@@ -30,7 +41,7 @@ export function normalizeThemeMode(value: unknown): ThemeMode {
 }
 
 export function isViewMode(value: unknown): value is ViewMode {
-  return value === 'large' || value === 'medium' || value === 'small' || value === 'list'
+  return isOneOf(VIEW_MODES, value)
 }
 
 export function normalizeViewMode(value: unknown): ViewMode {
@@ -39,6 +50,37 @@ export function normalizeViewMode(value: unknown): ViewMode {
   }
 
   return DEFAULT_PREFERENCES.viewMode
+}
+
+export function normalizeScopedViewModes(
+  value?: unknown,
+  fallbackViewMode?: unknown
+): ViewModePreferences {
+  const legacyViewMode = isViewMode(fallbackViewMode) ? fallbackViewMode : undefined
+  const source = isRecord(value) ? value : {}
+
+  return Object.fromEntries(
+    VIEW_MODE_SCOPES.map((scope) => [
+      scope,
+      isViewMode(source[scope])
+        ? source[scope]
+        : scope === 'gallery' && legacyViewMode
+          ? legacyViewMode
+          : DEFAULT_VIEW_MODES[scope],
+    ])
+  ) as ViewModePreferences
+}
+
+export function isListLoadMode(value: unknown): value is ListLoadMode {
+  return isOneOf(LIST_LOAD_MODES, value)
+}
+
+export function normalizeListLoadMode(value: unknown): ListLoadMode {
+  if (isListLoadMode(value)) {
+    return value
+  }
+
+  return DEFAULT_PREFERENCES.listLoadMode
 }
 
 export function isBooleanPreference(value: unknown): value is boolean {
@@ -51,10 +93,15 @@ export function normalizeStoredPreferences(
   return {
     ...DEFAULT_PREFERENCES,
     viewMode: normalizeViewMode(value?.viewMode),
+    viewModes: normalizeScopedViewModes(value?.viewModes, value?.viewMode),
     theme: normalizeThemeMode(value?.theme),
+    listLoadMode: normalizeListLoadMode(value?.listLoadMode),
     showCharacterCount: isBooleanPreference(value?.showCharacterCount)
       ? value.showCharacterCount
       : DEFAULT_PREFERENCES.showCharacterCount,
+    showMobileSongSequence: isBooleanPreference(value?.showMobileSongSequence)
+      ? value.showMobileSongSequence
+      : DEFAULT_PREFERENCES.showMobileSongSequence,
     publicFavorites: isBooleanPreference(value?.publicFavorites)
       ? value.publicFavorites
       : DEFAULT_PREFERENCES.publicFavorites,
@@ -73,8 +120,12 @@ export function hasStoredPreferenceValues(
 
   return (
     isViewMode(value.viewMode) ||
+    (isRecord(value.viewModes) &&
+      VIEW_MODE_SCOPES.some((scope) => isViewMode(value.viewModes?.[scope]))) ||
     isThemeMode(value.theme) ||
+    isListLoadMode(value.listLoadMode) ||
     isBooleanPreference(value.showCharacterCount) ||
+    isBooleanPreference(value.showMobileSongSequence) ||
     isBooleanPreference(value.publicFavorites) ||
     isBooleanPreference(value.publicHistory)
   )
@@ -89,12 +140,33 @@ export function mergeStoredPreferences(
     return normalizedBase
   }
 
+  const nextViewMode = isViewMode(value.viewMode) ? value.viewMode : normalizedBase.viewMode
+  const validScopedViewModes = isRecord(value.viewModes)
+    ? Object.fromEntries(
+        Object.entries(value.viewModes).filter(([, scopedViewMode]) => isViewMode(scopedViewMode))
+      )
+    : null
+
   return {
-    viewMode: isViewMode(value.viewMode) ? value.viewMode : normalizedBase.viewMode,
+    viewMode: nextViewMode,
+    viewModes: validScopedViewModes
+      ? normalizeScopedViewModes(
+          { ...normalizedBase.viewModes, ...validScopedViewModes },
+          nextViewMode
+        )
+      : isViewMode(value.viewMode)
+        ? normalizeScopedViewModes(undefined, value.viewMode)
+        : normalizedBase.viewModes,
     theme: isThemeMode(value.theme) ? value.theme : normalizedBase.theme,
+    listLoadMode: isListLoadMode(value.listLoadMode)
+      ? value.listLoadMode
+      : normalizedBase.listLoadMode,
     showCharacterCount: isBooleanPreference(value.showCharacterCount)
       ? value.showCharacterCount
       : normalizedBase.showCharacterCount,
+    showMobileSongSequence: isBooleanPreference(value.showMobileSongSequence)
+      ? value.showMobileSongSequence
+      : normalizedBase.showMobileSongSequence,
     publicFavorites: isBooleanPreference(value.publicFavorites)
       ? value.publicFavorites
       : normalizedBase.publicFavorites,
@@ -125,9 +197,7 @@ function readThemeStorageState(): ThemeStorageState {
     }
 
     const users: Record<string, Partial<UserPreferences>> = isRecord(parsed.users)
-      ? Object.fromEntries(
-          Object.entries(parsed.users).filter(([, value]) => isRecord(value))
-        )
+      ? Object.fromEntries(Object.entries(parsed.users).filter(([, value]) => isRecord(value)))
       : {}
 
     if (isRecord(parsed.guest)) {
@@ -225,7 +295,10 @@ export function readStoredPreferences(
   }
 }
 
-export function writeStoredPreferences(preferences: Partial<UserPreferences>, uid?: string | null): void {
+export function writeStoredPreferences(
+  preferences: Partial<UserPreferences>,
+  uid?: string | null
+): void {
   if (typeof window === 'undefined') {
     return
   }

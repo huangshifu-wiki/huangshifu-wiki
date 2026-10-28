@@ -7,7 +7,12 @@ import { asyncHandler } from '../middleware/asyncHandler'
 import { authRateLimiter } from '../middleware/rateLimiter'
 import { prisma } from '../prisma'
 import { setupInitializeSchema, validateBody } from '../schemas'
-import { getPasswordSaltRounds, logger, validateUserDisplayName } from '../utils'
+import {
+  allocateUserPublicId,
+  getPasswordSaltRounds,
+  logger,
+  validateUserDisplayName,
+} from '../utils'
 
 const router = Router()
 const PASSWORD_SALT_ROUNDS = getPasswordSaltRounds()
@@ -57,8 +62,10 @@ router.post(
             return null
           }
 
+          const publicId = await allocateUserPublicId(tx)
           return tx.user.create({
             data: {
+              publicId,
               email: normalizedEmail,
               displayName: displayNameResult.displayName,
               passwordHash,

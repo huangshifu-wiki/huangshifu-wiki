@@ -22,11 +22,15 @@ export function shouldWaitForGalleryThumbnail(gallery: Pick<GalleryItem, 'images
   return Boolean(image && !image.thumbnailUrl && isPendingThumbnailStatus(image.thumbnailStatus))
 }
 
-export function shouldWaitForImageThumbnail(image: Pick<GalleryImageItem, 'thumbnailUrl' | 'thumbnailStatus'>) {
+export function shouldWaitForImageThumbnail(
+  image: Pick<GalleryImageItem, 'thumbnailUrl' | 'thumbnailStatus'>
+) {
   return !image.thumbnailUrl && isPendingThumbnailStatus(image.thumbnailStatus)
 }
 
-export function shouldWaitForAnyGalleryThumbnail(gallery: Pick<GalleryItem, 'images'> | null | undefined) {
+export function shouldWaitForAnyGalleryThumbnail(
+  gallery: Pick<GalleryItem, 'images'> | null | undefined
+) {
   return Boolean(gallery?.images?.some(shouldWaitForImageThumbnail))
 }
 

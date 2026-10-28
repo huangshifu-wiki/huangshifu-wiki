@@ -1,6 +1,15 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import { ConfirmModal } from './Modal'
+import { Input, Textarea } from '@/src/components/ui'
 
 type DialogVariant = 'danger' | 'warning' | 'info'
 
@@ -8,15 +17,17 @@ type ConfirmOptions = {
   title: string
   message: string
   confirmText?: string
-  cancelText?: string
+  cancelText?: string | null
   variant?: DialogVariant
 }
 
 type PromptOptions = ConfirmOptions & {
   defaultValue?: string
   placeholder?: string
+  inputType?: 'text' | 'password'
   multiline?: boolean
   maxLength?: number
+  onConfirm?: (value: string) => Promise<boolean>
 }
 
 type DialogContextValue = {
@@ -31,12 +42,10 @@ type ConfirmState = ConfirmOptions & {
 type PromptState = PromptOptions & {
   open: boolean
   value: string
+  loading: boolean
 }
 
 const DialogContext = createContext<DialogContextValue | undefined>(undefined)
-
-const PROMPT_FIELD_CLASS =
-  'mt-4 w-full rounded border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-brand-gold'
 
 export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
@@ -56,26 +65,23 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
     setPromptState(null)
   }, [])
 
-  const confirm = useCallback(
-    (options: ConfirmOptions) => {
-      confirmResolveRef.current?.(false)
-      promptResolveRef.current?.(null)
-      promptResolveRef.current = null
-      setPromptState(null)
-      setConfirmState({ ...options, open: true })
-      return new Promise<boolean>((resolve) => {
-        confirmResolveRef.current = resolve
-      })
-    },
-    []
-  )
+  const confirm = useCallback((options: ConfirmOptions) => {
+    confirmResolveRef.current?.(false)
+    promptResolveRef.current?.(null)
+    promptResolveRef.current = null
+    setPromptState(null)
+    setConfirmState({ ...options, open: true })
+    return new Promise<boolean>((resolve) => {
+      confirmResolveRef.current = resolve
+    })
+  }, [])
 
   const prompt = useCallback((options: PromptOptions) => {
     promptResolveRef.current?.(null)
     confirmResolveRef.current?.(false)
     confirmResolveRef.current = null
     setConfirmState(null)
-    setPromptState({ ...options, open: true, value: options.defaultValue ?? '' })
+    setPromptState({ ...options, open: true, value: options.defaultValue ?? '', loading: false })
     return new Promise<string | null>((resolve) => {
       promptResolveRef.current = resolve
     })
@@ -90,26 +96,32 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [])
 
-  const handlePromptValueChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const setPromptLoading = (loading: boolean) =>
+    setPromptState((prev) => (prev ? { ...prev, loading } : prev))
+
+  const handlePromptValueChange = (
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     setPromptState((prev) => (prev ? { ...prev, value: event.target.value } : prev))
   }
 
   const promptField = promptState?.multiline ? (
-    <textarea
+    <Textarea
       value={promptState.value}
       onChange={handlePromptValueChange}
       placeholder={promptState.placeholder}
       maxLength={promptState.maxLength}
-      className={`${PROMPT_FIELD_CLASS} min-h-24`}
+      className="mt-4 min-h-24"
     />
   ) : promptState ? (
-    <input
-      type="text"
+    <Input
+      type={promptState.inputType ?? 'text'}
       value={promptState.value}
       onChange={handlePromptValueChange}
       placeholder={promptState.placeholder}
       maxLength={promptState.maxLength}
-      className={PROMPT_FIELD_CLASS}
+      autoComplete={promptState.inputType === 'password' ? 'current-password' : undefined}
+      className="mt-4"
     />
   ) : null
 
@@ -130,12 +142,29 @@ export const DialogProvider = ({ children }: { children: React.ReactNode }) => {
         <ConfirmModal
           open={promptState.open}
           onClose={() => closePrompt(null)}
-          onConfirm={() => closePrompt(promptState.value)}
+          onConfirm={async () => {
+            if (promptState.onConfirm) {
+              setPromptLoading(true)
+              try {
+                const shouldClose = await promptState.onConfirm(promptState.value)
+                if (shouldClose) {
+                  closePrompt(promptState.value)
+                } else {
+                  setPromptLoading(false)
+                }
+              } catch {
+                setPromptLoading(false)
+              }
+            } else {
+              closePrompt(promptState.value)
+            }
+          }}
           title={promptState.title}
           message={promptState.message}
           confirmText={promptState.confirmText ?? '确认'}
           cancelText={promptState.cancelText}
           variant={promptState.variant}
+          loading={promptState.loading}
           initialFocus="firstField"
         >
           {promptField}

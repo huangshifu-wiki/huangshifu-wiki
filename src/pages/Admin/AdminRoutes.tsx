@@ -1,4 +1,3 @@
-import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { AdminLayout } from '../../components/admin/AdminLayout'
 import { RouteGuard } from '../../components/RouteGuard'
@@ -6,6 +5,7 @@ import AdminDashboard from './AdminDashboard'
 import AdminReviews from './AdminReviews'
 import AdminReviewWorkbench from './AdminReviewWorkbench'
 import AdminListPage from './AdminListPage'
+import AdminMusicPage from './AdminMusicPage'
 import AdminUsers from './AdminUsers'
 import AdminLocks from './AdminLocks'
 import AdminLogs from './AdminLogs'
@@ -13,6 +13,7 @@ import AdminToolPage from './AdminToolPage'
 import AdminDiskMonitor from './AdminDiskMonitor'
 import AdminVariantManager from './AdminVariantManager'
 import AdminSettings from './AdminSettings'
+import AdminMaintenance from './AdminMaintenance'
 import NotFound from '../NotFound'
 import { usePublicFeatures } from '../../hooks/usePublicFeatures'
 
@@ -48,9 +49,12 @@ export const AdminRoutes = () => (
       <Route path="reviews" element={<AdminReviews />} />
       <Route path="reviews/workbench" element={<AdminReviewWorkbench />} />
       <Route path="wiki" element={<AdminListPage type="wiki" />} />
-      <Route path="music" element={<AdminListPage type="music" />} />
+      <Route path="wiki-categories" element={<AdminListPage type="wiki-categories" />} />
+      <Route path="music" element={<AdminMusicPage />} />
       <Route path="posts" element={<AdminListPage type="posts" />} />
       <Route path="galleries" element={<AdminListPage type="galleries" />} />
+      <Route path="ticket-listings" element={<AdminListPage type="ticket-listings" />} />
+      <Route path="events" element={<AdminListPage type="events" />} />
       <Route path="sections" element={<AdminListPage type="sections" />} />
       <Route path="announcements" element={<AdminListPage type="announcements" />} />
       <Route path="users" element={<AdminUsers />} />
@@ -71,6 +75,7 @@ export const AdminRoutes = () => (
       <Route path="markdown_links" element={<AdminToolPage type="markdown_links" />} />
       <Route path="disk-monitor" element={<AdminDiskMonitor />} />
       <Route path="variant-manager" element={<AdminVariantManager />} />
+      <Route path="maintenance" element={<AdminMaintenance />} />
       <Route
         path="settings"
         element={

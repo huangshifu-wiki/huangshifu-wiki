@@ -1,24 +1,51 @@
-import React, { useEffect, useState } from 'react';
-import { Trash2, CheckCircle, XCircle, AlertTriangle, RefreshCw, Pencil } from 'lucide-react';
-import { clsx } from 'clsx';
-import { CharacterCount } from '../../components/CharacterCount';
-import { apiDelete, apiGet, apiPatch, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient';
-import { useDialog } from '../../components/Dialog';
-import { useToast } from '../../components/Toast';
-import { SmartImage } from '../../components/SmartImage';
-import { useAuth } from '../../context/AuthContext';
-import { DEFAULT_AVATAR } from '../../lib/defaultAvatar';
-import { formatAdminRole } from '../../lib/formatUtils';
-import { FormModal } from '../../components/Modal';
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/passwordRules';
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { FocusEvent } from 'react'
+import {
+  Trash2,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  RefreshCw,
+  Pencil,
+  MoreVertical,
+  ShieldCheck,
+} from '@/src/components/icons'
+import { clsx } from 'clsx'
+import { CharacterCount } from '../../components/CharacterCount'
+import { Button, LoadErrorState, Switch } from '@/src/components/ui'
+import { PageSkeleton } from '@/src/components/PageSkeleton'
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPut,
+  invalidateApiCacheByPrefix,
+} from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
+import { validateEmail, validateMaxLength, validatePassword } from '../../lib/clientValidation'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { useDialog } from '../../components/Dialog'
+import { useToast } from '../../components/Toast'
+import { SmartImage } from '../../components/SmartImage'
+import { useAuth } from '../../context/AuthContext'
+import { DEFAULT_AVATAR } from '../../lib/defaultAvatar'
+import { formatAdminRole } from '../../lib/formatUtils'
+import { FormModal } from '../../components/Modal'
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/passwordRules'
+import { useDismissableLayer } from '../../hooks/useClickOutside'
+import { useScrollRestore } from '../../hooks/useScrollRestore'
+import Pagination from '../../components/Pagination'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
 import {
   PROFILE_DISPLAY_NAME_MAX_LENGTH,
   PROFILE_SIGNATURE_MAX_LENGTH,
   WIKI_MAX_CONTENT_SIZE,
-} from '../../lib/contentLimits';
-import type { AdminDataItem } from '../../types/entities';
+} from '../../lib/contentLimits'
+import type { AdminDataItem } from '../../types/entities'
+import type { AdminDataListResponse } from '../../types/api'
 
 const ADMIN_USERS_API_PREFIX = '/api/admin/users'
+const ADMIN_PERMISSIONS_API_PATH = '/api/config/admin-permissions'
 
 type AdminUserEditForm = {
   displayName: string
@@ -28,6 +55,14 @@ type AdminUserEditForm = {
   bio: string
   newPassword: string
   confirmPassword: string
+}
+
+type AdminPermissionConfig = {
+  allowSuperAdminRoleChanges: boolean
+}
+
+const DEFAULT_ADMIN_PERMISSIONS: AdminPermissionConfig = {
+  allowSuperAdminRoleChanges: false,
 }
 
 const EMPTY_EDIT_FORM: AdminUserEditForm = {
@@ -41,120 +76,220 @@ const EMPTY_EDIT_FORM: AdminUserEditForm = {
 }
 
 export const AdminUsers = () => {
-  const { user: currentUser, profile } = useAuth();
-  const isSuperAdmin = profile?.role === 'super_admin';
-  const [data, setData] = useState<AdminDataItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editTarget, setEditTarget] = useState<AdminDataItem | null>(null);
-  const [editForm, setEditForm] = useState<AdminUserEditForm>(EMPTY_EDIT_FORM);
-  const [editLoading, setEditLoading] = useState(false);
-  const dialog = useDialog();
-  const { show } = useToast();
+  const { user: currentUser, profile } = useAuth()
+  const isSuperAdmin = profile?.role === 'super_admin'
+  const [data, setData] = useState<AdminDataItem[]>([])
+  const [total, setTotal] = useState<number | undefined>()
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [editTarget, setEditTarget] = useState<AdminDataItem | null>(null)
+  const [editForm, setEditForm] = useState<AdminUserEditForm>(EMPTY_EDIT_FORM)
+  const [editLoading, setEditLoading] = useState(false)
+  const [openMenuUid, setOpenMenuUid] = useState<string | null>(null)
+  const [adminPermissions, setAdminPermissions] =
+    useState<AdminPermissionConfig>(DEFAULT_ADMIN_PERMISSIONS)
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null)
+  const dialog = useDialog()
+  const { show } = useToast()
+  const saveScroll = useScrollRestore()
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: 50,
+    pageSizeOptions: [20, 50, 100],
+    pageParam: 'page',
+    pageSizeParam: 'pageSize',
+    showPageSizeSelector: true,
+  })
+  const requestIdRef = useRef(0)
 
+  const closeActionsMenu = useCallback(() => setOpenMenuUid(null), [])
   const invalidateAdminUsersCache = () => invalidateApiCacheByPrefix(ADMIN_USERS_API_PREFIX)
   const isCurrentUser = (uid?: string) => Boolean(uid && uid === currentUser?.uid)
 
-  const getNextRole = (role?: string) => (role === 'admin' ? 'user' : 'admin')
-  const getRoleToggleTitle = (role?: string) => (getNextRole(role) === 'admin' ? '设为管理员' : '设为普通用户')
+  useDismissableLayer(actionsMenuRef, closeActionsMenu, Boolean(openMenuUid))
 
+  const getNextRole = (role?: string) => (role === 'admin' ? 'user' : 'admin')
+  const canManageSuperAdminRole = (target: AdminDataItem) =>
+    Boolean(
+      isSuperAdmin &&
+      target.uid &&
+      !isCurrentUser(target.uid) &&
+      adminPermissions.allowSuperAdminRoleChanges
+    )
+  const getSuperAdminRoleAction = (target: AdminDataItem) => {
+    if (!canManageSuperAdminRole(target)) {
+      return null
+    }
+
+    return target.role === 'super_admin'
+      ? ({ role: 'admin', label: '降为管理员' } as const)
+      : ({ role: 'super_admin', label: '设为超级管理员' } as const)
+  }
   const canManageUser = (target: AdminDataItem) => {
     if (!target.uid || isCurrentUser(target.uid)) {
-      return false;
+      return false
     }
 
     if (isSuperAdmin) {
-      return true;
+      return true
     }
 
-    return target.role === 'user';
+    return target.role === 'user'
   }
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const result = await apiGet<{ data: AdminDataItem[] }>(ADMIN_USERS_API_PREFIX);
-      setData(result.data || []);
-    } catch (e) {
-      console.error(e);
-      setData([]);
-    } finally {
-      setLoading(false);
+  const fetchData = async (options?: { silent?: boolean }) => {
+    const requestId = ++requestIdRef.current
+    closeActionsMenu()
+    const silent = options?.silent === true
+    if (silent) saveScroll()
+    else {
+      setLoading(true)
+      setLoadError(null)
     }
-  };
+    try {
+      const [result, permissions] = await Promise.all([
+        apiGet<AdminDataListResponse>(ADMIN_USERS_API_PREFIX, {
+          page: pagination.page,
+          limit: pagination.pageSize,
+        }),
+        isSuperAdmin
+          ? apiGet<AdminPermissionConfig>(ADMIN_PERMISSIONS_API_PATH).catch(
+              () => DEFAULT_ADMIN_PERMISSIONS
+            )
+          : Promise.resolve(DEFAULT_ADMIN_PERMISSIONS),
+      ])
+      if (requestId !== requestIdRef.current) return
+      setData(result.data || [])
+      setTotal(result.total || 0)
+      setAdminPermissions(permissions)
+      setLoadError(null)
+    } catch (error) {
+      if (requestId !== requestIdRef.current) return
+      console.error(error)
+      setLoadError(error)
+    } finally {
+      if (requestId === requestIdRef.current && !silent) setLoading(false)
+    }
+  }
+
+  const refreshUsers = async () => {
+    invalidateAdminUsersCache()
+    await fetchData({ silent: true })
+  }
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    void fetchData()
+  }, [pagination.page, pagination.pageSize, isSuperAdmin])
 
   const toggleBan = async (target: AdminDataItem) => {
+    closeActionsMenu()
     if (!canManageUser(target)) {
-      show('当前权限不能管理该用户', { variant: 'error' });
-      return;
+      show('当前权限不能管理该用户', { variant: 'error' })
+      return
     }
 
-    const shouldUnban = target.status === 'banned';
-    const note = await dialog.prompt({
+    const shouldUnban = target.status === 'banned'
+    const endpoint = shouldUnban ? `/api/users/${target.uid}/unban` : `/api/users/${target.uid}/ban`
+
+    await dialog.prompt({
       title: shouldUnban ? '解封备注' : '封禁原因',
       message: shouldUnban ? '解封备注（可选）' : '封禁原因',
-      defaultValue: shouldUnban ? '' : '违反社区规范',
-      confirmText: '确认',
+      defaultValue: '',
+      confirmText: shouldUnban ? '解封' : '封禁',
       variant: shouldUnban ? 'info' : 'warning',
       multiline: true,
-    });
-    if (note === null) return;
-    if (!shouldUnban && !note.trim()) {
-      show('请输入封禁原因', { variant: 'error' });
-      return;
-    }
-    const confirmed = await dialog.confirm({
-      title: shouldUnban ? '解封用户' : '封禁用户',
-      message: `确定要${shouldUnban ? '解封' : '封禁'} ${target.displayName || target.uid} 吗？`,
-      confirmText: shouldUnban ? '解封' : '封禁',
-      variant: shouldUnban ? 'warning' : 'danger',
-    });
-    if (!confirmed) return;
-    try {
-      const endpoint = shouldUnban ? `/api/users/${target.uid}/unban` : `/api/users/${target.uid}/ban`;
-      const result = await apiPut<{ user: AdminDataItem }>(endpoint, shouldUnban ? { note } : { reason: note, note });
-      invalidateAdminUsersCache();
-      setData((prev) => prev.map((item) => (item.uid === target.uid ? { ...item, ...result.user } : item)));
-      show(shouldUnban ? '已解封' : '已封禁', { variant: 'success' });
-    } catch (e) {
-      show(shouldUnban ? '解封失败' : '封禁失败', { variant: 'error' });
-    }
-  };
+      onConfirm: async (value) => {
+        const reasonError = validateMaxLength(
+          value,
+          'reason',
+          shouldUnban ? '解封备注' : '封禁原因',
+          shouldUnban ? CONTENT_LIMITS.userModeration.note : CONTENT_LIMITS.userModeration.banReason
+        )
+        if (reasonError) {
+          show(reasonError.message, { variant: 'error' })
+          return false
+        }
+
+        try {
+          await apiPut(endpoint, shouldUnban ? { note: value } : { reason: value })
+          await refreshUsers()
+          show(shouldUnban ? '已解封' : '已封禁', { variant: 'success' })
+          return true
+        } catch (error) {
+          show(getErrorMessage(error, shouldUnban ? '解封失败' : '封禁失败'), { variant: 'error' })
+          return false
+        }
+      },
+    })
+  }
 
   const toggleRole = async (target: AdminDataItem) => {
+    closeActionsMenu()
     if (!isSuperAdmin) {
-      show('只有超级管理员可以更改权限', { variant: 'error' });
-      return;
+      show('只有超级管理员可以更改权限', { variant: 'error' })
+      return
     }
-    const newRole = getNextRole(target.role);
+    const newRole = getNextRole(target.role)
     const confirmed = await dialog.confirm({
       title: '更改用户角色',
       message: `确定要将 ${target.displayName || target.uid} 的角色更改为 ${formatAdminRole(newRole)} 吗？`,
       confirmText: '更改',
       variant: 'warning',
-    });
-    if (!confirmed) return;
+    })
+    if (!confirmed) return
     try {
-      await apiPut(`/api/users/${target.uid}/role`, { role: newRole });
-      invalidateAdminUsersCache();
-      setData((prev) => prev.map((item) => (item.uid === target.uid ? { ...item, role: newRole } : item)));
-      show('角色已更新', { variant: 'success' });
+      await apiPut(`/api/users/${target.uid}/role`, {
+        role: newRole,
+      })
+      await refreshUsers()
+      show('角色已更新', { variant: 'success' })
     } catch (e) {
-      show('更新角色失败', { variant: 'error' });
+      show(getErrorMessage(e, '更新角色失败'), { variant: 'error' })
     }
-  };
+  }
 
-  const canEditUser = (target: AdminDataItem) => {
-    return canManageUser(target);
+  const updateRoleWithPassword = async (target: AdminDataItem, role: 'admin' | 'super_admin') => {
+    if (!canManageSuperAdminRole(target)) {
+      show('只有超级管理员可以更改超级管理员身份', { variant: 'error' })
+      return
+    }
+
+    const actionLabel = role === 'super_admin' ? '设为超级管理员' : '降为管理员'
+    closeActionsMenu()
+    await dialog.prompt({
+      title: actionLabel,
+      message: `请输入当前账户密码，将 ${target.displayName || target.uid} ${actionLabel}。`,
+      placeholder: '当前账户密码',
+      inputType: 'password',
+      confirmText: '确认更改',
+      variant: role === 'super_admin' ? 'warning' : 'danger',
+      onConfirm: async (value) => {
+        if (!value) {
+          show('请输入当前账户密码', { variant: 'error' })
+          return false
+        }
+
+        try {
+          await apiPut(`/api/users/${target.uid}/role`, {
+            role,
+            currentPassword: value,
+          })
+          await refreshUsers()
+          show('角色已更新', { variant: 'success' })
+          return true
+        } catch (error) {
+          show(getErrorMessage(error, '更新角色失败'), { variant: 'error' })
+          return false
+        }
+      },
+    })
   }
 
   const handleDeleteUser = async (target: AdminDataItem) => {
+    closeActionsMenu()
     if (!canManageUser(target)) {
-      show('当前权限不能删除该用户', { variant: 'error' });
-      return;
+      show('当前权限不能删除该用户', { variant: 'error' })
+      return
     }
 
     const confirmed = await dialog.confirm({
@@ -162,37 +297,37 @@ export const AdminUsers = () => {
       message: '确定删除此用户吗？',
       confirmText: '删除',
       variant: 'danger',
-    });
+    })
     if (!confirmed) {
-      return;
+      return
     }
 
     try {
-      await apiDelete(`/api/admin/users/${target.uid}`);
-      invalidateAdminUsersCache();
-      setData((prev) => prev.filter((item) => item.uid !== target.uid));
-      show('已删除', { variant: 'success' });
+      await apiDelete(`/api/admin/users/${target.uid}`)
+      await refreshUsers()
+      show('已删除', { variant: 'success' })
     } catch (error) {
-      show(error instanceof Error ? error.message : '删除失败', { variant: 'error' });
+      show(getErrorMessage(error, '删除失败'), { variant: 'error' })
     }
   }
 
   const closeEditModal = () => {
     if (editLoading) {
-      return;
+      return
     }
 
-    setEditTarget(null);
-    setEditForm(EMPTY_EDIT_FORM);
+    setEditTarget(null)
+    setEditForm(EMPTY_EDIT_FORM)
   }
 
   const openEditModal = (target: AdminDataItem) => {
-    if (!canEditUser(target)) {
-      show('当前权限不能编辑该用户', { variant: 'error' });
-      return;
+    closeActionsMenu()
+    if (!canManageUser(target)) {
+      show('当前权限不能编辑该用户', { variant: 'error' })
+      return
     }
 
-    setEditTarget(target);
+    setEditTarget(target)
     setEditForm({
       displayName: target.displayName || '',
       email: target.email || '',
@@ -201,7 +336,13 @@ export const AdminUsers = () => {
       bio: target.bio || '',
       newPassword: '',
       confirmPassword: '',
-    });
+    })
+  }
+
+  const handleActionsMenuBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      closeActionsMenu()
+    }
   }
 
   const updateEditForm = <K extends keyof AdminUserEditForm>(
@@ -213,7 +354,8 @@ export const AdminUsers = () => {
       if (field === 'email') {
         const originalEmail = (editTarget?.email || '').trim().toLowerCase()
         const nextEmail = String(value).trim().toLowerCase()
-        next.emailVerified = nextEmail === originalEmail ? Boolean(editTarget?.emailVerified) : false
+        next.emailVerified =
+          nextEmail === originalEmail ? Boolean(editTarget?.emailVerified) : false
       }
       return next
     })
@@ -221,41 +363,33 @@ export const AdminUsers = () => {
 
   const handleUpdateUser = async () => {
     if (!editTarget?.uid) {
-      return;
+      return
     }
 
     if (editForm.displayName.length > PROFILE_DISPLAY_NAME_MAX_LENGTH) {
-      show(`昵称不能超过${PROFILE_DISPLAY_NAME_MAX_LENGTH}个字符`, { variant: 'error' });
-      return;
+      show(`昵称不能超过${PROFILE_DISPLAY_NAME_MAX_LENGTH}个字符`, { variant: 'error' })
+      return
     }
-    if (!editForm.email.trim()) {
-      show('邮箱不能为空', { variant: 'error' });
-      return;
+    const emailError = validateEmail(editForm.email, 'email', '邮箱')
+    if (emailError) {
+      show(emailError.message, { variant: 'error' })
+      return
     }
     if (editForm.signature.length > PROFILE_SIGNATURE_MAX_LENGTH) {
-      show(`签名不能超过${PROFILE_SIGNATURE_MAX_LENGTH}个字符`, { variant: 'error' });
-      return;
+      show(`签名不能超过${PROFILE_SIGNATURE_MAX_LENGTH}个字符`, { variant: 'error' })
+      return
     }
     if (editForm.bio.length > WIKI_MAX_CONTENT_SIZE) {
-      show('个人简介不能超过500KB', { variant: 'error' });
-      return;
+      show('个人简介不能超过500KB', { variant: 'error' })
+      return
     }
     if (editForm.newPassword || editForm.confirmPassword) {
       if (editForm.newPassword !== editForm.confirmPassword) {
-        show('两次输入的新密码不一致', { variant: 'error' });
-        return;
-      }
-      if (editForm.newPassword.length < PASSWORD_MIN_LENGTH) {
-        show(`新密码至少${PASSWORD_MIN_LENGTH}个字符`, { variant: 'error' });
-        return;
-      }
-      if (editForm.newPassword.length > PASSWORD_MAX_LENGTH) {
-        show(`新密码最多${PASSWORD_MAX_LENGTH}个字符`, { variant: 'error' });
-        return;
+        show('两次输入的新密码不一致', { variant: 'error' })
+        return
       }
     }
-
-    setEditLoading(true);
+    setEditLoading(true)
     try {
       const payload: {
         displayName: string
@@ -275,29 +409,46 @@ export const AdminUsers = () => {
         payload.newPassword = editForm.newPassword
       }
 
-      const result = await apiPatch<{ user: AdminDataItem }>(`/api/users/${editTarget.uid}`, payload);
-      invalidateAdminUsersCache();
-      setData((prev) => prev.map((item) => (item.uid === editTarget.uid ? { ...item, ...result.user } : item)));
-      setEditTarget(null);
-      setEditForm(EMPTY_EDIT_FORM);
+      const result = await apiPatch<{ user: AdminDataItem }>(
+        `/api/users/${editTarget.uid}`,
+        payload
+      )
+      await refreshUsers()
+      setEditTarget(null)
+      setEditForm(EMPTY_EDIT_FORM)
       show(`已更新 ${result.user.displayName || editTarget.displayName || editTarget.uid} 的资料`, {
         variant: 'success',
-      });
+      })
     } catch (error) {
-      show(error instanceof Error ? error.message : '更新用户资料失败', { variant: 'error' });
+      show(getErrorMessage(error, '更新用户资料失败'), { variant: 'error' })
     } finally {
-      setEditLoading(false);
+      setEditLoading(false)
     }
+  }
+
+  if (loading && data.length === 0) {
+    return <PageSkeleton variant="admin" />
   }
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">用户管理</h1>
-        <button onClick={fetchData} className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all">
+        <button
+          onClick={() => void fetchData()}
+          className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
+        >
           <RefreshCw size={14} className="inline mr-1" /> 刷新
         </button>
       </div>
+      {loadError && data.length > 0 && (
+        <LoadErrorState
+          className="py-5"
+          error={loadError}
+          description="当前用户列表可能不是最新内容。"
+          onRetry={() => void fetchData()}
+        />
+      )}
 
       <div className="bg-surface border border-border rounded overflow-hidden">
         <div className="overflow-x-auto">
@@ -305,86 +456,207 @@ export const AdminUsers = () => {
             <thead>
               <tr className="bg-surface-alt border-b border-border">
                 {['用户', '角色', '状态', '操作'].map((col) => (
-                  <th key={col} className="px-5 py-3 text-[11px] font-semibold text-text-muted uppercase tracking-wider">{col}</th>
+                  <th
+                    key={col}
+                    className="px-5 py-3 text-[11px] font-semibold text-text-muted uppercase tracking-wider"
+                  >
+                    {col}
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {loading ? (
-                [1, 2, 3].map((i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td colSpan={4} className="px-5 py-4"><div className="h-6 bg-surface-alt rounded" /></td>
-                  </tr>
-                ))
+              {loadError && data.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    <LoadErrorState error={loadError} onRetry={() => void fetchData()} />
+                  </td>
+                </tr>
               ) : data.length > 0 ? (
-                data.map((item) => (
-                  <tr key={item.uid} className="hover:bg-surface-alt transition-colors group">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <SmartImage src={item.photoURL || DEFAULT_AVATAR} alt="" className="w-10 h-10 rounded-full object-cover bg-surface-alt" />
-                        <div>
-                          <p className="text-sm font-medium text-text-primary">{item.displayName || item.uid}</p>
-                          <p className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                            <span>{item.email}</span>
-                            <span
-                              className={clsx(
-                                'rounded px-1.5 py-0.5 text-[10px] font-medium',
-                                item.emailVerified ? 'theme-status-success' : 'bg-surface-alt text-text-muted'
-                              )}
-                            >
-                              {item.emailVerified ? '已验证' : '未验证'}
-                            </span>
-                          </p>
+                data.map((item) => {
+                  const superAdminRoleAction = getSuperAdminRoleAction(item)
+                  return (
+                    <tr key={item.uid} className="hover:bg-surface-alt transition-colors">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <SmartImage
+                            src={item.photoURL || DEFAULT_AVATAR}
+                            alt=""
+                            className="w-10 h-10 rounded-full object-cover bg-surface-alt"
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-text-primary">
+                              {item.displayName || item.uid}
+                            </p>
+                            <p className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                              <span>{item.email}</span>
+                              <span
+                                className={clsx(
+                                  'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                                  item.emailVerified
+                                    ? 'theme-status-success'
+                                    : 'bg-surface-alt text-text-muted'
+                                )}
+                              >
+                                {item.emailVerified ? '已验证' : '未验证'}
+                              </span>
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={clsx('px-2 py-0.5 rounded text-[10px] font-medium', item.role === 'super_admin' ? 'bg-brand-gold/15 text-brand-gold' : item.role === 'admin' ? 'theme-status-error' : 'bg-surface-alt text-brand-gold')}>
-                        {formatAdminRole(item.role)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={clsx('px-2 py-0.5 rounded text-[10px] font-medium', item.status === 'banned' ? 'theme-status-error' : 'theme-status-success')}>
-                        {item.status === 'banned' ? '已封禁' : '正常'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {canEditUser(item) && (
-                          <button
-                            onClick={() => openEditModal(item)}
-                            className="p-1.5 text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded transition-all"
-                            title="编辑用户"
-                          >
-                            <Pencil size={16} />
-                          </button>
-                        )}
-                        {isSuperAdmin && !isCurrentUser(item.uid) && (
-                          <button onClick={() => toggleRole(item)} className="p-1.5 text-brand-gold hover:bg-surface-alt rounded transition-all" title={getRoleToggleTitle(item.role)}>
-                            {getNextRole(item.role) === 'admin' ? <CheckCircle size={16} /> : <XCircle size={16} />}
-                          </button>
-                        )}
-                        {canManageUser(item) && (
-                          <button onClick={() => toggleBan(item)} className={clsx('p-1.5 rounded transition-all', item.status === 'banned' ? 'theme-text-success hover:bg-surface-alt' : 'theme-icon-button-warning hover:bg-surface-alt')} title={item.status === 'banned' ? '解封' : '封禁'}>
-                            {item.status === 'banned' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
-                          </button>
-                        )}
-                        {canManageUser(item) && (
-                          <button onClick={() => void handleDeleteUser(item)} className="p-1.5 theme-icon-button-danger hover:bg-surface-alt rounded transition-all" title="删除">
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-5 py-4">
+                        <span
+                          className={clsx(
+                            'px-2 py-0.5 rounded text-[10px] font-medium',
+                            item.role === 'super_admin'
+                              ? 'bg-brand-gold/15 text-brand-gold'
+                              : item.role === 'admin'
+                                ? 'theme-status-error'
+                                : 'bg-surface-alt text-brand-gold'
+                          )}
+                        >
+                          {formatAdminRole(item.role)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span
+                          className={clsx(
+                            'px-2 py-0.5 rounded text-[10px] font-medium',
+                            item.status === 'banned' ? 'theme-status-error' : 'theme-status-success'
+                          )}
+                        >
+                          {item.status === 'banned' ? '已封禁' : '正常'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-left">
+                        <div className="flex items-center justify-start gap-2">
+                          {canManageUser(item) && (
+                            <Button
+                              onClick={() => openEditModal(item)}
+                              variant="info"
+                              soft
+                              size="sm"
+                              leftIcon={<Pencil size={14} />}
+                            >
+                              编辑
+                            </Button>
+                          )}
+                          {isSuperAdmin &&
+                            !isCurrentUser(item.uid) &&
+                            item.role !== 'super_admin' && (
+                              <Button
+                                onClick={() => toggleRole(item)}
+                                variant="info"
+                                soft
+                                size="sm"
+                                leftIcon={
+                                  getNextRole(item.role) === 'admin' ? (
+                                    <CheckCircle size={14} />
+                                  ) : (
+                                    <XCircle size={14} />
+                                  )
+                                }
+                              >
+                                {getNextRole(item.role) === 'admin' ? '升为管理员' : '降为普通'}
+                              </Button>
+                            )}
+                          {canManageUser(item) && (
+                            <Button
+                              onClick={() => toggleBan(item)}
+                              variant={item.status === 'banned' ? 'success' : 'warning'}
+                              soft
+                              size="sm"
+                              leftIcon={
+                                item.status === 'banned' ? (
+                                  <CheckCircle size={14} />
+                                ) : (
+                                  <AlertTriangle size={14} />
+                                )
+                              }
+                            >
+                              {item.status === 'banned' ? '解封' : '封禁'}
+                            </Button>
+                          )}
+                          {canManageUser(item) && (
+                            <Button
+                              onClick={() => void handleDeleteUser(item)}
+                              variant="danger"
+                              soft
+                              size="sm"
+                              leftIcon={<Trash2 size={14} />}
+                            >
+                              删除
+                            </Button>
+                          )}
+                          {superAdminRoleAction && (
+                            <div
+                              ref={openMenuUid === item.uid ? actionsMenuRef : undefined}
+                              onBlur={handleActionsMenuBlur}
+                              className="relative"
+                            >
+                              <Button
+                                onClick={() =>
+                                  setOpenMenuUid((current) =>
+                                    current === item.uid ? null : item.uid!
+                                  )
+                                }
+                                variant="secondary"
+                                soft
+                                size="sm"
+                                leftIcon={<MoreVertical size={14} />}
+                                aria-haspopup="menu"
+                                aria-expanded={openMenuUid === item.uid}
+                                aria-label={`${item.displayName || item.uid} 的其他选项`}
+                              >
+                                更多
+                              </Button>
+                              {openMenuUid === item.uid && (
+                                <div
+                                  role="menu"
+                                  className="absolute right-0 z-20 mt-2 min-w-44 overflow-hidden rounded-lg border border-border bg-surface p-1 shadow-xl"
+                                >
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() =>
+                                      void updateRoleWithPassword(item, superAdminRoleAction.role)
+                                    }
+                                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-text-secondary transition-colors hover:bg-surface-alt hover:text-brand-gold"
+                                  >
+                                    <ShieldCheck size={14} />
+                                    {superAdminRoleAction.label}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               ) : (
-                <tr><td colSpan={4} className="px-5 py-16 text-center text-text-muted italic">暂无数据</td></tr>
+                <tr>
+                  <td colSpan={4} className="px-5 py-16 text-center text-text-muted italic">
+                    暂无数据
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+      {pagination.hasMultiplePages ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.handlePageChange}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.handlePageSizeChange}
+          pageSizeOptions={[20, 50, 100]}
+          showPageSizeSelector
+        />
+      ) : null}
 
       <FormModal
         open={Boolean(editTarget)}
@@ -413,53 +685,50 @@ export const AdminUsers = () => {
               value={editForm.displayName}
               onChange={(e) => updateEditForm('displayName', e.target.value)}
               maxLength={PROFILE_DISPLAY_NAME_MAX_LENGTH}
-              className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-medium text-text-secondary">邮箱</span>
+            <span className="text-sm font-medium text-text-secondary">
+              邮箱 <span className="theme-text-error">*</span>
+            </span>
             <input
               type="email"
               value={editForm.email}
               onChange={(e) => updateEditForm('email', e.target.value)}
-              className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
 
           <div className="flex items-center justify-between gap-4 rounded border border-border bg-surface-alt px-4 py-3 md:col-span-2">
-            <label htmlFor="admin-edit-email-verified" className="text-sm font-medium text-text-primary">
+            <label
+              htmlFor="admin-edit-email-verified"
+              className="text-sm font-medium text-text-primary"
+            >
               邮箱验证状态
             </label>
-            <button
-              type="button"
+            <Switch
               id="admin-edit-email-verified"
-              role="switch"
-              aria-checked={editForm.emailVerified}
-              onClick={() => updateEditForm('emailVerified', !editForm.emailVerified)}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold focus:ring-offset-2 ${
-                editForm.emailVerified ? 'bg-[var(--color-theme-accent)]' : 'bg-border'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                  editForm.emailVerified ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+              checked={editForm.emailVerified}
+              onCheckedChange={(checked) => updateEditForm('emailVerified', checked)}
+            />
           </div>
 
           <label className="space-y-2 md:col-span-2">
             <span className="flex items-center justify-between gap-3 text-sm font-medium text-text-secondary">
               签名
-              <CharacterCount current={editForm.signature.length} max={PROFILE_SIGNATURE_MAX_LENGTH} />
+              <CharacterCount
+                current={editForm.signature.length}
+                max={PROFILE_SIGNATURE_MAX_LENGTH}
+              />
             </span>
             <input
               type="text"
               value={editForm.signature}
               onChange={(e) => updateEditForm('signature', e.target.value)}
               maxLength={PROFILE_SIGNATURE_MAX_LENGTH}
-              className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
 
@@ -473,7 +742,7 @@ export const AdminUsers = () => {
               onChange={(e) => updateEditForm('bio', e.target.value)}
               maxLength={WIKI_MAX_CONTENT_SIZE}
               rows={6}
-              className="w-full resize-y rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full resize-y rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
 
@@ -482,15 +751,15 @@ export const AdminUsers = () => {
               新密码（可选）
               <CharacterCount current={editForm.newPassword.length} max={PASSWORD_MAX_LENGTH} />
             </span>
-              <input
-                type="password"
-                value={editForm.newPassword}
-                onChange={(e) => updateEditForm('newPassword', e.target.value)}
-                autoComplete="new-password"
-                minLength={PASSWORD_MIN_LENGTH}
-                maxLength={PASSWORD_MAX_LENGTH}
-                className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
-              />
+            <input
+              type="password"
+              value={editForm.newPassword}
+              onChange={(e) => updateEditForm('newPassword', e.target.value)}
+              autoComplete="new-password"
+              minLength={PASSWORD_MIN_LENGTH}
+              maxLength={PASSWORD_MAX_LENGTH}
+              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+            />
           </label>
 
           <label className="space-y-2">
@@ -502,13 +771,13 @@ export const AdminUsers = () => {
               autoComplete="new-password"
               minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
-              className="w-full rounded border border-border bg-bg-primary px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
             />
           </label>
         </div>
       </FormModal>
     </div>
-  );
-};
+  )
+}
 
-export default AdminUsers;
+export default AdminUsers

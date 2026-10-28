@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import {
   type LucideIcon,
@@ -13,6 +13,8 @@ import {
   Megaphone,
   Lock,
   FileText,
+  Calendar,
+  Ticket,
   Shield,
   Database,
   Cpu,
@@ -23,15 +25,18 @@ import {
   Menu,
   X,
   ChevronRight,
+  ChevronDown,
   HardDrive,
   RefreshCw,
   Settings as SettingsIcon,
-} from 'lucide-react'
+} from '@/src/components/icons'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { clsx } from 'clsx'
 import { useAuth } from '../../context/AuthContext'
 import { logoutRequest } from '../../lib/auth'
 import { HeaderUserControls } from '../HeaderUserControls'
 import { useToast } from '../Toast'
+import { Button, IconButton } from '@/src/components/ui'
 import { usePendingReviewCount } from '../../hooks/usePendingReviewCount'
 import { usePublicFeatures } from '../../hooks/usePublicFeatures'
 
@@ -54,19 +59,25 @@ const mobileUtilityNav: AdminNavItem[] = [{ id: 'home', label: '返回主页', p
 
 const contentNav: AdminNavItem[] = [
   { id: 'wiki', label: '百科管理', path: '/admin/wiki', icon: Book },
+  { id: 'wiki-categories', label: '百科分类', path: '/admin/wiki-categories', icon: Layers },
   { id: 'music', label: '音乐管理', path: '/admin/music', icon: Music },
   { id: 'posts', label: '帖子管理', path: '/admin/posts', icon: MessageSquare },
   { id: 'galleries', label: '图集管理', path: '/admin/galleries', icon: ImageIcon },
+  { id: 'ticket-listings', label: '盘票管理', path: '/admin/ticket-listings', icon: Ticket },
+  { id: 'events', label: '活动管理', path: '/admin/events', icon: Calendar },
   { id: 'sections', label: '版块管理', path: '/admin/sections', icon: Layers },
   { id: 'announcements', label: '公告管理', path: '/admin/announcements', icon: Megaphone },
 ]
 
-const siteNav: AdminNavItem[] = [
+const operationNav: AdminNavItem[] = [
   { id: 'reviews', label: '审核队列', path: '/admin/reviews', icon: CheckCircle },
   { id: 'users', label: '用户管理', path: '/admin/users', icon: Users },
   { id: 'locks', label: '编辑锁', path: '/admin/locks', icon: Lock },
   { id: 'moderation_logs', label: '操作日志', path: '/admin/moderation_logs', icon: FileText },
   { id: 'ban_logs', label: '封禁日志', path: '/admin/ban_logs', icon: Shield },
+]
+
+const toolsNav: AdminNavItem[] = [
   { id: 'embeddings', label: '向量管理', path: '/admin/embeddings', icon: Cpu },
   {
     id: 'backups',
@@ -80,6 +91,10 @@ const siteNav: AdminNavItem[] = [
   { id: 'markdown_links', label: '链接更新', path: '/admin/markdown_links', icon: LinkIcon },
   { id: 'disk-monitor', label: '磁盘监控', path: '/admin/disk-monitor', icon: HardDrive },
   { id: 'variant-manager', label: '变体管理', path: '/admin/variant-manager', icon: RefreshCw },
+  { id: 'maintenance', label: '媒体维护', path: '/admin/maintenance', icon: RefreshCw },
+]
+
+const settingsNav: AdminNavItem[] = [
   {
     id: 'settings',
     label: '站点设置',
@@ -126,8 +141,8 @@ const SidebarNavLink = ({
         'flex items-center gap-3 rounded transition-all',
         paddingClassName,
         isActive
-          ? 'bg-surface-alt text-brand-gold font-medium'
-          : 'text-text-secondary hover:bg-surface-alt hover:text-brand-gold',
+          ? 'bg-[color-mix(in_srgb,var(--color-theme-accent)_12%,var(--color-surface))] text-brand-gold font-medium shadow-[inset_2px_0_0_var(--color-theme-accent)]'
+          : 'text-text-secondary hover:bg-[var(--book-panel-hover)] hover:text-brand-gold',
         className
       )}
       title={sidebarCollapsed && !mobileOpen ? item.label : undefined}
@@ -148,6 +163,17 @@ const SidebarNavLink = ({
   )
 }
 
+const readCollapsedGroups = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem('hsf:admin:nav-groups')
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    return new Set(Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
 const NavGroup = ({
   title,
   items,
@@ -155,6 +181,8 @@ const NavGroup = ({
   sidebarCollapsed,
   mobileOpen,
   onClick,
+  collapsed,
+  onToggleCollapsed,
   showReviewDot = false,
 }: {
   title: string
@@ -163,29 +191,42 @@ const NavGroup = ({
   sidebarCollapsed: boolean
   mobileOpen: boolean
   onClick: () => void
+  collapsed: boolean
+  onToggleCollapsed: () => void
   showReviewDot?: boolean
 }) => (
   <div className="mb-3">
     {(!sidebarCollapsed || mobileOpen) && (
-      <div className="px-3 py-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        fullWidth
+        className="justify-between px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted hover:text-brand-gold"
+        rightIcon={collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        onClick={onToggleCollapsed}
+        aria-expanded={!collapsed}
+      >
         {title}
+      </Button>
+    )}
+    {!collapsed && (
+      <div className="space-y-0.5">
+        {items.map((item) => {
+          return (
+            <SidebarNavLink
+              key={item.id}
+              item={item}
+              currentPath={currentPath}
+              sidebarCollapsed={sidebarCollapsed}
+              mobileOpen={mobileOpen}
+              onClick={onClick}
+              showDot={showReviewDot && item.id === 'reviews'}
+            />
+          )
+        })}
       </div>
     )}
-    <div className="space-y-0.5">
-      {items.map((item) => {
-        return (
-          <SidebarNavLink
-            key={item.id}
-            item={item}
-            currentPath={currentPath}
-            sidebarCollapsed={sidebarCollapsed}
-            mobileOpen={mobileOpen}
-            onClick={onClick}
-            showDot={showReviewDot && item.id === 'reviews'}
-          />
-        )
-      })}
-    </div>
   </div>
 )
 
@@ -197,15 +238,36 @@ export const AdminLayout = () => {
   const { features } = usePublicFeatures()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(readCollapsedGroups)
   const pendingReviewCount = usePendingReviewCount(isAdmin)
 
   const currentPath = location.pathname
   const closeMobileMenu = () => setMobileOpen(false)
-  const visibleSiteNav = siteNav.filter(
+  const visibleToolsNav = toolsNav.filter(
     (item) =>
       (!item.superAdminOnly || user?.role === 'super_admin') &&
       (item.id !== 'embeddings' || features.semanticSearch)
   )
+  const visibleSettingsNav = settingsNav.filter(
+    (item) => !item.superAdminOnly || user?.role === 'super_admin'
+  )
+
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupId)) {
+        next.delete(groupId)
+      } else {
+        next.add(groupId)
+      }
+      try {
+        localStorage.setItem('hsf:admin:nav-groups', JSON.stringify([...next]))
+      } catch {
+        // localStorage 不可用时仅本次会话生效
+      }
+      return next
+    })
+  }
 
   const handleLogout = async () => {
     try {
@@ -213,7 +275,7 @@ export const AdminLayout = () => {
       navigate('/')
     } catch (error) {
       console.error('Logout failed:', error)
-      show('退出登录失败，请稍后重试', { variant: 'error' })
+      show(getErrorMessage(error, '退出登录失败，请稍后重试'), { variant: 'error' })
     }
   }
 
@@ -223,29 +285,34 @@ export const AdminLayout = () => {
 
   return (
     <div
-      className="h-screen flex flex-col overflow-hidden"
+      className="admin-shell h-screen flex flex-col overflow-hidden bg-[var(--color-bg-antique)]"
       style={{
         fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
       }}
     >
       {/* Header */}
-      <header className="h-14 bg-surface border-b border-border flex items-center justify-between px-4 md:px-6 z-50 shrink-0">
+      <header className="h-14 border-b border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] backdrop-blur-[14px] flex items-center justify-between px-4 md:px-6 z-50 shrink-0 shadow-[0_1px_0_rgba(138,109,47,0.06)]">
         <div className="flex items-center gap-3">
-          <button
-            className="md:hidden p-2 hover:bg-surface-alt rounded text-text-secondary"
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={mobileOpen ? '关闭管理菜单' : '打开管理菜单'}
+            className="md:hidden p-2 hover:bg-[var(--book-panel-hover)] rounded text-text-secondary"
             onClick={() => setMobileOpen((open) => !open)}
           >
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+          </IconButton>
           <Link
             to="/admin"
-            className="text-lg font-bold text-text-primary hover:text-brand-gold transition-colors"
+            className="font-[var(--book-title-font)] text-2xl font-normal tracking-[0.1em] text-text-primary hover:text-brand-gold transition-colors"
           >
             管理后台
           </Link>
           <Link
             to="/"
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-muted hover:text-brand-gold hover:bg-surface-alt rounded transition-colors"
+            data-pressable
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-muted hover:text-brand-gold hover:bg-[var(--book-panel-hover)] rounded transition-colors"
           >
             <Home size={16} /> 返回主页
           </Link>
@@ -264,7 +331,7 @@ export const AdminLayout = () => {
         {/* Sidebar */}
         <aside
           className={clsx(
-            'bg-surface border-r border-border z-40 transition-all duration-300 shrink-0 flex flex-col',
+            'bg-[var(--book-panel-bg-strong)] border-r border-[var(--book-ink-line)] z-40 transition-all duration-300 shrink-0 flex flex-col shadow-[10px_0_28px_rgba(72,53,25,0.06)] backdrop-blur-[12px]',
             'fixed top-14 left-0 h-[calc(100vh-3.5rem)] md:static md:h-auto',
             mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
             sidebarCollapsed ? 'w-16' : 'w-56'
@@ -305,30 +372,62 @@ export const AdminLayout = () => {
               sidebarCollapsed={sidebarCollapsed}
               mobileOpen={mobileOpen}
               onClick={closeMobileMenu}
+              collapsed={collapsedGroups.has('content')}
+              onToggleCollapsed={() => toggleGroup('content')}
             />
 
             <NavGroup
-              title="站务管理"
-              items={visibleSiteNav}
+              title="运营管理"
+              items={operationNav}
               currentPath={currentPath}
               sidebarCollapsed={sidebarCollapsed}
               mobileOpen={mobileOpen}
               onClick={closeMobileMenu}
+              collapsed={collapsedGroups.has('operations')}
+              onToggleCollapsed={() => toggleGroup('operations')}
               showReviewDot={pendingReviewCount > 0}
             />
+
+            <NavGroup
+              title="系统工具"
+              items={visibleToolsNav}
+              currentPath={currentPath}
+              sidebarCollapsed={sidebarCollapsed}
+              mobileOpen={mobileOpen}
+              onClick={closeMobileMenu}
+              collapsed={collapsedGroups.has('tools')}
+              onToggleCollapsed={() => toggleGroup('tools')}
+            />
+
+            {visibleSettingsNav.length > 0 && (
+              <NavGroup
+                title="设置"
+                items={visibleSettingsNav}
+                currentPath={currentPath}
+                sidebarCollapsed={sidebarCollapsed}
+                mobileOpen={mobileOpen}
+                onClick={closeMobileMenu}
+                collapsed={collapsedGroups.has('settings')}
+                onToggleCollapsed={() => toggleGroup('settings')}
+              />
+            )}
           </nav>
 
-          <div className="hidden md:block p-2 border-t border-border">
-            <button
+          <div className="hidden md:block p-2 border-t border-[var(--book-ink-line)]">
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="w-full p-2 text-text-muted hover:text-brand-gold hover:bg-surface-alt rounded transition-colors flex items-center justify-center"
+              className="w-full p-2 text-text-muted hover:text-brand-gold hover:bg-[var(--book-panel-hover)] rounded transition-colors flex items-center justify-center"
             >
               {sidebarCollapsed ? (
                 <ChevronRight size={16} />
               ) : (
                 <ChevronRight size={16} className="rotate-180" />
               )}
-            </button>
+            </IconButton>
           </div>
         </aside>
 
@@ -337,8 +436,10 @@ export const AdminLayout = () => {
           data-admin-scroll-container
           className="flex-1 overflow-y-auto bg-[var(--color-bg-antique)]"
         >
-          <div className="p-4 md:p-6 lg:p-8 min-h-full">
-            <Outlet />
+          <div className="relative min-h-full p-4 md:p-6 lg:p-8 before:pointer-events-none before:fixed before:inset-0 before:bg-[image:var(--book-paper-image)] before:bg-[length:var(--book-paper-size)] before:opacity-70 before:content-['']">
+            <div className="relative z-10">
+              <Outlet />
+            </div>
           </div>
         </main>
       </div>

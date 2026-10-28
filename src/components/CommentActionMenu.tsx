@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import type { FocusEvent } from 'react'
-import { Copy, MoreVertical } from 'lucide-react'
+import { Copy, MoreVertical } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useDismissableLayer } from '../hooks/useClickOutside'
+import { Button, IconButton } from '@/src/components/ui'
 
 interface CommentActionMenuProps {
   alignClassName?: string
@@ -48,41 +49,45 @@ export const CommentActionMenu = ({
         alignClassName
       )}
     >
-      <button
+      <IconButton
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={() => setOpen((current) => !current)}
         aria-label={menuLabel}
         aria-haspopup="menu"
         aria-expanded={open}
         className={clsx(
-          'inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-text-muted transition-colors',
-          'hover:border-border hover:bg-surface-alt hover:text-brand-gold focus-visible:border-brand-gold focus-visible:outline-none',
-          open && 'border-border bg-surface-alt text-brand-gold'
+          'h-7 w-7 text-text-muted',
+          'hover:border-[var(--book-ink-line)] hover:bg-[var(--book-panel-bg)] hover:text-brand-gold focus-visible:border-brand-gold focus-visible:outline-none',
+          open && 'border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-brand-gold'
         )}
       >
         <MoreVertical size={14} />
-      </button>
+      </IconButton>
 
       <div
         role="menu"
         aria-hidden={!open}
         className={clsx(
-          'absolute right-0 top-full z-30 mt-1 min-w-32 rounded-md border border-border bg-surface p-1 shadow-lg transition-all',
+          'absolute right-0 top-full z-30 mt-1 min-w-32 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-1 shadow-[var(--book-panel-shadow)] transition-all',
           open
             ? 'visible translate-y-0 opacity-100'
             : 'invisible -translate-y-1 opacity-0 pointer-events-none'
         )}
       >
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           role="menuitem"
           tabIndex={open ? 0 : -1}
           onClick={() => void handleCopy()}
-          className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-xs font-medium text-text-secondary transition-colors hover:bg-surface-alt hover:text-brand-gold focus-visible:bg-surface-alt focus-visible:text-brand-gold focus-visible:outline-none"
+          className="w-full justify-start px-2.5"
+          leftIcon={<Copy size={12} />}
         >
-          <Copy size={12} />
           {copyLabel}
-        </button>
+        </Button>
       </div>
     </div>
   )

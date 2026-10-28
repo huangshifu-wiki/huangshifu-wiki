@@ -12,6 +12,8 @@ SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_MIGRATE="${SKIP_MIGRATE:-0}"
 SKIP_SEED="${SKIP_SEED:-0}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-60}"
+# 默认不清理 Docker 主机上的悬挂镜像；持久化 volume 不会被删除。
+PRUNE_IMAGES="${PRUNE_IMAGES:-0}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -47,6 +49,15 @@ random_hex() {
   fi
 }
 
+random_base64() {
+  local bytes="${1:-32}"
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -base64 "$bytes" | tr -d '\n'
+  else
+    head -c "$bytes" /dev/urandom | base64 | tr -d '\n'
+  fi
+}
+
 # 将 .env 模板中的占位符替换为真实随机值。
 replace_literal() {
   local search="$1"
@@ -77,14 +88,27 @@ fill_env_placeholders() {
   local postgres_password
   local jwt_secret
   local backup_password
+  local secrets_encryption_key
 
   postgres_password="$(random_hex 24)"
   jwt_secret="$(random_hex 32)"
   backup_password="$(random_hex 24)"
+  secrets_encryption_key="$(random_base64 32)"
 
   replace_literal 'replace_with_random_postgres_password' "$postgres_password"
   replace_literal 'replace_with_random_long_secret_at_least_32_chars' "$jwt_secret"
   replace_literal 'replace_with_backup_password' "$backup_password"
+  replace_literal 'replace_with_secrets_encryption_key' "$secrets_encryption_key"
+}
+
+# 旧版 .env 缺少 SECRETS_ENCRYPTION_KEY 时（升级部署场景）自动补写，
+# 避免凭证管理因密钥缺失而静默禁用；已有行不会被覆盖。
+ensure_secrets_encryption_key() {
+  if grep -q '^SECRETS_ENCRYPTION_KEY=' "$ENV_FILE"; then
+    return
+  fi
+  echo "SECRETS_ENCRYPTION_KEY=\"$(random_base64 32)\"" >> "$ENV_FILE"
+  log "SECRETS_ENCRYPTION_KEY 缺失，已自动补写随机密钥到 $ENV_FILE"
 }
 
 # 将 .env 导入当前 shell，供 compose 和后续校验读取。
@@ -103,6 +127,7 @@ validate_env() {
   [[ -n "${DATABASE_URL:-}" ]] || missing+=('DATABASE_URL')
   [[ -n "${JWT_SECRET:-}" ]] || missing+=('JWT_SECRET')
   [[ -n "${BACKUP_PASSWORD:-}" ]] || missing+=('BACKUP_PASSWORD')
+  [[ -n "${SECRETS_ENCRYPTION_KEY:-}" ]] || missing+=('SECRETS_ENCRYPTION_KEY')
 
   if (( ${#missing[@]} > 0 )); then
     error "missing required environment variables: ${missing[*]}"
@@ -141,6 +166,61 @@ compose() {
     args+=(--profile semantic)
   fi
   APP_ENV_FILE="$ENV_FILE" "${args[@]}" "$@"
+}
+
+# 清理已退出的 compose run 一次性容器，避免每次部署累积 stopped 容器。
+cleanup_one_off_containers() {
+  local project_name="${COMPOSE_PROJECT_NAME:-$(basename "$ROOT_DIR")}"
+  local containers=()
+  local remove_output
+
+  while IFS= read -r container_id; do
+    [[ -n "$container_id" ]] && containers+=("$container_id")
+  done < <(
+    docker ps -aq \
+      --filter "label=com.docker.compose.project=${project_name}" \
+      --filter 'label=com.docker.compose.oneoff' \
+      --filter 'status=exited' \
+      2>/dev/null
+  )
+
+  if (( ${#containers[@]} == 0 )); then
+    return
+  fi
+
+  log "removing ${#containers[@]} stale one-off container(s)"
+  for container_id in "${containers[@]}"; do
+    if remove_output=$(docker rm "$container_id" 2>&1); then
+      continue
+    fi
+    if [[ "$remove_output" == *'No such container'* || "$remove_output" == *'removal of container'*'already in progress'* ]]; then
+      warn "one-off container $container_id was already removed or is being removed"
+      continue
+    fi
+    error "$remove_output"
+    return 1
+  done
+}
+
+# 语义搜索关闭时移除之前启动的 Qdrant 容器，但保留 qdrant_storage volume。
+cleanup_disabled_services() {
+  if is_semantic_enabled; then
+    return
+  fi
+
+  log 'removing stale qdrant container because semantic search is disabled'
+  APP_ENV_FILE="$ENV_FILE" docker compose --env-file "$ENV_FILE" --profile semantic \
+    rm --stop --force qdrant >/dev/null
+}
+
+# 可选清理整个 Docker 主机上的悬挂镜像，不触碰数据库、模型缓存和上传文件等持久化资源。
+cleanup_stale_images() {
+  if [[ "$PRUNE_IMAGES" == '1' ]]; then
+    log 'removing dangling Docker images'
+    docker image prune --force >/dev/null
+  else
+    warn 'PRUNE_IMAGES=0, keeping dangling Docker images'
+  fi
 }
 
 # PostgreSQL 必须先可用，后续 Prisma 迁移和 seed 才能执行。
@@ -212,12 +292,13 @@ main() {
   # 准备并校验环境变量。
   bootstrap_env
   fill_env_placeholders
+  ensure_secrets_encryption_key
   load_env
   validate_env
 
   # 给 compose 和容器提供默认运行参数。
   export APP_PORT="${APP_PORT:-3003}"
-  export APP_IMAGE="${APP_IMAGE:-ghcr.io/yangwenjie1231/huangshifu-wiki:latest}"
+  export APP_IMAGE="${APP_IMAGE:-ghcr.io/huangshifu-wiki/huangshifu-wiki:latest}"
   export DEPLOY_IMAGE_MODE="${DEPLOY_IMAGE_MODE:-pull}"
   export PORT="${PORT:-3003}"
   export NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmjs.org}"
@@ -238,6 +319,8 @@ main() {
   # 先校验 compose 配置，避免执行到一半才发现 YAML 或变量错误。
   log 'validating docker compose configuration'
   compose config >/dev/null
+  cleanup_one_off_containers
+  cleanup_disabled_services
 
   # 应用镜像来源由 DEPLOY_IMAGE_MODE 控制：
   # pull 适合低内存服务器，直接使用 GitHub Actions 推送的预构建镜像；
@@ -256,13 +339,13 @@ main() {
 
   # 数据库先启动，后续迁移和 seed 都依赖它。
   log 'starting postgres'
-  compose up -d postgres
+  compose up -d --remove-orphans postgres
   wait_for_postgres
 
   # 语义搜索默认可关闭，避免首次部署被 Qdrant 或模型缓存阻塞。
   if is_semantic_enabled; then
     log 'semantic search enabled; starting qdrant'
-    compose up -d qdrant
+    compose up -d --remove-orphans qdrant
     wait_for_qdrant
   else
     log 'semantic search disabled; qdrant profile will not be started'
@@ -286,8 +369,11 @@ main() {
 
   # 最后启动应用，并等待健康检查通过。
   log 'starting app'
-  compose up -d app
+  compose up -d --remove-orphans app
   wait_for_app
+
+  cleanup_one_off_containers
+  cleanup_stale_images
 
   echo
   log 'deployment completed successfully'

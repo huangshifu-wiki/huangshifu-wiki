@@ -1,5 +1,5 @@
 const config = {
   webAppUrl: 'https://your-domain.com/',
-};
+}
 
-module.exports = config;
+module.exports = config

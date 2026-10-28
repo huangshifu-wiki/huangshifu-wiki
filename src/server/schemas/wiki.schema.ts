@@ -12,7 +12,6 @@ const wikiContentStatusSchema = z.enum(['draft', 'pending', 'published'])
 export const wikiCreateSchema = z.object({
   title: limitedString('标题', CONTENT_LIMITS.wiki.title).min(1, '标题不能为空'),
   content: limitedString('内容', CONTENT_LIMITS.wiki.content).min(1, '内容不能为空'),
-  slug: optionalLimitedString('路径', CONTENT_LIMITS.wiki.slug),
   category: optionalLimitedString('分类', CONTENT_LIMITS.wiki.category),
   tags: limitedStringArray('标签', CONTENT_LIMITS.wiki.tag, CONTENT_LIMITS.wiki.tags),
   relations: z
@@ -36,7 +35,6 @@ export const wikiDeleteSchema = z
 export const wikiRevisionSchema = z.object({
   title: limitedString('标题', CONTENT_LIMITS.wiki.title).min(1, '标题不能为空'),
   content: limitedString('内容', CONTENT_LIMITS.wiki.content).min(1, '内容不能为空'),
-  slug: optionalLimitedString('路径', CONTENT_LIMITS.wiki.slug),
   category: limitedString('分类', CONTENT_LIMITS.wiki.category).min(1, '分类不能为空'),
   tags: limitedStringArray('标签', CONTENT_LIMITS.wiki.tag, CONTENT_LIMITS.wiki.tags),
   relations: z

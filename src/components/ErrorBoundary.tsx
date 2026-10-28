@@ -1,42 +1,43 @@
-import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+import React, { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Button } from '@/src/components/ui'
 
 interface ErrorBoundaryProps {
-  children: ReactNode;
-  fallback?: ReactNode;
-  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  children: ReactNode
+  fallback?: ReactNode
+  onError?: (error: Error, errorInfo: ErrorInfo) => void
 }
 
 interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
+  hasError: boolean
+  error: Error | null
 }
 
 class ErrorBoundaryInner extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false, error: null };
+  state: ErrorBoundaryState = { hasError: false, error: null }
 
   constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.handleReset = this.handleReset.bind(this);
+    super(props)
+    this.handleReset = this.handleReset.bind(this)
   }
 
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    return { hasError: true, error };
+    return { hasError: true, error }
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
-    this.props.onError?.(error, errorInfo);
+    console.error('ErrorBoundary caught an error:', error, errorInfo)
+    this.props.onError?.(error, errorInfo)
   }
 
   handleReset(): void {
-    this.setState({ hasError: false, error: null });
+    this.setState({ hasError: false, error: null })
   }
 
   render(): ReactNode {
     if (this.state.hasError) {
-      const { fallback } = this.props;
+      const { fallback } = this.props
       if (fallback) {
-        return fallback;
+        return fallback
       }
 
       return (
@@ -64,9 +65,7 @@ class ErrorBoundaryInner extends Component<ErrorBoundaryProps, ErrorBoundaryStat
                 />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-text-primary mb-2">
-              页面出错了
-            </h2>
+            <h2 className="text-lg font-semibold text-text-primary mb-2">页面出错了</h2>
             <p className="text-sm text-text-muted mb-6">
               抱歉，页面遇到了一些问题。请尝试刷新页面或返回首页。
             </p>
@@ -76,29 +75,21 @@ class ErrorBoundaryInner extends Component<ErrorBoundaryProps, ErrorBoundaryStat
               </pre>
             )}
             <div className="flex gap-3 justify-center">
-              <button
-                onClick={this.handleReset}
-                className="px-4 py-2 theme-button-primary text-sm rounded transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
-              >
-                重试
-              </button>
-              <a
-                href="/"
-                className="px-4 py-2 bg-surface-alt text-text-secondary text-sm rounded hover:bg-bg-tertiary transition-colors inline-block no-underline focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
-              >
-                返回首页
-              </a>
+              <Button onClick={this.handleReset}>重试</Button>
+              <Button asChild variant="secondary">
+                <a href="/">返回首页</a>
+              </Button>
             </div>
           </div>
         </div>
-      );
+      )
     }
 
-    const { children } = this.props;
-    return children;
+    const { children } = this.props
+    return children
   }
 }
 
 export function ErrorBoundary(props: ErrorBoundaryProps) {
-  return React.createElement(ErrorBoundaryInner, props);
+  return React.createElement(ErrorBoundaryInner, props)
 }

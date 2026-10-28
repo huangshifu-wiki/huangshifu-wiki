@@ -1,93 +1,111 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { List, ChevronRight, Link2 } from 'lucide-react';
-import { clsx } from 'clsx';
-import { useI18n } from '../../lib/i18n';
-import { SmartImage } from '../SmartImage';
-import type { AlbumItem } from '../../types/entities';
+import React from 'react'
+import { Link } from 'react-router-dom'
+import { Disc3, List, ChevronRight } from '@/src/components/icons'
+import { useI18n } from '../../lib/i18n'
+import { SmartImage } from '../SmartImage'
+import { CoverPlaceholder } from '../CoverPlaceholder'
+import type { AlbumItem } from '../../types/entities'
 
 interface AlbumCardProps {
-	album: AlbumItem;
-	viewMode?: 'grid' | 'list';
-	onCopyLink: (event: React.MouseEvent<HTMLButtonElement>, albumId: string) => void;
+  album: AlbumItem
+  viewMode?: 'grid' | 'list'
 }
 
-const AlbumCard = React.memo(function AlbumCard({
-	album,
-	viewMode = 'grid',
-	onCopyLink,
-}: AlbumCardProps) {
-	const { t } = useI18n();
-	const albumId = album.docId || album.id;
-	const trackCount = album.trackCount ?? album.tracks?.length ?? 0;
+const COVER_FILTER = 'brightness(0.96) saturate(0.92)'
 
-	if (viewMode === 'list') {
-		return (
-			<div className="flex gap-4 py-4 px-1 border-b border-border items-center group transition-all hover:bg-surface-alt">
-				<div className="relative w-14 h-14 flex-shrink-0">
-					<SmartImage src={album.cover} alt={album.title} className="w-full h-full object-cover rounded" />
-				</div>
-				<div className="flex-1 min-w-0">
-					<Link
-						to={`/album/${albumId}`}
-						className="block text-[1.0625rem] font-semibold truncate text-text-primary group-hover:text-brand-gold transition-colors"
-					>
-						{album.title}
-					</Link>
-					<p className="text-[0.8125rem] text-text-muted truncate mt-0.5">{album.artist}</p>
-				</div>
-				<div className="flex items-center gap-3 flex-shrink-0">
-					<span className="text-xs text-text-muted">{trackCount} {t('music.unit.song')}</span>
-					<Link
-						to={`/album/${albumId}`}
-						className="text-brand-gold hover:text-brand-gold/80 transition-colors"
-					>
-						<ChevronRight size={16} />
-					</Link>
-				</div>
-			</div>
-		);
-	}
+const AlbumCard = React.memo(function AlbumCard({ album, viewMode = 'grid' }: AlbumCardProps) {
+  const { t } = useI18n()
+  const albumSlug = album.slug || album.docId || ''
+  const trackCount = album.trackCount ?? album.tracks?.length ?? 0
+  const coverSrc = album.coverThumbnail || album.cover
 
-	return (
-		<div className="group transition-all">
-			<Link to={`/album/${albumId}`} className="block">
-				<div className="relative aspect-square overflow-hidden bg-surface-alt rounded mb-2.5">
-					<SmartImage
-						src={album.cover}
-						alt={album.title}
-						className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-					/>
-					{trackCount > 0 && (
-						<div className="absolute top-2 right-2 bg-black/45 text-white text-xs px-2 py-0.5 rounded flex items-center gap-1">
-							<List size={12} /> {trackCount}
-						</div>
-					)}
-				</div>
-				<h3 className="text-[0.9375rem] font-semibold text-text-primary truncate mb-0.5 tracking-[0.02em] group-hover:text-brand-gold transition-colors">
-					{album.title}
-				</h3>
-				<p className="text-xs text-text-muted truncate">{album.artist}</p>
-			</Link>
+  if (viewMode === 'list') {
+    return (
+      <Link
+        to={`/album/${albumSlug}`}
+        data-press-feedback="state"
+        className="group flex cursor-pointer items-center gap-4 rounded px-2 py-3 transition-all duration-300 hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_50%,transparent)]"
+      >
+        <div className="relative h-[100px] w-[100px] flex-shrink-0 overflow-hidden rounded shadow-[0_4px_20px_rgba(42,37,32,0.06)] transition-shadow duration-300 group-hover:shadow-[0_12px_48px_rgba(42,37,32,0.08)]">
+          <SmartImage
+            src={coverSrc}
+            alt={album.title}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+            style={{ filter: COVER_FILTER }}
+            fallback={<CoverPlaceholder icon={<Disc3 size={18} />} label="无封面" />}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-[0.975rem] font-semibold tracking-[0.04em] text-text-primary transition-colors group-hover:text-brand-gold">
+            {album.title}
+          </span>
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.8125rem] text-text-muted">
+            <span className="min-w-0 truncate">{album.artist}</span>
+            {album.releaseDate && (
+              <>
+                <span className="flex-shrink-0 text-text-muted/40">·</span>
+                <span className="flex-shrink-0 whitespace-nowrap">{album.releaseDate}</span>
+              </>
+            )}
+          </p>
+          {album.description && (
+            <p className="mt-1 line-clamp-2 text-[0.75rem] leading-relaxed text-text-muted/70">
+              {album.description}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-3">
+          <span className="hidden text-[0.75rem] text-text-muted/60 sm:inline">
+            {trackCount} {t('music.unit.song')}
+          </span>
+          <span
+            className="text-brand-gold/70 transition-colors hover:text-brand-gold"
+            aria-hidden="true"
+          >
+            <ChevronRight size={16} />
+          </span>
+        </div>
+      </Link>
+    )
+  }
 
-			<div className="mt-2 flex items-center justify-between">
-				<Link
-					to={`/album/${albumId}`}
-					className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-brand-gold transition-colors"
-				>
-					{t('music.viewAlbum')} <ChevronRight size={14} />
-				</Link>
-				<button
-					onClick={(event) => onCopyLink(event, albumId)}
-					className="p-1.5 text-text-muted hover:text-brand-gold transition-colors"
-					title={t('music.copyAlbumLink')}
-				>
-					<Link2 size={14} />
-				</button>
-			</div>
-		</div>
-	);
-});
+  return (
+    <div className="group">
+      <Link to={`/album/${albumSlug}`} data-press-feedback="state" className="block">
+        <div className="relative aspect-square overflow-hidden rounded-lg bg-surface-alt shadow-[0_4px_20px_rgba(42,37,32,0.06)] transition-shadow duration-300 group-hover:shadow-[0_12px_48px_rgba(42,37,32,0.08)]">
+          <SmartImage
+            src={coverSrc}
+            alt={album.title}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+            style={{ filter: COVER_FILTER }}
+            fallback={<CoverPlaceholder icon={<Disc3 size={18} />} label="无封面" />}
+          />
+          {trackCount > 0 && (
+            <div className="absolute right-2 top-2 flex items-center gap-1 rounded bg-black/40 px-2 py-0.5 text-xs text-white backdrop-blur-sm">
+              <List size={12} /> {trackCount}
+            </div>
+          )}
+        </div>
+        <h3 className="mt-2.5 truncate text-[0.9375rem] font-semibold tracking-[0.02em] text-text-primary transition-colors group-hover:text-brand-gold">
+          {album.title}
+        </h3>
+        <p className="mt-0.5 truncate text-[0.78rem] text-text-muted">{album.artist}</p>
+        {album.releaseDate && (
+          <p className="mt-0.5 truncate text-[0.72rem] text-text-muted/60">{album.releaseDate}</p>
+        )}
+      </Link>
+      <div className="mt-2">
+        <Link
+          to={`/album/${albumSlug}`}
+          data-press-feedback="inline"
+          className="inline-flex items-center gap-1 text-[0.75rem] tracking-[0.04em] text-text-muted transition-colors hover:text-brand-gold"
+        >
+          {t('music.viewAlbum')} <ChevronRight size={13} />
+        </Link>
+      </div>
+    </div>
+  )
+})
 
-export { AlbumCard };
-export type { AlbumCardProps };
+export { AlbumCard }
+export type { AlbumCardProps }

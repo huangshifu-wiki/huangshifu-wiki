@@ -10,13 +10,16 @@ export type CommentStateItem = {
   likesCount?: number
 }
 
-export function markCommentDeleted<T extends CommentStateItem>(comments: T[], options: {
-  commentId: string
-  deletedContent: string
-  deletedBy: string
-  deletedByName: string | null
-  showDeletedComments: boolean
-}) {
+export function markCommentDeleted<T extends CommentStateItem>(
+  comments: T[],
+  options: {
+    commentId: string
+    deletedContent: string
+    deletedBy: string
+    deletedByName: string | null
+    showDeletedComments: boolean
+  }
+) {
   const nextComments = comments.map((comment) =>
     comment.id === options.commentId
       ? {
@@ -35,7 +38,10 @@ export function markCommentDeleted<T extends CommentStateItem>(comments: T[], op
   const visibleChildrenByRoot = new Map<string, number>()
   for (const comment of nextComments) {
     if (!comment.parentId || comment.isDeleted) continue
-    visibleChildrenByRoot.set(comment.parentId, (visibleChildrenByRoot.get(comment.parentId) ?? 0) + 1)
+    visibleChildrenByRoot.set(
+      comment.parentId,
+      (visibleChildrenByRoot.get(comment.parentId) ?? 0) + 1
+    )
   }
 
   return nextComments.filter((comment) => {
@@ -59,10 +65,14 @@ export function restoreComment<T extends CommentStateItem>(comments: T[], commen
   )
 }
 
-export function updateCommentLike<T extends CommentStateItem>(comments: T[], commentId: string, state: {
-  likedByMe: boolean
-  likesCount: number
-}) {
+export function updateCommentLike<T extends CommentStateItem>(
+  comments: T[],
+  commentId: string,
+  state: {
+    likedByMe: boolean
+    likesCount: number
+  }
+) {
   return comments.map((comment) =>
     comment.id === commentId
       ? { ...comment, likedByMe: state.likedByMe, likesCount: state.likesCount }

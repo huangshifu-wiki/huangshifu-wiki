@@ -1,4 +1,4 @@
-import { type Request, type Response, type Router } from 'express';
+import { type Request, type Response, type Router } from 'express'
 import {
   requireAdmin,
   requireSuperAdmin,
@@ -6,33 +6,51 @@ import {
   requireActiveUser,
   isAdminRole,
   clearUserCache,
-} from '../middleware/auth';
-import { asyncHandler } from '../middleware/asyncHandler';
+} from '../middleware/auth'
+import { asyncHandler } from '../middleware/asyncHandler'
 import {
   validateBody,
+  backupCreateSchema,
+  backupNoteSchema,
   backupRestoreSchema,
   adminBatchEditLocksSchema,
   adminBatchMusicDisplaySchema,
-} from '../schemas';
-import type { AuthenticatedRequest } from '../types';
+} from '../schemas'
+import type { AuthenticatedRequest } from '../types'
+import type { ModerationTargetType, Prisma } from '@prisma/client'
 import {
   prisma,
   toWikiResponse,
   toPostResponse,
   toGalleryResponse,
   toGalleryListResponse,
+  toEventResponse,
+  toEventListResponse,
+  toTicketListingResponse,
+  toTicketListingListResponse,
   toUserResponse,
   toEditLockResponse,
   toMusicResponse,
+  toAlbumResponse,
   parseContentStatus,
   parseDisplayAlbumMode,
+  parseMusicPlatform,
+  parsePagination,
+  createPaginationMeta,
+  normalizeTrackDiscPayload,
   normalizeModerationTargetType,
   createNotification,
   parseDatabaseUrl,
-  verifyBackupPassword,
   sanitizeFilename,
+  formatBackupTimestamp,
   formatFileSize,
   cleanupOldBackups,
+  readBackupNote,
+  writeBackupNote,
+  deleteBackupNote,
+  BACKUP_METADATA_ENTRY,
+  serializeBackupMetadata,
+  parseBackupMetadata,
   encryptBuffer,
   decryptBuffer,
   validateSqlContent,
@@ -48,63 +66,233 @@ import {
   resolveDeleteReason,
   normalizeDeleteReason,
   enhancedCache,
+  invalidateTicketListingCaches,
+  findMusicDocIdsByArtistPartial,
   CACHE_KEYS,
   clearWikiRelationCache,
   notifyMentionUsers,
-} from '../utils';
+} from '../utils'
+import { formatMusicCredits } from '../../lib/musicCredits'
 import {
   cleanupUnusedMediaAssetById,
   cleanupUntrackedUploadImageByUrl,
-} from '../services/mediaAssetCleanupService';
-import multer from 'multer';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits';
-import { CONTENT_LIMITS } from '../../lib/contentLimits';
-import archiver from 'archiver';
-import { scanAllWikiLinks, getWikiPageLinks, previewLinkUpdate, batchUpdateWikiLinks, switchWikiStorage } from '../wiki/markdownLinkUpdater';
-import { isSensitiveWord, containsSensitive } from '../../lib/sensitiveWordFilter';
-import { variantCleanup, CleanupTrigger } from '../services/variantCleanup.service';
+} from '../services/mediaAssetCleanupService'
+import {
+  generateMediaRestoreReport,
+  isMediaRestoreReportFilename,
+  resolveMediaRestoreReportPath,
+  type MediaRestoreReportSummary,
+  type MediaRestoreSource,
+} from '../services/mediaRestoreReport.service'
+import multer from 'multer'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import { UPLOAD_MAX_FILE_SIZE_BYTES } from '../../lib/uploadLimits'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import archiver from 'archiver'
+import {
+  scanAllWikiLinks,
+  getWikiPageLinks,
+  previewLinkUpdate,
+  batchUpdateWikiLinks,
+  switchWikiStorage,
+} from '../wiki/markdownLinkUpdater'
+import { isSensitiveWord, containsSensitive } from '../../lib/sensitiveWordFilter'
+import { collectMediaReferences, isMediaReferenced } from '../services/mediaAssetService'
+import { getMediaRetiredAt } from '../services/mediaConstants'
 import {
   deleteImageEmbeddingPointsBySource,
   deleteTextEmbeddingPointsBySource,
-} from '../vector/qdrantService';
-import { createRouter } from '../utils/typed-router';
+} from '../vector/qdrantService'
+import { createRouter } from '../utils/typed-router'
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-const router = createRouter();
+const router = createRouter()
+class ReviewActionConflictError extends Error {
+  readonly statusCode = 409
+
+  constructor() {
+    super('该盘票已被其他管理员处理或已删除')
+  }
+}
+const BACKUP_RESTORE_RESPONSE_TIMEOUT_MS = 15 * 60 * 1000
+
+const adminEventInclude = {
+  coverAsset: true,
+  createdBy: { select: { displayName: true } },
+  updatedBy: { select: { displayName: true } },
+  posters: {
+    include: {
+      asset: true,
+    },
+    orderBy: { sortOrder: 'asc' as const },
+  },
+}
+
+const adminTicketListingInclude = {
+  event: {
+    select: { id: true, slug: true, title: true, location: true, deletedAt: true },
+  },
+  author: { select: { publicId: true, displayName: true } },
+} as const
+const adminTicketListingListSelect = {
+  id: true,
+  slug: true,
+  type: true,
+  eventId: true,
+  customEventName: true,
+  quantity: true,
+  ticketTier: true,
+  seat: true,
+  authorUid: true,
+  status: true,
+  reviewNote: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  deletedAt: true,
+  deletedBy: true,
+  createdAt: true,
+  updatedAt: true,
+  event: adminTicketListingInclude.event,
+  author: adminTicketListingInclude.author,
+} as const
 
 function canManageTargetUserRole(
   operatorRole: AuthenticatedRequest['authUser']['role'] | undefined,
-  targetRole: AuthenticatedRequest['authUser']['role'],
+  targetRole: AuthenticatedRequest['authUser']['role']
 ) {
-  if (operatorRole === 'super_admin') return true;
-  if (operatorRole === 'admin') return targetRole === 'user';
-  return false;
+  if (operatorRole === 'super_admin') return true
+  if (operatorRole === 'admin') return targetRole === 'user'
+  return false
 }
 
-const execFileAsync = promisify(execFile);
+const ADMIN_MUSIC_PLATFORMS = ['netease', 'tencent', 'kugou', 'baidu', 'kuwo'] as const
+type AdminMusicSortBy = 'updatedAt' | 'releaseDate' | 'title' | 'artist'
+type AdminMusicSortOrder = 'asc' | 'desc'
+
+function normalizeAdminQuery(value: unknown, maxLength: number) {
+  return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
+}
+
+function parseAdminMusicSortBy(value: unknown): AdminMusicSortBy {
+  return value === 'releaseDate' || value === 'title' || value === 'artist' || value === 'updatedAt'
+    ? value
+    : 'updatedAt'
+}
+
+function parseAdminMusicSortOrder(value: unknown): AdminMusicSortOrder {
+  return value === 'asc' || value === 'desc' ? value : 'desc'
+}
+
+function parseAdminCoverFilter(value: unknown) {
+  return value === 'with' || value === 'without' ? value : 'all'
+}
+
+async function buildAdminMusicWhere(req: AuthenticatedRequest) {
+  const query = normalizeAdminQuery(req.query.q, CONTENT_LIMITS.music.title)
+  const platform = parseMusicPlatform(req.query.platform)
+  const cover = parseAdminCoverFilter(req.query.cover)
+  const displayAlbum = parseDisplayAlbumMode(req.query.displayAlbum)
+  const includeDeleted = includeDeletedFromQuery(req.query)
+  const where: Record<string, unknown> = {
+    ...deletedAtFilter(includeDeleted),
+  }
+
+  if (query) {
+    const artistMatchDocIds = await findMusicDocIdsByArtistPartial(query, undefined, includeDeleted)
+    where.OR = [
+      { title: { contains: query, mode: 'insensitive' } },
+      { album: { contains: query, mode: 'insensitive' } },
+      { manualAlbumName: { contains: query, mode: 'insensitive' } },
+      { externalSources: { some: { sourceId: { contains: query, mode: 'insensitive' } } } },
+      ...(artistMatchDocIds.length ? [{ docId: { in: artistMatchDocIds } }] : []),
+    ]
+  }
+  if (platform) where.externalSources = { some: { platform } }
+  if (cover === 'with') {
+    const coverWhere = [{ coverId: { not: null } }, { coverAlbumDocId: { not: null } }]
+    if (where.OR) {
+      where.AND = [{ OR: where.OR }, { OR: coverWhere }]
+      delete where.OR
+    } else {
+      where.OR = coverWhere
+    }
+  } else if (cover === 'without') {
+    where.AND = [...((where.AND as unknown[]) || []), { coverId: null }, { coverAlbumDocId: null }]
+  }
+  if (displayAlbum) where.displayAlbumMode = displayAlbum
+  return { where, query }
+}
+
+function compareAdminMusicRows(
+  a: { docId: string; title: string; artists: string[]; updatedAt: Date; releaseDate: Date | null },
+  b: { docId: string; title: string; artists: string[]; updatedAt: Date; releaseDate: Date | null },
+  sortBy: AdminMusicSortBy,
+  sortOrder: AdminMusicSortOrder
+) {
+  const direction = sortOrder === 'asc' ? 1 : -1
+  let result = 0
+  if (sortBy === 'title') result = a.title.localeCompare(b.title, 'zh-CN')
+  if (sortBy === 'artist') {
+    result = formatMusicCredits(a.artists, '').localeCompare(
+      formatMusicCredits(b.artists, ''),
+      'zh-CN'
+    )
+  }
+  if (sortBy === 'releaseDate') {
+    const aDate = a.releaseDate?.getTime() ?? Number.POSITIVE_INFINITY
+    const bDate = b.releaseDate?.getTime() ?? Number.POSITIVE_INFINITY
+    result = aDate - bDate
+  }
+  if (sortBy === 'updatedAt') result = a.updatedAt.getTime() - b.updatedAt.getTime()
+  if (result !== 0) return result * direction
+  return a.docId.localeCompare(b.docId)
+}
+
+function buildAdminAlbumWhere(req: AuthenticatedRequest) {
+  const query = normalizeAdminQuery(req.query.q, CONTENT_LIMITS.album.title)
+  const platform = parseMusicPlatform(req.query.platform)
+  const cover = parseAdminCoverFilter(req.query.cover)
+  const where: Record<string, unknown> = {
+    ...deletedAtFilter(includeDeletedFromQuery(req.query)),
+  }
+  if (query) {
+    where.OR = [
+      { title: { contains: query, mode: 'insensitive' } },
+      { artist: { contains: query, mode: 'insensitive' } },
+      { description: { contains: query, mode: 'insensitive' } },
+      { externalSources: { some: { sourceId: { contains: query, mode: 'insensitive' } } } },
+    ]
+  }
+  if (platform) where.externalSources = { some: { platform } }
+  if (cover === 'with') where.coverId = { not: null }
+  if (cover === 'without') where.coverId = null
+  return { where, query }
+}
+const execFileAsync = promisify(execFile)
 
 function isString(value: string | null): value is string {
-  return typeof value === 'string';
+  return typeof value === 'string'
 }
 
 function invalidateWikiContentCaches() {
-  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_PAGE}:`);
-  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`);
-  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`);
-  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_TIMELINE}:`);
-  clearWikiRelationCache();
+  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_PAGE}:`)
+  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`)
+  enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`)
+  clearWikiRelationCache()
 }
 
-async function getDeleteReasonsByTargetId(targetType: 'wiki' | 'post' | 'gallery' | 'comment', targetIds: string[]) {
-  const uniqueTargetIds = [...new Set(targetIds.filter(Boolean))];
-  if (uniqueTargetIds.length === 0) return new Map<string, string | null>();
+async function getDeleteReasonsByTargetId(
+  targetType: 'wiki' | 'post' | 'gallery' | 'comment' | 'ticketListing',
+  targetIds: string[]
+) {
+  const uniqueTargetIds = [...new Set(targetIds.filter(Boolean))]
+  if (uniqueTargetIds.length === 0) return new Map<string, string | null>()
 
   const logs = await prisma.moderationLog.findMany({
     where: {
@@ -117,15 +305,15 @@ async function getDeleteReasonsByTargetId(targetType: 'wiki' | 'post' | 'gallery
       targetId: true,
       note: true,
     },
-  });
+  })
 
-  const reasons = new Map<string, string | null>();
+  const reasons = new Map<string, string | null>()
   for (const log of logs) {
-    if (reasons.has(log.targetId)) continue;
-    reasons.set(log.targetId, log.note);
+    if (reasons.has(log.targetId)) continue
+    reasons.set(log.targetId, log.note)
   }
 
-  return reasons;
+  return reasons
 }
 
 async function hasLatestPostSubmitLogForRepublishedEdit(targetId: string) {
@@ -137,82 +325,123 @@ async function hasLatestPostSubmitLogForRepublishedEdit(targetId: string) {
     },
     orderBy: { createdAt: 'desc' },
     select: { note: true },
-  });
+  })
 
-  return latestSubmitLog?.note === '编辑后重新提交审核';
+  return latestSubmitLog?.note === '编辑后重新提交审核'
 }
 
-const backupsDir = path.join(__dirname, '..', '..', '..', 'backups');
-fs.mkdirSync(backupsDir, { recursive: true });
+const MODERATION_TARGET_TYPES: Record<string, ModerationTargetType> = {
+  wiki: 'wiki',
+  posts: 'post',
+  galleries: 'gallery',
+  events: 'event',
+  music: 'music',
+  albums: 'album',
+  announcements: 'announcement',
+  sections: 'section',
+  'wiki-categories': 'wikiCategory',
+  'image-maps': 'imageMap',
+  users: 'user',
+  'ticket-listings': 'ticketListing',
+}
 
-const BACKUP_PASSWORD = process.env.BACKUP_PASSWORD || '';
+function getModerationTargetType(tab: string): ModerationTargetType {
+  const targetType = MODERATION_TARGET_TYPES[tab]
+  if (!targetType) {
+    throw new Error(`未知操作日志目标类型: ${tab}`)
+  }
+  return targetType
+}
+
+async function createModerationLog(
+  tx: Prisma.TransactionClient,
+  tab: string,
+  targetId: string,
+  operatorUid: string
+) {
+  await tx.moderationLog.create({
+    data: {
+      targetType: getModerationTargetType(tab),
+      targetId,
+      action: 'restore',
+      operatorUid,
+      note: null,
+    },
+  })
+}
+
+const backupsDir = path.join(__dirname, '..', '..', '..', 'backups')
+fs.mkdirSync(backupsDir, { recursive: true })
+
+const BACKUP_PASSWORD = process.env.BACKUP_PASSWORD || ''
 
 if (!BACKUP_PASSWORD) {
-  logger.warn('BACKUP_PASSWORD 未配置或为空 — 备份操作将要求请求体提供密码，未加密备份被禁止');
+  logger.warn('BACKUP_PASSWORD 未配置或为空 — 新备份将以明文 SQL 写入 zip 文件')
+}
+
+async function mapBackupFile(filename: string) {
+  const filePath = path.join(backupsDir, filename)
+  const stat = await fs.promises.stat(filePath)
+  return {
+    filename,
+    size: stat.size,
+    sizeFormatted: formatFileSize(stat.size),
+    createdAt: stat.mtime.toISOString(),
+    note: await readBackupNote(filename),
+  }
+}
+
+async function listBackupFiles() {
+  const files = (await fs.promises.readdir(backupsDir)).filter(
+    (f) => f.startsWith('backup_') && f.endsWith('.zip')
+  )
+  return (await Promise.all(files.map(mapBackupFile))).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
 }
 
 async function handleBackupList(_req: Request, res: Response) {
   try {
-    const allFiles = await fs.promises.readdir(backupsDir);
-    const files = allFiles.filter((f) => f.startsWith('backup_') && f.endsWith('.zip'));
-    const results = [];
-    for (const f of files) {
-      const filePath = path.join(backupsDir, f);
-      const stat = await fs.promises.stat(filePath);
-      results.push({ filename: f, size: stat.size, sizeFormatted: formatFileSize(stat.size), createdAt: stat.mtime.toISOString() });
-    }
-    results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    res.json({ backups: results });
+    res.json({ backups: await listBackupFiles() })
   } catch (error) {
-    logger.error({ err: error }, 'List backups error');
-    res.status(500).json({ error: '获取备份列表失败' });
+    logger.error({ err: error }, 'List backups error')
+    res.status(500).json({ error: '获取备份列表失败' })
   }
 }
 
 async function handleBackupDelete(req: AuthenticatedRequest, res: Response) {
   try {
-    const { password } = req.body as { password?: string };
-    const filename = req.params.filename;
-    const normalized = path.normalize(filename);
-
-    if (!BACKUP_PASSWORD) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量' });
-      return;
-    }
-
-    if (!password || !verifyBackupPassword(password)) {
-      res.status(401).json({ error: '备份密码错误' });
-      return;
-    }
+    const filename = req.params.filename
+    const normalized = path.normalize(filename)
 
     if (normalized.includes('..') || !sanitizeFilename(filename)) {
-      res.status(400).json({ error: '无效的文件名' });
-      return;
+      res.status(400).json({ error: '无效的文件名' })
+      return
     }
 
-    const filePath = path.join(backupsDir, normalized);
+    const filePath = path.join(backupsDir, normalized)
     try {
-      await fs.promises.access(filePath);
+      await fs.promises.access(filePath)
     } catch {
-      res.status(404).json({ error: '备份文件不存在' });
-      return;
+      res.status(404).json({ error: '备份文件不存在' })
+      return
     }
 
-    await fs.promises.unlink(filePath);
-    res.json({ success: true });
+    await fs.promises.unlink(filePath)
+    await deleteBackupNote(normalized)
+    res.json({ success: true })
   } catch (error) {
-    logger.error({ err: error }, 'Delete backup error');
-    res.status(500).json({ error: '删除备份失败' });
+    logger.error({ err: error }, 'Delete backup error')
+    res.status(500).json({ error: '删除备份失败' })
   }
 }
-const BACKUP_RETAIN_COUNT = Math.max(1, Number(process.env.BACKUP_RETAIN_COUNT || 20));
 
-async function permanentlyDeleteWikiById(id: string) {
+async function permanentlyDeleteWikiById(id: string, operatorUid: string) {
   const page = await prisma.wikiPage.findUnique({
     where: { id },
     select: { slug: true },
-  });
-  if (!page) return false;
+  })
+  if (!page) return false
 
   await prisma.$transaction(async (tx) => {
     await Promise.all([
@@ -220,9 +449,18 @@ async function permanentlyDeleteWikiById(id: string) {
       tx.browsingHistory.deleteMany({ where: { targetType: 'wiki', targetId: page.slug } }),
       tx.wikiImageEmbedding.deleteMany({ where: { wikiPageSlug: page.slug } }),
       tx.textEmbeddingChunk.deleteMany({ where: { sourceType: 'wiki', sourceId: page.slug } }),
-    ]);
-    await tx.wikiPage.delete({ where: { id } });
-  });
+    ])
+    await tx.wikiPage.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'wiki',
+        targetId: page.slug,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
   void Promise.allSettled([
     deleteImageEmbeddingPointsBySource('wiki', page.slug),
@@ -230,20 +468,20 @@ async function permanentlyDeleteWikiById(id: string) {
   ]).then((results) => {
     results.forEach((result) => {
       if (result.status === 'rejected') {
-        logger.warn({ err: result.reason, slug: page.slug }, 'Delete wiki embedding points failed');
+        logger.warn({ err: result.reason, slug: page.slug }, 'Delete wiki embedding points failed')
       }
-    });
-  });
+    })
+  })
 
-  return page.slug;
+  return page.slug
 }
 
-async function permanentlyDeletePostById(id: string) {
+async function permanentlyDeletePostById(id: string, operatorUid: string) {
   const post = await prisma.post.findUnique({
     where: { id },
     select: { id: true, title: true },
-  });
-  if (!post) return false;
+  })
+  if (!post) return false
 
   await prisma.$transaction(async (tx) => {
     await Promise.all([
@@ -251,9 +489,18 @@ async function permanentlyDeletePostById(id: string) {
       tx.browsingHistory.deleteMany({ where: { targetType: 'post', targetId: post.id } }),
       tx.postImageEmbedding.deleteMany({ where: { postId: post.id } }),
       tx.textEmbeddingChunk.deleteMany({ where: { sourceType: 'post', sourceId: post.id } }),
-    ]);
-    await tx.post.delete({ where: { id } });
-  });
+    ])
+    await tx.post.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'post',
+        targetId: post.id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
   void Promise.allSettled([
     deleteImageEmbeddingPointsBySource('post', post.id),
@@ -261,72 +508,155 @@ async function permanentlyDeletePostById(id: string) {
   ]).then((results) => {
     results.forEach((result) => {
       if (result.status === 'rejected') {
-        logger.warn({ err: result.reason, postId: post.id }, 'Delete post embedding points failed');
+        logger.warn({ err: result.reason, postId: post.id }, 'Delete post embedding points failed')
       }
-    });
-  });
+    })
+  })
 
-  return true;
+  return true
 }
 
-async function permanentlyDeleteGalleryById(id: string) {
+async function permanentlyDeleteGalleryById(id: string, operatorUid: string) {
   const gallery = await prisma.gallery.findUnique({
     where: { id },
     include: { images: true },
-  });
-  if (!gallery) return false;
+  })
+  if (!gallery) return false
 
-  const assetIds = [...new Set(gallery.images.map((image) => image.assetId).filter(isString))];
-  const imagesWithoutAsset = gallery.images.filter((image) => !image.assetId);
+  const assetIds = [...new Set(gallery.images.map((image) => image.assetId).filter(isString))]
+  const imagesWithoutAsset = gallery.images.filter((image) => !image.assetId)
 
-  await prisma.gallery.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.gallery.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'gallery',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
-  await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)));
-  await Promise.all(imagesWithoutAsset.map((image) => cleanupUntrackedUploadImageByUrl(image.url)));
+  await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
+  await Promise.all(imagesWithoutAsset.map((image) => cleanupUntrackedUploadImageByUrl(image.url)))
 
-  return true;
+  return true
+}
+
+async function permanentlyDeleteEventById(id: string, operatorUid: string) {
+  const event = await prisma.event.findUnique({
+    where: { id },
+    include: { posters: true },
+  })
+  if (!event) return false
+
+  const assetIds = [
+    ...new Set(
+      [event.coverAssetId, ...event.posters.map((poster) => poster.assetId)].filter(isString)
+    ),
+  ]
+  const imageUrlsWithoutAsset = [
+    ...event.posters
+      .filter((poster) => !poster.assetId)
+      .map((poster) => poster.url)
+      .filter(isString),
+    ...(event.coverAssetId ? [] : [event.coverUrl].filter(isString)),
+  ]
+
+  await prisma.$transaction(async (tx) => {
+    await tx.ticketListing.updateMany({
+      where: { eventId: id },
+      data: { eventId: null, customEventName: event.title },
+    })
+    await tx.event.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'event',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
+
+  await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
+  await Promise.all(imageUrlsWithoutAsset.map((url) => cleanupUntrackedUploadImageByUrl(url)))
+
+  return true
+}
+
+async function permanentlyDeleteTicketListingById(id: string, operatorUid: string) {
+  const listing = await prisma.ticketListing.findUnique({
+    where: { id },
+    select: { id: true },
+  })
+  if (!listing) return false
+
+  await prisma.$transaction(async (tx) => {
+    await tx.ticketListing.delete({ where: { id } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'ticketListing',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
+  return true
 }
 
 function invalidateSoftDeleteCaches(
   tab: string,
   identifiers: { id?: string; slug?: string; docId?: string } = {}
 ) {
-  enhancedCache.invalidateByPrefix('search:');
+  enhancedCache.invalidateByPrefix('search:')
 
-  if (tab === 'wiki') {
+  if (tab === 'wiki' || tab === 'wiki-categories') {
     if (identifiers.slug) {
-      enhancedCache.delete(`${CACHE_KEYS.WIKI_PAGE}:${identifiers.slug}`);
+      enhancedCache.delete(`${CACHE_KEYS.WIKI_PAGE}:${identifiers.slug}`)
     }
-    enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`);
-    enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`);
-    enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_TIMELINE}:`);
-    clearWikiRelationCache();
-    return;
+    enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_LIST}:`)
+    enhancedCache.invalidateByPrefix(`${CACHE_KEYS.WIKI_RECOMMENDED}:`)
+    clearWikiRelationCache()
+    return
   }
 
   if (tab === 'posts' || tab === 'sections') {
-    enhancedCache.invalidateByPrefix('post_list:');
-    return;
+    enhancedCache.invalidateByPrefix('post_list:')
+    return
   }
 
   if (tab === 'galleries') {
-    enhancedCache.invalidateByPrefix('gallery_list_public:');
-    return;
+    enhancedCache.invalidateByPrefix('gallery_list_public:')
+    return
+  }
+  if (tab === 'events') {
+    invalidateTicketListingCaches()
+    return
+  }
+  if (tab === 'ticket-listings') {
+    invalidateTicketListingCaches()
+    return
   }
 
   if (tab === 'music') {
-    enhancedCache.invalidateByPrefix('music_list:');
-    return;
+    enhancedCache.invalidateByPrefix('music_list:')
+    return
   }
 
   if (tab === 'albums') {
-    enhancedCache.invalidateByPrefix('album_list:');
-    enhancedCache.invalidateByPrefix('music_list:');
-    return;
+    enhancedCache.invalidateByPrefix('album_list:')
+    enhancedCache.invalidateByPrefix('music_list:')
+    return
   }
 
   if (tab === 'announcements') {
-    enhancedCache.delete(CACHE_KEYS.ANNOUNCEMENT_LATEST);
+    enhancedCache.delete(CACHE_KEYS.ANNOUNCEMENT_LATEST)
   }
 }
 
@@ -335,25 +665,29 @@ function canOpenRestoredWikiNotification(
   recipientRole: AuthenticatedRequest['authUser']['role'] | undefined
 ) {
   if (status === 'draft' || status === 'pending' || status === 'published') {
-    return true;
+    return true
   }
 
-  return status === 'rejected' && isAdminRole(recipientRole);
+  return status === 'rejected' && isAdminRole(recipientRole)
 }
 
 async function notifyContentRestored(options: {
-  recipientUid: string | null | undefined;
-  operatorUid: string;
-  operatorName?: string | null;
-  targetType: 'wiki' | 'post';
-  targetId: string;
-  title: string;
-  status: string;
-  linkable: boolean;
-  wasDeleted: boolean;
+  recipientUid: string | null | undefined
+  operatorUid: string
+  operatorName?: string | null
+  targetType: 'wiki' | 'post' | 'ticketListing'
+  targetId: string
+  title: string
+  status: string
+  linkable: boolean
+  wasDeleted: boolean
 }) {
-  if (!options.wasDeleted || !options.recipientUid || options.recipientUid === options.operatorUid) {
-    return;
+  if (
+    !options.wasDeleted ||
+    !options.recipientUid ||
+    options.recipientUid === options.operatorUid
+  ) {
+    return
   }
 
   await createNotification(options.recipientUid, 'review_result', {
@@ -366,20 +700,20 @@ async function notifyContentRestored(options: {
     linkable: options.linkable,
     operatorUid: options.operatorUid,
     operatorName: options.operatorName || null,
-  });
+  })
 }
 
 async function notifyContentDeleted(options: {
-  recipientUid: string | null | undefined;
-  operatorUid: string;
-  operatorName?: string | null;
-  targetType: 'wiki' | 'post' | 'gallery';
-  targetId: string;
-  title: string;
-  note: string;
+  recipientUid: string | null | undefined
+  operatorUid: string
+  operatorName?: string | null
+  targetType: 'wiki' | 'post' | 'gallery' | 'ticketListing'
+  targetId: string
+  title: string
+  note: string
 }) {
   if (!options.recipientUid || options.recipientUid === options.operatorUid) {
-    return;
+    return
   }
 
   await createNotification(options.recipientUid, 'review_result', {
@@ -391,100 +725,142 @@ async function notifyContentDeleted(options: {
     note: options.note,
     operatorUid: options.operatorUid,
     operatorName: options.operatorName || null,
-  });
+  })
 }
 
-async function permanentlyDeleteMusicTrackByDocId(docId: string) {
+async function permanentlyDeleteMusicTrackByDocId(docId: string, operatorUid: string) {
   const song = await prisma.musicTrack.findUnique({
     where: { docId },
     include: { covers: true },
-  });
-  if (!song) return false;
+  })
+  if (!song) return false
 
-  const assetIds = [...new Set(song.covers.map((cover) => cover.assetId).filter(isString))];
-  const coversWithoutAsset = song.covers.filter((cover) => !cover.assetId);
+  const assetIds = [...new Set(song.covers.map((cover) => cover.assetId).filter(isString))]
+  const coversWithoutAsset = song.covers.filter((cover) => !cover.assetId)
 
-  await prisma.$transaction([
-    prisma.favorite.deleteMany({ where: { targetType: 'music', targetId: docId } }),
-    prisma.browsingHistory.deleteMany({ where: { targetType: 'music', targetId: docId } }),
-    prisma.musicTrack.delete({ where: { docId } }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    await tx.favorite.deleteMany({ where: { targetType: 'music', targetId: docId } })
+    await tx.browsingHistory.deleteMany({ where: { targetType: 'music', targetId: docId } })
+    await tx.musicTrack.delete({ where: { docId } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'music',
+        targetId: docId,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
-  await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)));
-  await Promise.all(coversWithoutAsset.map((cover) => cleanupUntrackedUploadImageByUrl(cover.publicUrl)));
+  await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
+  await Promise.all(
+    coversWithoutAsset.map((cover) => cleanupUntrackedUploadImageByUrl(cover.publicUrl))
+  )
 
-  return true;
+  return true
 }
 
-async function permanentlyDeleteAlbumByDocId(docId: string) {
+async function permanentlyDeleteAlbumByDocId(
+  docId: string,
+  operatorUid: string
+): Promise<'not-found' | 'active' | 'deleted'> {
   const album = await prisma.album.findUnique({
     where: { docId },
     include: { covers: true },
-  });
-  if (!album) return false;
+  })
+  if (!album) return 'not-found'
+  if (!album.deletedAt) return 'active'
 
-  const coverIds = album.covers.map((cover) => cover.id);
-  const assetIds = [...new Set(album.covers.map((cover) => cover.assetId).filter(isString))];
-  const coversWithoutAsset = album.covers.filter((cover) => !cover.assetId);
-
+  const assetIds = [...new Set(album.covers.map((cover) => cover.assetId).filter(isString))]
+  const coversWithoutAsset = album.covers.filter((cover) => !cover.assetId)
   await prisma.$transaction(async (tx) => {
-    if (coverIds.length) {
-      await tx.musicTrack.updateMany({
-        where: {
-          defaultCoverSource: { in: coverIds.map((coverId) => `album_cover:${coverId}`) },
-        },
-        data: {
-          defaultCoverSource: null,
-          cover: '',
-        },
-      });
-    }
+    await tx.musicTrack.updateMany({
+      where: { coverAlbumDocId: docId },
+      data: { coverAlbumDocId: null },
+    })
 
-    await tx.songAlbumRelation.deleteMany({ where: { albumDocId: docId } });
-    await tx.album.delete({ where: { docId } });
-  });
+    await tx.songAlbumRelation.deleteMany({ where: { albumDocId: docId } })
+    await tx.album.delete({ where: { docId } })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'album',
+        targetId: docId,
+        action: 'permanentDelete',
+        operatorUid,
+        note: null,
+      },
+    })
+  })
 
-  await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)));
-  await Promise.all(coversWithoutAsset.map((cover) => cleanupUntrackedUploadImageByUrl(cover.publicUrl)));
+  await Promise.all(assetIds.map((assetId) => cleanupUnusedMediaAssetById(assetId)))
+  await Promise.all(
+    coversWithoutAsset.map((cover) => cleanupUntrackedUploadImageByUrl(cover.publicUrl))
+  )
 
-  return true;
+  return 'deleted'
 }
 
-async function permanentlyDeleteImageMapById(id: string) {
+async function permanentlyDeleteImageMapById(id: string, operatorUid: string) {
   const existing = await prisma.imageMap.findUnique({
     where: { id },
-    select: { id: true },
-  });
-  if (!existing) return false;
-
-  await variantCleanup.cleanupByImageMapId(id, CleanupTrigger.ON_DELETE);
-  await prisma.imageMap.delete({ where: { id } });
-  return true;
+    select: { id: true, localUrl: true, s3Url: true, externalUrl: true, variantStatus: true },
+  })
+  if (!existing) return false
+  const [activeClaims, references] = await Promise.all([
+    prisma.mediaAsset.count({ where: { imageMapId: id, status: { in: ['uploaded', 'ready'] } } }),
+    collectMediaReferences(),
+  ])
+  if (
+    activeClaims > 0 ||
+    isMediaReferenced(references, {
+      urls: [existing.localUrl, existing.s3Url, existing.externalUrl],
+    }) ||
+    existing.variantStatus === 'processing'
+  ) {
+    return false
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.imageMap.update({
+      where: { id },
+      data: { retiredAt: getMediaRetiredAt() },
+    })
+    await tx.moderationLog.create({
+      data: {
+        targetType: 'imageMap',
+        targetId: id,
+        action: 'permanentDelete',
+        operatorUid,
+        note: '已登记延迟物理回收',
+      },
+    })
+  })
+  return true
 }
 
 const uploadBackup = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
-      cb(null, backupsDir);
+      cb(null, backupsDir)
     },
     filename: (_req, file, cb) => {
-      cb(null, `restore_${Date.now()}_${file.originalname}`);
+      cb(null, `restore_${Date.now()}_${file.originalname}`)
     },
   }),
   limits: {
     fileSize: UPLOAD_MAX_FILE_SIZE_BYTES,
   },
-});
+})
 
 async function handleReviewAction(
-  targetType: 'wiki' | 'post' | 'gallery',
+  targetType: 'wiki' | 'post' | 'gallery' | 'ticketListing',
   targetId: string,
   action: 'approve' | 'reject',
   reqAuthUser: { uid: string; role: string; displayName?: string | null },
-  note: string,
+  note: string
 ) {
-  const reviewedAt = new Date();
-  const reviewNote = action === 'reject' ? note : null;
+  const reviewedAt = new Date()
+  const reviewNote = action === 'reject' ? note : null
 
   if (targetType === 'wiki') {
     const page = await prisma.wikiPage.update({
@@ -499,17 +875,32 @@ async function handleReviewAction(
         reviewedBy: reqAuthUser.uid,
         reviewedAt,
       },
-    });
+    })
 
     await prisma.moderationLog.create({
-      data: { targetType: 'wiki', targetId, action, operatorUid: reqAuthUser.uid, note: reviewNote },
-    });
+      data: {
+        targetType: 'wiki',
+        targetId,
+        action,
+        operatorUid: reqAuthUser.uid,
+        note: reviewNote,
+      },
+    })
 
     if (page.lastEditorUid && page.lastEditorUid !== reqAuthUser.uid) {
-      await createNotification(page.lastEditorUid, 'review_result', { approved: action === 'approve', targetType: 'wiki', targetId, title: page.title, note: reviewNote });
+      await createNotification(page.lastEditorUid, 'review_result', {
+        approved: action === 'approve',
+        targetType: 'wiki',
+        targetId,
+        title: page.title,
+        note: reviewNote,
+      })
     }
 
-    return { item: { ...toWikiResponse(page), sensitiveWords: containsSensitive(page.content || '') }, targetType };
+    return {
+      item: { ...toWikiResponse(page), sensitiveWords: containsSensitive(page.content || '') },
+      targetType,
+    }
   }
 
   if (targetType === 'post') {
@@ -519,18 +910,18 @@ async function handleReviewAction(
         content: true,
         pendingReviewBaseContent: true,
       },
-    });
+    })
     if (!existingPost) {
-      throw new Error(`Post not found: ${targetId}`);
+      throw new Error(`Post not found: ${targetId}`)
     }
 
     const suppressLegacyMentionNotifications =
       action === 'approve' &&
       !existingPost.pendingReviewBaseContent &&
-      (await hasLatestPostSubmitLogForRepublishedEdit(targetId));
+      (await hasLatestPostSubmitLogForRepublishedEdit(targetId))
     const previousContentForMentions =
       existingPost.pendingReviewBaseContent ??
-      (suppressLegacyMentionNotifications ? existingPost.content : null);
+      (suppressLegacyMentionNotifications ? existingPost.content : null)
 
     const post = await prisma.post.update({
       where: { id: targetId },
@@ -542,12 +933,26 @@ async function handleReviewAction(
         pendingReviewBaseContent: null,
       },
       include: { author: { select: { displayName: true } } },
-    });
+    })
 
-    await prisma.moderationLog.create({ data: { targetType: 'post', targetId, action, operatorUid: reqAuthUser.uid, note: reviewNote } });
+    await prisma.moderationLog.create({
+      data: {
+        targetType: 'post',
+        targetId,
+        action,
+        operatorUid: reqAuthUser.uid,
+        note: reviewNote,
+      },
+    })
 
     if (post.authorUid && post.authorUid !== reqAuthUser.uid) {
-      await createNotification(post.authorUid, 'review_result', { approved: action === 'approve', targetType: 'post', targetId, title: post.title, note: reviewNote });
+      await createNotification(post.authorUid, 'review_result', {
+        approved: action === 'approve',
+        targetType: 'post',
+        targetId,
+        title: post.title,
+        note: reviewNote,
+      })
     }
 
     if (action === 'approve') {
@@ -557,13 +962,64 @@ async function handleReviewAction(
         actorUid: post.authorUid,
         actorName: post.author?.displayName || '',
         target: { type: 'post', id: post.id },
-      });
+      })
     }
 
-    return { item: action === 'approve' ? { ...toPostResponse(post), sensitiveWords: containsSensitive(post.content || '') } : toPostResponse(post), targetType };
+    return {
+      item:
+        action === 'approve'
+          ? { ...toPostResponse(post), sensitiveWords: containsSensitive(post.content || '') }
+          : toPostResponse(post),
+      targetType,
+    }
   }
 
-  const nextStatus = action === 'approve' ? 'published' : 'rejected';
+  if (targetType === 'ticketListing') {
+    const updateResult = await prisma.ticketListing.updateMany({
+      where: { id: targetId, status: 'pending', deletedAt: null },
+      data: {
+        status: action === 'approve' ? 'published' : 'rejected',
+        reviewNote,
+        reviewedBy: reqAuthUser.uid,
+        reviewedAt,
+      },
+    })
+    if (!updateResult.count) throw new ReviewActionConflictError()
+    const listing = await prisma.ticketListing.findUnique({
+      where: { id: targetId },
+      include: adminTicketListingInclude,
+    })
+    if (!listing) throw new ReviewActionConflictError()
+
+    await prisma.moderationLog.create({
+      data: {
+        targetType: 'ticketListing',
+        targetId,
+        action,
+        operatorUid: reqAuthUser.uid,
+        note: reviewNote,
+      },
+    })
+
+    if (listing.authorUid !== reqAuthUser.uid) {
+      await createNotification(listing.authorUid, 'review_result', {
+        approved: action === 'approve',
+        targetType: 'ticketListing',
+        targetId,
+        targetSlug: listing.slug,
+        title: listing.event?.title || listing.customEventName || '盘票信息',
+        note: reviewNote,
+      })
+    }
+
+    invalidateTicketListingCaches()
+    return {
+      item: toTicketListingResponse(listing, { includePrivate: true }),
+      targetType,
+    }
+  }
+
+  const nextStatus = action === 'approve' ? 'published' : 'rejected'
   const gallery = await prisma.gallery.update({
     where: { id: targetId },
     data: {
@@ -583,19 +1039,34 @@ async function handleReviewAction(
       },
       location: true,
     },
-  });
+  })
 
-  await prisma.moderationLog.create({ data: { targetType: 'gallery', targetId, action, operatorUid: reqAuthUser.uid, note: reviewNote } });
+  await prisma.moderationLog.create({
+    data: {
+      targetType: 'gallery',
+      targetId,
+      action,
+      operatorUid: reqAuthUser.uid,
+      note: reviewNote,
+    },
+  })
 
   if (gallery.authorUid && gallery.authorUid !== reqAuthUser.uid) {
-    await createNotification(gallery.authorUid, 'review_result', { approved: action === 'approve', targetType: 'gallery', targetId, title: gallery.title, note: reviewNote });
+    await createNotification(gallery.authorUid, 'review_result', {
+      approved: action === 'approve',
+      targetType: 'gallery',
+      targetId,
+      title: gallery.title,
+      note: reviewNote,
+    })
   }
-
-  return { item: await toGalleryResponse(gallery), targetType };
+  return { item: await toGalleryResponse(gallery), targetType }
 }
 
-function isReviewTargetType(value: unknown): value is 'wiki' | 'post' | 'gallery' {
-  return value === 'wiki' || value === 'post' || value === 'gallery';
+function isReviewTargetType(
+  value: unknown
+): value is 'wiki' | 'post' | 'gallery' | 'ticketListing' {
+  return value === 'wiki' || value === 'post' || value === 'gallery' || value === 'ticketListing'
 }
 
 /**
@@ -605,209 +1076,419 @@ function isReviewTargetType(value: unknown): value is 'wiki' | 'post' | 'gallery
  */
 
 // GET /api/admin/review-queue/count - Get pending review counts
-router.get('/review-queue/count', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const type = normalizeModerationTargetType(req.query.type);
-    const status = parseContentStatus(req.query.status) || 'pending';
+router.get(
+  '/review-queue/count',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const type = normalizeModerationTargetType(req.query.type)
+      const status = parseContentStatus(req.query.status) || 'pending'
 
-    if (type && type !== 'wiki' && type !== 'post' && type !== 'gallery') {
-      res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' });
-      return;
+      if (
+        type &&
+        type !== 'wiki' &&
+        type !== 'post' &&
+        type !== 'gallery' &&
+        type !== 'ticketListing'
+      ) {
+        res.status(400).json({ error: 'type 必须为 wiki、posts、galleries 或 tickets' })
+        return
+      }
+
+      const [wiki, posts, galleries, tickets] = await Promise.all([
+        type && type !== 'wiki'
+          ? Promise.resolve(0)
+          : prisma.wikiPage.count({ where: { status, deletedAt: null } }),
+        type && type !== 'post'
+          ? Promise.resolve(0)
+          : prisma.post.count({ where: { status, deletedAt: null } }),
+        type && type !== 'gallery'
+          ? Promise.resolve(0)
+          : prisma.gallery.count({ where: { status, deletedAt: null } }),
+        type && type !== 'ticketListing'
+          ? Promise.resolve(0)
+          : prisma.ticketListing.count({ where: { status, deletedAt: null } }),
+      ])
+
+      res.json({
+        status,
+        counts: { wiki, posts, galleries, tickets },
+        total: wiki + posts + galleries + tickets,
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Fetch review queue count error')
+      res.status(500).json({ error: '获取审核队列数量失败' })
     }
-
-    const [wiki, posts, galleries] = await Promise.all([
-      type && type !== 'wiki'
-        ? Promise.resolve(0)
-        : prisma.wikiPage.count({ where: { status, deletedAt: null } }),
-      type && type !== 'post'
-        ? Promise.resolve(0)
-        : prisma.post.count({ where: { status, deletedAt: null } }),
-      type && type !== 'gallery'
-        ? Promise.resolve(0)
-        : prisma.gallery.count({ where: { status, deletedAt: null } }),
-    ]);
-
-    res.json({ status, counts: { wiki, posts, galleries }, total: wiki + posts + galleries });
-  } catch (error) {
-    logger.error({ err: error }, 'Fetch review queue count error');
-    res.status(500).json({ error: '获取审核队列数量失败' });
-  }
-}));
+  })
+)
 
 // GET /api/admin/review-queue - Get review queue items
-router.get('/review-queue', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const type = normalizeModerationTargetType(req.query.type);
-    const status = parseContentStatus(req.query.status) || 'pending';
+router.get(
+  '/review-queue',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const status = parseContentStatus(req.query.status) || 'pending'
 
-    if (!type) {
-      res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' });
-      return;
-    }
+      if (req.query.type === 'all') {
+        const { limit, page, offset: skip } = parsePagination(req.query)
+        const take = skip + limit
+        const [
+          wikiItems,
+          postItems,
+          galleryItems,
+          ticketItems,
+          wikiTotal,
+          postTotal,
+          galleryTotal,
+          ticketTotal,
+        ] = await Promise.all([
+          prisma.wikiPage.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              lastEditor: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.post.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              author: { select: { displayName: true } },
+              sectionRef: { select: { name: true } },
+              location: true,
+            },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.gallery.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              images: {
+                include: { asset: true },
+                orderBy: { sortOrder: 'asc' },
+              },
+              location: true,
+            },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.ticketListing.findMany({
+            where: { status, deletedAt: null },
+            select: adminTicketListingListSelect,
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take,
+          }),
+          prisma.wikiPage.count({ where: { status, deletedAt: null } }),
+          prisma.post.count({ where: { status, deletedAt: null } }),
+          prisma.gallery.count({ where: { status, deletedAt: null } }),
+          prisma.ticketListing.count({ where: { status, deletedAt: null } }),
+        ])
+        const mergedItems = [
+          ...wikiItems.map((item) => ({
+            data: {
+              ...toWikiResponse(item),
+              sensitiveWords: containsSensitive(item.content || ''),
+              reviewType: 'wiki' as const,
+              reviewId: item.slug,
+            },
+            sortKey: item.id,
+          })),
+          ...(await toGalleryListResponse(galleryItems)).map((item) => ({
+            data: {
+              ...item,
+              reviewType: 'gallery' as const,
+              reviewId: item.id,
+            },
+            sortKey: item.id,
+          })),
+          ...postItems.map((item) => ({
+            data: {
+              ...toPostResponse(item),
+              sectionName: item.sectionRef?.name || item.section,
+              sensitiveWords: containsSensitive(item.content || ''),
+              reviewType: 'post' as const,
+              reviewId: item.id,
+            },
+            sortKey: item.id,
+          })),
+          ...ticketItems.map((item) => ({
+            data: {
+              ...toTicketListingListResponse(item, { includePrivate: true }),
+              reviewType: 'ticket' as const,
+              reviewId: item.id,
+            },
+            sortKey: item.id,
+          })),
+        ].sort((left, right) => {
+          const updatedAtDifference =
+            new Date(String(right.data.updatedAt || 0)).getTime() -
+            new Date(String(left.data.updatedAt || 0)).getTime()
+          if (updatedAtDifference !== 0) return updatedAtDifference
+          const sortKeyDifference = right.sortKey.localeCompare(left.sortKey)
+          if (sortKeyDifference !== 0) return sortKeyDifference
+          return `${right.data.reviewType}:${right.data.reviewId}`.localeCompare(
+            `${left.data.reviewType}:${left.data.reviewId}`
+          )
+        })
+        const total = wikiTotal + postTotal + galleryTotal + ticketTotal
+        const items = mergedItems.slice(skip, skip + limit).map(({ data }) => data)
+        res.json({
+          type: 'all',
+          status,
+          items,
+          ...createPaginationMeta(total, page, limit, items.length),
+        })
+        return
+      }
 
-    if (type !== 'wiki' && type !== 'post' && type !== 'gallery') {
-      res.status(400).json({ error: 'type 必须为 wiki、posts 或 galleries' });
-      return;
-    }
+      const type = normalizeModerationTargetType(req.query.type)
 
-    if (type === 'wiki') {
-      const items = await prisma.wikiPage.findMany({
-        where: { status, deletedAt: null },
-        include: {
-          lastEditor: { select: { displayName: true } },
-          location: true,
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 200,
-      });
-      res.json({
-        type,
-        status,
-        items: items.map((item) => ({
+      if (!type) {
+        res.status(400).json({ error: 'type 必须为 wiki、posts、galleries 或 tickets' })
+        return
+      }
+
+      if (type !== 'wiki' && type !== 'post' && type !== 'gallery' && type !== 'ticketListing') {
+        res.status(400).json({ error: 'type 必须为 wiki、posts、galleries 或 tickets' })
+        return
+      }
+
+      const { limit, page, offset: skip } = parsePagination(req.query)
+
+      if (type === 'wiki') {
+        const [items, total] = await Promise.all([
+          prisma.wikiPage.findMany({
+            where: { status, deletedAt: null },
+            include: {
+              lastEditor: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+          prisma.wikiPage.count({ where: { status, deletedAt: null } }),
+        ])
+        const responseItems = items.map((item) => ({
           ...toWikiResponse(item),
           sensitiveWords: containsSensitive(item.content || ''),
-        })),
-      });
-      return;
-    }
+        }))
+        res.json({
+          type,
+          status,
+          items: responseItems,
+          ...createPaginationMeta(total, page, limit, responseItems.length),
+        })
+        return
+      }
 
-    if (type === 'gallery') {
-      const items = await prisma.gallery.findMany({
-        where: { status, deletedAt: null },
-        include: {
-          images: {
+      if (type === 'ticketListing') {
+        const [items, total] = await Promise.all([
+          prisma.ticketListing.findMany({
+            where: { status, deletedAt: null },
+            select: adminTicketListingListSelect,
+            orderBy: { updatedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+          prisma.ticketListing.count({ where: { status, deletedAt: null } }),
+        ])
+        const responseItems = items.map((item) =>
+          toTicketListingListResponse(item, { includePrivate: true })
+        )
+        res.json({
+          type: 'tickets',
+          status,
+          items: responseItems,
+          ...createPaginationMeta(total, page, limit, responseItems.length),
+        })
+        return
+      }
+
+      if (type === 'gallery') {
+        const [items, total] = await Promise.all([
+          prisma.gallery.findMany({
+            where: { status, deletedAt: null },
             include: {
-              asset: true,
+              images: {
+                include: {
+                  asset: true,
+                },
+                orderBy: { sortOrder: 'asc' },
+              },
+              location: true,
             },
-            orderBy: { sortOrder: 'asc' },
-          },
-          location: true,
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 200,
-      });
-      res.json({
-        type: 'galleries',
-        status,
-        items: await toGalleryListResponse(items),
-      });
-      return;
-    }
+            orderBy: { updatedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+          prisma.gallery.count({ where: { status, deletedAt: null } }),
+        ])
+        const responseItems = await toGalleryListResponse(items)
+        res.json({
+          type: 'galleries',
+          status,
+          items: responseItems,
+          ...createPaginationMeta(total, page, limit, responseItems.length),
+        })
+        return
+      }
 
-    const items = await prisma.post.findMany({
-      where: { status, deletedAt: null },
-      include: {
-        author: { select: { displayName: true } },
-        sectionRef: { select: { name: true } },
-        location: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 200,
-    });
-    res.json({
-      type: 'posts',
-      status,
-      items: items.map((item) => ({
+      const [items, total] = await Promise.all([
+        prisma.post.findMany({
+          where: { status, deletedAt: null },
+          include: {
+            author: { select: { displayName: true } },
+            sectionRef: { select: { name: true } },
+            location: true,
+          },
+          orderBy: { updatedAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.post.count({ where: { status, deletedAt: null } }),
+      ])
+      const responseItems = items.map((item) => ({
         ...toPostResponse(item),
         sectionName: item.sectionRef?.name || item.section,
         sensitiveWords: containsSensitive(item.content || ''),
-      })),
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Fetch review queue error');
-    res.status(500).json({ error: '获取审核队列失败' });
-  }
-}));
+      }))
+      res.json({
+        type: 'posts',
+        status,
+        items: responseItems,
+        ...createPaginationMeta(total, page, limit, responseItems.length),
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Fetch review queue error')
+      res.status(500).json({ error: '获取审核队列失败' })
+    }
+  })
+)
 
 // PUT /api/admin/review-queue/:id/approve - Approve a review item
-router.put('/review-queue/:id/approve', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const targetType = normalizeModerationTargetType(req.body.type) || 'wiki';
-    const targetId = req.params.id;
-    const reqAuthUser = req.authUser!;
+router.put(
+  '/review-queue/:id/approve',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const targetType = normalizeModerationTargetType(req.body.type) || 'wiki'
+      const targetId = req.params.id
+      const reqAuthUser = req.authUser!
 
-    if (!isReviewTargetType(targetType)) {
-      res.status(400).json({ error: '无效审核类型' });
-      return;
+      if (!isReviewTargetType(targetType)) {
+        res.status(400).json({ error: '无效审核类型' })
+        return
+      }
+
+      const result = await handleReviewAction(targetType, targetId, 'approve', reqAuthUser, '')
+      res.json(result)
+    } catch (error) {
+      if (error instanceof ReviewActionConflictError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      logger.error({ err: error }, 'Approve review item error')
+      res.status(500).json({ error: '审核通过失败' })
     }
-
-    const result = await handleReviewAction(targetType, targetId, 'approve', reqAuthUser, '');
-    res.json(result);
-  } catch (error) {
-    logger.error({ err: error }, 'Approve review item error');
-    res.status(500).json({ error: '审核通过失败' });
-  }
-}));
+  })
+)
 
 // PUT /api/admin/review-queue/:id/reject - Reject a review item
-router.put('/review-queue/:id/reject', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const targetType = normalizeModerationTargetType(req.body.type) || 'wiki';
-    const targetId = req.params.id;
-    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
-    const reqAuthUser = req.authUser!;
-    if (!isReviewTargetType(targetType)) {
-      res.status(400).json({ error: '无效审核类型' });
-      return;
-    }
-    if (!note) {
-      res.status(400).json({ error: '驳回原因不能为空' });
-      return;
-    }
-    const reviewNoteLimit =
-      targetType === 'gallery' ? CONTENT_LIMITS.gallery.reviewNote : CONTENT_LIMITS.post.reviewNote;
-    if (!ensureTextLimit(res, note, '审核备注', reviewNoteLimit)) {
-      return;
-    }
+router.put(
+  '/review-queue/:id/reject',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const targetType = normalizeModerationTargetType(req.body.type) || 'wiki'
+      const targetId = req.params.id
+      const note = typeof req.body?.note === 'string' ? req.body.note.trim() : ''
+      const reqAuthUser = req.authUser!
+      if (!isReviewTargetType(targetType)) {
+        res.status(400).json({ error: '无效审核类型' })
+        return
+      }
+      if (!note) {
+        res.status(400).json({ error: '驳回原因不能为空' })
+        return
+      }
+      const reviewNoteLimit =
+        targetType === 'gallery'
+          ? CONTENT_LIMITS.gallery.reviewNote
+          : targetType === 'ticketListing'
+            ? CONTENT_LIMITS.ticketListing.reviewNote
+            : CONTENT_LIMITS.post.reviewNote
+      if (!ensureTextLimit(res, note, '审核备注', reviewNoteLimit)) {
+        return
+      }
 
-    const result = await handleReviewAction(targetType, targetId, 'reject', reqAuthUser, note);
-    res.json(result);
-  } catch (error) {
-    logger.error({ err: error }, 'Reject review item error');
-    res.status(500).json({ error: '驳回失败' });
-  }
-}));
+      const result = await handleReviewAction(targetType, targetId, 'reject', reqAuthUser, note)
+      res.json(result)
+    } catch (error) {
+      if (error instanceof ReviewActionConflictError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      logger.error({ err: error }, 'Reject review item error')
+      res.status(500).json({ error: '驳回失败' })
+    }
+  })
+)
 
 // POST /api/admin/review/:type/:id/:action - Legacy compatible route
 // Redirects to PUT /api/admin/review-queue/:id/:action
-router.post('/review/:type/:id/:action', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { type, id, action } = req.params;
-    let rejectNote = '';
+router.post(
+  '/review/:type/:id/:action',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { type, id, action } = req.params
+      let rejectNote = ''
 
-    if (action !== 'approve' && action !== 'reject') {
-      res.status(400).json({ error: '无效的操作' });
-      return;
-    }
-
-    if (action === 'reject') {
-      rejectNote = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
-      if (!rejectNote) {
-        res.status(400).json({ error: '驳回原因不能为空' });
-        return;
+      if (action !== 'approve' && action !== 'reject') {
+        res.status(400).json({ error: '无效的操作' })
+        return
       }
-    }
 
-    const targetType = normalizeModerationTargetType(type);
-    if (!isReviewTargetType(targetType)) {
-      res.status(400).json({ error: '无效的类型' });
-      return;
-    }
-    if (action === 'reject') {
-      const reviewNoteLimit =
-        targetType === 'gallery' ? CONTENT_LIMITS.gallery.reviewNote : CONTENT_LIMITS.post.reviewNote;
-      if (!ensureTextLimit(res, rejectNote, '审核备注', reviewNoteLimit)) {
-        return;
+      if (action === 'reject') {
+        rejectNote = typeof req.body?.note === 'string' ? req.body.note.trim() : ''
+        if (!rejectNote) {
+          res.status(400).json({ error: '驳回原因不能为空' })
+          return
+        }
       }
-    }
 
-    const result = await handleReviewAction(targetType, id, action, req.authUser!, rejectNote);
-    res.json(result);
-  } catch (error) {
-    logger.error({ err: error }, 'Review action error');
-    res.status(500).json({ error: '审核操作失败' });
-  }
-}));
+      const targetType = normalizeModerationTargetType(type)
+      if (!isReviewTargetType(targetType)) {
+        res.status(400).json({ error: '无效的类型' })
+        return
+      }
+      if (action === 'reject') {
+        const reviewNoteLimit =
+          targetType === 'gallery'
+            ? CONTENT_LIMITS.gallery.reviewNote
+            : targetType === 'ticketListing'
+              ? CONTENT_LIMITS.ticketListing.reviewNote
+              : CONTENT_LIMITS.post.reviewNote
+        if (!ensureTextLimit(res, rejectNote, '审核备注', reviewNoteLimit)) {
+          return
+        }
+      }
+
+      const result = await handleReviewAction(targetType, id, action, req.authUser!, rejectNote)
+      res.json(result)
+    } catch (error) {
+      if (error instanceof ReviewActionConflictError) {
+        res.status(error.statusCode).json({ error: error.message })
+        return
+      }
+      logger.error({ err: error }, 'Review action error')
+      res.status(500).json({ error: '审核操作失败' })
+    }
+  })
+)
 
 /**
  * ==========================
@@ -816,65 +1497,77 @@ router.post('/review/:type/:id/:action', requireAdmin, asyncHandler(async (req: 
  */
 
 // GET /api/admin/sensitive-words - Check if a word is sensitive
-router.get('/sensitive-words', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { word } = req.query as { word?: string };
-    if (!word) {
-      res.status(400).json({ error: '请提供要检查的词语' });
-      return;
+router.get(
+  '/sensitive-words',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { word } = req.query as { word?: string }
+      if (!word) {
+        res.status(400).json({ error: '请提供要检查的词语' })
+        return
+      }
+      const isSensitive = isSensitiveWord(word)
+      res.json({ word, isSensitive })
+    } catch (error) {
+      logger.error({ err: error }, 'Check sensitive word error')
+      res.status(500).json({ error: '检查敏感词失败' })
     }
-    const isSensitive = isSensitiveWord(word);
-    res.json({ word, isSensitive });
-  } catch (error) {
-    logger.error({ err: error }, 'Check sensitive word error');
-    res.status(500).json({ error: '检查敏感词失败' });
-  }
-}));
+  })
+)
 
 // POST /api/admin/sensitive-words - Add sensitive word (placeholder - requires file system write)
-router.post('/sensitive-words', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { word } = req.body as { word?: string };
-    if (!word || typeof word !== 'string') {
-      res.status(400).json({ error: '请提供要添加的敏感词' });
-      return;
+router.post(
+  '/sensitive-words',
+  requireSuperAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { word } = req.body as { word?: string }
+      if (!word || typeof word !== 'string') {
+        res.status(400).json({ error: '请提供要添加的敏感词' })
+        return
+      }
+      if (!ensureTextLimit(res, word, '敏感词', CONTENT_LIMITS.admin.sensitiveWord)) {
+        return
+      }
+
+      // Note: This is a placeholder. Actual implementation would require
+      // writing to the sensitive-words.txt file which needs special handling
+      res.status(501).json({
+        error: '敏感词管理需要通过文件系统操作，请手动编辑 public/sensitive-words/words.txt 文件',
+        hint: '将敏感词添加到 public/sensitive-words/words.txt 文件中，每行一个词',
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Add sensitive word error')
+      res.status(500).json({ error: '添加敏感词失败' })
     }
-    if (!ensureTextLimit(res, word, '敏感词', CONTENT_LIMITS.admin.sensitiveWord)) {
-      return;
-    }
-    
-    // Note: This is a placeholder. Actual implementation would require
-    // writing to the sensitive-words.txt file which needs special handling
-    res.status(501).json({ 
-      error: '敏感词管理需要通过文件系统操作，请手动编辑 public/sensitive-words/words.txt 文件',
-      hint: '将敏感词添加到 public/sensitive-words/words.txt 文件中，每行一个词'
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Add sensitive word error');
-    res.status(500).json({ error: '添加敏感词失败' });
-  }
-}));
+  })
+)
 
 // DELETE /api/admin/sensitive-words/:id - Remove sensitive word (placeholder)
-router.delete('/sensitive-words/:id', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const word = req.params.id;
-    if (!word) {
-      res.status(400).json({ error: '请提供要删除的敏感词' });
-      return;
+router.delete(
+  '/sensitive-words/:id',
+  requireSuperAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const word = req.params.id
+      if (!word) {
+        res.status(400).json({ error: '请提供要删除的敏感词' })
+        return
+      }
+
+      // Note: This is a placeholder. Actual implementation would require
+      // writing to the sensitive-words.txt file which needs special handling
+      res.status(501).json({
+        error: '敏感词管理需要通过文件系统操作，请手动编辑 public/sensitive-words/words.txt 文件',
+        hint: '从 public/sensitive-words/words.txt 文件中删除该敏感词',
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Remove sensitive word error')
+      res.status(500).json({ error: '删除敏感词失败' })
     }
-    
-    // Note: This is a placeholder. Actual implementation would require
-    // writing to the sensitive-words.txt file which needs special handling
-    res.status(501).json({ 
-      error: '敏感词管理需要通过文件系统操作，请手动编辑 public/sensitive-words/words.txt 文件',
-      hint: '从 public/sensitive-words/words.txt 文件中删除该敏感词'
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Remove sensitive word error');
-    res.status(500).json({ error: '删除敏感词失败' });
-  }
-}));
+  })
+)
 
 /**
  * ==========================
@@ -883,128 +1576,155 @@ router.delete('/sensitive-words/:id', requireSuperAdmin, asyncHandler(async (req
  */
 
 // GET /api/admin/locks - Get all edit locks
-router.get('/locks', requireAdmin, asyncHandler(async (_req, res) => {
-  try {
-    const locks = await prisma.editLock.findMany({
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: 200,
-    });
+router.get(
+  '/locks',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    try {
+      await prisma.editLock.deleteMany({
+        where: {
+          expiresAt: {
+            lt: new Date(),
+          },
+        },
+      })
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [locks, total] = await Promise.all([
+        prisma.editLock.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+        }),
+        prisma.editLock.count(),
+      ])
 
-    res.json({ locks: locks.map(toEditLockResponse) });
-  } catch (error) {
-    logger.error({ err: error }, 'Fetch edit locks error');
-    res.status(500).json({ error: '获取编辑锁列表失败' });
-  }
-}));
+      res.json({
+        locks: locks.map(toEditLockResponse),
+        ...createPaginationMeta(total, page, limit, locks.length),
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Fetch edit locks error')
+      res.status(500).json({ error: '获取编辑锁列表失败' })
+    }
+  })
+)
 
 // POST /api/admin/locks - Create/edit lock (generic endpoint)
-router.post('/locks', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    await prisma.editLock.deleteMany({
-      where: {
-        expiresAt: {
-          lt: new Date(),
+router.post(
+  '/locks',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      await prisma.editLock.deleteMany({
+        where: {
+          expiresAt: {
+            lt: new Date(),
+          },
         },
-      },
-    });
+      })
 
-    const collection = req.body?.collection;
-    const recordId = req.body?.recordId;
-    
-    if (!collection || !recordId) {
-      res.status(400).json({ error: '缺少有效的锁定目标' });
-      return;
-    }
+      const collection = req.body?.collection
+      const recordId = req.body?.recordId
 
-    const ttlMinutes = 15;
-    const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
-    const force = false;
-
-    const existing = await prisma.editLock.findUnique({
-      where: {
-        collection_recordId: {
-          collection,
-          recordId,
-        },
-      },
-    });
-
-    if (existing && existing.userId !== req.authUser!.uid) {
-      const isExpired = existing.expiresAt.getTime() <= Date.now();
-      if (!isExpired && !(force && isAdminRole(req.authUser!.role))) {
-        res.status(409).json({
-          error: '该记录正在被其他用户编辑',
-          lock: toEditLockResponse(existing),
-        });
-        return;
+      if (!collection || !recordId) {
+        res.status(400).json({ error: '缺少有效的锁定目标' })
+        return
       }
 
-      const takenOver = await prisma.editLock.update({
-        where: { id: existing.id },
+      const ttlMinutes = 15
+      const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000)
+      const force = false
+
+      const existing = await prisma.editLock.findUnique({
+        where: {
+          collection_recordId: {
+            collection,
+            recordId,
+          },
+        },
+      })
+
+      if (existing && existing.userId !== req.authUser!.uid) {
+        const isExpired = existing.expiresAt.getTime() <= Date.now()
+        if (!isExpired && !(force && isAdminRole(req.authUser!.role))) {
+          res.status(409).json({
+            error: '该记录正在被其他用户编辑',
+            lock: toEditLockResponse(existing),
+          })
+          return
+        }
+
+        const takenOver = await prisma.editLock.update({
+          where: { id: existing.id },
+          data: {
+            userId: req.authUser!.uid,
+            username: req.authUser!.displayName,
+            expiresAt,
+          },
+        })
+
+        res.json({ lock: toEditLockResponse(takenOver), acquired: true, takeover: true })
+        return
+      }
+
+      if (existing && existing.userId === req.authUser!.uid) {
+        const renewed = await prisma.editLock.update({
+          where: { id: existing.id },
+          data: {
+            username: req.authUser!.displayName,
+            expiresAt,
+          },
+        })
+        res.json({ lock: toEditLockResponse(renewed), acquired: true, renewed: true })
+        return
+      }
+
+      const created = await prisma.editLock.create({
         data: {
+          collection,
+          recordId,
           userId: req.authUser!.uid,
           username: req.authUser!.displayName,
           expiresAt,
         },
-      });
+      })
 
-      res.json({ lock: toEditLockResponse(takenOver), acquired: true, takeover: true });
-      return;
+      res.status(201).json({ lock: toEditLockResponse(created), acquired: true })
+    } catch (error) {
+      logger.error({ err: error }, 'Acquire edit lock error')
+      res.status(500).json({ error: '申请编辑锁失败' })
     }
-
-    if (existing && existing.userId === req.authUser!.uid) {
-      const renewed = await prisma.editLock.update({
-        where: { id: existing.id },
-        data: {
-          username: req.authUser!.displayName,
-          expiresAt,
-        },
-      });
-      res.json({ lock: toEditLockResponse(renewed), acquired: true, renewed: true });
-      return;
-    }
-
-    const created = await prisma.editLock.create({
-      data: {
-        collection,
-        recordId,
-        userId: req.authUser!.uid,
-        username: req.authUser!.displayName,
-        expiresAt,
-      },
-    });
-
-    res.status(201).json({ lock: toEditLockResponse(created), acquired: true });
-  } catch (error) {
-    logger.error({ err: error }, 'Acquire edit lock error');
-    res.status(500).json({ error: '申请编辑锁失败' });
-  }
-}));
+  })
+)
 
 // DELETE /api/admin/locks/:id - Delete lock by ID
-router.delete('/locks/:id', requireAuth, requireActiveUser, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const lock = await prisma.editLock.findUnique({ where: { id: req.params.id } });
-    if (!lock) {
-      res.json({ success: true });
-      return;
-    }
+router.delete(
+  '/locks/:id',
+  requireAuth,
+  requireActiveUser,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const lock = await prisma.editLock.findUnique({ where: { id: req.params.id } })
+      if (!lock) {
+        res.json({ success: true })
+        return
+      }
 
-    const canManage = lock.userId === req.authUser!.uid || isAdminRole(req.authUser!.role);
-    if (!canManage) {
-      res.status(403).json({ error: '无权限释放该编辑锁' });
-      return;
-    }
+      const canManage = lock.userId === req.authUser!.uid || isAdminRole(req.authUser!.role)
+      if (!canManage) {
+        res.status(403).json({ error: '无权限释放该编辑锁' })
+        return
+      }
 
-    await prisma.editLock.delete({ where: { id: lock.id } });
-    res.json({ success: true });
-  } catch (error) {
-    logger.error({ err: error }, 'Release edit lock error');
-    res.status(500).json({ error: '释放编辑锁失败' });
-  }
-}));
+      await prisma.editLock.delete({ where: { id: lock.id } })
+      res.json({ success: true })
+    } catch (error) {
+      logger.error({ err: error }, 'Release edit lock error')
+      res.status(500).json({ error: '释放编辑锁失败' })
+    }
+  })
+)
 
 router.delete(
   '/locks',
@@ -1012,20 +1732,20 @@ router.delete(
   validateBody(adminBatchEditLocksSchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const lockIds = req.body.lockIds as string[];
+      const lockIds = req.body.lockIds as string[]
       const result = await prisma.editLock.deleteMany({
         where: {
           id: { in: lockIds },
         },
-      });
+      })
 
-      res.json({ success: true, deleted: result.count });
+      res.json({ success: true, deleted: result.count })
     } catch (error) {
-      logger.error({ err: error }, 'Batch release edit locks error');
-      res.status(500).json({ error: '批量释放编辑锁失败' });
+      logger.error({ err: error }, 'Batch release edit locks error')
+      res.status(500).json({ error: '批量释放编辑锁失败' })
     }
   })
-);
+)
 
 /**
  * ==========================
@@ -1034,69 +1754,89 @@ router.delete(
  */
 
 // GET /api/admin/moderation_logs - Get moderation logs
-router.get('/moderation_logs', requireAdmin, asyncHandler(async (_req, res) => {
-  try {
-    const logs = await prisma.moderationLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      include: {
-        operator: {
-          select: { uid: true, displayName: true, email: true },
-        },
-      },
-    });
+router.get(
+  '/moderation_logs',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    try {
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [logs, total] = await Promise.all([
+        prisma.moderationLog.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+          include: {
+            operator: {
+              select: { uid: true, displayName: true, email: true },
+            },
+          },
+        }),
+        prisma.moderationLog.count(),
+      ])
 
-    res.json({
-      logs: logs.map(log => ({
-        id: log.id,
-        targetType: log.targetType,
-        targetId: log.targetId,
-        action: log.action,
-        operatorUid: log.operatorUid,
-        operatorName: log.operator.displayName || log.operator.email || 'Unknown',
-        note: log.note,
-        createdAt: log.createdAt.toISOString(),
-      })),
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Fetch moderation logs error');
-    res.status(500).json({ error: '获取操作日志失败' });
-  }
-}));
+      res.json({
+        logs: logs.map((log) => ({
+          id: log.id,
+          targetType: log.targetType,
+          targetId: log.targetId,
+          action: log.action,
+          operatorUid: log.operatorUid,
+          operatorName: log.operator.displayName || log.operator.email || 'Unknown',
+          note: log.note,
+          createdAt: log.createdAt.toISOString(),
+        })),
+        ...createPaginationMeta(total, page, limit, logs.length),
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Fetch moderation logs error')
+      res.status(500).json({ error: '获取操作日志失败' })
+    }
+  })
+)
 
 // GET /api/admin/ban_logs - Get ban logs
-router.get('/ban_logs', requireAdmin, asyncHandler(async (_req, res) => {
-  try {
-    const logs = await prisma.userBanLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      include: {
-        target: {
-          select: { uid: true, displayName: true, email: true },
-        },
-        operator: {
-          select: { uid: true, displayName: true, email: true },
-        },
-      },
-    });
+router.get(
+  '/ban_logs',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    try {
+      const { limit, page, offset: skip } = parsePagination(req.query)
+      const [logs, total] = await Promise.all([
+        prisma.userBanLog.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+          include: {
+            target: {
+              select: { uid: true, displayName: true, email: true },
+            },
+            operator: {
+              select: { uid: true, displayName: true, email: true },
+            },
+          },
+        }),
+        prisma.userBanLog.count(),
+      ])
 
-    res.json({
-      logs: logs.map(log => ({
-        id: log.id,
-        targetUid: log.targetUid,
-        targetName: log.target.displayName || log.target.email || 'Unknown',
-        action: log.action,
-        operatorUid: log.operatorUid,
-        operatorName: log.operator.displayName || log.operator.email || 'Unknown',
-        note: log.note,
-        createdAt: log.createdAt.toISOString(),
-      })),
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Fetch ban logs error');
-    res.status(500).json({ error: '获取封禁日志失败' });
-  }
-}));
+      res.json({
+        logs: logs.map((log) => ({
+          id: log.id,
+          targetUid: log.targetUid,
+          targetName: log.target.displayName || log.target.email || 'Unknown',
+          action: log.action,
+          operatorUid: log.operatorUid,
+          operatorName: log.operator.displayName || log.operator.email || 'Unknown',
+          note: log.note,
+          createdAt: log.createdAt.toISOString(),
+        })),
+        ...createPaginationMeta(total, page, limit, logs.length),
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Fetch ban logs error')
+      res.status(500).json({ error: '获取封禁日志失败' })
+    }
+  })
+)
 
 /**
  * ==========================
@@ -1110,20 +1850,22 @@ router.patch(
   validateBody(adminBatchMusicDisplaySchema),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-      const songDocIds = req.body.songDocIds as string[];
-      const displayAlbumMode = parseDisplayAlbumMode(req.body.displayAlbumMode);
+      const songDocIds = req.body.songDocIds as string[]
+      const displayAlbumMode = parseDisplayAlbumMode(req.body.displayAlbumMode)
       const manualAlbumName =
-        typeof req.body.manualAlbumName === 'string' ? req.body.manualAlbumName.trim() : null;
+        typeof req.body.manualAlbumName === 'string' ? req.body.manualAlbumName.trim() : null
       const displayAlbumDocId =
-        typeof req.body.displayAlbumDocId === 'string' ? req.body.displayAlbumDocId.trim() : null;
+        typeof req.body.displayAlbumDocId === 'string' ? req.body.displayAlbumDocId.trim() : null
 
       if (!displayAlbumMode) {
-        res.status(400).json({ error: '展示模式无效' });
-        return;
+        res.status(400).json({ error: '展示模式无效' })
+        return
       }
 
-      if (!ensureTextLimit(res, manualAlbumName, '手动专辑名', CONTENT_LIMITS.music.manualAlbumName)) {
-        return;
+      if (
+        !ensureTextLimit(res, manualAlbumName, '手动专辑名', CONTENT_LIMITS.music.manualAlbumName)
+      ) {
+        return
       }
 
       const songs = await prisma.musicTrack.findMany({
@@ -1132,15 +1874,15 @@ router.patch(
           deletedAt: null,
         },
         select: { docId: true },
-      });
+      })
       if (songs.length !== songDocIds.length) {
-        res.status(400).json({ error: '歌曲列表包含无效歌曲' });
-        return;
+        res.status(400).json({ error: '歌曲列表包含无效歌曲' })
+        return
       }
 
       if (displayAlbumMode === 'manual' && !manualAlbumName) {
-        res.status(400).json({ error: '手动专辑名不能为空' });
-        return;
+        res.status(400).json({ error: '手动专辑名不能为空' })
+        return
       }
 
       if (displayAlbumMode === 'linked' && displayAlbumDocId) {
@@ -1150,11 +1892,11 @@ router.patch(
             songDocId: { in: songDocIds },
           },
           select: { songDocId: true },
-        });
-        const relatedSongDocIds = new Set(relations.map((relation) => relation.songDocId));
+        })
+        const relatedSongDocIds = new Set(relations.map((relation) => relation.songDocId))
         if (songDocIds.some((songDocId) => !relatedSongDocIds.has(songDocId))) {
-          res.status(400).json({ error: '展示专辑必须已关联所有选中歌曲' });
-          return;
+          res.status(400).json({ error: '展示专辑必须已关联所有选中歌曲' })
+          return
         }
       }
 
@@ -1165,187 +1907,205 @@ router.patch(
             displayAlbumMode,
             manualAlbumName: displayAlbumMode === 'manual' ? manualAlbumName : null,
           },
-        });
+        })
 
         if (displayAlbumMode === 'linked' && displayAlbumDocId) {
           await tx.songAlbumRelation.updateMany({
             where: { songDocId: { in: songDocIds } },
             data: { isDisplay: false },
-          });
+          })
           await tx.songAlbumRelation.updateMany({
             where: {
               songDocId: { in: songDocIds },
               albumDocId: displayAlbumDocId,
             },
             data: { isDisplay: true },
-          });
+          })
         }
-      });
+      })
 
-      enhancedCache.invalidateByPrefix('music_list:');
-      res.json({ success: true, updated: songDocIds.length });
+      enhancedCache.invalidateByPrefix('music_list:')
+      res.json({ success: true, updated: songDocIds.length })
     } catch (error) {
-      logger.error({ err: error }, 'Batch update music display error');
-      res.status(500).json({ error: '批量更新歌曲展示信息失败' });
+      logger.error({ err: error }, 'Batch update music display error')
+      res.status(500).json({ error: '批量更新歌曲展示信息失败' })
     }
   })
-);
+)
 
 // POST /api/admin/batch-delete-posts - Batch delete posts
-router.post('/batch-delete-posts', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const postIds = Array.isArray(req.body?.postIds) ? req.body.postIds : [];
-    if (!postIds.length) {
-      res.status(400).json({ error: '请选择要删除的帖子' });
-      return;
-    }
-
-    const posts = await prisma.post.findMany({
-      where: { id: { in: postIds }, deletedAt: null },
-      select: { id: true, authorUid: true },
-    });
-    const hasOtherPeopleContent = posts.some((post) => post.authorUid !== req.authUser!.uid);
-    const reason = resolveDeleteReason(req.body?.reason, !hasOtherPeopleContent);
-    if (hasOtherPeopleContent && !reason) {
-      res.status(400).json({ error: '删除理由不能为空' });
-      return;
-    }
-    if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.post.reviewNote)) {
-      return;
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      let deleted = 0;
-      for (const post of posts) {
-        await tx.post.update({
-          where: { id: post.id },
-          data: softDeleteData(req.authUser!.uid),
-        });
-        await tx.moderationLog.create({
-          data: {
-            targetType: 'post',
-            targetId: post.id,
-            action: 'delete',
-            operatorUid: req.authUser!.uid,
-            note: post.authorUid === req.authUser!.uid ? resolveDeleteReason(null, true) : reason,
-          },
-        });
-        deleted++;
+router.post(
+  '/batch-delete-posts',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const postIds = Array.isArray(req.body?.postIds) ? req.body.postIds : []
+      if (!postIds.length) {
+        res.status(400).json({ error: '请选择要删除的帖子' })
+        return
       }
-      return { count: deleted };
-    });
 
-    res.json({ deleted: result.count });
-  } catch (error) {
-    logger.error({ err: error }, 'Batch delete posts error');
-    res.status(500).json({ error: '批量删除帖子失败' });
-  }
-}));
+      const posts = await prisma.post.findMany({
+        where: { id: { in: postIds }, deletedAt: null },
+        select: { id: true, authorUid: true },
+      })
+      const hasOtherPeopleContent = posts.some((post) => post.authorUid !== req.authUser!.uid)
+      const reason = resolveDeleteReason(req.body?.reason, !hasOtherPeopleContent)
+      if (hasOtherPeopleContent && !reason) {
+        res.status(400).json({ error: '删除理由不能为空' })
+        return
+      }
+      if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.post.reviewNote)) {
+        return
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        let deleted = 0
+        for (const post of posts) {
+          await tx.post.update({
+            where: { id: post.id },
+            data: softDeleteData(req.authUser!.uid),
+          })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'post',
+              targetId: post.id,
+              action: 'delete',
+              operatorUid: req.authUser!.uid,
+              note: post.authorUid === req.authUser!.uid ? resolveDeleteReason(null, true) : reason,
+            },
+          })
+          deleted++
+        }
+        return { count: deleted }
+      })
+
+      res.json({ deleted: result.count })
+    } catch (error) {
+      logger.error({ err: error }, 'Batch delete posts error')
+      res.status(500).json({ error: '批量删除帖子失败' })
+    }
+  })
+)
 
 // POST /api/admin/batch-delete-galleries - Batch delete galleries
-router.post('/batch-delete-galleries', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const galleryIds = Array.isArray(req.body?.galleryIds) ? req.body.galleryIds : [];
-    if (!galleryIds.length) {
-      res.status(400).json({ error: '请选择要删除的图集' });
-      return;
-    }
-
-    const galleries = await prisma.gallery.findMany({
-      where: { id: { in: galleryIds }, deletedAt: null },
-      select: { id: true, authorUid: true },
-    });
-    const hasOtherPeopleContent = galleries.some((gallery) => gallery.authorUid !== req.authUser!.uid);
-    const reason = resolveDeleteReason(req.body?.reason, !hasOtherPeopleContent);
-    if (hasOtherPeopleContent && !reason) {
-      res.status(400).json({ error: '删除理由不能为空' });
-      return;
-    }
-    if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.gallery.reviewNote)) {
-      return;
-    }
-
-    const deleted = await prisma.$transaction(async (tx) => {
-      let count = 0;
-      for (const gallery of galleries) {
-        await tx.gallery.update({
-          where: { id: gallery.id },
-          data: softDeleteData(req.authUser!.uid),
-        });
-        await tx.moderationLog.create({
-          data: {
-            targetType: 'gallery',
-            targetId: gallery.id,
-            action: 'delete',
-            operatorUid: req.authUser!.uid,
-            note: gallery.authorUid === req.authUser!.uid ? resolveDeleteReason(null, true) : reason,
-          },
-        });
-        count++;
+router.post(
+  '/batch-delete-galleries',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const galleryIds = Array.isArray(req.body?.galleryIds) ? req.body.galleryIds : []
+      if (!galleryIds.length) {
+        res.status(400).json({ error: '请选择要删除的图集' })
+        return
       }
-      return count;
-    });
 
-    res.json({ deleted });
-  } catch (error) {
-    logger.error({ err: error }, 'Batch delete galleries error');
-    res.status(500).json({ error: '批量删除图集失败' });
-  }
-}));
+      const galleries = await prisma.gallery.findMany({
+        where: { id: { in: galleryIds }, deletedAt: null },
+        select: { id: true, authorUid: true },
+      })
+      const hasOtherPeopleContent = galleries.some(
+        (gallery) => gallery.authorUid !== req.authUser!.uid
+      )
+      const reason = resolveDeleteReason(req.body?.reason, !hasOtherPeopleContent)
+      if (hasOtherPeopleContent && !reason) {
+        res.status(400).json({ error: '删除理由不能为空' })
+        return
+      }
+      if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.gallery.reviewNote)) {
+        return
+      }
+
+      const deleted = await prisma.$transaction(async (tx) => {
+        let count = 0
+        for (const gallery of galleries) {
+          await tx.gallery.update({
+            where: { id: gallery.id },
+            data: softDeleteData(req.authUser!.uid),
+          })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'gallery',
+              targetId: gallery.id,
+              action: 'delete',
+              operatorUid: req.authUser!.uid,
+              note:
+                gallery.authorUid === req.authUser!.uid ? resolveDeleteReason(null, true) : reason,
+            },
+          })
+          count++
+        }
+        return count
+      })
+
+      res.json({ deleted })
+    } catch (error) {
+      logger.error({ err: error }, 'Batch delete galleries error')
+      res.status(500).json({ error: '批量删除图集失败' })
+    }
+  })
+)
 
 // POST /api/admin/batch-delete-comments - Batch delete comments
-router.post('/batch-delete-comments', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const commentIds = Array.isArray(req.body?.commentIds) ? req.body.commentIds : [];
-    if (!commentIds.length) {
-      res.status(400).json({ error: '请选择要删除的评论' });
-      return;
-    }
-
-    const comments = await prisma.postComment.findMany({
-      where: { id: { in: commentIds }, deletedAt: null },
-      select: { id: true, authorUid: true },
-    });
-    const hasOtherPeopleContent = comments.some((comment) => comment.authorUid !== req.authUser!.uid);
-    const reason = resolveDeleteReason(req.body?.reason, !hasOtherPeopleContent);
-    if (hasOtherPeopleContent && !reason) {
-      res.status(400).json({ error: '删除理由不能为空' });
-      return;
-    }
-    if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.post.reviewNote)) {
-      return;
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      let deleted = 0;
-      for (const comment of comments) {
-        await tx.postComment.update({
-          where: { id: comment.id },
-          data: {
-            deletedAt: new Date(),
-            deletedBy: req.authUser!.uid,
-          },
-        });
-        await tx.moderationLog.create({
-          data: {
-            targetType: 'comment',
-            targetId: comment.id,
-            action: 'delete',
-            operatorUid: req.authUser!.uid,
-            note: comment.authorUid === req.authUser!.uid ? resolveDeleteReason(null, true) : reason,
-          },
-        });
-        deleted++;
+router.post(
+  '/batch-delete-comments',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const commentIds = Array.isArray(req.body?.commentIds) ? req.body.commentIds : []
+      if (!commentIds.length) {
+        res.status(400).json({ error: '请选择要删除的评论' })
+        return
       }
-      return { count: deleted };
-    });
 
-    res.json({ deleted: result.count });
-  } catch (error) {
-    logger.error({ err: error }, 'Batch delete comments error');
-    res.status(500).json({ error: '批量删除评论失败' });
-  }
-}));
+      const comments = await prisma.postComment.findMany({
+        where: { id: { in: commentIds }, deletedAt: null },
+        select: { id: true, authorUid: true },
+      })
+      const hasOtherPeopleContent = comments.some(
+        (comment) => comment.authorUid !== req.authUser!.uid
+      )
+      const reason = resolveDeleteReason(req.body?.reason, !hasOtherPeopleContent)
+      if (hasOtherPeopleContent && !reason) {
+        res.status(400).json({ error: '删除理由不能为空' })
+        return
+      }
+      if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.post.reviewNote)) {
+        return
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        let deleted = 0
+        for (const comment of comments) {
+          await tx.postComment.update({
+            where: { id: comment.id },
+            data: {
+              deletedAt: new Date(),
+              deletedBy: req.authUser!.uid,
+            },
+          })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'comment',
+              targetId: comment.id,
+              action: 'delete',
+              operatorUid: req.authUser!.uid,
+              note:
+                comment.authorUid === req.authUser!.uid ? resolveDeleteReason(null, true) : reason,
+            },
+          })
+          deleted++
+        }
+        return { count: deleted }
+      })
+
+      res.json({ deleted: result.count })
+    } catch (error) {
+      logger.error({ err: error }, 'Batch delete comments error')
+      res.status(500).json({ error: '批量删除评论失败' })
+    }
+  })
+)
 
 /**
  * ==========================
@@ -1354,142 +2114,172 @@ router.post('/batch-delete-comments', requireAdmin, asyncHandler(async (req: Aut
  */
 
 // GET /api/admin/wiki-links - Get all wiki-links (scan)
-router.get('/wiki-links/scan', requireAuth, requireAdmin, asyncHandler(async (_req, res) => {
-  try {
-    const result = await scanAllWikiLinks();
-    res.json(result);
-  } catch (error) {
-    logger.error({ err: error }, 'Scan wiki links error');
-    res.status(500).json({ error: '扫描 Wiki 链接失败' });
-  }
-}));
+router.get(
+  '/wiki-links/scan',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    try {
+      const result = await scanAllWikiLinks()
+      res.json(result)
+    } catch (error) {
+      logger.error({ err: error }, 'Scan wiki links error')
+      res.status(500).json({ error: '扫描 Wiki 链接失败' })
+    }
+  })
+)
 
 // GET /api/admin/wiki-links/:slug - Get wiki page links
-router.get('/wiki-links/:slug', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { slug } = req.params;
-    const result = await getWikiPageLinks(slug);
-    res.json(result);
-  } catch (error) {
-    logger.error({ err: error }, 'Get wiki page links error');
-    res.status(500).json({ error: '获取 Wiki 页面链接失败' });
-  }
-}));
+router.get(
+  '/wiki-links/:slug',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { slug } = req.params
+      const result = await getWikiPageLinks(slug)
+      res.json(result)
+    } catch (error) {
+      logger.error({ err: error }, 'Get wiki page links error')
+      res.status(500).json({ error: '获取 Wiki 页面链接失败' })
+    }
+  })
+)
 
 // PUT /api/admin/wiki-links/:id - Update wiki link (preview)
-router.put('/wiki-links/:id', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { mappings, slugs } = req.body as {
-      mappings: Array<{ oldUrl: string; newUrl: string; useRegex?: boolean }>;
-      slugs?: string[];
-    };
+router.put(
+  '/wiki-links/:id',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { mappings, slugs } = req.body as {
+        mappings: Array<{ oldUrl: string; newUrl: string; useRegex?: boolean }>
+        slugs?: string[]
+      }
 
-    if (!mappings || !Array.isArray(mappings) || mappings.length === 0) {
-      res.status(400).json({ error: '请提供链接映射规则' });
-      return;
+      if (!mappings || !Array.isArray(mappings) || mappings.length === 0) {
+        res.status(400).json({ error: '请提供链接映射规则' })
+        return
+      }
+
+      const result = await previewLinkUpdate(mappings, { specificSlugs: slugs })
+      res.json(result)
+    } catch (error) {
+      logger.error({ err: error }, 'Preview link update error')
+      res.status(500).json({ error: '预览链接更新失败' })
     }
-
-    const result = await previewLinkUpdate(mappings, { specificSlugs: slugs });
-    res.json(result);
-  } catch (error) {
-    logger.error({ err: error }, 'Preview link update error');
-    res.status(500).json({ error: '预览链接更新失败' });
-  }
-}));
+  })
+)
 
 // POST /api/admin/wiki-links/update - Batch update wiki links
-router.post('/wiki-links/update', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { mappings, dryRun } = req.body as {
-      mappings: Array<{ oldUrl: string; newUrl: string; useRegex?: boolean }>;
-      dryRun?: boolean;
-    };
+router.post(
+  '/wiki-links/update',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { mappings, dryRun } = req.body as {
+        mappings: Array<{ oldUrl: string; newUrl: string; useRegex?: boolean }>
+        dryRun?: boolean
+      }
 
-    if (!mappings || !Array.isArray(mappings) || mappings.length === 0) {
-      res.status(400).json({ error: '请提供链接映射规则' });
-      return;
+      if (!mappings || !Array.isArray(mappings) || mappings.length === 0) {
+        res.status(400).json({ error: '请提供链接映射规则' })
+        return
+      }
+
+      const result = await batchUpdateWikiLinks(mappings, { dryRun })
+
+      // 批量更新完成后清空 Wiki 相关缓存
+      if (!dryRun && result.successCount > 0) {
+        invalidateWikiContentCaches()
+      }
+
+      res.json(result)
+    } catch (error) {
+      logger.error({ err: error }, 'Batch update wiki links error')
+      res.status(500).json({ error: '批量更新链接失败' })
     }
-
-    const result = await batchUpdateWikiLinks(mappings, { dryRun });
-
-    // 批量更新完成后清空 Wiki 相关缓存
-    if (!dryRun && result.successCount > 0) {
-      invalidateWikiContentCaches();
-    }
-
-    res.json(result);
-  } catch (error) {
-    logger.error({ err: error }, 'Batch update wiki links error');
-    res.status(500).json({ error: '批量更新链接失败' });
-  }
-}));
+  })
+)
 
 // POST /api/admin/wiki-links/switch-storage - Switch wiki storage strategy
-router.post('/wiki-links/switch-storage', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { fromStorage, toStorage, config, dryRun } = req.body as {
-      fromStorage: 'local' | 's3' | 'external';
-      toStorage: 'local' | 's3' | 'external';
-      config: {
-        localBaseUrl?: string;
-        s3BaseUrl?: string;
-        externalBaseUrl?: string;
-      };
-      dryRun?: boolean;
-    };
+router.post(
+  '/wiki-links/switch-storage',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { fromStorage, toStorage, config, dryRun } = req.body as {
+        fromStorage: 'local' | 's3' | 'external'
+        toStorage: 'local' | 's3' | 'external'
+        config: {
+          localBaseUrl?: string
+          s3BaseUrl?: string
+          externalBaseUrl?: string
+        }
+        dryRun?: boolean
+      }
 
-    if (!fromStorage || !toStorage) {
-      res.status(400).json({ error: '请提供源存储和目标存储' });
-      return;
+      if (!fromStorage || !toStorage) {
+        res.status(400).json({ error: '请提供源存储和目标存储' })
+        return
+      }
+
+      if (fromStorage === toStorage) {
+        res.status(400).json({ error: '源存储和目标存储不能相同' })
+        return
+      }
+
+      const result = await switchWikiStorage(fromStorage, toStorage, config, { dryRun })
+      res.json(result)
+    } catch (error) {
+      logger.error({ err: error }, 'Switch wiki storage error')
+      res.status(500).json({ error: '切换存储策略失败' })
     }
-
-    if (fromStorage === toStorage) {
-      res.status(400).json({ error: '源存储和目标存储不能相同' });
-      return;
-    }
-
-    const result = await switchWikiStorage(fromStorage, toStorage, config, { dryRun });
-    res.json(result);
-  } catch (error) {
-    logger.error({ err: error }, 'Switch wiki storage error');
-    res.status(500).json({ error: '切换存储策略失败' });
-  }
-}));
+  })
+)
 
 // POST /api/admin/wiki-links/sync-with-imagemap - Sync wiki links with ImageMap
-router.post('/wiki-links/sync-with-imagemap', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { dryRun } = req.body as { dryRun?: boolean };
+router.post(
+  '/wiki-links/sync-with-imagemap',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { dryRun } = req.body as { dryRun?: boolean }
 
-    const imageMaps = await prisma.imageMap.findMany({});
-    if (imageMaps.length === 0) {
-      res.json({ message: 'ImageMap 为空，无需同步', result: null });
-      return;
+      const imageMaps = await prisma.imageMap.findMany({})
+      if (imageMaps.length === 0) {
+        res.json({ message: 'ImageMap 为空，无需同步', result: null })
+        return
+      }
+
+      const mappings = imageMaps
+        .filter((im) => im.localUrl && im.externalUrl && im.localUrl !== im.externalUrl)
+        .map((im) => ({
+          oldUrl: im.localUrl!,
+          newUrl: im.externalUrl!,
+          useRegex: false,
+        }))
+
+      if (mappings.length === 0) {
+        res.json({ message: '没有需要同步的链接', result: null })
+        return
+      }
+
+      const result = await batchUpdateWikiLinks(mappings, { dryRun })
+      if (!dryRun && result.successCount > 0) {
+        invalidateWikiContentCaches()
+      }
+      res.json({ message: dryRun ? '预览同步完成' : '同步完成', result })
+    } catch (error) {
+      logger.error({ err: error }, 'Sync wiki links with ImageMap error')
+      res.status(500).json({ error: '同步 ImageMap 失败' })
     }
-
-    const mappings = imageMaps
-      .filter(im => im.localUrl && im.externalUrl && im.localUrl !== im.externalUrl)
-      .map(im => ({
-        oldUrl: im.localUrl!,
-        newUrl: im.externalUrl!,
-        useRegex: false,
-      }));
-
-    if (mappings.length === 0) {
-      res.json({ message: '没有需要同步的链接', result: null });
-      return;
-    }
-
-    const result = await batchUpdateWikiLinks(mappings, { dryRun });
-    if (!dryRun && result.successCount > 0) {
-      invalidateWikiContentCaches();
-    }
-    res.json({ message: dryRun ? '预览同步完成' : '同步完成', result });
-  } catch (error) {
-    logger.error({ err: error }, 'Sync wiki links with ImageMap error');
-    res.status(500).json({ error: '同步 ImageMap 失败' });
-  }
-}));
+  })
+)
 
 /**
  * ==========================
@@ -1497,1199 +2287,2121 @@ router.post('/wiki-links/sync-with-imagemap', requireAuth, requireAdmin, asyncHa
  * ==========================
  */
 
+// pg_dump 耗时较长，拒绝并发创建备份
+let backupCreateInFlight = false
+
 // POST /api/admin/backup/create - Create backup
-router.post('/backup/create', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { password } = req.body as { password?: string };
-    const backupPassword = password || BACKUP_PASSWORD;
-
-    if (!backupPassword) {
-      res.status(400).json({ error: '请提供备份密码' });
-      return;
+router.post(
+  '/backup/create',
+  requireSuperAdmin,
+  validateBody(backupCreateSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    if (backupCreateInFlight) {
+      res.status(409).json({ error: '已有备份正在创建，请稍后再试' })
+      return
     }
-
-    const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '');
-    if (!dbConfig) {
-      res.status(500).json({ error: 'DATABASE_URL 格式无效' });
-      return;
-    }
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const sqlFilename = `backup_${timestamp}.sql`;
-    const sqlFilePath = path.join(backupsDir, sqlFilename);
-    const zipFilename = `backup_${timestamp}.zip`;
-    const zipFilePath = path.join(backupsDir, zipFilename);
-
-    const pgDumpArgs = [
-      '-h', dbConfig.host,
-      '-p', dbConfig.port,
-      '-U', dbConfig.user,
-      '-d', dbConfig.database,
-      '--no-owner',
-      '--no-privileges',
-      '--clean',
-      '--if-exists',
-      '--exclude-table-data=ImageEmbedding',
-      '--exclude-table-data=_prisma_migrations',
-      '-f', sqlFilePath,
-    ];
-
-    const pgDumpEnv = { ...process.env, PGPASSWORD: dbConfig.password };
-
-    await execFileAsync(getPostgresClientExecutable('pg_dump'), pgDumpArgs, {
-      env: pgDumpEnv,
-      timeout: 300000,
-    });
-
-    const sqlContent = await fs.promises.readFile(sqlFilePath);
-    await fs.promises.unlink(sqlFilePath);
-
-    const encryptedContent = encryptBuffer(sqlContent, backupPassword);
-
-    await new Promise<void>((resolve, reject) => {
-      const output = fs.createWriteStream(zipFilePath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
-
-      output.on('close', () => resolve());
-      archive.on('error', (err) => reject(err));
-
-      archive.pipe(output);
-      archive.append(encryptedContent, { name: sqlFilename });
-      archive.finalize();
-    });
-
-    const stat = await fs.promises.stat(zipFilePath);
-
-    await cleanupOldBackups();
-
-    res.json({
-      backup: {
-        filename: zipFilename,
-        size: stat.size,
-        sizeFormatted: formatFileSize(stat.size),
-        createdAt: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Create backup error');
-    if (isPostgresClientMissingError(error)) {
-      res.status(500).json({ error: formatPostgresClientMissingError('pg_dump') });
-      return;
-    }
-    res.status(500).json({ error: '创建备份失败，请查看服务器日志' });
-  }
-}));
-
-// GET /api/admin/backup/list - List backups (frontend compatible)
-router.get('/backup/list', requireSuperAdmin, asyncHandler(async (_req, res) => {
-  try {
-    const files = (await fs.promises.readdir(backupsDir))
-      .filter((f) => f.startsWith('backup_') && f.endsWith('.zip'));
-    const mapped = (await Promise.all(
-      files.map(async (f) => {
-        const filePath = path.join(backupsDir, f);
-        const stat = await fs.promises.stat(filePath);
-        return {
-          filename: f,
-          size: stat.size,
-          sizeFormatted: formatFileSize(stat.size),
-          createdAt: stat.mtime.toISOString(),
-        };
-      }),
-    ))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    res.json({ backups: mapped });
-  } catch (error) {
-    logger.error({ err: error }, 'List backups error');
-  }
-}));
-
-// POST /api/admin/backup/:filename/download - Download backup
-router.post('/backup/:filename/download', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { password } = req.body as { password?: string };
-    const filename = req.params.filename;
-    const normalized = path.normalize(filename);
-
-    const backupPassword = password || BACKUP_PASSWORD;
-    if (!backupPassword) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
-      return;
-    }
-
-    if (!password || !verifyBackupPassword(password)) {
-      res.status(401).json({ error: '备份密码错误' });
-      return;
-    }
-
-    if (normalized.includes('..') || !sanitizeFilename(filename)) {
-      res.status(400).json({ error: '无效的文件名' });
-      return;
-    }
-
-    const filePath = path.join(backupsDir, normalized);
+    backupCreateInFlight = true
     try {
-      await fs.promises.access(filePath);
-    } catch {
-      res.status(404).json({ error: '备份文件不存在' });
-      return;
-    }
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.on('error', (err) => {
-      logger.error({ err }, 'Backup download stream error');
-      if (!res.headersSent) {
-        res.status(500).json({ error: '下载备份失败' });
-      } else {
-        res.end();
+      const { note = '' } = req.body as { note?: string }
+      const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '')
+      if (!dbConfig) {
+        res.status(500).json({ error: 'DATABASE_URL 格式无效' })
+        return
       }
-    });
-    fileStream.pipe(res);
-  } catch (error) {
-    logger.error({ err: error }, 'Download backup error');
-    res.status(500).json({ error: '下载备份失败' });
-  }
-}));
 
-// POST /api/admin/backup/restore - Restore backup
-router.post('/backup/restore', requireSuperAdmin, uploadBackup.single('file'), validateBody(backupRestoreSchema), asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { password, confirm } = req.body as { password?: string; confirm?: boolean };
-    const file = req.file;
-
-    const backupPassword = password || BACKUP_PASSWORD;
-    if (!backupPassword) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
-      return;
-    }
-
-    if (!password || !verifyBackupPassword(password)) {
-      res.status(401).json({ error: '备份密码错误' });
-      return;
-    }
-
-    if (!confirm) {
-      res.status(400).json({ error: '恢复操作需要二次确认，请传入 confirm: true' });
-      return;
-    }
-
-    if (!file) {
-      res.status(400).json({ error: '请上传备份文件' });
-      return;
-    }
-
-    const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '');
-    if (!dbConfig) {
-      res.status(500).json({ error: 'DATABASE_URL 格式无效' });
-      return;
-    }
-
-    const AdmZip = (await import('adm-zip')).default;
-    const zip = new AdmZip(file.path);
-    const zipEntries = zip.getEntries();
-
-    const sqlEntry = zipEntries.find((e) => e.entryName.endsWith('.sql'));
-    if (!sqlEntry) {
-      await fs.promises.unlink(file.path);
-      res.status(400).json({ error: '备份文件中未找到 SQL 数据' });
-      return;
-    }
-
-    const encryptedContent = sqlEntry.getData();
-
-    let sqlContent: Buffer;
-    try {
-      sqlContent = decryptBuffer(encryptedContent, password);
-    } catch {
-      await fs.promises.unlink(file.path);
-      res.status(401).json({ error: '备份密码错误或文件已损坏' });
-      return;
-    }
-
-    const sqlContentStr = sqlContent.toString('utf-8');
-    if (!sqlContentStr.includes('PostgreSQL database dump') && !sqlContentStr.includes('pg_dump')) {
-      await fs.promises.unlink(file.path);
-      res.status(400).json({ error: '备份文件格式无效' });
-      return;
-    }
-
-    const validation = validateSqlContent(sqlContentStr);
-    if (!validation.valid) {
-      await fs.promises.unlink(file.path);
-      logger.error({ reason: validation.reason }, 'SQL validation failed during restore');
-      res.status(400).json({ error: validation.reason });
-      return;
-    }
-
-    logger.info('Creating pre-restore backup before database restore')
-    try {
-      const preRestoreTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const preRestoreSqlFilename = `backup_${preRestoreTimestamp}.sql`;
-      const preRestoreSqlFilePath = path.join(backupsDir, preRestoreSqlFilename);
-      const preRestoreZipFilename = `backup_${preRestoreTimestamp}.zip`;
-      const preRestoreZipFilePath = path.join(backupsDir, preRestoreZipFilename);
+      const timestamp = formatBackupTimestamp()
+      const sqlFilename = `backup_${timestamp}.sql`
+      const sqlFilePath = path.join(backupsDir, sqlFilename)
+      const zipFilename = `backup_${timestamp}.zip`
+      const zipFilePath = path.join(backupsDir, zipFilename)
 
       const pgDumpArgs = [
-        '-h', dbConfig.host,
-        '-p', dbConfig.port,
-        '-U', dbConfig.user,
-        '-d', dbConfig.database,
+        '-h',
+        dbConfig.host,
+        '-p',
+        dbConfig.port,
+        '-U',
+        dbConfig.user,
+        '-d',
+        dbConfig.database,
         '--no-owner',
         '--no-privileges',
         '--clean',
         '--if-exists',
         '--exclude-table-data=ImageEmbedding',
-        '--exclude-table-data=_prisma_migrations',
-        '-f', preRestoreSqlFilePath,
-      ];
-      const pgDumpEnv = { ...process.env, PGPASSWORD: dbConfig.password };
+        '--exclude-table-data=TextEmbeddingChunk',
+        '-f',
+        sqlFilePath,
+      ]
+
+      const pgDumpEnv = { ...process.env, PGPASSWORD: dbConfig.password }
 
       await execFileAsync(getPostgresClientExecutable('pg_dump'), pgDumpArgs, {
         env: pgDumpEnv,
         timeout: 300000,
-      });
+      })
 
-      const preRestoreSqlContent = await fs.promises.readFile(preRestoreSqlFilePath);
-      await fs.promises.unlink(preRestoreSqlFilePath);
+      const sqlContent = await fs.promises.readFile(sqlFilePath)
+      await fs.promises.unlink(sqlFilePath)
 
-      const preRestoreEncrypted = encryptBuffer(preRestoreSqlContent, BACKUP_PASSWORD);
+      const isEncrypted = Boolean(BACKUP_PASSWORD)
+      const archiveContent = isEncrypted ? encryptBuffer(sqlContent, BACKUP_PASSWORD) : sqlContent
 
       await new Promise<void>((resolve, reject) => {
-        const output = fs.createWriteStream(preRestoreZipFilePath);
-        const archive = archiver('zip', { zlib: { level: 9 } });
+        const output = fs.createWriteStream(zipFilePath)
+        const archive = archiver('zip', { zlib: { level: 9 } })
 
-        output.on('close', () => resolve());
-        archive.on('error', (err) => reject(err));
+        output.on('close', () => resolve())
+        archive.on('error', (err) => reject(err))
 
-        archive.pipe(output);
-        archive.append(preRestoreEncrypted, { name: preRestoreSqlFilename });
-        archive.finalize();
-      });
+        archive.pipe(output)
+        archive.append(archiveContent, { name: sqlFilename })
+        archive.append(
+          serializeBackupMetadata({
+            format: 'huangshifu-wiki-backup',
+            version: 2,
+            encrypted: isEncrypted,
+            encryption: isEncrypted ? 'aes-256-gcm' : undefined,
+          }),
+          { name: BACKUP_METADATA_ENTRY }
+        )
+        archive.finalize()
+      })
 
-      await cleanupOldBackups();
-      logger.info({ filename: preRestoreZipFilename }, 'Pre-restore backup created successfully');
-    } catch (preBackupError) {
-      logger.error({ err: preBackupError }, 'Pre-restore backup creation failed, aborting restore');
-      await fs.promises.unlink(file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'));
-      if (isPostgresClientMissingError(preBackupError)) {
-        res.status(500).json({ error: formatPostgresClientMissingError('pg_dump') });
-        return;
-      }
-      res.status(500).json({ error: '预备份创建失败，恢复操作已中止，请查看服务器日志' });
-      return;
-    }
+      const stat = await fs.promises.stat(zipFilePath)
+      const savedNote = note.trim() ? await writeBackupNote(zipFilename, note) : ''
 
-    const tempSqlPath = path.join(backupsDir, `restore_${Date.now()}.sql`);
-    await fs.promises.writeFile(tempSqlPath, sqlContent);
+      const removedFilenames = await cleanupOldBackups()
 
-    try {
-      const psqlArgs = [
-        '-h', dbConfig.host,
-        '-p', dbConfig.port,
-        '-U', dbConfig.user,
-        '-d', dbConfig.database,
-        '--single-transaction',
-        '-v', 'ON_ERROR_STOP=1',
-        '-f', tempSqlPath,
-      ];
-      const psqlEnv = { ...process.env, PGPASSWORD: dbConfig.password };
-
-      await execFileAsync(getPostgresClientExecutable('psql'), psqlArgs, {
-        env: psqlEnv,
-        timeout: 600000,
-      });
-    } finally {
-      await fs.promises.unlink(tempSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'));
-      await fs.promises.unlink(file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'));
-    }
-
-    res.json({ success: true, message: '数据库恢复成功' });
-  } catch (error) {
-    logger.error({ err: error }, 'Restore backup error');
-    if (req.file) {
-      try { await fs.promises.access(req.file.path); } catch { /* already gone */ }
-      await fs.promises.unlink(req.file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'));
-    }
-    if (isPostgresClientMissingError(error)) {
-      res.status(500).json({ error: formatPostgresClientMissingError('psql') });
-      return;
-    }
-    res.status(500).json({ error: '恢复数据库失败，请查看服务器日志' });
-  }
-}));
-
-// GET /api/admin/backups - List backups
-router.get('/backups', requireSuperAdmin, asyncHandler(async (_req, res) => {
-  try {
-    const files = (await fs.promises.readdir(backupsDir))
-      .filter((f) => f.startsWith('backup_') && f.endsWith('.zip'));
-    const mapped = (await Promise.all(
-      files.map(async (f) => {
-        const filePath = path.join(backupsDir, f);
-        const stat = await fs.promises.stat(filePath);
-        return {
-          filename: f,
+      res.json({
+        backup: {
+          filename: zipFilename,
           size: stat.size,
           sizeFormatted: formatFileSize(stat.size),
-          createdAt: stat.mtime.toISOString(),
-        };
-      }),
-    ))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          createdAt: new Date().toISOString(),
+          note: savedNote,
+        },
+        removedFilenames,
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Create backup error')
+      if (isPostgresClientMissingError(error)) {
+        res.status(500).json({ error: formatPostgresClientMissingError('pg_dump') })
+        return
+      }
+      res.status(500).json({ error: '创建备份失败，请查看服务器日志' })
+    } finally {
+      backupCreateInFlight = false
+    }
+  })
+)
 
-    res.json({ backups: mapped });
-  } catch (error) {
-    logger.error({ err: error }, 'List backups error');
-    res.status(500).json({ error: '获取备份列表失败' });
-  }
-}));
+// GET /api/admin/backup/list - List backups (frontend compatible)
+router.get('/backup/list', requireSuperAdmin, asyncHandler(handleBackupList))
 
-// DELETE /api/admin/backup/:filename - Delete backup (legacy compatible)
-router.post('/backup/:filename/delete', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+// POST /api/admin/backup/:filename/note - Update backup note
+router.post(
+  '/backup/:filename/note',
+  requireSuperAdmin,
+  validateBody(backupNoteSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const filename = req.params.filename
+      const normalized = path.normalize(filename)
+
+      if (normalized.includes('..') || !sanitizeFilename(filename)) {
+        res.status(400).json({ error: '无效的文件名' })
+        return
+      }
+
+      const filePath = path.join(backupsDir, normalized)
+      try {
+        await fs.promises.access(filePath)
+      } catch {
+        res.status(404).json({ error: '备份文件不存在' })
+        return
+      }
+
+      const { note } = req.body as { note: string }
+      const savedNote = await writeBackupNote(normalized, note)
+      res.json({ success: true, note: savedNote })
+    } catch (error) {
+      logger.error({ err: error }, 'Update backup note error')
+      res.status(500).json({ error: '更新备份备注失败' })
+    }
+  })
+)
+
+// POST /api/admin/backup/:filename/download - Download backup
+router.post(
+  '/backup/:filename/download',
+  requireSuperAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const filename = req.params.filename
+      const normalized = path.normalize(filename)
+
+      if (normalized.includes('..') || !sanitizeFilename(filename)) {
+        res.status(400).json({ error: '无效的文件名' })
+        return
+      }
+
+      const filePath = path.join(backupsDir, normalized)
+      try {
+        await fs.promises.access(filePath)
+      } catch {
+        res.status(404).json({ error: '备份文件不存在' })
+        return
+      }
+
+      pipeDownloadFile(res, filePath, {
+        filename,
+        contentType: 'application/zip',
+        errorMessage: '下载备份失败',
+        logMessage: 'Backup download stream error',
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Download backup error')
+      res.status(500).json({ error: '下载备份失败' })
+    }
+  })
+)
+
+// ─── 站内备份恢复共享函数 ────────────────────────────────────────────
+
+type RestoreFromZipResult = {
+  success: boolean
+  error?: string
+  statusCode?: number
+  mediaReport?: MediaRestoreReportSummary
+  mediaReportError?: string
+}
+
+function pipeDownloadFile(
+  res: Response,
+  filePath: string,
+  options: { filename: string; contentType: string; errorMessage: string; logMessage: string }
+) {
+  res.setHeader('Content-Type', options.contentType)
+  res.setHeader('Content-Disposition', `attachment; filename="${options.filename}"`)
+  const fileStream = fs.createReadStream(filePath)
+  fileStream.on('error', (err) => {
+    logger.error({ err }, options.logMessage)
+    if (!res.headersSent) {
+      res.status(500).json({ error: options.errorMessage })
+    } else {
+      res.end()
+    }
+  })
+  fileStream.pipe(res)
+}
+
+async function restoreDatabaseFromZip(
+  zipFilePath: string,
+  dbConfig: { host: string; port: string; user: string; password: string; database: string },
+  restorePassword?: string,
+  sourceBackupFilename?: string,
+  restoreSource: MediaRestoreSource = { type: 'upload' }
+): Promise<RestoreFromZipResult> {
+  let sqlContent: Buffer
   try {
-    const { password } = req.body as { password?: string };
-    const filename = req.params.filename;
-    const normalized = path.normalize(filename);
+    const AdmZip = (await import('adm-zip')).default
+    const zip = new AdmZip(zipFilePath)
+    const zipEntries = zip.getEntries()
 
-    const backupPassword = password || BACKUP_PASSWORD;
-    if (!backupPassword) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
-      return;
+    const sqlEntry = zipEntries.find((e) => e.entryName.endsWith('.sql'))
+    if (!sqlEntry) {
+      return { success: false, error: '备份文件中未找到 SQL 数据', statusCode: 400 }
     }
 
-    if (!password || !verifyBackupPassword(password)) {
-      res.status(401).json({ error: '备份密码错误' });
-      return;
+    const encryptedContent = sqlEntry.getData()
+    const metadataEntry = zipEntries.find((e) => e.entryName === BACKUP_METADATA_ENTRY)
+    const metadata = parseBackupMetadata(metadataEntry?.getData())
+
+    if (!metadata) {
+      return {
+        success: false,
+        error: '备份文件缺少 backup-meta.json 元数据，仅支持 v2 格式备份',
+        statusCode: 400,
+      }
     }
+
+    if (metadata.encrypted) {
+      const candidatePasswords = [BACKUP_PASSWORD, restorePassword].filter(
+        (candidate, index, candidates): candidate is string =>
+          Boolean(candidate) && candidates.indexOf(candidate) === index
+      )
+
+      if (candidatePasswords.length === 0) {
+        return {
+          success: false,
+          error: '服务器未配置 BACKUP_PASSWORD，且未提供解密密码，无法恢复加密备份',
+          statusCode: 400,
+        }
+      }
+
+      let decrypted: Buffer | null = null
+      for (const candidate of candidatePasswords) {
+        try {
+          decrypted = decryptBuffer(encryptedContent, candidate)
+          break
+        } catch {
+          // 尝试下一个候选密码
+        }
+      }
+
+      if (!decrypted) {
+        return {
+          success: false,
+          error: '备份解密失败，请确认服务器 BACKUP_PASSWORD 或所提供密码与备份加密时一致',
+          statusCode: 400,
+        }
+      }
+
+      sqlContent = decrypted
+    } else {
+      sqlContent = encryptedContent
+    }
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to parse backup zip')
+    return { success: false, error: '备份文件解析失败', statusCode: 400 }
+  }
+
+  const sqlContentStr = sqlContent.toString('utf-8')
+  if (!sqlContentStr.includes('PostgreSQL database dump') && !sqlContentStr.includes('pg_dump')) {
+    return { success: false, error: '备份文件格式无效', statusCode: 400 }
+  }
+
+  const validation = validateSqlContent(sqlContentStr)
+  if (!validation.valid) {
+    logger.error({ reason: validation.reason }, 'SQL validation failed during restore')
+    return { success: false, error: validation.reason!, statusCode: 400 }
+  }
+
+  // Pre-restore backup
+  logger.info('Creating pre-restore backup before database restore')
+  try {
+    const preRestoreTimestamp = formatBackupTimestamp()
+    const preRestoreSqlFilename = `backup_${preRestoreTimestamp}.sql`
+    const preRestoreSqlFilePath = path.join(backupsDir, preRestoreSqlFilename)
+    const preRestoreZipFilename = `backup_${preRestoreTimestamp}.zip`
+    const preRestoreZipFilePath = path.join(backupsDir, preRestoreZipFilename)
+
+    const pgDumpArgs = [
+      '-h',
+      dbConfig.host,
+      '-p',
+      dbConfig.port,
+      '-U',
+      dbConfig.user,
+      '-d',
+      dbConfig.database,
+      '--no-owner',
+      '--no-privileges',
+      '--clean',
+      '--if-exists',
+      '--exclude-table-data=ImageEmbedding',
+      '--exclude-table-data=TextEmbeddingChunk',
+      '-f',
+      preRestoreSqlFilePath,
+    ]
+    const pgDumpEnv = { ...process.env, PGPASSWORD: dbConfig.password }
+
+    await execFileAsync(getPostgresClientExecutable('pg_dump'), pgDumpArgs, {
+      env: pgDumpEnv,
+      timeout: 300000,
+    })
+
+    const preRestoreSqlContent = await fs.promises.readFile(preRestoreSqlFilePath)
+    await fs.promises.unlink(preRestoreSqlFilePath)
+
+    const preRestoreEncrypted = Boolean(BACKUP_PASSWORD)
+    const preRestoreContent = preRestoreEncrypted
+      ? encryptBuffer(preRestoreSqlContent, BACKUP_PASSWORD)
+      : preRestoreSqlContent
+
+    await new Promise<void>((resolve, reject) => {
+      const output = fs.createWriteStream(preRestoreZipFilePath)
+      const archive = archiver('zip', { zlib: { level: 9 } })
+
+      output.on('close', () => resolve())
+      archive.on('error', (err) => reject(err))
+
+      archive.pipe(output)
+      archive.append(preRestoreContent, { name: preRestoreSqlFilename })
+      archive.append(
+        serializeBackupMetadata({
+          format: 'huangshifu-wiki-backup',
+          version: 2,
+          encrypted: preRestoreEncrypted,
+          encryption: preRestoreEncrypted ? 'aes-256-gcm' : undefined,
+        }),
+        { name: BACKUP_METADATA_ENTRY }
+      )
+      archive.finalize()
+    })
+
+    await cleanupOldBackups(sourceBackupFilename ? [sourceBackupFilename] : undefined)
+    logger.info({ filename: preRestoreZipFilename }, 'Pre-restore backup created successfully')
+  } catch (preBackupError) {
+    logger.error({ err: preBackupError }, 'Pre-restore backup creation failed, aborting restore')
+    if (isPostgresClientMissingError(preBackupError)) {
+      return { success: false, error: formatPostgresClientMissingError('pg_dump'), statusCode: 500 }
+    }
+    return {
+      success: false,
+      error: '预备份创建失败，恢复操作已中止，请查看服务器日志',
+      statusCode: 500,
+    }
+  }
+
+  // Execute restore
+  const restoreId = Date.now()
+  const tempSqlPath = path.join(backupsDir, `restore_${restoreId}.sql`)
+  const wipeSqlPath = path.join(backupsDir, `restore_${restoreId}_wipe.sql`)
+  await fs.promises.writeFile(tempSqlPath, sqlContent)
+  // pg_dump --clean 只清理备份中已知的对象，目标库 schema 比备份新时（如备份后新增了表和外键）
+  // 残留的外键会阻塞主键删除，因此先重建 public schema 再重放备份
+  await fs.promises.writeFile(
+    wipeSqlPath,
+    'DROP SCHEMA IF EXISTS public CASCADE;\nCREATE SCHEMA public;\n'
+  )
+
+  try {
+    const psqlArgs = [
+      '-h',
+      dbConfig.host,
+      '-p',
+      dbConfig.port,
+      '-U',
+      dbConfig.user,
+      '-d',
+      dbConfig.database,
+      '--single-transaction',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-f',
+      wipeSqlPath,
+      '-f',
+      tempSqlPath,
+    ]
+    const psqlEnv = { ...process.env, PGPASSWORD: dbConfig.password }
+
+    await execFileAsync(getPostgresClientExecutable('psql'), psqlArgs, {
+      env: psqlEnv,
+      timeout: 600000,
+    })
+  } catch (psqlError) {
+    logger.error({ err: psqlError }, 'psql restore failed')
+    if (isPostgresClientMissingError(psqlError)) {
+      return { success: false, error: formatPostgresClientMissingError('psql'), statusCode: 500 }
+    }
+    return {
+      success: false,
+      error: '恢复数据库失败，数据库已回滚至恢复前状态，请查看服务器日志',
+      statusCode: 500,
+    }
+  } finally {
+    await fs.promises.unlink(tempSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'))
+    await fs.promises.unlink(wipeSqlPath).catch((err) => logger.warn({ err }, 'Cleanup failed'))
+  }
+
+  try {
+    const mediaReport = await generateMediaRestoreReport(prisma, restoreSource)
+    return { success: true, mediaReport }
+  } catch (mediaReportError) {
+    logger.error({ err: mediaReportError }, 'Generate restore media report failed')
+    return {
+      success: true,
+      mediaReportError: '图片清单生成失败，请查看服务器日志',
+    }
+  }
+}
+
+// POST /api/admin/backup/restore - Restore backup (upload)
+router.post(
+  '/backup/restore',
+  requireSuperAdmin,
+  uploadBackup.single('file'),
+  validateBody(backupRestoreSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    req.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
+    res.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
+    const { password, confirm } = req.body as { password?: string; confirm?: boolean }
+    const file = req.file
+
+    if (!confirm) {
+      res.status(400).json({ error: '恢复操作需要二次确认，请传入 confirm: true' })
+      return
+    }
+
+    if (!file) {
+      res.status(400).json({ error: '请上传备份文件' })
+      return
+    }
+
+    const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '')
+    if (!dbConfig) {
+      await fs.promises.unlink(file.path).catch(() => {})
+      res.status(500).json({ error: 'DATABASE_URL 格式无效' })
+      return
+    }
+
+    try {
+      const result = await restoreDatabaseFromZip(file.path, dbConfig, password, undefined, {
+        type: 'upload',
+        filename: file.originalname,
+      })
+
+      if (!result.success) {
+        res.status(result.statusCode).json({ error: result.error })
+        return
+      }
+
+      res.json({
+        success: true,
+        message: '数据库恢复成功',
+        mediaReport: result.mediaReport,
+        mediaReportError: result.mediaReportError,
+      })
+    } finally {
+      await fs.promises.unlink(file.path).catch((err) => logger.warn({ err }, 'Cleanup failed'))
+    }
+  })
+)
+
+// POST /api/admin/backup/:filename/restore - Restore from existing backup
+router.post(
+  '/backup/:filename/restore',
+  requireSuperAdmin,
+  validateBody(backupRestoreSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    req.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
+    res.setTimeout(BACKUP_RESTORE_RESPONSE_TIMEOUT_MS)
+    const { password, confirm } = req.body as { password?: string; confirm?: boolean }
+
+    if (!confirm) {
+      res.status(400).json({ error: '恢复操作需要二次确认，请传入 confirm: true' })
+      return
+    }
+
+    const filename = req.params.filename
+    const normalized = path.normalize(filename)
 
     if (normalized.includes('..') || !sanitizeFilename(filename)) {
-      res.status(400).json({ error: '无效的文件名' });
-      return;
+      res.status(400).json({ error: '无效的文件名' })
+      return
     }
 
-    const filePath = path.join(backupsDir, normalized);
+    const filePath = path.join(backupsDir, normalized)
     try {
-      await fs.promises.access(filePath);
+      await fs.promises.access(filePath)
     } catch {
-      res.status(404).json({ error: '备份文件不存在' });
-      return;
+      res.status(404).json({ error: '备份文件不存在' })
+      return
     }
 
-    await fs.promises.unlink(filePath);
-    res.json({ success: true });
-  } catch (error) {
-    logger.error({ err: error }, 'Delete backup error');
-    res.status(500).json({ error: '删除备份失败' });
-  }
-}));
-
-// DELETE /api/admin/backups/:filename - Delete backup
-router.post('/backups/:filename/delete', requireSuperAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const { password } = req.body as { password?: string };
-    const filename = req.params.filename;
-    const normalized = path.normalize(filename);
-
-    const backupPassword = password || BACKUP_PASSWORD;
-    if (!backupPassword) {
-      res.status(500).json({ error: '未配置 BACKUP_PASSWORD 环境变量，请在请求体中提供密码' });
-      return;
+    const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL || '')
+    if (!dbConfig) {
+      res.status(500).json({ error: 'DATABASE_URL 格式无效' })
+      return
     }
 
-    if (!password || !verifyBackupPassword(password)) {
-      res.status(401).json({ error: '备份密码错误' });
-      return;
+    const result = await restoreDatabaseFromZip(filePath, dbConfig, password, normalized, {
+      type: 'existing',
+      filename: normalized,
+    })
+
+    if (!result.success) {
+      res.status(result.statusCode).json({ error: result.error })
+      return
     }
 
-    if (normalized.includes('..') || !sanitizeFilename(filename)) {
-      res.status(400).json({ error: '无效的文件名' });
-      return;
-    }
-
-    const filePath = path.join(backupsDir, normalized);
-    try {
-      await fs.promises.access(filePath);
-    } catch {
-      res.status(404).json({ error: '备份文件不存在' });
-      return;
-    }
-
-    await fs.promises.unlink(filePath);
-    res.json({ success: true });
-  } catch (error) {
-    logger.error({ err: error }, 'Delete backup error');
-    res.status(500).json({ error: '删除备份失败' });
-  }
-}));
-
-/**
- * ==========================
- * Admin Panel Stats & Data
- * ==========================
- */
-
-// GET /api/admin/stats - Get admin panel statistics
-router.get('/stats', requireAdmin, asyncHandler(async (_req, res) => {
-  try {
-    const [
-      wikiCount,
-      postCount,
-      galleryCount,
-      userCount,
-      musicCount,
-    ] = await Promise.all([
-      prisma.wikiPage.count({ where: { deletedAt: null } }),
-      prisma.post.count({ where: { deletedAt: null } }),
-      prisma.gallery.count({ where: { deletedAt: null } }),
-      prisma.user.count({ where: { deletedAt: null } }),
-      prisma.musicTrack.count({ where: { deletedAt: null } }),
-    ]);
-
+    // Do NOT delete the original backup file
     res.json({
-      stats: {
-        wiki: wikiCount,
-        posts: postCount,
-        galleries: galleryCount,
-        users: userCount,
-        music: musicCount,
-      },
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Fetch admin stats error');
-    res.status(500).json({ error: '获取统计数据失败' });
-  }
-}));
+      success: true,
+      message: '数据库恢复成功',
+      mediaReport: result.mediaReport,
+      mediaReportError: result.mediaReportError,
+    })
+  })
+)
+
+// POST /api/admin/backup/media-reports/:filename/download - Download restore media report
+router.post(
+  '/backup/media-reports/:filename/download',
+  requireSuperAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const filename = req.params.filename
+      if (!isMediaRestoreReportFilename(filename)) {
+        res.status(400).json({ error: '无效的文件名' })
+        return
+      }
+
+      const filePath = resolveMediaRestoreReportPath(filename)
+      try {
+        await fs.promises.access(filePath)
+      } catch {
+        res.status(404).json({ error: '图片清单不存在' })
+        return
+      }
+
+      pipeDownloadFile(res, filePath, {
+        filename,
+        contentType: 'application/json; charset=utf-8',
+        errorMessage: '下载图片清单失败',
+        logMessage: 'Restore media report download stream error',
+      })
+    } catch (error) {
+      logger.error({ err: error }, 'Download restore media report error')
+      res.status(500).json({ error: '下载图片清单失败' })
+    }
+  })
+)
+
+// POST /api/admin/backup/:filename/delete - Delete backup
+router.post('/backup/:filename/delete', requireSuperAdmin, asyncHandler(handleBackupDelete))
+
+router.post(
+  '/wiki-categories',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id, name, description, order, requiresAdminEdit } = req.body as {
+        id?: string
+        name?: string
+        description?: string
+        order?: number
+        requiresAdminEdit?: boolean
+      }
+      const categoryId = id?.trim()
+      const categoryName = name?.trim()
+      const categoryDescription = description?.trim() || ''
+
+      if (!categoryId || !categoryName) {
+        res.status(400).json({ error: '分类 ID 和名称不能为空' })
+        return
+      }
+
+      if (
+        !ensureTextLimit(res, categoryId, '分类 ID', CONTENT_LIMITS.wiki.category) ||
+        !ensureTextLimit(res, categoryName, '分类名称', CONTENT_LIMITS.wiki.title) ||
+        !ensureTextLimit(res, categoryDescription, '分类描述', CONTENT_LIMITS.section.description)
+      ) {
+        return
+      }
+
+      const category = await prisma.wikiCategory.create({
+        data: {
+          id: categoryId,
+          name: categoryName,
+          description: categoryDescription,
+          order: typeof order === 'number' && Number.isFinite(order) ? order : 0,
+          requiresAdminEdit: Boolean(requiresAdminEdit),
+        },
+      })
+
+      invalidateSoftDeleteCaches('wiki-categories')
+      res.status(201).json({ category })
+    } catch (error) {
+      logger.error({ err: error }, 'Create wiki category error')
+      res.status(500).json({ error: '创建百科分类失败' })
+    }
+  })
+)
+
+router.patch(
+  '/wiki-categories/:id',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = req.params.id
+      const { name, description, order, requiresAdminEdit } = req.body as {
+        name?: string
+        description?: string
+        order?: number
+        requiresAdminEdit?: boolean
+      }
+      const categoryName = name?.trim()
+      const categoryDescription = description?.trim() || ''
+
+      if (!categoryName) {
+        res.status(400).json({ error: '分类名称不能为空' })
+        return
+      }
+
+      if (
+        !ensureTextLimit(res, categoryName, '分类名称', CONTENT_LIMITS.wiki.title) ||
+        !ensureTextLimit(res, categoryDescription, '分类描述', CONTENT_LIMITS.section.description)
+      ) {
+        return
+      }
+
+      const category = await prisma.wikiCategory.update({
+        where: { id },
+        data: {
+          name: categoryName,
+          description: categoryDescription,
+          order: typeof order === 'number' && Number.isFinite(order) ? order : 0,
+          requiresAdminEdit: Boolean(requiresAdminEdit),
+        },
+      })
+
+      invalidateSoftDeleteCaches('wiki-categories')
+      res.json({ category })
+    } catch (error) {
+      logger.error({ err: error }, 'Update wiki category error')
+      res.status(500).json({ error: '更新百科分类失败' })
+    }
+  })
+)
 
 // GET /api/admin/:tab - Get admin data by tab
-router.get('/:tab', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const tab = req.params.tab;
-    const includeDeleted = includeDeletedFromQuery(req.query);
-    const activeWhere = deletedAtFilter(includeDeleted);
+router.get(
+  '/:tab',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const tab = req.params.tab
+      const includeDeleted = includeDeletedFromQuery(req.query)
+      const activeWhere = deletedAtFilter(includeDeleted)
 
-    if (tab === 'wiki') {
-      const data = await prisma.wikiPage.findMany({
-        where: activeWhere,
-        include: {
-          lastEditor: { select: { displayName: true } },
-          location: true,
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 100,
-      });
-      const deleteReasonsBySlug = await getDeleteReasonsByTargetId(
-        'wiki',
-        data.filter((page) => page.deletedAt).map((page) => page.slug),
-      );
-      res.json({
-        data: data.map((page) => ({
-          ...toWikiResponse(page),
-          deletionReason: deleteReasonsBySlug.get(page.slug) ?? null,
-        })),
-      });
-      return;
-    }
+      const { limit, page, offset: skip } = parsePagination(req.query)
 
-    if (tab === 'posts') {
-      const data = await prisma.post.findMany({
-        where: activeWhere,
-        include: {
-          author: { select: { displayName: true } },
-          location: true,
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 100,
-      });
-      const deleteReasonsById = await getDeleteReasonsByTargetId(
-        'post',
-        data.filter((post) => post.deletedAt).map((post) => post.id),
-      );
-      res.json({
-        data: data.map((post) => ({
-          ...toPostResponse(post),
-          deletionReason: deleteReasonsById.get(post.id) ?? null,
-        })),
-      });
-      return;
-    }
-
-    if (tab === 'galleries') {
-      const data = await prisma.gallery.findMany({
-        where: activeWhere,
-        include: {
-          images: {
+      if (tab === 'wiki') {
+        const [data, total] = await Promise.all([
+          prisma.wikiPage.findMany({
+            where: activeWhere,
             include: {
-              asset: true,
+              lastEditor: { select: { displayName: true } },
+              location: true,
             },
-            orderBy: { sortOrder: 'asc' },
-          },
-          location: true,
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 100,
-      });
-      const deleteReasonsById = await getDeleteReasonsByTargetId(
-        'gallery',
-        data.filter((gallery) => gallery.deletedAt).map((gallery) => gallery.id),
-      );
-      const serialized = await Promise.all(data.map(g => toGalleryResponse(g)));
-      res.json({
-        data: serialized.map((gallery) => ({
-          ...gallery,
-          deletionReason: deleteReasonsById.get(gallery.id) ?? null,
-        })),
-      });
-      return;
-    }
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.wikiPage.count({ where: activeWhere }),
+        ])
+        const deleteReasonsBySlug = await getDeleteReasonsByTargetId(
+          'wiki',
+          data.filter((page) => page.deletedAt).map((page) => page.slug)
+        )
+        res.json({
+          data: data.map((page) => ({
+            ...toWikiResponse(page),
+            deletionReason: deleteReasonsBySlug.get(page.slug) ?? null,
+          })),
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
 
-    if (tab === 'users') {
-      const data = await prisma.user.findMany({
-        where: activeWhere,
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-        select: {
-          uid: true,
-          email: true,
-          displayName: true,
-          photoURL: true,
-          role: true,
-          status: true,
-          banReason: true,
-          bannedAt: true,
-          emailVerifiedAt: true,
-          level: true,
-          signature: true,
-          bio: true,
+      if (tab === 'posts') {
+        const [data, total] = await Promise.all([
+          prisma.post.findMany({
+            where: activeWhere,
+            include: {
+              author: { select: { displayName: true } },
+              location: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.post.count({ where: activeWhere }),
+        ])
+        const deleteReasonsById = await getDeleteReasonsByTargetId(
+          'post',
+          data.filter((post) => post.deletedAt).map((post) => post.id)
+        )
+        res.json({
+          data: data.map((post) => ({
+            ...toPostResponse(post),
+            deletionReason: deleteReasonsById.get(post.id) ?? null,
+          })),
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+      if (tab === 'galleries') {
+        const [data, total] = await Promise.all([
+          prisma.gallery.findMany({
+            where: activeWhere,
+            include: {
+              images: {
+                include: {
+                  asset: true,
+                },
+                orderBy: { sortOrder: 'asc' },
+              },
+              location: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.gallery.count({ where: activeWhere }),
+        ])
+        const deleteReasonsById = await getDeleteReasonsByTargetId(
+          'gallery',
+          data.filter((gallery) => gallery.deletedAt).map((gallery) => gallery.id)
+        )
+        const serialized = await Promise.all(data.map((g) => toGalleryResponse(g)))
+        res.json({
+          data: serialized.map((gallery) => ({
+            ...gallery,
+            deletionReason: deleteReasonsById.get(gallery.id) ?? null,
+          })),
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+
+      if (tab === 'ticket-listings') {
+        const [data, total] = await Promise.all([
+          prisma.ticketListing.findMany({
+            where: activeWhere,
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take: limit,
+            skip,
+            select: {
+              id: true,
+              slug: true,
+              type: true,
+              eventId: true,
+              customEventName: true,
+              quantity: true,
+              ticketTier: true,
+              seat: true,
+              authorUid: true,
+              status: true,
+              reviewNote: true,
+              reviewedBy: true,
+              reviewedAt: true,
+              deletedAt: true,
+              deletedBy: true,
+              createdAt: true,
+              updatedAt: true,
+              event: adminTicketListingInclude.event,
+              author: adminTicketListingInclude.author,
+            },
+          }),
+          prisma.ticketListing.count({ where: activeWhere }),
+        ])
+        const deleteReasonsById = await getDeleteReasonsByTargetId(
+          'ticketListing',
+          data.filter((listing) => listing.deletedAt).map((listing) => listing.id)
+        )
+        res.json({
+          data: data.map((listing) => ({
+            ...toTicketListingListResponse(listing, { includePrivate: true }),
+            deletionReason: deleteReasonsById.get(listing.id) ?? null,
+          })),
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+
+      if (tab === 'events') {
+        const [data, total] = await Promise.all([
+          prisma.event.findMany({
+            where: activeWhere,
+            include: adminEventInclude,
+            orderBy: [
+              { timeStatus: { sort: 'asc', nulls: 'last' } },
+              { sortStart: { sort: 'desc', nulls: 'last' } },
+              { createdAt: 'desc' },
+            ],
+            take: limit,
+            skip,
+          }),
+          prisma.event.count({ where: activeWhere }),
+        ])
+        res.json({
+          data: await toEventListResponse(data),
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+
+      if (tab === 'users') {
+        const [data, total] = await Promise.all([
+          prisma.user.findMany({
+            where: activeWhere,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip,
+            select: {
+              uid: true,
+              publicId: true,
+              email: true,
+              displayName: true,
+              photoURL: true,
+              role: true,
+              status: true,
+              banReason: true,
+              bannedAt: true,
+              emailVerifiedAt: true,
+              level: true,
+              signature: true,
+              bio: true,
+              deletedAt: true,
+              deletedBy: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          }),
+          prisma.user.count({ where: activeWhere }),
+        ])
+        res.json({
+          data: data.map(toUserResponse),
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+
+      if (tab === 'music') {
+        const sortBy = parseAdminMusicSortBy(req.query.sortBy)
+        const sortOrder = parseAdminMusicSortOrder(req.query.sortOrder)
+        const { where } = await buildAdminMusicWhere(req)
+        const select = {
+          docId: true,
+          slug: true,
+          title: true,
+          artists: true,
+          lyricists: true,
+          composers: true,
+          arrangers: true,
+          vocals: true,
+          album: true,
+          audioUrl: true,
+          lyric: true,
+          description: true,
+          tags: true,
+          customPlatformLinks: true,
+          releaseDate: true,
+          durationMs: true,
+          coverId: true,
+          coverAlbumDocId: true,
+          displayAlbumMode: true,
+          manualAlbumName: true,
           deletedAt: true,
           deletedBy: true,
           createdAt: true,
           updatedAt: true,
-        },
-      });
-      res.json({ data: data.map(toUserResponse) });
-      return;
-    }
-
-    if (tab === 'locks') {
-      await prisma.editLock.deleteMany({
-        where: {
-          expiresAt: {
-            lt: new Date(),
+          playableOverride: true,
+          externalSources: {
+            orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
           },
-        },
-      });
+          covers: {
+            orderBy: { sortOrder: 'asc' as const },
+            select: { id: true, publicUrl: true, thumbnailUrl: true, isDefault: true },
+          },
+          albumRelations: {
+            select: {
+              album: {
+                select: {
+                  docId: true,
+                  coverId: true,
+                  covers: {
+                    orderBy: { sortOrder: 'asc' as const },
+                    select: { id: true, publicUrl: true, thumbnailUrl: true, isDefault: true },
+                  },
+                },
+              },
+            },
+            where: { album: { deletedAt: null } },
+            orderBy: [{ discNumber: 'asc' as const }, { trackOrder: 'asc' as const }],
+          },
+        }
+        const fetchRows = () => {
+          if (sortBy === 'title' || sortBy === 'artist') {
+            return (async () => {
+              const orderedIds = (
+                await prisma.musicTrack.findMany({
+                  where: where as never,
+                  select: {
+                    docId: true,
+                    title: true,
+                    artists: true,
+                    updatedAt: true,
+                    releaseDate: true,
+                  },
+                })
+              )
+                .sort((a, b) => compareAdminMusicRows(a, b, sortBy, sortOrder))
+                .slice(skip, skip + limit)
+                .map((row) => row.docId)
+              if (!orderedIds.length) return []
 
-      const data = await prisma.editLock.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-      });
-      res.json({ data: data.map(toEditLockResponse) });
-      return;
+              const rows = await prisma.musicTrack.findMany({
+                where: { AND: [where, { docId: { in: orderedIds } }] } as never,
+                select,
+              })
+              const order = new Map(orderedIds.map((id, index) => [id, index]))
+              return rows.sort((a, b) => (order.get(a.docId) ?? 0) - (order.get(b.docId) ?? 0))
+            })()
+          }
+          if (sortBy === 'updatedAt') {
+            return prisma.musicTrack.findMany({
+              where: where as never,
+              select,
+              orderBy: [{ updatedAt: sortOrder }, { docId: 'asc' as const }],
+              skip,
+              take: limit,
+            })
+          }
+          return prisma.musicTrack.findMany({
+            where: where as never,
+            select,
+            orderBy: [
+              { releaseDate: { sort: sortOrder, nulls: 'last' as const } },
+              { updatedAt: 'desc' as const },
+              { docId: 'asc' as const },
+            ],
+            skip,
+            take: limit,
+          })
+        }
+        const [total, orderedRows] = await Promise.all([
+          prisma.musicTrack.count({ where: where as never }),
+          fetchRows(),
+        ])
+        res.json({
+          data: orderedRows.map((track) => toMusicResponse(track)),
+          ...createPaginationMeta(total, page, limit, orderedRows.length),
+        })
+        return
+      }
+
+      if (tab === 'albums') {
+        const sortBy = parseAdminMusicSortBy(req.query.sortBy)
+        const sortOrder = parseAdminMusicSortOrder(req.query.sortOrder)
+        const { where } = buildAdminAlbumWhere(req)
+        const [total, albums] = await Promise.all([
+          prisma.album.count({ where: where as never }),
+          prisma.album.findMany({
+            where: where as never,
+            select: {
+              docId: true,
+              slug: true,
+              title: true,
+              artist: true,
+              description: true,
+              tags: true,
+              tracks: true,
+              coverId: true,
+              releaseDate: true,
+              deletedAt: true,
+              deletedBy: true,
+              createdAt: true,
+              updatedAt: true,
+              covers: {
+                orderBy: { sortOrder: 'asc' },
+                select: {
+                  id: true,
+                  publicUrl: true,
+                  thumbnailUrl: true,
+                  isDefault: true,
+                  sortOrder: true,
+                },
+              },
+              externalSources: {
+                orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+              },
+              songRelations: {
+                where: { song: { deletedAt: null } },
+                select: { songDocId: true },
+              },
+            },
+            orderBy:
+              sortBy === 'updatedAt'
+                ? [{ updatedAt: sortOrder }, { docId: 'asc' }]
+                : sortBy === 'releaseDate'
+                  ? [
+                      { releaseDate: { sort: sortOrder, nulls: 'last' } },
+                      { updatedAt: 'desc' },
+                      { docId: 'asc' },
+                    ]
+                  : sortBy === 'title'
+                    ? [{ title: sortOrder }, { updatedAt: 'desc' }, { docId: 'asc' }]
+                    : [{ artist: sortOrder }, { updatedAt: 'desc' }, { docId: 'asc' }],
+            skip,
+            take: limit,
+          }),
+        ])
+        res.json({
+          data: albums.map((album) => ({
+            ...toAlbumResponse({ ...album, songRelations: undefined }),
+            trackCount: album.songRelations.length,
+            discCount: normalizeTrackDiscPayload(album.tracks).length,
+          })),
+          ...createPaginationMeta(total, page, limit, albums.length),
+        })
+        return
+      }
+      if (tab === 'announcements') {
+        const [data, total] = await Promise.all([
+          prisma.announcement.findMany({
+            where: activeWhere,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip,
+          }),
+          prisma.announcement.count({ where: activeWhere }),
+        ])
+        res.json({
+          data,
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+      if (tab === 'sections') {
+        const [data, total] = await Promise.all([
+          prisma.section.findMany({
+            where: activeWhere,
+            orderBy: { order: 'asc' },
+            take: limit,
+            skip,
+          }),
+          prisma.section.count({ where: activeWhere }),
+        ])
+        res.json({
+          data,
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+
+      if (tab === 'wiki-categories') {
+        const [data, total] = await Promise.all([
+          prisma.wikiCategory.findMany({
+            where: activeWhere,
+            orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+            take: limit,
+            skip,
+          }),
+          prisma.wikiCategory.count({ where: activeWhere }),
+        ])
+        res.json({
+          data,
+          ...createPaginationMeta(total, page, limit, data.length),
+        })
+        return
+      }
+
+      res.status(400).json({ error: '未知数据类型' })
+    } catch (error) {
+      logger.error({ err: error }, 'Fetch admin data error')
+      res.status(500).json({ error: '获取管理数据失败' })
     }
-
-    if (tab === 'music') {
-      const data = await prisma.musicTrack.findMany({
-        where: activeWhere,
-        orderBy: { updatedAt: 'desc' },
-        take: 100,
-      });
-      res.json({ data: data.map(toMusicResponse) });
-      return;
-    }
-
-    if (tab === 'announcements') {
-      const data = await prisma.announcement.findMany({
-        where: activeWhere,
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      });
-      res.json({ data });
-      return;
-    }
-
-    if (tab === 'sections') {
-      const data = await prisma.section.findMany({
-        where: activeWhere,
-        orderBy: { order: 'asc' },
-        take: 100,
-      });
-      res.json({ data });
-      return;
-    }
-
-    res.status(400).json({ error: '未知数据类型' });
-  } catch (error) {
-    logger.error({ err: error }, 'Fetch admin data error');
-    res.status(500).json({ error: '获取管理数据失败' });
-  }
-}));
+  })
+)
 
 // GET /api/admin/:tab/:id - Get admin item by ID
-router.get('/:tab/:id', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const tab = req.params.tab;
-    const id = req.params.id;
+router.get(
+  '/:tab/:id',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const tab = req.params.tab
+      const id = req.params.id
 
-    if (tab === 'wiki') {
-      const item = await prisma.wikiPage.findUnique({
-        where: { id },
-        include: {
-          lastEditor: { select: { displayName: true } },
-          location: true,
-        },
-      });
-      if (!item) {
-        res.status(404).json({ error: '记录不存在' });
-        return;
-      }
-      res.json({ item: toWikiResponse(item) });
-      return;
-    }
-
-    if (tab === 'posts') {
-      const item = await prisma.post.findUnique({ where: { id } });
-      if (!item) {
-        res.status(404).json({ error: '记录不存在' });
-        return;
-      }
-      res.json({ item: toPostResponse(item) });
-      return;
-    }
-
-    if (tab === 'galleries') {
-      const item = await prisma.gallery.findUnique({
-        where: { id },
-        include: {
-          images: {
-            include: {
-              asset: true,
-            },
-            orderBy: { sortOrder: 'asc' },
+      if (tab === 'wiki') {
+        const item = await prisma.wikiPage.findUnique({
+          where: { id },
+          include: {
+            lastEditor: { select: { displayName: true } },
+            location: true,
           },
-        },
-      });
-      if (!item) {
-        res.status(404).json({ error: '记录不存在' });
-        return;
+        })
+        if (!item) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        res.json({ item: toWikiResponse(item) })
+        return
       }
-      res.json({ item: await toGalleryResponse(item) });
-      return;
-    }
 
-    if (tab === 'users') {
-      const item = await prisma.user.findUnique({
-        where: { uid: id },
-        select: {
-          uid: true,
-          email: true,
-          displayName: true,
-          photoURL: true,
-          role: true,
-          status: true,
-          banReason: true,
-          bannedAt: true,
-          emailVerifiedAt: true,
-          level: true,
-          signature: true,
-          bio: true,
-          deletedAt: true,
-          deletedBy: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-      if (!item) {
-        res.status(404).json({ error: '记录不存在' });
-        return;
+      if (tab === 'posts') {
+        const item = await prisma.post.findUnique({ where: { id } })
+        if (!item) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        res.json({ item: toPostResponse(item) })
+        return
       }
-      res.json({ item: toUserResponse(item) });
-      return;
-    }
 
-    if (tab === 'locks') {
-      const item = await prisma.editLock.findUnique({ where: { id } });
-      if (!item) {
-        res.status(404).json({ error: '记录不存在' });
-        return;
+      if (tab === 'galleries') {
+        const item = await prisma.gallery.findUnique({
+          where: { id },
+          include: {
+            images: {
+              include: {
+                asset: true,
+              },
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
+        })
+        if (!item) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        res.json({ item: await toGalleryResponse(item) })
+        return
       }
-      res.json({ item: toEditLockResponse(item) });
-      return;
-    }
 
-    res.status(400).json({ error: '未知数据类型' });
-  } catch (error) {
-    logger.error({ err: error }, 'Fetch admin item error');
-    res.status(500).json({ error: '获取详情失败' });
-  }
-}));
+      if (tab === 'ticket-listings') {
+        const item = await prisma.ticketListing.findUnique({
+          where: { id },
+          include: adminTicketListingInclude,
+        })
+        if (!item) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        const deleteReasons = await getDeleteReasonsByTargetId('ticketListing', [id])
+        res.json({
+          item: {
+            ...toTicketListingResponse(item, { includePrivate: true }),
+            deletionReason: deleteReasons.get(id) ?? null,
+          },
+        })
+        return
+      }
+
+      if (tab === 'events') {
+        const item = await prisma.event.findUnique({
+          where: { id },
+          include: adminEventInclude,
+        })
+        if (!item) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        res.json({ item: await toEventResponse(item) })
+        return
+      }
+
+      if (tab === 'users') {
+        const item = await prisma.user.findUnique({
+          where: { uid: id },
+          select: {
+            uid: true,
+            publicId: true,
+            email: true,
+            displayName: true,
+            photoURL: true,
+            role: true,
+            status: true,
+            banReason: true,
+            bannedAt: true,
+            emailVerifiedAt: true,
+            level: true,
+            signature: true,
+            bio: true,
+            deletedAt: true,
+            deletedBy: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        })
+        if (!item) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        res.json({ item: toUserResponse(item) })
+        return
+      }
+
+      if (tab === 'locks') {
+        const item = await prisma.editLock.findUnique({ where: { id } })
+        if (!item) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        res.json({ item: toEditLockResponse(item) })
+        return
+      }
+
+      res.status(400).json({ error: '未知数据类型' })
+    } catch (error) {
+      logger.error({ err: error }, 'Fetch admin item error')
+      res.status(500).json({ error: '获取详情失败' })
+    }
+  })
+)
 
 // DELETE /api/admin/:tab/:id - Delete admin item
-router.delete('/:tab/:id', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const tab = req.params.tab;
-    const id = req.params.id;
-    const rawReason = req.body?.reason;
+router.delete(
+  '/:tab/:id',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const tab = req.params.tab
+      const id = req.params.id
+      const rawReason = req.body?.reason
 
-    if (tab === 'wiki') {
-      const reason = normalizeDeleteReason(rawReason);
-      if (!reason) {
-        res.status(400).json({ error: '删除理由不能为空' });
-        return;
-      }
-      if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.wiki.reviewNote)) {
-        return;
-      }
+      if (tab === 'wiki') {
+        const reason = normalizeDeleteReason(rawReason)
+        if (!reason) {
+          res.status(400).json({ error: '删除理由不能为空' })
+          return
+        }
+        if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.wiki.reviewNote)) {
+          return
+        }
 
-      const page = await prisma.wikiPage.findUnique({
-        where: { id },
-        select: { slug: true, title: true, lastEditorUid: true, deletedAt: true },
-      });
-      if (!page || page.deletedAt) {
-        res.status(404).json({ error: '页面不存在' });
-        return;
-      }
-
-      await prisma.$transaction(async (tx) => {
-        await tx.wikiPage.update({
+        const page = await prisma.wikiPage.findUnique({
           where: { id },
-          data: softDeleteData(req.authUser!.uid),
-        });
+          select: { slug: true, title: true, lastEditorUid: true, deletedAt: true },
+        })
+        if (!page || page.deletedAt) {
+          res.status(404).json({ error: '页面不存在' })
+          return
+        }
 
-        await tx.moderationLog.create({
-          data: {
-            targetType: 'wiki',
-            targetId: page.slug,
-            action: 'delete',
+        await prisma.$transaction(async (tx) => {
+          await tx.wikiPage.update({
+            where: { id },
+            data: softDeleteData(req.authUser!.uid),
+          })
+
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'wiki',
+              targetId: page.slug,
+              action: 'delete',
+              operatorUid: req.authUser!.uid,
+              note: reason,
+            },
+          })
+        })
+
+        await notifyContentDeleted({
+          recipientUid: page.lastEditorUid,
+          operatorUid: req.authUser!.uid,
+          operatorName: req.authUser!.displayName,
+          targetType: 'wiki',
+          targetId: page.slug,
+          title: page.title,
+          note: reason,
+        })
+
+        invalidateSoftDeleteCaches(tab, { slug: page.slug })
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'posts') {
+        const post = await prisma.post.findUnique({
+          where: { id },
+          select: { title: true, authorUid: true, deletedAt: true },
+        })
+        if (!post || post.deletedAt) {
+          res.status(404).json({ error: '帖子不存在' })
+          return
+        }
+
+        const isSelfDelete = post.authorUid === req.authUser!.uid
+        const reason = resolveDeleteReason(rawReason, isSelfDelete)
+        if (!isSelfDelete && !reason) {
+          res.status(400).json({ error: '删除理由不能为空' })
+          return
+        }
+        if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.post.reviewNote)) {
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.post.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
+
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'post',
+              targetId: id,
+              action: 'delete',
+              operatorUid: req.authUser!.uid,
+              note: reason,
+            },
+          })
+        })
+
+        if (!isSelfDelete) {
+          await notifyContentDeleted({
+            recipientUid: post.authorUid,
             operatorUid: req.authUser!.uid,
-            note: reason,
-          },
-        });
-      });
-
-      await notifyContentDeleted({
-        recipientUid: page.lastEditorUid,
-        operatorUid: req.authUser!.uid,
-        operatorName: req.authUser!.displayName,
-        targetType: 'wiki',
-        targetId: page.slug,
-        title: page.title,
-        note: reason,
-      });
-
-      invalidateSoftDeleteCaches(tab, { slug: page.slug });
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'posts') {
-      const post = await prisma.post.findUnique({
-        where: { id },
-        select: { title: true, authorUid: true, deletedAt: true },
-      });
-      if (!post || post.deletedAt) {
-        res.status(404).json({ error: '帖子不存在' });
-        return;
-      }
-
-      const isSelfDelete = post.authorUid === req.authUser!.uid;
-      const reason = resolveDeleteReason(rawReason, isSelfDelete);
-      if (!isSelfDelete && !reason) {
-        res.status(400).json({ error: '删除理由不能为空' });
-        return;
-      }
-      if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.post.reviewNote)) {
-        return;
-      }
-
-      await prisma.$transaction(async (tx) => {
-        await tx.post.update({ where: { id }, data: softDeleteData(req.authUser!.uid) });
-
-        await tx.moderationLog.create({
-          data: {
+            operatorName: req.authUser!.displayName,
             targetType: 'post',
             targetId: id,
-            action: 'delete',
-            operatorUid: req.authUser!.uid,
+            title: post.title,
             note: reason,
-          },
-        });
-      });
+          })
+        }
 
-      if (!isSelfDelete) {
-        await notifyContentDeleted({
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'galleries') {
+        const gallery = await prisma.gallery.findUnique({
+          where: { id },
+          include: { images: true },
+        })
+        if (!gallery || gallery.deletedAt) {
+          res.status(404).json({ error: '图集不存在' })
+          return
+        }
+
+        const isSelfDelete = gallery.authorUid === req.authUser!.uid
+        const reason = resolveDeleteReason(rawReason, isSelfDelete)
+        if (!isSelfDelete && !reason) {
+          res.status(400).json({ error: '删除理由不能为空' })
+          return
+        }
+        if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.gallery.reviewNote)) {
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.gallery.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
+
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'gallery',
+              targetId: id,
+              action: 'delete',
+              operatorUid: req.authUser!.uid,
+              note: reason,
+            },
+          })
+        })
+
+        if (!isSelfDelete) {
+          await notifyContentDeleted({
+            recipientUid: gallery.authorUid,
+            operatorUid: req.authUser!.uid,
+            operatorName: req.authUser!.displayName,
+            targetType: 'gallery',
+            targetId: id,
+            title: gallery.title,
+            note: reason,
+          })
+        }
+
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+
+      if (tab === 'ticket-listings') {
+        const listing = await prisma.ticketListing.findUnique({
+          where: { id },
+          include: { event: { select: { title: true } } },
+        })
+        if (!listing || listing.deletedAt) {
+          res.status(404).json({ error: '盘票信息不存在' })
+          return
+        }
+
+        const isSelfDelete = listing.authorUid === req.authUser!.uid
+        const reason = resolveDeleteReason(rawReason, isSelfDelete)
+        if (!isSelfDelete && !reason) {
+          res.status(400).json({ error: '删除理由不能为空' })
+          return
+        }
+        if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.ticketListing.reviewNote)) {
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.ticketListing.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'ticketListing',
+              targetId: id,
+              action: 'delete',
+              operatorUid: req.authUser!.uid,
+              note: reason,
+            },
+          })
+        })
+
+        if (!isSelfDelete) {
+          await notifyContentDeleted({
+            recipientUid: listing.authorUid,
+            operatorUid: req.authUser!.uid,
+            operatorName: req.authUser!.displayName,
+            targetType: 'ticketListing',
+            targetId: id,
+            title: listing.event?.title || listing.customEventName || '盘票信息',
+            note: reason,
+          })
+        }
+
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+
+      if (tab === 'events') {
+        const event = await prisma.event.findUnique({
+          where: { id },
+          select: { id: true, deletedAt: true },
+        })
+        if (!event || event.deletedAt) {
+          res.status(404).json({ error: '活动不存在' })
+          return
+        }
+
+        await prisma.event.update({
+          where: { id: event.id },
+          data: softDeleteData(req.authUser!.uid),
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'music') {
+        await prisma.musicTrack.update({
+          where: { docId: id },
+          data: softDeleteData(req.authUser!.uid),
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'albums') {
+        const album = await prisma.album.findUnique({
+          where: { docId: id },
+          select: { deletedAt: true },
+        })
+        if (!album || album.deletedAt) {
+          res.status(404).json({ error: '专辑不存在' })
+          return
+        }
+        await prisma.album.update({ where: { docId: id }, data: softDeleteData(req.authUser!.uid) })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'announcements') {
+        await prisma.announcement.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'sections') {
+        await prisma.section.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'wiki-categories') {
+        const pageCount = await prisma.wikiPage.count({ where: { category: id } })
+        if (pageCount > 0) {
+          res.status(400).json({
+            error: `该分类下还有 ${pageCount} 个百科页面（包括回收站），请先处理页面后再删除分类`,
+          })
+          return
+        }
+
+        await prisma.wikiCategory.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'image-maps') {
+        await prisma.imageMap.update({ where: { id }, data: softDeleteData(req.authUser!.uid) })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'users') {
+        const currentUser = req.authUser
+        if (currentUser?.uid === id) {
+          res.status(400).json({ error: '不能删除自己' })
+          return
+        }
+
+        const targetUser = await prisma.user.findUnique({
+          where: { uid: id },
+          select: { uid: true, role: true, deletedAt: true },
+        })
+
+        if (!targetUser || targetUser.deletedAt) {
+          res.status(404).json({ error: '用户不存在' })
+          return
+        }
+
+        if (!canManageTargetUserRole(currentUser?.role, targetUser.role)) {
+          res.status(403).json({ error: '只能删除普通用户' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({
+            where: { uid: id },
+            data: softDeleteData(req.authUser!.uid),
+          })
+          await tx.userApiKey.updateMany({
+            where: { userUid: id, revokedAt: null },
+            data: { revokedAt: new Date() },
+          })
+        })
+        clearUserCache(id)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'locks') {
+        await prisma.editLock.delete({ where: { id } })
+        res.json({ success: true })
+        return
+      }
+
+      res.status(400).json({ error: '未知删除类型' })
+    } catch (error) {
+      logger.error({ err: error }, 'Delete admin data error')
+      res.status(500).json({ error: '删除失败' })
+    }
+  })
+)
+
+// POST /api/admin/:tab/:id/restore - Restore soft-deleted admin item
+router.post(
+  '/:tab/:id/restore',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const tab = req.params.tab
+      const id = req.params.id
+
+      if (tab === 'wiki') {
+        const page = await prisma.wikiPage.findUnique({
+          where: { id },
+          select: { slug: true, title: true, status: true, lastEditorUid: true, deletedAt: true },
+        })
+        if (!page) {
+          res.status(404).json({ error: '百科不存在' })
+          return
+        }
+        if (!page.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.wikiPage.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'wiki', page.slug, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab, { slug: page.slug })
+        const recipient =
+          page.lastEditorUid === req.authUser!.uid
+            ? null
+            : await prisma.user.findUnique({
+                where: { uid: page.lastEditorUid },
+                select: { role: true },
+              })
+        await notifyContentRestored({
+          recipientUid: page.lastEditorUid,
+          operatorUid: req.authUser!.uid,
+          operatorName: req.authUser!.displayName,
+          targetType: 'wiki',
+          targetId: page.slug,
+          title: page.title,
+          status: page.status,
+          linkable: canOpenRestoredWikiNotification(page.status, recipient?.role),
+          wasDeleted: true,
+        })
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'posts') {
+        const post = await prisma.post.findUnique({
+          where: { id },
+          select: { id: true, title: true, status: true, authorUid: true, deletedAt: true },
+        })
+        if (!post) {
+          res.status(404).json({ error: '帖子不存在' })
+          return
+        }
+        if (!post.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.post.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'posts', post.id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        await notifyContentRestored({
           recipientUid: post.authorUid,
           operatorUid: req.authUser!.uid,
           operatorName: req.authUser!.displayName,
           targetType: 'post',
-          targetId: id,
+          targetId: post.id,
           title: post.title,
-          note: reason,
-        });
+          status: post.status,
+          linkable: true,
+          wasDeleted: true,
+        })
+        res.json({ success: true })
+        return
       }
+      if (tab === 'galleries') {
+        const gallery = await prisma.gallery.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!gallery) {
+          res.status(404).json({ error: '图集不存在' })
+          return
+        }
+        if (!gallery.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
 
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'galleries') {
-      const gallery = await prisma.gallery.findUnique({
-        where: { id },
-        include: { images: true },
-      });
-      if (!gallery || gallery.deletedAt) {
-        res.status(404).json({ error: '图集不存在' });
-        return;
+        await prisma.$transaction(async (tx) => {
+          await tx.gallery.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'galleries', id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
       }
-
-      const isSelfDelete = gallery.authorUid === req.authUser!.uid;
-      const reason = resolveDeleteReason(rawReason, isSelfDelete);
-      if (!isSelfDelete && !reason) {
-        res.status(400).json({ error: '删除理由不能为空' });
-        return;
-      }
-      if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.gallery.reviewNote)) {
-        return;
-      }
-
-      await prisma.$transaction(async (tx) => {
-        await tx.gallery.update({ where: { id }, data: softDeleteData(req.authUser!.uid) });
-
-        await tx.moderationLog.create({
-          data: {
-            targetType: 'gallery',
-            targetId: id,
-            action: 'delete',
-            operatorUid: req.authUser!.uid,
-            note: reason,
+      if (tab === 'ticket-listings') {
+        const listing = await prisma.ticketListing.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            slug: true,
+            status: true,
+            authorUid: true,
+            event: { select: { title: true } },
+            customEventName: true,
+            deletedAt: true,
           },
-        });
-      });
+        })
+        if (!listing) {
+          res.status(404).json({ error: '盘票信息不存在' })
+          return
+        }
+        if (!listing.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
 
-      if (!isSelfDelete) {
-        await notifyContentDeleted({
-          recipientUid: gallery.authorUid,
+        await prisma.$transaction(async (tx) => {
+          await tx.ticketListing.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'ticket-listings', id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        await notifyContentRestored({
+          recipientUid: listing.authorUid,
           operatorUid: req.authUser!.uid,
           operatorName: req.authUser!.displayName,
-          targetType: 'gallery',
-          targetId: id,
-          title: gallery.title,
-          note: reason,
-        });
+          targetType: 'ticketListing',
+          targetId: listing.id,
+          title: listing.event?.title || listing.customEventName || '盘票信息',
+          status: listing.status,
+          linkable: true,
+          wasDeleted: true,
+        })
+        res.json({ success: true })
+        return
       }
 
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'music') {
-      await prisma.musicTrack.update({ where: { docId: id }, data: softDeleteData(req.authUser!.uid) });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'albums') {
-      await prisma.album.update({ where: { docId: id }, data: softDeleteData(req.authUser!.uid) });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'announcements') {
-      await prisma.announcement.update({ where: { id }, data: softDeleteData(req.authUser!.uid) });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'sections') {
-      await prisma.section.update({ where: { id }, data: softDeleteData(req.authUser!.uid) });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'image-maps') {
-      await prisma.imageMap.update({ where: { id }, data: softDeleteData(req.authUser!.uid) });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'users') {
-      const currentUser = req.authUser;
-      if (currentUser?.uid === id) {
-        res.status(400).json({ error: '不能删除自己' });
-        return;
+      if (tab === 'events') {
+        const event = await prisma.event.findUnique({
+          where: { id },
+          select: { id: true, deletedAt: true },
+        })
+        if (!event) {
+          res.status(404).json({ error: '活动不存在' })
+          return
+        }
+        if (!event.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.event.update({
+            where: { id: event.id },
+            data: { ...restoreDeleteData, updatedByUid: req.authUser!.uid },
+          })
+          await createModerationLog(tx, 'events', event.id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'music') {
+        const song = await prisma.musicTrack.findUnique({
+          where: { docId: id },
+          select: { deletedAt: true },
+        })
+        if (!song) {
+          res.status(404).json({ error: '歌曲不存在' })
+          return
+        }
+        if (!song.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.musicTrack.update({ where: { docId: id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'music', id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'albums') {
+        const album = await prisma.album.findUnique({
+          where: { docId: id },
+          select: { deletedAt: true },
+        })
+        if (!album) {
+          res.status(404).json({ error: '专辑不存在' })
+          return
+        }
+        if (!album.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.album.update({ where: { docId: id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'albums', id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'announcements') {
+        const announcement = await prisma.announcement.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!announcement) {
+          res.status(404).json({ error: '公告不存在' })
+          return
+        }
+        if (!announcement.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.announcement.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'announcements', id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'sections') {
+        const section = await prisma.section.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!section) {
+          res.status(404).json({ error: '版块不存在' })
+          return
+        }
+        if (!section.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.section.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'sections', id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'wiki-categories') {
+        const category = await prisma.wikiCategory.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!category) {
+          res.status(404).json({ error: '分类不存在' })
+          return
+        }
+        if (!category.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.wikiCategory.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'wiki-categories', id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'image-maps') {
+        const imageMap = await prisma.imageMap.findUnique({
+          where: { id },
+          select: { deletedAt: true },
+        })
+        if (!imageMap) {
+          res.status(404).json({ error: '图片映射不存在' })
+          return
+        }
+        if (!imageMap.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.imageMap.update({ where: { id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'image-maps', id, req.authUser!.uid)
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'users') {
+        const targetUser = await prisma.user.findUnique({
+          where: { uid: id },
+          select: { uid: true, role: true, deletedAt: true },
+        })
+        if (!targetUser) {
+          res.status(404).json({ error: '用户不存在' })
+          return
+        }
+        if (!targetUser.deletedAt) {
+          res.status(400).json({ error: '该记录未被删除' })
+          return
+        }
+        if (!canManageTargetUserRole(req.authUser?.role, targetUser.role)) {
+          res.status(403).json({ error: '无权恢复该用户' })
+          return
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({ where: { uid: id }, data: restoreDeleteData })
+          await createModerationLog(tx, 'users', id, req.authUser!.uid)
+        })
+        clearUserCache(id)
+        res.json({ success: true })
+        return
       }
 
-      const targetUser = await prisma.user.findUnique({
-        where: { uid: id },
-        select: { uid: true, role: true, deletedAt: true },
-      });
-
-      if (!targetUser || targetUser.deletedAt) {
-        res.status(404).json({ error: '用户不存在' });
-        return;
-      }
-
-      if (!canManageTargetUserRole(currentUser?.role, targetUser.role)) {
-        res.status(403).json({ error: '只能删除普通用户' });
-        return;
-      }
-
-      await prisma.user.update({ where: { uid: id }, data: softDeleteData(req.authUser!.uid) });
-      clearUserCache(id);
-      res.json({ success: true });
-      return;
+      res.status(400).json({ error: '未知恢复类型' })
+    } catch (error) {
+      logger.error({ err: error }, 'Restore admin data error')
+      res.status(500).json({ error: '恢复失败' })
     }
-    if (tab === 'locks') {
-      await prisma.editLock.delete({ where: { id } });
-      res.json({ success: true });
-      return;
-    }
-
-    res.status(400).json({ error: '未知删除类型' });
-  } catch (error) {
-    logger.error({ err: error }, 'Delete admin data error');
-    res.status(500).json({ error: '删除失败' });
-  }
-}));
-
-// POST /api/admin/:tab/:id/restore - Restore soft-deleted admin item
-router.post('/:tab/:id/restore', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const tab = req.params.tab;
-    const id = req.params.id;
-
-    if (tab === 'wiki') {
-      const page = await prisma.wikiPage.findUnique({
-        where: { id },
-        select: { slug: true, title: true, status: true, lastEditorUid: true, deletedAt: true },
-      });
-      if (!page) {
-        res.status(404).json({ error: '百科不存在' });
-        return;
-      }
-
-      await prisma.wikiPage.update({ where: { id }, data: restoreDeleteData });
-      invalidateSoftDeleteCaches(tab, { slug: page.slug });
-      const recipient =
-        !page.deletedAt || page.lastEditorUid === req.authUser!.uid
-          ? null
-          : await prisma.user.findUnique({
-              where: { uid: page.lastEditorUid },
-              select: { role: true },
-            });
-      await notifyContentRestored({
-        recipientUid: page.lastEditorUid,
-        operatorUid: req.authUser!.uid,
-        operatorName: req.authUser!.displayName,
-        targetType: 'wiki',
-        targetId: page.slug,
-        title: page.title,
-        status: page.status,
-        linkable: canOpenRestoredWikiNotification(page.status, recipient?.role),
-        wasDeleted: Boolean(page.deletedAt),
-      });
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'posts') {
-      const post = await prisma.post.findUnique({
-        where: { id },
-        select: { id: true, title: true, status: true, authorUid: true, deletedAt: true },
-      });
-      if (!post) {
-        res.status(404).json({ error: '帖子不存在' });
-        return;
-      }
-
-      await prisma.post.update({ where: { id }, data: restoreDeleteData });
-      invalidateSoftDeleteCaches(tab);
-      await notifyContentRestored({
-        recipientUid: post.authorUid,
-        operatorUid: req.authUser!.uid,
-        operatorName: req.authUser!.displayName,
-        targetType: 'post',
-        targetId: post.id,
-        title: post.title,
-        status: post.status,
-        linkable: true,
-        wasDeleted: Boolean(post.deletedAt),
-      });
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'galleries') {
-      await prisma.gallery.update({ where: { id }, data: restoreDeleteData });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'music') {
-      await prisma.musicTrack.update({ where: { docId: id }, data: restoreDeleteData });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'albums') {
-      await prisma.album.update({ where: { docId: id }, data: restoreDeleteData });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'announcements') {
-      await prisma.announcement.update({ where: { id }, data: restoreDeleteData });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'sections') {
-      await prisma.section.update({ where: { id }, data: restoreDeleteData });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'image-maps') {
-      await prisma.imageMap.update({ where: { id }, data: restoreDeleteData });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'users') {
-      const targetUser = await prisma.user.findUnique({
-        where: { uid: id },
-        select: { uid: true, role: true },
-      });
-      if (!targetUser) {
-        res.status(404).json({ error: '用户不存在' });
-        return;
-      }
-      if (!canManageTargetUserRole(req.authUser?.role, targetUser.role)) {
-        res.status(403).json({ error: '无权恢复该用户' });
-        return;
-      }
-      await prisma.user.update({ where: { uid: id }, data: restoreDeleteData });
-      clearUserCache(id);
-      res.json({ success: true });
-      return;
-    }
-
-    res.status(400).json({ error: '未知恢复类型' });
-  } catch (error) {
-    logger.error({ err: error }, 'Restore admin data error');
-    res.status(500).json({ error: '恢复失败' });
-  }
-}));
+  })
+)
 
 // DELETE /api/admin/:tab/:id/permanent - Permanently delete admin item
-router.delete('/:tab/:id/permanent', requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  try {
-    const tab = req.params.tab;
-    const id = req.params.id;
+router.delete(
+  '/:tab/:id/permanent',
+  requireAdmin,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+      const tab = req.params.tab
+      const id = req.params.id
 
-    if (tab === 'wiki') {
-      const deletedSlug = await permanentlyDeleteWikiById(id);
-      if (!deletedSlug) {
-        res.status(404).json({ error: '记录不存在' });
-        return;
+      if (tab === 'wiki') {
+        const deletedSlug = await permanentlyDeleteWikiById(id, req.authUser!.uid)
+        if (!deletedSlug) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab, { slug: deletedSlug })
+        res.json({ success: true })
+        return
       }
-      invalidateSoftDeleteCaches(tab, { slug: deletedSlug });
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'posts') {
-      const deleted = await permanentlyDeletePostById(id);
-      if (!deleted) {
-        res.status(404).json({ error: '记录不存在' });
-        return;
+      if (tab === 'posts') {
+        const deleted = await permanentlyDeletePostById(id, req.authUser!.uid)
+        if (!deleted) {
+          res.status(404).json({ error: '记录不存在' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
       }
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'galleries') {
-      const deleted = await permanentlyDeleteGalleryById(id);
-      if (!deleted) {
-        res.status(404).json({ error: '图集不存在' });
-        return;
+      if (tab === 'galleries') {
+        const deleted = await permanentlyDeleteGalleryById(id, req.authUser!.uid)
+        if (!deleted) {
+          res.status(404).json({ error: '图集不存在' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
       }
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'music') {
-      const deleted = await permanentlyDeleteMusicTrackByDocId(id);
-      if (!deleted) {
-        res.status(404).json({ error: '歌曲不存在' });
-        return;
+      if (tab === 'ticket-listings') {
+        const deleted = await permanentlyDeleteTicketListingById(id, req.authUser!.uid)
+        if (!deleted) {
+          res.status(404).json({ error: '盘票信息不存在' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
       }
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'albums') {
-      const deleted = await permanentlyDeleteAlbumByDocId(id);
-      if (!deleted) {
-        res.status(404).json({ error: '专辑不存在' });
-        return;
-      }
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'announcements') {
-      await prisma.announcement.delete({ where: { id } });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'sections') {
-      await prisma.section.delete({ where: { id } });
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'image-maps') {
-      const deleted = await permanentlyDeleteImageMapById(id);
-      if (!deleted) {
-        res.status(404).json({ error: '图片映射不存在' });
-        return;
-      }
-      invalidateSoftDeleteCaches(tab);
-      res.json({ success: true });
-      return;
-    }
-    if (tab === 'users') {
-      if (req.authUser?.uid === id) {
-        res.status(400).json({ error: '不能删除自己' });
-        return;
-      }
-      const targetUser = await prisma.user.findUnique({
-        where: { uid: id },
-        select: { uid: true, role: true },
-      });
-      if (!targetUser) {
-        res.status(404).json({ error: '用户不存在' });
-        return;
-      }
-      if (!canManageTargetUserRole(req.authUser?.role, targetUser.role)) {
-        res.status(403).json({ error: '无权彻底删除该用户' });
-        return;
-      }
-      await prisma.user.delete({ where: { uid: id } });
-      clearUserCache(id);
-      res.json({ success: true });
-      return;
-    }
 
-    res.status(400).json({ error: '未知彻底删除类型' });
-  } catch (error) {
-    logger.error({ err: error }, 'Permanent delete admin data error');
-    res.status(500).json({ error: '彻底删除失败' });
-  }
-}));
+      if (tab === 'events') {
+        const deleted = await permanentlyDeleteEventById(id, req.authUser!.uid)
+        if (!deleted) {
+          res.status(404).json({ error: '活动不存在' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'music') {
+        const deleted = await permanentlyDeleteMusicTrackByDocId(id, req.authUser!.uid)
+        if (!deleted) {
+          res.status(404).json({ error: '歌曲不存在' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'albums') {
+        const result = await permanentlyDeleteAlbumByDocId(id, req.authUser!.uid)
+        if (result === 'not-found') {
+          res.status(404).json({ error: '专辑不存在' })
+          return
+        }
+        if (result === 'active') {
+          res.status(400).json({ error: '请先软删除专辑' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'announcements') {
+        await prisma.$transaction(async (tx) => {
+          await tx.announcement.delete({ where: { id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'announcement',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'sections') {
+        await prisma.$transaction(async (tx) => {
+          await tx.section.delete({ where: { id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'section',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'wiki-categories') {
+        const pageCount = await prisma.wikiPage.count({ where: { category: id } })
+        if (pageCount > 0) {
+          res.status(400).json({ error: `该分类下还有 ${pageCount} 个百科页面，不能彻底删除` })
+          return
+        }
 
-export { registerAdminRoutes };
+        await prisma.$transaction(async (tx) => {
+          await tx.wikiCategory.delete({ where: { id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'wikiCategory',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'image-maps') {
+        const deleted = await permanentlyDeleteImageMapById(id, req.authUser!.uid)
+        if (!deleted) {
+          res.status(404).json({ error: '图片映射不存在' })
+          return
+        }
+        invalidateSoftDeleteCaches(tab)
+        res.json({ success: true })
+        return
+      }
+      if (tab === 'users') {
+        if (req.authUser?.uid === id) {
+          res.status(400).json({ error: '不能删除自己' })
+          return
+        }
+        const targetUser = await prisma.user.findUnique({
+          where: { uid: id },
+          select: { uid: true, role: true },
+        })
+        if (!targetUser) {
+          res.status(404).json({ error: '用户不存在' })
+          return
+        }
+        if (!canManageTargetUserRole(req.authUser?.role, targetUser.role)) {
+          res.status(403).json({ error: '无权彻底删除该用户' })
+          return
+        }
+        await prisma.$transaction(async (tx) => {
+          await tx.user.delete({ where: { uid: id } })
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'user',
+              targetId: id,
+              action: 'permanentDelete',
+              operatorUid: req.authUser!.uid,
+              note: null,
+            },
+          })
+        })
+        clearUserCache(id)
+        res.json({ success: true })
+        return
+      }
+
+      res.status(400).json({ error: '未知彻底删除类型' })
+    } catch (error) {
+      logger.error({ err: error }, 'Permanent delete admin data error')
+      res.status(500).json({ error: '彻底删除失败' })
+    }
+  })
+)
+
+export { registerAdminRoutes }
 
 function registerAdminRoutes(app: Router) {
-  app.use('/api/admin', router);
+  app.use('/api/admin', router)
 }

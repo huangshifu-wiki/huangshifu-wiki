@@ -2,7 +2,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
-import { UserPreferencesProvider, useUserPreferences } from '../../src/context/UserPreferencesContext'
+import {
+  UserPreferencesProvider,
+  useUserPreferences,
+} from '../../src/context/UserPreferencesContext'
 import { THEME_STORAGE_KEY, readStoredPreferences } from '../../src/lib/theme'
 import { DEFAULT_PREFERENCES } from '../../src/types/userPreferences'
 
@@ -20,7 +23,7 @@ vi.mock('../../src/context/AuthContext', () => ({
 }))
 
 function PreferenceProbe() {
-  const { preferences, resolvedTheme, loading } = useUserPreferences()
+  const { preferences, resolvedTheme, loading, getScopedViewMode } = useUserPreferences()
 
   if (loading) {
     return <div>loading</div>
@@ -29,6 +32,8 @@ function PreferenceProbe() {
   return (
     <div>
       <span data-testid="view-mode">{preferences.viewMode}</span>
+      <span data-testid="music-view-mode">{getScopedViewMode('music')}</span>
+      <span data-testid="gallery-view-mode">{getScopedViewMode('gallery')}</span>
       <span data-testid="theme-mode">{preferences.theme}</span>
       <span data-testid="resolved-theme">{resolvedTheme}</span>
     </div>
@@ -204,15 +209,24 @@ describe('UserPreferencesProvider', () => {
     expect(screen.getByTestId('resolved-theme')).toHaveTextContent('default')
     expect(readStoredPreferences('user-2')).toEqual({
       viewMode: 'medium',
+      viewModes: DEFAULT_PREFERENCES.viewModes,
       theme: 'system',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
     expect(readStoredPreferences()).toEqual({
       viewMode: 'small',
+      viewModes: {
+        ...DEFAULT_PREFERENCES.viewModes,
+        gallery: 'small',
+      },
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -254,17 +268,48 @@ describe('UserPreferencesProvider', () => {
     expect(screen.getByTestId('theme-mode')).toHaveTextContent('dark')
     expect(readStoredPreferences('user-3')).toEqual({
       viewMode: 'small',
+      viewModes: {
+        ...DEFAULT_PREFERENCES.viewModes,
+        gallery: 'small',
+      },
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
     expect(readStoredPreferences()).toEqual({
       viewMode: 'small',
+      viewModes: {
+        ...DEFAULT_PREFERENCES.viewModes,
+        gallery: 'small',
+      },
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
+  })
+
+  it('uses channel-specific default view modes for new users', async () => {
+    mockUseAuth.mockReturnValue({
+      user: null,
+      loading: false,
+    })
+
+    render(
+      <UserPreferencesProvider>
+        <PreferenceProbe />
+      </UserPreferencesProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('music-view-mode')).toHaveTextContent('list')
+    })
+
+    expect(screen.getByTestId('gallery-view-mode')).toHaveTextContent('medium')
   })
 })

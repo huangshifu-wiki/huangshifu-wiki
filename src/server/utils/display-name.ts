@@ -13,9 +13,7 @@ type DisplayNameValidationFailure = {
   error: string
 }
 
-export type DisplayNameValidationResult =
-  | DisplayNameValidationSuccess
-  | DisplayNameValidationFailure
+type DisplayNameValidationResult = DisplayNameValidationSuccess | DisplayNameValidationFailure
 
 const DISPLAY_NAME_WHITESPACE = /\s/u
 const DISPLAY_NAME_RESERVED_MENTION_CHARS = /[<>\[\]()`{}"'“”‘’]/u

@@ -3,7 +3,11 @@ import path from 'path'
 
 import { EmbeddingStatus, PrismaClient } from '@prisma/client'
 
-import { generateImageEmbedding, getEmbeddingModelName, getEmbeddingVectorSize } from './clipEmbedding'
+import {
+  generateImageEmbedding,
+  getEmbeddingModelName,
+  getEmbeddingVectorSize,
+} from './clipEmbedding'
 import { buildQdrantPointId } from './embeddingSync'
 import { upsertImageEmbeddingPoint, deleteImageEmbeddingPointsBySource } from './qdrantService'
 
@@ -13,29 +17,29 @@ import { upsertImageEmbeddingPoint, deleteImageEmbeddingPointsBySource } from '.
  */
 function extractImagesFromMarkdown(content: string): string[] {
   if (!content || typeof content !== 'string') {
-    return [];
+    return []
   }
 
-  const imageUrls: string[] = [];
-  const markdownImageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  const imageUrls: string[] = []
+  const markdownImageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
 
-  let match;
+  let match
   while ((match = markdownImageRegex.exec(content)) !== null) {
-    const url = match[2]?.trim();
+    const url = match[2]?.trim()
     if (url) {
-      imageUrls.push(url);
+      imageUrls.push(url)
     }
   }
 
-  const htmlImgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  const htmlImgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi
   while ((match = htmlImgRegex.exec(content)) !== null) {
-    const url = match[1]?.trim();
+    const url = match[1]?.trim()
     if (url) {
-      imageUrls.push(url);
+      imageUrls.push(url)
     }
   }
 
-  return Array.from(new Set(imageUrls));
+  return Array.from(new Set(imageUrls))
 }
 
 /**
@@ -45,7 +49,7 @@ function extractImagesFromMarkdown(content: string): string[] {
  * @returns 图片 URL 数组
  */
 export function extractWikiImages(wikiContent: string): string[] {
-  return extractImagesFromMarkdown(wikiContent);
+  return extractImagesFromMarkdown(wikiContent)
 }
 
 /**
@@ -55,7 +59,7 @@ export function extractWikiImages(wikiContent: string): string[] {
  * @returns 图片 URL 数组
  */
 export function extractPostImages(postContent: string): string[] {
-  return extractImagesFromMarkdown(postContent);
+  return extractImagesFromMarkdown(postContent)
 }
 
 /**
@@ -69,9 +73,9 @@ export async function enqueueWikiImageEmbeddings(
   prisma: PrismaClient,
   wikiPageSlugs: string[]
 ): Promise<{ requested: number; queued: number }> {
-  const uniqueSlugs = Array.from(new Set(wikiPageSlugs.map((slug) => slug.trim()).filter(Boolean)));
+  const uniqueSlugs = Array.from(new Set(wikiPageSlugs.map((slug) => slug.trim()).filter(Boolean)))
   if (uniqueSlugs.length === 0) {
-    return { requested: 0, queued: 0 };
+    return { requested: 0, queued: 0 }
   }
 
   // 获取所有 Wiki 页面的内容
@@ -84,11 +88,11 @@ export async function enqueueWikiImageEmbeddings(
       slug: true,
       content: true,
     },
-  });
+  })
 
-  let queued = 0;
-  const modelName = getEmbeddingModelName();
-  const vectorSize = getEmbeddingVectorSize();
+  let queued = 0
+  const modelName = getEmbeddingModelName()
+  const vectorSize = getEmbeddingVectorSize()
 
   for (const page of wikiPages) {
     await prisma.wikiImageEmbedding.deleteMany({
@@ -96,7 +100,7 @@ export async function enqueueWikiImageEmbeddings(
     })
     await deleteImageEmbeddingPointsBySource('wiki', page.slug)
 
-    const imageUrls = extractWikiImages(page.content);
+    const imageUrls = extractWikiImages(page.content)
 
     for (const imageUrl of imageUrls) {
       await prisma.wikiImageEmbedding.upsert({
@@ -117,12 +121,12 @@ export async function enqueueWikiImageEmbeddings(
           vectorSize,
           status: EmbeddingStatus.pending,
         },
-      });
-      queued += 1;
+      })
+      queued += 1
     }
   }
 
-  return { requested: uniqueSlugs.length, queued };
+  return { requested: uniqueSlugs.length, queued }
 }
 
 /**
@@ -136,9 +140,9 @@ export async function enqueuePostImageEmbeddings(
   prisma: PrismaClient,
   postIds: string[]
 ): Promise<{ requested: number; queued: number }> {
-  const uniqueIds = Array.from(new Set(postIds.map((id) => id.trim()).filter(Boolean)));
+  const uniqueIds = Array.from(new Set(postIds.map((id) => id.trim()).filter(Boolean)))
   if (uniqueIds.length === 0) {
-    return { requested: 0, queued: 0 };
+    return { requested: 0, queued: 0 }
   }
 
   // 获取所有 Post 的内容
@@ -151,11 +155,11 @@ export async function enqueuePostImageEmbeddings(
       id: true,
       content: true,
     },
-  });
+  })
 
-  let queued = 0;
-  const modelName = getEmbeddingModelName();
-  const vectorSize = getEmbeddingVectorSize();
+  let queued = 0
+  const modelName = getEmbeddingModelName()
+  const vectorSize = getEmbeddingVectorSize()
 
   for (const post of posts) {
     await prisma.postImageEmbedding.deleteMany({
@@ -163,7 +167,7 @@ export async function enqueuePostImageEmbeddings(
     })
     await deleteImageEmbeddingPointsBySource('post', post.id)
 
-    const imageUrls = extractPostImages(post.content);
+    const imageUrls = extractPostImages(post.content)
 
     for (const imageUrl of imageUrls) {
       await prisma.postImageEmbedding.upsert({
@@ -184,12 +188,12 @@ export async function enqueuePostImageEmbeddings(
           vectorSize,
           status: EmbeddingStatus.pending,
         },
-      });
-      queued += 1;
+      })
+      queued += 1
     }
   }
 
-  return { requested: uniqueIds.length, queued };
+  return { requested: uniqueIds.length, queued }
 }
 
 /**
@@ -216,27 +220,27 @@ export async function enqueueMissingWikiImageEmbeddings(
     orderBy: {
       updatedAt: 'asc',
     },
-  });
+  })
 
   if (wikiPages.length === 0) {
-    return { requested: 0, queued: 0 };
+    return { requested: 0, queued: 0 }
   }
 
   // 收集所有图片 URL 和对应的 slug
-  const imageTasks: Array<{ wikiPageSlug: string; imageUrl: string }> = [];
+  const imageTasks: Array<{ wikiPageSlug: string; imageUrl: string }> = []
 
   for (const page of wikiPages) {
-    const imageUrls = extractWikiImages(page.content);
+    const imageUrls = extractWikiImages(page.content)
     for (const imageUrl of imageUrls) {
       imageTasks.push({
         wikiPageSlug: page.slug,
         imageUrl,
-      });
+      })
     }
   }
 
   if (imageTasks.length === 0) {
-    return { requested: 0, queued: 0 };
+    return { requested: 0, queued: 0 }
   }
 
   // 查找已存在的 embedding 记录
@@ -251,24 +255,22 @@ export async function enqueueMissingWikiImageEmbeddings(
       wikiPageSlug: true,
       imageUrl: true,
     },
-  });
+  })
 
   // 构建已存在记录的集合
-  const existingSet = new Set(
-    existingEmbeddings.map((e) => `${e.wikiPageSlug}:${e.imageUrl}`)
-  );
+  const existingSet = new Set(existingEmbeddings.map((e) => `${e.wikiPageSlug}:${e.imageUrl}`))
 
   // 过滤出需要创建的任务
   const newTasks = imageTasks.filter(
     (task) => !existingSet.has(`${task.wikiPageSlug}:${task.imageUrl}`)
-  );
+  )
 
   if (newTasks.length === 0) {
-    return { requested: wikiPages.length, queued: 0 };
+    return { requested: wikiPages.length, queued: 0 }
   }
 
-  const modelName = getEmbeddingModelName();
-  const vectorSize = getEmbeddingVectorSize();
+  const modelName = getEmbeddingModelName()
+  const vectorSize = getEmbeddingVectorSize()
 
   // 批量创建新的 embedding 记录
   await prisma.wikiImageEmbedding.createMany({
@@ -280,12 +282,12 @@ export async function enqueueMissingWikiImageEmbeddings(
       status: EmbeddingStatus.pending,
     })),
     skipDuplicates: true,
-  });
+  })
 
   return {
     requested: wikiPages.length,
     queued: newTasks.length,
-  };
+  }
 }
 
 /**
@@ -312,27 +314,27 @@ export async function enqueueMissingPostImageEmbeddings(
     orderBy: {
       updatedAt: 'asc',
     },
-  });
+  })
 
   if (posts.length === 0) {
-    return { requested: 0, queued: 0 };
+    return { requested: 0, queued: 0 }
   }
 
   // 收集所有图片 URL 和对应的 postId
-  const imageTasks: Array<{ postId: string; imageUrl: string }> = [];
+  const imageTasks: Array<{ postId: string; imageUrl: string }> = []
 
   for (const post of posts) {
-    const imageUrls = extractPostImages(post.content);
+    const imageUrls = extractPostImages(post.content)
     for (const imageUrl of imageUrls) {
       imageTasks.push({
         postId: post.id,
         imageUrl,
-      });
+      })
     }
   }
 
   if (imageTasks.length === 0) {
-    return { requested: 0, queued: 0 };
+    return { requested: 0, queued: 0 }
   }
 
   // 查找已存在的 embedding 记录
@@ -347,24 +349,20 @@ export async function enqueueMissingPostImageEmbeddings(
       postId: true,
       imageUrl: true,
     },
-  });
+  })
 
   // 构建已存在记录的集合
-  const existingSet = new Set(
-    existingEmbeddings.map((e) => `${e.postId}:${e.imageUrl}`)
-  );
+  const existingSet = new Set(existingEmbeddings.map((e) => `${e.postId}:${e.imageUrl}`))
 
   // 过滤出需要创建的任务
-  const newTasks = imageTasks.filter(
-    (task) => !existingSet.has(`${task.postId}:${task.imageUrl}`)
-  );
+  const newTasks = imageTasks.filter((task) => !existingSet.has(`${task.postId}:${task.imageUrl}`))
 
   if (newTasks.length === 0) {
-    return { requested: posts.length, queued: 0 };
+    return { requested: posts.length, queued: 0 }
   }
 
-  const modelName = getEmbeddingModelName();
-  const vectorSize = getEmbeddingVectorSize();
+  const modelName = getEmbeddingModelName()
+  const vectorSize = getEmbeddingVectorSize()
 
   // 批量创建新的 embedding 记录
   await prisma.postImageEmbedding.createMany({
@@ -376,7 +374,7 @@ export async function enqueueMissingPostImageEmbeddings(
       status: EmbeddingStatus.pending,
     })),
     skipDuplicates: true,
-  });
+  })
 
   return {
     requested: posts.length,
@@ -421,7 +419,10 @@ function resolveLocalPathFromUrl(imageUrl: string, uploadsDir: string): string |
 async function resolveImageBuffer(
   imageUrl: string,
   uploadsDir: string,
-  imageMapByUrl?: Map<string, { localUrl: string; s3Url: string | null; externalUrl: string | null }>
+  imageMapByUrl?: Map<
+    string,
+    { localUrl: string; s3Url: string | null; externalUrl: string | null }
+  >
 ): Promise<Buffer | null> {
   if (imageMapByUrl) {
     const im = imageMapByUrl.get(imageUrl)
@@ -477,22 +478,23 @@ export async function syncWikiImageEmbeddingBatch(
 
   const imageUrls = candidates.map((c) => c.imageUrl)
 
-  const imageMaps = imageUrls.length > 0
-    ? await prisma.imageMap.findMany({
-        where: {
-          OR: [
-            { localUrl: { in: imageUrls } },
-            { s3Url: { in: imageUrls } },
-            { externalUrl: { in: imageUrls } },
-          ],
-        },
-        select: {
-          localUrl: true,
-          s3Url: true,
-          externalUrl: true,
-        },
-      })
-    : []
+  const imageMaps =
+    imageUrls.length > 0
+      ? await prisma.imageMap.findMany({
+          where: {
+            OR: [
+              { localUrl: { in: imageUrls } },
+              { s3Url: { in: imageUrls } },
+              { externalUrl: { in: imageUrls } },
+            ],
+          },
+          select: {
+            localUrl: true,
+            s3Url: true,
+            externalUrl: true,
+          },
+        })
+      : []
 
   const imageMapByUrl = new Map<string, (typeof imageMaps)[0]>()
   for (const im of imageMaps) {
@@ -607,22 +609,23 @@ export async function syncPostImageEmbeddingBatch(
 
   const imageUrls = candidates.map((c) => c.imageUrl)
 
-  const imageMaps = imageUrls.length > 0
-    ? await prisma.imageMap.findMany({
-        where: {
-          OR: [
-            { localUrl: { in: imageUrls } },
-            { s3Url: { in: imageUrls } },
-            { externalUrl: { in: imageUrls } },
-          ],
-        },
-        select: {
-          localUrl: true,
-          s3Url: true,
-          externalUrl: true,
-        },
-      })
-    : []
+  const imageMaps =
+    imageUrls.length > 0
+      ? await prisma.imageMap.findMany({
+          where: {
+            OR: [
+              { localUrl: { in: imageUrls } },
+              { s3Url: { in: imageUrls } },
+              { externalUrl: { in: imageUrls } },
+            ],
+          },
+          select: {
+            localUrl: true,
+            s3Url: true,
+            externalUrl: true,
+          },
+        })
+      : []
 
   const imageMapByUrl = new Map<string, (typeof imageMaps)[0]>()
   for (const im of imageMaps) {

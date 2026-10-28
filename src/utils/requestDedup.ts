@@ -11,52 +11,68 @@
  */
 
 interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
-  staleTime: number;
+  data: T
+  timestamp: number
+  staleTime: number
+}
+
+interface RequestGeneration {
+  global: number
+  key: number
 }
 
 interface InFlightRequest<T> {
-  promise: Promise<T>;
-  timestamp: number;
+  promise: Promise<T>
+  timestamp: number
+  generation: RequestGeneration
 }
 
 export interface DedupOptions {
   /** 缓存有效时间（毫秒），默认 60000ms (1分钟) */
-  staleTime?: number;
+  staleTime?: number
   /** 是否启用 SWR 策略，默认 true */
-  swr?: boolean;
+  swr?: boolean
   /** SWR 重新验证的冷却时间（毫秒），默认 5000ms (5秒) */
-  swrCooldown?: number;
+  swrCooldown?: number
 }
 
-const MAX_CACHE_SIZE = 200;
-const INFLIGHT_TIMEOUT_MS = 30000;
+const MAX_CACHE_SIZE = 200
+const INFLIGHT_TIMEOUT_MS = 30000
 
-const cache = new Map<string, CacheEntry<unknown>>();
+const cache = new Map<string, CacheEntry<unknown>>()
 
-const inFlightRequests = new Map<string, InFlightRequest<unknown>>();
+const inFlightRequests = new Map<string, InFlightRequest<unknown>>()
 
-const swrCooldowns = new Map<string, number>();
+const swrCooldowns = new Map<string, number>()
+let globalGeneration = 0
+const keyGenerations = new Map<string, number>()
+
+function invalidateKey(key: string): void {
+  cache.delete(key)
+  inFlightRequests.delete(key)
+  swrCooldowns.delete(key)
+  keyGenerations.set(key, (keyGenerations.get(key) ?? 0) + 1)
+}
 
 function debugLog(message: string, ...args: unknown[]): void {
   if (process.env.NODE_ENV !== 'production') {
-    console.debug(`[RequestDedup] ${message}`, ...args);
+    console.debug(`[RequestDedup] ${message}`, ...args)
   }
 }
 
 function evictOldestCacheEntry(): void {
   if (cache.size >= MAX_CACHE_SIZE) {
-    const oldestKey = cache.keys().next().value;
-    if (oldestKey) cache.delete(oldestKey);
+    const oldestKey = cache.keys().next().value
+    if (oldestKey) cache.delete(oldestKey)
   }
 }
 
 function cleanupStaleInFlightRequests(): void {
-  const now = Date.now();
+  const now = Date.now()
   for (const [key, req] of inFlightRequests.entries()) {
     if (now - req.timestamp > INFLIGHT_TIMEOUT_MS) {
-      inFlightRequests.delete(key);
+      inFlightRequests.delete(key)
+      keyGenerations.set(key, (keyGenerations.get(key) ?? 0) + 1)
     }
   }
 }
@@ -64,29 +80,25 @@ function cleanupStaleInFlightRequests(): void {
 /**
  * 生成请求的唯一标识键
  */
-export function generateRequestKey(
-  method: string,
-  url: string,
-  body?: unknown
-): string {
-  const bodyKey = body ? JSON.stringify(body) : '';
-  return `${method.toUpperCase()}|${url}|${bodyKey}`;
+export function generateRequestKey(method: string, url: string, body?: unknown): string {
+  const bodyKey = body ? JSON.stringify(body) : ''
+  return `${method.toUpperCase()}|${url}|${bodyKey}`
 }
 
 /**
  * 检查缓存是否有效
  */
 function isCacheValid<T>(entry: CacheEntry<T>, staleTime: number): boolean {
-  return Date.now() - entry.timestamp < staleTime;
+  return Date.now() - entry.timestamp < staleTime
 }
 
 /**
  * 检查 SWR 冷却是否生效
  */
 function isSwrOnCooldown(key: string, cooldown: number): boolean {
-  const lastRevalidate = swrCooldowns.get(key);
-  if (!lastRevalidate) return false;
-  return Date.now() - lastRevalidate < cooldown;
+  const lastRevalidate = swrCooldowns.get(key)
+  if (!lastRevalidate) return false
+  return Date.now() - lastRevalidate < cooldown
 }
 
 /**
@@ -94,13 +106,13 @@ function isSwrOnCooldown(key: string, cooldown: number): boolean {
  */
 export function clearCache(key?: string): void {
   if (key) {
-    cache.delete(key);
-    inFlightRequests.delete(key);
-    swrCooldowns.delete(key);
+    invalidateKey(key)
   } else {
-    cache.clear();
-    inFlightRequests.clear();
-    swrCooldowns.clear();
+    cache.clear()
+    inFlightRequests.clear()
+    swrCooldowns.clear()
+    globalGeneration += 1
+    keyGenerations.clear()
   }
 }
 
@@ -108,15 +120,15 @@ export function clearCache(key?: string): void {
  * 获取缓存统计信息（用于调试）
  */
 export function getCacheStats(): {
-  cacheSize: number;
-  inFlightSize: number;
-  cooldownSize: number;
+  cacheSize: number
+  inFlightSize: number
+  cooldownSize: number
 } {
   return {
     cacheSize: cache.size,
     inFlightSize: inFlightRequests.size,
     cooldownSize: swrCooldowns.size,
-  };
+  }
 }
 
 /**
@@ -141,89 +153,108 @@ export async function dedupedRequest<T>(
   key: string,
   options: DedupOptions = {}
 ): Promise<T> {
-  const {
-    staleTime = 60000,
-    swr = true,
-    swrCooldown: swrCooldownMs = 5000,
-  } = options;
+  const { staleTime = 60000, swr = true, swrCooldown: swrCooldownMs = 5000 } = options
 
-  cleanupStaleInFlightRequests();
+  cleanupStaleInFlightRequests()
+  const generation: RequestGeneration = {
+    global: globalGeneration,
+    key: keyGenerations.get(key) ?? 0,
+  }
 
-  // 1. 检查是否有正在进行的相同请求，直接复用 Promise
-  const inFlight = inFlightRequests.get(key) as InFlightRequest<T> | undefined;
-  if (inFlight) {
-    debugLog(`Reusing in-flight request: ${key}`);
-    return inFlight.promise;
+  // 1. 检查是否有同一代的进行中请求，直接复用 Promise
+  const inFlight = inFlightRequests.get(key) as InFlightRequest<T> | undefined
+  if (
+    inFlight &&
+    inFlight.generation.global === generation.global &&
+    inFlight.generation.key === generation.key
+  ) {
+    debugLog(`Reusing in-flight request: ${key}`)
+    return inFlight.promise
   }
 
   // 2. 检查缓存
-  const cached = cache.get(key) as CacheEntry<T> | undefined;
+  const cached = cache.get(key) as CacheEntry<T> | undefined
 
   if (cached && isCacheValid(cached, staleTime)) {
-    debugLog(`Cache hit: ${key}`);
+    debugLog(`Cache hit: ${key}`)
 
-    // SWR 策略：在后台重新验证（如果不在冷却期）
     if (swr && !isSwrOnCooldown(key, swrCooldownMs)) {
-      debugLog(`SWR revalidating in background: ${key}`);
-      swrCooldowns.set(key, Date.now());
+      debugLog(`SWR revalidating in background: ${key}`)
+      swrCooldowns.set(key, Date.now())
 
-      // 后台重新验证，不阻塞当前返回
-      const revalidatePromise = requestFn()
+      let revalidatePromise: Promise<T | undefined>
+      revalidatePromise = requestFn()
         .then((data) => {
-          if (data !== undefined && data !== null) {
-            evictOldestCacheEntry();
-            cache.set(key, { data, timestamp: Date.now(), staleTime });
+          if (
+            data !== undefined &&
+            data !== null &&
+            generation.global === globalGeneration &&
+            generation.key === (keyGenerations.get(key) ?? 0)
+          ) {
+            evictOldestCacheEntry()
+            cache.set(key, { data, timestamp: Date.now(), staleTime })
           }
-          debugLog(`SWR revalidate success: ${key}`);
-          return data;
+          debugLog(`SWR revalidate success: ${key}`)
+          return data
         })
         .catch((error) => {
-          debugLog(`SWR revalidate failed: ${key}`, error);
+          debugLog(`SWR revalidate failed: ${key}`, error)
+          return undefined
         })
         .finally(() => {
-          inFlightRequests.delete(key);
-        });
+          if (inFlightRequests.get(key)?.promise === revalidatePromise) {
+            inFlightRequests.delete(key)
+          }
+        })
 
       inFlightRequests.set(key, {
-        promise: revalidatePromise as Promise<unknown>,
+        promise: revalidatePromise,
         timestamp: Date.now(),
-      });
+        generation,
+      })
     }
 
-    return cached.data;
+    return cached.data
   }
 
   // 3. 缓存无效或不存在，发起新请求
-  evictOldestCacheEntry();
-  debugLog(`Cache miss, fetching: ${key}`);
+  evictOldestCacheEntry()
+  debugLog(`Cache miss, fetching: ${key}`)
 
-  const promise = requestFn()
+  let promise: Promise<T>
+  promise = requestFn()
     .then((data) => {
-      if (data !== undefined && data !== null) {
-        evictOldestCacheEntry();
-        cache.set(key, { data, timestamp: Date.now(), staleTime });
+      if (
+        data !== undefined &&
+        data !== null &&
+        generation.global === globalGeneration &&
+        generation.key === (keyGenerations.get(key) ?? 0)
+      ) {
+        evictOldestCacheEntry()
+        cache.set(key, { data, timestamp: Date.now(), staleTime })
       }
-      return data;
+      return data
     })
     .catch((error) => {
       if (cached && swr) {
-        debugLog(`Request failed, using stale cache: ${key}`);
-        return cached.data;
+        debugLog(`Request failed, using stale cache: ${key}`)
+        return cached.data
       }
-      throw error;
+      throw error
     })
     .finally(() => {
-      // 清理进行中的请求记录
-      inFlightRequests.delete(key);
-    });
+      if (inFlightRequests.get(key)?.promise === promise) {
+        inFlightRequests.delete(key)
+      }
+    })
 
-  // 记录进行中的请求
   inFlightRequests.set(key, {
-    promise: promise as Promise<unknown>,
+    promise,
     timestamp: Date.now(),
-  });
+    generation,
+  })
 
-  return promise;
+  return promise
 }
 
 /**
@@ -245,9 +276,9 @@ export function createDedupedRequest<TArgs extends unknown[], TResult>(
 ): (...args: TArgs) => Promise<TResult> {
   return async (...args: TArgs): Promise<TResult> => {
     // 生成缓存键（基于函数名和参数）
-    const key = generateRequestKey('DEDUP', requestFn.name, args);
-    return dedupedRequest(() => requestFn(...args), key, defaultOptions);
-  };
+    const key = generateRequestKey('DEDUP', requestFn.name, args)
+    return dedupedRequest(() => requestFn(...args), key, defaultOptions)
+  }
 }
 
 /**
@@ -257,33 +288,31 @@ export function createDedupedRequest<TArgs extends unknown[], TResult>(
  * @param data - 预加载数据
  * @param staleTime - 缓存有效时间
  */
-export function preloadCache<T>(
-  key: string,
-  data: T,
-  staleTime: number = 60000
-): void {
-  cache.set(key, { data, timestamp: Date.now(), staleTime });
-  debugLog(`Preloaded cache: ${key}`);
+export function preloadCache<T>(key: string, data: T, staleTime: number = 60000): void {
+  cache.set(key, { data, timestamp: Date.now(), staleTime })
+  debugLog(`Preloaded cache: ${key}`)
 }
 
 /**
  * 使指定缓存失效
  */
 export function invalidateCache(key: string): void {
-  cache.delete(key);
-  swrCooldowns.delete(key);
-  debugLog(`Invalidated cache: ${key}`);
+  invalidateKey(key)
+  debugLog(`Invalidated cache: ${key}`)
 }
 
 /**
  * 使匹配前缀的所有缓存失效
  */
 export function invalidateCacheByPrefix(prefix: string): void {
-  for (const key of cache.keys()) {
-    if (key.includes(prefix)) {
-      cache.delete(key);
-      swrCooldowns.delete(key);
-    }
+  const keys = new Set([
+    ...cache.keys(),
+    ...inFlightRequests.keys(),
+    ...swrCooldowns.keys(),
+    ...keyGenerations.keys(),
+  ])
+  for (const key of keys) {
+    if (key.includes(prefix)) invalidateKey(key)
   }
-  debugLog(`Invalidated cache by prefix: ${prefix}`);
+  debugLog(`Invalidated cache by prefix: ${prefix}`)
 }

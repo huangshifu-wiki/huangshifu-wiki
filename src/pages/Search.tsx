@@ -6,29 +6,35 @@ import { SearchBox } from '../components/search/SearchBox'
 import { SearchFilters } from '../components/search/SearchFilters'
 import { SearchResults } from '../components/search/SearchResults'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
+import { Seo } from '../components/Seo'
+import { SEARCH_SEO_METADATA } from '../lib/seo'
 
 const Search: React.FC = () => {
   const { preferences, setViewMode } = useUserPreferences()
   const viewMode = preferences.viewMode
-  const { features } = usePublicFeatures()
+  const { features, loading: featuresLoading } = usePublicFeatures()
   const semanticSearchEnabled = features.semanticSearch
+  const hotKeywordsEnabled = featuresLoading ? false : features.searchHotKeywordsEnabled
 
   const {
     state,
     searchHistory,
     tabItems,
     performSearch,
+    searchCategoryPage,
     handleQueryChange,
     handleImageSearch,
+    toggleDetail,
     toggleTag,
     updateFilters,
     resetFilters,
     setActiveTab,
     setShowFilters,
+    fetchImageSearchPage,
     dismissSuggestions,
     removeSearchHistoryItem,
     clearSearchHistory,
-  } = useSearchPage()
+  } = useSearchPage({ hotKeywordsEnabled })
 
   React.useEffect(() => {
     if (!semanticSearchEnabled && state.filters.semanticImageSearch) {
@@ -37,46 +43,45 @@ const Search: React.FC = () => {
   }, [semanticSearchEnabled, state.filters.semanticImageSearch, updateFilters])
 
   return (
-    <div
-      className="min-h-[calc(100vh-60px)] bg-bg-primary"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
-      <div className="max-w-[1100px] mx-auto px-6 py-8 pb-32 search-page">
-        {/* Header */}
-        <header className="mb-7">
-          <div className="flex items-end justify-between flex-wrap gap-3">
-            <h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">搜索</h1>
-            <div className="flex items-center gap-3">
+    <div className="gufeng-search-page mobile-page-shell">
+      <Seo metadata={SEARCH_SEO_METADATA} />
+      <div className="mobile-page-container search-page">
+        <header className="mobile-page-header">
+          <div className="mobile-page-titlebar">
+            <div className="min-w-0">
+              <h1 className="mobile-page-title">搜索</h1>
+              <div className="mt-3 flex">
+                <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+              </div>
+            </div>
+            <div className="mobile-action-row">
               <ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
             </div>
           </div>
         </header>
 
-        {/* Search Box */}
         <SearchBox
           query={state.query}
           suggestions={state.suggestions}
           aiSearching={state.aiSearching}
           semanticImageSearch={state.filters.semanticImageSearch}
+          includeDetail={state.includeDetail}
           semanticSearchEnabled={semanticSearchEnabled}
           searchHistory={searchHistory}
           onQueryChange={handleQueryChange}
           onSearch={performSearch}
           onImageSearch={handleImageSearch}
-          onToggleSemanticSearch={() => {
+          onToggleSemanticSearch={(checked) => {
             if (semanticSearchEnabled) {
-              updateFilters({ semanticImageSearch: !state.filters.semanticImageSearch })
+              updateFilters({ semanticImageSearch: checked })
             }
           }}
+          onToggleDetail={toggleDetail}
           onDismissSuggestions={dismissSuggestions}
           onRemoveSearchHistoryItem={removeSearchHistoryItem}
           onClearSearchHistory={clearSearchHistory}
         />
 
-        {/* Search Filters */}
         <SearchFilters
           filters={state.filters}
           hotKeywords={state.hotKeywords}
@@ -90,12 +95,21 @@ const Search: React.FC = () => {
           onSearchKeyword={(keyword) => performSearch(keyword)}
         />
 
-        {/* Search Results */}
         <SearchResults
           state={state}
           viewMode={viewMode}
           tabItems={tabItems}
           onTabChange={setActiveTab}
+          onCategoryPageChange={searchCategoryPage}
+          onMixedPageChange={fetchImageSearchPage}
+          onRetry={
+            state.query
+              ? () =>
+                  void performSearch(state.query, undefined, undefined, {
+                    preservePagination: true,
+                  })
+              : undefined
+          }
         />
       </div>
     </div>

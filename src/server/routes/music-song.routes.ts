@@ -1,55 +1,69 @@
-import { Router } from 'express';
-import { prisma, resolveMusicPlayUrl, toSongResponse, normalizeMusicImportTracks } from '../utils';
+import { Router } from 'express'
+import {
+  normalizeLyricStorage,
+  normalizeMusicImportTracks,
+  prisma,
+  resolveMusicPlayUrl,
+  toSongResponse,
+} from '../utils'
 import {
   getMusicResourcePreview,
+  getMusicTrackMetadata,
   resolveAudioUrl as resolveMetingAudioUrl,
   resolveLyric as resolveMetingLyric,
-} from '../music/metingService';
-import type { MusicTrackWithRelations } from '../types';
-
-const router = Router();
+} from '../music/metingService'
+import { extractMusicCreditsFromLyric, resolveImportedVocals } from '../../lib/musicCredits'
+const router = Router()
 
 router.get('/song/:id', async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params
 
   try {
-    const existing = await prisma.musicTrack.findFirst({
+    const existingSource = await prisma.musicExternalSource.findFirst({
       where: {
-        deletedAt: null,
-        OR: [
-          { id },
-          { neteaseId: id },
-          { tencentId: id },
-          { kugouId: id },
-          { baiduId: id },
-          { kuwoId: id },
-        ],
+        resourceType: 'song',
+        sourceId: id,
       },
+      // 同一 id 可被多首歌共享，固定取最早占用者
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       include: {
-        covers: {
-          orderBy: { sortOrder: 'asc' },
-        },
-        albumRelations: {
+        song: {
           include: {
-            album: {
+            covers: {
+              orderBy: { sortOrder: 'asc' },
+            },
+            albumRelations: {
               include: {
-                covers: {
-                  orderBy: { sortOrder: 'asc' },
+                album: {
+                  include: {
+                    covers: {
+                      orderBy: { sortOrder: 'asc' },
+                    },
+                  },
                 },
               },
+              orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
+            },
+            instrumentalLinks: {
+              select: {
+                targetSongDocId: true,
+              },
+            },
+            externalSources: {
+              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
             },
           },
-          orderBy: [{ discNumber: 'asc' }, { trackOrder: 'asc' }],
         },
       },
-    });
+    })
+    const existing = existingSource?.song || null
 
-    if (existing) {
-      const resolved = await resolveMusicPlayUrl(existing);
-      const song = toSongResponse(existing as MusicTrackWithRelations);
+    if (existing && !existing.deletedAt) {
+      const resolved = await resolveMusicPlayUrl(existing)
+      const song = toSongResponse(existing)
       res.json({
         ...song,
-        playUrl: resolved.playUrl || song.audioUrl,
+        playUrl: resolved.mode === 'disabled' ? '' : resolved.playUrl || song.audioUrl,
         playMeta: {
           platform: resolved.platform,
           sourceId: resolved.sourceId,
@@ -57,50 +71,62 @@ router.get('/song/:id', async (req, res) => {
           cacheExpiresAt: resolved.cacheExpiresAt,
           fallback: Boolean((resolved as { fallback?: boolean }).fallback),
         },
-      });
-      return;
+      })
+      return
     }
 
-    const preview = await getMusicResourcePreview('netease', 'song', id);
-    const track = normalizeMusicImportTracks(preview.songs)[0];
+    const preview = await getMusicResourcePreview('netease', 'song', id)
+    const track = normalizeMusicImportTracks(preview.songs)[0]
     if (!track) {
-      res.status(404).json({ error: '未找到歌曲信息' });
-      return;
+      res.status(404).json({ error: '未找到歌曲信息' })
+      return
     }
 
-    const audioUrl = await resolveMetingAudioUrl('netease', track.urlId);
-    const lyric = await resolveMetingLyric('netease', track.lyricId);
+    const [audioUrl, lyric, metadata] = await Promise.all([
+      resolveMetingAudioUrl('netease', track.urlId),
+      resolveMetingLyric('netease', track.lyricId),
+      getMusicTrackMetadata('netease', track.sourceId),
+    ])
+    const lyricStorage = normalizeLyricStorage({ lyric, lyricSource: 'netease' })
+    const credits = extractMusicCreditsFromLyric(lyric)
+    const artists = track.artists.length ? track.artists : [preview.artist]
+    credits.vocals = resolveImportedVocals(credits.vocals, artists, track.isInstrumental === true)
 
     res.json({
       docId: null,
-      id: track.sourceId,
       title: track.title || preview.title,
-      artist: track.artist || preview.artist,
+      artists,
       album: track.album || preview.title,
       description: null,
+      releaseDate: metadata.releaseDate,
+      durationMs: metadata.durationMs,
       cover: track.cover || preview.cover,
       audioUrl: audioUrl || '',
       playUrl: audioUrl || '',
-      lyric: lyric || null,
-      primaryPlatform: 'netease',
-      enabledPlatform: 'netease',
-      platformIds: {
-        neteaseId: track.sourceId,
-        tencentId: null,
-        kugouId: null,
-        baiduId: null,
-        kuwoId: null,
-      },
+      ...lyricStorage.data,
+      sources: [
+        {
+          id: `preview-netease-${track.sourceId}`,
+          resourceType: 'song',
+          platform: 'netease',
+          sourceId: track.sourceId,
+          sourceUrl: track.sourceUrl,
+          isPrimary: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+      playable: Boolean(audioUrl),
       customPlatformLinks: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    });
+    })
   } catch (error) {
-    console.error('Error fetching song metadata:', error);
-    res.status(500).json({ error: 'Failed to fetch song metadata' });
+    console.error('Error fetching song metadata:', error)
+    res.status(500).json({ error: 'Failed to fetch song metadata' })
   }
-});
+})
 
 export function registerMusicSongRoutes(app: Router) {
-  app.use('/api/music', router);
+  app.use('/api/music', router)
 }

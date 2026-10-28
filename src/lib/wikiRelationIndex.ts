@@ -1,14 +1,14 @@
-import type { WikiRelationRecord } from "../components/wiki/types";
+import type { WikiRelationRecord } from '../components/wiki/types'
 
 export type RelationWithOriginalIndex<T extends WikiRelationRecord> = T & {
-	originalIndex: number;
-};
+  originalIndex: number
+}
 
 export function withOriginalRelationIndexes<T extends WikiRelationRecord>(
-	relations: readonly T[],
+  relations: readonly T[]
 ): RelationWithOriginalIndex<T>[] {
-	return relations.map((relation, originalIndex) => ({
-		...relation,
-		originalIndex,
-	}));
+  return relations.map((relation, originalIndex) => ({
+    ...relation,
+    originalIndex,
+  }))
 }

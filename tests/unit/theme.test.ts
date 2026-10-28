@@ -62,14 +62,18 @@ describe('theme helpers', () => {
     expect(
       normalizeStoredPreferences({
         viewMode: 'large',
+        viewModes: DEFAULT_PREFERENCES.viewModes,
         theme: 'dark',
         showCharacterCount: true,
         extra: 'ignored',
       } as Record<string, unknown>)
     ).toEqual({
       viewMode: 'large',
+      viewModes: DEFAULT_PREFERENCES.viewModes,
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: true,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -80,6 +84,8 @@ describe('theme helpers', () => {
     expect(hasStoredPreferenceValues({})).toBe(false)
     expect(hasStoredPreferenceValues({ theme: 'dark' })).toBe(true)
     expect(hasStoredPreferenceValues({ viewMode: 'small' })).toBe(true)
+    expect(hasStoredPreferenceValues({ viewModes: { music: 'large' } })).toBe(true)
+    expect(hasStoredPreferenceValues({ listLoadMode: 'incremental' })).toBe(true)
     expect(hasStoredPreferenceValues({ showCharacterCount: false })).toBe(true)
     expect(hasStoredPreferenceValues({ publicFavorites: false })).toBe(true)
     expect(hasStoredPreferenceValues({ theme: 'sepia' })).toBe(false)
@@ -99,16 +105,50 @@ describe('theme helpers', () => {
       )
     ).toEqual({
       viewMode: 'small',
+      viewModes: {
+        ...DEFAULT_PREFERENCES.viewModes,
+        gallery: 'small',
+      },
       theme: 'default',
+      listLoadMode: 'pagination',
       showCharacterCount: true,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
+    })
+  })
+
+  it('ignores unsupported scoped view modes without resetting existing scoped values', () => {
+    expect(
+      mergeStoredPreferences(
+        {
+          viewMode: 'medium',
+          viewModes: {
+            ...DEFAULT_PREFERENCES.viewModes,
+            music: 'large',
+          },
+        },
+        {
+          viewModes: {
+            music: 'cinema',
+            wiki: 'small',
+          },
+        } as Record<string, unknown>
+      ).viewModes
+    ).toEqual({
+      ...DEFAULT_PREFERENCES.viewModes,
+      music: 'large',
+      wiki: 'small',
     })
   })
 
   it('writes only normalized user preference fields', () => {
     writeStoredPreferences({
       viewMode: 'small',
+      viewModes: {
+        ...DEFAULT_PREFERENCES.viewModes,
+        gallery: 'small',
+      },
       theme: 'dark',
       showCharacterCount: true,
     })
@@ -116,8 +156,14 @@ describe('theme helpers', () => {
     expect(JSON.parse(window.localStorage.getItem(THEME_STORAGE_KEY) || '{}')).toEqual({
       guest: {
         viewMode: 'small',
+        viewModes: {
+          ...DEFAULT_PREFERENCES.viewModes,
+          gallery: 'small',
+        },
         theme: 'dark',
+        listLoadMode: 'pagination',
         showCharacterCount: true,
+        showMobileSongSequence: false,
         publicFavorites: false,
         publicHistory: false,
       },
@@ -138,8 +184,14 @@ describe('theme helpers', () => {
     expect(readStoredPreferences()).toEqual(DEFAULT_PREFERENCES)
     expect(readStoredPreferences('user-1')).toEqual({
       viewMode: 'list',
+      viewModes: {
+        ...DEFAULT_PREFERENCES.viewModes,
+        gallery: 'list',
+      },
       theme: 'default',
+      listLoadMode: 'pagination',
       showCharacterCount: true,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -147,8 +199,14 @@ describe('theme helpers', () => {
       users: {
         'user-1': {
           viewMode: 'list',
+          viewModes: {
+            ...DEFAULT_PREFERENCES.viewModes,
+            gallery: 'list',
+          },
           theme: 'default',
+          listLoadMode: 'pagination',
           showCharacterCount: true,
+          showMobileSongSequence: false,
           publicFavorites: false,
           publicHistory: false,
         },
@@ -167,8 +225,14 @@ describe('theme helpers', () => {
 
     expect(readStoredPreferences()).toEqual({
       viewMode: 'small',
+      viewModes: {
+        ...DEFAULT_PREFERENCES.viewModes,
+        gallery: 'small',
+      },
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -185,8 +249,14 @@ describe('theme helpers', () => {
 
     expect(readStoredPreferences('user-1', { includeLegacyFallback: true })).toEqual({
       viewMode: 'small',
+      viewModes: {
+        ...DEFAULT_PREFERENCES.viewModes,
+        gallery: 'small',
+      },
       theme: 'dark',
+      listLoadMode: 'pagination',
       showCharacterCount: false,
+      showMobileSongSequence: false,
       publicFavorites: false,
       publicHistory: false,
     })
@@ -261,7 +331,9 @@ describe('theme helpers', () => {
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
     expect(document.documentElement.style.colorScheme).toBe('dark')
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#1f1a16')
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(
+      '#1f1a16'
+    )
   })
 
   it('skips duplicate DOM writes when the resolved theme is already applied', () => {

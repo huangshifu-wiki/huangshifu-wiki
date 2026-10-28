@@ -8,39 +8,41 @@
 
 ### 视频平台
 
-| 平台 | 域名 | 嵌入说明 |
-|------|------|----------|
-| Bilibili | player. bilibili. com | 支持视频嵌入 |
-| YouTube | youtube. com, www. youtube. com | 支持视频嵌入 |
-| 优酷 | player. youku. com | 支持视频嵌入 |
-| 爱奇艺 | open. iqiyi. com, www. iqiyi. com | 支持视频嵌入 |
-| 微博视频 | weibo. com, www. weibo. com | 支持视频嵌入 |
-| Vimeo | vimeo. com, player. vimeo. com | 支持视频嵌入 |
+| 平台     | 域名                              | 嵌入说明     |
+| -------- | --------------------------------- | ------------ |
+| Bilibili | player. bilibili. com             | 支持视频嵌入 |
+| YouTube  | youtube. com, www. youtube. com   | 支持视频嵌入 |
+| 优酷     | player. youku. com                | 支持视频嵌入 |
+| 爱奇艺   | open. iqiyi. com, www. iqiyi. com | 支持视频嵌入 |
+| 微博视频 | weibo. com, www. weibo. com       | 支持视频嵌入 |
+| Vimeo    | vimeo. com, player. vimeo. com    | 支持视频嵌入 |
 
 ### 音乐平台
 
-| 平台 | 域名 | 嵌入说明 |
-|------|------|----------|
+| 平台       | 域名            | 嵌入说明       |
+| ---------- | --------------- | -------------- |
 | 网易云音乐 | music. 163. com | 支持音乐播放器 |
-| QQ 音乐 | y. qq. com | 支持音乐播放器 |
+| QQ 音乐    | y. qq. com      | 支持音乐播放器 |
 
 ## 嵌入示例
 
 ### Bilibili 视频
 
 ```html
-<iframe 
-  src="//player. bilibili. com/player. html?bvid=BV1xx411c7mD&page=1" 
-  width="100%" 
-  height="400" 
-  scrolling="no" 
-  frameborder="no" 
-  framespacing="0" 
-  allowfullscreen="true">
+<iframe
+  src="//player. bilibili. com/player. html?bvid=BV1xx411c7mD&page=1"
+  width="100%"
+  height="400"
+  scrolling="no"
+  frameborder="no"
+  framespacing="0"
+  allowfullscreen="true"
+>
 </iframe>
 ```
 
 **获取方式：**
+
 1. 打开 Bilibili 视频页面
 2. 点击视频下方的「分享」按钮
 3. 选择「嵌入代码」
@@ -51,14 +53,16 @@
 ### 网易云音乐
 
 ```html
-<iframe 
-  src="//music. 163. com/outchain/player?type=2&id=347230&auto=1&height=66" 
-  width="100%" 
-  height="86">
+<iframe
+  src="//music. 163. com/outchain/player?type=2&id=347230&auto=1&height=66"
+  width="100%"
+  height="86"
+>
 </iframe>
 ```
 
 **获取方式：**
+
 1. 打开网易云音乐歌曲页面
 2. 点击「分享」-> 「生成外链播放器」
 3. 复制 iframe 代码
@@ -68,14 +72,16 @@
 ### QQ 音乐
 
 ```html
-<iframe 
-  src="https://y. qq. com/player. html?songmid=002R5xNn4B0UeM&type=2&auto=1&height=80" 
-  width="100%" 
-  height="80">
+<iframe
+  src="https://y. qq. com/player. html?songmid=002R5xNn4B0UeM&type=2&auto=1&height=80"
+  width="100%"
+  height="80"
+>
 </iframe>
 ```
 
 **获取方式：**
+
 1. 打开 QQ 音乐歌曲页面
 2. 点击「分享」-> 「复制外链」
 3. 选择「iframe」格式
@@ -85,17 +91,19 @@
 ### YouTube 视频
 
 ```html
-<iframe 
-  width="560" 
-  height="315" 
-  src="https://www. youtube. com/embed/dQw4w9WgXcQ" 
-  frameborder="0" 
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-  allowfullscreen>
+<iframe
+  width="560"
+  height="315"
+  src="https://www. youtube. com/embed/dQw4w9WgXcQ"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowfullscreen
+>
 </iframe>
 ```
 
 **获取方式：**
+
 1. 打开 YouTube 视频页面
 2. 点击「分享」-> 「嵌入」
 3. 复制 iframe 代码
@@ -105,14 +113,12 @@
 ### 优酷视频
 
 ```html
-<iframe 
-  src="https://player. youku. com/embed/XNTAwNDY4OTQ2NA==" 
-  width="100%" 
-  height="400">
+<iframe src="https://player. youku. com/embed/XNTAwNDY4OTQ2NA==" width="100%" height="400">
 </iframe>
 ```
 
 **获取方式：**
+
 1. 打开优酷视频页面
 2. 点击「分享」-> 「嵌入代码」
 3. 复制 iframe 代码
@@ -122,10 +128,11 @@
 ### 爱奇艺视频
 
 ```html
-<iframe 
-  src="https://open. iqiyi. com/developer/player_js/ coopPlayerIndex. html?vid=123456789" 
-  width="100%" 
-  height="400">
+<iframe
+  src="https://open. iqiyi. com/developer/player_js/ coopPlayerIndex. html?vid=123456789"
+  width="100%"
+  height="400"
+>
 </iframe>
 ```
 
@@ -134,12 +141,13 @@
 ### 微博视频
 
 ```html
-<iframe 
-  src="https://weibo. com/tv/show/10 34:xxxxx" 
-  width="100%" 
-  height="400" 
-  frameborder="0" 
-  scrolling="no">
+<iframe
+  src="https://weibo. com/tv/show/10 34:xxxxx"
+  width="100%"
+  height="400"
+  frameborder="0"
+  scrolling="no"
+>
 </iframe>
 ```
 
@@ -148,12 +156,13 @@
 ### Vimeo 视频
 
 ```html
-<iframe 
-  src="https://player. vimeo. com/video/123456789" 
-  width="640" 
-  height="360" 
-  frameborder="0" 
-  allow="autoplay; fullscreen; picture-in-picture">
+<iframe
+  src="https://player. vimeo. com/video/123456789"
+  width="640"
+  height="360"
+  frameborder="0"
+  allow="autoplay; fullscreen; picture-in-picture"
+>
 </iframe>
 ```
 
@@ -164,25 +173,26 @@
 您可以使用 HTML 属性自定义嵌入播放器的样式：
 
 ```html
-<iframe 
+<iframe
   src="..."
-  width="100%" 
-  height="400" 
-  style="border-radius: 12px; border: 1px solid #e5e7eb; margin: 32px 0;">
+  width="100%"
+  height="400"
+  style="border-radius: 12px; border: 1px solid #e5e7eb; margin: 32px 0;"
+>
 </iframe>
 ```
 
 ### 支持的样式属性
 
-| 属性 | 说明 | 示例 |
-|------|------|------|
-| `width` | 宽度 | `width="100%"` 或 `width="640"` |
-| `height` | 高度 | `height="400"` |
-| `style` | 内联 CSS | `style="border-radius: 8px;"` |
-| `class` | CSS 类名 | `class="my-video"` |
-| `frameborder` | 边框 | `frameborder="0"` |
-| `allowfullscreen` | 全屏 | `allowfullscreen` |
-| `scrolling` | 滚动条 | `scrolling="no"` |
+| 属性              | 说明     | 示例                            |
+| ----------------- | -------- | ------------------------------- |
+| `width`           | 宽度     | `width="100%"` 或 `width="640"` |
+| `height`          | 高度     | `height="400"`                  |
+| `style`           | 内联 CSS | `style="border-radius: 8px;"`   |
+| `class`           | CSS 类名 | `class="my-video"`              |
+| `frameborder`     | 边框     | `frameborder="0"`               |
+| `allowfullscreen` | 全屏     | `allowfullscreen`               |
+| `scrolling`       | 滚动条   | `scrolling="no"`                |
 
 ---
 
@@ -209,11 +219,13 @@
 
 ```html
 <!-- 脚本注入 - 会被阻止 -->
-<script>alert('xss')</script>
+<script>
+  alert('xss')
+</script>
 
 <!-- 事件处理器 - 会被阻止 -->
 <div onclick="alert('xss')">点击</div>
-<img src="x" onerror="alert('xss')">
+<img src="x" onerror="alert('xss')" />
 
 <!-- 危险协议 - 会被阻止 -->
 <a href="javascript:alert('xss')">链接</a>
@@ -230,6 +242,7 @@
 ### Q: 为什么我的视频无法显示？
 
 请确认：
+
 1. 您使用的平台是否在支持列表中
 2. 嵌入代码使用了正确的域名
 3. 视频未被原作者设置为「不可嵌入」

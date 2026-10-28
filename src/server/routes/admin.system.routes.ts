@@ -1,6 +1,6 @@
 /**
  * 管理后台 API - 磁盘监控与系统管理
- * 
+ *
  * 功能：
  * 1. 磁盘状态查询
  * 2. 动态修改告警阈值（用户核心需求）
@@ -9,14 +9,280 @@
  * 5. 批量变体重建
  */
 
-import { Router } from 'express';
-import { prisma } from '../prisma';
-import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
-import { diskMonitor } from '../services/diskMonitor.service';
-import { variantGenerator } from '../services/variantGenerator';
-import { cloudSyncService } from '../services/cloudSyncService';
+import { Router } from 'express'
+import { prisma } from '../prisma'
+import {
+  requireAuth,
+  requireAdmin,
+  requireSuperAdmin,
+  AuthenticatedRequest,
+} from '../middleware/auth'
+import { applyRateLimitConfig } from '../middleware/rateLimiter'
+import {
+  isSecretsEnabled,
+  maskSecrets,
+  secretsConfigService,
+  SecretsConfigValidationError,
+} from '../services/secretsConfig.service'
+import { diskMonitor } from '../services/diskMonitor.service'
+import { variantGenerator } from '../services/variantGenerator'
+import { cloudSyncService } from '../services/cloudSyncService'
+import {
+  RateLimitConfigValidationError,
+  rateLimitConfigService,
+} from '../services/rateLimitConfig.service'
+import {
+  RuntimeConfigValidationError,
+  normalizeRuntimeConfigUpdate,
+  runtimeConfigService,
+} from '../services/runtimeConfig.service'
+import { getDashboardOverview } from '../utils'
 
-const router = Router();
+const router = Router()
+
+// ============================================================================
+// 📊 仪表盘总览 API
+// ============================================================================
+
+/**
+ * GET /api/admin/dashboard - 管理后台总览（内容统计 + 审核队列 + 系统健康 + 新增趋势）
+ * 依赖本 router 在 server.ts 中先于 admin.routes.ts 的 /:tab 兜底路由挂载
+ */
+router.get('/dashboard', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    const data = await getDashboardOverview()
+
+    res.json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('[Admin/Dashboard] Error getting overview:', error)
+    res.status(500).json({
+      success: false,
+      error: '获取仪表盘数据失败',
+    })
+  }
+})
+
+// ============================================================================
+// 请求限流 API（支持动态配置）
+// ============================================================================
+
+router.get('/rate-limits/config', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: rateLimitConfigService.getConfig(),
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('[Admin/RateLimit] Error getting config:', error)
+    res.status(500).json({ success: false, error: '获取请求限流配置失败' })
+  }
+})
+
+router.patch(
+  '/rate-limits/config',
+  requireAuth,
+  requireSuperAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const config = await rateLimitConfigService.updateConfig(req.body)
+      applyRateLimitConfig(config)
+
+      await logConfigUpdate(req, 'rate-limit', configFieldNames(req.body))
+
+      console.log(`[Admin/RateLimit] Config updated by super admin: ${req.authUser?.uid}`)
+
+      res.json({
+        success: true,
+        data: config,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      if (error instanceof RateLimitConfigValidationError) {
+        res.status(400).json({ success: false, error: error.message })
+        return
+      }
+
+      console.error('[Admin/RateLimit] Error updating config:', error)
+      res.status(500).json({ success: false, error: '更新请求限流配置失败' })
+    }
+  }
+)
+
+router.post(
+  '/rate-limits/config/reset',
+  requireAuth,
+  requireSuperAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const config = await rateLimitConfigService.resetConfig()
+      applyRateLimitConfig(config)
+
+      await logConfigUpdate(req, 'rate-limit', 'reset')
+
+      res.json({
+        success: true,
+        data: config,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      console.error('[Admin/RateLimit] Error resetting config:', error)
+      res.status(500).json({ success: false, error: '重置请求限流配置失败' })
+    }
+  }
+)
+
+// ============================================================================
+// ⚙️ 运行时行为配置 API（支持动态配置）
+// ============================================================================
+
+/**
+ * GET /api/admin/runtime-config - 获取运行时行为配置
+ */
+router.get('/runtime-config', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: runtimeConfigService.getConfig(),
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('[Admin/RuntimeConfig] Error getting config:', error)
+    res.status(500).json({ success: false, error: '获取运行时配置失败' })
+  }
+})
+
+/**
+ * PATCH /api/admin/runtime-config - 更新运行时行为配置
+ */
+router.patch(
+  '/runtime-config',
+  requireAuth,
+  requireSuperAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const partial = normalizeRuntimeConfigUpdate(req.body)
+      const config = await runtimeConfigService.updateConfig(partial)
+
+      await logConfigUpdate(req, 'runtime', configFieldNames(partial))
+
+      console.log(`[Admin/RuntimeConfig] Config updated by super admin: ${req.authUser?.uid}`)
+
+      res.json({
+        success: true,
+        data: config,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      if (error instanceof RuntimeConfigValidationError) {
+        res.status(400).json({ success: false, error: error.message })
+        return
+      }
+
+      console.error('[Admin/RuntimeConfig] Error updating config:', error)
+      res.status(500).json({ success: false, error: '更新运行时配置失败' })
+    }
+  }
+)
+
+/**
+ * POST /api/admin/runtime-config/reset - 重置为默认配置
+ */
+router.post(
+  '/runtime-config/reset',
+  requireAuth,
+  requireSuperAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const config = await runtimeConfigService.resetConfig()
+
+      await logConfigUpdate(req, 'runtime', 'reset')
+
+      res.json({
+        success: true,
+        data: config,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      console.error('[Admin/RuntimeConfig] Error resetting config:', error)
+      res.status(500).json({ success: false, error: '重置运行时配置失败' })
+    }
+  }
+)
+
+// ============================================================================
+// 🔐 服务凭证管理 API
+// ============================================================================
+
+/**
+ * GET /api/admin/secrets-config - 获取服务凭证掩码状态（绝不返回明文）
+ */
+router.get('/secrets-config', requireAuth, requireSuperAdmin, async (_req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        disabled: !isSecretsEnabled(),
+        secrets: maskSecrets(secretsConfigService.getSecrets()),
+      },
+    })
+  } catch (error) {
+    console.error('[Admin/SecretsConfig] Error getting secrets:', error)
+    res.status(500).json({ success: false, error: '获取服务凭证配置失败' })
+  }
+})
+
+/**
+ * PATCH /api/admin/secrets-config - 更新服务凭证
+ * body: { [key]: string | null }，null/空字符串 = 清除，undefined = 不变
+ */
+router.patch(
+  '/secrets-config',
+  requireAuth,
+  requireSuperAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!isSecretsEnabled()) {
+        res.status(400).json({
+          success: false,
+          error: '未配置 SECRETS_ENCRYPTION_KEY，无法管理凭证',
+        })
+        return
+      }
+
+      const body = req.body
+      if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+        res.status(400).json({ success: false, error: '请求体必须是对象' })
+        return
+      }
+
+      const config = await secretsConfigService.updateSecrets(body)
+
+      await logConfigUpdate(req, 'secrets', configFieldNames(body))
+
+      res.json({
+        success: true,
+        data: {
+          disabled: false,
+          secrets: maskSecrets(config),
+        },
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      if (error instanceof SecretsConfigValidationError) {
+        res.status(400).json({ success: false, error: error.message })
+        return
+      }
+
+      console.error('[Admin/SecretsConfig] Error updating secrets:', error)
+      res.status(500).json({ success: false, error: '更新服务凭证失败' })
+    }
+  }
+)
 
 // ============================================================================
 // 📊 磁盘监控 API（支持动态配置）
@@ -27,46 +293,46 @@ const router = Router();
  */
 router.get('/disk/status', requireAuth, requireAdmin, async (_req, res) => {
   try {
-    const status = await diskMonitor.checkDiskSpace();
-    
+    const status = await diskMonitor.checkDiskSpace()
+
     res.json({
       success: true,
       data: status,
       timestamp: new Date().toISOString(),
-    });
+    })
   } catch (error) {
-    console.error('[Admin/Disk] Error getting status:', error);
+    console.error('[Admin/Disk] Error getting status:', error)
     res.status(500).json({
       success: false,
       error: 'Failed to get disk status',
-    });
+    })
   }
-});
+})
 
 /**
  * GET /api/admin/disk/config - 获取当前监控配置
  */
 router.get('/disk/config', requireAuth, requireAdmin, async (_req, res) => {
   try {
-    const config = diskMonitor.getConfig();
-    
+    const config = diskMonitor.getConfig()
+
     res.json({
       success: true,
       data: config,
       timestamp: new Date().toISOString(),
-    });
+    })
   } catch (error) {
-    console.error('[Admin/Disk] Error getting config:', error);
+    console.error('[Admin/Disk] Error getting config:', error)
     res.status(500).json({
       success: false,
       error: 'Failed to get disk monitor configuration',
-    });
+    })
   }
-});
+})
 
 /**
  * PUT /api/admin/disk/config - ⭐ 更新监控配置（核心功能：后台修改阈值）
- * 
+ *
  * 请求体示例：
  * {
  *   "warningThresholdGB": 100,    // 可选：警告阈值（GB），默认 50
@@ -77,40 +343,40 @@ router.get('/disk/config', requireAuth, requireAdmin, async (_req, res) => {
  */
 router.put('/disk/config', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const newConfig = req.body;
+    const newConfig = req.body
 
     // 参数验证
     if (typeof newConfig !== 'object' || newConfig === null) {
       return res.status(400).json({
         success: false,
         error: 'Request body must be a JSON object',
-      });
+      })
     }
 
     // 验证各字段类型和范围
-    const validationErrors: string[] = [];
+    const validationErrors: string[] = []
 
     if ('warningThresholdGB' in newConfig) {
       if (typeof newConfig.warningThresholdGB !== 'number' || newConfig.warningThresholdGB <= 0) {
-        validationErrors.push('warningThresholdGB must be a positive number');
+        validationErrors.push('warningThresholdGB must be a positive number')
       }
     }
 
     if ('criticalThresholdGB' in newConfig) {
       if (typeof newConfig.criticalThresholdGB !== 'number' || newConfig.criticalThresholdGB <= 0) {
-        validationErrors.push('criticalThresholdGB must be a positive number');
+        validationErrors.push('criticalThresholdGB must be a positive number')
       }
     }
 
     if ('checkIntervalMs' in newConfig) {
       if (typeof newConfig.checkIntervalMs !== 'number' || newConfig.checkIntervalMs < 60000) {
-        validationErrors.push('checkIntervalMs must be >= 60000 (1 minute)');
+        validationErrors.push('checkIntervalMs must be >= 60000 (1 minute)')
       }
     }
 
     if ('uploadsMinFreeMB' in newConfig) {
       if (typeof newConfig.uploadsMinFreeMB !== 'number' || newConfig.uploadsMinFreeMB < 10) {
-        validationErrors.push('uploadsMinFreeMB must be >= 10 MB');
+        validationErrors.push('uploadsMinFreeMB must be >= 10 MB')
       }
     }
 
@@ -119,7 +385,7 @@ router.put('/disk/config', requireAuth, requireAdmin, async (req: AuthenticatedR
         success: false,
         error: 'Validation failed',
         details: validationErrors,
-      });
+      })
     }
 
     // 业务逻辑验证：critical 必须小于 warning
@@ -131,140 +397,179 @@ router.put('/disk/config', requireAuth, requireAdmin, async (req: AuthenticatedR
       return res.status(400).json({
         success: false,
         error: 'criticalThresholdGB must be less than warningThresholdGB',
-      });
+      })
     }
 
     // 更新配置（会自动保存到数据库并生效）
-    const updatedConfig = await diskMonitor.updateConfig(newConfig);
+    const updatedConfig = await diskMonitor.updateConfig(newConfig)
 
-    console.log(
-      `[Admin/Disk] 🔧 Config updated by admin: ${req.authUser?.uid}`,
-      updatedConfig
-    );
+    await logConfigUpdate(req, 'disk-monitor', configFieldNames(newConfig))
+
+    console.log(`[Admin/Disk] 🔧 Config updated by admin: ${req.authUser?.uid}`, updatedConfig)
 
     res.json({
       success: true,
       message: 'Disk monitor configuration updated successfully',
       data: updatedConfig,
-      previousConfig: diskMonitor.getConfig(),  // 实际上已经是更新后的了
+      previousConfig: diskMonitor.getConfig(), // 实际上已经是更新后的了
       timestamp: new Date().toISOString(),
-    });
+    })
   } catch (error) {
-    console.error('[Admin/Disk] Error updating config:', error);
+    console.error('[Admin/Disk] Error updating config:', error)
     res.status(500).json({
       success: false,
       error: 'Failed to update disk monitor configuration',
-    });
+    })
   }
-});
+})
 
 /**
  * POST /api/admin/disk/config/reset - 重置为默认配置
  */
-router.post('/disk/config/reset', requireAuth, requireAdmin, async (_req, res) => {
-  try {
-    const defaultConfig = await diskMonitor.resetConfig();
+router.post(
+  '/disk/config/reset',
+  requireAuth,
+  requireAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const defaultConfig = await diskMonitor.resetConfig()
 
-    res.json({
-      success: true,
-      message: 'Configuration reset to defaults',
-      data: defaultConfig,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('[Admin/Disk] Error resetting config:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to reset configuration',
-    });
+      await logConfigUpdate(req, 'disk-monitor', 'reset')
+
+      res.json({
+        success: true,
+        message: 'Configuration reset to defaults',
+        data: defaultConfig,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      console.error('[Admin/Disk] Error resetting config:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to reset configuration',
+      })
+    }
   }
-});
+)
 
 /**
  * POST /api/admin/disk/check - 手动触发磁盘检查
  */
 router.post('/disk/check', requireAuth, requireAdmin, async (_req, res) => {
   try {
-    const status = await diskMonitor.manualCheck();
-    
+    const status = await diskMonitor.manualCheck()
+
     res.json({
       success: true,
       message: 'Manual disk check completed',
       data: status,
       timestamp: new Date().toISOString(),
-    });
+    })
   } catch (error) {
-    console.error('[Admin/Disk] Error in manual check:', error);
+    console.error('[Admin/Disk] Error in manual check:', error)
     res.status(500).json({
       success: false,
       error: 'Manual disk check failed',
-    });
+    })
   }
-});
+})
 
 /**
  * POST /api/admin/disk/monitor/stop - 停止监控（维护用）
  */
 router.post('/disk/monitor/stop', requireAuth, requireAdmin, async (_req, res) => {
   try {
-    diskMonitor.stopMonitoring();
-    
+    diskMonitor.stopMonitoring()
+
     res.json({
       success: true,
       message: 'Disk monitoring stopped',
       timestamp: new Date().toISOString(),
-    });
+    })
   } catch (error) {
     res.status(500).json({
       success: false,
       error: 'Failed to stop monitoring',
-    });
+    })
   }
-});
+})
 
 /**
  * POST /api/admin/disk/monitor/resume - 恢复监控
  */
 router.post('/disk/monitor/resume', requireAuth, requireAdmin, async (_req, res) => {
   try {
-    diskMonitor.resumeMonitoring();
-    
+    diskMonitor.resumeMonitoring()
+
     res.json({
       success: true,
       message: 'Disk monitoring resumed',
       timestamp: new Date().toISOString(),
-    });
+    })
   } catch (error) {
     res.status(500).json({
       success: false,
       error: 'Failed to resume monitoring',
-    });
+    })
   }
-});
+})
 
 // ============================================================================
 // 🖼️ 变体生成器 API
 // ============================================================================
 
 /**
- * GET /api/admin/variants/stats - 获取变体生成统计
+ * GET /api/admin/variants/stats - 获取变体生成统计（队列 + 分类型状态）
  */
 router.get('/variants/stats', requireAuth, requireAdmin, async (_req, res) => {
   try {
-    const stats = variantGenerator.getQueueStats();
-    
+    const stats = variantGenerator.getQueueStats()
+
+    const countByStatus = async (model: 'imageMap' | 'songCover' | 'albumCover') => {
+      const whereBase = model === 'imageMap' ? { deletedAt: null } : {}
+      const countFor = (where: Record<string, unknown>) => {
+        if (model === 'imageMap') return prisma.imageMap.count({ where })
+        if (model === 'songCover') return prisma.songCover.count({ where })
+        return prisma.albumCover.count({ where })
+      }
+      const [total, completed, failed] = await Promise.all([
+        countFor(whereBase),
+        countFor({ ...whereBase, variantStatus: 'completed' }),
+        countFor({ ...whereBase, variantStatus: 'failed' }),
+      ])
+      return {
+        total,
+        completed,
+        failed,
+        pending: total - completed - failed,
+      }
+    }
+
+    const [imageMap, songCover, albumCover] = await Promise.all([
+      countByStatus('imageMap'),
+      countByStatus('songCover'),
+      countByStatus('albumCover'),
+    ])
+
     res.json({
       success: true,
-      data: stats,
+      data: {
+        ...stats,
+        byType: {
+          imageMap,
+          songCover,
+          albumCover,
+        },
+      },
       timestamp: new Date().toISOString(),
-    });
+    })
   } catch (error) {
     res.status(500).json({
       success: false,
       error: 'Failed to get variant generator stats',
-    });
+    })
   }
-});
+})
 
 // ============================================================================
 // ☁️ 云端同步 API
@@ -275,66 +580,47 @@ router.get('/variants/stats', requireAuth, requireAdmin, async (_req, res) => {
  */
 router.get('/cloud-sync/stats', requireAuth, requireAdmin, async (_req, res) => {
   try {
-    const stats = cloudSyncService.getQueueStats();
-    
+    const stats = cloudSyncService.getQueueStats()
+
     res.json({
       success: true,
       data: stats,
       lskyProAvailable: cloudSyncService.isLskyProAvailable(),
       timestamp: new Date().toISOString(),
-    });
+    })
   } catch (error) {
     res.status(500).json({
       success: false,
       error: 'Failed to get cloud sync stats',
-    });
+    })
   }
-});
+})
 
-// ============================================================================
-// 📈 系统健康检查仪表盘
-// ============================================================================
-
-/**
- * GET /api/admin/system/dashboard - 系统总览仪表盘
- */
-router.get('/system/dashboard', requireAuth, requireAdmin, async (_req, res) => {
-  try {
-    const [diskStatus, variantStats, cloudSyncStats] = await Promise.all([
-      diskMonitor.getStatus() || diskMonitor.manualCheck(),
-      Promise.resolve(variantGenerator.getQueueStats()),
-      Promise.resolve(cloudSyncService.getQueueStats()),
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        disk: {
-          ...diskStatus,
-          config: diskMonitor.getConfig(),
-        },
-        variants: variantStats,
-        cloudSync: {
-          ...cloudSyncStats,
-          lskyProAvailable: cloudSyncService.isLskyProAvailable(),
-        },
-        serverTime: new Date().toISOString(),
-        uptime: process.uptime(),
-        memoryUsage: process.memoryUsage(),
-      },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('[Admin/Dashboard] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get system dashboard',
-    });
-  }
-});
-
-export { registerAdminSystemRoutes };
+export { registerAdminSystemRoutes }
 
 function registerAdminSystemRoutes(app: Router) {
-  app.use('/api/admin', router);
+  app.use('/api/admin', router)
+}
+
+// 记录配置类变更到操作日志（只记字段名，绝不记录凭证值）
+function configFieldNames(obj: object): string {
+  return JSON.stringify(Object.keys(obj))
+}
+
+async function logConfigUpdate(req: AuthenticatedRequest, targetId: string, note: string) {
+  // 配置服务的持久化封装在 service 内部，无法与日志同一事务；
+  // 审计写入失败降级为警告，不阻断已成功的配置变更。
+  try {
+    await prisma.moderationLog.create({
+      data: {
+        targetType: 'config',
+        targetId,
+        action: 'update',
+        operatorUid: req.authUser!.uid,
+        note,
+      },
+    })
+  } catch (error) {
+    console.warn(`[Admin/Config] Failed to write moderation log for ${targetId}:`, error)
+  }
 }

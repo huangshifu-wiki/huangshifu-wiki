@@ -18,7 +18,10 @@ function normalizeMentionName(name: string) {
 }
 
 async function findMentionUsersByNames(names: string[]) {
-  const normalizedNames = [...new Set(names.map((name) => name.trim()).filter(Boolean))].slice(0, 50)
+  const normalizedNames = [...new Set(names.map((name) => name.trim()).filter(Boolean))].slice(
+    0,
+    50
+  )
   if (!normalizedNames.length) return new Map<string, MentionUser[]>()
 
   const users = await prisma.user.findMany({
@@ -31,6 +34,7 @@ async function findMentionUsersByNames(names: string[]) {
     },
     select: {
       uid: true,
+      publicId: true,
       displayName: true,
       photoURL: true,
     },
@@ -61,6 +65,7 @@ function collectCandidateNames(matches: MentionMatch[]) {
 function toMentionTarget(user: MentionUser): MentionTarget {
   return {
     uid: user.uid,
+    publicId: user.publicId,
     displayName: user.displayName,
     photoURL: user.photoURL,
   }
@@ -103,24 +108,13 @@ async function resolveMentionTargetsForMatches(matches: MentionMatch[]) {
   )
 }
 
-export async function resolveMentionTargetsForNames(names: string[]) {
-  const usersByName = await findMentionUsersByNames(names)
-  const targets: MentionTarget[] = []
-
-  for (const users of usersByName.values()) {
-    if (users.length !== 1) continue
-    const user = users[0]
-    targets.push(toMentionTarget(user))
-  }
-
-  return targets
-}
-
 export async function resolveMentionTargetsForText(content: string) {
   return resolveMentionTargetsForMatches(extractMentionMatches(content))
 }
 
-export async function buildMentionTargetsByTextKey(contents: Array<{ key: string; content: string }>) {
+export async function buildMentionTargetsByTextKey(
+  contents: Array<{ key: string; content: string }>
+) {
   const matchesByKey = new Map<string, MentionMatch[]>()
   const allNames = new Set<string>()
 
@@ -136,9 +130,7 @@ export async function buildMentionTargetsByTextKey(contents: Array<{ key: string
   for (const [key, matches] of matchesByKey.entries()) {
     result.set(
       key,
-      uniqueMentionTargets(
-        matches.map((match) => resolveMentionTargetForMatch(match, usersByName))
-      )
+      uniqueMentionTargets(matches.map((match) => resolveMentionTargetForMatch(match, usersByName)))
     )
   }
 
@@ -159,7 +151,8 @@ export async function notifyMentionUsers(options: {
   if (!targets.length) return
 
   const previousTargets =
-    options.previousMentionTargets ?? (await resolveMentionTargetsForText(options.previousContent ?? ''))
+    options.previousMentionTargets ??
+    (await resolveMentionTargetsForText(options.previousContent ?? ''))
   const previousUserUids = new Set(previousTargets.map((target) => target.uid))
 
   const excludeUserUids = new Set([options.actorUid, ...(options.excludeUserUids ?? [])])

@@ -1,48 +1,50 @@
-import { getXsrfToken } from './xsrf';
-import { apiPost } from './apiClient';
+import { getXsrfToken } from './xsrf'
+import { apiPost } from './apiClient'
 
 export interface AuthProviderInfo {
-  providerId: string;
-  displayName: string | null;
-  email: string | null;
-  photoURL: string | null;
+  providerId: string
+  displayName: string | null
+  email: string | null
+  photoURL: string | null
 }
 
 export interface User {
-  uid: string;
-  email: string;
-  displayName: string;
-  photoURL: string | null;
-  wechatBound?: boolean;
-  role: 'user' | 'admin' | 'super_admin';
-  status: 'active' | 'banned';
-  banReason: string | null;
-  bannedAt: string | null;
-  level: number;
-  signature: string;
-  bio: string;
-  emailVerified: boolean;
-  isAnonymous: boolean;
-  tenantId: string | null;
-  providerData: AuthProviderInfo[];
+  uid: string
+  publicId: string
+  email: string
+  displayName: string
+  photoURL: string | null
+  photoAssetId?: string | null
+  wechatBound?: boolean
+  role: 'user' | 'admin' | 'super_admin'
+  status: 'active' | 'banned'
+  banReason: string | null
+  bannedAt: string | null
+  level: number
+  signature: string
+  bio: string
+  emailVerified: boolean
+  isAnonymous: boolean
+  tenantId: string | null
+  providerData: AuthProviderInfo[]
 }
 
 export interface RegisterResponse {
-  success: boolean;
-  requiresEmailVerification: boolean;
-  verificationEmailSent?: boolean;
-  user?: User;
+  success: boolean
+  requiresEmailVerification: boolean
+  verificationEmailSent?: boolean
+  user?: User
 }
 
-type AuthStateListener = (user: User | null) => void;
+type AuthStateListener = (user: User | null) => void
 
-const listeners = new Set<AuthStateListener>();
-let currentUser: User | null = null;
-let initialized = false;
+const listeners = new Set<AuthStateListener>()
+let currentUser: User | null = null
+let initialized = false
 
 function notifyListeners() {
   for (const listener of listeners) {
-    listener(currentUser);
+    listener(currentUser)
   }
 }
 
@@ -66,7 +68,7 @@ function getValidationFieldMessage(data: unknown): string | null {
 }
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
-  const data = await response.json().catch(() => ({}));
+  const data = await response.json().catch(() => ({}))
   if (!response.ok) {
     const message = (() => {
       if (typeof data !== 'object' || !data || !('error' in data)) {
@@ -80,25 +82,25 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 
       return error
     })()
-    throw new Error(message);
+    throw new Error(message)
   }
-  return data as T;
+  return data as T
 }
 
 export async function refreshAuthState() {
   try {
     const response = await fetch('/api/auth/me', {
       credentials: 'include',
-    });
-    const data = await parseJsonResponse<{ user: User | null }>(response);
-    currentUser = data.user;
+    })
+    const data = await parseJsonResponse<{ user: User | null }>(response)
+    currentUser = data.user
   } catch {
-    currentUser = null;
+    currentUser = null
   }
 
-  initialized = true;
-  notifyListeners();
-  return currentUser;
+  initialized = true
+  notifyListeners()
+  return currentUser
 }
 
 export function readBootstrapAuthUid(): string | null {
@@ -117,32 +119,37 @@ export function readBootstrapAuthUid(): string | null {
 
 export const auth = {
   get currentUser() {
-    return currentUser;
+    return currentUser
   },
-};
+}
 
-export function onAuthStateChanged(
-  _auth: unknown,
-  callback: AuthStateListener,
-) {
-  listeners.add(callback);
+export function resetAuthStateForTests() {
+  if (process.env.NODE_ENV !== 'test') return
+
+  listeners.clear()
+  currentUser = null
+  initialized = false
+}
+
+export function onAuthStateChanged(_auth: unknown, callback: AuthStateListener) {
+  listeners.add(callback)
 
   if (initialized) {
-    callback(currentUser);
+    callback(currentUser)
   } else {
     refreshAuthState()
       .then(() => {
-        callback(currentUser);
+        callback(currentUser)
       })
       .catch((error) => {
-        console.error('Failed to initialize auth state:', error);
-        callback(null);
-      });
+        console.error('Failed to initialize auth state:', error)
+        callback(null)
+      })
   }
 
   return () => {
-    listeners.delete(callback);
-  };
+    listeners.delete(callback)
+  }
 }
 
 export async function login(email: string, password: string) {
@@ -153,13 +160,18 @@ export async function login(email: string, password: string) {
     },
     credentials: 'include',
     body: JSON.stringify({ email, password }),
-  });
+  })
 
-  await parseJsonResponse(response);
-  await refreshAuthState();
+  await parseJsonResponse(response)
+  await refreshAuthState()
 }
 
-export async function register(email: string, password: string, displayName?: string) {
+export async function register(
+  email: string,
+  password: string,
+  displayName?: string,
+  turnstileToken?: string
+) {
   const response = await fetch('/api/auth/register', {
     method: 'POST',
     headers: {
@@ -170,26 +182,31 @@ export async function register(email: string, password: string, displayName?: st
       email,
       password,
       ...(displayName?.trim() ? { displayName: displayName.trim() } : {}),
+      ...(turnstileToken ? { turnstileToken } : {}),
     }),
-  });
+  })
 
-  return parseJsonResponse<RegisterResponse>(response);
+  return parseJsonResponse<RegisterResponse>(response)
 }
 
 export async function verifyEmail(token: string) {
   return apiPost<{ success: boolean; purpose: 'register' | 'change_email' }>(
     '/api/auth/verify-email',
     { token }
-  );
+  )
 }
 
-export async function resendEmailVerification(email: string) {
-  return apiPost<{ success: boolean; message?: string }>('/api/auth/resend-verification', { email });
+export async function resendEmailVerification(email: string, turnstileToken?: string) {
+  return apiPost<{ success: boolean; message?: string }>('/api/auth/resend-verification', {
+    email,
+    ...(turnstileToken ? { turnstileToken } : {}),
+  })
 }
 
-export async function requestPasswordReset(email: string) {
+export async function requestPasswordReset(email: string, turnstileToken?: string) {
   return apiPost<{ success: boolean; message?: string }>('/api/auth/password-reset/request', {
     email,
+    ...(turnstileToken ? { turnstileToken } : {}),
   })
 }
 
@@ -202,7 +219,10 @@ export async function confirmPasswordReset(token: string, newPassword: string) {
   return result
 }
 
-export async function loginWithWeChat<T = unknown>(code: string, profile?: { displayName?: string; photoURL?: string }) {
+export async function loginWithWeChat<T = unknown>(
+  code: string,
+  profile?: { displayName?: string; photoURL?: string }
+) {
   const response = await fetch('/api/auth/wechat/login', {
     method: 'POST',
     headers: {
@@ -214,21 +234,21 @@ export async function loginWithWeChat<T = unknown>(code: string, profile?: { dis
       displayName: profile?.displayName,
       photoURL: profile?.photoURL,
     }),
-  });
+  })
 
-  const data = await parseJsonResponse<T>(response);
-  await refreshAuthState();
-  return data;
+  const data = await parseJsonResponse<T>(response)
+  await refreshAuthState()
+  return data
 }
 
 export async function logoutRequest() {
-  const xsrfToken = getXsrfToken();
+  const xsrfToken = getXsrfToken()
   const response = await fetch('/api/auth/logout', {
     method: 'POST',
     credentials: 'include',
     headers: xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : undefined,
-  });
+  })
 
-  await parseJsonResponse(response);
-  await refreshAuthState();
+  await parseJsonResponse(response)
+  await refreshAuthState()
 }

@@ -3,24 +3,24 @@
  * 用于懒加载和首屏检测
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 export interface UseIntersectionObserverOptions {
-  threshold?: number | number[];
-  root?: Element | null;
-  rootMargin?: string;
-  triggerOnce?: boolean;
+  threshold?: number | number[]
+  root?: Element | null
+  rootMargin?: string
+  triggerOnce?: boolean
   /**
    * 可选的外部 ref，用于与组件内部的 ref 共享
    */
-  externalRef?: React.RefObject<HTMLElement | null>;
+  externalRef?: React.RefObject<HTMLElement | null>
 }
 
 export interface UseIntersectionObserverReturn {
-  isIntersecting: boolean;
-  hasIntersected: boolean;
-  entry: IntersectionObserverEntry | null;
-  ref: React.RefObject<HTMLElement | null>;
+  isIntersecting: boolean
+  hasIntersected: boolean
+  entry: IntersectionObserverEntry | null
+  ref: React.RefObject<HTMLElement | null>
 }
 
 /**
@@ -35,87 +35,85 @@ export function useIntersectionObserver(
     rootMargin = '0px',
     triggerOnce = false,
     externalRef,
-  } = options;
+  } = options
 
-  const [isIntersecting, setIsIntersecting] = useState(false);
-  const [hasIntersected, setHasIntersected] = useState(false);
-  const [entry, setEntry] = useState<IntersectionObserverEntry | null>(null);
-  const internalRef = useRef<HTMLElement>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
+  const [isIntersecting, setIsIntersecting] = useState(false)
+  const [hasIntersected, setHasIntersected] = useState(false)
+  const [entry, setEntry] = useState<IntersectionObserverEntry | null>(null)
+  const internalRef = useRef<HTMLElement>(null)
+  const observerRef = useRef<IntersectionObserver | null>(null)
 
   // 使用外部 ref 或内部 ref
-  const ref = externalRef || internalRef;
+  const ref = externalRef || internalRef
 
   useEffect(() => {
-    const element = ref.current;
-    if (!element) return;
+    const element = ref.current
+    if (!element) return
 
     // 清理之前的 observer
     if (observerRef.current) {
-      observerRef.current.disconnect();
+      observerRef.current.disconnect()
     }
 
     observerRef.current = new IntersectionObserver(
       ([entry]) => {
-        setEntry(entry);
-        setIsIntersecting(entry.isIntersecting);
+        setEntry(entry)
+        setIsIntersecting(entry.isIntersecting)
 
         if (entry.isIntersecting) {
-          setHasIntersected(true);
+          setHasIntersected(true)
 
           // 如果 triggerOnce 为 true，取消观察
           if (triggerOnce && observerRef.current) {
-            observerRef.current.unobserve(element);
+            observerRef.current.unobserve(element)
           }
         }
       },
       { threshold, root, rootMargin }
-    );
+    )
 
-    observerRef.current.observe(element);
+    observerRef.current.observe(element)
 
     return () => {
       if (observerRef.current) {
-        observerRef.current.disconnect();
+        observerRef.current.disconnect()
       }
-    };
-  }, [threshold, root, rootMargin, triggerOnce, ref]);
+    }
+  }, [threshold, root, rootMargin, triggerOnce, ref])
 
-  return { isIntersecting, hasIntersected, entry, ref };
+  return { isIntersecting, hasIntersected, entry, ref }
 }
 
 /**
  * 检测元素是否在首屏（用于自动设置 fetchpriority）
  */
-export function useAboveTheFold(
-  options: Omit<UseIntersectionObserverOptions, 'rootMargin'> = {}
-): {
-  isAboveTheFold: boolean;
-  ref: React.RefObject<HTMLElement | null>;
+export function useAboveTheFold(options: Omit<UseIntersectionObserverOptions, 'rootMargin'> = {}): {
+  isAboveTheFold: boolean
+  ref: React.RefObject<HTMLElement | null>
 } {
-  const [isAboveTheFold, setIsAboveTheFold] = useState(false);
-  const ref = useRef<HTMLElement>(null);
+  const [isAboveTheFold, setIsAboveTheFold] = useState(false)
+  const ref = useRef<HTMLElement>(null)
 
   useEffect(() => {
-    const element = ref.current;
-    if (!element) return;
+    const element = ref.current
+    if (!element) return
 
     // 立即检查是否在首屏
     const checkAboveTheFold = () => {
-      const rect = element.getBoundingClientRect();
-      const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-      const isInFold = rect.top < windowHeight && rect.bottom > 0;
-      setIsAboveTheFold(isInFold);
-    };
+      const rect = element.getBoundingClientRect()
+      const windowHeight = window.innerHeight || document.documentElement.clientHeight
+      const isInFold = rect.top < windowHeight && rect.bottom > 0
+      setIsAboveTheFold(isInFold)
+    }
 
     // 初始检查
-    checkAboveTheFold();
+    checkAboveTheFold()
 
     // 使用 Intersection Observer 持续监测
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setIsAboveTheFold(true);
+          setIsAboveTheFold(true)
         }
       },
       {
@@ -123,24 +121,24 @@ export function useAboveTheFold(
         rootMargin: '0px',
         ...options,
       }
-    );
+    )
 
-    observer.observe(element);
+    observer.observe(element)
 
     // 监听滚动事件进行额外检查
     const handleScroll = () => {
-      checkAboveTheFold();
-    };
+      checkAboveTheFold()
+    }
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true })
 
     return () => {
-      observer.disconnect();
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, [options.threshold]);
+      observer.disconnect()
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [options.threshold])
 
-  return { isAboveTheFold, ref };
+  return { isAboveTheFold, ref }
 }
 
 /**
@@ -149,20 +147,20 @@ export function useAboveTheFold(
 export function useLazyLoad<T extends HTMLElement>(
   options: UseIntersectionObserverOptions = {}
 ): {
-  shouldLoad: boolean;
-  ref: React.RefObject<T | null>;
-  isIntersecting: boolean;
+  shouldLoad: boolean
+  ref: React.RefObject<T | null>
+  isIntersecting: boolean
 } {
   const { isIntersecting, hasIntersected, ref } = useIntersectionObserver({
     ...options,
     triggerOnce: true,
-  });
+  })
 
   return {
     shouldLoad: hasIntersected,
     ref: ref as React.RefObject<T | null>,
     isIntersecting,
-  };
+  }
 }
 
 /**
@@ -172,69 +170,67 @@ export function useBatchLazyLoad(
   itemCount: number,
   options: UseIntersectionObserverOptions = {}
 ): {
-  loadStates: boolean[];
-  setItemRef: (index: number) => (el: HTMLElement | null) => void;
+  loadStates: boolean[]
+  setItemRef: (index: number) => (el: HTMLElement | null) => void
 } {
-  const [loadStates, setLoadStates] = useState<boolean[]>(() =>
-    Array(itemCount).fill(false)
-  );
-  const observersRef = useRef<Map<number, IntersectionObserver>>(new Map());
-  const elementsRef = useRef<Map<number, HTMLElement>>(new Map());
+  const [loadStates, setLoadStates] = useState<boolean[]>(() => Array(itemCount).fill(false))
+  const observersRef = useRef<Map<number, IntersectionObserver>>(new Map())
+  const elementsRef = useRef<Map<number, HTMLElement>>(new Map())
 
   const setItemRef = useCallback(
     (index: number) => (el: HTMLElement | null) => {
       if (!el) {
         // 清理已移除元素的 observer
-        const existingObserver = observersRef.current.get(index);
+        const existingObserver = observersRef.current.get(index)
         if (existingObserver) {
-          const existingElement = elementsRef.current.get(index);
+          const existingElement = elementsRef.current.get(index)
           if (existingElement) {
-            existingObserver.unobserve(existingElement);
+            existingObserver.unobserve(existingElement)
           }
-          observersRef.current.delete(index);
-          elementsRef.current.delete(index);
+          observersRef.current.delete(index)
+          elementsRef.current.delete(index)
         }
-        return;
+        return
       }
 
-      elementsRef.current.set(index, el);
+      elementsRef.current.set(index, el)
 
       const observer = new IntersectionObserver(
         ([entry]) => {
           if (entry.isIntersecting) {
             setLoadStates((prev) => {
-              const newStates = [...prev];
-              newStates[index] = true;
-              return newStates;
-            });
+              const newStates = [...prev]
+              newStates[index] = true
+              return newStates
+            })
 
             // 加载后取消观察
-            observer.unobserve(el);
-            observersRef.current.delete(index);
+            observer.unobserve(el)
+            observersRef.current.delete(index)
           }
         },
         { threshold: 0, rootMargin: '50px', ...options }
-      );
+      )
 
-      observer.observe(el);
-      observersRef.current.set(index, observer);
+      observer.observe(el)
+      observersRef.current.set(index, observer)
     },
     [options]
-  );
+  )
 
   // 清理所有 observers
   useEffect(() => {
     return () => {
       observersRef.current.forEach((observer, index) => {
-        const element = elementsRef.current.get(index);
+        const element = elementsRef.current.get(index)
         if (element) {
-          observer.unobserve(element);
+          observer.unobserve(element)
         }
-      });
-      observersRef.current.clear();
-      elementsRef.current.clear();
-    };
-  }, []);
+      })
+      observersRef.current.clear()
+      elementsRef.current.clear()
+    }
+  }, [])
 
-  return { loadStates, setItemRef };
+  return { loadStates, setItemRef }
 }

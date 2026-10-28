@@ -1,14 +1,14 @@
-import { defineConfig } from 'vitest/config';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
+import { defineConfig } from 'vitest/config'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import dotenv from 'dotenv'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // 加载测试环境变量
-dotenv.config({ path: path.resolve(__dirname, '.env.test') });
-dotenv.config({ path: path.resolve(__dirname, '.env.local') });
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '.env.test') })
+dotenv.config({ path: path.resolve(__dirname, '.env.local') })
+dotenv.config()
 
 export default defineConfig({
   define: {
@@ -31,13 +31,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       reportsDirectory: 'coverage/components',
-      exclude: [
-        'node_modules/',
-        'dist/',
-        'tests/',
-        '**/*.config.*',
-        '**/*.test.{ts,tsx}',
-      ],
+      exclude: ['node_modules/', 'dist/', 'tests/', '**/*.config.*', '**/*.test.{ts,tsx}'],
     },
   },
-});
+})

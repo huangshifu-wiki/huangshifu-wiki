@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Search as SearchIcon, Camera, Clock, Sparkles, Trash2, X } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Search as SearchIcon, Camera, Clock, Sparkles, Trash2, X } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
 import type { SearchSuggestion } from '../../hooks/useSearch'
 import type { SearchHistoryItem } from '../../hooks/useSearchHistory'
+import { Button, IconButton, Input, Switch } from '@/src/components/ui'
 
 interface SearchBoxProps {
   query: string
@@ -12,11 +13,13 @@ interface SearchBoxProps {
   searchHistory?: SearchHistoryItem[]
   aiSearching: boolean
   semanticImageSearch: boolean
+  includeDetail: boolean
   semanticSearchEnabled?: boolean
   onQueryChange: (val: string) => void
   onSearch: (q: string) => void
   onImageSearch: (file: File) => void
-  onToggleSemanticSearch: () => void
+  onToggleSemanticSearch: (checked: boolean) => void
+  onToggleDetail: (checked: boolean) => void
   onDismissSuggestions: () => void
   onRemoveSearchHistoryItem?: (query: string) => void
   onClearSearchHistory?: () => void
@@ -32,11 +35,13 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   searchHistory = [],
   aiSearching,
   semanticImageSearch,
+  includeDetail,
   semanticSearchEnabled = true,
   onQueryChange,
   onSearch,
   onImageSearch,
   onToggleSemanticSearch,
+  onToggleDetail,
   onDismissSuggestions,
   onRemoveSearchHistoryItem,
   onClearSearchHistory,
@@ -64,8 +69,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
       : inputFocused && matchingHistory.length > 0
         ? { type: 'history', items: matchingHistory }
         : null
+  const dropdownOpen = Boolean(currentDropdown)
 
-  const dropdownPresence = useFloatingPresence(Boolean(currentDropdown))
+  const dropdownPresence = useFloatingPresence(dropdownOpen)
   const lastDropdownRef = useRef<SearchDropdown | null>(null)
 
   if (currentDropdown) {
@@ -75,7 +81,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   const visibleDropdown = currentDropdown || lastDropdownRef.current
 
   useEffect(() => {
-    if (!currentDropdown) return
+    if (!dropdownOpen) return
     const handleClickOutside = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setInputFocused(false)
@@ -84,7 +90,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [currentDropdown, onDismissSuggestions])
+  }, [dropdownOpen, onDismissSuggestions])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -123,15 +129,14 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
       case 'music':
         return 'theme-status-error'
       case 'album':
-        return 'bg-purple-50 text-purple-600'
+        return 'theme-status-warning'
       default:
         return 'bg-surface-alt text-text-secondary'
     }
   }
 
   const handleSuggestionClick = (s: SearchSuggestion) => {
-    setHighlightedIndex(-1)
-    setInputFocused(false)
+    dismissSuggestionList()
     if (s.type === 'keyword') {
       onSearch(s.text)
     } else {
@@ -145,6 +150,20 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
         navigate(`/album/${s.id}`)
       }
     }
+  }
+
+  // 建议条目对应目标页；keyword 类型无 URL（触发搜索）
+  const getSuggestionUrl = (s: SearchSuggestion): string | null => {
+    if (s.type === 'wiki' && s.id) return `/wiki/${s.id}`
+    if (s.type === 'post' && s.id) return `/forum/${s.id}`
+    if (s.type === 'music' && s.id) return `/music/${s.id}`
+    if (s.type === 'album' && s.id) return `/album/${s.id}`
+    return null
+  }
+
+  const dismissSuggestionList = () => {
+    setHighlightedIndex(-1)
+    setInputFocused(false)
   }
 
   const handleHistoryClick = (historyQuery: string) => {
@@ -206,14 +225,14 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   }
 
   return (
-    <div ref={wrapperRef} className="theme-panel rounded p-6 mb-6">
+    <div ref={wrapperRef} className="mb-6 border-y border-[var(--book-ink-line)] py-4 sm:py-6">
       <form
         onSubmit={handleSubmit}
-        className="relative group mb-5"
+        className="group relative mb-5"
         role="search"
         onKeyDown={handleListboxKeyDown}
       >
-        <input
+        <Input
           type="text"
           value={query}
           onChange={(e) => {
@@ -234,91 +253,142 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           aria-label="搜索百科、帖子、图集、音乐或专辑"
           autoComplete="off"
           aria-owns="search-suggestions"
-          aria-expanded={Boolean(currentDropdown)}
-          className="theme-input w-full px-12 py-4 rounded transition-all text-base"
+          aria-expanded={dropdownOpen}
+          className="w-full rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] py-4 pl-12 pr-14 text-base text-text-primary shadow-[inset_0_1px_0_rgba(138,109,47,0.06)] outline-none transition-all placeholder:text-text-muted focus:border-brand-gold sm:pr-40"
         />
         <SearchIcon
-          className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-gold transition-colors"
+          className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted transition-colors group-focus-within:text-brand-gold"
           size={20}
         />
 
         {dropdownPresence.mounted && visibleDropdown && visibleDropdown.items.length > 0 && (
           <div
-            className="floating-dropdown absolute left-0 right-0 top-full mt-2 bg-surface border border-border rounded z-50 overflow-hidden"
+            className="floating-dropdown absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-sm border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] shadow-[var(--book-panel-shadow)]"
             data-state={dropdownPresence.state}
             role="listbox"
             id="search-suggestions"
             aria-hidden={!currentDropdown}
           >
             {visibleDropdown.type === 'history' && (
-              <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-surface-alt">
+              <div className="flex items-center justify-between border-b border-[var(--book-ink-line)] bg-surface-alt px-4 py-2">
                 <div className="flex items-center gap-2 text-xs font-medium text-text-muted">
                   <Clock size={14} />
                   <span>搜索历史</span>
                 </div>
-                <button
+                <IconButton
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={handleClearHistory}
-                  className="p-1.5 rounded text-text-muted hover:text-brand-gold hover:bg-surface transition-colors"
                   title="清空搜索历史"
                   aria-label="清空搜索历史"
                 >
                   <Trash2 size={14} />
-                </button>
+                </IconButton>
               </div>
             )}
 
             {visibleDropdown.type === 'suggestions'
-              ? visibleDropdown.items.map((s, i) => (
-                  <button
-                    key={`${s.type}-${s.id || s.text}-${i}`}
-                    type="button"
-                    onClick={() => handleSuggestionClick(s)}
-                    className={clsx(
-                      'w-full text-left px-4 py-2.5 transition-colors border-b border-border last:border-0',
-                      i === highlightedIndex
-                        ? 'bg-[var(--color-theme-accent)] text-white'
-                        : 'hover:bg-surface-alt'
-                    )}
-                    role="option"
-                    aria-selected={i === highlightedIndex}
-                    id={`suggestion-${i}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={clsx(
-                          'px-2 py-0.5 rounded text-[10px] font-medium',
-                          getSuggestionTypeClass(s.type)
-                        )}
-                      >
-                        {getSuggestionTypeLabel(s.type)}
-                      </span>
-                      <span
-                        className={clsx(
-                          'text-sm',
-                          i === highlightedIndex ? 'text-white' : 'text-text-primary'
-                        )}
-                      >
-                        {s.text}
-                      </span>
-                      {s.subtext && (
+              ? visibleDropdown.items.map((s, i) => {
+                  const suggestionUrl = getSuggestionUrl(s)
+                  return suggestionUrl ? (
+                    <Button
+                      key={`${s.type}-${s.id || s.text}-${i}`}
+                      asChild
+                      variant="ghost"
+                      role="option"
+                      aria-selected={i === highlightedIndex}
+                      id={`suggestion-${i}`}
+                      className={clsx(
+                        'w-full flex-col items-stretch justify-start rounded-none border-x-0 border-t-0 border-b border-[var(--book-ink-line)] px-4 py-2.5 text-left last:border-0',
+                        i === highlightedIndex
+                          ? 'bg-[var(--color-theme-accent)] text-white'
+                          : 'hover:bg-surface-alt'
+                      )}
+                    >
+                      <Link to={suggestionUrl} onClick={dismissSuggestionList}>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={clsx(
+                              'px-2 py-0.5 rounded text-[10px] font-medium',
+                              getSuggestionTypeClass(s.type)
+                            )}
+                          >
+                            {getSuggestionTypeLabel(s.type)}
+                          </span>
+                          <span
+                            className={clsx(
+                              'text-sm',
+                              i === highlightedIndex ? 'text-white' : 'text-text-primary'
+                            )}
+                          >
+                            {s.text}
+                          </span>
+                          {s.subtext && (
+                            <span
+                              className={clsx(
+                                'text-xs',
+                                i === highlightedIndex ? 'text-white/80' : 'text-text-muted'
+                              )}
+                            >
+                              {s.subtext}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      key={`${s.type}-${s.id || s.text}-${i}`}
+                      type="button"
+                      variant="ghost"
+                      onClick={() => handleSuggestionClick(s)}
+                      className={clsx(
+                        'w-full flex-col items-stretch justify-start rounded-none border-x-0 border-t-0 border-b border-[var(--book-ink-line)] px-4 py-2.5 text-left last:border-0',
+                        i === highlightedIndex
+                          ? 'bg-[var(--color-theme-accent)] text-white'
+                          : 'hover:bg-surface-alt'
+                      )}
+                      role="option"
+                      aria-selected={i === highlightedIndex}
+                      id={`suggestion-${i}`}
+                    >
+                      <div className="flex items-center gap-3">
                         <span
                           className={clsx(
-                            'text-xs',
-                            i === highlightedIndex ? 'text-white/80' : 'text-text-muted'
+                            'px-2 py-0.5 rounded text-[10px] font-medium',
+                            getSuggestionTypeClass(s.type)
                           )}
                         >
-                          {s.subtext}
+                          {getSuggestionTypeLabel(s.type)}
                         </span>
-                      )}
-                    </div>
-                  </button>
-                ))
+                        <span
+                          className={clsx(
+                            'text-sm',
+                            i === highlightedIndex ? 'text-white' : 'text-text-primary'
+                          )}
+                        >
+                          {s.text}
+                        </span>
+                        {s.subtext && (
+                          <span
+                            className={clsx(
+                              'text-xs',
+                              i === highlightedIndex ? 'text-white/80' : 'text-text-muted'
+                            )}
+                          >
+                            {s.subtext}
+                          </span>
+                        )}
+                      </div>
+                    </Button>
+                  )
+                })
               : visibleDropdown.items.map((item, i) => (
                   <div
                     key={item.query}
                     className={clsx(
-                      'flex items-center border-b border-border last:border-0 transition-colors',
+                      'flex items-center border-b border-[var(--book-ink-line)] transition-colors last:border-0',
                       i === highlightedIndex
                         ? 'bg-[var(--color-theme-accent)] text-white'
                         : 'hover:bg-surface-alt'
@@ -327,10 +397,11 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                     aria-selected={i === highlightedIndex}
                     id={`suggestion-${i}`}
                   >
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       onClick={() => handleHistoryClick(item.query)}
-                      className="min-w-0 flex-1 px-4 py-2.5 text-left"
+                      className="min-w-0 flex-1 justify-start rounded-none border-0 px-4 py-2.5 text-left"
                     >
                       <div className="flex items-center gap-3">
                         <Clock
@@ -346,49 +417,48 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                           {item.query}
                         </span>
                       </div>
-                    </button>
-                    <button
+                    </Button>
+                    <IconButton
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={(e) => handleRemoveHistoryItem(e, item.query)}
                       className={clsx(
                         'mr-2 p-1.5 rounded transition-colors',
                         i === highlightedIndex
-                          ? 'text-white/80 hover:text-white hover:bg-white/10'
+                          ? 'text-white/80 hover:text-white hover:bg-[color-mix(in_srgb,var(--color-theme-accent)_24%,transparent)]'
                           : 'text-text-muted hover:text-brand-gold hover:bg-surface'
                       )}
                       title={`删除搜索历史：${item.query}`}
                       aria-label={`删除搜索历史：${item.query}`}
                     >
                       <X size={14} />
-                    </button>
+                    </IconButton>
                   </div>
                 ))}
           </div>
         )}
 
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+        <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2">
           {semanticSearchEnabled && (
-            <button
+            <IconButton
               type="button"
+              variant="ghost"
               onClick={() => fileInputRef.current?.click()}
               disabled={aiSearching}
-              className="p-2.5 bg-surface-alt text-text-muted rounded hover:text-brand-gold transition-all"
+              className="bg-surface-alt text-text-muted"
               title="AI 图片搜索"
               aria-label="AI 图片搜索"
             >
               {aiSearching ? <Sparkles className="animate-spin" size={18} /> : <Camera size={18} />}
-            </button>
+            </IconButton>
           )}
-          <button
-            type="submit"
-            className="theme-button-primary px-6 py-2.5 rounded font-medium transition-all"
-            aria-label="提交搜索"
-          >
+          <Button type="submit" className="hidden px-6 sm:inline-flex" aria-label="提交搜索">
             搜索
-          </button>
+          </Button>
         </div>
         {semanticSearchEnabled && (
-          <input
+          <Input
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
@@ -398,46 +468,32 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
         )}
       </form>
 
-      {/* 混合搜索模式切换 */}
-      {semanticSearchEnabled && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onToggleSemanticSearch}
-              className={clsx(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold focus:ring-offset-2',
-                semanticImageSearch ? 'bg-[var(--color-theme-accent)]' : 'bg-border'
-              )}
-              role="switch"
-              aria-checked={semanticImageSearch}
-              aria-label="切换智能混合搜索模式"
+      {/* 搜索模式工具栏：搜索详情开关恒可用，智能混合搜索仅在语义搜索启用时显示 */}
+      <div className="mt-4 flex flex-col gap-3 border-t border-[var(--book-ink-line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <Switch
+            onCheckedChange={onToggleDetail}
+            checked={includeDetail}
+            id="detail-search-toggle"
+            label={<span className="font-medium text-text-secondary">搜索详情</span>}
+          />
+          {semanticSearchEnabled && (
+            <Switch
+              onCheckedChange={onToggleSemanticSearch}
+              checked={semanticImageSearch}
               id="hybrid-search-toggle"
-            >
-              <span
-                className={clsx(
-                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm',
-                  semanticImageSearch ? 'translate-x-6' : 'translate-x-1'
-                )}
-              />
-            </button>
-            <label
-              htmlFor="hybrid-search-toggle"
-              className="text-sm text-text-secondary cursor-pointer select-none"
-            >
-              <span className="font-medium">智能混合搜索</span>
-              <span className="ml-1.5 text-xs text-text-muted">(关键词+语义向量融合搜索)</span>
-            </label>
-          </div>
-          <div className="text-xs text-text-muted">
-            {semanticImageSearch ? (
-              <span className="text-brand-gold font-medium">● 混合模式已开启</span>
-            ) : (
-              <span>关键词模式</span>
-            )}
-          </div>
+              label={<span className="font-medium text-text-secondary">智能混合搜索</span>}
+            />
+          )}
         </div>
-      )}
+        <div className="text-xs text-text-muted">
+          {semanticImageSearch && includeDetail ? (
+            <span className="text-brand-gold font-medium">● 混合模式已开启</span>
+          ) : (
+            <span>关键词模式</span>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

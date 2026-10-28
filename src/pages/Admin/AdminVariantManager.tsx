@@ -1,194 +1,196 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Image, Trash2, RotateCcw, Loader2, CheckCircle, AlertTriangle, XCircle, Zap, Clock, BarChart3 } from 'lucide-react';
-import { apiGet, apiPost } from '../../lib/apiClient';
-import { useDialog } from '../../components/Dialog';
-import { clsx } from 'clsx';
+import React, { useState, useEffect, useCallback } from 'react'
+import {
+  RefreshCw,
+  Image,
+  Loader2,
+  CheckCircle,
+  AlertTriangle,
+  XCircle,
+  Zap,
+  Clock,
+  BarChart3,
+  Music,
+} from '@/src/components/icons'
+import { apiGet, apiPost } from '../../lib/apiClient'
+import { useDialog } from '../../components/Dialog'
+import { clsx } from 'clsx'
+import { LoadErrorState } from '@/src/components/ui'
+
+interface TypeVariantStats {
+  total: number
+  completed: number
+  failed: number
+  pending: number
+}
 
 interface VariantStats {
-  queueLength: number;
-  processingCount: number;
-  completedToday: number;
-  failedToday: number;
-  averageProcessingTime: number;
-  timeoutCount: number;
+  queueLength: number
+  processingCount: number
+  completedToday: number
+  failedToday: number
+  averageProcessingTime: number
+  timeoutCount: number
+  byType: {
+    imageMap: TypeVariantStats
+    songCover: TypeVariantStats
+    albumCover: TypeVariantStats
+  }
 }
 
 interface CleanupStats {
-  totalImages: number;
-  completedVariants: number;
-  failedVariants: number;
-  pendingOrProcessing: number;
-  estimatedOrphanedDirectories: number;
+  totalImages: number
+  completedVariants: number
+  failedVariants: number
+  pendingOrProcessing: number
+  estimatedOrphanedDirectories: number
 }
 
 interface RebuildResponse {
-  success: boolean;
-  error?: string;
-  jobId?: string;
+  success: boolean
+  error?: string
+  jobId?: string
   summary?: {
-    totalScanned: number;
-    queuedForRebuild: number;
-    skipped: number;
-    errors: number;
-  };
-  estimatedTimeSeconds?: number;
+    totalScanned: number
+    queuedForRebuild: number
+    skipped: number
+    errors: number
+  }
+  estimatedTimeSeconds?: number
 }
 
 export const AdminVariantManager: React.FC = () => {
-  const [variantStats, setVariantStats] = useState<VariantStats | null>(null);
-  const [cleanupStats, setCleanupStats] = useState<CleanupStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [rebuildScope, setRebuildScope] = useState<string>('missing');
-  const [rebuilding, setRebuilding] = useState(false);
-  const [rebuildResult, setRebuildResult] = useState<RebuildResponse | null>(null);
-  const [cleaning, setCleaning] = useState(false);
-  const [cleanupResult, setCleanupResult] = useState<{ type: string; freedSpace: number; deletedCount: number; errorsCount: number } | null>(null);
-  const dialog = useDialog();
+  const [variantStats, setVariantStats] = useState<VariantStats | null>(null)
+  const [cleanupStats, setCleanupStats] = useState<CleanupStats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [rebuildScope, setRebuildScope] = useState<string>('missing')
+  const [rebuilding, setRebuilding] = useState(false)
+  const [rebuildResult, setRebuildResult] = useState<RebuildResponse | null>(null)
+  const [coverRebuilding, setCoverRebuilding] = useState(false)
+  const [coverRebuildResult, setCoverRebuildResult] = useState<{
+    totalScanned: number
+    queuedForRebuild: number
+    skipped: number
+    errors: number
+  } | null>(null)
+  const dialog = useDialog()
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (options: { clearError?: boolean } = {}) => {
     try {
-      setLoading(true);
-      setError(null);
+      setLoading(true)
+      if (options.clearError !== false) {
+        setError(null)
+      }
       const [statsData, cleanupData] = await Promise.all([
         apiGet<{ success: boolean; data: VariantStats }>('/api/admin/variants/stats'),
-        apiGet<{ success: boolean; data: CleanupStats }>('/api/admin/cleanup/stats').catch(() => ({ success: false, data: null as any })),
-      ]);
-      if (statsData.success) setVariantStats(statsData.data);
-      if (cleanupData.success) setCleanupStats(cleanupData.data);
+        apiGet<{ success: boolean; data: CleanupStats }>('/api/admin/variants/cleanup/stats').catch(
+          () => ({ success: false, data: null as CleanupStats | null })
+        ),
+      ])
+      if (!statsData.success) {
+        throw new Error('获取变体统计失败')
+      }
+      setVariantStats(statsData.data)
+      if (cleanupData.success && cleanupData.data) setCleanupStats(cleanupData.data)
     } catch (err) {
-      console.error('Failed to fetch stats:', err);
-      setError(err instanceof Error ? err.message : '网络错误');
+      console.error('Failed to fetch stats:', err)
+      setError(err instanceof Error ? err.message : '网络错误')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, []);
+  }, [])
 
   useEffect(() => {
-    fetchStats();
-    const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
-  }, [fetchStats]);
+    fetchStats()
+    const interval = setInterval(fetchStats, 30000)
+    return () => clearInterval(interval)
+  }, [fetchStats])
 
   const handleRebuildVariants = async (scope: string) => {
-    const actionLabel = scope === 'missing' ? '补全缺失' : scope === 'failed' ? '重建失败' : '全部重建';
+    const actionLabel =
+      scope === 'missing' ? '补全缺失' : scope === 'failed' ? '重建失败' : '全部重建'
     const confirmed = await dialog.confirm({
       title: '重建变体',
       message: `确定要执行"${actionLabel}"吗？`,
       confirmText: '执行',
       variant: scope === 'all' ? 'danger' : 'warning',
-    });
-    if (!confirmed) return;
+    })
+    if (!confirmed) return
+    setError(null)
     try {
-      setRebuilding(true);
-      setRebuildResult(null);
-      const result = await apiPost<RebuildResponse>('/api/admin/rebuild-all-variants', { scope, batchSize: 100, dryRun: false });
+      setRebuilding(true)
+      setRebuildResult(null)
+      const result = await apiPost<RebuildResponse>('/api/admin/rebuild-all-variants', {
+        scope,
+        batchSize: 100,
+        dryRun: false,
+      })
       if (result.success) {
-        setRebuildResult(result);
-        setTimeout(() => fetchStats(), 2000);
+        setRebuildResult(result)
+        setTimeout(() => fetchStats(), 2000)
       } else {
-        throw new Error(result.error || '重建失败');
+        throw new Error(result.error || '重建失败')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '重建失败');
+      setError(err instanceof Error ? err.message : '重建失败')
     } finally {
-      setRebuilding(false);
+      setRebuilding(false)
     }
-  };
+  }
 
-  const handleCleanupOrphaned = async () => {
+  const handleRebuildMusicCovers = async () => {
     const confirmed = await dialog.confirm({
-      title: '清理孤儿变体',
-      message: '确定要清理所有孤儿变体文件吗？',
-      confirmText: '清理',
+      title: '补齐缺失封面',
+      message: '确定为歌曲和专辑封面补全缺失的缩略图吗？',
+      confirmText: '补齐',
       variant: 'warning',
-    });
-    if (!confirmed) return;
+    })
+    if (!confirmed) return
+    setError(null)
     try {
-      setCleaning(true);
-      setCleanupResult(null);
-      const data = await apiPost<{ success: boolean; data: { freedSpace: number; deletedCount: number; errorsCount: number } }>('/api/admin/cleanup/orphaned');
-      if (data.success) {
-        setCleanupResult({ type: 'orphaned', freedSpace: data.data.freedSpace, deletedCount: data.data.deletedCount, errorsCount: data.data.errorsCount });
-        setTimeout(() => fetchStats(), 1000);
+      setCoverRebuilding(true)
+      setCoverRebuildResult(null)
+      let totalScanned = 0
+      let queuedForRebuild = 0
+      let skipped = 0
+      let errors = 0
+
+      for (const type of ['songCover', 'albumCover']) {
+        const result = await apiPost<RebuildResponse>('/api/admin/rebuild-all-variants', {
+          type,
+          scope: 'missing',
+          batchSize: 100,
+          dryRun: false,
+        })
+        if (!result.success) {
+          throw new Error(result.error || '补齐失败')
+        }
+        totalScanned += result.summary?.totalScanned ?? 0
+        queuedForRebuild += result.summary?.queuedForRebuild ?? 0
+        skipped += result.summary?.skipped ?? 0
+        errors += result.summary?.errors ?? 0
       }
+
+      setCoverRebuildResult({ totalScanned, queuedForRebuild, skipped, errors })
+      setTimeout(() => fetchStats(), 2000)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '清理失败');
+      setError(err instanceof Error ? err.message : '补齐失败')
     } finally {
-      setCleaning(false);
+      setCoverRebuilding(false)
     }
-  };
+  }
 
-  const handleCleanupFailed = async () => {
-    const confirmed = await dialog.confirm({
-      title: '清理失败变体',
-      message: '确定要清理所有失败的变体文件吗？',
-      confirmText: '清理',
-      variant: 'warning',
-    });
-    if (!confirmed) return;
-    try {
-      setCleaning(true);
-      setCleanupResult(null);
-      const data = await apiPost<{ success: boolean; data: { freedSpace: number; deletedCount: number; errorsCount: number } }>('/api/admin/cleanup/failed');
-      if (data.success) {
-        setCleanupResult({ type: 'failed', freedSpace: data.data.freedSpace, deletedCount: data.data.deletedCount, errorsCount: data.data.errorsCount });
-        setTimeout(() => fetchStats(), 1000);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '清理失败');
-    } finally {
-      setCleaning(false);
-    }
-  };
-
-  const handleCleanupAll = async () => {
-    const confirmed = await dialog.confirm({
-      title: '全量清理',
-      message: '确定要执行全量清理吗？这将同时清理孤儿文件和失败残留。',
-      confirmText: '清理',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
-    try {
-      setCleaning(true);
-      setCleanupResult(null);
-      const data = await apiPost<{ success: boolean; data: { totalFreedBytes: number; totalDeletedFiles: number; totalErrors: number } }>('/api/admin/cleanup/all');
-      if (data.success) {
-        setCleanupResult({ type: 'all', freedSpace: data.data.totalFreedBytes, deletedCount: data.data.totalDeletedFiles, errorsCount: data.data.totalErrors });
-        setTimeout(() => fetchStats(), 1500);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '全量清理失败');
-    } finally {
-      setCleaning(false);
-    }
-  };
-
-  const formatBytes = (bytes: number): string => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
-
-  /**
-   * 变体管理按钮说明：
-   * - 刷新：重新拉取当前变体生成队列和清理统计，不修改数据。
-   * - 补全缺失：只处理没有缩略图或状态仍为 pending 的图片，适合历史图片补生成变体。
-   * - 重建失败：只把 variantStatus = failed 的图片重新加入生成队列。
-   * - 全部重建：当前前端未传 force: true，后端实际只处理 variantStatus != completed 的图片，
-   *   不会覆盖所有已完成变体；若要真正强制重建所有变体，需要同步调整请求参数和提示文案。
-   * - 开始重建：按当前选中的范围提交后台生成任务，实际生成进度看等待处理、正在处理、今日完成和今日失败。
-   * - 清理孤儿文件：删除 uploads/variants/ 中找不到对应 ImageMap 数据库记录的变体目录或文件。
-   * - 清理失败残留：清理生成失败后留下的残缺变体文件，用于释放空间并避免影响后续重试。
-   * - 全量清理：同时执行清理孤儿文件和清理失败残留。
-   * - 错误提示里的垃圾桶按钮：只关闭当前错误提示，不会删除任何文件。
-   */
   const scopeOptions = [
     { value: 'missing', label: '补全缺失', desc: '仅处理没有变体的图片' },
     { value: 'failed', label: '重建失败', desc: '仅处理生成失败的图片' },
     { value: 'all', label: '全部重建', desc: '强制重新生成所有变体（慎用）' },
-  ];
+  ]
+
+  if (error && !variantStats && !cleanupStats && !loading) {
+    return (
+      <LoadErrorState className="py-10" description={error} onRetry={() => void fetchStats()} />
+    )
+  }
 
   if (loading && !variantStats && !cleanupStats) {
     return (
@@ -205,7 +207,7 @@ export const AdminVariantManager: React.FC = () => {
           ))}
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -216,7 +218,7 @@ export const AdminVariantManager: React.FC = () => {
           <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">变体管理</h1>
         </div>
         <button
-          onClick={fetchStats}
+          onClick={() => fetchStats()}
           disabled={loading}
           className="inline-flex items-center gap-2 px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all disabled:opacity-50"
         >
@@ -225,13 +227,7 @@ export const AdminVariantManager: React.FC = () => {
       </div>
 
       {error && (
-        <div className="flex items-start gap-3 p-3 rounded theme-status-error">
-          <XCircle size={18} className="theme-text-error shrink-0 mt-0.5" />
-          <p className="text-sm theme-text-error flex-1">{error}</p>
-          <button onClick={() => setError(null)} className="p-1 theme-icon-button-danger">
-            <Trash2 size={14} />
-          </button>
-        </div>
+        <LoadErrorState className="py-5" description={error} onRetry={() => void fetchStats()} />
       )}
 
       {variantStats && (
@@ -239,18 +235,50 @@ export const AdminVariantManager: React.FC = () => {
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 size={16} className="text-text-muted" />
             <h3 className="text-sm font-semibold text-text-secondary">生成队列</h3>
-            <span className="px-2 py-0.5 theme-status-success text-[10px] font-medium rounded border border-border">运行中</span>
+            <span className="px-2 py-0.5 theme-status-success text-[10px] font-medium rounded border border-border">
+              运行中
+            </span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
-              { label: '等待处理', value: variantStats.queueLength, icon: Clock, color: 'text-text-primary' },
-              { label: '正在处理', value: variantStats.processingCount, icon: Loader2, color: 'text-brand-gold' },
-              { label: '今日完成', value: variantStats.completedToday, icon: CheckCircle, color: 'theme-text-success' },
-              { label: '今日失败', value: variantStats.failedToday, icon: XCircle, color: 'theme-text-error' },
-              { label: '超时次数', value: variantStats.timeoutCount, icon: AlertTriangle, color: 'theme-text-warning' },
-              { label: '平均耗时', value: `${variantStats.averageProcessingTime}ms`, icon: Clock, color: 'text-text-secondary' },
+              {
+                label: '等待处理',
+                value: variantStats.queueLength,
+                icon: Clock,
+                color: 'text-text-primary',
+              },
+              {
+                label: '正在处理',
+                value: variantStats.processingCount,
+                icon: Loader2,
+                color: 'text-brand-gold',
+              },
+              {
+                label: '今日完成',
+                value: variantStats.completedToday,
+                icon: CheckCircle,
+                color: 'theme-text-success',
+              },
+              {
+                label: '今日失败',
+                value: variantStats.failedToday,
+                icon: XCircle,
+                color: 'theme-text-error',
+              },
+              {
+                label: '超时次数',
+                value: variantStats.timeoutCount,
+                icon: AlertTriangle,
+                color: 'theme-text-warning',
+              },
+              {
+                label: '平均耗时',
+                value: `${variantStats.averageProcessingTime}ms`,
+                icon: Clock,
+                color: 'text-text-secondary',
+              },
             ].map((item) => {
-              const Icon = item.icon;
+              const Icon = item.icon
               return (
                 <div key={item.label} className="bg-surface-alt rounded p-3">
                   <div className="flex items-center gap-1.5 mb-1">
@@ -259,7 +287,7 @@ export const AdminVariantManager: React.FC = () => {
                   </div>
                   <p className={`text-lg font-bold ${item.color}`}>{item.value}</p>
                 </div>
-              );
+              )
             })}
           </div>
         </div>
@@ -274,14 +302,28 @@ export const AdminVariantManager: React.FC = () => {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
               { label: '总图片数', value: cleanupStats.totalImages },
-              { label: '已完成', value: cleanupStats.completedVariants, badge: 'theme-status-success' },
+              {
+                label: '已完成',
+                value: cleanupStats.completedVariants,
+                badge: 'theme-status-success',
+              },
               { label: '失败数', value: cleanupStats.failedVariants, badge: 'theme-status-error' },
-              { label: '待处理', value: cleanupStats.pendingOrProcessing, badge: 'theme-status-warning' },
-              { label: '孤儿目录', value: cleanupStats.estimatedOrphanedDirectories, badge: 'theme-tag' },
+              {
+                label: '待处理',
+                value: cleanupStats.pendingOrProcessing,
+                badge: 'theme-status-warning',
+              },
+              {
+                label: '孤儿目录',
+                value: cleanupStats.estimatedOrphanedDirectories,
+                badge: 'theme-tag',
+              },
             ].map((item) => (
               <div key={item.label} className="bg-surface-alt rounded p-3">
                 <span className="text-[11px] text-text-muted">{item.label}</span>
-                <p className={`text-lg font-bold ${item.badge ?? 'text-text-primary'}`}>{item.value}</p>
+                <p className={`text-lg font-bold ${item.badge ?? 'text-text-primary'}`}>
+                  {item.value}
+                </p>
               </div>
             ))}
           </div>
@@ -299,6 +341,7 @@ export const AdminVariantManager: React.FC = () => {
           {scopeOptions.map((opt) => (
             <button
               key={opt.value}
+              disabled={rebuilding || coverRebuilding}
               onClick={() => setRebuildScope(opt.value)}
               className={clsx(
                 'px-3 py-1.5 rounded text-xs font-medium transition-all',
@@ -318,7 +361,7 @@ export const AdminVariantManager: React.FC = () => {
 
         <button
           onClick={() => handleRebuildVariants(rebuildScope)}
-          disabled={rebuilding}
+          disabled={rebuilding || coverRebuilding}
           className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
         >
           {rebuilding ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
@@ -332,70 +375,137 @@ export const AdminVariantManager: React.FC = () => {
               <p className="text-sm font-medium theme-text-success">重建任务已提交</p>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div><span className="text-text-muted">扫描总数</span><p className="font-medium text-text-primary">{rebuildResult.summary?.totalScanned ?? 0}</p></div>
-              <div><span className="text-text-muted">入队数量</span><p className="font-medium text-text-primary">{rebuildResult.summary?.queuedForRebuild ?? 0}</p></div>
-              <div><span className="text-text-muted">跳过数量</span><p className="font-medium text-text-primary">{rebuildResult.summary?.skipped ?? 0}</p></div>
-              <div><span className="text-text-muted">错误数量</span><p className={`font-medium ${(rebuildResult.summary?.errors ?? 0) > 0 ? 'theme-text-error' : 'text-text-primary'}`}>{rebuildResult.summary?.errors ?? 0}</p></div>
+              <div>
+                <span className="text-text-muted">扫描总数</span>
+                <p className="font-medium text-text-primary">
+                  {rebuildResult.summary?.totalScanned ?? 0}
+                </p>
+              </div>
+              <div>
+                <span className="text-text-muted">入队数量</span>
+                <p className="font-medium text-text-primary">
+                  {rebuildResult.summary?.queuedForRebuild ?? 0}
+                </p>
+              </div>
+              <div>
+                <span className="text-text-muted">跳过数量</span>
+                <p className="font-medium text-text-primary">
+                  {rebuildResult.summary?.skipped ?? 0}
+                </p>
+              </div>
+              <div>
+                <span className="text-text-muted">错误数量</span>
+                <p
+                  className={`font-medium ${(rebuildResult.summary?.errors ?? 0) > 0 ? 'theme-text-error' : 'text-text-primary'}`}
+                >
+                  {rebuildResult.summary?.errors ?? 0}
+                </p>
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      <div className="bg-surface border border-border rounded p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Trash2 size={16} className="text-text-muted" />
-          <h3 className="text-sm font-semibold text-text-secondary">变体清理</h3>
-        </div>
-        <p className="text-xs text-text-muted mb-4">清理无效或多余的变体文件以释放磁盘空间</p>
+      {/* 音乐封面（统一变体引擎） */}
+      {variantStats && (
+        <div className="bg-surface border border-border rounded p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Music size={16} className="text-text-muted" />
+            <h3 className="text-sm font-semibold text-text-secondary">音乐封面</h3>
+          </div>
+          <p className="text-xs text-text-muted mb-4">
+            歌曲与专辑封面的缩略图由统一变体引擎异步生成，上传后自动补全
+          </p>
 
-        <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            {[
+              { label: '歌曲封面总数', value: variantStats.byType?.songCover.total ?? 0 },
+              {
+                label: '歌曲完成',
+                value: variantStats.byType?.songCover.completed ?? 0,
+                badge: 'theme-status-success',
+              },
+              {
+                label: '歌曲失败',
+                value: variantStats.byType?.songCover.failed ?? 0,
+                badge: 'theme-status-error',
+              },
+              {
+                label: '歌曲待处理',
+                value: variantStats.byType?.songCover.pending ?? 0,
+                badge: 'theme-status-warning',
+              },
+              { label: '专辑封面总数', value: variantStats.byType?.albumCover.total ?? 0 },
+              {
+                label: '专辑完成',
+                value: variantStats.byType?.albumCover.completed ?? 0,
+                badge: 'theme-status-success',
+              },
+              {
+                label: '专辑失败',
+                value: variantStats.byType?.albumCover.failed ?? 0,
+                badge: 'theme-status-error',
+              },
+              {
+                label: '专辑待处理',
+                value: variantStats.byType?.albumCover.pending ?? 0,
+                badge: 'theme-status-warning',
+              },
+            ].map((item) => (
+              <div key={item.label} className="bg-surface-alt rounded p-3">
+                <span className="text-[11px] text-text-muted">{item.label}</span>
+                <p className={`text-lg font-bold ${item.badge ?? 'text-text-primary'}`}>
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
+
           <button
-            onClick={handleCleanupOrphaned}
-            disabled={cleaning}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all disabled:opacity-50"
-          >
-            <Trash2 size={14} /> 清理孤儿文件
-          </button>
-          <button
-            onClick={handleCleanupFailed}
-            disabled={cleaning}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-border theme-status-error text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
-          >
-            <XCircle size={14} /> 清理失败残留
-          </button>
-          <button
-            onClick={handleCleanupAll}
-            disabled={cleaning}
+            onClick={handleRebuildMusicCovers}
+            disabled={coverRebuilding || rebuilding}
             className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
           >
-            <RotateCcw size={14} /> 全量清理
+            {coverRebuilding ? <Loader2 size={14} className="animate-spin" /> : <Music size={14} />}
+            {coverRebuilding ? '正在处理...' : '补齐缺失封面'}
           </button>
+
+          {coverRebuildResult && (
+            <div className="mt-4 p-3 rounded theme-status-success">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle size={16} className="theme-text-success" />
+                <p className="text-sm font-medium theme-text-success">封面补齐任务已提交</p>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <span className="text-text-muted">扫描总数</span>
+                  <p className="font-medium text-text-primary">{coverRebuildResult.totalScanned}</p>
+                </div>
+                <div>
+                  <span className="text-text-muted">入队数量</span>
+                  <p className="font-medium text-text-primary">
+                    {coverRebuildResult.queuedForRebuild}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-text-muted">跳过数量</span>
+                  <p className="font-medium text-text-primary">{coverRebuildResult.skipped}</p>
+                </div>
+                <div>
+                  <span className="text-text-muted">错误数量</span>
+                  <p
+                    className={`font-medium ${coverRebuildResult.errors > 0 ? 'theme-text-error' : 'text-text-primary'}`}
+                  >
+                    {coverRebuildResult.errors}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-
-        {cleaning && (
-          <div className="mt-4 flex items-center gap-2 text-sm text-text-muted">
-            <Loader2 size={14} className="animate-spin" />
-            <span>正在清理，请稍候...</span>
-          </div>
-        )}
-
-        {cleanupResult && (
-          <div className="mt-4 p-3 rounded theme-bg-warning-soft border theme-border-warning-soft">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle size={16} className="text-brand-gold" />
-              <p className="text-sm font-medium text-text-primary">清理完成</p>
-              <span className="px-2 py-0.5 theme-tag text-[10px] font-medium rounded">{cleanupResult.type}</span>
-            </div>
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              <div><span className="text-text-muted">释放空间</span><p className="font-medium theme-text-success">{formatBytes(cleanupResult.freedSpace)}</p></div>
-              <div><span className="text-text-muted">删除文件</span><p className="font-medium text-text-primary">{cleanupResult.deletedCount}</p></div>
-              <div><span className="text-text-muted">错误数量</span><p className={`font-medium ${cleanupResult.errorsCount > 0 ? 'theme-text-error' : 'text-text-primary'}`}>{cleanupResult.errorsCount}</p></div>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
-  );
-};
+  )
+}
 
-export default AdminVariantManager;
+export default AdminVariantManager

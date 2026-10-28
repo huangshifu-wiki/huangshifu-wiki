@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { X } from '@/src/components/icons'
 import { useI18n } from '../../lib/i18n'
 import { AuthForm } from '../AuthForm'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import { isBackdropClick } from '../../utils/modal'
 import type { AuthMode } from './types'
+import { IconButton } from '@/src/components/ui'
 
 interface AuthModalProps {
   open: boolean
@@ -58,28 +60,22 @@ export const AuthModal = ({
 
   return createPortal(
     <div
-      className="floating-overlay fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40"
+      className="floating-overlay fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[var(--ui-overlay-bg)]"
       data-state={presence.state}
       role="dialog"
       aria-modal="true"
       aria-label={t('auth.dialogLabel')}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) onClose()
+      }}
     >
-      <div
-        className="floating-panel w-full max-w-md bg-surface rounded border border-border p-6"
-        ref={modalRef}
-        onKeyDown={handleKeyDown}
-      >
+      <div className="floating-panel w-full max-w-md p-6" ref={modalRef} onKeyDown={handleKeyDown}>
         <div className="flex items-center justify-between mb-5">
           <div />
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="关闭"
-            className="text-text-muted hover:text-brand-gold transition-colors"
-          >
+          <IconButton type="button" variant="ghost" size="sm" onClick={onClose} aria-label="关闭">
             <X size={20} />
-          </button>
+          </IconButton>
         </div>
         <AuthForm
           initialMode={authMode}

@@ -2,10 +2,7 @@ import { Prisma, type PrismaClient } from '@prisma/client'
 
 type QueryablePrisma = Pick<PrismaClient, '$queryRaw'>
 
-export async function doesPublicTableExist(
-  prisma: QueryablePrisma,
-  tableName: string
-) {
+export async function doesPublicTableExist(prisma: QueryablePrisma, tableName: string) {
   const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
     SELECT EXISTS (
       SELECT 1

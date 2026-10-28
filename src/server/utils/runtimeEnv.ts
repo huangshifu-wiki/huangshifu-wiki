@@ -11,9 +11,7 @@ export function isTruthyEnvFlag(value: unknown): boolean {
 
 export function isTestRuntime(env: RuntimeEnv = process.env): boolean {
   return (
-    env.NODE_ENV === 'test' ||
-    isTruthyEnvFlag(env.VITEST) ||
-    env.VITEST_WORKER_ID !== undefined
+    env.NODE_ENV === 'test' || isTruthyEnvFlag(env.VITEST) || env.VITEST_WORKER_ID !== undefined
   )
 }
 

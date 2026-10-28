@@ -1,7 +1,7 @@
 # 黄诗扶 Wiki
 
-[![CI](https://github.com/yangwenjie1231/huangshifu-wiki/actions/workflows/ci.yml/badge.svg)](https://github.com/yangwenjie1231/huangshifu-wiki/actions/workflows/ci.yml)
-[![Security Scan](https://github.com/yangwenjie1231/huangshifu-wiki/actions/workflows/security.yml/badge.svg)](https://github.com/yangwenjie1231/huangshifu-wiki/actions/workflows/security.yml)
+[![CI](https://github.com/huangshifu-wiki/huangshifu-wiki/actions/workflows/ci.yml/badge.svg)](https://github.com/huangshifu-wiki/huangshifu-wiki/actions/workflows/ci.yml)
+[![Security Scan](https://github.com/huangshifu-wiki/huangshifu-wiki/actions/workflows/security.yml/badge.svg)](https://github.com/huangshifu-wiki/huangshifu-wiki/actions/workflows/security.yml)
 ![Node.js](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/typescript-5.8-3178c6?logo=typescript&logoColor=white)
 
@@ -71,6 +71,7 @@ npm run dev
 | 命令                       | 用途                                   |
 | -------------------------- | -------------------------------------- |
 | `npm run dev`              | 启动 Express + Vite 开发服务           |
+| `npm run format`           | 使用 Prettier 格式化代码、配置和文档   |
 | `npm run lint`             | TypeScript 类型检查                    |
 | `npm run test:unit`        | 运行单元测试                           |
 | `npm run test:integration` | 运行集成测试                           |
@@ -85,7 +86,7 @@ npm run dev
 推荐使用 Docker Compose 部署生产环境：
 
 ```bash
-git clone git@github.com:yangwenjie1231/huangshifu-wiki.git
+git clone git@github.com:huangshifu-wiki/huangshifu-wiki.git
 cd huangshifu-wiki
 cp .env.docker.example .env
 ./scripts/deploy-docker.sh
@@ -124,6 +125,7 @@ docs/                   项目文档
 提交前请至少运行：
 
 ```bash
+npm run format
 npm run verify
 npm audit --omit=dev --audit-level=high
 ```

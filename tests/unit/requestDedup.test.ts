@@ -1,100 +1,147 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest'
 import {
   generateRequestKey,
   clearCache,
+  dedupedRequest,
   getCacheStats,
   preloadCache,
   invalidateCache,
   invalidateCacheByPrefix,
-} from '../../src/utils/requestDedup';
+} from '../../src/utils/requestDedup'
 
 describe('requestDedup', () => {
   beforeEach(() => {
-    clearCache();
-  });
+    clearCache()
+  })
 
   describe('generateRequestKey', () => {
     it('generates key with method and url', () => {
-      const key = generateRequestKey('GET', '/api/test');
-      expect(key).toBe('GET|/api/test|');
-    });
+      const key = generateRequestKey('GET', '/api/test')
+      expect(key).toBe('GET|/api/test|')
+    })
 
     it('includes body in key when provided', () => {
-      const key = generateRequestKey('POST', '/api/test', { foo: 'bar' });
-      expect(key).toBe('POST|/api/test|{"foo":"bar"}');
-    });
+      const key = generateRequestKey('POST', '/api/test', { foo: 'bar' })
+      expect(key).toBe('POST|/api/test|{"foo":"bar"}')
+    })
 
     it('uppercases method', () => {
-      const key = generateRequestKey('get', '/api/test');
-      expect(key).toContain('GET|');
-    });
+      const key = generateRequestKey('get', '/api/test')
+      expect(key).toContain('GET|')
+    })
 
     it('handles undefined body gracefully', () => {
-      const key = generateRequestKey('DELETE', '/api/items/1');
-      expect(key).toBe('DELETE|/api/items/1|');
-    });
-  });
+      const key = generateRequestKey('DELETE', '/api/items/1')
+      expect(key).toBe('DELETE|/api/items/1|')
+    })
+  })
 
   describe('clearCache', () => {
     it('clears all cache entries', () => {
-      preloadCache('key1', 'value1');
-      preloadCache('key2', 'value2');
-      clearCache();
-      expect(getCacheStats().cacheSize).toBe(0);
-    });
-  });
+      preloadCache('key1', 'value1')
+      preloadCache('key2', 'value2')
+      clearCache()
+      expect(getCacheStats().cacheSize).toBe(0)
+    })
+  })
 
   describe('preloadCache / getCacheStats', () => {
     it('preloads data into cache', () => {
-      preloadCache('test-key', { data: 'hello' });
-      const stats = getCacheStats();
-      expect(stats.cacheSize).toBe(1);
-    });
+      preloadCache('test-key', { data: 'hello' })
+      const stats = getCacheStats()
+      expect(stats.cacheSize).toBe(1)
+    })
 
     it('reports correct stats after multiple preloads', () => {
-      preloadCache('a', 1);
-      preloadCache('b', 2);
-      preloadCache('c', 3);
-      const stats = getCacheStats();
-      expect(stats.cacheSize).toBe(3);
-    });
-  });
+      preloadCache('a', 1)
+      preloadCache('b', 2)
+      preloadCache('c', 3)
+      const stats = getCacheStats()
+      expect(stats.cacheSize).toBe(3)
+    })
+  })
 
   describe('invalidateCache', () => {
     it('removes specific cache entry', () => {
-      preloadCache('keep-me', 'val1');
-      preloadCache('remove-me', 'val2');
-      invalidateCache('remove-me');
-      const stats = getCacheStats();
-      expect(stats.cacheSize).toBe(1);
-    });
+      preloadCache('keep-me', 'val1')
+      preloadCache('remove-me', 'val2')
+      invalidateCache('remove-me')
+      const stats = getCacheStats()
+      expect(stats.cacheSize).toBe(1)
+    })
 
     it('does nothing for non-existent key', () => {
-      invalidateCache('non-existent');
-      expect(getCacheStats().cacheSize).toBe(0);
-    });
-  });
+      invalidateCache('non-existent')
+      expect(getCacheStats().cacheSize).toBe(0)
+    })
+  })
 
   describe('invalidateCacheByPrefix', () => {
     it('removes all entries matching prefix', () => {
-      preloadCache('user:1:data', 'a');
-      preloadCache('user:2:data', 'b');
-      preloadCache('post:1:data', 'c');
-      invalidateCacheByPrefix('user:');
-      const stats = getCacheStats();
-      expect(stats.cacheSize).toBe(1);
-    });
+      preloadCache('user:1:data', 'a')
+      preloadCache('user:2:data', 'b')
+      preloadCache('post:1:data', 'c')
+      invalidateCacheByPrefix('user:')
+      const stats = getCacheStats()
+      expect(stats.cacheSize).toBe(1)
+    })
 
     it('handles empty cache gracefully', () => {
-      invalidateCacheByPrefix('any:');
-      expect(getCacheStats().cacheSize).toBe(0);
-    });
+      invalidateCacheByPrefix('any:')
+      expect(getCacheStats().cacheSize).toBe(0)
+    })
 
     it('removes all entries when prefix matches everything', () => {
-      preloadCache('a:1', 'x');
-      preloadCache('b:2', 'y');
-      invalidateCacheByPrefix('');
-      expect(getCacheStats().cacheSize).toBe(0);
-    });
-  });
-});
+      preloadCache('a:1', 'x')
+      preloadCache('b:2', 'y')
+      invalidateCacheByPrefix('')
+      expect(getCacheStats().cacheSize).toBe(0)
+    })
+  })
+  it('does not cache an in-flight response invalidated by prefix', async () => {
+    const key = 'GET|/api/music|'
+    let resolveStale!: (value: string) => void
+    const staleRequest = new Promise<string>((resolve) => {
+      resolveStale = resolve
+    })
+
+    const staleResponse = dedupedRequest(() => staleRequest, key)
+    invalidateCacheByPrefix('/api/music')
+    resolveStale('stale')
+    await expect(staleResponse).resolves.toBe('stale')
+
+    let freshCalls = 0
+    await expect(
+      dedupedRequest(
+        () => {
+          freshCalls += 1
+          return Promise.resolve('fresh')
+        },
+        key,
+        { swr: false }
+      )
+    ).resolves.toBe('fresh')
+    expect(freshCalls).toBe(1)
+  })
+
+  it('keeps a newer request after an older invalidated request settles', async () => {
+    const key = 'GET|/api/music|'
+    let resolveOld!: (value: string) => void
+    let resolveNew!: (value: string) => void
+    const oldRequest = new Promise<string>((resolve) => {
+      resolveOld = resolve
+    })
+    const newRequest = new Promise<string>((resolve) => {
+      resolveNew = resolve
+    })
+
+    const oldResponse = dedupedRequest(() => oldRequest, key)
+    invalidateCacheByPrefix('/api/music')
+    const newResponse = dedupedRequest(() => newRequest, key)
+    resolveOld('old')
+    await expect(oldResponse).resolves.toBe('old')
+    expect(getCacheStats().inFlightSize).toBe(1)
+    resolveNew('new')
+    await expect(newResponse).resolves.toBe('new')
+  })
+})

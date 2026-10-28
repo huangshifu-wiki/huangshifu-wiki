@@ -1,208 +1,353 @@
-import Meting from '@meting/core';
+import Meting from '@meting/core'
 
-import { buildPlatformResourceUrl, type MusicPlatform, type MusicResourceType } from './musicUrlParser';
+import { formatMusicCredits, normalizeStringListInput } from '../../lib/musicCredits'
+import {
+  buildPlatformResourceUrl,
+  type MusicPlatform,
+  type MusicResourceType,
+} from './musicUrlParser'
 
 type MetingTrackRaw = {
-  id?: string | number;
-  name?: string;
-  artist?: string[] | string;
-  album?: string;
-  pic_id?: string | number;
-  url_id?: string | number;
-  lyric_id?: string | number;
-  source?: string;
-  type?: number;
-};
+  id?: string | number
+  name?: string
+  artist?: string[] | string
+  album?: string
+  pic_id?: string | number
+  url_id?: string | number
+  lyric_id?: string | number
+  source?: string
+  type?: number
+}
 
 export interface MusicImportTrack {
-  sourceId: string;
-  title: string;
-  artist: string;
-  album: string;
-  picId: string;
-  urlId: string;
-  lyricId: string;
-  cover: string;
-  sourceUrl: string;
-  isInstrumental?: boolean;
+  sourceId: string
+  title: string
+  artists: string[]
+  album: string
+  picId: string
+  urlId: string
+  lyricId: string
+  cover: string
+  sourceUrl: string
+  isInstrumental?: boolean
 }
 
 export interface MusicResourcePreview {
-  platform: MusicPlatform;
-  type: MusicResourceType;
-  id: string;
-  title: string;
-  artist: string;
-  cover: string;
-  description: string;
-  platformUrl: string;
-  songs: MusicImportTrack[];
+  platform: MusicPlatform
+  type: MusicResourceType
+  id: string
+  title: string
+  artist: string
+  cover: string
+  description: string
+  platformUrl: string
+  songs: MusicImportTrack[]
 }
 
 export interface MusicSearchItem {
-  sourceId: string;
-  title: string;
-  artist: string;
-  album: string;
-  picId: string;
-  sourceUrl: string;
+  sourceId: string
+  title: string
+  artists: string[]
+  album: string
+  picId: string
+  sourceUrl: string
 }
 
 function createClient(platform: MusicPlatform, formatted = true) {
-  const client = new Meting(platform);
-  client.format(formatted);
-  return client;
+  const client = new Meting(platform)
+  client.format(formatted)
+  return client
 }
 
-const METING_API_TIMEOUT_MS = 5000;
+const METING_API_TIMEOUT_MS = 5000
+const COVER_PROBE_TIMEOUT_MS = 3000
+const TENCENT_COVER_SIZES = [3543, 3000, 1500, 1000, 800, 500, 300]
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Meting API timeout')), ms);
+    const timer = setTimeout(() => reject(new Error('Meting API timeout')), ms)
     promise
       .then((value) => {
-        clearTimeout(timer);
-        resolve(value);
+        clearTimeout(timer)
+        resolve(value)
       })
       .catch((error) => {
-        clearTimeout(timer);
-        reject(error);
-      });
-  });
+        clearTimeout(timer)
+        reject(error)
+      })
+  })
 }
 
 function ensureString(value: unknown): string {
   if (typeof value === 'string') {
-    return value;
+    return value
   }
-  return '';
+  return ''
 }
 
 function parseJsonSafe<T>(raw: string, fallback: T): T {
   try {
-    return JSON.parse(raw) as T;
+    return JSON.parse(raw) as T
   } catch {
-    return fallback;
+    return fallback
   }
 }
 
 function toArray(value: unknown) {
   if (Array.isArray(value)) {
-    return value;
+    return value
   }
   if (value && typeof value === 'object') {
-    return [value];
+    return [value]
   }
-  return [];
+  return []
 }
 
 function normalizeText(value: unknown, fallback = '') {
   if (typeof value !== 'string') {
-    return fallback;
+    return fallback
   }
   // Remove backticks that may wrap the URL from Meting API response
-  const normalized = value.trim().replace(/^`+|`+$/g, '');
-  return normalized || fallback;
+  const normalized = value.trim().replace(/^`+|`+$/g, '')
+  return normalized || fallback
+}
+
+function upgradeToHttps(url: string) {
+  // Upgrade HTTP to HTTPS to avoid Mixed Content warnings
+  return url.replace(/^http:\/\//i, 'https://')
 }
 
 function normalizeImageUrl(value: unknown, fallback = '') {
-  const url = normalizeText(value, fallback);
+  const url = normalizeText(value, fallback)
   if (!url) {
-    return url;
+    return url
   }
-  // Upgrade HTTP to HTTPS to avoid Mixed Content warnings
-  return url.replace(/^http:\/\//i, 'https://');
+  return upgradeToHttps(url)
 }
 
 function normalizeArtist(value: unknown, fallback = '未知歌手') {
-  if (Array.isArray(value)) {
-    const names = value
-      .map((item) => normalizeText(item))
-      .filter(Boolean);
-    if (names.length) {
-      return names.join(' / ');
-    }
-  }
+  return formatMusicCredits(value, fallback)
+}
 
-  if (typeof value === 'string') {
-    const normalized = normalizeText(value);
-    if (normalized) {
-      return normalized;
-    }
-  }
-
-  return fallback;
+function normalizeArtists(value: unknown, fallback = '未知歌手') {
+  const artists = normalizeStringListInput(value)
+  return artists.length ? artists : [fallback]
 }
 
 function normalizeId(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return String(value);
+    return String(value)
   }
   if (typeof value === 'string') {
-    const normalized = value.trim();
-    return normalized || '';
+    const normalized = value.trim()
+    return normalized || ''
   }
-  return '';
+  return ''
 }
 
 async function runFormattedList(
   platform: MusicPlatform,
-  runner: (client: Meting) => Promise<string>,
+  runner: (client: Meting) => Promise<string>
 ) {
-  const client = createClient(platform, true);
-  const raw = ensureString(await withTimeout(runner(client), METING_API_TIMEOUT_MS));
-  const parsed = parseJsonSafe<unknown>(raw, []);
-  return toArray(parsed) as MetingTrackRaw[];
+  const client = createClient(platform, true)
+  const raw = ensureString(await withTimeout(runner(client), METING_API_TIMEOUT_MS))
+  const parsed = parseJsonSafe<unknown>(raw, [])
+  return toArray(parsed) as MetingTrackRaw[]
 }
 
 async function runRawValue(platform: MusicPlatform, runner: (client: Meting) => Promise<string>) {
-  const client = createClient(platform, false);
-  const raw = ensureString(await withTimeout(runner(client), METING_API_TIMEOUT_MS));
-  return parseJsonSafe<unknown>(raw, {});
+  const client = createClient(platform, false)
+  const raw = ensureString(await withTimeout(runner(client), METING_API_TIMEOUT_MS))
+  return parseJsonSafe<unknown>(raw, {})
+}
+
+function firstRawSong(payload: unknown): Record<string, unknown> {
+  if (Array.isArray(payload)) {
+    return firstRawSong(payload[0])
+  }
+  if (!payload || typeof payload !== 'object') {
+    return {}
+  }
+
+  const record = payload as Record<string, unknown>
+  if (Array.isArray(record.songs)) return firstRawSong(record.songs[0])
+  if (Array.isArray(record.data)) return firstRawSong(record.data[0])
+  if (record.data && typeof record.data === 'object') return firstRawSong(record.data)
+  return record
+}
+
+function parseFiniteInteger(value: unknown, multiplier = 1) {
+  const raw = typeof value === 'string' ? value.trim() : value
+  if (raw === '') return null
+  const numeric = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+  if (!Number.isFinite(numeric) || numeric < 0) return null
+  const result = numeric * multiplier
+  return Number.isSafeInteger(result) && result <= 2_147_483_647 ? result : null
+}
+
+function parseDateOnly(value: unknown) {
+  if (typeof value === 'string') {
+    const normalized = value.trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null
+    const date = new Date(`${normalized}T00:00:00.000Z`)
+    return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== normalized
+      ? null
+      : normalized
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null
+  // 网易云把中国本地发行日编码为对应的 UTC 时间戳，按中国日历日读取后再输出 YYYY-MM-DD。
+  const date = new Date(value + 8 * 60 * 60 * 1000)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10)
+}
+
+export async function getMusicTrackMetadata(
+  platform: MusicPlatform,
+  sourceId: string
+): Promise<{ releaseDate: string | null; durationMs: number | null }> {
+  const empty = { releaseDate: null, durationMs: null }
+  if (!sourceId.trim()) return empty
+  if (platform !== 'netease' && platform !== 'tencent' && platform !== 'kugou') return empty
+
+  try {
+    const raw = await runRawValue(platform, (client) => client.song(sourceId))
+    const song = firstRawSong(raw)
+
+    if (platform === 'netease') {
+      return {
+        releaseDate: parseDateOnly(song.publishTime),
+        durationMs: parseFiniteInteger(song.dt),
+      }
+    }
+
+    if (platform === 'tencent') {
+      const album =
+        song.album && typeof song.album === 'object' ? (song.album as Record<string, unknown>) : {}
+      return {
+        releaseDate: parseDateOnly(song.time_public ?? album.time_public),
+        durationMs: parseFiniteInteger(song.interval, 1000),
+      }
+    }
+
+    if (platform === 'kugou') {
+      return {
+        releaseDate: null,
+        durationMs: parseFiniteInteger(song.timeLength, 1000),
+      }
+    }
+  } catch {
+    return empty
+  }
+
+  return empty
 }
 
 async function resolvePicById(platform: MusicPlatform, picId: string, fallback = '') {
+  const candidates = await resolvePicCandidatesById(platform, picId, fallback)
+  if (platform === 'tencent') {
+    return (await firstReachableImageUrl(candidates)) || candidates[0] || fallback
+  }
+  return candidates[0] || fallback
+}
+
+async function resolvePicCandidatesById(platform: MusicPlatform, picId: string, fallback = '') {
   if (!picId) {
-    return fallback;
+    return fallback ? [fallback] : []
+  }
+
+  if (platform === 'tencent') {
+    const urls = TENCENT_COVER_SIZES.map((size) =>
+      normalizeImageUrl(
+        `https://y.gtimg.cn/music/photo_new/T002R${size}x${size}M000${picId}.jpg?max_age=2592000`
+      )
+    )
+    return uniqueImageUrls([...urls, fallback])
   }
 
   try {
-    const client = createClient(platform, true);
-    const raw = ensureString(await withTimeout(client.pic(picId, 500), METING_API_TIMEOUT_MS));
-    const parsed = parseJsonSafe<unknown>(raw, {});
+    const client = createClient(platform, true)
+    const raw = ensureString(await withTimeout(client.pic(picId, 3543), METING_API_TIMEOUT_MS))
+    const parsed = parseJsonSafe<unknown>(raw, {})
     if (Array.isArray(parsed)) {
-      const first = parsed[0] as { url?: string } | undefined;
-      return normalizeImageUrl(first?.url, fallback);
+      const urls = parsed
+        .map((item) => normalizeImageUrl((item as { url?: string } | undefined)?.url))
+        .filter(Boolean)
+      return uniqueImageUrls([...urls, fallback])
     }
     if (parsed && typeof parsed === 'object') {
-      return normalizeImageUrl((parsed as { url?: string }).url, fallback);
+      return uniqueImageUrls([normalizeImageUrl((parsed as { url?: string }).url), fallback])
     }
   } catch {
-    return fallback;
+    return fallback ? [fallback] : []
   }
 
-  return fallback;
+  return fallback ? [fallback] : []
+}
+
+function uniqueImageUrls(urls: string[]) {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const url of urls) {
+    const normalized = normalizeImageUrl(url)
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized)
+      result.push(normalized)
+    }
+  }
+  return result
+}
+
+async function firstReachableImageUrl(urls: string[]) {
+  for (const url of urls) {
+    if (await isImageUrlReachable(url)) {
+      return url
+    }
+  }
+  return ''
+}
+
+async function isImageUrlReachable(url: string) {
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(COVER_PROBE_TIMEOUT_MS),
+    })
+    if (response.ok) return true
+    if (response.status === 404) return false
+  } catch {
+    // Some image CDNs reject HEAD but allow GET.
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: AbortSignal.timeout(COVER_PROBE_TIMEOUT_MS),
+    })
+    await response.body?.cancel()
+    return response.ok
+  } catch {
+    return false
+  }
 }
 
 function normalizeTrack(platform: MusicPlatform, track: MetingTrackRaw): MusicImportTrack | null {
-  const sourceId = normalizeId(track.id);
+  const sourceId = normalizeId(track.id)
   if (!sourceId) {
-    return null;
+    return null
   }
 
-  const title = normalizeText(track.name, `未命名歌曲 ${sourceId}`);
-  const artist = normalizeArtist(track.artist);
-  const album = normalizeText(track.album, '未知专辑');
-  const picId = normalizeId(track.pic_id) || sourceId;
-  const urlId = normalizeId(track.url_id) || sourceId;
-  const lyricId = normalizeId(track.lyric_id) || sourceId;
+  const title = normalizeText(track.name, `未命名歌曲 ${sourceId}`)
+  const artists = normalizeArtists(track.artist)
+  const album = normalizeText(track.album, '未知专辑')
+  const picId = normalizeId(track.pic_id) || sourceId
+  const urlId = normalizeId(track.url_id) || sourceId
+  const lyricId = normalizeId(track.lyric_id) || sourceId
 
-  const isInstrumental = track.type === 1;
+  const isInstrumental = track.type === 1
 
   return {
     sourceId,
     title,
-    artist,
+    artists,
     album,
     picId,
     urlId,
@@ -210,29 +355,33 @@ function normalizeTrack(platform: MusicPlatform, track: MetingTrackRaw): MusicIm
     cover: '',
     sourceUrl: buildPlatformResourceUrl(platform, 'song', sourceId),
     isInstrumental,
-  };
-}
-
-async function enrichTrackCovers(platform: MusicPlatform, tracks: MusicImportTrack[]) {
-  const resolved: MusicImportTrack[] = [];
-  for (const track of tracks) {
-    const cover = await resolvePicById(platform, track.picId, track.cover);
-    resolved.push({
-      ...track,
-      cover,
-    });
   }
-  return resolved;
 }
+async function enrichTrackCovers(platform: MusicPlatform, tracks: MusicImportTrack[]) {
+  const resolved = new Array<MusicImportTrack>(tracks.length)
+  let nextIndex = 0
+  const workerCount = Math.min(4, tracks.length)
 
+  const resolveNext = async () => {
+    while (nextIndex < tracks.length) {
+      const index = nextIndex++
+      const track = tracks[index]
+      const cover = await resolvePicById(platform, track.picId, track.cover)
+      resolved[index] = { ...track, cover }
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, resolveNext))
+  return resolved
+}
 function uniqueTracksBySourceId(tracks: MusicImportTrack[]) {
-  const deduped = new Map<string, MusicImportTrack>();
+  const deduped = new Map<string, MusicImportTrack>()
   tracks.forEach((track) => {
     if (!deduped.has(track.sourceId)) {
-      deduped.set(track.sourceId, track);
+      deduped.set(track.sourceId, track)
     }
-  });
-  return [...deduped.values()];
+  })
+  return [...deduped.values()]
 }
 
 function normalizePreviewMeta(value: unknown) {
@@ -242,10 +391,10 @@ function normalizePreviewMeta(value: unknown) {
       artist: '',
       cover: '',
       description: '',
-    };
+    }
   }
 
-  const record = value as Record<string, unknown>;
+  const record = value as Record<string, unknown>
   return {
     title:
       normalizeText(record.title) ||
@@ -259,92 +408,96 @@ function normalizePreviewMeta(value: unknown) {
       normalizeImageUrl(record.coverImgUrl) ||
       normalizeImageUrl((record.album as Record<string, unknown> | undefined)?.picUrl) ||
       normalizeImageUrl((record.album as Record<string, unknown> | undefined)?.blurPicUrl),
-    description:
-      normalizeText(record.description) ||
-      normalizeText(record.briefDesc),
-  };
+    description: normalizeText(record.description) || normalizeText(record.briefDesc),
+  }
 }
 
 function fallbackPreviewTitle(type: MusicResourceType, id: string) {
   if (type === 'album') {
-    return `专辑 ${id}`;
+    return `专辑 ${id}`
   }
   if (type === 'playlist') {
-    return `歌单 ${id}`;
+    return `歌单 ${id}`
   }
-  return `歌曲 ${id}`;
+  return `歌曲 ${id}`
 }
 
 function mapSearchTypeToMeting(type: MusicResourceType | 'artist') {
-  if (type === 'song') return 1;
-  if (type === 'album') return 10;
-  if (type === 'artist') return 100;
-  return 1000;
+  if (type === 'song') return 1
+  if (type === 'album') return 10
+  if (type === 'artist') return 100
+  return 1000
 }
 
 export async function searchMusicResources(options: {
-  platform: MusicPlatform;
-  keyword: string;
-  type: MusicResourceType | 'artist';
-  page?: number;
-  limit?: number;
+  platform: MusicPlatform
+  keyword: string
+  type: MusicResourceType | 'artist'
+  page?: number
+  limit?: number
 }) {
-  const client = createClient(options.platform, true);
-  const raw = ensureString(await withTimeout(
-    client.search(options.keyword, {
-      type: mapSearchTypeToMeting(options.type),
-      page: options.page || 1,
-      limit: options.limit || 20,
-    }),
-    METING_API_TIMEOUT_MS,
-  ));
-  const parsed = parseJsonSafe<unknown>(raw, []);
-  const list = toArray(parsed) as MetingTrackRaw[];
+  const client = createClient(options.platform, true)
+  const raw = ensureString(
+    await withTimeout(
+      client.search(options.keyword, {
+        type: mapSearchTypeToMeting(options.type),
+        page: options.page || 1,
+        limit: options.limit || 20,
+      }),
+      METING_API_TIMEOUT_MS
+    )
+  )
+  const parsed = parseJsonSafe<unknown>(raw, [])
+  const list = toArray(parsed) as MetingTrackRaw[]
 
   const items: MusicSearchItem[] = list
     .map((item) => {
-      const sourceId = normalizeId(item.id);
+      const sourceId = normalizeId(item.id)
       if (!sourceId) {
-        return null;
+        return null
       }
-      const title = normalizeText(item.name, sourceId);
-      const artist = normalizeArtist(item.artist, '未知歌手');
-      const album = normalizeText(item.album, '');
-      const picId = normalizeId(item.pic_id) || sourceId;
+      const title = normalizeText(item.name, sourceId)
+      const artists = normalizeArtists(item.artist, '未知歌手')
+      const album = normalizeText(item.album, '')
+      const picId = normalizeId(item.pic_id) || sourceId
 
       return {
         sourceId,
         title,
-        artist,
+        artists,
         album,
         picId,
-        sourceUrl: buildPlatformResourceUrl(options.platform, options.type === 'artist' ? 'song' : options.type, sourceId),
-      };
+        sourceUrl: buildPlatformResourceUrl(
+          options.platform,
+          options.type === 'artist' ? 'song' : options.type,
+          sourceId
+        ),
+      }
     })
-    .filter((item): item is MusicSearchItem => Boolean(item));
+    .filter((item): item is MusicSearchItem => Boolean(item))
 
-  return items;
+  return items
 }
 
 export async function getMusicResourcePreview(
   platform: MusicPlatform,
   type: MusicResourceType,
-  id: string,
+  id: string
 ): Promise<MusicResourcePreview> {
   if (type === 'song') {
-    const songs = await runFormattedList(platform, (client) => client.song(id));
-    const normalizedTrack = normalizeTrack(platform, songs[0] || { id });
+    const songs = await runFormattedList(platform, (client) => client.song(id))
+    const normalizedTrack = normalizeTrack(platform, songs[0] || { id })
     if (!normalizedTrack) {
-      throw new Error('未找到可导入的歌曲');
+      throw new Error('未找到可导入的歌曲')
     }
-    const cover = await resolvePicById(platform, normalizedTrack.picId, normalizedTrack.cover);
+    const cover = await resolvePicById(platform, normalizedTrack.picId, normalizedTrack.cover)
 
     return {
       platform,
       type,
       id,
       title: normalizedTrack.title,
-      artist: normalizedTrack.artist,
+      artist: formatMusicCredits(normalizedTrack.artists, '未知歌手'),
       cover,
       description: '',
       platformUrl: buildPlatformResourceUrl(platform, type, id),
@@ -354,57 +507,55 @@ export async function getMusicResourcePreview(
           cover,
         },
       ],
-    };
+    }
   }
 
-  const formattedTracks = await runFormattedList(
-    platform,
-    (client) => (type === 'album' ? client.album(id) : client.playlist(id)),
-  );
+  const formattedTracks = await runFormattedList(platform, (client) =>
+    type === 'album' ? client.album(id) : client.playlist(id)
+  )
   const normalized = uniqueTracksBySourceId(
     formattedTracks
       .map((track) => normalizeTrack(platform, track))
-      .filter((track): track is MusicImportTrack => Boolean(track)),
-  );
+      .filter((track): track is MusicImportTrack => Boolean(track))
+  )
 
   if (!normalized.length) {
-    throw new Error(type === 'album' ? '专辑暂无可导入歌曲' : '歌单暂无可导入歌曲');
+    throw new Error(type === 'album' ? '专辑暂无可导入歌曲' : '歌单暂无可导入歌曲')
   }
 
-  const withCover = await enrichTrackCovers(platform, normalized);
+  const withCover = await enrichTrackCovers(platform, normalized)
 
-  let title = '';
-  let artist = '';
-  let cover = '';
-  let description = '';
+  let title = ''
+  let artist = ''
+  let cover = ''
+  let description = ''
 
   try {
-    const raw = await runRawValue(
-      platform,
-      (client) => (type === 'album' ? client.album(id) : client.playlist(id)),
-    );
+    const raw = await runRawValue(platform, (client) =>
+      type === 'album' ? client.album(id) : client.playlist(id)
+    )
 
-    const record = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-    const albumMeta = normalizePreviewMeta(record.album);
-    const playlistMeta = normalizePreviewMeta(record.playlist);
-    const topMeta = normalizePreviewMeta(record);
+    const record = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+    const albumMeta = normalizePreviewMeta(record.album)
+    const playlistMeta = normalizePreviewMeta(record.playlist)
+    const topMeta = normalizePreviewMeta(record)
 
-    title = albumMeta.title || playlistMeta.title || topMeta.title;
-    artist = albumMeta.artist || playlistMeta.artist || topMeta.artist;
-    cover = albumMeta.cover || playlistMeta.cover || topMeta.cover;
-    description = albumMeta.description || playlistMeta.description || topMeta.description;
+    title = albumMeta.title || playlistMeta.title || topMeta.title
+    artist = albumMeta.artist || playlistMeta.artist || topMeta.artist
+    cover = albumMeta.cover || playlistMeta.cover || topMeta.cover
+    description = albumMeta.description || playlistMeta.description || topMeta.description
   } catch {
-    title = '';
+    title = ''
   }
 
   if (!title) {
-    title = withCover[0]?.album || fallbackPreviewTitle(type, id);
+    title = withCover[0]?.album || fallbackPreviewTitle(type, id)
   }
   if (!artist) {
-    artist = withCover[0]?.artist || '未知歌手';
+    artist = formatMusicCredits(withCover[0]?.artists, '未知歌手')
   }
   if (!cover) {
-    cover = withCover[0]?.cover || '';
+    cover = withCover[0]?.cover || ''
   }
 
   return {
@@ -417,58 +568,100 @@ export async function getMusicResourcePreview(
     description,
     platformUrl: buildPlatformResourceUrl(platform, type, id),
     songs: withCover,
-  };
+  }
 }
 
 function extractSingleFieldAsString(payload: unknown, field: string) {
   if (!payload || typeof payload !== 'object') {
-    return '';
+    return ''
   }
   if (Array.isArray(payload)) {
-    return extractSingleFieldAsString(payload[0], field);
+    return extractSingleFieldAsString(payload[0], field)
   }
 
-  const record = payload as Record<string, unknown>;
-  const value = record[field];
+  const record = payload as Record<string, unknown>
+  const value = record[field]
   if (typeof value === 'string') {
-    return value.trim();
+    return value.trim()
   }
-  return '';
+  return ''
 }
 
 export async function resolveAudioUrl(platform: MusicPlatform, urlId: string) {
   if (!urlId) {
-    return '';
+    return ''
   }
 
   if (platform === 'netease') {
-    return `https://music.163.com/song/media/outer/url?id=${urlId}.mp3`;
+    return resolveNeteaseAudioUrl(urlId)
   }
 
   try {
-    const client = createClient(platform, true);
-    const raw = ensureString(await withTimeout(client.url(urlId, 320), METING_API_TIMEOUT_MS));
-    const parsed = parseJsonSafe<unknown>(raw, {});
-    return extractSingleFieldAsString(parsed, 'url');
+    const client = createClient(platform, true)
+    const raw = ensureString(await withTimeout(client.url(urlId, 320), METING_API_TIMEOUT_MS))
+    const parsed = parseJsonSafe<unknown>(raw, {})
+    return upgradeToHttps(extractSingleFieldAsString(parsed, 'url'))
   } catch {
-    return '';
+    return ''
+  }
+}
+
+async function resolveNeteaseAudioUrl(urlId: string) {
+  // 优先走官方 eapi 接口：返回 CDN 直链（http），升级为 https 避免混合内容拦截
+  try {
+    const client = createClient('netease', true)
+    const raw = ensureString(await withTimeout(client.url(urlId, 320), METING_API_TIMEOUT_MS))
+    const url = extractSingleFieldAsString(parseJsonSafe<unknown>(raw, {}), 'url')
+    if (url) {
+      return upgradeToHttps(url)
+    }
+  } catch {
+    // 继续尝试外链兜底
+  }
+
+  // 兜底：media/outer 会 302 重定向到 http CDN 地址，跟随重定向后升级为 https
+  // 不可播放的歌曲会重定向到 404 页面（HTTP 200、text/html），必须校验音频类型
+  try {
+    const response = await fetch(`https://music.163.com/song/media/outer/url?id=${urlId}.mp3`, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(METING_API_TIMEOUT_MS),
+    })
+    if (!response.ok) {
+      return ''
+    }
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.startsWith('audio/')) {
+      return ''
+    }
+    await response.body?.cancel()
+    return upgradeToHttps(response.url)
+  } catch {
+    return ''
   }
 }
 
 export async function resolveLyric(platform: MusicPlatform, lyricId: string) {
   if (!lyricId) {
-    return '';
+    return ''
   }
   try {
-    const client = createClient(platform, true);
-    const raw = ensureString(await withTimeout(client.lyric(lyricId), METING_API_TIMEOUT_MS));
-    const parsed = parseJsonSafe<unknown>(raw, {});
-    return extractSingleFieldAsString(parsed, 'lyric');
+    const client = createClient(platform, true)
+    const raw = ensureString(await withTimeout(client.lyric(lyricId), METING_API_TIMEOUT_MS))
+    const parsed = parseJsonSafe<unknown>(raw, {})
+    return extractSingleFieldAsString(parsed, 'lyric')
   } catch {
-    return '';
+    return ''
   }
 }
 
 export async function resolveCoverUrl(platform: MusicPlatform, picId: string, fallback = '') {
-  return resolvePicById(platform, picId, fallback);
+  return resolvePicById(platform, picId, fallback)
+}
+
+export async function resolveCoverUrlCandidates(
+  platform: MusicPlatform,
+  picId: string,
+  fallback = ''
+) {
+  return resolvePicCandidatesById(platform, picId, fallback)
 }

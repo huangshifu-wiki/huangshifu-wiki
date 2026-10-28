@@ -1,128 +1,138 @@
-import { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
+import { Menu, X } from '@/src/components/icons'
 import { logoutRequest } from '../lib/auth'
-import { useI18n } from '../lib/i18n'
 import { HeaderUserControls } from './HeaderUserControls'
 import { useToast } from './Toast'
+import { getErrorMessage } from '../lib/errorHandler'
 import { AuthModal } from './Navbar/AuthModal'
 import type { AuthMode } from './Navbar/types'
+import { NAV_LINK_ITEMS } from './Navbar/NavLinks'
 import { MobileMenu } from './Navbar/MobileMenu'
+import { NavbarSearchBox } from './Navbar/NavbarSearchBox'
+import { useDismissableLayer } from '../hooks/useClickOutside'
+import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import styles from './Navbar.module.css'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
+import { IconButton } from '@/src/components/ui'
 
 export const Navbar = () => {
-	const { t } = useI18n()
-	const [isMenuOpen, setIsMenuOpen] = useState(false)
-	const [authModalOpen, setAuthModalOpen] = useState(false)
-	const [authInitialMode, setAuthInitialMode] = useState<AuthMode>('login')
-	const { show } = useToast()
-	const { features } = usePublicFeatures()
-	const allowRegister = features.registrationEnabled
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [authInitialMode, setAuthInitialMode] = useState<AuthMode>('login')
+  const [isScrolled, setIsScrolled] = useState(false)
+  const { show } = useToast()
+  const { features } = usePublicFeatures()
+  const allowRegister = features.registrationEnabled
+  const location = useLocation()
+  const navRef = useRef<HTMLElement | null>(null)
+  // 菜单的挂载状态（关闭动画结束后才卸载），用于让整条导航在动画期间保持磨砂面板样式
+  // 180ms 与 .floating-expand 的过渡时长一致，避免动画结束后磨砂面板多留一截
+  const menuPresence = useFloatingPresence(isMenuOpen, 180)
 
-	const openAuthModal = (mode: AuthMode) => {
-		setAuthInitialMode(mode === 'register' && !allowRegister ? 'login' : mode)
-		setAuthModalOpen(true)
-	}
+  // 路由变化后收起移动端菜单（点击菜单链接、提交搜索、前进/后退均覆盖）
+  useEffect(() => {
+    setIsMenuOpen(false)
+  }, [location.pathname, location.search, location.hash])
 
-	const handleLogout = async () => {
-		try {
-			await logoutRequest()
-			setIsMenuOpen(false)
-		} catch (error) {
-			console.error('Logout failed:', error)
-			show('退出登录失败，请稍后重试', { variant: 'error' })
-		}
-	}
+  // Escape 与点击导航栏外部时关闭菜单；汉堡按钮在 nav 内，不会误触发
+  useDismissableLayer(navRef, () => setIsMenuOpen(false), isMenuOpen)
 
-	return (
-		<nav
-			className="sticky top-0 z-[100] border-b border-border bg-bg-primary/92 backdrop-blur-md"
-			role="navigation"
-			aria-label="主导航"
-		>
-			<div
-				className="max-w-[1100px] mx-auto px-6"
-				style={{
-					height: '60px',
-					display: 'flex',
-					alignItems: 'center',
-					justifyContent: 'space-between',
-				}}
-			>
-				<div className="flex items-center gap-7">
-					<Link
-						to="/"
-						className="flex items-center gap-2 group"
-						style={{ textDecoration: 'none', color: 'inherit' }}
-					>
-						<div className="w-7 h-7 flex items-center justify-center text-white text-sm bg-brand-gold rounded">
-							诗
-						</div>
-						<span
-							className="font-semibold text-text-primary"
-							style={{ fontSize: '1.25rem', letterSpacing: '0.15em' }}
-						>
-							诗扶小筑
-						</span>
-					</Link>
+  useEffect(() => {
+    const updateScrolled = () => {
+      setIsScrolled(window.scrollY > 40)
+    }
 
-					<div className="hidden md:flex items-center" style={{ gap: '28px' }}>
-						<NavLink to="/music" className={styles.navLink}>
-							{t('nav.music')}
-						</NavLink>
-						<NavLink to="/gallery" className={styles.navLink}>
-							{t('nav.gallery')}
-						</NavLink>
-						<NavLink to="/wiki" className={styles.navLink}>
-							{t('nav.wiki')}
-						</NavLink>
-						<NavLink to="/forum" className={styles.navLink}>
-							{t('nav.forum')}
-						</NavLink>
-						<NavLink to="/search" className={styles.navLink}>
-							搜索
-						</NavLink>
-					</div>
-				</div>
+    updateScrolled()
+    window.addEventListener('scroll', updateScrolled, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', updateScrolled)
+    }
+  }, [])
 
-				<div className="flex items-center" style={{ gap: '16px' }}>
-					<div className="hidden md:block">
-						<HeaderUserControls
-							onLogout={handleLogout}
-							onOpenAuth={openAuthModal}
-							allowRegister={allowRegister}
-						/>
-					</div>
+  const openAuthModal = (mode: AuthMode) => {
+    setAuthInitialMode(mode === 'register' && !allowRegister ? 'login' : mode)
+    setIsMenuOpen(false)
+    setAuthModalOpen(true)
+  }
 
-					<button
-						type="button"
-						onClick={() => setIsMenuOpen(!isMenuOpen)}
-						className="md:hidden p-2 text-text-muted hover:text-brand-gold transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
-						aria-label={isMenuOpen ? '关闭菜单' : '打开菜单'}
-					>
-						{isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-					</button>
-				</div>
-			</div>
+  const handleLogout = async () => {
+    try {
+      await logoutRequest()
+      setIsMenuOpen(false)
+    } catch (error) {
+      console.error('Logout failed:', error)
+      show(getErrorMessage(error, '退出登录失败，请稍后重试'), { variant: 'error' })
+    }
+  }
 
-			<MobileMenu
-				open={isMenuOpen}
-				onClose={() => setIsMenuOpen(false)}
-				onOpenAuth={openAuthModal}
-				onLogout={handleLogout}
-				allowRegister={allowRegister}
-			/>
+  return (
+    <nav
+      ref={navRef}
+      className={styles.siteNav}
+      data-scrolled={isScrolled ? 'true' : 'false'}
+      data-menu-open={menuPresence.mounted ? 'true' : 'false'}
+      role="navigation"
+      aria-label="主导航"
+    >
+      <div className={styles.siteNavInner}>
+        <div className={styles.siteNavLeft}>
+          <Link to="/" className={styles.siteBrand}>
+            <span className={styles.siteBrandName}>黄诗扶</span>
+            <small>Wiki</small>
+          </Link>
+        </div>
 
-			{(
-				<AuthModal
-					open={authModalOpen}
-					onClose={() => setAuthModalOpen(false)}
-					onAuthSuccess={() => setIsMenuOpen(false)}
-					initialMode={authInitialMode}
-					allowRegister={allowRegister}
-				/>
-			)}
-		</nav>
-	)
+        <div className={styles.siteNavLinks}>
+          {NAV_LINK_ITEMS.map(({ to, label, Icon }) => (
+            <NavLink key={to} to={to} className={styles.navLink}>
+              <Icon size={16} />
+              <span>{label}</span>
+            </NavLink>
+          ))}
+        </div>
+
+        <div className={styles.siteNavRight}>
+          <div className={styles.siteDesktopControls}>
+            <NavbarSearchBox />
+            <HeaderUserControls
+              onLogout={handleLogout}
+              onOpenAuth={openAuthModal}
+              allowRegister={allowRegister}
+            />
+          </div>
+
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="lg"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className={`${styles.siteNavToggle} mobile-touch-target`}
+            aria-label={isMenuOpen ? '关闭菜单' : '打开菜单'}
+            aria-expanded={isMenuOpen}
+            aria-controls="site-mobile-menu"
+          >
+            {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </IconButton>
+        </div>
+      </div>
+      <MobileMenu
+        open={isMenuOpen}
+        presence={menuPresence}
+        onOpenAuth={openAuthModal}
+        onLogout={handleLogout}
+        allowRegister={allowRegister}
+      />
+
+      {
+        <AuthModal
+          open={authModalOpen}
+          onClose={() => setAuthModalOpen(false)}
+          onAuthSuccess={() => setIsMenuOpen(false)}
+          initialMode={authInitialMode}
+          allowRegister={allowRegister}
+        />
+      }
+    </nav>
+  )
 }

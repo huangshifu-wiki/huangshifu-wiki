@@ -1,7 +1,7 @@
 import { describe, beforeEach, afterEach, it, expect } from 'vitest'
 import request from 'supertest'
 import { app } from '../../server'
-import { prisma, createTestGallery, createTestUser } from './setup'
+import { prisma, createTestGallery, createTestUser, nextTestNumericSlug } from './setup'
 
 function findCookieValue(setCookieHeader: string | string[] | undefined, cookieName: string) {
   const cookies = Array.isArray(setCookieHeader)
@@ -47,10 +47,10 @@ describe('Admin batch operations API', () => {
       where: { title: { startsWith: 'Admin Batch Gallery' } },
     })
     await prisma.album.deleteMany({
-      where: { id: { startsWith: 'test-admin-batch-album-' } },
+      where: { title: { startsWith: 'Batch' } },
     })
     await prisma.musicTrack.deleteMany({
-      where: { id: { startsWith: 'test-admin-batch-song-' } },
+      where: { title: { startsWith: 'Batch' } },
     })
     await prisma.mediaAsset.deleteMany({
       where: { storageKey: { startsWith: 'test-admin-batch/' } },
@@ -127,7 +127,7 @@ describe('Admin batch operations API', () => {
     expect(await prisma.galleryImage.count({ where: { galleryId: gallery.id } })).toBe(1)
   })
 
-  it('appends duplicate gallery asset ids as separate images', async () => {
+  it('拒绝追加重复 gallery asset id', async () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const gallery = await createTestGallery({
       title: `Admin Batch Gallery Duplicate Append ${suffix}`,
@@ -155,13 +155,12 @@ describe('Admin batch operations API', () => {
       .set('X-XSRF-TOKEN', xsrfToken)
       .send({ assetIds: [asset.id, asset.id] })
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(400)
     const appended = await prisma.galleryImage.findMany({
       where: { galleryId: gallery.id, assetId: asset.id },
       orderBy: { sortOrder: 'asc' },
     })
-    expect(appended).toHaveLength(2)
-    expect(appended.map((image) => image.sortOrder)).toEqual([0, 1])
+    expect(appended).toHaveLength(0)
   })
 
   it('batch deletes song and album covers with default cover fallback', async () => {
@@ -169,21 +168,17 @@ describe('Admin batch operations API', () => {
     const [song, album] = await Promise.all([
       prisma.musicTrack.create({
         data: {
-          id: `test-admin-batch-song-${suffix}`,
+          slug: nextTestNumericSlug(),
           title: 'Batch Cover Song',
-          artist: 'Batch Artist',
+          artists: ['Batch Artist'],
           album: 'Batch Album',
-          addedBy: adminUser.user.uid,
         },
       }),
       prisma.album.create({
         data: {
-          id: `test-admin-batch-album-${suffix}`,
-          platform: 'netease',
-          sourceId: `test-admin-batch-album-source-${suffix}`,
+          slug: nextTestNumericSlug(),
           title: 'Batch Cover Album',
           artist: 'Batch Artist',
-          cover: '/uploads/test-admin-batch-album-old.jpg',
         },
       }),
     ])
@@ -242,11 +237,17 @@ describe('Admin batch operations API', () => {
     expect(songResponse.status).toBe(200)
     expect(albumResponse.status).toBe(200)
     await expect(prisma.songCover.findUnique({ where: { id: songCoverA.id } })).resolves.toBeNull()
-    await expect(prisma.albumCover.findUnique({ where: { id: albumCoverA.id } })).resolves.toBeNull()
-    await expect(prisma.songCover.findUnique({ where: { id: songCoverB.id } })).resolves.toMatchObject({
+    await expect(
+      prisma.albumCover.findUnique({ where: { id: albumCoverA.id } })
+    ).resolves.toBeNull()
+    await expect(
+      prisma.songCover.findUnique({ where: { id: songCoverB.id } })
+    ).resolves.toMatchObject({
       isDefault: true,
     })
-    await expect(prisma.albumCover.findUnique({ where: { id: albumCoverB.id } })).resolves.toMatchObject({
+    await expect(
+      prisma.albumCover.findUnique({ where: { id: albumCoverB.id } })
+    ).resolves.toMatchObject({
       isDefault: true,
     })
 
@@ -256,10 +257,11 @@ describe('Admin batch operations API', () => {
       .send({ coverIds: [albumCoverB.id] })
 
     expect(finalAlbumResponse.status).toBe(200)
-    await expect(prisma.album.findUnique({ where: { docId: album.docId } })).resolves.toMatchObject({
-      cover: '',
-      defaultCoverSource: 'old_cover',
-    })
+    await expect(prisma.album.findUnique({ where: { docId: album.docId } })).resolves.toMatchObject(
+      {
+        coverId: null,
+      }
+    )
   })
 
   it('batch releases edit locks', async () => {
@@ -288,29 +290,27 @@ describe('Admin batch operations API', () => {
 
     expect(response.status).toBe(200)
     expect(response.body.deleted).toBe(2)
-    expect(await prisma.editLock.count({ where: { id: { in: locks.map((lock) => lock.id) } } })).toBe(0)
+    expect(
+      await prisma.editLock.count({ where: { id: { in: locks.map((lock) => lock.id) } } })
+    ).toBe(0)
   })
 
   it('batch updates music display info', async () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const album = await prisma.album.create({
       data: {
-        id: `test-admin-batch-album-${suffix}`,
-        platform: 'netease',
-        sourceId: `test-admin-batch-display-album-source-${suffix}`,
+        slug: nextTestNumericSlug(),
         title: 'Batch Display Album',
         artist: 'Batch Artist',
-        cover: '/uploads/test-admin-batch-display-album.jpg',
       },
     })
     const songs = await Promise.all(
       [0, 1].map((index) =>
         prisma.musicTrack.create({
           data: {
-            id: `test-admin-batch-song-${suffix}-${index}`,
+            slug: nextTestNumericSlug(),
             title: `Batch Display Song ${index}`,
-            artist: 'Batch Artist',
-            addedBy: adminUser.user.uid,
+            artists: ['Batch Artist'],
           },
         })
       )
@@ -353,7 +353,7 @@ describe('Admin batch operations API', () => {
     expect(linkedResponse.status).toBe(200)
     const updatedSongs = await prisma.musicTrack.findMany({
       where: { docId: { in: songs.map((song) => song.docId) } },
-      orderBy: { id: 'asc' },
+      orderBy: { title: 'asc' },
     })
     expect(updatedSongs.every((song) => song.displayAlbumMode === 'linked')).toBe(true)
     expect(updatedSongs.every((song) => song.manualAlbumName === null)).toBe(true)
@@ -361,5 +361,72 @@ describe('Admin batch operations API', () => {
       where: { songDocId: { in: songs.map((song) => song.docId) }, albumDocId: album.docId },
     })
     expect(displayRelations.every((relation) => relation.isDisplay)).toBe(true)
+  })
+  it('专辑软删除、重复删除和永久删除遵守状态边界', async () => {
+    const album = await prisma.album.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: `Batch Album Lifecycle ${Date.now()}`,
+        artist: '测试艺人',
+      },
+    })
+    const cover = await prisma.albumCover.create({
+      data: {
+        albumDocId: album.docId,
+        storageKey: `test-admin-batch/cover-${Date.now()}.jpg`,
+        publicUrl: '/uploads/test-admin-batch-cover.jpg',
+        thumbnailUrl: '/uploads/test-admin-batch-cover-thumb.jpg',
+        isDefault: true,
+      },
+    })
+    const activeAlbum = await prisma.album.create({
+      data: {
+        slug: nextTestNumericSlug(),
+        title: `Batch Album Active ${Date.now()}`,
+        artist: '测试艺人',
+      },
+    })
+    const { agent, xsrfToken } = await createAuthenticatedAgent(
+      adminUser.user.email,
+      adminUser.plainPassword
+    )
+
+    const deleted = await agent
+      .delete(`/api/admin/albums/${album.docId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(deleted.status).toBe(200)
+
+    const duplicate = await agent
+      .delete(`/api/admin/albums/${album.docId}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(duplicate.status).toBe(404)
+
+    const deletedCover = await agent
+      .delete(`/api/albums/${album.docId}/covers/${cover.id}`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(deletedCover.status).toBe(404)
+    const defaultCover = await agent
+      .patch(`/api/albums/${album.docId}/covers/${cover.id}/default`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(defaultCover.status).toBe(404)
+
+    const permanentActive = await agent
+      .delete(`/api/admin/albums/${activeAlbum.docId}/permanent`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(permanentActive.status).toBe(400)
+    await expect(
+      prisma.album.findUnique({ where: { docId: activeAlbum.docId } })
+    ).resolves.toBeTruthy()
+
+    const permanent = await agent
+      .delete(`/api/admin/albums/${album.docId}/permanent`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(permanent.status).toBe(200)
+
+    const duplicatePermanent = await agent
+      .delete(`/api/admin/albums/${album.docId}/permanent`)
+      .set('X-XSRF-TOKEN', xsrfToken)
+    expect(duplicatePermanent.status).toBe(404)
+    expect(await prisma.albumCover.count({ where: { albumDocId: album.docId } })).toBe(0)
   })
 })

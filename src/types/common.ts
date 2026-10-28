@@ -1,11 +1,11 @@
-export type ContentStatus = 'draft' | 'pending' | 'published' | 'rejected';
+export type ContentStatus = 'draft' | 'pending' | 'published' | 'rejected'
 
-export type FavoriteTargetType = 'wiki' | 'post' | 'music' | 'gallery';
+export type FavoriteTargetType = 'wiki' | 'post' | 'music' | 'gallery'
 
-export type AdminRole = 'user' | 'admin' | 'super_admin';
+export type AdminRole = 'user' | 'admin' | 'super_admin'
 
-export type UserStatus = 'active' | 'banned';
+export type UserStatus = 'active' | 'banned'
 
-export type Platform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo';
+export type Platform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo'
 
-export type ViewMode = 'large' | 'medium' | 'small' | 'list';
+export type ViewMode = 'large' | 'medium' | 'small' | 'list'

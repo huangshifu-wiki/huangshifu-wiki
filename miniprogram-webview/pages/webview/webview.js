@@ -4,15 +4,15 @@ Page({
   },
 
   onLoad(options) {
-    const target = options && options.target ? decodeURIComponent(options.target) : '';
+    const target = options && options.target ? decodeURIComponent(options.target) : ''
     if (!target) {
       wx.showToast({
         title: '目标地址缺失',
         icon: 'none',
-      });
-      return;
+      })
+      return
     }
 
-    this.setData({ src: target });
+    this.setData({ src: target })
   },
-});
+})

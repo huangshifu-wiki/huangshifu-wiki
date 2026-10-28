@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom/vitest';
+import '@testing-library/jest-dom/vitest'
 
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
@@ -13,38 +13,38 @@ Object.defineProperty(window, 'matchMedia', {
     removeEventListener: () => {},
     dispatchEvent: () => false,
   }),
-});
+})
 
 // Mock IntersectionObserver
 class MockIntersectionObserver implements IntersectionObserver {
-  readonly root: Element | null = null;
-  readonly rootMargin: string = '';
-  readonly thresholds: ReadonlyArray<number> = [];
-  callback: IntersectionObserverCallback;
+  readonly root: Element | null = null
+  readonly rootMargin: string = ''
+  readonly thresholds: ReadonlyArray<number> = []
+  callback: IntersectionObserverCallback
 
   constructor(callback: IntersectionObserverCallback) {
-    this.callback = callback;
+    this.callback = callback
   }
 
   observe() {}
   unobserve() {}
   disconnect() {}
   takeRecords(): IntersectionObserverEntry[] {
-    return [];
+    return []
   }
 }
 
 Object.defineProperty(window, 'IntersectionObserver', {
   writable: true,
   value: MockIntersectionObserver,
-});
+})
 
 // Mock ResizeObserver
 class MockResizeObserver implements ResizeObserver {
-  callback: ResizeObserverCallback;
+  callback: ResizeObserverCallback
 
   constructor(callback: ResizeObserverCallback) {
-    this.callback = callback;
+    this.callback = callback
   }
 
   observe() {}
@@ -55,11 +55,11 @@ class MockResizeObserver implements ResizeObserver {
 Object.defineProperty(window, 'ResizeObserver', {
   writable: true,
   value: MockResizeObserver,
-});
+})
 
 // Mock getComputedStyle with basic support
-const originalGetComputedStyle = window.getComputedStyle;
+const originalGetComputedStyle = window.getComputedStyle
 window.getComputedStyle = (elt: Element, pseudoElt?: string | null) => {
-  const style = originalGetComputedStyle(elt, pseudoElt);
-  return style;
-};
+  const style = originalGetComputedStyle(elt, pseudoElt)
+  return style
+}

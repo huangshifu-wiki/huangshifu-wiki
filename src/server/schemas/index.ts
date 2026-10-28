@@ -1,4 +1,5 @@
 export { validateBody } from './validate'
+export { coordinateSchema, addressSearchQuerySchema } from './location.schema'
 export {
   registerSchema,
   loginSchema,
@@ -9,22 +10,34 @@ export {
   passwordSchema,
   setupInitializeSchema,
 } from './auth.schema'
-export { userEmailUpdateSchema, userPasswordUpdateSchema } from './user.schema'
+export { userEmailUpdateSchema } from './user.schema'
+export { createApiKeySchema } from './api-key.schema'
 export {
   wikiCreateSchema,
   wikiUpdateSchema,
   wikiDeleteSchema,
   wikiRevisionSchema,
 } from './wiki.schema'
-export { postCreateSchema, postUpdateSchema, postDeleteSchema, postCommentSchema } from './post.schema'
-export { galleryDeleteSchema } from './gallery.schema'
 export {
+  postCreateSchema,
+  postUpdateSchema,
+  postDeleteSchema,
+  postCommentSchema,
+} from './post.schema'
+export { galleryDeleteSchema, galleryRelatedLinksSchema } from './gallery.schema'
+export { eventWriteSchema } from './event.schema'
+export { ticketListingWriteSchema } from './ticket-listing.schema'
+export {
+  backupCreateSchema,
+  backupNoteSchema,
   backupRestoreSchema,
   adminResetUserPasswordSchema,
+  adminUpdateUserRoleSchema,
   adminUpdateUserSchema,
   adminBatchGalleryImagesSchema,
   adminBatchSongCoversSchema,
   adminBatchAlbumCoversSchema,
   adminBatchEditLocksSchema,
   adminBatchMusicDisplaySchema,
+  adminAlbumTrackReorderSchema,
 } from './admin.schema'

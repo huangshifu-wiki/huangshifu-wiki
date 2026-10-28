@@ -1,176 +1,129 @@
-import { prisma } from '../prisma';
+import { prisma } from '../prisma'
+import { Prisma } from '@prisma/client'
 import {
-  buildUploadPublicUrl,
-  logger,
-  safeDeleteUploadFileByStorageKey,
-  safeDeleteUploadFileByUrl,
-} from '../utils';
-import { CleanupTrigger, variantCleanup } from './variantCleanup.service';
+  collectMediaReferences,
+  getMediaRetiredAt,
+  isMediaReferenced,
+  releaseMediaAsset,
+} from './mediaAssetService'
+import { logger } from '../utils/logger'
 
 export interface MediaAssetCleanupResult {
-  assetId?: string;
-  localUrls: string[];
-  deletedImageMapIds: string[];
-  deletedOriginalFile: boolean;
-  markedAssetDeleted: boolean;
-  skippedReason?: 'asset_not_found' | 'still_referenced' | 'shared_image_map' | 'processing';
+  assetId?: string
+  localUrls: string[]
+  deletedImageMapIds: string[]
+  deletedOriginalFile: boolean
+  markedAssetDeleted: boolean
+  skippedReason?: 'asset_not_found' | 'still_referenced' | 'shared_image_map' | 'processing'
 }
+const CLEANUP_ASSET_SELECT = { id: true } as const
+type CleanupAsset = Prisma.MediaAssetGetPayload<{ select: typeof CLEANUP_ASSET_SELECT }>
 
-type MediaAssetRecord = {
-  id: string;
-  storageKey: string;
-  publicUrl: string;
-};
-
-function uniqueValues(values: Array<string | null | undefined>) {
-  return [...new Set(values.filter((value): value is string => Boolean(value)))];
-}
-
-function getAssetLocalUrls(asset: Pick<MediaAssetRecord, 'storageKey' | 'publicUrl'>) {
-  return uniqueValues([
-    asset.publicUrl,
-    buildUploadPublicUrl(asset.storageKey),
-  ]);
-}
-
-async function countStructuredMediaAssetReferences(assetId: string) {
-  const [galleryImages, songCovers, albumCovers] = await Promise.all([
-    prisma.galleryImage.count({ where: { assetId } }),
-    prisma.songCover.count({ where: { assetId } }),
-    prisma.albumCover.count({ where: { assetId } }),
-  ]);
-
-  return galleryImages + songCovers + albumCovers;
-}
-
-async function cleanupImageMapsByLocalUrls(localUrls: string[], assetId?: string) {
-  if (localUrls.length === 0) {
-    return { deletedImageMapIds: [], skippedShared: false, skippedProcessing: false };
-  }
-
-  const imageMaps = await prisma.imageMap.findMany({
-    where: { localUrl: { in: localUrls }, deletedAt: null },
-    select: { id: true, localUrl: true },
-  });
-
-  const deletedImageMapIds: string[] = [];
-  let skippedShared = false;
-  let skippedProcessing = false;
-
-  for (const imageMap of imageMaps) {
-    const otherAssetCount = await prisma.mediaAsset.count({
-      where: {
-        publicUrl: imageMap.localUrl,
-        status: { not: 'deleted' },
-        ...(assetId ? { id: { not: assetId } } : {}),
-      },
-    });
-
-    if (otherAssetCount > 0) {
-      skippedShared = true;
-      continue;
-    }
-
-    try {
-      const cleanupResult = await variantCleanup.cleanupByImageMapId(
-        imageMap.id,
-        CleanupTrigger.ON_DELETE
-      );
-
-      if (cleanupResult.skipped) {
-        skippedProcessing = cleanupResult.skippedReason === 'processing';
-        continue;
+async function releaseLoadedMediaAsset(asset: CleanupAsset): Promise<MediaAssetCleanupResult> {
+  try {
+    const release = await releaseMediaAsset(asset.id)
+    const localUrls = release.localUrls
+    if (!release.released) {
+      return {
+        assetId: asset.id,
+        localUrls,
+        deletedImageMapIds: [],
+        deletedOriginalFile: false,
+        markedAssetDeleted: false,
+        skippedReason:
+          release.reason === 'still_referenced' ? 'still_referenced' : 'asset_not_found',
       }
-
-      await prisma.imageMap.update({
-        where: { id: imageMap.id },
-        data: { deletedAt: new Date(), deletedBy: null },
-      });
-      deletedImageMapIds.push(imageMap.id);
-    } catch (error) {
-      logger.error({ err: error, imageMapId: imageMap.id }, 'ImageMap cleanup failed');
     }
-  }
-
-  return { deletedImageMapIds, skippedShared, skippedProcessing };
-}
-
-export async function cleanupUnusedMediaAssetById(
-  assetId: string
-): Promise<MediaAssetCleanupResult> {
-  const asset = await prisma.mediaAsset.findUnique({
-    where: { id: assetId },
-    select: {
-      id: true,
-      storageKey: true,
-      publicUrl: true,
-    },
-  });
-
-  if (!asset) {
-    return {
-      assetId,
-      localUrls: [],
-      deletedImageMapIds: [],
-      deletedOriginalFile: false,
-      markedAssetDeleted: false,
-      skippedReason: 'asset_not_found',
-    };
-  }
-
-  const referenceCount = await countStructuredMediaAssetReferences(asset.id);
-  const localUrls = getAssetLocalUrls(asset);
-
-  if (referenceCount > 0) {
     return {
       assetId: asset.id,
       localUrls,
       deletedImageMapIds: [],
       deletedOriginalFile: false,
-      markedAssetDeleted: false,
-      skippedReason: 'still_referenced',
-    };
+      markedAssetDeleted: release.markedAssetDeleted,
+    }
+  } catch (error) {
+    logger.error({ err: error, assetId: asset.id }, 'Failed to release media asset')
+    throw error
   }
-
-  await safeDeleteUploadFileByStorageKey(asset.storageKey);
-
-  const imageMapCleanup = await cleanupImageMapsByLocalUrls(localUrls, asset.id);
-
-  await prisma.mediaAsset.update({
-    where: { id: asset.id },
-    data: { status: 'deleted' },
-  });
-
-  return {
-    assetId: asset.id,
-    localUrls,
-    deletedImageMapIds: imageMapCleanup.deletedImageMapIds,
-    deletedOriginalFile: true,
-    markedAssetDeleted: true,
-    skippedReason: imageMapCleanup.skippedProcessing
-      ? 'processing'
-      : imageMapCleanup.skippedShared
-        ? 'shared_image_map'
-        : undefined,
-  };
 }
 
+export async function cleanupUnusedMediaAssetById(
+  assetId: string
+): Promise<MediaAssetCleanupResult> {
+  return releaseLoadedMediaAsset({ id: assetId })
+}
 export async function cleanupUntrackedUploadImageByUrl(
   url: string
 ): Promise<MediaAssetCleanupResult> {
-  await safeDeleteUploadFileByUrl(url);
+  const asset = await prisma.mediaAsset.findFirst({
+    where: { OR: [{ publicUrl: url }, { storageKey: url }], status: { not: 'deleted' } },
+    select: CLEANUP_ASSET_SELECT,
+  })
+  if (asset) return releaseLoadedMediaAsset(asset)
 
-  const imageMapCleanup = await cleanupImageMapsByLocalUrls([url]);
+  const imageMap = await prisma.imageMap.findFirst({
+    where: { OR: [{ localUrl: url }, { s3Url: url }, { externalUrl: url }] },
+    select: { id: true, md5: true },
+  })
+  if (!imageMap) {
+    return {
+      localUrls: [url],
+      deletedImageMapIds: [],
+      deletedOriginalFile: false,
+      markedAssetDeleted: false,
+      skippedReason: 'asset_not_found',
+    }
+  }
 
+  const cleanup = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw(
+      Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${imageMap.md5}, 0))`
+    )
+    const locked = await tx.imageMap.findUnique({
+      where: { id: imageMap.id },
+      select: {
+        id: true,
+        localUrl: true,
+        s3Url: true,
+        externalUrl: true,
+        variantStatus: true,
+      },
+    })
+    if (!locked) return { skippedReason: 'asset_not_found' as const }
+    if (locked.variantStatus === 'processing') return { skippedReason: 'processing' as const }
+    const activeClaims = await tx.mediaAsset.count({
+      where: { imageMapId: locked.id, status: { in: ['uploaded', 'ready'] } },
+    })
+    if (activeClaims > 0) return { skippedReason: 'shared_image_map' as const }
+
+    const references = await collectMediaReferences()
+    if (
+      isMediaReferenced(references, {
+        imageMapId: locked.id,
+        urls: [locked.localUrl, locked.s3Url, locked.externalUrl],
+      })
+    ) {
+      return { skippedReason: 'still_referenced' as const }
+    }
+    await tx.imageMap.updateMany({
+      where: { id: locked.id, retiredAt: null },
+      data: { retiredAt: getMediaRetiredAt() },
+    })
+    return { skippedReason: undefined }
+  })
+  if (cleanup.skippedReason) {
+    return {
+      localUrls: [url],
+      deletedImageMapIds: [],
+      deletedOriginalFile: false,
+      markedAssetDeleted: false,
+      skippedReason: cleanup.skippedReason,
+    }
+  }
   return {
     localUrls: [url],
-    deletedImageMapIds: imageMapCleanup.deletedImageMapIds,
-    deletedOriginalFile: true,
+    deletedImageMapIds: [],
+    deletedOriginalFile: false,
     markedAssetDeleted: false,
-    skippedReason: imageMapCleanup.skippedProcessing
-      ? 'processing'
-      : imageMapCleanup.skippedShared
-        ? 'shared_image_map'
-        : undefined,
-  };
+  }
 }

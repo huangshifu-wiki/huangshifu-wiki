@@ -1,320 +1,355 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ZoomIn, ZoomOut, Maximize, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { useFloatingPresence } from '../hooks/useFloatingPresence';
-import { getFitScale as getFitScaleUtil, computeNextScale } from '../utils/lightbox';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import {
+  ZoomIn,
+  ZoomOut,
+  Maximize,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  X,
+} from '@/src/components/icons'
+import { Spinner } from '@/src/components/ui'
+import { useFloatingPresence } from '../hooks/useFloatingPresence'
+import { getFitScale as getFitScaleUtil, computeNextScale } from '../utils/lightbox'
+import { isBackdropClick } from '../utils/modal'
 
 interface LightboxImage {
-  id: string;
-  url: string;
-  originalUrl?: string | null;
-  name?: string | null;
+  id: string
+  url: string
+  originalUrl?: string | null
+  name?: string | null
 }
 
 interface LightboxProps {
-  open: boolean;
-  images: LightboxImage[];
-  initialIndex: number;
-  onClose: () => void;
+  open: boolean
+  images: LightboxImage[]
+  initialIndex: number
+  onClose: () => void
 }
 
-const MIN_PIXEL_SCALE = 0.05;
-const MAX_PIXEL_SCALE = 5;
-const ZOOM_RATIO = 0.1;
+const MIN_PIXEL_SCALE = 0.05
+const MAX_PIXEL_SCALE = 5
+const ZOOM_RATIO = 0.1
 
 export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps) => {
-  const presence = useFloatingPresence(open);
-  const [activeIndex, setActiveIndex] = useState(initialIndex);
-  const [pixelScale, setPixelScale] = useState(1);
-  const [translateX, setTranslateX] = useState(0);
-  const [translateY, setTranslateY] = useState(0);
-  const [isImageLoading, setIsImageLoading] = useState(true);
-  const [imageNaturalWidth, setImageNaturalWidth] = useState(0);
-  const [imageNaturalHeight, setImageNaturalHeight] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
+  const presence = useFloatingPresence(open)
+  const [activeIndex, setActiveIndex] = useState(initialIndex)
+  const [pixelScale, setPixelScale] = useState(1)
+  const [translateX, setTranslateX] = useState(0)
+  const [translateY, setTranslateY] = useState(0)
+  const [isImageLoading, setIsImageLoading] = useState(true)
+  const [imageNaturalWidth, setImageNaturalWidth] = useState(0)
+  const [imageNaturalHeight, setImageNaturalHeight] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const triggerElementRef = useRef<HTMLElement | null>(null);
-  const lightboxStateKey = useRef<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const triggerElementRef = useRef<HTMLElement | null>(null)
+  const lightboxStateKey = useRef<string | null>(null)
+  const previousBodyOverflowRef = useRef<string | null>(null)
 
   // Drag refs (avoid stale closures during high-frequency events)
-  const dragStartX = useRef(0);
-  const dragStartY = useRef(0);
-  const initialTranslateXRef = useRef(0);
-  const initialTranslateYRef = useRef(0);
-  const translateXRef = useRef(0);
-  const translateYRef = useRef(0);
-  const pixelScaleRef = useRef(1);
-  const imageRef = useRef<HTMLImageElement>(null);
+  const dragStartX = useRef(0)
+  const dragStartY = useRef(0)
+  const initialTranslateXRef = useRef(0)
+  const initialTranslateYRef = useRef(0)
+  const translateXRef = useRef(0)
+  const translateYRef = useRef(0)
+  const pixelScaleRef = useRef(1)
+  const imageRef = useRef<HTMLImageElement>(null)
 
   // Pinch refs
-  const isPinching = useRef(false);
-  const initialPinchDistance = useRef(0);
-  const initialPinchScale = useRef(1);
+  const isPinching = useRef(false)
+  const initialPinchDistance = useRef(0)
+  const initialPinchScale = useRef(1)
 
-  const activeImage = images[activeIndex];
-  const currentImageUrl = activeImage?.originalUrl || activeImage?.url || '';
+  const activeImage = images[activeIndex]
+  const currentImageUrl = activeImage?.originalUrl || activeImage?.url || ''
 
   const resetImageState = useCallback(() => {
-    setIsImageLoading(true);
-    setImageNaturalWidth(0);
-    setImageNaturalHeight(0);
-    setPixelScale(1);
-    setTranslateX(0);
-    setTranslateY(0);
-    setIsDragging(false);
-  }, []);
+    setIsImageLoading(true)
+    setImageNaturalWidth(0)
+    setImageNaturalHeight(0)
+    setPixelScale(1)
+    setTranslateX(0)
+    setTranslateY(0)
+    setIsDragging(false)
+  }, [])
 
   useLayoutEffect(() => {
-    if (!open) return;
-    setActiveIndex(initialIndex);
-    resetImageState();
-  }, [initialIndex, open, resetImageState]);
+    if (!open) return
+    setActiveIndex(initialIndex)
+    resetImageState()
+  }, [initialIndex, open, resetImageState])
 
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   const getFitScale = useCallback(() => {
-    return getFitScaleUtil(imageNaturalWidth, imageNaturalHeight, window.innerWidth, window.innerHeight);
-  }, [imageNaturalWidth, imageNaturalHeight]);
+    return getFitScaleUtil(
+      imageNaturalWidth,
+      imageNaturalHeight,
+      window.innerWidth,
+      window.innerHeight
+    )
+  }, [imageNaturalWidth, imageNaturalHeight])
 
   const close = useCallback(() => {
     if (lightboxStateKey.current) {
-      lightboxStateKey.current = null;
-      window.history.back();
+      lightboxStateKey.current = null
+      window.history.back()
     }
-    onCloseRef.current();
-  }, []);
+    onCloseRef.current()
+  }, [])
 
   const prev = useCallback(() => {
-    if (images.length <= 1) return;
-    setActiveIndex((idx) => (idx - 1 + images.length) % images.length);
-    resetImageState();
-  }, [images.length, resetImageState]);
+    if (images.length <= 1) return
+    setActiveIndex((idx) => (idx - 1 + images.length) % images.length)
+    resetImageState()
+  }, [images.length, resetImageState])
 
   const next = useCallback(() => {
-    if (images.length <= 1) return;
-    setActiveIndex((idx) => (idx + 1) % images.length);
-    resetImageState();
-  }, [images.length, resetImageState]);
+    if (images.length <= 1) return
+    setActiveIndex((idx) => (idx + 1) % images.length)
+    resetImageState()
+  }, [images.length, resetImageState])
 
-  const prevRef = useRef(prev);
-  prevRef.current = prev;
-  const nextRef = useRef(next);
-  nextRef.current = next;
-  const closeRef = useRef(close);
-  closeRef.current = close;
+  const prevRef = useRef(prev)
+  prevRef.current = prev
+  const nextRef = useRef(next)
+  nextRef.current = next
+  const closeRef = useRef(close)
+  closeRef.current = close
 
   useEffect(() => {
-    if (!open || !presence.mounted) return;
-    triggerElementRef.current = document.activeElement as HTMLElement;
-    closeButtonRef.current?.focus();
-    document.body.style.overflow = 'hidden';
+    if (!open || !presence.mounted) return
+    triggerElementRef.current = document.activeElement as HTMLElement
+    closeButtonRef.current?.focus()
+    previousBodyOverflowRef.current = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
 
-    const key = `lightbox-${Date.now()}`;
-    lightboxStateKey.current = key;
-    window.history.pushState({ [key]: true, lightboxOpen: true }, '', '');
+    const key = `lightbox-${Date.now()}`
+    lightboxStateKey.current = key
+    window.history.pushState({ [key]: true, lightboxOpen: true }, '', '')
 
     const handlePopstate = (e: PopStateEvent) => {
       if (lightboxStateKey.current && !e.state?.[lightboxStateKey.current]) {
-        lightboxStateKey.current = null;
-        onCloseRef.current();
+        lightboxStateKey.current = null
+        onCloseRef.current()
       }
-    };
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
         case 'ArrowLeft':
         case 'ArrowUp':
-          e.preventDefault();
-          prevRef.current();
-          break;
+          e.preventDefault()
+          prevRef.current()
+          break
         case 'ArrowRight':
         case 'ArrowDown':
-          e.preventDefault();
-          nextRef.current();
-          break;
+          e.preventDefault()
+          nextRef.current()
+          break
         case 'Escape':
-          e.preventDefault();
-          closeRef.current();
-          break;
+          e.preventDefault()
+          closeRef.current()
+          break
         case 'Tab': {
           const focusableElements = containerRef.current?.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-          );
-          if (!focusableElements || focusableElements.length === 0) return;
-          const firstElement = focusableElements[0];
-          const lastElement = focusableElements[focusableElements.length - 1];
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+          if (!focusableElements || focusableElements.length === 0) return
+          const firstElement = focusableElements[0]
+          const lastElement = focusableElements[focusableElements.length - 1]
           if (e.shiftKey && document.activeElement === firstElement) {
-            e.preventDefault();
-            lastElement?.focus();
+            e.preventDefault()
+            lastElement?.focus()
           } else if (!e.shiftKey && document.activeElement === lastElement) {
-            e.preventDefault();
-            firstElement?.focus();
+            e.preventDefault()
+            firstElement?.focus()
           }
-          break;
+          break
         }
       }
-    };
+    }
 
-    window.addEventListener('popstate', handlePopstate);
-    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('popstate', handlePopstate)
+    document.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      window.removeEventListener('popstate', handlePopstate);
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = '';
-      triggerElementRef.current?.focus();
-    };
-  }, [open, presence.mounted]);
+      window.removeEventListener('popstate', handlePopstate)
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = previousBodyOverflowRef.current ?? ''
+      previousBodyOverflowRef.current = null
+      triggerElementRef.current?.focus()
+    }
+  }, [open, presence.mounted])
 
   // Keep refs in sync with state (for non-drag updates)
   useEffect(() => {
-    pixelScaleRef.current = pixelScale;
-  }, [pixelScale]);
+    pixelScaleRef.current = pixelScale
+  }, [pixelScale])
   useEffect(() => {
-    translateXRef.current = translateX;
-    translateYRef.current = translateY;
-  }, [translateX, translateY]);
+    translateXRef.current = translateX
+    translateYRef.current = translateY
+  }, [translateX, translateY])
 
   // Apply transform to DOM directly (used during drag to avoid re-renders)
   const applyTransform = useCallback((tx: number, ty: number, ps: number) => {
-    const img = imageRef.current;
+    const img = imageRef.current
     if (img) {
-      img.style.transform = `scale(${ps}) translate(${tx / ps}px, ${ty / ps}px)`;
+      img.style.transform = `scale(${ps}) translate(${tx / ps}px, ${ty / ps}px)`
     }
-  }, []);
+  }, [])
 
   // Wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    setPixelScale((scale) => computeNextScale(scale, e.deltaY < 0, ZOOM_RATIO, MIN_PIXEL_SCALE, MAX_PIXEL_SCALE));
-  }, []);
+    e.preventDefault()
+    setPixelScale((scale) =>
+      computeNextScale(scale, e.deltaY < 0, ZOOM_RATIO, MIN_PIXEL_SCALE, MAX_PIXEL_SCALE)
+    )
+  }, [])
 
   // Mouse drag — use refs + direct DOM to avoid re-renders on every pixel
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    setIsDragging(true);
-    dragStartX.current = e.clientX;
-    dragStartY.current = e.clientY;
-    initialTranslateXRef.current = translateXRef.current;
-    initialTranslateYRef.current = translateYRef.current;
-  }, []);
+    setIsDragging(true)
+    dragStartX.current = e.clientX
+    dragStartY.current = e.clientY
+    initialTranslateXRef.current = translateXRef.current
+    initialTranslateYRef.current = translateYRef.current
+  }, [])
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging) return;
-    e.preventDefault();
-    const dx = e.clientX - dragStartX.current;
-    const dy = e.clientY - dragStartY.current;
-    const tx = initialTranslateXRef.current + dx;
-    const ty = initialTranslateYRef.current + dy;
-    translateXRef.current = tx;
-    translateYRef.current = ty;
-    applyTransform(tx, ty, pixelScaleRef.current);
-  }, [isDragging, applyTransform]);
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isDragging) return
+      e.preventDefault()
+      const dx = e.clientX - dragStartX.current
+      const dy = e.clientY - dragStartY.current
+      const tx = initialTranslateXRef.current + dx
+      const ty = initialTranslateYRef.current + dy
+      translateXRef.current = tx
+      translateYRef.current = ty
+      applyTransform(tx, ty, pixelScaleRef.current)
+    },
+    [isDragging, applyTransform]
+  )
 
   const handleMouseUp = useCallback(() => {
     if (isDragging) {
-      setIsDragging(false);
-      setTranslateX(translateXRef.current);
-      setTranslateY(translateYRef.current);
+      setIsDragging(false)
+      setTranslateX(translateXRef.current)
+      setTranslateY(translateYRef.current)
     }
-  }, [isDragging]);
+  }, [isDragging])
 
   // Touch handling
   const getPinchDistance = (touches: React.TouchList) => {
-    const touch0 = touches[0];
-    const touch1 = touches[1];
-    const dx = touch0.clientX - touch1.clientX;
-    const dy = touch0.clientY - touch1.clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
+    const touch0 = touches[0]
+    const touch1 = touches[1]
+    const dx = touch0.clientX - touch1.clientX
+    const dy = touch0.clientY - touch1.clientY
+    return Math.sqrt(dx * dx + dy * dy)
+  }
 
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLImageElement>) => {
     if (e.touches.length === 2) {
-      isPinching.current = true;
-      initialPinchDistance.current = getPinchDistance(e.touches);
-      initialPinchScale.current = pixelScaleRef.current;
+      isPinching.current = true
+      initialPinchDistance.current = getPinchDistance(e.touches)
+      initialPinchScale.current = pixelScaleRef.current
     } else if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      setIsDragging(true);
-      dragStartX.current = touch.clientX;
-      dragStartY.current = touch.clientY;
-      initialTranslateXRef.current = translateXRef.current;
-      initialTranslateYRef.current = translateYRef.current;
+      const touch = e.touches[0]
+      setIsDragging(true)
+      dragStartX.current = touch.clientX
+      dragStartY.current = touch.clientY
+      initialTranslateXRef.current = translateXRef.current
+      initialTranslateYRef.current = translateYRef.current
     }
-  }, []);
+  }, [])
 
-  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLImageElement>) => {
-    if (e.touches.length === 2 && isPinching.current) {
-      e.preventDefault();
-      const distance = getPinchDistance(e.touches);
-      const pinchScale = distance / initialPinchDistance.current;
-      const newScale = Math.min(MAX_PIXEL_SCALE, Math.max(MIN_PIXEL_SCALE, initialPinchScale.current * pinchScale));
-      setPixelScale(newScale);
-    } else if (e.touches.length === 1 && isDragging) {
-      e.preventDefault();
-      const touch = e.touches[0];
-      const dx = touch.clientX - dragStartX.current;
-      const dy = touch.clientY - dragStartY.current;
-      const tx = initialTranslateXRef.current + dx;
-      const ty = initialTranslateYRef.current + dy;
-      translateXRef.current = tx;
-      translateYRef.current = ty;
-      applyTransform(tx, ty, pixelScaleRef.current);
-    }
-  }, [isDragging, applyTransform]);
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLImageElement>) => {
+      if (e.touches.length === 2 && isPinching.current) {
+        e.preventDefault()
+        const distance = getPinchDistance(e.touches)
+        const pinchScale = distance / initialPinchDistance.current
+        const newScale = Math.min(
+          MAX_PIXEL_SCALE,
+          Math.max(MIN_PIXEL_SCALE, initialPinchScale.current * pinchScale)
+        )
+        setPixelScale(newScale)
+      } else if (e.touches.length === 1 && isDragging) {
+        e.preventDefault()
+        const touch = e.touches[0]
+        const dx = touch.clientX - dragStartX.current
+        const dy = touch.clientY - dragStartY.current
+        const tx = initialTranslateXRef.current + dx
+        const ty = initialTranslateYRef.current + dy
+        translateXRef.current = tx
+        translateYRef.current = ty
+        applyTransform(tx, ty, pixelScaleRef.current)
+      }
+    },
+    [isDragging, applyTransform]
+  )
 
   const handleTouchEnd = useCallback(() => {
-    isPinching.current = false;
+    isPinching.current = false
     if (isDragging) {
-      setIsDragging(false);
-      setTranslateX(translateXRef.current);
-      setTranslateY(translateYRef.current);
+      setIsDragging(false)
+      setTranslateX(translateXRef.current)
+      setTranslateY(translateYRef.current)
     }
-  }, [isDragging]);
+  }, [isDragging])
 
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    const img = e.currentTarget;
-    setImageNaturalWidth(img.naturalWidth);
-    setImageNaturalHeight(img.naturalHeight);
-    setIsImageLoading(false);
-    const fit = getFitScaleUtil(img.naturalWidth, img.naturalHeight, window.innerWidth, window.innerHeight);
-    setPixelScale(fit);
-    setTranslateX(0);
-    setTranslateY(0);
-  }, []);
+    const img = e.currentTarget
+    setImageNaturalWidth(img.naturalWidth)
+    setImageNaturalHeight(img.naturalHeight)
+    setIsImageLoading(false)
+    const fit = getFitScaleUtil(
+      img.naturalWidth,
+      img.naturalHeight,
+      window.innerWidth,
+      window.innerHeight
+    )
+    setPixelScale(fit)
+    setTranslateX(0)
+    setTranslateY(0)
+  }, [])
 
   // Toolbar actions
   const zoomIn = useCallback(() => {
-    setPixelScale((s) => computeNextScale(s, true, ZOOM_RATIO, MIN_PIXEL_SCALE, MAX_PIXEL_SCALE));
-  }, []);
+    setPixelScale((s) => computeNextScale(s, true, ZOOM_RATIO, MIN_PIXEL_SCALE, MAX_PIXEL_SCALE))
+  }, [])
 
   const zoomOut = useCallback(() => {
-    setPixelScale((s) => computeNextScale(s, false, ZOOM_RATIO, MIN_PIXEL_SCALE, MAX_PIXEL_SCALE));
-  }, []);
+    setPixelScale((s) => computeNextScale(s, false, ZOOM_RATIO, MIN_PIXEL_SCALE, MAX_PIXEL_SCALE))
+  }, [])
 
   const zoomToFit = useCallback(() => {
-    setPixelScale(getFitScale());
-    setTranslateX(0);
-    setTranslateY(0);
-  }, [getFitScale]);
+    setPixelScale(getFitScale())
+    setTranslateX(0)
+    setTranslateY(0)
+  }, [getFitScale])
 
   const zoomToActual = useCallback(() => {
-    setPixelScale(1);
-    setTranslateX(0);
-    setTranslateY(0);
-  }, []);
+    setPixelScale(1)
+    setTranslateX(0)
+    setTranslateY(0)
+  }, [])
 
-  const displayScale = isImageLoading ? null : Math.round(pixelScale * 100);
+  const displayScale = isImageLoading ? null : Math.round(pixelScale * 100)
 
   if (!presence.mounted || !images || images.length === 0) {
-    return null;
+    return null
   }
 
-  return (
+  const overlay = (
     <div
       ref={containerRef}
-      className="floating-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/95 select-none"
+      className="floating-overlay fixed inset-0 z-[10000] flex items-center justify-center bg-black/95 select-none"
       data-state={presence.state}
       onWheel={handleWheel}
       onMouseMove={handleMouseMove}
@@ -324,6 +359,9 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
       aria-modal="true"
       aria-label={`图片查看器 ${activeIndex + 1} / ${images.length}`}
       aria-hidden={!open}
+      onClick={(event) => {
+        if (isBackdropClick(event)) close()
+      }}
     >
       {/* Close button */}
       <button
@@ -365,8 +403,12 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
         </>
       )}
 
-      {/* Backdrop click to close */}
-      <div className="absolute inset-0 z-0" onClick={close} role="presentation" />
+      {/* Loading indicator */}
+      {isImageLoading && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <Spinner variant="tail" className="h-10 w-10 text-white" />
+        </div>
+      )}
 
       {/* Image container */}
       <div className="relative z-10 flex items-center justify-center pointer-events-none shrink-0">
@@ -442,7 +484,21 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
         >
           <Maximize size={18} />
         </button>
+
+        <a
+          href={currentImageUrl}
+          download
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--color-theme-text-inverse)] opacity-70 hover:opacity-100 w-8 h-8 flex items-center justify-center transition-opacity cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--color-theme-text-inverse)] rounded"
+          title="下载原图"
+          aria-label="下载原图"
+        >
+          <Download size={20} />
+        </a>
       </div>
     </div>
-  );
-};
+  )
+
+  return createPortal(overlay, document.body)
+}

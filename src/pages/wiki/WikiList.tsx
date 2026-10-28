@@ -1,207 +1,249 @@
-import React, { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Book, Calendar, Plus } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
-import { useUserPreferences } from "../../context/UserPreferencesContext";
-import { ViewModeSelector } from "../../components/ViewModeSelector";
-import { VIEW_MODE_CONFIG } from "../../lib/viewModes";
-import { clsx } from "clsx";
-import { useToast } from "../../components/Toast";
-import { copyToClipboard, toAbsoluteInternalUrl } from "../../lib/copyLink";
-import { apiGet } from "../../lib/apiClient";
-import WikiCard from "../../components/wiki/WikiCard";
-import Pagination from "../../components/Pagination";
-import type { WikiItem } from "./types";
-import { DEFAULT_PAGE_SIZE } from "./types";
-import { usePagination } from "../../hooks/usePagination";
+import React, { useCallback, useEffect, useState } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Book, Plus } from '@/src/components/icons'
+import { useAuth } from '../../context/AuthContext'
+import { useUserPreferences } from '../../context/UserPreferencesContext'
+import { VIEW_MODE_CONFIG } from '../../lib/viewModes'
+import { clsx } from 'clsx'
+import { apiGet } from '../../lib/apiClient'
+import WikiCard from '../../components/wiki/WikiCard'
+import { WikiFilters } from '../../components/wiki/WikiFilters'
+import Pagination from '../../components/Pagination'
+import { Spinner } from '@/src/components/ui'
+import { ListPageContentState, ListPageLoadingBoundary } from '../../components/ListPageState'
+import { IncrementalLoadFooter } from '../../components/IncrementalLoadFooter'
+import type { WikiItem } from './types'
+import { DEFAULT_PAGE_SIZE } from './types'
+import { useIncrementalListLoader } from '../../hooks/useIncrementalListLoader'
+import { useRoutedPagination } from '../../hooks/useRoutedPagination'
+import { getErrorMessage } from '../../lib/errorHandler'
+import { getListLoadState } from '../../lib/listLoadState'
+import { useWikiCategories } from '../../hooks/useWikiCategories'
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 
 const WikiList = () => {
-	const [searchParams] = useSearchParams();
-	const category = searchParams.get("category") || "all";
-	const tag = searchParams.get("tag");
-	const [pages, setPages] = useState<WikiItem[]>([]);
-	const [total, setTotal] = useState(0);
-	const [loading, setLoading] = useState(true);
-	const { user, isBanned } = useAuth();
-	const { show } = useToast();
-	const { preferences, setViewMode } = useUserPreferences();
-	const viewMode = preferences.viewMode;
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const category = searchParams.get('category') || 'all'
+  const tag = searchParams.get('tag')
+  const [pages, setPages] = useState<WikiItem[]>([])
+  const [totalState, setTotal] = useState<{ scope: string; total: number }>()
+  const scope = JSON.stringify([category, tag || ''])
+  const total = totalState?.scope === scope ? totalState.total : undefined
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
+  const { user, isBanned } = useAuth()
+  const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
+  const viewMode = getScopedViewMode('wiki')
+  const isIncrementalMode = preferences.listLoadMode === 'incremental'
+  const { categories, getCategoryLabel } = useWikiCategories()
 
-	const pagination = usePagination({
-		totalCount: total,
-		defaultPageSize: DEFAULT_PAGE_SIZE,
-	});
+  const pagination = useRoutedPagination({
+    totalCount: total,
+    defaultPageSize: DEFAULT_PAGE_SIZE,
+    pageSizeOptions: PAGE_SIZE_OPTIONS,
+    enabled: !isIncrementalMode,
+  })
+  const pageSize = isIncrementalMode ? DEFAULT_PAGE_SIZE : pagination.pageSize
+  const fetchWikiPage = useCallback(
+    async (page: number, signal?: AbortSignal) => {
+      const data = await apiGet<{ pages: WikiItem[]; total: number }>(
+        '/api/wiki',
+        {
+          category: category !== 'all' ? category : undefined,
+          tag: tag || undefined,
+          page,
+          pageSize,
+        },
+        undefined,
+        signal
+      )
 
-	useEffect(() => {
-		pagination.setPage(1);
-	}, [category, tag]);
+      return {
+        items: data.pages || [],
+        total: data.total || 0,
+      }
+    },
+    [category, pageSize, tag]
+  )
+  const incrementalList = useIncrementalListLoader({
+    enabled: isIncrementalMode,
+    pageSize,
+    resetKey: `${category}:${tag || ''}`,
+    fetchPage: fetchWikiPage,
+    getItemKey: (page) => page.id,
+    preserveItemsOnReset: true,
+  })
+  const visiblePages = isIncrementalMode ? incrementalList.items : pages
+  const visibleTotal = isIncrementalMode ? incrementalList.total : total || 0
+  const wikiState = getListLoadState({
+    items: visiblePages,
+    loading,
+    error: loadError,
+    retry: () => setRetryNonce((value) => value + 1),
+    incremental: isIncrementalMode ? incrementalList : null,
+  })
 
-	useEffect(() => {
-		let cancelled = false;
-		const fetchPages = async () => {
-			setLoading(true);
-			try {
-				const data = await apiGet<{ pages: WikiItem[]; total: number }>("/api/wiki", {
-					category: category !== "all" ? category : undefined,
-					tag: tag || undefined,
-					page: pagination.page,
-					pageSize: pagination.pageSize,
-				});
-				if (cancelled) return;
-				setPages(data.pages || []);
-				setTotal(data.total || 0);
-			} catch (e) {
-				if (cancelled) return;
-				console.error("Error fetching wiki pages:", e);
-			}
-			if (!cancelled) setLoading(false);
-		};
-		fetchPages();
-		return () => { cancelled = true; };
-	}, [category, tag, pagination.page, pagination.pageSize]);
+  useEffect(() => {
+    if (!isIncrementalMode) return
+    setSearchParams(
+      (prev) => {
+        if (!prev.has('page') && !prev.has('pageSize')) return prev
+        const next = new URLSearchParams(prev)
+        next.delete('page')
+        next.delete('pageSize')
+        return next
+      },
+      { replace: true }
+    )
+  }, [isIncrementalMode, setSearchParams])
 
-	const handleCopyWikiLink = async (
-		event: React.MouseEvent<HTMLButtonElement>,
-		slug: string,
-	) => {
-		event.preventDefault();
-		event.stopPropagation();
-		const copied = await copyToClipboard(
-			toAbsoluteInternalUrl(`/wiki/${slug}`),
-		);
-		if (copied) {
-			show("百科内链已复制");
-			return;
-		}
-		show("复制链接失败，请稍后重试", { variant: "error" });
-	};
+  useEffect(() => {
+    if (isIncrementalMode) return
+    let cancelled = false
+    const fetchPages = async () => {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const data = await fetchWikiPage(pagination.page)
+        if (cancelled) return
+        setPages(data.items)
+        setTotal({ scope, total: data.total })
+      } catch (error) {
+        if (cancelled) return
+        console.error('Error fetching wiki pages:', error)
+        setLoadError(error)
+      }
+      if (!cancelled) setLoading(false)
+    }
+    void fetchPages()
+    return () => {
+      cancelled = true
+    }
+  }, [fetchWikiPage, isIncrementalMode, pagination.page, retryNonce, scope])
 
-	return (
-		<div className="min-h-[calc(100vh-60px)] antique-page">
-			<div className="max-w-[1100px] mx-auto px-6 py-8 pb-32">
-				<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-					<div>
-					<h1 className="text-[1.75rem] font-bold text-text-primary tracking-[0.12em]">
-						百科全书
-					</h1>
-					</div>
-					<div className="flex items-center gap-3">
-						{user && !isBanned && (
-							<Link
-								to={"/wiki/new"}
-								className="px-5 py-2 theme-button-primary text-sm rounded transition-all flex items-center gap-2"
-							>
-								<Plus size={15} /> 创建页面
-							</Link>
-						)}
-					</div>
-				</div>
+  const getCategoryUrl = (nextCategory: string) => {
+    const params = new URLSearchParams(searchParams)
+    params.delete('page')
+    if (nextCategory === 'all') {
+      params.delete('category')
+    } else {
+      params.set('category', nextCategory)
+    }
+    const query = params.toString()
+    return query ? `/wiki?${query}` : '/wiki'
+  }
 
-				<div className="flex items-end justify-between border-b border-border mb-5">
-					<div className="flex gap-5">
-						{["all", "biography", "music", "album", "timeline", "event"].map(
-							(cat) => (
-								<Link
-									key={cat}
-									to={`/wiki?category=${cat}`}
-									className={clsx(
-										"text-[1.125rem] pb-2 relative tracking-[0.05em] transition-all cursor-pointer",
-										category === cat
-											? "text-brand-gold font-semibold after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[var(--color-theme-accent)] after:rounded-[1px]"
-											: "text-text-muted hover:text-brand-gold"
-									)}
-								>
-									{cat === "all"
-										? "全部"
-										: cat === "biography"
-											? "人物介绍"
-											: cat === "music"
-												? "音乐作品"
-												: cat === "album"
-													? "专辑一览"
-													: cat === "timeline"
-														? "时间轴"
-														: cat === "event"
-															? "活动记录"
-															: cat}
-								</Link>
-							),
-						)}
-						<Link
-							to={"/wiki/timeline"}
-							className="text-[0.8125rem] text-brand-gold font-medium hover:text-brand-gold/80 transition-colors flex items-center gap-1 self-center mb-1 cursor-pointer"
-						>
-							<Calendar size={14} /> 时间轴
-						</Link>
-					</div>
+  return (
+    <ListPageLoadingBoundary variant="wiki" isInitialLoading={wikiState.isInitialLoading}>
+      <div className="gufeng-wiki-page mobile-page-shell">
+        <div className="mobile-page-container" aria-busy={wikiState.isRefreshing || undefined}>
+          <header className="mobile-page-header">
+            <div className="mobile-page-titlebar">
+              <div className="min-w-0">
+                <h1 className="mobile-page-title">百科</h1>
+                <div className="mt-3 flex">
+                  <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
+                </div>
+              </div>
+              <div className="mobile-action-row">
+                {wikiState.isRefreshing && <Spinner size="sm" label="百科刷新中" />}
+                {user && !isBanned && (
+                  <Link
+                    to="/wiki/new"
+                    state={{ editorBackground: location }}
+                    data-pressable
+                    className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
+                  >
+                    <Plus size={15} aria-hidden="true" /> 创建页面
+                  </Link>
+                )}
+              </div>
+            </div>
+          </header>
 
-					<div className="flex items-center gap-3 pb-2 text-[0.8125rem] text-text-muted">
-						<ViewModeSelector value={viewMode} onChange={setViewMode} size="sm" />
-						<span className="text-text-muted">{pages.length} 个页面</span>
-					</div>
-				</div>
+          <WikiFilters
+            categories={categories}
+            activeCategory={category}
+            total={visibleTotal}
+            viewMode={viewMode}
+            getCategoryUrl={getCategoryUrl}
+            getCategoryLabel={getCategoryLabel}
+            onViewModeChange={(mode) => void setScopedViewMode('wiki', mode)}
+          />
 
+          <ListPageContentState
+            hasItems={wikiState.items.length > 0}
+            error={wikiState.error}
+            onRetry={wikiState.retry}
+            staleDescription="当前内容可能不是最新内容。"
+            empty={
+              <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+                <Book size={48} className="mx-auto mb-6 text-border" />
+                <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">
+                  暂无相关百科页面
+                </p>
+              </div>
+            }
+          >
+            <>
+              <div
+                className={clsx(
+                  viewMode === 'list'
+                    ? 'flex flex-col gap-0.5'
+                    : clsx(
+                        'mobile-grid grid',
+                        'items-start',
+                        viewMode === 'large' && 'wiki-large-grid',
+                        VIEW_MODE_CONFIG[viewMode].gridCols,
+                        VIEW_MODE_CONFIG[viewMode].gap
+                      )
+                )}
+              >
+                {visiblePages.map((page) => (
+                  <WikiCard
+                    key={page.id}
+                    page={page}
+                    viewMode={viewMode}
+                    categoryLabel={getCategoryLabel(page.category)}
+                  />
+                ))}
+              </div>
+              {isIncrementalMode ? (
+                <IncrementalLoadFooter
+                  hasMore={incrementalList.hasMore}
+                  loading={incrementalList.loadingMore}
+                  total={visibleTotal}
+                  pageSize={pageSize}
+                  loaded={visiblePages.length}
+                  onLoadMore={incrementalList.loadMore}
+                  sentinelRef={incrementalList.sentinelRef}
+                  error={
+                    wikiState.loadMoreError
+                      ? getErrorMessage(wikiState.loadMoreError, '加载失败，请重试')
+                      : undefined
+                  }
+                  onRetry={wikiState.retry}
+                />
+              ) : pagination.hasMultiplePages ? (
+                <Pagination
+                  page={pagination.page}
+                  totalPages={pagination.totalPages}
+                  onPageChange={pagination.handlePageChange}
+                  pageSize={pagination.pageSize}
+                  onPageSizeChange={pagination.handlePageSizeChange}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
+                  showPageSizeSelector
+                />
+              ) : null}
+            </>
+          </ListPageContentState>
+        </div>
+      </div>
+    </ListPageLoadingBoundary>
+  )
+}
 
-
-			{loading ? (
-				<div
-					className={clsx(
-						"grid",
-						VIEW_MODE_CONFIG[viewMode].gridCols,
-						VIEW_MODE_CONFIG[viewMode].gap,
-					)}
-				>
-					{[1, 2, 3, 4, 5, 6].map((i) => (
-						<div
-							key={i}
-							className={clsx(
-								viewMode === "list"
-									? "h-24"
-									: VIEW_MODE_CONFIG[viewMode].cardHeight,
-								"bg-surface rounded animate-pulse border border-border",
-							)}
-						></div>
-					))}
-				</div>
-			) : pages.length > 0 ? (
-				<>
-					<div
-						className={clsx(
-							"grid",
-							VIEW_MODE_CONFIG[viewMode].gridCols,
-							VIEW_MODE_CONFIG[viewMode].gap,
-						)}
-					>
-						{pages.map((page) => (
-							<WikiCard
-								key={page.id}
-								page={page}
-								viewMode={viewMode}
-								cardHeight={VIEW_MODE_CONFIG[viewMode].cardHeight}
-								onCopyLink={handleCopyWikiLink}
-							/>
-						))}
-					</div>
-					{(import.meta.env.DEV || pagination.totalPages > 1) && (
-						<Pagination
-							page={pagination.page}
-							totalPages={pagination.totalPages}
-							onPageChange={pagination.handlePageChange}
-							pageSize={pagination.pageSize}
-							onPageSizeChange={pagination.handlePageSizeChange}
-							showPageSizeSelector
-						/>
-					)}
-				</>
-			) : (
-				<div className="bg-surface p-20 rounded border border-border text-center">
-					<Book size={48} className="mx-auto text-border-light mb-6" />
-					<p className="text-text-muted italic">暂无相关百科页面</p>
-				</div>
-			)}
-			</div>
-		</div>
-	);
-};
-
-export default WikiList;
+export default WikiList

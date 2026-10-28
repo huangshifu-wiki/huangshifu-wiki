@@ -7,13 +7,13 @@ import { toCommentResponse } from './response-transformers'
 
 const commentInclude = {
   author: {
-    select: { displayName: true, photoURL: true },
+    select: { publicId: true, displayName: true, photoURL: true },
   },
   replyTo: {
     select: {
       authorUid: true,
       author: {
-        select: { displayName: true },
+        select: { publicId: true, displayName: true },
       },
     },
   },
@@ -24,10 +24,13 @@ const commentInclude = {
 
 type CommentWithRelations = Prisma.PostCommentGetPayload<{ include: typeof commentInclude }>
 
-export async function buildCommentResponses(comments: CommentWithRelations[], options: {
-  authUserUid?: string | null
-  includeDeleted?: boolean
-}) {
+async function buildCommentResponses(
+  comments: CommentWithRelations[],
+  options: {
+    authUserUid?: string | null
+    includeDeleted?: boolean
+  }
+) {
   const includeDeleted = Boolean(options.includeDeleted)
   const visibleComments = includeDeleted ? comments : filterVisibleComments(comments)
   return serializeCommentResponses(visibleComments, {
@@ -36,17 +39,18 @@ export async function buildCommentResponses(comments: CommentWithRelations[], op
   })
 }
 
-async function serializeCommentResponses(comments: CommentWithRelations[], options: {
-  authUserUid?: string | null
-  includeDeleted: boolean
-}) {
+async function serializeCommentResponses(
+  comments: CommentWithRelations[],
+  options: {
+    authUserUid?: string | null
+    includeDeleted: boolean
+  }
+) {
   const commentIds = comments.map((comment) => comment.id)
   const deletedByUids = [
     ...new Set(
       options.includeDeleted
-        ? comments
-            .map((comment) => comment.deletedBy)
-            .filter((uid): uid is string => Boolean(uid))
+        ? comments.map((comment) => comment.deletedBy).filter((uid): uid is string => Boolean(uid))
         : []
     ),
   ]
@@ -89,17 +93,20 @@ async function serializeCommentResponses(comments: CommentWithRelations[], optio
         likedByMe: likedCommentSet.has(comment.id),
         deletedByName:
           options.includeDeleted && comment.deletedBy
-            ? deletedByNameMap.get(comment.deletedBy) ?? null
+            ? (deletedByNameMap.get(comment.deletedBy) ?? null)
             : null,
       }
     )
   )
 }
 
-export async function fetchPostCommentsForResponse(postId: string, options: {
-  authUserUid?: string | null
-  includeDeleted?: boolean
-}) {
+export async function fetchPostCommentsForResponse(
+  postId: string,
+  options: {
+    authUserUid?: string | null
+    includeDeleted?: boolean
+  }
+) {
   const comments = await prisma.postComment.findMany({
     where: { postId },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -109,12 +116,15 @@ export async function fetchPostCommentsForResponse(postId: string, options: {
   return buildCommentResponses(comments, options)
 }
 
-export async function fetchPostCommentsPageForResponse(postId: string, options: {
-  authUserUid?: string | null
-  includeDeleted?: boolean
-  take?: number
-  skip?: number
-}) {
+export async function fetchPostCommentsPageForResponse(
+  postId: string,
+  options: {
+    authUserUid?: string | null
+    includeDeleted?: boolean
+    take?: number
+    skip?: number
+  }
+) {
   const skip = options.skip ?? 0
   if (options.includeDeleted) {
     const [comments, total] = await Promise.all([
@@ -192,10 +202,13 @@ export async function fetchPostCommentsPageForResponse(postId: string, options: 
   }
 }
 
-export async function fetchGalleryCommentsForResponse(galleryId: string, options: {
-  authUserUid?: string | null
-  includeDeleted?: boolean
-}) {
+export async function fetchGalleryCommentsForResponse(
+  galleryId: string,
+  options: {
+    authUserUid?: string | null
+    includeDeleted?: boolean
+  }
+) {
   const comments = await prisma.postComment.findMany({
     where: { galleryId },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -237,10 +250,13 @@ async function canLikeComment(commentId: string, authUser: ApiUser) {
   return false
 }
 
-export async function resolveCommentReplyTarget(targetId: string, expected: {
-  postId?: string
-  galleryId?: string
-}) {
+export async function resolveCommentReplyTarget(
+  targetId: string,
+  expected: {
+    postId?: string
+    galleryId?: string
+  }
+) {
   const target = await prisma.postComment.findUnique({
     where: { id: targetId },
     select: {
@@ -294,9 +310,7 @@ export async function deleteCommentLike(commentId: string, authUser: ApiUser) {
 async function getCommentLikeState(commentId: string, userUid: string) {
   const [likesCount, likedByMe] = await Promise.all([
     prisma.postCommentLike.count({ where: { commentId } }),
-    prisma.postCommentLike
-      .count({ where: { commentId, userUid } })
-      .then((count) => count > 0),
+    prisma.postCommentLike.count({ where: { commentId, userUid } }).then((count) => count > 0),
   ])
 
   return { liked: likedByMe, likedByMe, likesCount }
@@ -307,7 +321,10 @@ function filterVisibleComments(comments: CommentWithRelations[]) {
 
   for (const comment of comments) {
     if (!comment.parentId || comment.deletedAt) continue
-    visibleChildrenByRoot.set(comment.parentId, (visibleChildrenByRoot.get(comment.parentId) ?? 0) + 1)
+    visibleChildrenByRoot.set(
+      comment.parentId,
+      (visibleChildrenByRoot.get(comment.parentId) ?? 0) + 1
+    )
   }
 
   return comments.filter((comment) => {

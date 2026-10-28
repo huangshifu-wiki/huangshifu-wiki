@@ -1,15 +1,15 @@
-import { Prisma } from '@prisma/client';
-import type { Router } from 'express';
-import { createRouter } from '../utils/typed-router';
-import { requireAuth, requireAdmin, requireActiveUser, isAdminRole } from '../middleware/auth';
-import { postWriteLimiter } from '../middleware/rateLimiter';
+import { Prisma } from '@prisma/client'
+import type { Router } from 'express'
+import { createRouter } from '../utils/typed-router'
+import { requireAuth, requireAdmin, requireActiveUser, isAdminRole } from '../middleware/auth'
+import { postWriteLimiter } from '../middleware/rateLimiter'
 import {
   validateBody,
   postCreateSchema,
   postUpdateSchema,
   postDeleteSchema,
   postCommentSchema,
-} from '../schemas';
+} from '../schemas'
 import {
   prisma,
   toPostResponse,
@@ -23,6 +23,7 @@ import {
   notifyCommentReply,
   parsePagination,
   enhancedCache,
+  createPaginationMeta,
   fetchPostCommentsForResponse,
   fetchPostCommentsPageForResponse,
   resolveCommentReplyTarget,
@@ -33,42 +34,51 @@ import {
   ensureTextLimit,
   notifyMentionUsers,
   resolveMentionTargetsForText,
-} from '../utils';
-import type { AuthenticatedRequest, ContentStatus } from '../types';
-import { CONTENT_LIMITS } from '../../lib/contentLimits';
+  allocateNumericSlug,
+  isNumericSlug,
+  fetchVisibleTagSuggestions,
+  recordBrowsingHistory,
+} from '../utils'
+import type { AuthenticatedRequest, ContentStatus } from '../types'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
 
-const router = createRouter();
-const MUSIC_SECTION_ID = 'music';
+const router = createRouter()
+const MUSIC_SECTION_ID = 'music'
 
 // Post list routes
 router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
-    const section = typeof req.query.section === 'string' ? req.query.section : 'all';
-    const { limit, page, offset: skip } = parsePagination(req.query);
-    const sort = req.query.sort as string | undefined;
-    const visibilityWhere = buildPostVisibilityWhere(req.authUser);
+    const section = typeof req.query.section === 'string' ? req.query.section : 'all'
+    const { limit, page, offset: skip } = parsePagination(req.query)
+    const sort = req.query.sort as string | undefined
+    const visibilityWhere = buildPostVisibilityWhere(req.authUser)
     const where = {
       ...(section !== 'all' ? { section } : {}),
       ...visibilityWhere,
       status: 'published' as ContentStatus,
-    };
+    }
 
     if (!req.authUser && sort === 'latest') {
-      const cacheKey = `post_list:${section}:${page}:${limit}`;
-      const cached = enhancedCache.get(cacheKey);
+      const cacheKey = `post_list:${section}:${page}:${limit}`
+      const cached = enhancedCache.get(cacheKey)
       if (cached) {
-        res.json(cached);
-        return;
+        res.json(cached)
+        return
       }
     }
 
-    let orderBy: Array<Record<string, 'asc' | 'desc'>>;
+    let orderBy: Array<Record<string, 'asc' | 'desc'>>
     if (sort === 'hot') {
-      orderBy = [{ isPinned: 'desc' }, { hotScore: 'desc' }, { updatedAt: 'desc' }];
+      orderBy = [{ isPinned: 'desc' }, { hotScore: 'desc' }, { updatedAt: 'desc' }]
     } else if (sort === 'recommended') {
-      orderBy = [{ isPinned: 'desc' }, { commentsCount: 'desc' }, { likesCount: 'desc' }, { updatedAt: 'desc' }];
+      orderBy = [
+        { isPinned: 'desc' },
+        { commentsCount: 'desc' },
+        { likesCount: 'desc' },
+        { updatedAt: 'desc' },
+      ]
     } else {
-      orderBy = [{ isPinned: 'desc' }, { updatedAt: 'desc' }];
+      orderBy = [{ isPinned: 'desc' }, { updatedAt: 'desc' }]
     }
 
     const [posts, total] = await Promise.all([
@@ -79,6 +89,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
         skip,
         select: {
           id: true,
+          slug: true,
           title: true,
           section: true,
           tags: true,
@@ -95,11 +106,11 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
           albumDocId: true,
           createdAt: true,
           updatedAt: true,
-          author: { select: { displayName: true } },
+          author: { select: { publicId: true, displayName: true } },
         },
       }),
       prisma.post.count({ where }),
-    ]);
+    ])
 
     if (sort !== 'latest' && posts.length) {
       const updates = posts
@@ -107,7 +118,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
           id: post.id,
           hotScore: calculatePostHotScore(post),
         }))
-        .filter((item) => Number.isFinite(item.hotScore));
+        .filter((item) => Number.isFinite(item.hotScore))
 
       if (updates.length > 0) {
         await prisma.$transaction(
@@ -115,14 +126,14 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
             prisma.post.update({
               where: { id: item.id },
               data: { hotScore: item.hotScore },
-            }),
-          ),
-        );
+            })
+          )
+        )
       }
     }
 
-    const likedPostSet = new Set<string>();
-    const favoritedPostSet = new Set<string>();
+    const likedPostSet = new Set<string>()
+    const favoritedPostSet = new Set<string>()
     if (req.authUser && posts.length) {
       const [likedPosts, favoritedPosts] = await Promise.all([
         prisma.postLike.findMany({
@@ -140,9 +151,9 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
           },
           select: { targetId: true },
         }),
-      ]);
-      likedPosts.forEach((item) => likedPostSet.add(item.postId));
-      favoritedPosts.forEach((item) => favoritedPostSet.add(item.targetId));
+      ])
+      likedPosts.forEach((item) => likedPostSet.add(item.postId))
+      favoritedPosts.forEach((item) => favoritedPostSet.add(item.targetId))
     }
 
     const excerptMap = new Map<string, string>()
@@ -160,6 +171,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     const result = {
       posts: posts.map((post) => ({
         id: post.id,
+        slug: post.slug,
         title: post.title,
         section: post.section,
         authorUid: post.authorUid,
@@ -181,199 +193,214 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
         likedByMe: likedPostSet.has(post.id),
         favoritedByMe: favoritedPostSet.has(post.id),
       })),
-      total,
-      page,
-      limit,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
-      hasMore: skip + posts.length < total,
-    };
+      ...createPaginationMeta(total, page, limit, posts.length),
+    }
 
     if (!req.authUser && sort === 'latest') {
-      const cacheKey = `post_list:${section}:${page}:${limit}`;
-      enhancedCache.set(cacheKey, result, 60);
+      const cacheKey = `post_list:${section}:${page}:${limit}`
+      enhancedCache.set(cacheKey, result, 60)
     }
 
-    res.json(result);
+    res.json(result)
   } catch (error) {
-    console.error('Fetch posts error:', error);
-    res.status(500).json({ error: '获取帖子失败' });
+    console.error('Fetch posts error:', error)
+    res.status(500).json({ error: '获取帖子失败' })
   }
-});
+})
+router.get('/tags', async (req: AuthenticatedRequest, res) => {
+  try {
+    const tags = await fetchVisibleTagSuggestions('post', req.authUser)
+    res.json({ tags })
+  } catch (error) {
+    console.error('Fetch post tags error:', error)
+    res.status(500).json({ error: '获取帖子标签失败' })
+  }
+})
 
 // Create post
-router.post('/', postWriteLimiter, requireAuth, requireActiveUser, validateBody(postCreateSchema), async (req: AuthenticatedRequest, res) => {
-  try {
-    const { title, section, content, tags, status, musicDocId, albumDocId, locationCode, locationDetail } = req.body as {
-      title?: string;
-      section?: string;
-      content?: string;
-      tags?: string[];
-      status?: ContentStatus;
-      musicDocId?: string;
-      albumDocId?: string;
-      locationCode?: string;
-      locationDetail?: string;
-    };
-
-    if (!title || !section || !content) {
-      res.status(400).json({ error: '缺少必要字段' });
-      return;
-    }
-
-    const normalizedMusicDocId = normalizeOptionalDocId(musicDocId);
-    const normalizedAlbumDocId = normalizeOptionalDocId(albumDocId);
-
-    let finalSection = section;
-    if (normalizedMusicDocId || normalizedAlbumDocId) {
-      const musicSection = await prisma.section.findUnique({
-        where: { id: MUSIC_SECTION_ID },
-        select: { id: true },
-      });
-      if (!musicSection) {
-        res.status(500).json({ error: '音乐版块不存在，请先在后台创建' });
-        return;
-      }
-      finalSection = MUSIC_SECTION_ID;
-    }
-
-    const sectionExists = await prisma.section.findUnique({
-      where: { id: finalSection },
-      select: { id: true },
-    });
-    if (!sectionExists) {
-      res.status(400).json({ error: '版块不存在' });
-      return;
-    }
-
-    const nextStatus = normalizePostWriteStatus(status, req.authUser!);
-
-    const post = await prisma.post.create({
-      data: {
+router.post(
+  '/',
+  postWriteLimiter,
+  requireAuth,
+  requireActiveUser,
+  validateBody(postCreateSchema),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const {
         title,
-        section: finalSection,
+        section,
         content,
-        tags: tags || [],
-        status: nextStatus,
-        reviewNote: null,
-        reviewedBy: null,
-        reviewedAt: null,
-        authorUid: req.authUser!.uid,
-        musicDocId: normalizedMusicDocId,
-        albumDocId: normalizedAlbumDocId,
+        tags,
+        status,
+        musicDocId,
+        albumDocId,
         locationCode,
-        locationDetail: locationDetail || null,
-      },
-    });
+        locationDetail,
+      } = req.body as {
+        title?: string
+        section?: string
+        content?: string
+        tags?: string[]
+        status?: ContentStatus
+        musicDocId?: string
+        albumDocId?: string
+        locationCode?: string
+        locationDetail?: string
+      }
 
-    if (nextStatus === 'pending') {
-      await prisma.moderationLog.create({
-        data: {
-          targetType: 'post',
-          targetId: post.id,
-          action: 'submit',
-          operatorUid: req.authUser!.uid,
-          note: null,
-        },
-      });
+      if (!title || !section || !content) {
+        res.status(400).json({ error: '缺少必要字段' })
+        return
+      }
+
+      const normalizedMusicDocId = normalizeOptionalDocId(musicDocId)
+      const normalizedAlbumDocId = normalizeOptionalDocId(albumDocId)
+
+      let finalSection = section
+      if (normalizedMusicDocId || normalizedAlbumDocId) {
+        const musicSection = await prisma.section.findUnique({
+          where: { id: MUSIC_SECTION_ID },
+          select: { id: true },
+        })
+        if (!musicSection) {
+          res.status(500).json({ error: '音乐版块不存在，请先在后台创建' })
+          return
+        }
+        finalSection = MUSIC_SECTION_ID
+      }
+
+      const sectionExists = await prisma.section.findUnique({
+        where: { id: finalSection },
+        select: { id: true },
+      })
+      if (!sectionExists) {
+        res.status(400).json({ error: '版块不存在' })
+        return
+      }
+
+      const nextStatus = normalizePostWriteStatus(status, req.authUser!)
+
+      const post = await prisma.$transaction(async (tx) => {
+        const slug = await allocateNumericSlug(tx, 'Post')
+        return tx.post.create({
+          data: {
+            slug,
+            title,
+            section: finalSection,
+            content,
+            tags: tags || [],
+            status: nextStatus,
+            reviewNote: null,
+            reviewedBy: null,
+            reviewedAt: null,
+            authorUid: req.authUser!.uid,
+            musicDocId: normalizedMusicDocId,
+            albumDocId: normalizedAlbumDocId,
+            locationCode,
+            locationDetail: locationDetail || null,
+          },
+        })
+      })
+
+      if (nextStatus === 'pending') {
+        await prisma.moderationLog.create({
+          data: {
+            targetType: 'post',
+            targetId: post.id,
+            action: 'submit',
+            operatorUid: req.authUser!.uid,
+            note: null,
+          },
+        })
+      }
+
+      const mentionTargets = await resolveMentionTargetsForText(post.content)
+
+      if (nextStatus === 'published') {
+        await notifyMentionUsers({
+          content: post.content,
+          mentionTargets,
+          actorUid: req.authUser!.uid,
+          actorName: req.authUser!.displayName,
+          target: { type: 'post', id: post.id },
+        })
+      }
+
+      res.status(201).json({
+        post: toPostResponse({
+          ...post,
+          mentionTargets,
+        }),
+      })
+      enhancedCache.invalidateByPrefix('post_list:')
+    } catch (error) {
+      console.error('Create post error:', error)
+      res.status(500).json({ error: '发布帖子失败' })
     }
-
-    const mentionTargets = await resolveMentionTargetsForText(post.content);
-
-    if (nextStatus === 'published') {
-      await notifyMentionUsers({
-        content: post.content,
-        mentionTargets,
-        actorUid: req.authUser!.uid,
-        actorName: req.authUser!.displayName,
-        target: { type: 'post', id: post.id },
-      });
-    }
-
-    res.status(201).json({
-      post: toPostResponse({
-        ...post,
-        mentionTargets,
-      }),
-    });
-    enhancedCache.invalidateByPrefix('post_list:');
-  } catch (error) {
-    console.error('Create post error:', error);
-    res.status(500).json({ error: '发布帖子失败' });
   }
-});
+)
 
 // Get post detail
-router.get('/:id', async (req: AuthenticatedRequest, res) => {
+router.get('/:slug', async (req: AuthenticatedRequest, res) => {
   try {
-    const post = await prisma.post.findUnique({
-      where: { id: req.params.id },
-      include: { author: { select: { displayName: true } } },
-    });
-
-    if (!post || !canViewPost(post, req.authUser)) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
+    if (!isNumericSlug(req.params.slug)) {
+      res.status(404).json({ error: '帖子未找到' })
+      return
     }
 
-    const hotScore = calculatePostHotScore(post);
+    const post = await prisma.post.findUnique({
+      where: { slug: req.params.slug },
+      include: { author: { select: { publicId: true, displayName: true } } },
+    })
+
+    if (!post || !canViewPost(post, req.authUser)) {
+      res.status(404).json({ error: '帖子未找到' })
+      return
+    }
+
+    const hotScore = calculatePostHotScore(post)
 
     const browsingPromise = req.authUser
-      ? (async () => {
-          const existing = await prisma.browsingHistory.findFirst({
-            where: {
-              userUid: req.authUser!.uid,
-              targetType: 'post',
-              targetId: req.params.id,
-            },
-          });
-          if (existing) {
-            await prisma.browsingHistory.update({
-              where: { id: existing.id },
-              data: { createdAt: new Date() },
-            });
-          } else {
-            await prisma.browsingHistory.create({
-              data: {
-                userUid: req.authUser!.uid,
-                targetType: 'post',
-                targetId: req.params.id,
-              },
-            });
-          }
-        })()
-      : Promise.resolve();
+      ? recordBrowsingHistory(req.authUser.uid, 'post', post.id)
+      : Promise.resolve()
 
     await Promise.all([
       prisma.post.update({
-        where: { id: req.params.id },
+        where: { id: post.id },
         data: { viewCount: { increment: 1 }, hotScore },
       }),
       browsingPromise,
-    ]);
+    ])
 
     const includeDeletedComments =
-      isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true';
+      isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true'
 
     const [comments, mentionTargets, likedByMe, favoritedByMe, dislikedByMe] = await Promise.all([
-      fetchPostCommentsForResponse(req.params.id, {
+      fetchPostCommentsForResponse(post.id, {
         authUserUid: req.authUser?.uid,
         includeDeleted: includeDeletedComments,
       }),
       resolveMentionTargetsForText(post.content),
       ...(req.authUser
         ? [
-            prisma.postLike.count({
-              where: { postId: req.params.id, userUid: req.authUser.uid },
-            }).then((c) => c > 0),
-            prisma.favorite.count({
-              where: { targetType: 'post', targetId: req.params.id, userUid: req.authUser.uid },
-            }).then((c) => c > 0),
-            prisma.postDislike.count({
-              where: { postId: req.params.id, userUid: req.authUser.uid },
-            }).then((c) => c > 0),
+            prisma.postLike
+              .count({
+                where: { postId: post.id, userUid: req.authUser.uid },
+              })
+              .then((c) => c > 0),
+            prisma.favorite
+              .count({
+                where: { targetType: 'post', targetId: post.id, userUid: req.authUser.uid },
+              })
+              .then((c) => c > 0),
+            prisma.postDislike
+              .count({
+                where: { postId: post.id, userUid: req.authUser.uid },
+              })
+              .then((c) => c > 0),
           ]
         : [Promise.resolve(false), Promise.resolve(false), Promise.resolve(false)]),
-    ]);
+    ])
 
     res.json({
       post: {
@@ -388,158 +415,177 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
         dislikedByMe,
       },
       comments,
-    });
+    })
   } catch (error) {
-    console.error('Fetch post detail error:', error);
-    res.status(500).json({ error: '获取帖子详情失败' });
+    console.error('Fetch post detail error:', error)
+    res.status(500).json({ error: '获取帖子详情失败' })
   }
-});
+})
 
 // Update post
-router.put('/:id', postWriteLimiter, requireAuth, requireActiveUser, validateBody(postUpdateSchema), async (req: AuthenticatedRequest, res) => {
-  try {
-    const { title, section, content, tags, status, musicDocId, albumDocId, locationCode, locationDetail } = req.body as {
-      title?: string;
-      section?: string;
-      content?: string;
-      tags?: string[];
-      status?: ContentStatus;
-      musicDocId?: string;
-      albumDocId?: string;
-      locationCode?: string;
-      locationDetail?: string;
-    };
-
-    if (!title || !section || !content) {
-      res.status(400).json({ error: '缺少必要字段' });
-      return;
-    }
-
-    const normalizedMusicDocId = normalizeOptionalDocId(musicDocId);
-    const normalizedAlbumDocId = normalizeOptionalDocId(albumDocId);
-
-    const existingPost = await prisma.post.findUnique({
-      where: { id: req.params.id },
-      select: {
-        id: true,
-        authorUid: true,
-        status: true,
-        content: true,
-        pendingReviewBaseContent: true,
-      },
-    });
-
-    if (!existingPost) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
-    }
-
-    const isOwner = existingPost.authorUid === req.authUser!.uid;
-    const isAdmin = isAdminRole(req.authUser!.role);
-    if (!isOwner && !isAdmin) {
-      res.status(403).json({ error: '无权编辑该帖子' });
-      return;
-    }
-
-    let finalSection = section;
-    if (normalizedMusicDocId || normalizedAlbumDocId) {
-      const musicSection = await prisma.section.findUnique({
-        where: { id: MUSIC_SECTION_ID },
-        select: { id: true },
-      });
-      if (!musicSection) {
-        res.status(500).json({ error: '音乐版块不存在，请先在后台创建' });
-        return;
-      }
-      finalSection = MUSIC_SECTION_ID;
-    }
-
-    const sectionExists = await prisma.section.findUnique({
-      where: { id: finalSection },
-      select: { id: true },
-    });
-    if (!sectionExists) {
-      res.status(400).json({ error: '版块不存在' });
-      return;
-    }
-
-    let nextStatus: ContentStatus;
-    if (isAdmin) {
-      nextStatus = status === undefined
-        ? existingPost.status
-        : normalizePostWriteStatus(status, req.authUser!);
-    } else if (existingPost.status === 'published') {
-      nextStatus = 'pending';
-    } else {
-      const normalized = normalizePostWriteStatus(status ?? existingPost.status, req.authUser!);
-      nextStatus = existingPost.status === 'pending' && normalized === 'draft' ? 'pending' : normalized;
-    }
-
-    const nextPendingReviewBaseContent =
-      nextStatus === 'pending'
-        ? !isAdmin && existingPost.status === 'published'
-          ? existingPost.content
-          : existingPost.pendingReviewBaseContent
-        : null;
-
-    const post = await prisma.post.update({
-      where: { id: req.params.id },
-      data: {
+router.put(
+  '/:id',
+  postWriteLimiter,
+  requireAuth,
+  requireActiveUser,
+  validateBody(postUpdateSchema),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const {
         title,
-        section: finalSection,
+        section,
         content,
-        tags: Array.isArray(tags) ? tags : [],
-        status: nextStatus,
-        reviewNote: null,
-        reviewedBy: null,
-        reviewedAt: null,
-        pendingReviewBaseContent: nextPendingReviewBaseContent,
-        musicDocId: normalizedMusicDocId,
-        albumDocId: normalizedAlbumDocId,
+        tags,
+        status,
+        musicDocId,
+        albumDocId,
         locationCode,
-        locationDetail: locationDetail || null,
-      },
-    });
+        locationDetail,
+      } = req.body as {
+        title?: string
+        section?: string
+        content?: string
+        tags?: string[]
+        status?: ContentStatus
+        musicDocId?: string
+        albumDocId?: string
+        locationCode?: string
+        locationDetail?: string
+      }
 
-    if (nextStatus === 'pending') {
-      await prisma.moderationLog.create({
-        data: {
-          targetType: 'post',
-          targetId: post.id,
-          action: 'submit',
-          operatorUid: req.authUser!.uid,
-          note: !isAdmin && existingPost.status === 'published' ? '编辑后重新提交审核' : null,
+      if (!title || !section || !content) {
+        res.status(400).json({ error: '缺少必要字段' })
+        return
+      }
+
+      const normalizedMusicDocId = normalizeOptionalDocId(musicDocId)
+      const normalizedAlbumDocId = normalizeOptionalDocId(albumDocId)
+
+      const existingPost = await prisma.post.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true,
+          authorUid: true,
+          status: true,
+          content: true,
+          pendingReviewBaseContent: true,
         },
-      });
+      })
+
+      if (!existingPost) {
+        res.status(404).json({ error: '帖子未找到' })
+        return
+      }
+
+      const isOwner = existingPost.authorUid === req.authUser!.uid
+      const isAdmin = isAdminRole(req.authUser!.role)
+      if (!isOwner && !isAdmin) {
+        res.status(403).json({ error: '无权编辑该帖子' })
+        return
+      }
+
+      let finalSection = section
+      if (normalizedMusicDocId || normalizedAlbumDocId) {
+        const musicSection = await prisma.section.findUnique({
+          where: { id: MUSIC_SECTION_ID },
+          select: { id: true },
+        })
+        if (!musicSection) {
+          res.status(500).json({ error: '音乐版块不存在，请先在后台创建' })
+          return
+        }
+        finalSection = MUSIC_SECTION_ID
+      }
+
+      const sectionExists = await prisma.section.findUnique({
+        where: { id: finalSection },
+        select: { id: true },
+      })
+      if (!sectionExists) {
+        res.status(400).json({ error: '版块不存在' })
+        return
+      }
+
+      let nextStatus: ContentStatus
+      if (isAdmin) {
+        nextStatus =
+          status === undefined
+            ? existingPost.status
+            : normalizePostWriteStatus(status, req.authUser!)
+      } else if (existingPost.status === 'published') {
+        nextStatus = 'pending'
+      } else {
+        const normalized = normalizePostWriteStatus(status ?? existingPost.status, req.authUser!)
+        nextStatus =
+          existingPost.status === 'pending' && normalized === 'draft' ? 'pending' : normalized
+      }
+
+      const nextPendingReviewBaseContent =
+        nextStatus === 'pending'
+          ? !isAdmin && existingPost.status === 'published'
+            ? existingPost.content
+            : existingPost.pendingReviewBaseContent
+          : null
+
+      const post = await prisma.post.update({
+        where: { id: req.params.id },
+        data: {
+          title,
+          section: finalSection,
+          content,
+          tags: Array.isArray(tags) ? tags : [],
+          status: nextStatus,
+          reviewNote: null,
+          reviewedBy: null,
+          reviewedAt: null,
+          pendingReviewBaseContent: nextPendingReviewBaseContent,
+          musicDocId: normalizedMusicDocId,
+          albumDocId: normalizedAlbumDocId,
+          locationCode,
+          locationDetail: locationDetail || null,
+        },
+      })
+
+      if (nextStatus === 'pending') {
+        await prisma.moderationLog.create({
+          data: {
+            targetType: 'post',
+            targetId: post.id,
+            action: 'submit',
+            operatorUid: req.authUser!.uid,
+            note: !isAdmin && existingPost.status === 'published' ? '编辑后重新提交审核' : null,
+          },
+        })
+      }
+
+      const mentionTargets = await resolveMentionTargetsForText(post.content)
+
+      if (nextStatus === 'published') {
+        await notifyMentionUsers({
+          content: post.content,
+          previousContent:
+            existingPost.pendingReviewBaseContent ??
+            (existingPost.status === 'published' ? existingPost.content : null),
+          mentionTargets,
+          actorUid: req.authUser!.uid,
+          actorName: req.authUser!.displayName,
+          target: { type: 'post', id: post.id },
+        })
+      }
+
+      res.json({
+        post: toPostResponse({
+          ...post,
+          mentionTargets,
+        }),
+      })
+      enhancedCache.invalidateByPrefix('post_list:')
+    } catch (error) {
+      console.error('Edit post error:', error)
+      res.status(500).json({ error: '编辑帖子失败' })
     }
-
-    const mentionTargets = await resolveMentionTargetsForText(post.content);
-
-    if (nextStatus === 'published') {
-      await notifyMentionUsers({
-        content: post.content,
-        previousContent:
-          existingPost.pendingReviewBaseContent ??
-          (existingPost.status === 'published' ? existingPost.content : null),
-        mentionTargets,
-        actorUid: req.authUser!.uid,
-        actorName: req.authUser!.displayName,
-        target: { type: 'post', id: post.id },
-      });
-    }
-
-    res.json({
-      post: toPostResponse({
-        ...post,
-        mentionTargets,
-      }),
-    });
-    enhancedCache.invalidateByPrefix('post_list:');
-  } catch (error) {
-    console.error('Edit post error:', error);
-    res.status(500).json({ error: '编辑帖子失败' });
   }
-});
+)
 
 // Delete post
 router.delete(
@@ -552,34 +598,34 @@ router.delete(
       const post = await prisma.post.findUnique({
         where: { id: req.params.id },
         select: { authorUid: true, title: true, status: true, deletedAt: true },
-      });
+      })
 
       if (!post || post.deletedAt) {
-        res.status(404).json({ error: '帖子未找到' });
-        return;
+        res.status(404).json({ error: '帖子未找到' })
+        return
       }
 
-      const isOwner = post.authorUid === req.authUser!.uid;
-      const isAdmin = isAdminRole(req.authUser!.role);
+      const isOwner = post.authorUid === req.authUser!.uid
+      const isAdmin = isAdminRole(req.authUser!.role)
       if (!isOwner && !isAdmin) {
-        res.status(403).json({ error: '无权删除该帖子' });
-        return;
+        res.status(403).json({ error: '无权删除该帖子' })
+        return
       }
 
-      const reason = resolveDeleteReason(req.body?.reason, isOwner);
+      const reason = resolveDeleteReason(req.body?.reason, isOwner)
       if (!isOwner && !reason) {
-        res.status(400).json({ error: '删除理由不能为空' });
-        return;
+        res.status(400).json({ error: '删除理由不能为空' })
+        return
       }
       if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.post.reviewNote)) {
-        return;
+        return
       }
 
       await prisma.$transaction(async (tx) => {
         await tx.post.update({
           where: { id: req.params.id },
           data: softDeleteData(req.authUser!.uid),
-        });
+        })
 
         await tx.moderationLog.create({
           data: {
@@ -589,8 +635,8 @@ router.delete(
             operatorUid: req.authUser!.uid,
             note: reason,
           },
-        });
-      });
+        })
+      })
 
       if (post.authorUid !== req.authUser!.uid) {
         await createNotification(post.authorUid, 'review_result', {
@@ -602,34 +648,34 @@ router.delete(
           note: reason,
           operatorUid: req.authUser!.uid,
           operatorName: req.authUser!.displayName,
-        });
+        })
       }
 
-      res.json({ success: true });
-      enhancedCache.invalidateByPrefix('post_list:');
+      res.json({ success: true })
+      enhancedCache.invalidateByPrefix('post_list:')
     } catch (error) {
-      console.error('Delete post error:', error);
-      res.status(500).json({ error: '删除帖子失败' });
+      console.error('Delete post error:', error)
+      res.status(500).json({ error: '删除帖子失败' })
     }
   }
-);
+)
 
 // Comment routes
 router.get('/:postId/comments', async (req: AuthenticatedRequest, res) => {
   try {
-    const postId = req.params.postId;
-    const { limit, page, offset: skip } = parsePagination(req.query);
+    const postId = req.params.postId
+    const { limit, page, offset: skip } = parsePagination(req.query)
     const includeDeletedComments =
-      isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true';
+      isAdminRole(req.authUser?.role) && req.query.includeDeleted === 'true'
 
     const post = await prisma.post.findUnique({
       where: { id: postId },
       select: { status: true, authorUid: true },
-    });
+    })
 
     if (!post || !canViewPost(post, req.authUser)) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
+      res.status(404).json({ error: '帖子未找到' })
+      return
     }
 
     const { comments, total } = await fetchPostCommentsPageForResponse(postId, {
@@ -637,206 +683,216 @@ router.get('/:postId/comments', async (req: AuthenticatedRequest, res) => {
       includeDeleted: includeDeletedComments,
       take: limit,
       skip,
-    });
+    })
 
     res.json({
       comments,
-      total,
-      page,
-      limit,
-    });
+      ...createPaginationMeta(total, page, limit, comments.length),
+    })
   } catch (error) {
-    console.error('Fetch post comments error:', error);
-    res.status(500).json({ error: '获取评论失败' });
+    console.error('Fetch post comments error:', error)
+    res.status(500).json({ error: '获取评论失败' })
   }
-});
+})
 
-router.post('/:postId/comments', postWriteLimiter, requireAuth, requireActiveUser, validateBody(postCommentSchema), async (req: AuthenticatedRequest, res) => {
-  try {
-    const { content, parentId } = req.body as {
-      content?: string;
-      parentId?: string | null;
-    };
-
-    if (!content || !content.trim()) {
-      res.status(400).json({ error: '评论内容不能为空' });
-      return;
-    }
-
-    const currentPost = await prisma.post.findUnique({
-      where: { id: req.params.postId },
-      select: {
-        id: true,
-        status: true,
-        authorUid: true,
-      },
-    });
-
-    if (!currentPost || !canViewPost(currentPost, req.authUser)) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
-    }
-
-    if (currentPost.status !== 'published') {
-      res.status(403).json({ error: '仅已发布内容可评论' });
-      return;
-    }
-
-    let replyTargetUid: string | null = null;
-    let rootParentId: string | null = null;
-    let replyToId: string | null = null;
-    if (parentId) {
-      const replyTarget = await resolveCommentReplyTarget(parentId, { postId: req.params.postId });
-      if (!replyTarget) {
-        res.status(400).json({ error: '回复目标不存在' });
-        return;
+router.post(
+  '/:postId/comments',
+  postWriteLimiter,
+  requireAuth,
+  requireActiveUser,
+  validateBody(postCommentSchema),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const { content, parentId } = req.body as {
+        content?: string
+        parentId?: string | null
       }
-      rootParentId = replyTarget.parentId;
-      replyToId = replyTarget.replyToId;
-      replyTargetUid = replyTarget.replyTargetUid;
-    }
 
-    const comment = await prisma.postComment.create({
-      data: {
-        postId: req.params.postId,
-        authorUid: req.authUser!.uid,
-        content,
-        parentId: rootParentId,
-        replyToId,
-      },
-      include: {
-        author: {
-          select: { displayName: true, photoURL: true },
+      if (!content || !content.trim()) {
+        res.status(400).json({ error: '评论内容不能为空' })
+        return
+      }
+
+      const currentPost = await prisma.post.findUnique({
+        where: { id: req.params.postId },
+        select: {
+          id: true,
+          status: true,
+          authorUid: true,
         },
-        replyTo: {
-          select: {
-            authorUid: true,
-            author: {
-              select: { displayName: true },
+      })
+
+      if (!currentPost || !canViewPost(currentPost, req.authUser)) {
+        res.status(404).json({ error: '帖子未找到' })
+        return
+      }
+
+      if (currentPost.status !== 'published') {
+        res.status(403).json({ error: '仅已发布内容可评论' })
+        return
+      }
+
+      let replyTargetUid: string | null = null
+      let rootParentId: string | null = null
+      let replyToId: string | null = null
+      if (parentId) {
+        const replyTarget = await resolveCommentReplyTarget(parentId, { postId: req.params.postId })
+        if (!replyTarget) {
+          res.status(400).json({ error: '回复目标不存在' })
+          return
+        }
+        rootParentId = replyTarget.parentId
+        replyToId = replyTarget.replyToId
+        replyTargetUid = replyTarget.replyTargetUid
+      }
+
+      const comment = await prisma.postComment.create({
+        data: {
+          postId: req.params.postId,
+          authorUid: req.authUser!.uid,
+          content,
+          parentId: rootParentId,
+          replyToId,
+        },
+        include: {
+          author: {
+            select: { publicId: true, displayName: true, photoURL: true },
+          },
+          replyTo: {
+            select: {
+              authorUid: true,
+              author: {
+                select: { publicId: true, displayName: true },
+              },
             },
           },
+          _count: {
+            select: { likes: true },
+          },
         },
-        _count: {
-          select: { likes: true },
+      })
+
+      await prisma.post.update({
+        where: { id: req.params.postId },
+        data: {
+          commentsCount: { increment: 1 },
         },
-      },
-    });
+      })
 
-    await prisma.post.update({
-      where: { id: req.params.postId },
-      data: {
-        commentsCount: { increment: 1 },
-      },
-    });
-
-    await notifyCommentReply({
-      ownerUid: currentPost.authorUid,
-      replyTargetUid,
-      actorUid: req.authUser!.uid,
-      actorName: req.authUser!.displayName,
-      commentId: comment.id,
-      content: comment.content,
-      parentId: comment.parentId,
-      target: { type: 'post', id: req.params.postId },
-    });
-    const mentionTargets = await resolveMentionTargetsForText(comment.content);
-    const replyRecipientUid = replyTargetUid || currentPost.authorUid;
-    await notifyMentionUsers({
-      content: comment.content,
-      mentionTargets,
-      actorUid: req.authUser!.uid,
-      actorName: req.authUser!.displayName,
-      target: { type: 'post', id: req.params.postId, commentId: comment.id },
-      excludeUserUids:
-        replyRecipientUid && replyRecipientUid !== req.authUser!.uid ? [replyRecipientUid] : [],
-    });
-
-    res.status(201).json({
-      comment: toCommentResponse({
-        ...comment,
+      await notifyCommentReply({
+        ownerUid: currentPost.authorUid,
+        replyTargetUid,
+        actorUid: req.authUser!.uid,
+        actorName: req.authUser!.displayName,
+        commentId: comment.id,
+        content: comment.content,
+        parentId: comment.parentId,
+        target: { type: 'post', id: req.params.postId },
+      })
+      const mentionTargets = await resolveMentionTargetsForText(comment.content)
+      const replyRecipientUid = replyTargetUid || currentPost.authorUid
+      await notifyMentionUsers({
+        content: comment.content,
         mentionTargets,
-      }),
-    });
-  } catch (error) {
-    console.error('Create comment error:', error);
-    res.status(500).json({ error: '发表评论失败' });
+        actorUid: req.authUser!.uid,
+        actorName: req.authUser!.displayName,
+        target: { type: 'post', id: req.params.postId, commentId: comment.id },
+        excludeUserUids:
+          replyRecipientUid && replyRecipientUid !== req.authUser!.uid ? [replyRecipientUid] : [],
+      })
+
+      res.status(201).json({
+        comment: toCommentResponse({
+          ...comment,
+          mentionTargets,
+        }),
+      })
+    } catch (error) {
+      console.error('Create comment error:', error)
+      res.status(500).json({ error: '发表评论失败' })
+    }
   }
-});
+)
 
-router.delete('/comments/:id', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const comment = await prisma.postComment.findUnique({
-      where: { id: req.params.id },
-      select: { authorUid: true, postId: true, galleryId: true, deletedAt: true },
-    });
+router.delete(
+  '/comments/:id',
+  requireAuth,
+  requireActiveUser,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const comment = await prisma.postComment.findUnique({
+        where: { id: req.params.id },
+        select: { authorUid: true, postId: true, galleryId: true, deletedAt: true },
+      })
 
-    if (!comment || (!comment.postId && !comment.galleryId)) {
-      res.status(404).json({ error: '评论未找到' });
-      return;
+      if (!comment || (!comment.postId && !comment.galleryId)) {
+        res.status(404).json({ error: '评论未找到' })
+        return
+      }
+
+      const isOwner = comment.authorUid === req.authUser!.uid
+      const isAdmin = isAdminRole(req.authUser!.role)
+      if (!isOwner && !isAdmin) {
+        res.status(403).json({ error: '无权删除该评论' })
+        return
+      }
+
+      const reason = resolveDeleteReason(req.body?.reason, isOwner)
+      if (!isOwner && !reason) {
+        res.status(400).json({ error: '删除理由不能为空' })
+        return
+      }
+      if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.post.reviewNote)) {
+        return
+      }
+
+      if (!comment.deletedAt) {
+        await prisma.$transaction(async (tx) => {
+          await tx.postComment.update({
+            where: { id: req.params.id },
+            data: {
+              deletedAt: new Date(),
+              deletedBy: req.authUser!.uid,
+            },
+          })
+
+          if (comment.postId) {
+            await tx.post.update({
+              where: { id: comment.postId },
+              data: { commentsCount: { decrement: 1 } },
+            })
+          }
+
+          await tx.moderationLog.create({
+            data: {
+              targetType: 'comment',
+              targetId: req.params.id,
+              action: 'delete',
+              operatorUid: req.authUser!.uid,
+              note: reason,
+            },
+          })
+        })
+      }
+
+      res.json({ success: true })
+    } catch (error) {
+      console.error('Delete comment error:', error)
+      res.status(500).json({ error: '删除评论失败' })
     }
-
-    const isOwner = comment.authorUid === req.authUser!.uid;
-    const isAdmin = isAdminRole(req.authUser!.role);
-    if (!isOwner && !isAdmin) {
-      res.status(403).json({ error: '无权删除该评论' });
-      return;
-    }
-
-    const reason = resolveDeleteReason(req.body?.reason, isOwner);
-    if (!isOwner && !reason) {
-      res.status(400).json({ error: '删除理由不能为空' });
-      return;
-    }
-    if (!ensureTextLimit(res, reason, '删除理由', CONTENT_LIMITS.post.reviewNote)) {
-      return;
-    }
-
-    if (!comment.deletedAt) {
-      await prisma.$transaction(async (tx) => {
-        await tx.postComment.update({
-          where: { id: req.params.id },
-          data: {
-            deletedAt: new Date(),
-            deletedBy: req.authUser!.uid,
-          },
-        });
-
-        if (comment.postId) {
-          await tx.post.update({
-            where: { id: comment.postId },
-            data: { commentsCount: { decrement: 1 } },
-          });
-        }
-
-        await tx.moderationLog.create({
-          data: {
-            targetType: 'comment',
-            targetId: req.params.id,
-            action: 'delete',
-            operatorUid: req.authUser!.uid,
-            note: reason,
-          },
-        });
-      });
-    }
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Delete comment error:', error);
-    res.status(500).json({ error: '删除评论失败' });
   }
-});
+)
 
 router.post('/comments/:id/restore', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const comment = await prisma.postComment.findUnique({
       where: { id: req.params.id },
       select: { id: true, postId: true, galleryId: true, deletedAt: true },
-    });
+    })
 
     if (!comment || (!comment.postId && !comment.galleryId)) {
-      res.status(404).json({ error: '评论未找到' });
-      return;
+      res.status(404).json({ error: '评论未找到' })
+      return
     }
 
     if (comment.deletedAt) {
@@ -847,58 +903,68 @@ router.post('/comments/:id/restore', requireAdmin, async (req: AuthenticatedRequ
             deletedAt: null,
             deletedBy: null,
           },
-        });
+        })
 
         if (comment.postId) {
           await tx.post.update({
             where: { id: comment.postId },
             data: { commentsCount: { increment: 1 } },
-          });
+          })
         }
-      });
+      })
     }
 
-    res.json({ success: true });
+    res.json({ success: true })
   } catch (error) {
-    console.error('Restore comment error:', error);
-    res.status(500).json({ error: '恢复评论失败' });
+    console.error('Restore comment error:', error)
+    res.status(500).json({ error: '恢复评论失败' })
   }
-});
+})
 
-router.post('/comments/:id/like', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const result = await createCommentLike(req.params.id, req.authUser!);
-    if (!result) {
-      res.status(404).json({ error: '评论未找到' });
-      return;
+router.post(
+  '/comments/:id/like',
+  requireAuth,
+  requireActiveUser,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const result = await createCommentLike(req.params.id, req.authUser!)
+      if (!result) {
+        res.status(404).json({ error: '评论未找到' })
+        return
+      }
+
+      res.json(result)
+    } catch (error) {
+      console.error('Like comment error:', error)
+      res.status(500).json({ error: '点赞失败' })
     }
-
-    res.json(result);
-  } catch (error) {
-    console.error('Like comment error:', error);
-    res.status(500).json({ error: '点赞失败' });
   }
-});
+)
 
-router.delete('/comments/:id/like', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const result = await deleteCommentLike(req.params.id, req.authUser!);
-    if (!result) {
-      res.status(404).json({ error: '评论未找到' });
-      return;
+router.delete(
+  '/comments/:id/like',
+  requireAuth,
+  requireActiveUser,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const result = await deleteCommentLike(req.params.id, req.authUser!)
+      if (!result) {
+        res.status(404).json({ error: '评论未找到' })
+        return
+      }
+
+      res.json(result)
+    } catch (error) {
+      console.error('Unlike comment error:', error)
+      res.status(500).json({ error: '取消点赞失败' })
     }
-
-    res.json(result);
-  } catch (error) {
-    console.error('Unlike comment error:', error);
-    res.status(500).json({ error: '取消点赞失败' });
   }
-});
+)
 
 // Like/Dislike routes
 router.post('/:id/like', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
   try {
-    const postId = req.params.id;
+    const postId = req.params.id
     const post = await prisma.post.findUnique({
       where: { id: postId },
       select: {
@@ -906,17 +972,17 @@ router.post('/:id/like', requireAuth, requireActiveUser, async (req: Authenticat
         status: true,
         authorUid: true,
       },
-    });
+    })
 
     if (!post || !canViewPost(post, req.authUser)) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
+      res.status(404).json({ error: '帖子未找到' })
+      return
     }
 
     await prisma.$transaction(async (tx) => {
       await tx.postDislike.deleteMany({
         where: { postId, userUid: req.authUser!.uid },
-      });
+      })
 
       try {
         await tx.postLike.create({
@@ -924,7 +990,7 @@ router.post('/:id/like', requireAuth, requireActiveUser, async (req: Authenticat
             postId,
             userUid: req.authUser!.uid,
           },
-        });
+        })
       } catch {
         // already liked
       }
@@ -932,277 +998,292 @@ router.post('/:id/like', requireAuth, requireActiveUser, async (req: Authenticat
       const [likesCount, dislikesCount] = await Promise.all([
         tx.postLike.count({ where: { postId } }),
         tx.postDislike.count({ where: { postId } }),
-      ]);
+      ])
 
       await tx.post.update({
         where: { id: postId },
         data: { likesCount, dislikesCount },
-      });
-    });
+      })
+    })
 
     const [likesCount, dislikesCount] = await Promise.all([
       prisma.postLike.count({ where: { postId } }),
       prisma.postDislike.count({ where: { postId } }),
-    ]);
+    ])
 
     const updatedPost = await prisma.post.update({
       where: { id: postId },
       data: {
         likesCount,
       },
-    });
+    })
 
-    const hotScore = calculatePostHotScore(updatedPost);
+    const hotScore = calculatePostHotScore(updatedPost)
     await prisma.post.update({
       where: { id: postId },
       data: { hotScore },
-    });
+    })
 
     if (post.authorUid !== req.authUser!.uid) {
       await createNotification(post.authorUid, 'like', {
         postId,
         actorUid: req.authUser!.uid,
         actorName: req.authUser!.displayName,
-      });
+      })
     }
 
-    res.json({ liked: true, likesCount, dislikesCount });
+    res.json({ liked: true, likesCount, dislikesCount })
   } catch (error) {
-    console.error('Like post error:', error);
-    res.status(500).json({ error: '点赞失败' });
+    console.error('Like post error:', error)
+    res.status(500).json({ error: '点赞失败' })
   }
-});
+})
 
-router.delete('/:id/like', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const postId = req.params.id;
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { id: true, status: true, authorUid: true, deletedAt: true },
-    });
+router.delete(
+  '/:id/like',
+  requireAuth,
+  requireActiveUser,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const postId = req.params.id
+      const post = await prisma.post.findUnique({
+        where: { id: postId },
+        select: { id: true, status: true, authorUid: true, deletedAt: true },
+      })
 
-    if (!post || !canViewPost(post, req.authUser)) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
-    }
-
-    await prisma.$transaction(async (tx) => {
-      const deleted = await tx.postLike.deleteMany({
-        where: {
-          postId,
-          userUid: req.authUser!.uid,
-        },
-      });
-
-      if (!deleted.count) {
-        return;
+      if (!post || !canViewPost(post, req.authUser)) {
+        res.status(404).json({ error: '帖子未找到' })
+        return
       }
 
-      await tx.post.update({
-        where: { id: postId },
-        data: {
-          likesCount: { decrement: 1 },
-        },
-      });
-    });
-
-    const likesCount = await prisma.postLike.count({ where: { postId } });
-    const updatedPost = await prisma.post.update({
-      where: { id: postId },
-      data: {
-        likesCount,
-      },
-    });
-
-    const hotScore = calculatePostHotScore(updatedPost);
-    await prisma.post.update({
-      where: { id: postId },
-      data: { hotScore },
-    });
-
-    res.json({ liked: false, likesCount });
-  } catch (error) {
-    console.error('Unlike post error:', error);
-    res.status(500).json({ error: '取消点赞失败' });
-  }
-});
-
-router.post('/:id/dislike', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const postId = req.params.id;
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: {
-        id: true,
-        status: true,
-        authorUid: true,
-      },
-    });
-
-    if (!post || !canViewPost(post, req.authUser)) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.postLike.deleteMany({
-        where: { postId, userUid: req.authUser!.uid },
-      });
-
-      try {
-        await tx.postDislike.create({
-          data: {
+      await prisma.$transaction(async (tx) => {
+        const deleted = await tx.postLike.deleteMany({
+          where: {
             postId,
             userUid: req.authUser!.uid,
           },
-        });
-      } catch {
-        // already disliked
-      }
+        })
 
-      const [likesCount, dislikesCount] = await Promise.all([
-        tx.postLike.count({ where: { postId } }),
-        tx.postDislike.count({ where: { postId } }),
-      ]);
+        if (!deleted.count) {
+          return
+        }
 
-      await tx.post.update({
-        where: { id: postId },
-        data: { likesCount, dislikesCount },
-      });
-    });
+        await tx.post.update({
+          where: { id: postId },
+          data: {
+            likesCount: { decrement: 1 },
+          },
+        })
+      })
 
-    const [likesCount, dislikesCount] = await Promise.all([
-      prisma.postLike.count({ where: { postId } }),
-      prisma.postDislike.count({ where: { postId } }),
-    ]);
-
-    const updatedPost = await prisma.post.update({
-      where: { id: postId },
-      data: {
-        dislikesCount,
-      },
-    });
-
-    const hotScore = calculatePostHotScore(updatedPost);
-    await prisma.post.update({
-      where: { id: postId },
-      data: { hotScore },
-    });
-
-    res.json({ disliked: true, dislikesCount, likesCount });
-  } catch (error) {
-    console.error('Dislike post error:', error);
-    res.status(500).json({ error: '踩失败' });
-  }
-});
-
-router.delete('/:id/dislike', requireAuth, requireActiveUser, async (req: AuthenticatedRequest, res) => {
-  try {
-    const postId = req.params.id;
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { id: true, status: true, authorUid: true, deletedAt: true },
-    });
-
-    if (!post || !canViewPost(post, req.authUser)) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
-    }
-
-    await prisma.$transaction(async (tx) => {
-      const deleted = await tx.postDislike.deleteMany({
-        where: {
-          postId,
-          userUid: req.authUser!.uid,
-        },
-      });
-
-      if (!deleted.count) {
-        return;
-      }
-
-      await tx.post.update({
+      const likesCount = await prisma.postLike.count({ where: { postId } })
+      const updatedPost = await prisma.post.update({
         where: { id: postId },
         data: {
-          dislikesCount: { decrement: 1 },
+          likesCount,
         },
-      });
-    });
+      })
 
-    const dislikesCount = await prisma.postDislike.count({ where: { postId } });
-    const updatedPost = await prisma.post.update({
-      where: { id: postId },
-      data: {
-        dislikesCount,
-      },
-    });
+      const hotScore = calculatePostHotScore(updatedPost)
+      await prisma.post.update({
+        where: { id: postId },
+        data: { hotScore },
+      })
 
-    const hotScore = calculatePostHotScore(updatedPost);
-    await prisma.post.update({
-      where: { id: postId },
-      data: { hotScore },
-    });
-
-    res.json({ disliked: false, dislikesCount });
-  } catch (error) {
-    console.error('Undislike post error:', error);
-    res.status(500).json({ error: '取消踩失败' });
+      res.json({ liked: false, likesCount })
+    } catch (error) {
+      console.error('Unlike post error:', error)
+      res.status(500).json({ error: '取消点赞失败' })
+    }
   }
-});
+)
+
+router.post(
+  '/:id/dislike',
+  requireAuth,
+  requireActiveUser,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const postId = req.params.id
+      const post = await prisma.post.findUnique({
+        where: { id: postId },
+        select: {
+          id: true,
+          status: true,
+          authorUid: true,
+        },
+      })
+
+      if (!post || !canViewPost(post, req.authUser)) {
+        res.status(404).json({ error: '帖子未找到' })
+        return
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.postLike.deleteMany({
+          where: { postId, userUid: req.authUser!.uid },
+        })
+
+        try {
+          await tx.postDislike.create({
+            data: {
+              postId,
+              userUid: req.authUser!.uid,
+            },
+          })
+        } catch {
+          // already disliked
+        }
+
+        const [likesCount, dislikesCount] = await Promise.all([
+          tx.postLike.count({ where: { postId } }),
+          tx.postDislike.count({ where: { postId } }),
+        ])
+
+        await tx.post.update({
+          where: { id: postId },
+          data: { likesCount, dislikesCount },
+        })
+      })
+
+      const [likesCount, dislikesCount] = await Promise.all([
+        prisma.postLike.count({ where: { postId } }),
+        prisma.postDislike.count({ where: { postId } }),
+      ])
+
+      const updatedPost = await prisma.post.update({
+        where: { id: postId },
+        data: {
+          dislikesCount,
+        },
+      })
+
+      const hotScore = calculatePostHotScore(updatedPost)
+      await prisma.post.update({
+        where: { id: postId },
+        data: { hotScore },
+      })
+
+      res.json({ disliked: true, dislikesCount, likesCount })
+    } catch (error) {
+      console.error('Dislike post error:', error)
+      res.status(500).json({ error: '踩失败' })
+    }
+  }
+)
+
+router.delete(
+  '/:id/dislike',
+  requireAuth,
+  requireActiveUser,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const postId = req.params.id
+      const post = await prisma.post.findUnique({
+        where: { id: postId },
+        select: { id: true, status: true, authorUid: true, deletedAt: true },
+      })
+
+      if (!post || !canViewPost(post, req.authUser)) {
+        res.status(404).json({ error: '帖子未找到' })
+        return
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const deleted = await tx.postDislike.deleteMany({
+          where: {
+            postId,
+            userUid: req.authUser!.uid,
+          },
+        })
+
+        if (!deleted.count) {
+          return
+        }
+
+        await tx.post.update({
+          where: { id: postId },
+          data: {
+            dislikesCount: { decrement: 1 },
+          },
+        })
+      })
+
+      const dislikesCount = await prisma.postDislike.count({ where: { postId } })
+      const updatedPost = await prisma.post.update({
+        where: { id: postId },
+        data: {
+          dislikesCount,
+        },
+      })
+
+      const hotScore = calculatePostHotScore(updatedPost)
+      await prisma.post.update({
+        where: { id: postId },
+        data: { hotScore },
+      })
+
+      res.json({ disliked: false, dislikesCount })
+    } catch (error) {
+      console.error('Undislike post error:', error)
+      res.status(500).json({ error: '取消踩失败' })
+    }
+  }
+)
 
 // Pin routes
 router.post('/:id/pin', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const postId = req.params.id;
+    const postId = req.params.id
 
     const post = await prisma.post.findUnique({
       where: { id: postId },
       select: { id: true, isPinned: true },
-    });
+    })
 
     if (!post) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
+      res.status(404).json({ error: '帖子未找到' })
+      return
     }
 
     const updated = await prisma.post.update({
       where: { id: postId },
       data: { isPinned: true },
-    });
+    })
 
-    res.json({ isPinned: updated.isPinned });
+    res.json({ isPinned: updated.isPinned })
   } catch (error) {
-    console.error('Pin post error:', error);
-    res.status(500).json({ error: '置顶失败' });
+    console.error('Pin post error:', error)
+    res.status(500).json({ error: '置顶失败' })
   }
-});
+})
 
 router.delete('/:id/pin', requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const postId = req.params.id;
+    const postId = req.params.id
 
     const post = await prisma.post.findUnique({
       where: { id: postId },
       select: { id: true, isPinned: true },
-    });
+    })
 
     if (!post) {
-      res.status(404).json({ error: '帖子未找到' });
-      return;
+      res.status(404).json({ error: '帖子未找到' })
+      return
     }
 
     const updated = await prisma.post.update({
       where: { id: postId },
       data: { isPinned: false },
-    });
+    })
 
-    res.json({ isPinned: updated.isPinned });
+    res.json({ isPinned: updated.isPinned })
   } catch (error) {
-    console.error('Unpin post error:', error);
-    res.status(500).json({ error: '取消置顶失败' });
+    console.error('Unpin post error:', error)
+    res.status(500).json({ error: '取消置顶失败' })
   }
-});
+})
 
 export function registerPostsRoutes(app: Router) {
-  app.use('/api/posts', router);
+  app.use('/api/posts', router)
 }

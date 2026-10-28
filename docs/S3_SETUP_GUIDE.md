@@ -103,25 +103,20 @@ S3_EXPIRES_IN=900
 1. 进入「访问管理」
 2. 创建子用户
 3. 设置权限策略：
+
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:ListBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::your-private-bucket/*",
-        "arn:aws:s3:::your-private-bucket"
-      ]
+      "Action": ["s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::your-private-bucket/*", "arn:aws:s3:::your-private-bucket"]
     }
   ]
 }
 ```
+
 4. 获取 Access Key 和 Secret Key
 
 #### 读取用户（用于公开访问）
@@ -129,24 +124,20 @@ S3_EXPIRES_IN=900
 1. 进入「访问管理」
 2. 创建子用户
 3. 设置权限策略：
+
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:ListBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::your-public-bucket/*",
-        "arn:aws:s3:::your-public-bucket"
-      ]
+      "Action": ["s3:GetObject", "s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::your-public-bucket/*", "arn:aws:s3:::your-public-bucket"]
     }
   ]
 }
 ```
+
 4. 获取 Access Key 和 Secret Key
 
 ### 3. 配置自定义域名（可选）
@@ -191,6 +182,7 @@ npm run dev
 #### 查看图片统计
 
 在图片管理页面顶部，可以看到：
+
 - 总数量
 - 本地图片
 - **S3 图床** ⭐ 新增
@@ -206,6 +198,7 @@ npm run dev
 #### 批量导入
 
 支持批量导入 S3 图片链接：
+
 ```json
 [
   {
@@ -220,6 +213,7 @@ npm run dev
 #### 存储策略配置
 
 在图片策略中，可以选择：
+
 - **本地服务器**：优先使用本地存储
 - **S3 图床**：优先使用 S3 存储 ⭐
 - **外部图床**：优先使用外部图床
@@ -229,22 +223,22 @@ npm run dev
 #### 使用 useS3Upload Hook
 
 ```tsx
-import { useS3Upload } from '@/hooks/useS3Upload';
+import { useS3Upload } from '@/hooks/useS3Upload'
 
 function MyComponent() {
-  const { upload, uploading, progress, error } = useS3Upload();
+  const { upload, uploading, progress, error } = useS3Upload()
 
   const handleUpload = async (file: File) => {
     try {
       const key = await upload(file, {
         contentType: file.type,
-        onProgress: (p) => console.log(`上传进度: ${p}%`)
-      });
-      console.log(`上传成功，Key: ${key}`);
+        onProgress: (p) => console.log(`上传进度: ${p}%`),
+      })
+      console.log(`上传成功，Key: ${key}`)
     } catch (err) {
-      console.error('上传失败:', err);
+      console.error('上传失败:', err)
     }
-  };
+  }
 
   return (
     <input
@@ -252,50 +246,50 @@ function MyComponent() {
       onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
       disabled={uploading}
     />
-  );
+  )
 }
 ```
 
 #### 使用 S3ImageUploader 组件
 
 ```tsx
-import { S3ImageUploader } from '@/components/S3ImageUploader';
+import { S3ImageUploader } from '@/components/S3ImageUploader'
 
 function ImageUploadForm() {
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageUrl, setImageUrl] = useState('')
 
   return (
     <S3ImageUploader
       onUpload={(url, key) => {
-        setImageUrl(url);
-        console.log(`上传成功！Key: ${key}`);
+        setImageUrl(url)
+        console.log(`上传成功！Key: ${key}`)
       }}
       onError={(error) => {
-        console.error('上传失败:', error);
+        console.error('上传失败:', error)
       }}
       bucket="private"
       maxSize={10 * 1024 * 1024} // 10MB
     />
-  );
+  )
 }
 ```
 
 #### 使用 imageService
 
 ```tsx
-import { uploadImage, getImageUrl, getImagePreference } from '@/services/imageService';
+import { uploadImage, getImageUrl, getImagePreference } from '@/services/imageService'
 
 // 上传图片（自动根据策略选择存储）
-const result = await uploadImage(file);
-console.log(`图片已上传: ${result.url}`);
+const result = await uploadImage(file)
+console.log(`图片已上传: ${result.url}`)
 
 // 获取图片 URL（根据偏好策略）
-const urls = await getImageUrl(imageId);
-const primaryUrl = urls[0];
+const urls = await getImageUrl(imageId)
+const primaryUrl = urls[0]
 
 // 获取当前存储策略
-const preference = await getImagePreference();
-console.log(`当前策略: ${preference.strategy}`);
+const preference = await getImagePreference()
+console.log(`当前策略: ${preference.strategy}`)
 ```
 
 ## 故障排除
@@ -305,6 +299,7 @@ console.log(`当前策略: ${preference.strategy}`);
 **症状**：上传时报错 "S3 configuration error"
 
 **解决方案**：
+
 1. 检查 `.env.local` 中的凭证是否正确
 2. 确认写入凭证具有 PutObject 权限
 3. 检查存储桶名称是否匹配
@@ -314,6 +309,7 @@ console.log(`当前策略: ${preference.strategy}`);
 **症状**：无法获取上传 URL
 
 **解决方案**：
+
 1. 检查网络连接
 2. 确认 S3_ENDPOINT 可访问
 3. 验证凭证是否过期
@@ -323,6 +319,7 @@ console.log(`当前策略: ${preference.strategy}`);
 **症状**：上传成功但图片无法显示
 
 **解决方案**：
+
 1. 检查 S3_PUBLIC_DOMAIN 配置
 2. 确认存储桶访问权限
 3. 如果使用 Presigned URL，检查是否过期
@@ -332,6 +329,7 @@ console.log(`当前策略: ${preference.strategy}`);
 **症状**：报错 "Unknown field s3Url"
 
 **解决方案**：
+
 ```bash
 npm run db:generate
 npm run db:push
@@ -343,6 +341,7 @@ npm run db:push
 
 **解决方案**：
 在 Bitiful 控制台配置存储桶的 CORS 规则：
+
 ```json
 [
   {

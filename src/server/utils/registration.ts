@@ -18,9 +18,7 @@ function normalizeRegistrationConfig(value: unknown): RegistrationConfig {
   const config = value as Record<string, unknown>
   return {
     enabled:
-      typeof config.enabled === 'boolean'
-        ? config.enabled
-        : DEFAULT_REGISTRATION_CONFIG.enabled,
+      typeof config.enabled === 'boolean' ? config.enabled : DEFAULT_REGISTRATION_CONFIG.enabled,
   }
 }
 
@@ -32,7 +30,9 @@ export async function getRegistrationConfig(): Promise<RegistrationConfig> {
   return normalizeRegistrationConfig(config?.value)
 }
 
-export async function setRegistrationConfig(value: RegistrationConfig): Promise<RegistrationConfig> {
+export async function setRegistrationConfig(
+  value: RegistrationConfig
+): Promise<RegistrationConfig> {
   const config = normalizeRegistrationConfig(value)
   await prisma.siteConfig.upsert({
     where: { key: REGISTRATION_CONFIG_KEY },

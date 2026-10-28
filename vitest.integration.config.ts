@@ -1,16 +1,16 @@
-import { defineConfig } from 'vitest/config';
-import os from 'os';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
+import { defineConfig } from 'vitest/config'
+import os from 'os'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import dotenv from 'dotenv'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-dotenv.config({ path: path.resolve(__dirname, '.env.test') });
+dotenv.config({ path: path.resolve(__dirname, '.env.test') })
 
 const testUploadsPath =
-  process.env.UPLOADS_PATH || path.join(os.tmpdir(), 'huangshifu-wiki-test-uploads');
-process.env.UPLOADS_PATH = testUploadsPath;
+  process.env.UPLOADS_PATH || path.join(os.tmpdir(), 'huangshifu-wiki-test-uploads')
+process.env.UPLOADS_PATH = testUploadsPath
 
 export default defineConfig({
   define: {
@@ -38,13 +38,7 @@ export default defineConfig({
       reporter: ['text', 'html', 'json-summary'],
       reportsDirectory: 'coverage/integration',
       include: ['src/**/*.ts'],
-      exclude: [
-        'tests/**',
-        'scripts/**',
-        'dist/**',
-        '**/*.d.ts',
-        '**/types/**',
-      ],
+      exclude: ['tests/**', 'scripts/**', 'dist/**', '**/*.d.ts', '**/types/**'],
       thresholds: {
         lines: 20,
         functions: 40,
@@ -53,4 +47,4 @@ export default defineConfig({
       },
     },
   },
-});
+})

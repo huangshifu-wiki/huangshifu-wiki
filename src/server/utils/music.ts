@@ -1,14 +1,23 @@
 // 音乐平台解析、播放URL、导入、CRUD 全链路
 
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client'
+import type { MusicPlayableOverride } from '@prisma/client'
+import { prisma, DEFAULT_MUSIC_PLATFORMS, uploadsDir } from './config'
+import { runtimeConfigService } from '../services/runtimeConfig.service'
+import { normalizeTrackDiscPayload, type TrackDiscPayload } from './upload'
+import { enhancedCache, CACHE_KEYS } from './cache'
+import { normalizeOptionalDateOnly, parseInteger } from './parsers'
+import { withNumericSlugTransaction } from './numericSlug'
+import { normalizeLyricStorage } from './lyrics'
+import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import {
-  prisma,
-  PLAY_URL_CACHE_TTL_MS,
-  DEFAULT_MUSIC_PLATFORMS,
-} from './config';
-import { enhancedCache, CACHE_KEYS } from './cache';
-import { parseInteger } from './parsers';
-import { CONTENT_LIMITS } from '../../lib/contentLimits';
+  extractMusicCreditsFromLyric,
+  firstMusicCredit,
+  normalizeStringListInput,
+  resolveImportedVocals,
+} from '../../lib/musicCredits'
+import type { MusicImportCredits } from '../../lib/musicCredits'
+import type { LyricType } from '../../lib/lrcParser'
 import type {
   MusicPlatform,
   MusicTrackWithRelations,
@@ -16,37 +25,63 @@ import type {
   ImportSongInput,
   SongCustomPlatformLink,
   PlayUrlCacheValue,
-} from '../types';
-import {
-  parseMusicUrl,
-  type MusicPlatform as ParsedMusicPlatform,
-} from '../music/musicUrlParser';
+} from '../types'
+import { parseMusicUrl, type MusicPlatform as ParsedMusicPlatform } from '../music/musicUrlParser'
+import { getMediaStorageSnapshot, getReadyAssetForOwner } from '../services/mediaAssetService'
 import {
   getMusicResourcePreview,
+  getMusicTrackMetadata,
   resolveAudioUrl as resolveMetingAudioUrl,
   resolveLyric as resolveMetingLyric,
   resolveCoverUrl as resolveMetingCoverUrl,
-} from '../music/metingService';
+} from '../music/metingService'
+import { variantGenerator } from '../services/variantGenerator'
+import { resolveUploadPathByStorageKey } from '../uploadPath'
+import { localizeImageUrlAsMediaAsset } from './remoteImageAsset'
+import { enqueueMusicTextEmbeddingsDeferred } from '../vector/textEmbeddingSync'
+
+export async function findMusicDocIdsByArtistPartial(
+  query: string,
+  take?: number,
+  includeDeleted = false
+) {
+  if (!query) return [] as string[]
+  const deletedFilter = includeDeleted ? Prisma.empty : Prisma.sql`"deletedAt" IS NULL AND`
+  const limitClause = take === undefined ? Prisma.empty : Prisma.sql`LIMIT ${take}`
+  const rows = await prisma.$queryRaw<Array<{ docId: string }>>(Prisma.sql`
+    SELECT "docId"
+    FROM "MusicTrack"
+    WHERE ${deletedFilter}
+      EXISTS (
+        SELECT 1
+        FROM unnest("artists") AS artist_name(name)
+        WHERE artist_name.name ILIKE ${`%${query}%`}
+      )
+    ORDER BY "updatedAt" DESC, "docId" ASC
+    ${limitClause}
+  `)
+  return rows.map((row) => row.docId)
+}
 
 // ─── 显示辅助函数 ───────────────────────────────────────────────
 
 export function resolveSongDisplayAlbum(song: {
-  displayAlbumMode: DisplayAlbumMode;
-  manualAlbumName: string | null;
+  displayAlbumMode: DisplayAlbumMode
+  manualAlbumName: string | null
   albumRelations: Array<{
-    isDisplay: boolean;
+    isDisplay: boolean
     album: {
-      docId: string;
-      title: string;
-    };
-  }>;
+      docId: string
+      title: string
+    }
+  }>
 }) {
   if (song.displayAlbumMode === 'none') {
     return {
       mode: 'none' as const,
       albumDocId: null,
       title: '',
-    };
+    }
   }
 
   if (song.displayAlbumMode === 'manual') {
@@ -54,622 +89,1054 @@ export function resolveSongDisplayAlbum(song: {
       mode: 'manual' as const,
       albumDocId: null,
       title: song.manualAlbumName || '',
-    };
+    }
   }
 
-  const displayRelation = song.albumRelations.find((item) => item.isDisplay) || song.albumRelations[0] || null;
+  const displayRelation =
+    song.albumRelations.find((item) => item.isDisplay) || song.albumRelations[0] || null
   if (!displayRelation) {
     return {
       mode: 'linked' as const,
       albumDocId: null,
       title: '',
-    };
+    }
   }
 
   return {
     mode: 'linked' as const,
     albumDocId: displayRelation.album.docId,
     title: displayRelation.album.title,
-  };
+  }
 }
 
-export function resolveSongCoverUrl(song: Pick<MusicTrackWithRelations, 'cover' | 'defaultCoverSource' | 'covers' | 'albumRelations'>) {
-  const source = (song.defaultCoverSource || '').trim();
-  if (!source || source === 'old_cover') {
-    return song.cover || '';
-  }
-
-  if (source.startsWith('song_cover:')) {
-    const coverId = source.slice('song_cover:'.length);
-    const matched = song.covers.find((item) => item.id === coverId);
-    return matched?.publicUrl || song.cover || '';
-  }
-
-  if (source.startsWith('album_cover:')) {
-    const coverId = source.slice('album_cover:'.length);
-    for (const relation of song.albumRelations) {
-      const matched = relation.album.covers.find((item) => item.id === coverId);
-      if (matched?.publicUrl) {
-        return matched.publicUrl;
-      }
+export function resolveSongCoverUrl(song: {
+  coverId: string | null
+  coverAlbumDocId: string | null
+  covers: Array<{
+    id: string
+    publicUrl: string
+    thumbnailUrl?: string | null
+    isDefault?: boolean
+  }>
+  albumRelations: Array<{
+    album: {
+      docId: string
+      coverId: string | null
+      covers: Array<{
+        id: string
+        publicUrl: string
+        thumbnailUrl?: string | null
+        isDefault?: boolean
+      }>
     }
-    return song.cover || '';
+  }>
+}) {
+  if (song.coverAlbumDocId) {
+    const relation = song.albumRelations.find((item) => item.album.docId === song.coverAlbumDocId)
+    if (!relation) return ''
+    return resolveAlbumCoverUrl(relation.album)
   }
 
-  return song.cover || '';
+  const selected = song.coverId ? song.covers.find((item) => item.id === song.coverId) : null
+  return selected?.publicUrl || song.covers.find((item) => item.isDefault)?.publicUrl || ''
+}
+
+export function resolveAlbumCoverUrl(album: {
+  coverId: string | null
+  covers: Array<{
+    id: string
+    publicUrl: string
+    thumbnailUrl?: string | null
+    isDefault?: boolean
+  }>
+}) {
+  const selected = album.coverId ? album.covers.find((item) => item.id === album.coverId) : null
+  return selected?.publicUrl || album.covers.find((item) => item.isDefault)?.publicUrl || ''
+}
+
+export function resolveSongCoverThumbnailUrl(song: Parameters<typeof resolveSongCoverUrl>[0]) {
+  if (song.coverAlbumDocId) {
+    const relation = song.albumRelations.find((item) => item.album.docId === song.coverAlbumDocId)
+    if (!relation) return ''
+    return resolveAlbumCoverThumbnailUrl(relation.album)
+  }
+
+  const selected = song.coverId ? song.covers.find((item) => item.id === song.coverId) : null
+  return (
+    selected?.thumbnailUrl ||
+    selected?.publicUrl ||
+    song.covers.find((item) => item.isDefault)?.thumbnailUrl ||
+    song.covers.find((item) => item.isDefault)?.publicUrl ||
+    ''
+  )
+}
+
+export function resolveAlbumCoverThumbnailUrl(album: Parameters<typeof resolveAlbumCoverUrl>[0]) {
+  const selected = album.coverId ? album.covers.find((item) => item.id === album.coverId) : null
+  return (
+    selected?.thumbnailUrl ||
+    selected?.publicUrl ||
+    album.covers.find((item) => item.isDefault)?.thumbnailUrl ||
+    album.covers.find((item) => item.isDefault)?.publicUrl ||
+    ''
+  )
+}
+
+export async function enqueueMusicCoverThumbnail(
+  targetType: 'songCover' | 'albumCover',
+  coverId: string,
+  storageKey: string,
+  uploadDir = uploadsDir
+): Promise<boolean> {
+  const localFilePath = resolveUploadPathByStorageKey(storageKey, uploadDir)
+  if (!localFilePath) {
+    console.warn(
+      `[Music] Cannot resolve cover source file for ${targetType} ${coverId}: ${storageKey}`
+    )
+    return false
+  }
+
+  try {
+    return await variantGenerator.enqueue({
+      targetType,
+      targetId: coverId,
+      localFilePath,
+      priority: 'normal',
+    })
+  } catch (error) {
+    console.error(`[Music] Enqueue cover thumbnail failed for ${targetType} ${coverId}:`, error)
+    return false
+  }
 }
 
 // ─── 自定义链接函数 ──────────────────────────────────────────────
 
-export function normalizeSongCustomPlatformLinkUrl(value: string) {
-  const trimmed = value.trim();
+function normalizeSongCustomPlatformLinkUrl(value: string) {
+  const trimmed = value.trim()
   if (!trimmed) {
-    return '';
+    return ''
   }
 
-  const raw = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const raw = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
 
   try {
-    const parsed = new URL(raw);
+    const parsed = new URL(raw)
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return '';
+      return ''
     }
-    return parsed.toString();
+    return parsed.toString()
   } catch {
-    return '';
+    return ''
   }
 }
 
 export function normalizeSongCustomPlatformLinks(input: unknown): SongCustomPlatformLink[] {
   if (!Array.isArray(input)) {
-    return [];
+    return []
   }
 
-  const deduped = new Set<string>();
-  const links: SongCustomPlatformLink[] = [];
+  const deduped = new Set<string>()
+  const links: SongCustomPlatformLink[] = []
 
   for (const item of input) {
     if (!item || typeof item !== 'object') {
-      continue;
+      continue
     }
 
-    const rawLabel = typeof (item as { label?: unknown }).label === 'string'
-      ? (item as { label: string }).label.trim()
-      : '';
-    const normalizedLabel = rawLabel.slice(0, CONTENT_LIMITS.music.customPlatformLabel);
-    const rawUrl = typeof (item as { url?: unknown }).url === 'string'
-      ? (item as { url: string }).url
-      : '';
+    const rawLabel =
+      typeof (item as { label?: unknown }).label === 'string'
+        ? (item as { label: string }).label.trim()
+        : ''
+    const normalizedLabel = rawLabel.slice(0, CONTENT_LIMITS.music.customPlatformLabel)
+    const rawUrl =
+      typeof (item as { url?: unknown }).url === 'string' ? (item as { url: string }).url : ''
     const normalizedUrl = normalizeSongCustomPlatformLinkUrl(
       rawUrl.slice(0, CONTENT_LIMITS.music.customPlatformUrl)
-    );
+    )
 
     if (!normalizedLabel || !normalizedUrl) {
-      continue;
+      continue
     }
 
-    const key = `${normalizedLabel}::${normalizedUrl}`;
+    const key = `${normalizedLabel}::${normalizedUrl}`
     if (deduped.has(key)) {
-      continue;
+      continue
     }
 
-    deduped.add(key);
+    deduped.add(key)
     links.push({
       label: normalizedLabel,
       url: normalizedUrl,
-    });
+    })
 
     if (links.length >= CONTENT_LIMITS.music.customPlatformLinks) {
-      break;
+      break
     }
   }
 
-  return links;
+  return links
 }
 
 // ─── 平台解析函数 ────────────────────────────────────────────────
 
-export function getPlatformSourceId(song: {
-  neteaseId?: string | null;
-  tencentId?: string | null;
-  kugouId?: string | null;
-  baiduId?: string | null;
-  kuwoId?: string | null;
-  id?: string | null;
-}, platform: MusicPlatform): string {
-  if (platform === 'netease') return song.neteaseId?.trim() || '';
-  if (platform === 'tencent') return song.tencentId?.trim() || '';
-  if (platform === 'kugou') return song.kugouId?.trim() || '';
-  if (platform === 'baidu') return song.baiduId?.trim() || '';
-  if (platform === 'kuwo') return song.kuwoId?.trim() || '';
-  return song.id?.trim() || '';
+function getPlatformSourceId(
+  sources: Array<{ platform: MusicPlatform; sourceId: string; isPrimary?: boolean }>,
+  platform: MusicPlatform
+): string {
+  const source = sources.find((item) => item.platform === platform && item.sourceId.trim())
+  return source?.sourceId.trim() || ''
 }
 
-export function getPlatformSourceField(platform: MusicPlatform):
-  | 'neteaseId'
-  | 'tencentId'
-  | 'kugouId'
-  | 'baiduId'
-  | 'kuwoId' {
-  if (platform === 'netease') return 'neteaseId';
-  if (platform === 'tencent') return 'tencentId';
-  if (platform === 'kugou') return 'kugouId';
-  if (platform === 'baidu') return 'baiduId';
-  return 'kuwoId';
-}
-
-export function buildPlaybackPlatformCandidates(song: {
-  enabledPlatform?: MusicPlatform | null;
-  primaryPlatform?: MusicPlatform | null;
+function buildPlaybackPlatformCandidates(song: {
+  externalSources?: Array<{ platform: MusicPlatform; isPrimary?: boolean }>
 }): MusicPlatform[] {
-  const preferred = song.enabledPlatform || song.primaryPlatform || null;
-  const deduped = new Set<MusicPlatform>();
-  if (preferred) {
-    deduped.add(preferred);
+  const deduped = new Set<MusicPlatform>()
+  const primary = song.externalSources?.find((source) => source.isPrimary)
+  if (primary) {
+    deduped.add(primary.platform)
   }
-  DEFAULT_MUSIC_PLATFORMS.forEach((platform) => deduped.add(platform));
-  return [...deduped.values()];
+  for (const source of song.externalSources || []) {
+    deduped.add(source.platform)
+  }
+  return [...deduped.values()]
+}
+
+export type DuplicateSongSourceWarning = {
+  platform: MusicPlatform
+  sourceId: string
+  song: { docId: string; title: string; artists: string[] }
+}
+
+export type DuplicateAlbumSourceWarning = {
+  platform: MusicPlatform
+  sourceId: string
+  album: { docId: string; title: string }
+}
+
+function externalSourceConflictWhere(
+  sources: Array<{ platform: MusicPlatform; sourceId: string }>,
+  excludeField: 'songDocId' | 'albumDocId',
+  excludeDocId?: string
+) {
+  return {
+    OR: sources.map((source) => ({ platform: source.platform, sourceId: source.sourceId })),
+    ...(excludeDocId ? { [excludeField]: { not: excludeDocId } } : {}),
+  }
+}
+
+/** 同一 platform:sourceId 可能被多首歌/专辑共享，这里每个 key 只保留第一条占用记录。 */
+function firstPerPlatformSourceId<T extends { platform: MusicPlatform; sourceId: string }>(
+  rows: T[]
+): T[] {
+  const seen = new Set<string>()
+  return rows.filter((row) => {
+    const key = `${row.platform}:${row.sourceId}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/**
+ * 检测歌曲来源中已被其他歌曲占用的平台 id（同一 id 可被多首歌共享，这里只做提醒）。
+ * 每个 platform:sourceId 只返回第一条占用记录。
+ */
+export async function findDuplicateSongSources(
+  sources: Array<{ platform: MusicPlatform; sourceId: string }>,
+  excludeSongDocId?: string
+): Promise<DuplicateSongSourceWarning[]> {
+  if (!sources.length) return []
+  const rows = await prisma.musicExternalSource.findMany({
+    where: {
+      resourceType: 'song',
+      // 软删除歌曲与悬空行（无歌曲）不算占用，避免提醒里出现已删除歌曲或漏报
+      song: { is: { deletedAt: null } },
+      ...externalSourceConflictWhere(sources, 'songDocId', excludeSongDocId),
+    },
+    select: {
+      platform: true,
+      sourceId: true,
+      song: { select: { docId: true, title: true, artists: true } },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  })
+  return firstPerPlatformSourceId(rows).flatMap((row) =>
+    row.song ? [{ platform: row.platform, sourceId: row.sourceId, song: row.song }] : []
+  )
+}
+
+/**
+ * 检测专辑来源中已被其他专辑占用的平台 id（同一 id 可被多张专辑共享，这里只做提醒）。
+ * 每个 platform:sourceId 只返回第一条占用记录。
+ */
+export async function findDuplicateAlbumSources(
+  sources: Array<{ platform: MusicPlatform; sourceId: string }>,
+  excludeAlbumDocId?: string
+): Promise<DuplicateAlbumSourceWarning[]> {
+  if (!sources.length) return []
+  const rows = await prisma.musicExternalSource.findMany({
+    where: {
+      resourceType: 'album',
+      // 软删除专辑与悬空行（无专辑）不算占用，避免提醒里出现已删除专辑或漏报
+      album: { is: { deletedAt: null } },
+      ...externalSourceConflictWhere(sources, 'albumDocId', excludeAlbumDocId),
+    },
+    select: {
+      platform: true,
+      sourceId: true,
+      album: { select: { docId: true, title: true } },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  })
+  return firstPerPlatformSourceId(rows).flatMap((row) =>
+    row.album ? [{ platform: row.platform, sourceId: row.sourceId, album: row.album }] : []
+  )
+}
+
+export function normalizeMusicExternalSourceInputs(value: unknown) {
+  if (!Array.isArray(value)) return []
+  const deduped = new Set<string>()
+  const sources: Array<{
+    platform: MusicPlatform
+    sourceId: string
+    sourceUrl: string | null
+    isPrimary: boolean
+  }> = []
+
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const record = item as Record<string, unknown>
+    const platform = record.platform as MusicPlatform
+    if (!DEFAULT_MUSIC_PLATFORMS.includes(platform)) continue
+    const sourceId = typeof record.sourceId === 'string' ? record.sourceId.trim() : ''
+    if (!sourceId) continue
+
+    const key = `${platform}:${sourceId}`
+    if (deduped.has(key)) continue
+    deduped.add(key)
+    sources.push({
+      platform,
+      sourceId,
+      sourceUrl:
+        typeof record.sourceUrl === 'string' && record.sourceUrl.trim()
+          ? record.sourceUrl.trim()
+          : null,
+      isPrimary: record.isPrimary === true,
+    })
+  }
+
+  if (sources.length && !sources.some((source) => source.isPrimary)) {
+    sources[0].isPrimary = true
+  }
+
+  return sources
 }
 
 // ─── 播放缓存函数 ────────────────────────────────────────────────
 
-export function clearExpiredPlayUrlCache() {
-  const prefix = `${CACHE_KEYS.MUSIC_PLAY_URL}:`;
-  const allKeys = enhancedCache.getNativeStats().keys as unknown as string[] | undefined;
+function isValidPlayUrl(url: string) {
+  if (!url.startsWith('http')) {
+    return false
+  }
+  // 网易云不可播放时 media/outer 会重定向到 404 页面（HTTP 200），不能作为播放地址
+  if (url.includes('music.163.com/404')) {
+    return false
+  }
+  return true
+}
+
+function clearExpiredPlayUrlCache() {
+  const prefix = `${CACHE_KEYS.MUSIC_PLAY_URL}:`
+  const allKeys = enhancedCache.getNativeStats().keys as unknown as string[] | undefined
   if (!allKeys) {
-    try { enhancedCache.delete(prefix + '__sentinel__'); } catch { return; }
-    return;
+    try {
+      enhancedCache.delete(prefix + '__sentinel__')
+    } catch {
+      return
+    }
+    return
   }
   for (let i = 0; i < allKeys.length; i++) {
     if (allKeys[i].startsWith(prefix)) {
-      enhancedCache.delete(allKeys[i]);
+      enhancedCache.delete(allKeys[i])
     }
   }
 }
 
-export function getCachedPlayUrl(cacheKey: string) {
-  const enhancedKey = `${CACHE_KEYS.MUSIC_PLAY_URL}:${cacheKey}`;
-  const cached = enhancedCache.get<PlayUrlCacheValue>(enhancedKey);
+function getCachedPlayUrl(cacheKey: string) {
+  const enhancedKey = `${CACHE_KEYS.MUSIC_PLAY_URL}:${cacheKey}`
+  const cached = enhancedCache.get<PlayUrlCacheValue>(enhancedKey)
   if (cached && cached.expiresAt > Date.now()) {
-    return cached;
+    return cached
   }
   if (cached) {
-    enhancedCache.delete(enhancedKey);
+    enhancedCache.delete(enhancedKey)
   }
-  return null;
+  return null
 }
 
-export function setCachedPlayUrl(cacheKey: string, value: Omit<PlayUrlCacheValue, 'fetchedAt' | 'expiresAt'>) {
-  const now = Date.now();
+function setCachedPlayUrl(
+  cacheKey: string,
+  value: Omit<PlayUrlCacheValue, 'fetchedAt' | 'expiresAt'>
+) {
+  const now = Date.now()
+  const playUrlCacheTtlMs = runtimeConfigService.getConfig().playUrlCacheTtlSeconds * 1000
   const record: PlayUrlCacheValue = {
     ...value,
     fetchedAt: now,
-    expiresAt: now + PLAY_URL_CACHE_TTL_MS,
-  };
+    expiresAt: now + playUrlCacheTtlMs,
+  }
 
   // 写入增强缓存（限制大小）
-  const enhancedKey = `${CACHE_KEYS.MUSIC_PLAY_URL}:${cacheKey}`;
-  enhancedCache.set(enhancedKey, record, Math.ceil(PLAY_URL_CACHE_TTL_MS / 1000));
-  return record;
+  const enhancedKey = `${CACHE_KEYS.MUSIC_PLAY_URL}:${cacheKey}`
+  enhancedCache.set(enhancedKey, record, Math.ceil(playUrlCacheTtlMs / 1000))
+  return record
 }
 
 export async function resolveMusicPlayUrl(song: {
-  docId: string;
-  id: string;
-  audioUrl: string;
-  primaryPlatform: MusicPlatform;
-  enabledPlatform: MusicPlatform | null;
-  neteaseId: string | null;
-  tencentId: string | null;
-  kugouId: string | null;
-  baiduId: string | null;
-  kuwoId: string | null;
+  docId: string
+  audioUrl: string
+  playableOverride?: MusicPlayableOverride
+  externalSources: Array<{ platform: MusicPlatform; sourceId: string; isPrimary: boolean }>
 }) {
-  clearExpiredPlayUrlCache();
+  clearExpiredPlayUrlCache()
 
-  const candidates = buildPlaybackPlatformCandidates(song);
-  const errors: Array<{ platform: MusicPlatform; reason: string }> = [];
+  if (song.playableOverride === 'disabled') {
+    return {
+      mode: 'disabled' as const,
+      platform: null,
+      sourceId: null,
+      playUrl: '',
+      cached: false,
+      cacheExpiresAt: null,
+      playable: false,
+      errors: [],
+    }
+  }
+
+  const fallbackUrl = song.audioUrl?.trim() || ''
+  if (fallbackUrl) {
+    return {
+      mode: 'manual' as const,
+      platform: null,
+      sourceId: null,
+      playUrl: fallbackUrl,
+      cached: false,
+      cacheExpiresAt: null,
+      fallback: true,
+      playable: true,
+      errors: [],
+    }
+  }
+
+  const candidates = buildPlaybackPlatformCandidates(song)
+  const errors: Array<{ platform: MusicPlatform; reason: string }> = []
+  // 服务器 IP 拿不到网易云地址时，记录 sourceId 供浏览器直连外链回退
+  let neteaseFallbackSourceId = ''
 
   for (const platform of candidates) {
-    const sourceId = getPlatformSourceId(song, platform);
+    const sourceId = getPlatformSourceId(song.externalSources, platform)
     if (!sourceId) {
-      continue;
+      continue
     }
 
-    const cacheKey = `${song.docId}:${platform}:${sourceId}`;
-    const cached = getCachedPlayUrl(cacheKey);
-    if (cached?.url) {
+    if (platform === 'netease' && !neteaseFallbackSourceId) {
+      neteaseFallbackSourceId = sourceId
+    }
+
+    // v2：网易云解析改为 https 直链后作废旧缓存（旧条目仍指向 media/outer 混合内容地址）
+    const cacheKey = `v2:${song.docId}:${platform}:${sourceId}`
+    const cached = getCachedPlayUrl(cacheKey)
+    if (cached?.url && isValidPlayUrl(cached.url)) {
       return {
+        mode: 'cache' as const,
         platform: cached.platform,
         sourceId: cached.sourceId,
         playUrl: cached.url,
         cached: true,
         cacheExpiresAt: new Date(cached.expiresAt).toISOString(),
-      };
+        playable: true,
+      }
     }
 
     try {
-      const resolvedUrl = await resolveMetingAudioUrl(platform as ParsedMusicPlatform, sourceId);
+      const resolvedUrl = await resolveMetingAudioUrl(platform as ParsedMusicPlatform, sourceId)
       if (!resolvedUrl) {
-        errors.push({ platform, reason: 'empty_url' });
-        continue;
+        errors.push({ platform, reason: 'empty_url' })
+        continue
       }
 
       const cachedRecord = setCachedPlayUrl(cacheKey, {
         platform,
         sourceId,
         url: resolvedUrl,
-      });
+      })
 
       return {
+        mode: 'resolved' as const,
         platform,
         sourceId,
         playUrl: resolvedUrl,
         cached: false,
         cacheExpiresAt: new Date(cachedRecord.expiresAt).toISOString(),
-      };
+        playable: true,
+      }
     } catch (error) {
-      errors.push({ platform, reason: error instanceof Error ? error.message : 'resolve_failed' });
+      errors.push({ platform, reason: error instanceof Error ? error.message : 'resolve_failed' })
     }
   }
 
-  const fallbackUrl = song.audioUrl?.trim() || '';
-  if (fallbackUrl) {
+  // 网易云解析失败（典型：服务器 IP 被风控）时，回退到外链由浏览器直连，
+  // 用用户 IP 获取播放权；不缓存，避免阻止 eapi 恢复后重新解析
+  if (neteaseFallbackSourceId) {
     return {
-      platform: song.primaryPlatform,
-      sourceId: song.id,
-      playUrl: fallbackUrl,
+      mode: 'outer' as const,
+      platform: 'netease',
+      sourceId: neteaseFallbackSourceId,
+      playUrl: `https://music.163.com/song/media/outer/url?id=${neteaseFallbackSourceId}.mp3`,
       cached: false,
       cacheExpiresAt: null,
       fallback: true,
+      playable: true,
       errors,
-    };
+    }
   }
 
   return {
-    platform: song.primaryPlatform,
-    sourceId: song.id,
+    mode: 'none' as const,
+    platform: null,
+    sourceId: null,
     playUrl: '',
     cached: false,
     cacheExpiresAt: null,
+    playable: false,
     errors,
-  };
+  }
 }
 
 // ─── 导入函数 ────────────────────────────────────────────────────
 
 export function normalizeMusicImportTracks(input: unknown) {
   if (!Array.isArray(input)) {
-    return [] as ImportSongInput[];
+    return [] as ImportSongInput[]
   }
 
   return input
     .map((item): ImportSongInput | null => {
       if (!item || typeof item !== 'object') {
-        return null;
+        return null
       }
-      const record = item as Record<string, unknown>;
-      const sourceId = typeof record.sourceId === 'string' ? record.sourceId.trim() : '';
+      const record = item as Record<string, unknown>
+      const sourceId = typeof record.sourceId === 'string' ? record.sourceId.trim() : ''
       if (!sourceId) {
-        return null;
+        return null
       }
+
+      const normalizedArtists = normalizeStringListInput(record.artists)
+      const artists = normalizedArtists.length
+        ? normalizedArtists
+        : normalizeStringListInput(record.artist)
 
       return {
         sourceId,
         title: typeof record.title === 'string' ? record.title.trim() : '',
-        artist: typeof record.artist === 'string' ? record.artist.trim() : '',
+        artists,
         album: typeof record.album === 'string' ? record.album.trim() : '',
         picId: typeof record.picId === 'string' ? record.picId.trim() : sourceId,
         urlId: typeof record.urlId === 'string' ? record.urlId.trim() : sourceId,
         lyricId: typeof record.lyricId === 'string' ? record.lyricId.trim() : sourceId,
         cover: typeof record.cover === 'string' ? record.cover.trim() : '',
         sourceUrl: typeof record.sourceUrl === 'string' ? record.sourceUrl.trim() : '',
-        isInstrumental: typeof record.isInstrumental === 'boolean' ? record.isInstrumental : undefined,
-      };
+        isInstrumental:
+          typeof record.isInstrumental === 'boolean' ? record.isInstrumental : undefined,
+      }
     })
-    .filter((item): item is ImportSongInput => Boolean(item));
+    .filter((item): item is ImportSongInput => Boolean(item))
 }
 
 // ─── CRUD 函数 ───────────────────────────────────────────────────
 
-export function buildAlbumTracksPayload(relations: Array<{
-  songDocId: string;
-  trackOrder: number;
-  discNumber: number;
-  song: {
-    docId: string;
-    title: string;
-    artist: string;
-    cover: string;
-    id: string;
-  };
-}>) {
-  const byDisc = new Map<number, Array<{ songDocId: string; trackOrder: number; song: { docId: string; title: string; artist: string; cover: string; id: string } }>>();
-
-  relations.forEach((relation) => {
-    const disc = relation.discNumber > 0 ? relation.discNumber : 1;
-    if (!byDisc.has(disc)) {
-      byDisc.set(disc, []);
+export function buildAlbumTracksPayload(
+  relations: Array<{
+    songDocId: string
+    trackOrder: number
+    discNumber: number
+    song: {
+      docId: string
+      title: string
+      artists: string[]
     }
-    byDisc.get(disc)!.push({
+  }>,
+  existingTracks?: Prisma.JsonValue
+) {
+  const byDisc = new Map<
+    number,
+    {
+      name: string
+      songs: Array<{
+        songDocId: string
+        trackOrder: number
+        song: { docId: string; title: string; artists: string[] }
+      }>
+    }
+  >()
+
+  for (const disc of normalizeTrackDiscPayload(existingTracks)) {
+    byDisc.set(disc.disc, { name: disc.name, songs: [] })
+  }
+
+  for (const relation of relations) {
+    const disc = relation.discNumber > 0 ? relation.discNumber : 1
+    let entry = byDisc.get(disc)
+    if (!entry) {
+      entry = { name: `Disc ${disc}`, songs: [] }
+      byDisc.set(disc, entry)
+    }
+    entry.songs.push({
       songDocId: relation.songDocId,
       trackOrder: relation.trackOrder,
       song: relation.song,
-    });
-  });
+    })
+  }
 
   return [...byDisc.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([disc, songs]) => ({
+    .sort(([left], [right]) => left - right)
+    .map(([disc, entry]) => ({
       disc,
-      name: `Disc ${disc}`,
-      songs: songs
-        .sort((a, b) => a.trackOrder - b.trackOrder)
-        .map((entry) => ({
-          songDocId: entry.songDocId,
-          trackOrder: entry.trackOrder,
-          song: entry.song,
-        })),
-    }));
+      name: entry.name || `Disc ${disc}`,
+      songs: entry.songs.sort((left, right) => left.trackOrder - right.trackOrder),
+    }))
 }
 
-/** applyAlbumTracksToRelations 接受的 tracks 参数类型（与 normalizeTrackDiscPayload 返回值一致） */
-export type AlbumTrackDiscPayload = Array<{
-  disc: number;
-  name: string;
-  songs: Array<{ songDocId: string; trackOrder: number }>;
-}>;
+export async function applyAlbumTracksToRelations(
+  albumDocId: string,
+  tracks: TrackDiscPayload,
+  db: Prisma.TransactionClient | typeof prisma = prisma
+) {
+  const sync = async (client: Prisma.TransactionClient | typeof prisma) => {
+    const existingRelations = await client.songAlbumRelation.findMany({
+      where: { albumDocId },
+      select: { songDocId: true, isDisplay: true },
+    })
+    const existingDisplayBySongDocId = new Map(
+      existingRelations.map((relation) => [relation.songDocId, relation.isDisplay])
+    )
+    const createRows: Array<{
+      songDocId: string
+      albumDocId: string
+      discNumber: number
+      trackOrder: number
+      isDisplay: boolean
+    }> = []
 
-export async function applyAlbumTracksToRelations(albumDocId: string, tracks: AlbumTrackDiscPayload) {
-  const createRows: Array<{
-    songDocId: string;
-    albumDocId: string;
-    discNumber: number;
-    trackOrder: number;
-    isDisplay: boolean;
-  }> = [];
+    tracks.forEach((discEntry) => {
+      discEntry.songs.forEach((songEntry) => {
+        createRows.push({
+          songDocId: songEntry.songDocId,
+          albumDocId,
+          discNumber: discEntry.disc,
+          trackOrder: songEntry.trackOrder,
+          isDisplay: existingDisplayBySongDocId.get(songEntry.songDocId) ?? false,
+        })
+      })
+    })
 
-  tracks.forEach((discEntry) => {
-    discEntry.songs.forEach((songEntry) => {
-      createRows.push({
-        songDocId: songEntry.songDocId,
-        albumDocId,
-        discNumber: discEntry.disc,
-        trackOrder: songEntry.trackOrder,
-        isDisplay: false,
-      });
-    });
-  });
-
-  await prisma.$transaction([
-    prisma.songAlbumRelation.deleteMany({ where: { albumDocId } }),
-    ...(createRows.length
-      ? [prisma.songAlbumRelation.createMany({ data: createRows, skipDuplicates: true })]
-      : []),
-  ]);
-}
-
-export async function addSongCoverFromAsset(songDocId: string, assetId: string, markDefault = false) {
-  const asset = await prisma.mediaAsset.findUnique({
-    where: { id: assetId },
-    select: {
-      id: true,
-      storageKey: true,
-      publicUrl: true,
-      status: true,
-    },
-  });
-
-  if (!asset || asset.status !== 'ready') {
-    throw new Error('媒体资源不存在或不可用');
+    await client.songAlbumRelation.deleteMany({ where: { albumDocId } })
+    if (createRows.length) {
+      await client.songAlbumRelation.createMany({ data: createRows, skipDuplicates: true })
+    }
   }
 
-  const currentCount = await prisma.songCover.count({ where: { songDocId } });
+  if (db === prisma) await prisma.$transaction((tx) => sync(tx))
+  else await sync(db)
+}
+async function getReadyCoverAsset(
+  tx: Prisma.TransactionClient,
+  assetId: string,
+  ownerUid?: string
+) {
+  return getReadyAssetForOwner(tx, assetId, ownerUid)
+}
 
-  const cover = await prisma.songCover.create({
-    data: {
-      songDocId,
-      assetId: asset.id,
-      storageKey: asset.storageKey,
-      publicUrl: asset.publicUrl,
-      sortOrder: currentCount,
-      isDefault: markDefault,
-    },
-  });
-
-  if (markDefault) {
-    await prisma.songCover.updateMany({
-      where: {
+export async function addSongCoverFromAsset(
+  songDocId: string,
+  assetId: string,
+  markDefault = false,
+  ownerUid?: string
+) {
+  const cover = await prisma.$transaction(async (tx) => {
+    const asset = await getReadyCoverAsset(tx, assetId, ownerUid)
+    const snapshot = getMediaStorageSnapshot(asset)
+    const currentCount = await tx.songCover.count({ where: { songDocId } })
+    const cover = await tx.songCover.create({
+      data: {
         songDocId,
-        id: { not: cover.id },
+        assetId: asset.id,
+        storageKey: snapshot.storageKey || '',
+        publicUrl: snapshot.publicUrl,
+        variantStatus: snapshot.storageKey ? 'pending' : 'completed',
+        sortOrder: currentCount,
+        isDefault: markDefault,
       },
-      data: {
-        isDefault: false,
-      },
-    });
-    await prisma.musicTrack.update({
-      where: { docId: songDocId },
-      data: {
-        defaultCoverSource: `song_cover:${cover.id}`,
-      },
-    });
-  }
+    })
 
-  return cover;
+    if (markDefault) {
+      await tx.songCover.updateMany({
+        where: { songDocId, id: { not: cover.id }, isDefault: true },
+        data: { isDefault: false },
+      })
+      await tx.musicTrack.update({
+        where: { docId: songDocId },
+        data: { coverId: cover.id, coverAlbumDocId: null },
+      })
+    }
+    return cover
+  })
+  if (cover.storageKey) await enqueueMusicCoverThumbnail('songCover', cover.id, cover.storageKey)
+  return cover
 }
 
-export async function addAlbumCoverFromAsset(albumDocId: string, assetId: string, markDefault = false) {
-  const asset = await prisma.mediaAsset.findUnique({
-    where: { id: assetId },
-    select: {
-      id: true,
-      storageKey: true,
-      publicUrl: true,
-      status: true,
-    },
-  });
+export async function addSongCoverFromUrl(
+  songDocId: string,
+  publicUrl: string,
+  markDefault = false,
+  ownerUid?: string
+) {
+  const url = publicUrl.trim()
+  if (!url) return null
+  const asset = await localizeImageUrlAsMediaAsset(url, {
+    namespace: 'music-covers/songs',
+    fallbackName: `${songDocId}.jpg`,
+    ...(ownerUid ? { ownerUid } : {}),
+  })
+  return addSongCoverFromAsset(songDocId, asset.assetId, markDefault, ownerUid)
+}
 
-  if (!asset || asset.status !== 'ready') {
-    throw new Error('媒体资源不存在或不可用');
-  }
-
-  const currentCount = await prisma.albumCover.count({ where: { albumDocId } });
-
-  const cover = await prisma.albumCover.create({
-    data: {
-      albumDocId,
-      assetId: asset.id,
-      storageKey: asset.storageKey,
-      publicUrl: asset.publicUrl,
-      sortOrder: currentCount,
-      isDefault: markDefault,
-    },
-  });
-
-  if (markDefault) {
-    await prisma.albumCover.updateMany({
-      where: {
+export async function addAlbumCoverFromAsset(
+  albumDocId: string,
+  assetId: string,
+  markDefault = false,
+  ownerUid?: string
+) {
+  const cover = await prisma.$transaction(async (tx) => {
+    const asset = await getReadyCoverAsset(tx, assetId, ownerUid)
+    const snapshot = getMediaStorageSnapshot(asset)
+    const currentCount = await tx.albumCover.count({ where: { albumDocId } })
+    const cover = await tx.albumCover.create({
+      data: {
         albumDocId,
-        id: { not: cover.id },
+        assetId: asset.id,
+        storageKey: snapshot.storageKey || '',
+        publicUrl: snapshot.publicUrl,
+        variantStatus: snapshot.storageKey ? 'pending' : 'completed',
+        sortOrder: currentCount,
+        isDefault: markDefault,
       },
-      data: {
-        isDefault: false,
-      },
-    });
-    await prisma.album.update({
-      where: { docId: albumDocId },
-      data: {
-        defaultCoverSource: `album_cover:${cover.id}`,
-      },
-    });
-  }
+    })
 
-  return cover;
+    if (markDefault) {
+      await tx.albumCover.updateMany({
+        where: { albumDocId, id: { not: cover.id }, isDefault: true },
+        data: { isDefault: false },
+      })
+      await tx.album.update({ where: { docId: albumDocId }, data: { coverId: cover.id } })
+    }
+    return cover
+  })
+
+  if (cover.storageKey) await enqueueMusicCoverThumbnail('albumCover', cover.id, cover.storageKey)
+  return cover
 }
 
+export async function addAlbumCoverFromUrl(
+  albumDocId: string,
+  publicUrl: string,
+  markDefault = false,
+  ownerUid?: string
+) {
+  const url = publicUrl.trim()
+  if (!url) return null
+  const asset = await localizeImageUrlAsMediaAsset(url, {
+    namespace: 'music-covers/albums',
+    fallbackName: `${albumDocId}.jpg`,
+    ...(ownerUid ? { ownerUid } : {}),
+  })
+  return addAlbumCoverFromAsset(albumDocId, asset.assetId, markDefault, ownerUid)
+}
+
+async function maybeAddImportedSongCover(songDocId: string, coverUrl: string, markDefault = true) {
+  try {
+    await addSongCoverFromUrl(songDocId, coverUrl, markDefault)
+    return true
+  } catch (error) {
+    console.warn(`Import song cover failed for ${songDocId}:`, error)
+    return false
+  }
+}
+type ResolvedImportedSongData = {
+  resolvedCover: string
+  resolvedAudioUrl: string
+  resolvedLyric: string
+  lyricStorage: {
+    lyric: string | null
+    lyricType: LyricType | null
+    lyricPlain: string | null
+    lyricSource: MusicPlatform | null
+  }
+  credits: MusicImportCredits
+  releaseDate: string | null
+  durationMs: number | null
+}
+
+async function resolveImportedSongData(
+  platform: MusicPlatform,
+  track: ImportSongInput
+): Promise<ResolvedImportedSongData> {
+  const coverPromise = track.cover
+    ? Promise.resolve(track.cover)
+    : resolveMetingCoverUrl(platform as ParsedMusicPlatform, track.picId, track.cover)
+  const [resolvedCoverRaw, resolvedAudioUrlRaw, resolvedLyricRaw, metadata] = await Promise.all([
+    coverPromise,
+    resolveMetingAudioUrl(platform as ParsedMusicPlatform, track.urlId),
+    resolveMetingLyric(platform as ParsedMusicPlatform, track.lyricId),
+    getMusicTrackMetadata(platform, track.sourceId),
+  ])
+  const resolvedCover = resolvedCoverRaw || track.cover
+  const resolvedAudioUrl = resolvedAudioUrlRaw || ''
+  const resolvedLyric = resolvedLyricRaw || ''
+  const lyricStorage = normalizeLyricStorage({ lyric: resolvedLyric, lyricSource: platform })
+  const credits = extractMusicCreditsFromLyric(resolvedLyric)
+  credits.vocals = resolveImportedVocals(
+    credits.vocals,
+    track.artists,
+    track.isInstrumental === true
+  )
+
+  return {
+    resolvedCover,
+    resolvedAudioUrl,
+    resolvedLyric,
+    lyricStorage: lyricStorage.data,
+    credits,
+    releaseDate: metadata.releaseDate,
+    durationMs: metadata.durationMs,
+  }
+}
+
+export type MusicMetadataFields = {
+  lyricists: string[]
+  composers: string[]
+  arrangers: string[]
+  vocals: string[]
+  releaseDate: Date | null
+  durationMs: number | null
+}
+
+function buildImportedMetadataFields(data: ResolvedImportedSongData): MusicMetadataFields {
+  return {
+    lyricists: data.credits.lyricists,
+    composers: data.credits.composers,
+    arrangers: data.credits.arrangers,
+    vocals: data.credits.vocals,
+    releaseDate: normalizeOptionalDateOnly(data.releaseDate) ?? null,
+    durationMs: data.durationMs,
+  }
+}
+
+export function buildMusicMetadataFillUpdateData(
+  incoming: MusicMetadataFields,
+  existing: Partial<MusicMetadataFields>
+): Prisma.MusicTrackUpdateInput {
+  const updateData: Prisma.MusicTrackUpdateInput = {}
+  if (!existing.lyricists?.length && incoming.lyricists.length) {
+    updateData.lyricists = incoming.lyricists
+  }
+  if (!existing.composers?.length && incoming.composers.length) {
+    updateData.composers = incoming.composers
+  }
+  if (!existing.arrangers?.length && incoming.arrangers.length) {
+    updateData.arrangers = incoming.arrangers
+  }
+  if (!existing.vocals?.length && incoming.vocals.length) {
+    updateData.vocals = incoming.vocals
+  }
+  if (!existing.releaseDate && incoming.releaseDate) {
+    updateData.releaseDate = incoming.releaseDate
+  }
+  if (existing.durationMs == null && incoming.durationMs !== null) {
+    updateData.durationMs = incoming.durationMs
+  }
+  return updateData
+}
+
+function buildImportedMetadataUpdateData(
+  data: ResolvedImportedSongData,
+  existing: Partial<MusicMetadataFields>
+): Prisma.MusicTrackUpdateInput {
+  return buildMusicMetadataFillUpdateData(buildImportedMetadataFields(data), existing)
+}
+
+export type SongDuplicateStrategy = 'fill' | 'overwrite' | 'skip'
+
+type ImportedSongExisting = Pick<
+  MusicMetadataFields,
+  'lyricists' | 'composers' | 'arrangers' | 'vocals' | 'releaseDate' | 'durationMs'
+> & {
+  title: string
+  artists: string[]
+  album: string
+  audioUrl: string
+  lyric: string | null
+  description: string | null
+}
+
+function buildImportedSongUpdateData(params: {
+  data: ResolvedImportedSongData
+  existing: ImportedSongExisting
+  incoming: { title: string; artists: string[]; album: string }
+  strategy: Exclude<SongDuplicateStrategy, 'skip'>
+}): Prisma.MusicTrackUpdateInput {
+  const { data, existing, incoming, strategy } = params
+  const lyricUpdate =
+    data.resolvedLyric && (strategy === 'overwrite' || !existing.lyric) ? data.lyricStorage : {}
+  const metadataUpdate = buildImportedMetadataUpdateData(data, existing)
+
+  return {
+    title: strategy === 'overwrite' ? incoming.title : existing.title || incoming.title,
+    artists:
+      strategy === 'overwrite'
+        ? incoming.artists
+        : existing.artists.length
+          ? existing.artists
+          : incoming.artists,
+    album: strategy === 'overwrite' ? incoming.album : existing.album || incoming.album,
+    audioUrl:
+      strategy === 'overwrite' ? data.resolvedAudioUrl : existing.audioUrl || data.resolvedAudioUrl,
+    ...lyricUpdate,
+    ...metadataUpdate,
+    description: existing.description ?? null,
+  }
+}
 export async function createOrUpdateImportedSong(params: {
-  platform: MusicPlatform;
-  track: ImportSongInput;
-  userUid: string;
-  albumNameFallback?: string;
+  platform: MusicPlatform
+  track: ImportSongInput
+  albumNameFallback?: string
+  duplicateStrategy?: SongDuplicateStrategy
 }) {
-  const { platform, track, userUid, albumNameFallback } = params;
-  const sourceField = getPlatformSourceField(platform);
-  const platformId = track.sourceId;
+  const { platform, track, albumNameFallback, duplicateStrategy = 'fill' } = params
+  const platformId = track.sourceId
 
-  const existingByPlatformId = await prisma.musicTrack.findFirst({
+  const existingSources = await prisma.musicExternalSource.findMany({
     where: {
-      deletedAt: null,
-      OR: [
-        { [sourceField]: platformId },
-        { id: track.sourceId },
-      ] as Prisma.MusicTrackWhereInput[],
+      resourceType: 'song',
+      platform,
+      sourceId: platformId,
+      // 软删除歌曲不再占用 id，避免重复导入无限新建；悬空行（无歌曲）一并排除
+      song: { is: { deletedAt: null } },
     },
-  });
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    include: {
+      song: true,
+    },
+  })
+  // 同一 id 可被多首歌共享：仅当恰好一个活歌曲占用时合并导入数据，
+  // 多个占用者或没有占用者时新建，避免覆写已人工整理的歌曲；
+  // where 已过滤软删除，这里再留一道防御
+  const existingSong =
+    existingSources.length === 1 && !existingSources[0].song?.deletedAt
+      ? existingSources[0].song
+      : null
 
-  if (existingByPlatformId) {
-    const fallbackTitle = `未命名歌曲 ${track.sourceId}`;
-    const title = track.title || fallbackTitle;
-    const artist = track.artist || '未知歌手';
-    const album = track.album || albumNameFallback || '未知专辑';
+  if (existingSong) {
+    if (duplicateStrategy === 'skip') {
+      return {
+        song: existingSong,
+        created: false,
+        linked: false,
+      }
+    }
 
-    const resolvedCover = (await resolveMetingCoverUrl(platform as ParsedMusicPlatform, track.picId, track.cover)) || track.cover;
-    const resolvedAudioUrl = (await resolveMetingAudioUrl(platform as ParsedMusicPlatform, track.urlId)) || '';
-    const resolvedLyric = (await resolveMetingLyric(platform as ParsedMusicPlatform, track.lyricId)) || '';
+    const fallbackTitle = `未命名歌曲 ${track.sourceId}`
+    const incomingTitle = track.title || fallbackTitle
+    const incomingArtists = track.artists.length ? track.artists : ['未知歌手']
+    const incomingAlbum = track.album || albumNameFallback || '未知专辑'
+    const importedData = await resolveImportedSongData(platform, track)
+    const updateData = buildImportedSongUpdateData({
+      data: importedData,
+      existing: existingSong,
+      incoming: { title: incomingTitle, artists: incomingArtists, album: incomingAlbum },
+      strategy: duplicateStrategy,
+    })
 
     const song = await prisma.musicTrack.update({
-      where: { docId: existingByPlatformId.docId },
-      data: {
-        id: existingByPlatformId.id || track.sourceId,
-        title,
-        artist,
-        album,
-        cover: resolvedCover || '',
-        audioUrl: resolvedAudioUrl || '',
-        lyric: resolvedLyric || null,
-        description: existingByPlatformId.description ?? null,
-        primaryPlatform: platform,
-        enabledPlatform: platform,
-        [sourceField]: platformId,
-      },
-    });
+      where: { docId: existingSong.docId },
+      data: updateData,
+    })
+    if (importedData.resolvedCover && !existingSong.coverId && !existingSong.coverAlbumDocId) {
+      await maybeAddImportedSongCover(song.docId, importedData.resolvedCover, true)
+    }
+    enqueueMusicTextEmbeddingsDeferred(prisma, [song.docId])
     return {
       song,
       created: false,
       linked: false,
-    };
+    }
   }
 
-  const fallbackTitle = `未命名歌曲 ${track.sourceId}`;
-  const title = track.title || fallbackTitle;
-  const artist = track.artist || '未知歌手';
-  const album = track.album || albumNameFallback || '未知专辑';
+  const fallbackTitle = `未命名歌曲 ${track.sourceId}`
+  const title = track.title || fallbackTitle
+  const artists = track.artists.length ? track.artists : ['未知歌手']
+  const primaryArtist = firstMusicCredit(artists, '未知歌手')
+  const album = track.album || albumNameFallback || '未知专辑'
 
   const existingByTitleArtist = await prisma.musicTrack.findFirst({
     where: {
-      AND: [
-        { deletedAt: null },
-        { title: { equals: title } },
-        { artist: { equals: artist } },
-        {
-          OR: [
-            { neteaseId: { not: null } },
-            { tencentId: { not: null } },
-            { kugouId: { not: null } },
-            { baiduId: { not: null } },
-            { kuwoId: { not: null } },
-          ],
-        },
-      ],
+      AND: [{ deletedAt: null }, { title: { equals: title } }, { artists: { equals: artists } }],
     } as Prisma.MusicTrackWhereInput,
-  });
-
-  const resolvedCover = (await resolveMetingCoverUrl(platform as ParsedMusicPlatform, track.picId, track.cover)) || track.cover;
-  const resolvedAudioUrl = (await resolveMetingAudioUrl(platform as ParsedMusicPlatform, track.urlId)) || '';
-  const resolvedLyric = (await resolveMetingLyric(platform as ParsedMusicPlatform, track.lyricId)) || '';
+    include: {
+      externalSources: true,
+    },
+  })
 
   if (existingByTitleArtist) {
-    const conflictPlatformId = (existingByTitleArtist as unknown as Record<string, string | null>)[sourceField];
-    if (conflictPlatformId) {
-      const song = await prisma.musicTrack.create({
-      data: {
-        id: track.sourceId,
-        title,
-        artist,
-        album,
-        cover: resolvedCover || '',
-        audioUrl: resolvedAudioUrl || '',
-        lyric: resolvedLyric || null,
-        description: null,
-        primaryPlatform: platform,
-        enabledPlatform: platform,
-        [sourceField]: platformId,
-        addedBy: userUid,
-        },
-      });
+    if (duplicateStrategy === 'skip') {
       return {
-        song,
-        created: true,
+        song: existingByTitleArtist,
+        created: false,
         linked: false,
-      };
+      }
     }
+
+    const importedData = await resolveImportedSongData(platform, track)
+    const updateData = buildImportedSongUpdateData({
+      data: importedData,
+      existing: existingByTitleArtist,
+      incoming: { title, artists, album },
+      strategy: duplicateStrategy,
+    })
 
     const updatedSong = await prisma.musicTrack.update({
       where: { docId: existingByTitleArtist.docId },
+      data: updateData,
+    })
+    if (
+      importedData.resolvedCover &&
+      !existingByTitleArtist.coverId &&
+      !existingByTitleArtist.coverAlbumDocId
+    ) {
+      await maybeAddImportedSongCover(updatedSong.docId, importedData.resolvedCover, true)
+    }
+    await prisma.musicExternalSource.create({
       data: {
-        id: existingByTitleArtist.id || track.sourceId,
-        title,
-        artist,
-        album,
-        cover: resolvedCover || '',
-        audioUrl: resolvedAudioUrl || '',
-        lyric: resolvedLyric || null,
-        description: existingByTitleArtist.description ?? null,
-        primaryPlatform: platform,
-        enabledPlatform: platform,
-        [sourceField]: platformId,
+        resourceType: 'song',
+        songDocId: updatedSong.docId,
+        platform,
+        sourceId: platformId,
+        sourceUrl: track.sourceUrl || null,
+        isPrimary: !existingByTitleArtist.externalSources.length,
       },
-    });
+    })
+    enqueueMusicTextEmbeddingsDeferred(prisma, [updatedSong.docId])
     return {
       song: updatedSong,
       created: false,
@@ -677,42 +1144,55 @@ export async function createOrUpdateImportedSong(params: {
       linkedFrom: {
         docId: existingByTitleArtist.docId,
         title: existingByTitleArtist.title,
-        artist: existingByTitleArtist.artist,
+        artists: existingByTitleArtist.artists,
       },
-    };
+    }
   }
 
-  const song = await prisma.musicTrack.create({
+  const importedData = await resolveImportedSongData(platform, track)
+  const metadataData = buildImportedMetadataFields(importedData)
+  const song = await withNumericSlugTransaction(prisma, 'MusicTrack', async (tx, slug) => {
+    return tx.musicTrack.create({
       data: {
-        id: track.sourceId,
+        slug,
         title,
-        artist,
+        artists,
         album,
-        cover: resolvedCover || '',
-        audioUrl: resolvedAudioUrl || '',
-        lyric: resolvedLyric || null,
+        audioUrl: importedData.resolvedAudioUrl,
+        ...importedData.lyricStorage,
+        ...metadataData,
         description: null,
-        primaryPlatform: platform,
-        enabledPlatform: platform,
-        [sourceField]: platformId,
-        addedBy: userUid,
-    },
-  });
+        externalSources: {
+          create: {
+            resourceType: 'song',
+            platform,
+            sourceId: platformId,
+            sourceUrl: track.sourceUrl || null,
+            isPrimary: true,
+          },
+        },
+      },
+    })
+  })
+  if (importedData.resolvedCover) {
+    await maybeAddImportedSongCover(song.docId, importedData.resolvedCover, true)
+  }
 
-  await autoLinkInstrumental(song.docId, title, artist, track.isInstrumental);
+  await autoLinkInstrumental(song.docId, title, primaryArtist, track.isInstrumental)
+  enqueueMusicTextEmbeddingsDeferred(prisma, [song.docId])
 
   return {
     song,
     created: true,
     linked: false,
-  };
+  }
 }
 
 export async function autoLinkInstrumental(
   songDocId: string,
   title: string,
   artist: string,
-  isInstrumentalFromAPI?: boolean,
+  isInstrumentalFromAPI?: boolean
 ): Promise<void> {
   const instrumentalPatterns = [
     /\(伴奏\)/,
@@ -722,12 +1202,13 @@ export async function autoLinkInstrumental(
     /伴奏版$/,
     /inst\.?$/i,
     /instrumental$/i,
-  ];
+  ]
 
-  const isInstrumental = isInstrumentalFromAPI || instrumentalPatterns.some((pattern) => pattern.test(title));
-  if (!isInstrumental) return;
+  const isInstrumental =
+    isInstrumentalFromAPI || instrumentalPatterns.some((pattern) => pattern.test(title))
+  if (!isInstrumental) return
 
-  let originalTitle = title;
+  let originalTitle = title
   if (!isInstrumentalFromAPI) {
     originalTitle = title
       .replace(/\(伴奏\)/, '')
@@ -736,21 +1217,21 @@ export async function autoLinkInstrumental(
       .replace(/伴奏版$/, '')
       .replace(/inst\.?$/i, '')
       .replace(/instrumental$/i, '')
-      .trim();
+      .trim()
   }
 
-  if (!originalTitle) return;
+  if (!originalTitle) return
 
   const originalSong = await prisma.musicTrack.findFirst({
     where: {
       deletedAt: null,
       title: originalTitle,
-      artist: artist,
+      artists: { has: artist },
       docId: { not: songDocId },
     },
-  });
+  })
 
-  if (!originalSong) return;
+  if (!originalSong) return
 
   await prisma.songInstrumentalRelation.upsert({
     where: {
@@ -764,12 +1245,18 @@ export async function autoLinkInstrumental(
       songDocId: songDocId,
       targetSongDocId: originalSong.docId,
     },
-  });
+  })
 }
 
 export async function fetchSongsWithRelations(
   where?: Record<string, unknown>,
-  pagination?: { take?: number; skip?: number },
+  pagination?: {
+    take?: number
+    skip?: number
+    orderBy?:
+      | Prisma.MusicTrackOrderByWithRelationInput
+      | Prisma.MusicTrackOrderByWithRelationInput[]
+  }
 ) {
   const songs = await prisma.musicTrack.findMany({
     where: {
@@ -779,18 +1266,32 @@ export async function fetchSongsWithRelations(
     include: {
       covers: {
         orderBy: { sortOrder: 'asc' },
+        select: {
+          id: true,
+          publicUrl: true,
+          thumbnailUrl: true,
+          isDefault: true,
+          sortOrder: true,
+        },
       },
       albumRelations: {
         include: {
           album: {
             select: {
               docId: true,
+              slug: true,
               title: true,
               artist: true,
-              cover: true,
-              defaultCoverSource: true,
+              releaseDate: true,
+              coverId: true,
               covers: {
                 orderBy: { sortOrder: 'asc' },
+                select: {
+                  id: true,
+                  publicUrl: true,
+                  thumbnailUrl: true,
+                  isDefault: true,
+                },
               },
             },
           },
@@ -802,12 +1303,23 @@ export async function fetchSongsWithRelations(
           targetSongDocId: true,
         },
       },
+      externalSources: {
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+      },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: pagination?.orderBy || { createdAt: 'desc' },
     ...(pagination?.take !== undefined ? { take: pagination.take } : {}),
     ...(pagination?.skip !== undefined ? { skip: pagination.skip } : {}),
-  });
-  return songs as MusicTrackWithRelations[];
+  })
+  return songs as MusicTrackWithRelations[]
+}
+
+export async function fetchSongsWithRelationsByDocIds(songDocIds: string[]) {
+  if (!songDocIds.length) return []
+
+  const songs = await fetchSongsWithRelations({ docId: { in: songDocIds } })
+  const order = new Map(songDocIds.map((docId, index) => [docId, index]))
+  return songs.sort((a, b) => (order.get(a.docId) ?? 0) - (order.get(b.docId) ?? 0))
 }
 
 export async function fetchSongWithRelationsByDocId(songDocId: string) {
@@ -816,13 +1328,32 @@ export async function fetchSongWithRelationsByDocId(songDocId: string) {
     include: {
       covers: {
         orderBy: { sortOrder: 'asc' },
+        select: {
+          id: true,
+          publicUrl: true,
+          thumbnailUrl: true,
+          isDefault: true,
+          sortOrder: true,
+        },
       },
       albumRelations: {
         include: {
           album: {
-            include: {
+            select: {
+              docId: true,
+              slug: true,
+              title: true,
+              artist: true,
+              releaseDate: true,
+              coverId: true,
               covers: {
                 orderBy: { sortOrder: 'asc' },
+                select: {
+                  id: true,
+                  publicUrl: true,
+                  thumbnailUrl: true,
+                  isDefault: true,
+                },
               },
             },
           },
@@ -834,18 +1365,21 @@ export async function fetchSongWithRelationsByDocId(songDocId: string) {
           targetSongDocId: true,
         },
       },
+      externalSources: {
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+      },
     },
-  });
-  return song as unknown as MusicTrackWithRelations | null;
+  })
+  return song as unknown as MusicTrackWithRelations | null
 }
 
 export function ensureDisplayRelation<T extends { isDisplay: boolean }>(relations: T[]): T[] {
-  const hasDisplay = relations.some((relation) => relation.isDisplay);
+  const hasDisplay = relations.some((relation) => relation.isDisplay)
   if (hasDisplay || !relations.length) {
-    return relations;
+    return relations
   }
   return relations.map((relation, index) => ({
     ...relation,
     isDisplay: index === 0,
-  }));
+  }))
 }

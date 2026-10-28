@@ -9,7 +9,7 @@ export const CHART_COLOR_TOKENS = {
     brandOlive: '#6b6560',
     success: '#22C55E',
     info: '#3B82F6',
-    accent: '#5856D6'
+    accent: '#5856D6',
   },
   axis: '#E5DED1',
   label: '#6B7280',
@@ -22,7 +22,7 @@ export const CHART_COLOR_TOKENS = {
   linePrimarySoft: 'rgba(59, 130, 246, 0.3)',
   linePrimarySoftEnd: 'rgba(59, 130, 246, 0.05)',
   barStart: '#d4a843',
-  barEnd: '#b07b17'
+  barEnd: '#b07b17',
 } as const
 
 export const RELATION_GRAPH_COLOR_TOKENS = {
@@ -32,25 +32,25 @@ export const RELATION_GRAPH_COLOR_TOKENS = {
     borderWarm: '#D2B48C',
     highlightWarm: '#DAA520',
     layerWarm: '#DEB887',
-    layerWarmHighlight: '#E6C89C'
+    layerWarmHighlight: '#E6C89C',
   },
   relatedPerson: {
     edge: '#6B8E23',
     background: '#6B8E23',
     border: '#556B2F',
     highlightBackground: '#8FBC8F',
-    highlightBorder: '#6B8E23'
+    highlightBorder: '#6B8E23',
   },
   workRelation: {
     edge: '#CD853F',
     background: '#F4A460',
-    highlightBackground: '#FFA07A'
+    highlightBackground: '#FFA07A',
   },
   timelineRelation: {
-    edge: '#4682B4'
+    edge: '#4682B4',
   },
   custom: {
-    edge: '#9370DB'
+    edge: '#9370DB',
   },
   shadows: {
     node: 'rgba(0,0,0,0.2)',
@@ -58,6 +58,6 @@ export const RELATION_GRAPH_COLOR_TOKENS = {
     edgeStroke: '#ffffff',
     label: '0 1px 2px rgba(255,255,255,0.8)',
     nodeFilter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))',
-    centerText: '0 1px 2px rgba(0,0,0,0.2)'
-  }
+    centerText: '0 1px 2px rgba(0,0,0,0.2)',
+  },
 } as const

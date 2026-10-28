@@ -37,6 +37,7 @@ npm run dev
 至少运行：
 
 ```bash
+npm run format
 npm run verify
 ```
 

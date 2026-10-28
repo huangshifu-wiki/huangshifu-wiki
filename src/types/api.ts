@@ -1,137 +1,437 @@
-import type { GalleryItem } from './entities';
+import type {
+  AdminDataItem,
+  AlbumItem,
+  AnnouncementItem,
+  EventItem,
+  GalleryItem,
+  LyricSearchItem,
+  PostItem,
+  SongItem,
+  TicketListingEventOption,
+  TicketListingItem,
+  TicketListingSummary,
+  WikiItem,
+} from './entities'
+import type { Platform } from './common'
 
-export interface ApiResponse<T> {
-  data: T;
+export interface PersonalApiKey {
+  id: string
+  name: string
+  prefix: string
+  createdAt: string
+  expiresAt: string | null
+  revokedAt: string | null
+  lastUsedAt: string | null
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+export interface PersonalApiKeyListResponse {
+  keys: PersonalApiKey[]
+}
+
+export interface CreatePersonalApiKeyRequest {
+  name: string
+  expiry?: '30d' | '90d' | '365d' | 'never'
+}
+
+export interface CreatePersonalApiKeyResponse {
+  key: PersonalApiKey
+  token: string
+}
+export interface ApiResponse<T> {
+  data: T
+}
+
+export interface ApiSuccessResponse<T> extends ApiResponse<T> {
+  success: boolean
+}
+
+export interface PaginationMeta {
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  hasMore: boolean
+}
+
+export interface PaginatedResponse<T> extends PaginationMeta {
+  items: T[]
+}
+
+export interface SearchResultPage<T> extends PaginationMeta {
+  items: T[]
+}
+
+export interface SearchMeta {
+  mode: string
+  query: string
+  degraded: boolean
+  degradationReason?: string
+  keywordResultCount: number
+  vectorResultCount: number
+  textVectorResultCount: number
+}
+
+export type SemanticSearchResult = {
+  sourceType: 'gallery' | 'wiki' | 'post'
+  sourceId: string
+  imageUrl: string
+  similarity: number
+  data: unknown
+}
+
+export interface SearchResultsResponse {
+  wiki: SearchResultPage<WikiItem>
+  posts: SearchResultPage<PostItem>
+  galleries: SearchResultPage<GalleryItem>
+  music: SearchResultPage<SongItem>
+  albums: SearchResultPage<AlbumItem>
+  lyrics: SearchResultPage<LyricSearchItem>
+  searchMeta?: SearchMeta
+}
+
+export interface SemanticSearchPageResponse {
+  mode: 'semantic_text' | 'semantic_image'
+  query?: string
+  results: SearchResultPage<SemanticSearchResult>
+  totalMatches: number
+}
+export type SemanticSearchCategory = 'semantic' | 'wiki' | 'post' | 'gallery'
+
+export type SemanticSearchCategoryPages = Record<
+  SemanticSearchCategory,
+  SearchResultPage<SemanticSearchResult>
+>
+
+export interface ImageSearchSessionResponse extends SemanticSearchPageResponse {
+  mode: 'semantic_image'
+  sessionId: string
+  categoryPages: SemanticSearchCategoryPages
+}
+export interface ImageSearchSessionPageResponse extends SemanticSearchPageResponse {
+  mode: 'semantic_image'
+  sessionId: string
 }
 
 export interface HomeFeedResponse {
   announcements: Array<{
-    id: string;
-    content: string;
-    link?: string;
-    createdAt: string;
-  }>;
+    id: string
+    content: string
+    link?: string
+    createdAt: string
+  }>
   hotPosts: Array<{
-    id: string;
-    title: string;
-    section: string;
-    commentsCount: number;
-    likesCount: number;
-    createdAt: string;
-    updatedAt: string;
-  }>;
+    id: string
+    title: string
+    section: string
+    commentsCount: number
+    likesCount: number
+    createdAt: string
+    updatedAt: string
+  }>
   recentPosts: Array<{
-    id: string;
-    title: string;
-    section: string;
-    commentsCount: number;
-    likesCount: number;
-    updatedAt: string;
-  }>;
+    id: string
+    title: string
+    section: string
+    commentsCount: number
+    likesCount: number
+    updatedAt: string
+  }>
 }
 
-export interface NotificationsResponse {
+export interface NotificationsResponse extends PaginationMeta {
   notifications: Array<{
-    id: string;
-    type: 'reply' | 'like' | 'review_result' | 'mention';
-    payload: Record<string, unknown>;
-    isRead: boolean;
-    createdAt: string;
-  }>;
-  total: number;
-  unreadCount: number;
-  page: number;
-  limit: number;
+    id: string
+    type: 'reply' | 'like' | 'review_result' | 'mention'
+    payload: Record<string, unknown>
+    isRead: boolean
+    createdAt: string
+  }>
+  unreadCount: number
+}
+
+export interface AnnouncementsResponse extends PaginationMeta {
+  announcements: AnnouncementItem[]
 }
 
 export interface UploadSessionResponse {
   session: {
-    id: string;
-    status: 'open' | 'finalized' | 'expired';
-    maxFiles: number;
-    uploadedFiles: number;
-    expiresAt: string;
-  };
+    id: string
+    status: 'open' | 'finalized' | 'expired'
+    maxFiles: number
+    uploadedFiles: number
+    expiresAt: string
+  }
 }
 
 export interface UploadFileResponse {
   session: {
-    id: string;
-    status: 'open' | 'finalized' | 'expired';
-    uploadedFiles: number;
-    maxFiles: number;
-  };
+    id: string
+    status: 'open' | 'finalized' | 'expired'
+    uploadedFiles: number
+    maxFiles: number
+    expiresAt?: string
+  }
   asset: {
-    id: string;
-    publicUrl: string;
-    storageKey?: string;
-    fileName: string;
-    mimeType: string;
-    sizeBytes: number;
-    md5?: string;
-  };
+    id: string
+    imageMapId: string
+    publicUrl: string | null
+    storageKey: string | null
+    fileName: string
+    mimeType: string
+    sizeBytes: number
+    md5: string
+    status: 'uploaded' | 'ready' | 'deleted'
+    reused: boolean
+  }
   tripleStorage?: {
-    localUrl: string;
-    s3Url?: string;
-    externalUrl?: string;
-  };
+    localUrl: string
+    s3Url?: string
+    externalUrl?: string
+  }
+  storageErrors?: string[]
 }
 
 export interface GalleryCreateResponse {
-  gallery: GalleryItem;
+  gallery: GalleryItem
+}
+
+export interface GalleryDetailResponse extends GalleryCreateResponse {}
+
+export interface EventListResponse extends PaginationMeta {
+  events: EventItem[]
+}
+
+export interface EventDetailResponse {
+  event: EventItem
+}
+
+export interface EventCreateResponse extends EventDetailResponse {}
+export interface TicketListingListResponse extends PaginationMeta {
+  listings: TicketListingSummary[]
+}
+
+export interface TicketListingDetailResponse {
+  listing: TicketListingItem
+}
+
+export interface TicketListingCreateResponse extends TicketListingDetailResponse {}
+
+export interface TicketListingMineResponse extends TicketListingListResponse {}
+
+export interface TicketListingEventsResponse {
+  events: TicketListingEventOption[]
+}
+
+export interface AdminEventDetailResponse {
+  item: EventItem
 }
 
 export interface ImageStats {
-  total: number;
+  total: number
   stats: {
-    local: number;
-    external: number;
-    s3: number;
-  };
+    local: number
+    external: number
+    s3: number
+  }
 }
 
 export interface ImagePreference {
-  strategy: 'local' | 's3' | 'external';
-  fallback: boolean;
+  strategy: 'local' | 's3' | 'external'
+  fallback: boolean
+}
+
+export type MediaHealthScanMode = 'strict' | 'business'
+
+export type MediaHealthRecordType = 'mediaAsset' | 'imageMap'
+
+export type MediaHealthBlockReason =
+  | 'referenced'
+  | 'shared_image_map'
+  | 'processing'
+  | 'not_found'
+  | 'already_deleted'
+  | 'active_upload_session'
+
+export interface MediaHealthReference {
+  source: string
+  id?: string
+  field: string
+  value: string
+}
+
+export interface MediaHealthMissingLocalFile {
+  recordType: MediaHealthRecordType
+  id: string
+  storageKey: string
+  publicUrl: string
+  expectedPath: string
+  label: string
+  references: MediaHealthReference[]
+  canCleanup: boolean
+  blockedReasons: MediaHealthBlockReason[]
+}
+
+export interface MediaHealthUnusedRecord {
+  recordType: MediaHealthRecordType
+  id: string
+  storageKey?: string
+  publicUrl?: string
+  localUrl?: string
+  label: string
+  canCleanup: boolean
+  blockedReasons: MediaHealthBlockReason[]
+}
+
+export interface MediaHealthScanResult {
+  generatedAt: string
+  mode: MediaHealthScanMode
+  summary: {
+    missingLocalFiles: number
+    unusedMediaAssets: number
+    unusedImageMaps: number
+    cleanupCandidates: number
+    blockedRecords: number
+  }
+  missingLocalFiles: MediaHealthMissingLocalFile[]
+  unusedMediaRecords: MediaHealthUnusedRecord[]
+}
+
+export interface MediaHealthScanResponse extends ApiResponse<MediaHealthScanResult> {
+  success: boolean
+}
+
+export interface MediaHealthCleanupTarget {
+  recordType: MediaHealthRecordType
+  id: string
+}
+
+export interface MediaHealthCleanupResponse {
+  total: number
+  cleaned: number
+  skipped: number
+  results: Array<{
+    recordType: MediaHealthRecordType
+    id: string
+    success: boolean
+    skipped: boolean
+    blockedReasons: MediaHealthBlockReason[]
+    message: string
+  }>
+}
+
+export interface MediaHealthCleanupApiResponse extends ApiResponse<MediaHealthCleanupResponse> {
+  success: boolean
 }
 
 export interface EmailVerificationPublicConfig {
-  enabled: boolean;
+  enabled: boolean
 }
 
 export interface EmailVerificationAdminConfig extends EmailVerificationPublicConfig {
-  publicBaseUrl: string;
-  tokenTtlMinutes: number;
-  smtpHost: string;
-  smtpPort: number;
-  smtpSecure: boolean;
-  smtpUser: string;
-  smtpFrom: string;
-  smtpPassSet: boolean;
+  publicBaseUrl: string
+  tokenTtlMinutes: number
+  smtpHost: string
+  smtpPort: number
+  smtpSecure: boolean
+  smtpUser: string
+  smtpFrom: string
+  smtpPassSet: boolean
+  verificationSubject: string
+  verificationTextBody: string
+  verificationHtmlBody: string
+  resetSubject: string
+  resetTextBody: string
+  resetHtmlBody: string
 }
 
 export interface RegistrationConfig {
-  enabled: boolean;
+  enabled: boolean
 }
+
+export interface SearchHotKeywordsConfig {
+  enabled: boolean
+}
+
+// 管理面板可调的运行时行为配置（GET/PATCH /api/admin/runtime-config）
+export interface RuntimeAdminConfig {
+  semanticSearchEnabled: boolean
+  galleryAdminOnly: boolean
+  allowSuperAdminManageSuperAdmins: boolean
+  turnstileEnabled: boolean
+  blurhashEnabled: boolean
+  blurhashAutoGenerate: boolean
+  blurhashComponentsX: number
+  blurhashComponentsY: number
+  uploadSessionTtlMinutes: number
+  backupRetainCount: number
+  playUrlCacheTtlSeconds: number
+  cacheMaxKeys: number
+  qdrantTimeoutMs: number
+  imageEmbeddingBatchSize: number
+  editLockCleanupIntervalMs: number
+  mediaCleanupIntervalMs: number
+  variantMaxConcurrent: number
+  variantTaskTimeoutMs: number
+  variantQueueMaxWaitMs: number
+  variantSharpMemoryLimitMb: number
+  variantMaxRetries: number
+  cloudSyncMaxConcurrent: number
+  cloudSyncMaxRetries: number
+  logLevel: string
+  s3Enabled: boolean
+  s3PublicBucketName: string
+  s3PublicBucketRegion: string
+  s3PublicBucketPrefix: string
+  s3PrivateBucketName: string
+  s3PrivateBucketRegion: string
+  s3EndpointUrl: string
+  s3ForcePathStyle: boolean
+  s3SslEnabled: boolean
+  s3SignatureVersion: string
+  s3PublicDomain: string
+  s3DefaultAcl: string
+  s3ExpiresIn: number
+  s3MaxFileSize: number
+  s3AllowedContentTypes: string
+  s3EnableMd5Verification: boolean
+  qdrantUrl: string
+  qdrantCollection: string
+  qdrantTextCollection: string
+  lskyBaseUrl: string
+  lskyStrategyId: string
+  lskyTimeout: number
+}
+
+// 服务凭证掩码状态（GET/PATCH /api/admin/secrets-config，绝不包含明文）
+export type SecretsFieldStatus = { configured: boolean; last4: string }
+
+export interface SecretsAdminConfig {
+  disabled: boolean
+  secrets: Record<string, SecretsFieldStatus>
+}
+
+// Cloudflare Turnstile 公开配置（GET /api/config/turnstile）
+export interface TurnstilePublicConfig {
+  enabled: boolean
+  siteKey: string
+}
+
+export type {
+  RateLimitAdminConfig,
+  RateLimitBucketConfig,
+  RateLimitBucketId,
+} from '../lib/rateLimitConfig'
 
 // ============================================================================
 // 错误类型定义
 // ============================================================================
 
-export type ErrorType = 'NetworkError' | 'AuthError' | 'BusinessError' | 'ServerError';
+export type ErrorType = 'NetworkError' | 'AuthError' | 'BusinessError' | 'ServerError'
 
 export interface ApiErrorObject {
-  error: string;
-  code?: string;
-  details?: Record<string, unknown>;
+  error: string
+  code?: string
+  details?: Record<string, unknown>
 }
 
 // ============================================================================
@@ -139,15 +439,15 @@ export interface ApiErrorObject {
 // ============================================================================
 
 export interface PaginationParams {
-  page?: number;
-  limit?: number;
-  sort?: string;
-  order?: 'asc' | 'desc';
+  page?: number
+  limit?: number
+  sort?: string
+  order?: 'asc' | 'desc'
 }
 
 export interface SuccessResponse {
-  success: boolean;
-  message?: string;
+  success: boolean
+  message?: string
 }
 
 // ============================================================================
@@ -156,33 +456,34 @@ export interface SuccessResponse {
 
 export interface AuthMeResponse {
   user: {
-    uid: string;
-    nickname: string;
-    avatarUrl?: string;
-    role: 'user' | 'admin' | 'super_admin';
-    status: 'active' | 'banned' | 'pending';
-    preferences?: Record<string, unknown>;
-  } | null;
+    uid: string
+    publicId: string
+    nickname: string
+    avatarUrl?: string
+    role: 'user' | 'admin' | 'super_admin'
+    status: 'active' | 'banned' | 'pending'
+    preferences?: Record<string, unknown>
+  } | null
 }
 
 export interface AuthRegisterRequest {
-  email: string;
-  password: string;
-  nickname: string;
+  email: string
+  password: string
+  nickname: string
 }
 
 export interface AuthLoginRequest {
-  email: string;
-  password: string;
+  email: string
+  password: string
 }
 
 export interface PasswordResetRequest {
-  email: string;
+  email: string
 }
 
 export interface PasswordResetConfirmRequest {
-  token: string;
-  newPassword: string;
+  token: string
+  newPassword: string
 }
 
 // ============================================================================
@@ -190,25 +491,27 @@ export interface PasswordResetConfirmRequest {
 // ============================================================================
 
 export interface UserUpdateRequest {
-  displayName?: string;
-  signature?: string;
-  bio?: string;
-  photoURL?: string | null;
-  preferences?: Record<string, unknown>;
+  displayName?: string
+  signature?: string
+  bio?: string
+  photoURL?: string | null
+  photoAssetId?: string | null
+  preferences?: Record<string, unknown>
 }
 
 export interface UserResponse {
   user: {
-    uid: string;
-    nickname: string;
-    avatarUrl?: string;
-    role: string;
-    status: string;
-    emailVerified?: boolean;
-    emailVerifiedAt?: string | null;
-    createdAt: string;
-    updatedAt: string;
-  };
+    uid: string
+    publicId: string
+    nickname: string
+    avatarUrl?: string
+    role: string
+    status: string
+    emailVerified?: boolean
+    emailVerifiedAt?: string | null
+    createdAt: string
+    updatedAt: string
+  }
 }
 
 // ============================================================================
@@ -217,22 +520,22 @@ export interface UserResponse {
 
 export interface WikiDetailResponse {
   wiki: {
-    id: string;
-    slug: string;
-    title: string;
-    category: string;
-    content: string;
-    summary?: string;
-    tags?: string[];
-    likes: number;
-    dislikes: number;
-    views: number;
-    isPinned: boolean;
-    status: 'draft' | 'pending' | 'approved' | 'rejected';
-    createdAt: string;
-    updatedAt: string;
-    author?: UserResponse['user'];
-  };
+    id: string
+    slug: string
+    title: string
+    category: string
+    content: string
+    summary?: string
+    tags?: string[]
+    likes: number
+    dislikes: number
+    views: number
+    isPinned: boolean
+    status: 'draft' | 'pending' | 'approved' | 'rejected'
+    createdAt: string
+    updatedAt: string
+    author?: UserResponse['user']
+  }
 }
 
 export interface WikiListResponse extends PaginatedResponse<WikiDetailResponse['wiki']> {}
@@ -243,86 +546,103 @@ export interface WikiListResponse extends PaginatedResponse<WikiDetailResponse['
 
 export interface PostDetailResponse {
   post: {
-    id: string;
-    title: string;
-    content: string;
-    sectionId: string;
-    authorId: string;
-    likes: number;
-    dislikes: number;
-    commentsCount: number;
-    views: number;
-    isPinned: boolean;
-    status: string;
-    createdAt: string;
-    updatedAt: string;
-    author?: UserResponse['user'];
+    id: string
+    slug: string
+    title: string
+    content: string
+    sectionId: string
+    authorId: string
+    likes: number
+    dislikes: number
+    commentsCount: number
+    views: number
+    isPinned: boolean
+    status: string
+    createdAt: string
+    updatedAt: string
+    author?: UserResponse['user']
     section?: {
-      id: string;
-      name: string;
-    };
-  };
+      id: string
+      name: string
+    }
+  }
 }
 
 export interface PostListResponse extends PaginatedResponse<PostDetailResponse['post']> {}
 
-// ============================================================================
-// 音乐相关类型
-// ============================================================================
-
-export interface MusicListResponse {
-  songs: Array<{
-    id: string;
-    docId: string;
-    title: string;
-    artist: string;
-    album?: string;
-    description?: string | null;
-    coverUrl?: string;
-    playUrl?: string;
-    duration?: number;
-    createdAt: string;
-  }>;
-  total: number;
+export interface MusicListResponse extends PaginationMeta {
+  songs: SongItem[]
 }
+
+export interface AlbumListResponse extends PaginationMeta {
+  albums: AlbumItem[]
+}
+
+export interface AdminDataListResponse extends PaginationMeta {
+  data: AdminDataItem[]
+}
+
+export interface AdminMusicListResponse extends AdminDataListResponse {}
+
+export interface AdminAlbumListResponse extends AdminDataListResponse {}
 
 export interface MusicDetailResponse {
   song: {
-    id: string;
-    docId: string;
-    title: string;
-    artist: string;
-    album?: string;
-    description?: string | null;
-    coverUrl?: string;
-    playUrl?: string;
-    duration?: number;
-    createdAt: string;
-  };
+    docId: string
+    slug: string
+    title: string
+    artists: string[]
+    lyricists?: string[]
+    composers?: string[]
+    arrangers?: string[]
+    vocals?: string[]
+    album?: string
+    description?: string | null
+    tags?: string[]
+    coverUrl?: string
+    coverThumbnail?: string
+    playUrl?: string
+    playable?: boolean
+    releaseDate?: string | null
+    durationMs?: number | null
+    createdAt: string
+  }
 }
 
+export interface DuplicateSongSourceWarning {
+  platform: Platform
+  sourceId: string
+  song: { docId: string; title: string; artists: string[] }
+}
+
+export interface DuplicateAlbumSourceWarning {
+  platform: Platform
+  sourceId: string
+  album: { docId: string; title: string }
+}
+
+export type MusicPlayUrlMode = 'manual' | 'cache' | 'resolved' | 'outer' | 'none' | 'disabled'
+
 export interface MusicPlayUrlResponse {
-  playUrl: string;
+  playUrl: string
+  mode?: MusicPlayUrlMode
+  playable?: boolean
+  platform?: string | null
+  sourceId?: string | null
+  cached?: boolean
+  cacheExpiresAt?: string | null
 }
 
 // ============================================================================
 // 画廊相关类型
 // ============================================================================
 
-export interface GalleryDetailResponse {
-  gallery: GalleryItem;
-}
-
-export interface GalleryListResponse {
-  galleries: GalleryItem[];
-  total: number;
-  page: number;
-  limit: number;
-  hasMore: boolean;
+export interface GalleryListResponse extends PaginationMeta {
+  galleries: GalleryItem[]
 }
 
 export interface GalleryUploadResponse {
-  urls: string[];
+  urls: string[]
 }
 
 // ============================================================================
@@ -330,80 +650,225 @@ export interface GalleryUploadResponse {
 // ============================================================================
 
 export interface AdminBackup {
-  filename: string;
-  size: number;
-  createdAt: string;
+  filename: string
+  size: number
+  sizeFormatted?: string
+  createdAt: string
+  note: string
 }
 
 export interface AdminBackupsResponse {
-  backups: AdminBackup[];
+  backups: AdminBackup[]
 }
 
-export type AdminReviewQueueType = 'wiki' | 'posts' | 'galleries';
+export interface AdminBackupCreateResponse {
+  backup: AdminBackup
+  removedFilenames?: string[]
+}
 
-export type AdminReviewItemType = 'wiki' | 'post' | 'gallery';
+export interface AdminBackupNoteResponse {
+  success: boolean
+  note: string
+}
+
+export interface RestoreMediaReport {
+  filename: string
+  generatedAt: string
+  referencedKeys: number
+  scannedFiles: number
+  missingFiles: number
+  orphanFiles: number
+  orphanSizeBytes: number
+  missingFilePreview?: Array<{
+    storageKey: string
+    publicUrl: string
+    expectedPath: string
+    references: Array<{
+      source: string
+      id?: string
+      field: string
+      value: string
+    }>
+  }>
+  orphanFilePreview?: Array<{
+    storageKey: string
+    sizeBytes: number
+    mtime: string
+  }>
+  previewLimit?: number
+}
+
+export interface AdminBackupRestoreResponse {
+  success: boolean
+  mediaReport?: RestoreMediaReport
+  mediaReportError?: string
+}
+
+export type AdminReviewQueueType = 'wiki' | 'posts' | 'galleries' | 'tickets'
+
+export type AdminReviewItemType = 'wiki' | 'post' | 'gallery' | 'ticket'
 
 export type AdminReviewQueueItem = {
-  id: string;
-  slug?: string;
-  title?: string;
-  category?: string;
-  section?: string;
-  sectionName?: string;
-  content?: string;
-  description?: string;
-  copyright?: string | null;
-  tags?: string[];
-  locationCode?: string | null;
-  locationName?: string | null;
-  locationDetail?: string | null;
-  status?: 'draft' | 'pending' | 'published' | 'rejected';
-  reviewNote?: string | null;
-  reviewedBy?: string | null;
-  reviewedAt?: string | null;
-  viewCount?: number;
-  favoritesCount?: number;
-  likesCount?: number;
-  dislikesCount?: number;
-  commentsCount?: number;
-  isPinned?: boolean;
-  published?: boolean;
-  publishedAt?: string | null;
-  authorUid?: string;
-  authorName?: string | null;
-  lastEditorUid?: string;
-  lastEditorName?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-  sensitiveWords?: string[];
+  id: string
+  slug?: string
+  title?: string
+  category?: string
+  section?: string
+  sectionName?: string
+  content?: string
+  description?: string
+  type?: 'offer' | 'request'
+  eventId?: string | null
+  customEventName?: string | null
+  eventName?: string
+  eventSlug?: string | null
+  eventLocation?: string | null
+  quantity?: number
+  ticketTier?: string
+  seat?: string
+  contact?: string
+  copyright?: string | null
+  tags?: string[]
+  locationCode?: string | null
+  locationName?: string | null
+  locationDetail?: string | null
+  status?: 'draft' | 'pending' | 'published' | 'rejected'
+  reviewNote?: string | null
+  reviewedBy?: string | null
+  reviewedAt?: string | null
+  viewCount?: number
+  favoritesCount?: number
+  likesCount?: number
+  dislikesCount?: number
+  commentsCount?: number
+  isPinned?: boolean
+  published?: boolean
+  publishedAt?: string | null
+  authorUid?: string
+  authorName?: string | null
+  lastEditorUid?: string
+  lastEditorName?: string | null
+  createdAt?: string
+  updatedAt?: string
+  sensitiveWords?: string[]
   images?: {
-    id: string;
-    url: string;
-    originalUrl?: string | null;
-    thumbnailUrl?: string | null;
-    name: string;
-  }[];
-};
+    id: string
+    url: string
+    originalUrl?: string | null
+    thumbnailUrl?: string | null
+    name: string
+  }[]
+}
 
 export type AdminReviewQueueMergedItem = AdminReviewQueueItem & {
-  reviewType: AdminReviewItemType;
-  reviewId: string;
-};
+  reviewType: AdminReviewItemType
+  reviewId: string
+}
 
-export interface AdminReviewQueueResponse {
-  type: AdminReviewQueueType;
-  status: 'draft' | 'pending' | 'published' | 'rejected';
-  items: AdminReviewQueueItem[];
+export interface AdminReviewQueueResponse extends PaginationMeta {
+  type: AdminReviewQueueType | 'all'
+  status: 'draft' | 'pending' | 'published' | 'rejected'
+  items: AdminReviewQueueItem[]
 }
 
 export interface AdminReviewQueueCountResponse {
-  status: 'draft' | 'pending' | 'published' | 'rejected';
+  status: 'draft' | 'pending' | 'published' | 'rejected'
   counts: {
-    wiki: number;
-    posts: number;
-    galleries: number;
-  };
-  total: number;
+    wiki: number
+    posts: number
+    galleries: number
+    tickets: number
+  }
+  total: number
+}
+
+// ============================================================================
+// 管理后台仪表盘
+// ============================================================================
+
+export interface AdminDashboardStats {
+  wiki: number
+  posts: number
+  galleries: number
+  users: number
+  music: number
+}
+
+export interface AdminDashboardReviewQueue {
+  status: 'pending'
+  counts: {
+    wiki: number
+    posts: number
+    galleries: number
+    tickets: number
+  }
+  total: number
+}
+
+export interface AdminDashboardDiskStatus {
+  totalSpaceGB: number
+  freeSpaceGB: number
+  usedSpaceGB: number
+  usagePercent: number
+  status: 'healthy' | 'warning' | 'critical'
+  lastChecked: string
+}
+
+export interface AdminDashboardVariantStats {
+  queueLength: number
+  processingCount: number
+  completedToday: number
+  failedToday: number
+  averageProcessingTime: number
+  timeoutCount: number
+}
+
+export interface AdminDashboardCloudSyncStats {
+  queueLength: number
+  processingCount: number
+  completedToday: number
+  failedToday: number
+  averageProcessingTime: number
+  available: boolean
+}
+
+export type AdminDashboardSubsystem<T> = { data: T } | { error: string }
+
+export interface AdminDashboardTrends {
+  days: number
+  granularity: 'day'
+  rangeStart: string
+  rangeEnd: string
+  dates: string[]
+  series: {
+    posts: number[]
+    galleries: number[]
+    wiki: number[]
+    users: number[]
+  }
+  totals: {
+    posts: number
+    galleries: number
+    wiki: number
+    users: number
+  }
+}
+
+export interface AdminDashboardOverview {
+  stats: AdminDashboardStats
+  reviewQueue: AdminDashboardReviewQueue
+  system: {
+    disk: AdminDashboardSubsystem<AdminDashboardDiskStatus>
+    variants: AdminDashboardSubsystem<AdminDashboardVariantStats>
+    cloudSync: AdminDashboardSubsystem<AdminDashboardCloudSyncStats>
+  }
+  trends: AdminDashboardTrends
+}
+
+export interface AdminDashboardResponse {
+  success: boolean
+  data: AdminDashboardOverview
+  timestamp: string
 }
 
 // ============================================================================
@@ -423,21 +888,27 @@ export type TextSearchResult =
       sourceId: string
       score: number
       chunkPreview: string
-      entity: { id: string; title?: string; [key: string]: unknown }
+      entity: { id: string; slug?: string; title?: string; [key: string]: unknown }
     }
   | {
       sourceType: 'music'
       sourceId: string
       score: number
       chunkPreview: string
-      entity: { id: string; title?: string; artist?: string; [key: string]: unknown }
+      entity: {
+        id: string
+        slug?: string
+        title?: string
+        artists?: string[]
+        [key: string]: unknown
+      }
     }
   | {
       sourceType: 'album'
       sourceId: string
       score: number
       chunkPreview: string
-      entity: { id: string; title?: string; artist?: string; [key: string]: unknown }
+      entity: { id: string; slug?: string; title?: string; artist?: string; [key: string]: unknown }
     }
 
 export interface TextSearchResponse {
@@ -445,4 +916,75 @@ export interface TextSearchResponse {
   total: number
   query: string
   minScore: number
+}
+
+export type MediaMaintenanceMode = 'dry-run' | 'apply'
+export type MediaMaintenanceType = 'all' | 'gallery' | 'song' | 'album'
+export type MediaMaintenanceOperation =
+  | 'scan'
+  | 'reconcile'
+  | 'bind-legacy'
+  | 'localize'
+  | 'repair-thumbnails'
+  | 'orphans/preview'
+  | 'orphans/delete'
+export type MediaMaintenanceResultMode = MediaMaintenanceMode | 'strict' | 'business'
+
+export interface MediaMaintenanceDetail {
+  id: string
+  status: 'processed' | 'skipped' | 'failed'
+  reason?: string
+  type?: MediaMaintenanceType
+}
+
+export interface MediaMaintenanceBatchResult {
+  operation: MediaMaintenanceOperation
+  mode: MediaMaintenanceResultMode
+  type: MediaMaintenanceType
+  scanned: number
+  processed: number
+  skipped: number
+  failed: number
+  nextCursor: string | null
+  hasMore: boolean
+  details: MediaMaintenanceDetail[]
+  queued?: number
+  alreadyQueued?: number
+  skippedMissingSource?: number
+  conflicts?: number
+}
+
+export interface MediaMaintenanceScanResult extends MediaMaintenanceBatchResult {
+  counts: {
+    unboundMediaAssets: number
+    legacyUrlOnlyRecords: number
+    missingThumbnails: number
+    remoteCandidates: number
+    orphanFiles: number
+    orphanBytes: number
+    sharedImageMaps: number
+    activeUploadSessions: number
+    missingLocalFiles: number
+    retiredMedia: number
+  }
+  health: MediaHealthScanResult
+}
+
+export interface MediaMaintenanceOrphanEntry {
+  storageKey: string
+  sizeBytes: number
+  mtimeMs: number
+  sha256: string
+}
+
+export interface MediaMaintenanceOrphanPreview extends MediaMaintenanceBatchResult {
+  previewToken: string
+  storageKeys: string[]
+  entries: MediaMaintenanceOrphanEntry[]
+  totalBytes: number
+  includeVariants: boolean
+}
+export interface MediaMaintenanceOrphanDelete extends MediaMaintenanceBatchResult {
+  deletedBytes: number
+  deletedKeys: string[]
 }

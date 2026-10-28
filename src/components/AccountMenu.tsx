@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState, type FocusEvent, type MouseEvent } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Bookmark, FileText, History, LogOut, MessageSquare, Server, Settings, UserRound } from 'lucide-react'
+import {
+  Bookmark,
+  FileText,
+  History,
+  LogOut,
+  MessageSquare,
+  Server,
+  Settings,
+  Ticket,
+  UserRound,
+} from '@/src/components/icons'
 import { useAuth } from '../context/AuthContext'
 import { DEFAULT_AVATAR, handleAvatarError } from '../lib/defaultAvatar'
 import { DropdownPanel } from './DropdownPanel'
@@ -9,6 +19,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { usePendingReviewCount } from '../hooks/usePendingReviewCount'
 import type { AuthMode } from './Navbar/types'
 import styles from './AccountMenu.module.css'
+import { Button, IconButton } from '@/src/components/ui'
 
 interface AccountMenuProps {
   onLogout: () => void | Promise<void>
@@ -64,8 +75,9 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
       data-open={isAccountMenuOpen ? 'true' : 'false'}
       onBlur={handleAccountMenuBlur}
     >
-      <button
+      <IconButton
         type="button"
+        variant="ghost"
         onClick={() => {
           if (!isAuthResolved) {
             return
@@ -73,17 +85,17 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
 
           setIsAccountMenuOpen((open) => !open)
         }}
-        className={`${styles.avatarTrigger} ${
-          loading
-            ? styles.avatarTriggerPending
-            : !isAuthenticated
-              ? styles.avatarTriggerGuest
-              : ''
+        className={`${styles.avatarTrigger} min-h-0 border-0 p-0 ${
+          loading ? styles.avatarTriggerPending : !isAuthenticated ? styles.avatarTriggerGuest : ''
         }`}
         aria-haspopup="menu"
         aria-expanded={isAccountMenuOpen}
         aria-label={
-          loading ? '正在确认登录状态' : isAuthenticated ? `${displayName}的账户菜单` : '打开账户菜单'
+          loading
+            ? '正在确认登录状态'
+            : isAuthenticated
+              ? `${displayName}的账户菜单`
+              : '打开账户菜单'
         }
         disabled={loading}
       >
@@ -101,20 +113,18 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
           </span>
         )}
         {hasPendingReviews && <span className={styles.notificationDot} aria-hidden="true" />}
-      </button>
+      </IconButton>
 
-      <DropdownPanel
-        open={isAccountMenuOpen}
-        className={styles.accountMenuPanel}
-      >
-        <div
-          aria-label="账户菜单"
-          onMouseDownCapture={handleAccountMenuMouseDownCapture}
-        >
+      <DropdownPanel open={isAccountMenuOpen} className={styles.accountMenuPanel}>
+        <div aria-label="账户菜单" onMouseDownCapture={handleAccountMenuMouseDownCapture}>
           <div className={styles.menuStack}>
             {isAuthenticated ? (
               <>
-                <Link to={`/users/${user.uid}`} className={styles.profileSummary} onClick={closeAccountMenu}>
+                <Link
+                  to={`/users/${user.publicId}`}
+                  className={styles.profileSummary}
+                  onClick={closeAccountMenu}
+                >
                   <img
                     src={accountAvatarSrc}
                     alt=""
@@ -131,30 +141,62 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
                 </Link>
 
                 <div className={styles.quickLinksGrid}>
-                  <Link to="/settings/content?tab=posts" className={styles.menuAction} onClick={closeAccountMenu}>
+                  <Link
+                    to="/settings/content?tab=posts"
+                    className={styles.menuAction}
+                    onClick={closeAccountMenu}
+                  >
                     <FileText size={16} />
                     <span>我的帖子</span>
                   </Link>
-                  <Link to="/settings/content?tab=comments" className={styles.menuAction} onClick={closeAccountMenu}>
+                  <Link
+                    to="/settings/content?tab=tickets"
+                    className={styles.menuAction}
+                    onClick={closeAccountMenu}
+                  >
+                    <Ticket size={16} />
+                    <span>我的盘票</span>
+                  </Link>
+                  <Link
+                    to="/settings/content?tab=comments"
+                    className={styles.menuAction}
+                    onClick={closeAccountMenu}
+                  >
                     <MessageSquare size={16} />
                     <span>我的评论</span>
                   </Link>
-                  <Link to={`/users/${user.uid}/history`} className={styles.menuAction} onClick={closeAccountMenu}>
+                  <Link
+                    to={`/users/${user.publicId}/history`}
+                    className={styles.menuAction}
+                    onClick={closeAccountMenu}
+                  >
                     <History size={16} />
                     <span>浏览历史</span>
                   </Link>
-                  <Link to={`/users/${user.uid}/favorites`} className={styles.menuAction} onClick={closeAccountMenu}>
+                  <Link
+                    to={`/users/${user.publicId}/favorites`}
+                    className={styles.menuAction}
+                    onClick={closeAccountMenu}
+                  >
                     <Bookmark size={16} />
                     <span>我的收藏</span>
                   </Link>
                 </div>
 
-                <Link to="/settings/content" className={styles.menuAction} onClick={closeAccountMenu}>
+                <Link
+                  to="/settings/content"
+                  className={styles.menuAction}
+                  onClick={closeAccountMenu}
+                >
                   <FileText size={16} />
                   <span>内容管理</span>
                 </Link>
 
-                <Link to="/settings/profile" className={styles.menuAction} onClick={closeAccountMenu}>
+                <Link
+                  to="/settings/profile"
+                  className={styles.menuAction}
+                  onClick={closeAccountMenu}
+                >
                   <Settings size={16} />
                   <span>设置</span>
                 </Link>
@@ -180,8 +222,10 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
               <div className={styles.menuBlock}>
                 <div className={styles.menuLabel}>账号</div>
                 <div className={styles.authActions}>
-                  <button
+                  <Button
                     type="button"
+                    size="sm"
+                    fullWidth
                     onClick={() => {
                       closeAccountMenu()
                       onOpenAuth('login')
@@ -189,10 +233,13 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
                     className={styles.menuPrimaryAction}
                   >
                     登录
-                  </button>
+                  </Button>
                   {allowRegister ? (
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
+                      fullWidth
                       onClick={() => {
                         closeAccountMenu()
                         onOpenAuth('register')
@@ -200,7 +247,7 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
                       className={styles.menuSecondaryAction}
                     >
                       注册
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               </div>
@@ -212,8 +259,10 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
             </div>
 
             {isAuthenticated ? (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                fullWidth
                 onClick={() => {
                   closeAccountMenu()
                   void onLogout()
@@ -222,7 +271,7 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
               >
                 <LogOut size={16} />
                 <span>退出登录</span>
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>

@@ -1,18 +1,18 @@
-export type MusicPlatform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo';
+export type MusicPlatform = 'netease' | 'tencent' | 'kugou' | 'baidu' | 'kuwo'
 
-export type MusicResourceType = 'song' | 'album' | 'playlist';
+export type MusicResourceType = 'song' | 'album' | 'playlist'
 
 export interface ParsedMusicUrl {
-  platform: MusicPlatform;
-  type: MusicResourceType;
-  id: string;
-  normalizedUrl: string;
+  platform: MusicPlatform
+  type: MusicResourceType
+  id: string
+  normalizedUrl: string
 }
 
 const PLATFORM_URL_PATTERNS: Array<{
-  platform: MusicPlatform;
-  type: MusicResourceType;
-  patterns: RegExp[];
+  platform: MusicPlatform
+  type: MusicResourceType
+  patterns: RegExp[]
 }> = [
   {
     platform: 'netease',
@@ -50,9 +50,7 @@ const PLATFORM_URL_PATTERNS: Array<{
   {
     platform: 'tencent',
     type: 'album',
-    patterns: [
-      /y\.qq\.com\/n\/ryqq\/albumdetail\/([a-z0-9_-]+)/i,
-    ],
+    patterns: [/y\.qq\.com\/n\/ryqq\/albumdetail\/([a-z0-9_-]+)/i],
   },
   {
     platform: 'tencent',
@@ -75,9 +73,7 @@ const PLATFORM_URL_PATTERNS: Array<{
   {
     platform: 'kugou',
     type: 'album',
-    patterns: [
-      /kugou\.com\/album\/([a-z0-9_-]+)/i,
-    ],
+    patterns: [/kugou\.com\/album\/([a-z0-9_-]+)/i],
   },
   {
     platform: 'kugou',
@@ -90,112 +86,108 @@ const PLATFORM_URL_PATTERNS: Array<{
   {
     platform: 'baidu',
     type: 'song',
-    patterns: [
-      /music\.baidu\.com\/song\/([a-z0-9_-]+)/i,
-    ],
+    patterns: [/music\.baidu\.com\/song\/([a-z0-9_-]+)/i],
   },
   {
     platform: 'baidu',
     type: 'album',
-    patterns: [
-      /music\.baidu\.com\/album\/([a-z0-9_-]+)/i,
-    ],
+    patterns: [/music\.baidu\.com\/album\/([a-z0-9_-]+)/i],
   },
   {
     platform: 'baidu',
     type: 'playlist',
-    patterns: [
-      /music\.baidu\.com\/songlist\/([a-z0-9_-]+)/i,
-    ],
+    patterns: [/music\.baidu\.com\/songlist\/([a-z0-9_-]+)/i],
   },
   {
     platform: 'kuwo',
     type: 'song',
     patterns: [
+      // play_detail 是酷我当前官方歌曲页，song_detail 为历史链接，保留兼容
+      /kuwo\.cn\/play_detail\/([a-z0-9_-]+)/i,
       /kuwo\.cn\/song_detail\/([a-z0-9_-]+)/i,
     ],
   },
   {
     platform: 'kuwo',
     type: 'album',
-    patterns: [
-      /kuwo\.cn\/album_detail\/([a-z0-9_-]+)/i,
-    ],
+    patterns: [/kuwo\.cn\/album_detail\/([a-z0-9_-]+)/i],
   },
   {
     platform: 'kuwo',
     type: 'playlist',
-    patterns: [
-      /kuwo\.cn\/playlist_detail\/([a-z0-9_-]+)/i,
-      /kuwo\.cn\/play_detail\/([a-z0-9_-]+)/i,
-    ],
+    patterns: [/kuwo\.cn\/playlist_detail\/([a-z0-9_-]+)/i],
   },
-];
+]
 
 function normalizeUrlInput(value: string) {
-  const trimmed = value.trim();
+  const trimmed = value.trim()
   if (!trimmed) {
-    return '';
+    return ''
   }
 
   if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed;
+    return trimmed
   }
 
-  return `https://${trimmed}`;
+  return `https://${trimmed}`
 }
 
 function sanitizeResourceId(value: string) {
-  return value.trim().replace(/[?#&].*$/, '');
+  return value.trim().replace(/[?#&].*$/, '')
 }
 
-export function buildPlatformResourceUrl(platform: MusicPlatform, type: MusicResourceType, id: string) {
-  const safeId = encodeURIComponent(id);
+export function buildPlatformResourceUrl(
+  platform: MusicPlatform,
+  type: MusicResourceType,
+  id: string
+) {
+  const safeId = encodeURIComponent(id)
 
   if (platform === 'netease') {
-    return `https://music.163.com/#/${type}?id=${safeId}`;
+    return `https://music.163.com/#/${type}?id=${safeId}`
   }
   if (platform === 'tencent') {
-    if (type === 'song') return `https://y.qq.com/n/ryqq/songDetail/${safeId}`;
-    if (type === 'album') return `https://y.qq.com/n/ryqq/albumDetail/${safeId}`;
-    return `https://y.qq.com/n/ryqq/playlist/${safeId}`;
+    if (type === 'song') return `https://y.qq.com/n/ryqq/songDetail/${safeId}`
+    if (type === 'album') return `https://y.qq.com/n/ryqq/albumDetail/${safeId}`
+    return `https://y.qq.com/n/ryqq/playlist/${safeId}`
   }
   if (platform === 'kugou') {
-    if (type === 'song') return `https://www.kugou.com/song/#hash=${safeId}`;
-    if (type === 'album') return `https://www.kugou.com/album/${safeId}.html`;
-    return `https://www.kugou.com/songlist/${safeId}`;
+    if (type === 'song') return `https://www.kugou.com/song/#hash=${safeId}`
+    if (type === 'album') return `https://www.kugou.com/album/${safeId}.html`
+    return `https://www.kugou.com/songlist/${safeId}`
   }
   if (platform === 'baidu') {
-    if (type === 'song') return `https://music.baidu.com/song/${safeId}`;
-    if (type === 'album') return `https://music.baidu.com/album/${safeId}`;
-    return `https://music.baidu.com/songlist/${safeId}`;
+    // 百度音乐已更名为 91Q 音乐，旧 music.baidu.com 域名已下线
+    if (type === 'song') return `https://music.91q.com/#/song/${safeId}`
+    if (type === 'album') return `https://music.91q.com/#/album/${safeId}`
+    return `https://music.91q.com/#/songlist/${safeId}`
   }
-  if (type === 'song') return `https://www.kuwo.cn/song_detail/${safeId}`;
-  if (type === 'album') return `https://www.kuwo.cn/album_detail/${safeId}`;
-  return `https://www.kuwo.cn/playlist_detail/${safeId}`;
+  if (type === 'song') return `https://www.kuwo.cn/play_detail/${safeId}`
+  if (type === 'album') return `https://www.kuwo.cn/album_detail/${safeId}`
+  return `https://www.kuwo.cn/playlist_detail/${safeId}`
 }
 
 export function parseMusicUrl(rawUrl: string): ParsedMusicUrl | null {
-  const normalized = normalizeUrlInput(rawUrl);
+  const normalized = normalizeUrlInput(rawUrl)
   if (!normalized) {
-    return null;
+    return null
   }
 
-  let decoded: string;
+  let decoded: string
   try {
-    decoded = decodeURIComponent(normalized);
+    decoded = decodeURIComponent(normalized)
   } catch {
-    return null;
+    return null
   }
   for (const rule of PLATFORM_URL_PATTERNS) {
     for (const pattern of rule.patterns) {
-      const matched = decoded.match(pattern);
+      const matched = decoded.match(pattern)
       if (!matched?.[1]) {
-        continue;
+        continue
       }
-      const id = sanitizeResourceId(matched[1]);
+      const id = sanitizeResourceId(matched[1])
       if (!id) {
-        continue;
+        continue
       }
 
       return {
@@ -203,9 +195,9 @@ export function parseMusicUrl(rawUrl: string): ParsedMusicUrl | null {
         type: rule.type,
         id,
         normalizedUrl: buildPlatformResourceUrl(rule.platform, rule.type, id),
-      };
+      }
     }
   }
 
-  return null;
+  return null
 }

@@ -10,7 +10,7 @@
 
 推荐使用 GitHub 私有安全报告：
 
-<https://github.com/yangwenjie1231/huangshifu-wiki/security/advisories/new>
+<https://github.com/huangshifu-wiki/huangshifu-wiki/security/advisories/new>
 
 报告时请尽量包含：
 
