@@ -179,7 +179,9 @@ const PostList = () => {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [retryNonce, setRetryNonce] = useState(0)
-  const [totalPages, setTotalPages] = useState<number>()
+  const [totalPagesState, setTotalPages] = useState<{ scope: string; total: number }>()
+  const scope = JSON.stringify([section])
+  const totalPages = totalPagesState?.scope === scope ? totalPagesState.total : undefined
   const { user, isBanned } = useAuth()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
   const viewMode = getScopedViewMode('forum')
@@ -266,7 +268,7 @@ const PostList = () => {
         const data = await fetchPostPage(pagination.page, abortController.signal)
         if (cancelled) return
         setPosts(data.items)
-        setTotalPages(data.totalPages)
+        setTotalPages({ scope, total: data.totalPages })
       } catch (error) {
         if (cancelled) return
         console.error('Error fetching posts:', error)
@@ -282,7 +284,7 @@ const PostList = () => {
       cancelled = true
       abortController.abort()
     }
-  }, [fetchPostPage, isIncrementalMode, pagination.page, retryNonce])
+  }, [fetchPostPage, isIncrementalMode, pagination.page, retryNonce, scope])
 
   const forumState = getListLoadState({
     items: visiblePosts,

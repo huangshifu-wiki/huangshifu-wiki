@@ -29,13 +29,13 @@ const MUSIC_PAGE_SIZE_OPTIONS = [25, 50, 100]
 const Music = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [songs, setSongs] = useState<SongItem[]>([])
-  const [songTotal, setSongTotal] = useState<number>()
+  const [songTotalState, setSongTotal] = useState<{ scope: string; total: number }>()
   const [loading, setLoading] = useState(true)
   const [songLoadError, setSongLoadError] = useState<unknown | null>(null)
   const [songRetryNonce, setSongRetryNonce] = useState(0)
   const [favoriting, setFavoriting] = useState<string | null>(null)
   const [albums, setAlbums] = useState<AlbumItem[]>([])
-  const [albumTotal, setAlbumTotal] = useState<number>()
+  const [albumTotalState, setAlbumTotal] = useState<{ scope: string; total: number }>()
   const [loadingAlbums, setLoadingAlbums] = useState(true)
   const [albumLoadError, setAlbumLoadError] = useState<unknown | null>(null)
   const [albumRetryNonce, setAlbumRetryNonce] = useState(0)
@@ -52,6 +52,11 @@ const Music = () => {
   const { t } = useI18n()
 
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [showAccompaniments, setShowAccompaniments] = useState(false)
+  const songScope = JSON.stringify([tag, showAccompaniments])
+  const albumScope = JSON.stringify([albumTag])
+  const songTotal = songTotalState?.scope === songScope ? songTotalState.total : undefined
+  const albumTotal = albumTotalState?.scope === albumScope ? albumTotalState.total : undefined
 
   const musicPagination = useRoutedPagination({
     totalCount: songTotal,
@@ -69,7 +74,6 @@ const Music = () => {
     showPageSizeSelector: false,
     enabled: !isIncrementalMode,
   })
-  const [showAccompaniments, setShowAccompaniments] = useState(false)
   const musicTags = useTagSuggestions('music')
   const albumTags = useTagSuggestions('album')
   const activeTag = activeTab === 'music' ? tag : albumTag
@@ -209,7 +213,7 @@ const Music = () => {
         const data = await fetchSongPage(musicPagination.page, abortController.signal)
         if (cancelled) return
         setSongs(data.items)
-        setSongTotal(data.total)
+        setSongTotal({ scope: songScope, total: data.total })
       } catch (error) {
         if (cancelled) return
         console.error('Fetch songs error:', error)
@@ -225,7 +229,7 @@ const Music = () => {
       cancelled = true
       abortController.abort()
     }
-  }, [fetchSongPage, isIncrementalMode, musicPagination.page, songRetryNonce])
+  }, [fetchSongPage, isIncrementalMode, musicPagination.page, songRetryNonce, songScope])
 
   useEffect(() => {
     setPlaylist(visibleSongs)
@@ -243,7 +247,7 @@ const Music = () => {
         const data = await fetchAlbumPage(albumPagination.page, abortController.signal)
         if (cancelled) return
         setAlbums(data.items)
-        setAlbumTotal(data.total)
+        setAlbumTotal({ scope: albumScope, total: data.total })
       } catch (error) {
         if (cancelled) return
         console.error('Fetch albums error:', error)
@@ -259,7 +263,7 @@ const Music = () => {
       cancelled = true
       abortController.abort()
     }
-  }, [albumPagination.page, albumRetryNonce, fetchAlbumPage, isIncrementalMode])
+  }, [albumPagination.page, albumRetryNonce, fetchAlbumPage, isIncrementalMode, albumScope])
 
   const songState = getListLoadState({
     items: visibleSongs,

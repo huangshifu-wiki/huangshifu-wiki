@@ -16,12 +16,14 @@ import { PageSkeleton } from '@/src/components/PageSkeleton'
 
 export const AdminReviews = () => {
   const [items, setItems] = useState<AdminReviewQueueMergedItem[]>([])
-  const [total, setTotal] = useState<number | undefined>()
+  const [totalState, setTotal] = useState<{ scope: string; total: number }>()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const filter = normalizeReviewFilter(searchParams.get('type'))
+  const scope = JSON.stringify([filter])
+  const total = totalState?.scope === scope ? totalState.total : undefined
   const pagination = useRoutedPagination({
     totalCount: total,
     defaultPageSize: 20,
@@ -31,7 +33,6 @@ export const AdminReviews = () => {
     showPageSizeSelector: true,
   })
   const loadRequestRef = useRef(0)
-  const filterRef = useRef(filter)
 
   const fetchQueue = async () => {
     const requestId = loadRequestRef.current + 1
@@ -42,7 +43,7 @@ export const AdminReviews = () => {
       const result = await fetchReviewQueuePage(filter, pagination.page, pagination.pageSize)
       if (requestId !== loadRequestRef.current) return
       setItems(result.items)
-      setTotal(result.total)
+      setTotal({ scope, total: result.total })
       setLoadError(null)
     } catch (e) {
       console.error(e)
@@ -53,13 +54,6 @@ export const AdminReviews = () => {
       }
     }
   }
-
-  useEffect(() => {
-    if (filterRef.current === filter) return
-    filterRef.current = filter
-    pagination.setPage(1)
-    setTotal(undefined)
-  }, [filter])
 
   useEffect(() => {
     void fetchQueue()
@@ -116,8 +110,10 @@ export const AdminReviews = () => {
             variant={filter === item.id ? 'primary' : 'secondary'}
             key={item.id}
             onClick={() => {
+              if (item.id === filter) return
               setSearchParams((prev) => {
                 const next = new URLSearchParams(prev)
+                next.delete('page')
                 if (item.id === 'all') {
                   next.delete('type')
                 } else {

@@ -298,7 +298,10 @@ const Settings = () => {
     () => activeSection === 'content' && Boolean(userPublicId)
   )
   const [contentError, setContentError] = useState<unknown | null>(null)
-  const [contentTotal, setContentTotal] = useState<number | undefined>()
+  const [contentTotalState, setContentTotal] = useState<{ scope: string; total: number }>()
+  const contentScope = JSON.stringify([userPublicId, activeSection, activeContentTab])
+  const contentTotal =
+    contentTotalState?.scope === contentScope ? contentTotalState.total : undefined
   const pagination = useRoutedPagination({
     totalCount: contentTotal,
     defaultPageSize: 50,
@@ -308,7 +311,6 @@ const Settings = () => {
     showPageSizeSelector: true,
     enabled: activeSection === 'content',
   })
-  const contentScopeRef = useRef<string | null>(null)
   const [contentRetry, setContentRetry] = useState(0)
   const personalApiKeyRequestIdRef = useRef(0)
   const personalApiKeyCreateControllerRef = useRef<AbortController | null>(null)
@@ -453,16 +455,6 @@ const Settings = () => {
   }, [activeSection, personalApiKeysRetry, user?.uid])
 
   useEffect(() => {
-    if (!userPublicId) return
-    const scope = `${activeSection}:${activeContentTab}:${userPublicId}`
-    if (contentScopeRef.current !== null && contentScopeRef.current !== scope) {
-      pagination.setPage(1)
-      setContentTotal(undefined)
-    }
-    contentScopeRef.current = scope
-  }, [activeContentTab, activeSection, userPublicId])
-
-  useEffect(() => {
     if (!userPublicId || activeSection !== 'content') return
 
     let cancelled = false
@@ -478,7 +470,7 @@ const Settings = () => {
           )
           if (!cancelled) {
             setMyPosts(data.posts || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
           return
         }
@@ -490,7 +482,7 @@ const Settings = () => {
           )
           if (!cancelled) {
             setMyWikiPages(data.pages || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
           return
         }
@@ -502,7 +494,7 @@ const Settings = () => {
           )
           if (!cancelled) {
             setMyGalleries(data.galleries || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
           return
         }
@@ -515,7 +507,7 @@ const Settings = () => {
           })
           if (!cancelled) {
             setMyTicketListings(data.listings || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
           return
         }
@@ -526,7 +518,7 @@ const Settings = () => {
         )
         if (!cancelled) {
           setMyComments(data.comments || [])
-          setContentTotal(data.total || 0)
+          setContentTotal({ scope: contentScope, total: data.total || 0 })
         }
       } catch (error) {
         console.error('Fetch content management data error:', error)
@@ -546,6 +538,7 @@ const Settings = () => {
   }, [
     activeContentTab,
     activeSection,
+    contentScope,
     contentRetry,
     pagination.page,
     pagination.pageSize,
@@ -582,7 +575,7 @@ const Settings = () => {
         )
         if (!stopped) {
           setMyGalleries(data.galleries || [])
-          setContentTotal(data.total || 0)
+          setContentTotal({ scope: contentScope, total: data.total || 0 })
         }
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -607,6 +600,7 @@ const Settings = () => {
   }, [
     activeContentTab,
     activeSection,
+    contentScope,
     hasPendingGalleryThumbnails,
     pagination.page,
     pagination.pageSize,
