@@ -15,6 +15,7 @@ import {
   getSearchHotKeywordsConfig,
   setSearchHotKeywordsConfig,
   isSearchHotKeywordsEnabled,
+  getTurnstilePublicConfig,
   parseQueryString,
   parseRouteParam,
 } from '../utils'
@@ -56,6 +57,16 @@ router.get('/features', async (_req, res) => {
   } catch (error) {
     console.error('Get public features error:', error)
     res.status(500).json({ error: '获取站点功能配置失败' })
+  }
+})
+
+// GET /api/config/turnstile - Get public Turnstile config
+router.get('/turnstile', async (_req, res) => {
+  try {
+    res.json(getTurnstilePublicConfig())
+  } catch (error) {
+    console.error('Get turnstile config error:', error)
+    res.status(500).json({ error: '获取人机验证配置失败' })
   }
 })
 

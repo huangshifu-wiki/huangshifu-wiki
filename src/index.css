@@ -19,7 +19,7 @@
     'Microsoft YaHei', 'Noto Sans SC', sans-serif;
 
   /* 普通主题 - 原站米白 / 金棕色系 */
-  --color-brand-primary: #b07b17;
+  --color-brand-primary: var(--home-gold);
   --color-brand-olive: #6b6560;
   --color-brand-cream: #f7f5f0;
   --color-brand-paper: #ffffff;
@@ -29,7 +29,7 @@
   --color-theme-surface: #ffffff;
   --color-theme-surface-alt: #f0ece3;
   --color-theme-border: #e0dcd3;
-  --color-theme-accent: #8a6313;
+  --color-theme-accent: var(--home-gold);
   --color-theme-accent-hover: #b07b17;
   --color-theme-accent-strong: #6f4f0f;
   --color-theme-accent-soft: #f3e7c4;
@@ -121,7 +121,7 @@
   /* 将语义化命名映射到项目已有颜色，保持向后兼容 */
 
   /* 品牌色 (Brand) - 原站金棕色 */
-  --color-brand-gold: #b07b17;
+  --color-brand-gold: var(--home-gold);
   --color-brand-gold-light: #d9ab47;
   --color-brand-gold-dark: #a87912;
 
@@ -149,7 +149,7 @@
 
   /* 古风页面色 (Antique Page) */
   --color-bg-antique: #f7f5f0;
-  --color-accent-antique: #b07b17;
+  --color-accent-antique: var(--home-gold);
 
   /* 占位/错误状态色 (Placeholder & Error State) */
   --color-surface-error: #f5f2eb;
@@ -265,11 +265,13 @@ a.mention-highlight:hover {
   --color-theme-surface: #2a231e;
   --color-theme-surface-alt: #342c25;
   --color-theme-border: #51453a;
-  --color-theme-accent: #b07b17;
+  --color-brand-primary: var(--home-gold);
+  --color-brand-gold: var(--home-gold);
+  --color-theme-accent: var(--home-gold);
   --color-theme-accent-hover: #d4a843;
   --color-theme-accent-strong: #d4a843;
   --color-theme-accent-soft: rgba(212, 168, 67, 0.18);
-  --color-theme-accent-contrast: #fff8eb;
+  --color-theme-accent-contrast: #1f1a16;
   --color-theme-button-contrast: #fff;
   --color-theme-text-inverse: #fff;
   --color-theme-selection-text: #e8d4a8;
@@ -290,7 +292,7 @@ a.mention-highlight:hover {
   --color-text-antique-muted: #b8ab9a;
   --color-text-placeholder: #8f8172;
   --color-bg-antique: #1f1a16;
-  --color-accent-antique: #b07b17;
+  --color-accent-antique: var(--home-gold);
   --color-surface-error: #3a2f28;
   --color-surface-form: #2a231e;
   --glass-bg: rgba(42, 35, 30, 0.58);
@@ -344,6 +346,22 @@ a.mention-highlight:hover {
   --book-panel-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
   --book-panel-shadow-hover: 0 24px 52px rgba(0, 0, 0, 0.38);
   --book-focus-ring: 0 0 0 3px rgba(212, 168, 67, 0.2);
+}
+
+/* 深色主题的实心金色表面使用深色内容。 */
+[data-theme='dark']
+  :is(
+    .bg-brand-gold.text-white,
+    .hover\:bg-brand-gold.hover\:text-white:hover,
+    .hover\:bg-brand-gold.text-white:hover,
+    .focus\:bg-brand-gold.focus\:text-white:focus,
+    .skip-to-content
+  ) {
+  color: var(--color-theme-accent-contrast);
+}
+
+[data-theme='dark'] [role='switch'][data-state='unchecked'] > span {
+  background: var(--color-theme-button-contrast);
 }
 
 @layer base {

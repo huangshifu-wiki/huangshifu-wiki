@@ -23,7 +23,7 @@ import {
 import { CONTENT_LIMITS } from '../lib/contentLimits'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { getErrorMessage } from '../lib/errorHandler'
-import { apiDelete, apiGet, apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
+import { apiGet, apiPatch, invalidateMusicApiCaches } from '../lib/apiClient'
 import type { AdminDataItem } from '../types/entities'
 import {
   Button,
@@ -60,6 +60,7 @@ interface EditorDisc {
 
 interface AlbumDetail {
   docId: string
+  updatedAt: string
   tracks: EditorTrack[]
   discs: EditorDisc[]
 }
@@ -69,12 +70,6 @@ interface EditorDiscDraft {
   name: string
   tracks: EditorTrack[]
 }
-
-type PendingAction =
-  | null
-  | { type: 'save-order' | 'create-disc' }
-  | { type: 'add-track' | 'delete-track'; id: string }
-  | { type: 'delete-disc'; disc: number }
 
 const normalizeEditorTracks = (rawTracks: unknown): EditorTrack[] => {
   if (!Array.isArray(rawTracks)) return []
@@ -176,7 +171,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
   const [draftDiscs, setDraftDiscs] = useState<EditorDiscDraft[]>([])
   const [activeDiscNumber, setActiveDiscNumber] = useState<number | null>(null)
   const [orderDirty, setOrderDirty] = useState(false)
-  const [pendingAction, setPendingAction] = useState<PendingAction>(null)
+  const [isBusy, setIsBusy] = useState(false)
   const [newDiscOpen, setNewDiscOpen] = useState(false)
   const [newDiscNumber, setNewDiscNumber] = useState('')
   const [newDiscName, setNewDiscName] = useState('')
@@ -192,8 +187,6 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
 
   const albumId = album?.docId || ''
   const albumSlug = album?.slug || albumId
-  const isBusy = pendingAction !== null
-  const canStructure = !isBusy && !orderDirty
 
   const activeDisc = useMemo(
     () => draftDiscs.find((disc) => disc.disc === activeDiscNumber) || null,
@@ -243,7 +236,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
     setDraftDiscs([])
     setActiveDiscNumber(null)
     setOrderDirty(false)
-    setPendingAction(null)
+    setIsBusy(false)
     setNewDiscOpen(false)
     setNewDiscNumber('')
     setNewDiscName('')
@@ -309,7 +302,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
     }
     const confirmed = await dialog.confirm({
       title: '放弃未保存的编排？',
-      message: '曲目顺序尚未保存，关闭后将丢失这些调整。',
+      message: '有未保存的修改，关闭后将丢失这些调整。',
       confirmText: '放弃并关闭',
       cancelText: '继续编辑',
       variant: 'warning',
@@ -378,6 +371,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
   }
 
   const handleSaveOrder = async () => {
+    if (!detail) return
     if (
       draftDiscs.length > 20 ||
       draftDiscs.some(
@@ -395,21 +389,23 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
       show('曲目编排包含无效的 Disc 或轨序', { variant: 'error' })
       return
     }
-    setPendingAction({ type: 'save-order' })
+    setIsBusy(true)
     try {
-      await apiPatch(`/api/albums/${albumId}/tracks/reorder`, buildReorderPayload(draftDiscs))
+      await apiPatch(`/api/albums/${albumId}/tracks/reorder`, {
+        ...buildReorderPayload(draftDiscs),
+        updatedAt: detail.updatedAt,
+      })
       setOrderDirty(false)
       show('曲目编排已保存')
       await notifyChanged()
     } catch (error) {
       show(getErrorMessage(error, '保存曲目编排失败'), { variant: 'error' })
     } finally {
-      setPendingAction(null)
+      setIsBusy(false)
     }
   }
 
-  const handleCreateDisc = async () => {
-    if (!albumId) return
+  const handleCreateDisc = () => {
     const discNumber = Number(newDiscNumber)
     const name = newDiscName.trim()
     if (!Number.isInteger(discNumber) || discNumber < 1 || discNumber > 20 || !name) {
@@ -420,59 +416,45 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
       show('Disc 已存在', { variant: 'error' })
       return
     }
-
-    setPendingAction({ type: 'create-disc' })
-    try {
-      await apiPost(`/api/albums/${albumId}/discs`, { discNumber, name })
-      setNewDiscNumber('')
-      setNewDiscName('')
-      setNewDiscOpen(false)
-      setActiveDiscNumber(discNumber)
-      show('Disc 已创建')
-      await notifyChanged()
-    } catch (error) {
-      show(getErrorMessage(error, '创建 Disc 失败'), { variant: 'error' })
-    } finally {
-      setPendingAction(null)
-    }
+    setDraftDiscs((current) =>
+      [...current, { disc: discNumber, name, tracks: [] }].sort((a, b) => a.disc - b.disc)
+    )
+    setOrderDirty(true)
+    setNewDiscNumber('')
+    setNewDiscName('')
+    setNewDiscOpen(false)
+    setActiveDiscNumber(discNumber)
   }
 
-  const handleAddTrack = async (song: AdminDataItem) => {
-    if (!albumId || !activeDisc) return
-    const songDocId = song.docId || ''
-    if (!songDocId) return
+  const handleAddTrack = (song: AdminDataItem) => {
+    if (!activeDisc || !song.docId) return
+    const songDocId = song.docId
     if (draftDiscs.some((disc) => disc.tracks.some((track) => track.songDocId === songDocId))) {
       show('同一专辑不能重复添加歌曲', { variant: 'error' })
       return
     }
-    const maxPersistedTrackOrder = Math.max(
-      -1,
-      ...(detail?.tracks
-        .filter((track) => track.discNumber === activeDisc.disc)
-        .map((track) => track.trackOrder) || [])
-    )
-    if (maxPersistedTrackOrder >= 5000) {
-      show('当前轨序已达上限，请先调整并保存编排', { variant: 'error' })
+    if (activeDisc.tracks.length >= 5000) {
+      show('当前 Disc 的曲目已达上限', { variant: 'error' })
       return
     }
-
-    setPendingAction({ type: 'add-track', id: songDocId })
-    try {
-      await apiPost(`/api/music/${songDocId}/albums`, {
-        albumDocId: albumId,
-        discNumber: activeDisc.disc,
-        trackOrder: maxPersistedTrackOrder + 1,
-        isDisplay: false,
-      })
-      setSongQuery('')
-      setSongs([])
-      show('歌曲已添加')
-      await notifyChanged()
-    } catch (error) {
-      show(getErrorMessage(error, '添加歌曲失败'), { variant: 'error' })
-    } finally {
-      setPendingAction(null)
+    const track: EditorTrack = {
+      songDocId,
+      discNumber: activeDisc.disc,
+      trackOrder: activeDisc.tracks.length,
+      song: {
+        docId: songDocId,
+        title: song.title || songDocId,
+        artists: song.artists || (song.artist ? [song.artist] : []),
+      },
     }
+    setDraftDiscs((current) =>
+      current.map((disc) =>
+        disc.disc === activeDisc.disc ? { ...disc, tracks: [...disc.tracks, track] } : disc
+      )
+    )
+    setOrderDirty(true)
+    setSongQuery('')
+    setSongs([])
   }
 
   const handleDeleteTrack = async (track: EditorTrack) => {
@@ -485,16 +467,19 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
     })
     if (!confirmed) return
 
-    setPendingAction({ type: 'delete-track', id: track.songDocId })
-    try {
-      await apiDelete(`/api/music/${track.songDocId}/albums/${albumId}`)
-      show('歌曲已移出专辑')
-      await notifyChanged()
-    } catch (error) {
-      show(getErrorMessage(error, '删除歌曲失败'), { variant: 'error' })
-    } finally {
-      setPendingAction(null)
-    }
+    setDraftDiscs((current) =>
+      current.map((disc) =>
+        disc.disc === track.discNumber
+          ? {
+              ...disc,
+              tracks: reindexTracks(
+                disc.tracks.filter((item) => item.songDocId !== track.songDocId)
+              ),
+            }
+          : disc
+      )
+    )
+    setOrderDirty(true)
   }
 
   const handleDeleteDisc = async (disc: EditorDiscDraft) => {
@@ -507,18 +492,10 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
     })
     if (!confirmed) return
 
-    setPendingAction({ type: 'delete-disc', disc: disc.disc })
-    try {
-      await apiDelete(`/api/albums/${albumId}/discs/${disc.disc}`)
-      const nextDisc = draftDiscs.find((item) => item.disc > disc.disc) || draftDiscs.at(-2)
-      setActiveDiscNumber(nextDisc?.disc ?? null)
-      show('Disc 已删除')
-      await notifyChanged()
-    } catch (error) {
-      show(getErrorMessage(error, '删除 Disc 失败'), { variant: 'error' })
-    } finally {
-      setPendingAction(null)
-    }
+    const remaining = draftDiscs.filter((item) => item.disc !== disc.disc)
+    setDraftDiscs(remaining)
+    setActiveDiscNumber(remaining[0]?.disc ?? null)
+    setOrderDirty(true)
   }
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -597,7 +574,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
                   className="border border-brand-gold bg-surface-alt px-3 py-2 text-sm text-text-secondary"
                   role="status"
                 >
-                  先保存或撤销当前顺序，再增删 Disc 或曲目。
+                  有未保存的修改，请保存或撤销。
                 </p>
               )}
 
@@ -620,8 +597,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
                     open={newDiscOpen}
                     number={newDiscNumber}
                     name={newDiscName}
-                    disabled={!canStructure}
-                    loading={pendingAction?.type === 'create-disc'}
+                    disabled={isBusy}
                     onNumberChange={setNewDiscNumber}
                     onNameChange={setNewDiscName}
                     onSubmit={() => void handleCreateDisc()}
@@ -651,7 +627,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
                         type="button"
                         variant="secondary"
                         size="sm"
-                        disabled={!canStructure}
+                        disabled={isBusy}
                         onClick={() => setNewDiscOpen((value) => !value)}
                         leftIcon={newDiscOpen ? <ChevronUp size={14} /> : <Plus size={14} />}
                         className="w-full"
@@ -662,8 +638,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
                         open={newDiscOpen}
                         number={newDiscNumber}
                         name={newDiscName}
-                        disabled={!canStructure}
-                        loading={pendingAction?.type === 'create-disc'}
+                        disabled={isBusy}
                         onNumberChange={setNewDiscNumber}
                         onNameChange={setNewDiscName}
                         onSubmit={() => void handleCreateDisc()}
@@ -693,11 +668,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
                             type="button"
                             variant="danger"
                             size="sm"
-                            disabled={!canStructure || activeTracks.length > 0}
-                            loading={
-                              pendingAction?.type === 'delete-disc' &&
-                              pendingAction.disc === activeDisc.disc
-                            }
+                            disabled={isBusy || activeTracks.length > 0}
                             onClick={() => void handleDeleteDisc(activeDisc)}
                             leftIcon={<Trash2 size={14} />}
                           >
@@ -715,7 +686,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
                         loading={searchLoading}
                         error={searchError}
                         highlightedIndex={highlightedIndex}
-                        disabled={!canStructure}
+                        disabled={isBusy}
                         existingSongIds={
                           new Set(
                             draftDiscs.flatMap((disc) =>
@@ -803,7 +774,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
                                             total={activeTracks.length}
                                             dragHandleProps={dragProvided.dragHandleProps}
                                             reorderDisabled={isBusy}
-                                            deleteDisabled={isBusy || orderDirty}
+                                            deleteDisabled={isBusy}
                                             onMove={handleMoveTrack}
                                             onDelete={handleDeleteTrack}
                                           />
@@ -835,9 +806,15 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
             disabled={isBusy || !orderDirty}
             onClick={() => {
               if (!detail) return
-              setDraftDiscs(buildEditorDraft(detail))
+              const restored = buildEditorDraft(detail)
+              setDraftDiscs(restored)
+              setActiveDiscNumber((current) =>
+                restored.some((disc) => disc.disc === current)
+                  ? current
+                  : (restored[0]?.disc ?? null)
+              )
               setOrderDirty(false)
-              setLiveAnnouncement('已撤销未保存的曲目顺序调整。')
+              setLiveAnnouncement('已撤销未保存的修改。')
             }}
           >
             撤销调整
@@ -854,7 +831,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
           <Button
             type="button"
             disabled={!orderDirty}
-            loading={pendingAction?.type === 'save-order'}
+            loading={isBusy}
             loadingText="正在保存"
             onClick={() => void handleSaveOrder()}
             leftIcon={<Save size={15} />}
@@ -872,7 +849,6 @@ const CreateDiscForm = ({
   number,
   name,
   disabled,
-  loading,
   onNumberChange,
   onNameChange,
   onSubmit,
@@ -881,7 +857,6 @@ const CreateDiscForm = ({
   number: string
   name: string
   disabled: boolean
-  loading: boolean
   onNumberChange: (value: string) => void
   onNameChange: (value: string) => void
   onSubmit: () => void
@@ -915,7 +890,6 @@ const CreateDiscForm = ({
         size="sm"
         fullWidth
         disabled={disabled}
-        loading={loading}
         onClick={onSubmit}
       >
         创建 Disc

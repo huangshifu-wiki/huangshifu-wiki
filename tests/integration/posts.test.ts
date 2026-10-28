@@ -276,6 +276,79 @@ describe('Posts API', () => {
     })
   })
 
+  it('returns standard pagination metadata for post comments at page boundaries', async () => {
+    const post = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Comment Pagination`,
+      status: 'published',
+      authorUid: normalUser.user.uid,
+    })
+    const createdAt = new Date('2025-01-01T00:00:00.000Z')
+    await prisma.postComment.createMany({
+      data: [0, 1, 2].map((index) => ({
+        postId: post.id,
+        authorUid: normalUser.user.uid,
+        content: `ROI comment ${index}`,
+        createdAt: new Date(createdAt.getTime() + index * 1_000),
+      })),
+    })
+
+    const firstPage = await request(app)
+      .get(`/api/posts/${post.id}/comments`)
+      .query({ page: 1, limit: 2 })
+    expect(firstPage.status).toBe(200)
+    expect(firstPage.body.comments.map((comment: { content: string }) => comment.content)).toEqual([
+      'ROI comment 0',
+      'ROI comment 1',
+    ])
+    expect(firstPage.body).toMatchObject({
+      total: 3,
+      page: 1,
+      limit: 2,
+      totalPages: 2,
+      hasMore: true,
+    })
+
+    const lastPage = await request(app)
+      .get(`/api/posts/${post.id}/comments`)
+      .query({ page: 2, limit: 2 })
+    expect(lastPage.body.comments.map((comment: { content: string }) => comment.content)).toEqual([
+      'ROI comment 2',
+    ])
+    expect(lastPage.body).toMatchObject({
+      total: 3,
+      page: 2,
+      limit: 2,
+      totalPages: 2,
+      hasMore: false,
+    })
+
+    const beyondLastPage = await request(app)
+      .get(`/api/posts/${post.id}/comments`)
+      .query({ page: 9, limit: 2 })
+    expect(beyondLastPage.body.comments).toEqual([])
+    expect(beyondLastPage.body).toMatchObject({
+      total: 3,
+      page: 9,
+      limit: 2,
+      totalPages: 2,
+      hasMore: false,
+    })
+
+    const emptyPost = await createTestPost({
+      title: `${POST_TITLE_PREFIX} Empty Comment Pagination`,
+      status: 'published',
+      authorUid: normalUser.user.uid,
+    })
+    const emptyPage = await request(app).get(`/api/posts/${emptyPost.id}/comments`)
+    expect(emptyPage.body.comments).toEqual([])
+    expect(emptyPage.body).toMatchObject({
+      total: 0,
+      page: 1,
+      limit: 20,
+      totalPages: 1,
+      hasMore: false,
+    })
+  })
   it('preserves comment thread behavior for replies, soft deletion, and likes', async () => {
     const post = await createTestPost({
       title: `${POST_TITLE_PREFIX} Comments`,

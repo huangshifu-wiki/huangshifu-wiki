@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter, useNavigate } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ScrollPositionSync } from '../../src/components/ScrollPositionSync'
+import { useContentEditorNavigation } from '../../src/hooks/useContentEditorNavigation'
 
 const NavButton = () => {
   const navigate = useNavigate()
@@ -29,6 +30,26 @@ const renderSyncWithNav = () =>
       <NavButton />
     </MemoryRouter>
   )
+const ContentEditorNavButtons = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { closeEditor } = useContentEditorNavigation()
+
+  return (
+    <>
+      <output data-testid="route">{location.pathname}</output>
+      <button
+        type="button"
+        onClick={() => navigate('/gallery/new', { state: { editorBackground: location } })}
+      >
+        打开编辑器
+      </button>
+      <button type="button" onClick={closeEditor}>
+        关闭编辑器
+      </button>
+    </>
+  )
+}
 
 describe('ScrollPositionSync', () => {
   beforeEach(() => {
@@ -137,5 +158,26 @@ describe('ScrollPositionSync', () => {
     vi.advanceTimersByTime(100)
 
     expect(scrollToSpy).toHaveBeenCalledWith(0, 800)
+  })
+
+  it('打开和关闭路由弹窗时保留背景页滚动位置', () => {
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+
+    render(
+      <MemoryRouter initialEntries={['/gallery?page=2']}>
+        <ScrollPositionSync />
+        <ContentEditorNavButtons />
+      </MemoryRouter>
+    )
+
+    scrollToSpy.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: '打开编辑器' }))
+
+    expect(screen.getByTestId('route')).toHaveTextContent('/gallery/new')
+    expect(scrollToSpy).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '关闭编辑器' }))
+
+    expect(screen.getByTestId('route')).toHaveTextContent('/gallery')
+    expect(scrollToSpy).not.toHaveBeenCalled()
   })
 })

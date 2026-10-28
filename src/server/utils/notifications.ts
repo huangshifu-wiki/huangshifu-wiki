@@ -121,30 +121,13 @@ export async function recordBrowsingHistory(
   targetType: BrowsingTargetType,
   targetId: string
 ) {
-  const dedupeAfter = new Date(Date.now() - 30 * 60 * 1000)
   try {
-    const existing = await prisma.browsingHistory.findFirst({
-      where: {
-        userUid,
-        targetType,
-        targetId,
-        createdAt: {
-          gte: dedupeAfter,
-        },
-      },
-      select: { id: true },
-      orderBy: { createdAt: 'desc' },
+    // 同一目标保留最近访问时间。
+    await prisma.browsingHistory.upsert({
+      where: { userUid_targetType_targetId: { userUid, targetType, targetId } },
+      create: { userUid, targetType, targetId },
+      update: { createdAt: new Date() },
     })
-
-    if (!existing) {
-      await prisma.browsingHistory.create({
-        data: {
-          userUid,
-          targetType,
-          targetId,
-        },
-      })
-    }
   } catch (error) {
     console.error('Record browsing history error:', error)
   }

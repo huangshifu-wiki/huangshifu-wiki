@@ -29,6 +29,7 @@ import { registerRegionRoutes } from './src/server/location/routes'
 import { registerExifRoutes } from './src/server/location/exifRoutes'
 import { registerAuthRoutes } from './src/server/routes/auth.routes'
 import { registerUsersRoutes } from './src/server/routes/users.routes'
+import { registerApiKeysRoutes } from './src/server/routes/api-keys.routes'
 import { registerWikiRoutes } from './src/server/routes/wiki.routes'
 import { registerPostsRoutes } from './src/server/routes/posts.routes'
 import { registerGalleriesRoutes } from './src/server/routes/galleries.routes'
@@ -197,6 +198,11 @@ async function findAvailablePort(preferredPort: number, host = '0.0.0.0'): Promi
   throw new Error(`No available port found starting from ${preferredPort}`)
 }
 
+app.use('/api/users/me/api-keys', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store')
+  next()
+})
+
 if (CORS_ORIGIN) {
   const origins = parseCorsOrigins(CORS_ORIGIN)
   if (origins.length === 1 && origins[0] === '*') {
@@ -361,6 +367,7 @@ registerExifRoutes(app)
 registerSetupRoutes(app)
 registerAuthRoutes(app)
 registerUsersRoutes(app)
+registerApiKeysRoutes(app)
 registerWikiRoutes(app)
 registerPostsRoutes(app)
 registerGalleriesRoutes(app)
@@ -448,17 +455,17 @@ async function startServer() {
     const directives: string[] = [
       "default-src 'self'",
       isProduction
-        ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://*.amap.com`
-        : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.amap.com`,
+        ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://*.amap.com https://challenges.cloudflare.com`
+        : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.amap.com https://challenges.cloudflare.com`,
       isProduction
         ? `style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com`
         : `style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com`,
       "font-src 'self' data:",
       "img-src 'self' data: blob: https://*.amap.com https://*.gaode.com http://*.music.126.net https://*.music.126.net http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.com https://picsum.photos https://*.picsum.photos https://fastly.picsum.photos https://*.googleusercontent.com",
-      "connect-src 'self' https://*.amap.com http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.net http://*.music.126.net https://*.music.126.net https://analysis.chatglm.cn https://gator.volces.com https://picsum.photos https://*.picsum.photos https://fastly.picsum.photos https://*.googleusercontent.com wss://localhost:* ws://localhost:*",
+      "connect-src 'self' https://*.amap.com http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.net http://*.music.126.net https://*.music.126.net https://analysis.chatglm.cn https://gator.volces.com https://picsum.photos https://*.picsum.photos https://fastly.picsum.photos https://*.googleusercontent.com https://challenges.cloudflare.com wss://localhost:* ws://localhost:*",
       "worker-src 'self' blob:",
       "media-src 'self' http://music.163.com https://music.163.com http://*.music.163.com https://*.music.163.com http://*.music.126.net https://*.music.126.net https://*.tc.qq.com https://*.stream.qqmusic.qq.com https://*.kugou.com https://*.kuwo.cn",
-      'frame-src https://open.weixin.qq.com',
+      'frame-src https://open.weixin.qq.com https://challenges.cloudflare.com',
     ]
 
     res.setHeader('Content-Security-Policy', directives.join('; '))
@@ -477,6 +484,22 @@ async function startServer() {
         },
       },
       appType: 'custom',
+    })
+    // public 中的 Markdown 显式声明 UTF-8，避免浏览器按本地默认编码显示中文。
+    const markdownMiddleware = express.static(path.join(process.cwd(), 'public'), {
+      index: false,
+      redirect: false,
+      setHeaders: (res) => {
+        res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
+        res.setHeader('Cache-Control', CACHE_CONTROL_REVALIDATE)
+      },
+    })
+    app.use((req, res, next) => {
+      if (req.path.toLowerCase().endsWith('.md')) {
+        markdownMiddleware(req, res, next)
+      } else {
+        next()
+      }
     })
     app.use(vite.middlewares)
     app.get(SPA_FALLBACK_PATH, async (req: AuthenticatedRequest, res, next) => {

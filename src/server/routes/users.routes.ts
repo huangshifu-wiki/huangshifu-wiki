@@ -10,7 +10,6 @@ import {
   userToApiUser,
   clearUserCache,
   issueUserSession,
-  isBearerAuthRequest,
 } from '../middleware/auth'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { profileLimiter } from '../middleware/rateLimiter'
@@ -746,14 +745,15 @@ router.put(
         }),
       ])
       clearUserCache(req.authUser!.uid)
-      const { token } = issueUserSession(req, res, {
-        ...updatedUser,
-        passwordHash,
-      })
-
       const response: PasswordUpdateResponse = { success: true }
-      if (isBearerAuthRequest(req)) {
-        response.token = token
+      if (req.authSource !== 'api_key') {
+        const { token } = issueUserSession(req, res, {
+          ...updatedUser,
+          passwordHash,
+        })
+        if (req.authSource === 'bearer') {
+          response.token = token
+        }
       }
 
       res.json(response)
@@ -981,6 +981,10 @@ router.delete(
             status: 'banned',
             banReason: '用户主动注销',
           },
+        })
+        await tx.userApiKey.updateMany({
+          where: { userUid: req.authUser!.uid, revokedAt: null },
+          data: { revokedAt: new Date() },
         })
         return existing?.photoAssetId || null
       })
@@ -1483,18 +1487,22 @@ router.put(
 // User browsing history route
 router.get(
   '/me/history',
+  (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store')
+    next()
+  },
   requireAuth,
   requireActiveUser,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    if (req.query.offset !== undefined) {
+      res.status(400).json({ error: '不再支持 offset 分页，请使用 page 和 limit' })
+      return
+    }
     try {
-      const { type, limit = '20', offset = '0' } = req.query
-      const userId = req.authUser!.uid
-
-      const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 100)
-      const offsetNum = Math.max(Number(offset) || 0, 0)
-
+      const { type } = req.query
+      const { limit, page, offset: skip } = parsePagination(req.query)
       const where: Record<string, unknown> = {
-        userUid: userId,
+        userUid: req.authUser!.uid,
       }
 
       // Filter by type if provided
@@ -1505,9 +1513,9 @@ router.get(
       const [histories, total] = await Promise.all([
         prisma.browsingHistory.findMany({
           where,
-          orderBy: { createdAt: 'desc' },
-          take: limitNum,
-          skip: offsetNum,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: limit,
+          skip,
         }),
         prisma.browsingHistory.count({ where }),
       ])
@@ -1519,12 +1527,7 @@ router.get(
           targetId: item.targetId,
           createdAt: item.createdAt.toISOString(),
         })),
-        pagination: {
-          total,
-          limit: limitNum,
-          offset: offsetNum,
-          hasMore: offsetNum + limitNum < total,
-        },
+        ...createPaginationMeta(total, page, limit, histories.length),
       })
     } catch (error) {
       console.error('Get user history error:', error)
@@ -2115,6 +2118,7 @@ router.get(
 router.get(
   '/:userId/history',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    res.setHeader('Cache-Control', 'no-store')
     try {
       const targetUser = await resolveExistingPublicProfileUser(req.params.userId, res)
       if (!targetUser) return
@@ -2139,7 +2143,7 @@ router.get(
           userUid: uid,
           ...(type ? { targetType: String(type) as 'wiki' | 'post' | 'music' } : {}),
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true,
           targetType: true,
@@ -2242,9 +2246,7 @@ router.get(
           createdAt: item.createdAt.toISOString(),
           post: item.post ? toPostResponse(item.post) : null,
         })),
-        total,
-        page,
-        limit,
+        ...createPaginationMeta(total, page, limit, likedPosts.length),
       })
     } catch (error) {
       console.error('Fetch user likes error:', error)

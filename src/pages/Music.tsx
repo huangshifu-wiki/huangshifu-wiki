@@ -11,6 +11,7 @@ import Pagination from '../components/Pagination'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
+import { useTagSuggestions } from '../hooks/useTagSuggestions'
 import { useI18n } from '../lib/i18n'
 import { AlbumCard } from '../components/Music/AlbumCard'
 import { Spinner } from '@/src/components/ui'
@@ -28,19 +29,20 @@ const MUSIC_PAGE_SIZE_OPTIONS = [25, 50, 100]
 const Music = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [songs, setSongs] = useState<SongItem[]>([])
-  const [songTotal, setSongTotal] = useState<number>()
+  const [songTotalState, setSongTotal] = useState<{ scope: string; total: number }>()
   const [loading, setLoading] = useState(true)
   const [songLoadError, setSongLoadError] = useState<unknown | null>(null)
   const [songRetryNonce, setSongRetryNonce] = useState(0)
   const [favoriting, setFavoriting] = useState<string | null>(null)
   const [albums, setAlbums] = useState<AlbumItem[]>([])
-  const [albumTotal, setAlbumTotal] = useState<number>()
+  const [albumTotalState, setAlbumTotal] = useState<{ scope: string; total: number }>()
   const [loadingAlbums, setLoadingAlbums] = useState(true)
   const [albumLoadError, setAlbumLoadError] = useState<unknown | null>(null)
   const [albumRetryNonce, setAlbumRetryNonce] = useState(0)
   const tabParam = searchParams.get('tab')
   const activeTab: 'music' | 'albums' = tabParam === 'albums' ? 'albums' : 'music'
   const tag = searchParams.get('tag') || ''
+  const albumTag = searchParams.get('albumTag') || ''
   const { user } = useAuth()
   const { currentSong, setCurrentSong, setIsPlaying, setPlaylist, playSongAtIndex } = useMusic()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
@@ -50,6 +52,11 @@ const Music = () => {
   const { t } = useI18n()
 
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [showAccompaniments, setShowAccompaniments] = useState(false)
+  const songScope = JSON.stringify([tag, showAccompaniments])
+  const albumScope = JSON.stringify([albumTag])
+  const songTotal = songTotalState?.scope === songScope ? songTotalState.total : undefined
+  const albumTotal = albumTotalState?.scope === albumScope ? albumTotalState.total : undefined
 
   const musicPagination = useRoutedPagination({
     totalCount: songTotal,
@@ -67,22 +74,10 @@ const Music = () => {
     showPageSizeSelector: false,
     enabled: !isIncrementalMode,
   })
-  const [showAccompaniments, setShowAccompaniments] = useState(false)
-  const [musicTags, setMusicTags] = useState<string[]>([])
-
-  useEffect(() => {
-    let cancelled = false
-    apiGet<{ tags: string[] }>('/api/music/tags')
-      .then((data) => {
-        if (!cancelled) setMusicTags(data.tags || [])
-      })
-      .catch(() => {
-        if (!cancelled) setMusicTags([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const musicTags = useTagSuggestions('music')
+  const albumTags = useTagSuggestions('album')
+  const activeTag = activeTab === 'music' ? tag : albumTag
+  const activeTags = activeTab === 'music' ? musicTags : albumTags
 
   const fetchSongPage = useCallback(
     async (page: number, signal?: AbortSignal) => {
@@ -114,6 +109,7 @@ const Music = () => {
           limit: albumPagination.pageSize,
           page,
           sortOrder,
+          ...(albumTag ? { tag: albumTag } : {}),
         },
         undefined,
         signal
@@ -124,7 +120,7 @@ const Music = () => {
         total: data.total || 0,
       }
     },
-    [albumPagination.pageSize, sortOrder]
+    [albumPagination.pageSize, sortOrder, albumTag]
   )
   const incrementalSongs = useIncrementalListLoader({
     enabled: isIncrementalMode,
@@ -137,7 +133,7 @@ const Music = () => {
   const incrementalAlbums = useIncrementalListLoader({
     enabled: isIncrementalMode,
     pageSize: albumPagination.pageSize,
-    resetKey: `albums:${sortOrder}`,
+    resetKey: `albums:${sortOrder}:${albumTag}`,
     fetchPage: fetchAlbumPage,
     getItemKey: (album) => album.docId,
   })
@@ -189,13 +185,18 @@ const Music = () => {
   const handleTagChange = (nextTag: string) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
+      const param = activeTab === 'music' ? 'tag' : 'albumTag'
       if (nextTag) {
-        next.set('tag', nextTag)
+        next.set(param, nextTag)
       } else {
-        next.delete('tag')
+        next.delete(param)
       }
-      next.delete('musicPage')
-      next.delete('musicPageSize')
+      if (activeTab === 'music') {
+        next.delete('musicPage')
+        next.delete('musicPageSize')
+      } else {
+        next.delete('albumPage')
+      }
       return next
     })
   }
@@ -212,7 +213,7 @@ const Music = () => {
         const data = await fetchSongPage(musicPagination.page, abortController.signal)
         if (cancelled) return
         setSongs(data.items)
-        setSongTotal(data.total)
+        setSongTotal({ scope: songScope, total: data.total })
       } catch (error) {
         if (cancelled) return
         console.error('Fetch songs error:', error)
@@ -228,7 +229,7 @@ const Music = () => {
       cancelled = true
       abortController.abort()
     }
-  }, [fetchSongPage, isIncrementalMode, musicPagination.page, songRetryNonce])
+  }, [fetchSongPage, isIncrementalMode, musicPagination.page, songRetryNonce, songScope])
 
   useEffect(() => {
     setPlaylist(visibleSongs)
@@ -246,7 +247,7 @@ const Music = () => {
         const data = await fetchAlbumPage(albumPagination.page, abortController.signal)
         if (cancelled) return
         setAlbums(data.items)
-        setAlbumTotal(data.total)
+        setAlbumTotal({ scope: albumScope, total: data.total })
       } catch (error) {
         if (cancelled) return
         console.error('Fetch albums error:', error)
@@ -262,7 +263,7 @@ const Music = () => {
       cancelled = true
       abortController.abort()
     }
-  }, [albumPagination.page, albumRetryNonce, fetchAlbumPage, isIncrementalMode])
+  }, [albumPagination.page, albumRetryNonce, fetchAlbumPage, isIncrementalMode, albumScope])
 
   const songState = getListLoadState({
     items: visibleSongs,
@@ -374,26 +375,26 @@ const Music = () => {
                 onViewModeChange={(mode) => void setScopedViewMode('music', mode)}
               />
 
-              {activeTab === 'music' && musicTags.length > 0 && (
+              {(activeTags.length > 0 || activeTag) && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <button
                     type="button"
                     onClick={() => handleTagChange('')}
                     className={clsx(
                       'cursor-pointer rounded-sm px-2 py-0.5 text-xs theme-tag',
-                      !tag && 'font-semibold text-brand-gold'
+                      !activeTag && 'font-semibold'
                     )}
                   >
                     全部
                   </button>
-                  {musicTags.map((item) => (
+                  {activeTags.map((item) => (
                     <button
                       key={item}
                       type="button"
                       onClick={() => handleTagChange(item)}
                       className={clsx(
                         'cursor-pointer rounded-sm px-2 py-0.5 text-xs theme-tag',
-                        tag === item && 'font-semibold text-brand-gold'
+                        activeTag === item && 'font-semibold'
                       )}
                     >
                       {item}

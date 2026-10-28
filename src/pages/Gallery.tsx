@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { Image as ImageIcon, Plus } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { GalleryCard } from '../components/Gallery/GalleryCard'
@@ -29,6 +29,7 @@ const DEFAULT_PAGE_SIZE = 24
 const PAGE_SIZE_OPTIONS = [12, 24, 48, 96]
 
 const GalleryList = () => {
+  const location = useLocation()
   const [, setSearchParams] = useSearchParams()
   const [galleries, setGalleries] = useState<GalleryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -227,7 +228,11 @@ const GalleryList = () => {
                   size="sm"
                 />
                 {canUpload && (
-                  <LinkButton to="/gallery/new" leftIcon={<Plus size={15} aria-hidden="true" />}>
+                  <LinkButton
+                    to="/gallery/new"
+                    state={{ editorBackground: location }}
+                    leftIcon={<Plus size={15} aria-hidden="true" />}
+                  >
                     上传图集
                   </LinkButton>
                 )}

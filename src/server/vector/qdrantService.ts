@@ -326,8 +326,8 @@ export async function searchImageEmbeddingPoints(params: {
   await ensureQdrantCollection()
   const client = getQdrantClient()
   const collectionName = getQdrantCollectionName()
-  const results = await client.search(collectionName, {
-    vector: params.vector,
+  const { points } = await client.query(collectionName, {
+    query: params.vector,
     limit: params.limit,
     offset: params.offset,
     score_threshold: params.minScore,
@@ -343,7 +343,7 @@ export async function searchImageEmbeddingPoints(params: {
   })
 
   // 转换结果为包含解析后 payload 的格式
-  return results.map((result) => ({
+  return points.map((result) => ({
     id: result.id,
     score: result.score,
     payload: toEmbeddingPayload(result.payload as Record<string, unknown> | undefined),
@@ -398,8 +398,8 @@ export async function searchTextEmbeddingPoints(
   await ensureTextQdrantCollection()
   const client = getQdrantClient()
   const collectionName = getTextCollectionName()
-  const results = await client.search(collectionName, {
-    vector: queryVector,
+  const { points } = await client.query(collectionName, {
+    query: queryVector,
     limit: limit ?? 10,
     offset,
     score_threshold: minScore,
@@ -407,7 +407,7 @@ export async function searchTextEmbeddingPoints(
     with_vector: false,
   })
 
-  return results.map((result) => ({
+  return points.map((result) => ({
     sourceType: String(result.payload?.sourceType ?? ''),
     sourceId: String(result.payload?.sourceId ?? ''),
     chunkIndex: Number(result.payload?.chunkIndex ?? 0),

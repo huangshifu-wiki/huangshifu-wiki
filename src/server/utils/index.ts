@@ -57,6 +57,7 @@ export {
 } from './textLimits'
 
 export { allocateNumericSlug, isNumericSlug, withNumericSlugTransaction } from './numericSlug'
+export { createApiKeyMaterial, hashApiKeyToken, toApiKeyResponse } from './api-keys'
 export {
   getSharpInputPixelLimit,
   isSharpPixelLimitError,
@@ -219,6 +220,9 @@ export {
   hashEmailVerificationToken,
   verifyEmailVerificationToken,
 } from './email-verification'
+
+// === 人机验证（Cloudflare Turnstile） ===
+export { isTurnstileEnabled, getTurnstilePublicConfig, verifyTurnstileToken } from './turnstile'
 
 // === 文件上传与存储 ===
 export {

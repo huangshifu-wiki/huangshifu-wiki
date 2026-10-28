@@ -145,6 +145,8 @@ describe('maskSecrets', () => {
       s3WriteSecretAccessKey: '',
       wechatMpAppId: '',
       wechatMpAppSecret: '',
+      turnstileSiteKey: '',
+      turnstileSecretKey: '',
     })
 
     expect(masked.amapApiKey).toEqual({ configured: true, last4: '1234' })

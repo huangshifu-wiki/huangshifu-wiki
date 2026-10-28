@@ -195,6 +195,7 @@ model User {
   deletedBy     String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+  apiKeys UserApiKey[]
   posts         Post[]         @relation("UserPosts")
   comments      PostComment[]  @relation("UserComments")
   postCommentLikes PostCommentLike[]
@@ -231,6 +232,21 @@ model User {
   @@index([wechatUnionId])
   @@index([deletedAt])
   @@index([emailVerifiedAt])
+}
+
+model UserApiKey {
+  id         String    @id @default(cuid())
+  userUid    String
+  name       String
+  tokenHash  String    @unique
+  prefix     String
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  user       User      @relation(fields: [userUid], references: [uid], onDelete: Cascade)
+
+  @@index([userUid, createdAt])
 }
 
 model EmailVerificationToken {
@@ -924,6 +940,7 @@ model Album {
   title              String
   artist             String
   description        String?
+  tags               Json                @default("[]")
   tracks             Json?
   releaseDate        DateTime?           @db.Date
   coverId            String?
@@ -943,6 +960,7 @@ model Album {
   @@index([coverId])
   @@index([createdAt])
   @@index([deletedAt])
+  @@index([tags], map: "album_tags_gin", type: Gin)
 }
 
 model MusicTrack {
@@ -1158,6 +1176,7 @@ model BrowsingHistory {
   createdAt  DateTime          @default(now())
   user       User              @relation(fields: [userUid], references: [uid], onDelete: Cascade)
 
+  @@unique([userUid, targetType, targetId])
   @@index([userUid, createdAt])
   @@index([userUid, targetType, createdAt])
   @@index([targetType, targetId, createdAt])

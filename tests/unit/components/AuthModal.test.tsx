@@ -48,6 +48,10 @@ vi.mock('../../../src/lib/i18n', () => ({
   }),
 }))
 
+vi.mock('../../../src/hooks/useTurnstileConfig', () => ({
+  useTurnstileConfig: () => ({ enabled: false, siteKey: '' }),
+}))
+
 vi.mock('../../../src/lib/auth', () => ({
   login: vi.fn(),
   register: vi.fn(),
@@ -149,7 +153,8 @@ describe('AuthModal', () => {
       expect(registerMock).toHaveBeenCalledWith(
         'averylonglocalpart@example.com',
         'ValidPassword123!',
-        ''
+        '',
+        undefined
       )
     })
   })
@@ -174,7 +179,7 @@ describe('AuthModal', () => {
     fireEvent.submit(screen.getByRole('button', { name: '发送重置邮件' }).closest('form')!)
 
     await waitFor(() => {
-      expect(requestPasswordResetMock).toHaveBeenCalledWith('reset@example.com')
+      expect(requestPasswordResetMock).toHaveBeenCalledWith('reset@example.com', undefined)
     })
     expect(await screen.findByRole('heading', { name: '账号登录' })).toBeInTheDocument()
   })

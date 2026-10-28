@@ -1,5 +1,14 @@
-import { FormEvent, useEffect, useRef, useState } from 'react'
-import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import type { FormEvent } from 'react'
+import {
+  Link,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom'
 import {
   Calendar,
   Check,
@@ -22,11 +31,14 @@ import {
   BookEditorSection,
   BookEditorShell,
 } from '../components/BookEditor'
+import { FormModal } from '../components/Modal/FormModal'
 import { SmartBackLink } from '../components/SmartBackLink'
 import NotFound from './NotFound'
 import { ListPageContentState, ListPageLoadingBoundary } from '../components/ListPageState'
-import { RouteGuard } from '../components/RouteGuard'
 import { useAuth } from '../context/AuthContext'
+import { useContentEditorNavigation } from '../hooks/useContentEditorNavigation'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { hasFormChanges } from '../utils/formDirty'
 import { useDialog } from '../components/Dialog'
 import { useToast } from '../components/Toast'
 import {
@@ -56,6 +68,7 @@ import {
   Button,
   Field,
   Input,
+  LoadErrorState,
   Select,
   SegmentedControl,
   Spinner,
@@ -102,8 +115,9 @@ const emptyForm: TicketFormData = {
 }
 
 function TicketListPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
   const { user, isBanned } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [listings, setListings] = useState<TicketListingSummary[]>([])
   const [events, setEvents] = useState<TicketListingEventOption[]>([])
   const [totalPages, setTotalPages] = useState(1)
@@ -206,6 +220,7 @@ function TicketListPage() {
                 {user && !isBanned && (
                   <Link
                     to="/tickets/new"
+                    state={{ editorBackground: location }}
                     data-pressable
                     className="theme-button-primary inline-flex items-center gap-2 rounded px-4 py-2 text-sm"
                   >
@@ -309,6 +324,7 @@ function TicketListPage() {
 
 function TicketDetailPage() {
   const { slug } = useParams<{ slug: string }>()
+  const location = useLocation()
   const { user, isAdmin, isBanned } = useAuth()
   const { show } = useToast()
   const dialog = useDialog()
@@ -436,7 +452,7 @@ function TicketDetailPage() {
           canManage ? (
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="secondary" size="sm">
-                <Link to={`/tickets/${listing.slug}/edit`}>
+                <Link to={`/tickets/${listing.slug}/edit`} state={{ editorBackground: location }}>
                   <Edit3 size={14} /> 编辑
                 </Link>
               </Button>
@@ -689,23 +705,38 @@ function EventPicker({
   )
 }
 
-function TicketEditorPage() {
+export function TicketEditorPage() {
   const { slug } = useParams<{ slug: string }>()
   const isEditing = Boolean(slug)
-  const navigate = useNavigate()
   const { user, isAdmin, isBanned } = useAuth()
   const { show } = useToast()
+  const { closeEditor, navigateAfterSave } = useContentEditorNavigation()
   const [form, setForm] = useState<TicketFormData>(emptyForm)
   const [selectedEvent, setSelectedEvent] = useState<TicketListingEventOption | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(isEditing)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<unknown | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
   const [errors, setErrors] = useState<TicketFormErrors>({})
+  const [baseline, setBaseline] = useState<TicketFormData | null>(isEditing ? null : emptyForm)
+  const isDirty = baseline !== null && hasFormChanges(form, baseline)
+  const guard = useUnsavedChangesGuard(isDirty)
 
   useEffect(() => {
-    if (!slug) return
+    if (!slug) {
+      setForm(emptyForm)
+      setBaseline(emptyForm)
+      setEditingId(null)
+      setSelectedEvent(null)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
     const controller = new AbortController()
+    setLoading(true)
+    setError(null)
     void apiRequest<TicketListingDetailResponse>(`/api/ticket-listings/${slug}`, {
       method: 'GET',
       dedup: false,
@@ -714,11 +745,10 @@ function TicketEditorPage() {
       .then(({ listing }) => {
         if (controller.signal.aborted) return
         if (listing.authorUid !== user?.uid && !isAdmin) {
-          setError(new Error('无权编辑该盘票信息'))
-          return
+          throw new Error('无权编辑该盘票信息')
         }
         setEditingId(listing.id)
-        setForm({
+        const nextForm: TicketFormData = {
           type: listing.type,
           eventMode: listing.eventId ? 'linked' : 'custom',
           eventId: listing.eventId || '',
@@ -728,7 +758,9 @@ function TicketEditorPage() {
           seat: listing.seat,
           description: listing.description,
           contact: listing.contact,
-        })
+        }
+        setForm(nextForm)
+        setBaseline(nextForm)
         if (listing.eventId && listing.eventSlug) {
           setSelectedEvent({
             id: listing.eventId,
@@ -737,6 +769,8 @@ function TicketEditorPage() {
             location: listing.eventLocation || '',
             sortStart: null,
           })
+        } else {
+          setSelectedEvent(null)
         }
       })
       .catch((loadError) => {
@@ -746,7 +780,7 @@ function TicketEditorPage() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [isAdmin, slug, user?.uid])
+  }, [isAdmin, retryNonce, slug, user?.uid])
 
   const setField = <K extends keyof TicketFormData>(field: K, value: TicketFormData[K]) => {
     setForm((current) => ({ ...current, [field]: value }))
@@ -781,7 +815,7 @@ function TicketEditorPage() {
   }
 
   const submit = async (status: 'draft' | 'pending') => {
-    if (!user || isBanned || saving) return
+    if (!user || isBanned || saving || loading || error || baseline === null) return
     const nextErrors = validate()
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
@@ -810,7 +844,11 @@ function TicketEditorPage() {
         ? await apiPut<TicketListingDetailResponse>(`/api/ticket-listings/${editingId}`, payload)
         : await apiPost<TicketListingDetailResponse>('/api/ticket-listings', payload)
       invalidateApiCacheByPrefix('/api/ticket-listings')
-      navigate(
+      if (result.listing.status === 'draft') {
+        setBaseline(form)
+      }
+      guard.markClean()
+      navigateAfterSave(
         result.listing.status === 'draft'
           ? `/tickets/${result.listing.slug}/edit`
           : `/tickets/${result.listing.slug}`
@@ -822,221 +860,204 @@ function TicketEditorPage() {
     }
   }
 
-  if (loading)
-    return (
-      <div className="mobile-page-shell">
-        <div className="mobile-page-container py-20 text-center">
+  return (
+    <FormModal
+      open
+      onClose={() => {
+        if (saving) return
+        closeEditor()
+      }}
+      title={isEditing ? '编辑盘票' : '发布盘票'}
+      subtitle="盘票只用于发布出票或收票信息，不提供支付、担保、撮合或站内交易。"
+      loading={saving}
+      maxWidth="max-w-6xl"
+    >
+      {loading ? (
+        <div role="status" className="py-12 text-center text-text-muted">
           <Spinner label="编辑器加载中" />
         </div>
-      </div>
-    )
-  if (error)
-    return (
-      <div className="mobile-page-shell">
-        <div className="mobile-page-container py-20 text-center">
-          <p className="text-text-primary">无法加载编辑内容</p>
-          <p className="mt-2 text-sm text-text-muted">{getErrorMessage(error, '信息不存在')}</p>
-        </div>
-      </div>
-    )
+      ) : error ? (
+        <LoadErrorState error={error} onRetry={() => setRetryNonce((value) => value + 1)} />
+      ) : (
+        <BookEditorShell embedded>
+          {isBanned && (
+            <div className="mb-6 rounded border border-[var(--color-error)]/30 bg-[var(--color-error)]/5 p-4 text-sm text-[var(--color-error)]">
+              账号已被封禁，无法提交盘票信息。
+            </div>
+          )}
 
-  return (
-    <BookEditorShell>
-      <BookEditorHeader
-        title={isEditing ? '编辑盘票' : '发布盘票'}
-        description="盘票只用于发布出票或收票信息，不提供支付、担保、撮合或站内交易。"
-        backTo={isEditing && slug ? `/tickets/${slug}` : '/tickets'}
-        backLabel="返回"
-      />
-      {isBanned && (
-        <div className="mb-6 rounded border border-[var(--color-error)]/30 bg-[var(--color-error)]/5 p-4 text-sm text-[var(--color-error)]">
-          账号已被封禁，无法提交盘票信息。
-        </div>
-      )}
+          <form className="space-y-8" onSubmit={(event) => event.preventDefault()}>
+            <BookEditorSection title="基本信息" className="border-t-0 pt-0">
+              <div className="grid gap-6 md:grid-cols-2">
+                <Field label="出票或收票" required>
+                  <SegmentedControl
+                    value={form.type}
+                    options={[
+                      { value: 'offer', label: '出票' },
+                      { value: 'request', label: '收票' },
+                    ]}
+                    onValueChange={(value) => setField('type', value as TicketListingType)}
+                  />
+                </Field>
+                <Field label="活动来源" required error={errors.event}>
+                  <Select
+                    value={form.eventMode}
+                    onChange={(event) => {
+                      setField('eventMode', event.target.value as EventMode)
+                      setSelectedEvent(null)
+                      setField('eventId', '')
+                    }}
+                  >
+                    {EVENT_MODE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="mt-6">
+                {form.eventMode === 'linked' ? (
+                  <Field
+                    label="站内活动"
+                    required
+                    error={errors.event}
+                    description={
+                      selectedEvent
+                        ? `已选择：${selectedEvent.title}`
+                        : '输入关键词后从候选活动中选择。'
+                    }
+                  >
+                    <EventPicker
+                      value={form.eventId}
+                      selectedEvent={selectedEvent}
+                      onChange={(event) => {
+                        setSelectedEvent(event)
+                        setField('eventId', event?.id || '')
+                      }}
+                    />
+                  </Field>
+                ) : (
+                  <Field label="自定义活动名称" required error={errors.customEventName}>
+                    <Input
+                      value={form.customEventName}
+                      onChange={(event) => setField('customEventName', event.target.value)}
+                      maxLength={CONTENT_LIMITS.ticketListing.customEventName}
+                    />
+                    <CharacterCount
+                      current={form.customEventName.length}
+                      max={CONTENT_LIMITS.ticketListing.customEventName}
+                    />
+                  </Field>
+                )}
+              </div>
+              <div className="mt-6 grid gap-6 md:grid-cols-3">
+                <Field label="数量" required error={errors.quantity}>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={CONTENT_LIMITS.ticketListing.quantity}
+                    step={1}
+                    value={form.quantity}
+                    onChange={(event) => setField('quantity', event.target.value)}
+                  />
+                  <CharacterCount
+                    current={form.quantity.length}
+                    max={String(CONTENT_LIMITS.ticketListing.quantity).length}
+                  />
+                </Field>
+                <Field label="票档" required error={errors.ticketTier}>
+                  <Input
+                    value={form.ticketTier}
+                    onChange={(event) => setField('ticketTier', event.target.value)}
+                    maxLength={CONTENT_LIMITS.ticketListing.ticketTier}
+                  />
+                  <CharacterCount
+                    current={form.ticketTier.length}
+                    max={CONTENT_LIMITS.ticketListing.ticketTier}
+                  />
+                </Field>
+                <Field label="座位" error={errors.seat}>
+                  <Input
+                    value={form.seat}
+                    onChange={(event) => setField('seat', event.target.value)}
+                    maxLength={CONTENT_LIMITS.ticketListing.seat}
+                  />
+                  <CharacterCount
+                    current={form.seat.length}
+                    max={CONTENT_LIMITS.ticketListing.seat}
+                  />
+                </Field>
+              </div>
+            </BookEditorSection>
 
-      <form className="space-y-8" onSubmit={(event) => event.preventDefault()}>
-        <BookEditorSection title="基本信息" className="border-t-0 pt-0">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Field label="出票或收票" required>
-              <SegmentedControl
-                value={form.type}
-                options={[
-                  { value: 'offer', label: '出票' },
-                  { value: 'request', label: '收票' },
-                ]}
-                onValueChange={(value) => setField('type', value as TicketListingType)}
-              />
-            </Field>
-            <Field label="活动来源" required error={errors.event}>
-              <Select
-                value={form.eventMode}
-                onChange={(event) => {
-                  setField('eventMode', event.target.value as EventMode)
-                  setSelectedEvent(null)
-                  setField('eventId', '')
-                }}
-              >
-                {EVENT_MODE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-          <div className="mt-6">
-            {form.eventMode === 'linked' ? (
-              <Field
-                label="站内活动"
-                required
-                error={errors.event}
-                description={
-                  selectedEvent
-                    ? `已选择：${selectedEvent.title}`
-                    : '输入关键词后从候选活动中选择。'
-                }
-              >
-                <EventPicker
-                  value={form.eventId}
-                  selectedEvent={selectedEvent}
-                  onChange={(event) => {
-                    setSelectedEvent(event)
-                    setField('eventId', event?.id || '')
-                  }}
-                />
-              </Field>
-            ) : (
-              <Field label="自定义活动名称" required error={errors.customEventName}>
-                <Input
-                  value={form.customEventName}
-                  onChange={(event) => setField('customEventName', event.target.value)}
-                  maxLength={CONTENT_LIMITS.ticketListing.customEventName}
-                />
+            <BookEditorSection title="描述与联系方式">
+              <Field label="描述" description="支持 Markdown，可留空。" error={errors.description}>
                 <CharacterCount
-                  current={form.customEventName.length}
-                  max={CONTENT_LIMITS.ticketListing.customEventName}
+                  current={form.description.length}
+                  max={CONTENT_LIMITS.ticketListing.description}
+                />
+                <MarkdownEditor
+                  value={form.description}
+                  onChange={(value) => setField('description', value)}
+                  maxLength={CONTENT_LIMITS.ticketListing.description}
+                  height="320px"
+                  variant="book"
+                  ariaLabel="盘票描述"
                 />
               </Field>
-            )}
-          </div>
-          <div className="mt-6 grid gap-6 md:grid-cols-3">
-            <Field label="数量" required error={errors.quantity}>
-              <Input
-                type="number"
-                min={1}
-                max={CONTENT_LIMITS.ticketListing.quantity}
-                step={1}
-                value={form.quantity}
-                onChange={(event) => setField('quantity', event.target.value)}
-              />
-              <CharacterCount
-                current={form.quantity.length}
-                max={String(CONTENT_LIMITS.ticketListing.quantity).length}
-              />
-            </Field>
-            <Field label="票档" required error={errors.ticketTier}>
-              <Input
-                value={form.ticketTier}
-                onChange={(event) => setField('ticketTier', event.target.value)}
-                maxLength={CONTENT_LIMITS.ticketListing.ticketTier}
-              />
-              <CharacterCount
-                current={form.ticketTier.length}
-                max={CONTENT_LIMITS.ticketListing.ticketTier}
-              />
-            </Field>
-            <Field label="座位" error={errors.seat}>
-              <Input
-                value={form.seat}
-                onChange={(event) => setField('seat', event.target.value)}
-                maxLength={CONTENT_LIMITS.ticketListing.seat}
-              />
-              <CharacterCount current={form.seat.length} max={CONTENT_LIMITS.ticketListing.seat} />
-            </Field>
-          </div>
-        </BookEditorSection>
+              <Field
+                className="mt-6"
+                label="联系方式"
+                required
+                description="请填写方便联系的方式，支持 Markdown。"
+                error={errors.contact}
+              >
+                <CharacterCount
+                  current={form.contact.length}
+                  max={CONTENT_LIMITS.ticketListing.contact}
+                />
+                <Textarea
+                  value={form.contact}
+                  onChange={(event) => setField('contact', event.target.value)}
+                  maxLength={CONTENT_LIMITS.ticketListing.contact}
+                  rows={5}
+                  placeholder="例如：Markdown 联系方式"
+                />
+              </Field>
+            </BookEditorSection>
 
-        <BookEditorSection title="描述与联系方式">
-          <Field label="描述" description="支持 Markdown，可留空。" error={errors.description}>
-            <CharacterCount
-              current={form.description.length}
-              max={CONTENT_LIMITS.ticketListing.description}
-            />
-            <MarkdownEditor
-              value={form.description}
-              onChange={(value) => setField('description', value)}
-              maxLength={CONTENT_LIMITS.ticketListing.description}
-              height="320px"
-              variant="book"
-              ariaLabel="盘票描述"
-            />
-          </Field>
-          <Field
-            className="mt-6"
-            label="联系方式"
-            required
-            description="请填写方便联系的方式，支持 Markdown。"
-            error={errors.contact}
-          >
-            <CharacterCount
-              current={form.contact.length}
-              max={CONTENT_LIMITS.ticketListing.contact}
-            />
-            <Textarea
-              value={form.contact}
-              onChange={(event) => setField('contact', event.target.value)}
-              maxLength={CONTENT_LIMITS.ticketListing.contact}
-              rows={5}
-              placeholder="例如：Markdown 联系方式"
-            />
-          </Field>
-        </BookEditorSection>
-
-        <BookEditorActions>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={saving || isBanned}
-            onClick={() => void submit('draft')}
-            leftIcon={<Check size={14} />}
-          >
-            保存草稿
-          </Button>
-          <Button
-            type="button"
-            disabled={saving || isBanned}
-            loading={saving}
-            loadingText="提交中..."
-            onClick={() => void submit('pending')}
-            leftIcon={<Check size={14} />}
-          >
-            {isAdmin ? '直接发布' : '提交审核'}
-          </Button>
-        </BookEditorActions>
-      </form>
-    </BookEditorShell>
+            <BookEditorActions>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={saving || isBanned}
+                onClick={() => void submit('draft')}
+                leftIcon={<Check size={14} />}
+              >
+                保存草稿
+              </Button>
+              <Button
+                type="button"
+                disabled={saving || isBanned}
+                loading={saving}
+                loadingText="提交中..."
+                onClick={() => void submit('pending')}
+                leftIcon={<Check size={14} />}
+              >
+                {isAdmin ? '直接发布' : '提交审核'}
+              </Button>
+            </BookEditorActions>
+          </form>
+        </BookEditorShell>
+      )}
+    </FormModal>
   )
 }
 
 export const Tickets = () => (
   <Routes>
     <Route index element={<TicketListPage />} />
-    <Route
-      path="new"
-      element={
-        <RouteGuard title="发布盘票需要先登录">
-          <TicketEditorPage />
-        </RouteGuard>
-      }
-    />
-    <Route
-      path=":slug/edit"
-      element={
-        <RouteGuard title="编辑盘票需要先登录">
-          <TicketEditorPage />
-        </RouteGuard>
-      }
-    />
     <Route path=":slug" element={<TicketDetailPage />} />
     <Route path="*" element={<NotFound homePath="/tickets" homeLabel="返回盘票" />} />
   </Routes>

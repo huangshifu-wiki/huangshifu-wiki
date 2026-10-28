@@ -79,6 +79,7 @@ const UiShowcase = () => {
   const [demoTags, setDemoTags] = useState(['古风'])
   const [fullscreenDemo, setFullscreenDemo] = useState(false)
   const [demoMarkdown, setDemoMarkdown] = useState(DEMO_MARKDOWN)
+  const [menuResult, setMenuResult] = useState('尚未选择菜单操作')
 
   return (
     <div data-theme={dark ? 'dark' : 'default'} className="mobile-page-shell min-h-screen">
@@ -160,7 +161,10 @@ const UiShowcase = () => {
               <Textarea placeholder="输入简介" />
             </Field>
           </div>
-          <Field label="标签令牌" description="聚焦输入框显示已有标签，输入后按回车添加。">
+          <Field
+            label="标签令牌"
+            description="聚焦显示站内候选，回车添加；默认关闭浏览器自动补全。"
+          >
             <TagInput
               value={demoTags}
               onChange={setDemoTags}
@@ -254,10 +258,59 @@ const UiShowcase = () => {
               <DialogTrigger asChild>
                 <Button variant="secondary">打开弹窗</Button>
               </DialogTrigger>
-              <DialogContent title="编辑条目" description="焦点、Escape 和恢复行为由 Radix 管理。">
+              <DialogContent
+                title="编辑条目"
+                description="焦点、Escape 和恢复行为由 Radix 管理。"
+                className="max-h-[70vh]"
+              >
                 <div className="space-y-4 p-5">
                   <Field label="标题">
                     <Input autoFocus />
+                  </Field>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="secondary">弹窗内菜单</Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onSelect={() => setMenuResult('已选择编辑资料')}>
+                        编辑资料
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <p role="status" className="text-sm text-text-secondary">
+                    {menuResult}
+                  </p>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost">弹窗内提示</Button>
+                      </TooltipTrigger>
+                      <TooltipContent>提示应显示在编辑弹窗之上</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="secondary">打开子弹窗</Button>
+                    </DialogTrigger>
+                    <DialogContent
+                      title="子弹窗"
+                      description="Escape 只关闭当前子弹窗，父层草稿不变。"
+                    >
+                      <Field label="子弹窗输入" className="p-5">
+                        <Input />
+                      </Field>
+                    </DialogContent>
+                  </Dialog>
+                  <div className="h-[30vh] content-center text-sm text-text-muted">
+                    向下滚动，检查底部标签候选是否翻转、滚动且不被弹窗裁切。
+                  </div>
+                  <Field label="弹窗底部标签">
+                    <TagInput
+                      value={demoTags}
+                      onChange={setDemoTags}
+                      suggestions={['古风', '现场', '原创']}
+                      placeholder="输入标签后按回车添加"
+                    />
                   </Field>
                   <Button>保存</Button>
                 </div>

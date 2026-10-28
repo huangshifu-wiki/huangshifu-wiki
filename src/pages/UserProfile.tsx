@@ -82,7 +82,7 @@ function formatTime(value: string) {
 function getFavoriteLink(item: FavoriteItem | HistoryItem) {
   if (item.targetType === 'wiki') return `/wiki/${item.target?.slug || item.targetId}`
   if (item.targetType === 'post') return `/forum/${item.target?.slug || item.targetId}`
-  return '/music'
+  return item.target?.slug ? `/music/${item.target.slug}` : '/music'
 }
 
 function getFavoriteTitle(item: FavoriteItem | HistoryItem) {
@@ -144,7 +144,10 @@ export default function UserProfile() {
   const [galleries, setGalleries] = useState<GalleryItem[]>([])
   const [favorites, setFavorites] = useState<FavoriteItem[]>([])
   const [history, setHistory] = useState<HistoryItem[]>([])
-  const [contentTotal, setContentTotal] = useState<number | undefined>()
+  const [contentTotalState, setContentTotal] = useState<{ scope: string; total: number }>()
+  const contentScope = JSON.stringify([userId, activeTab])
+  const contentTotal =
+    contentTotalState?.scope === contentScope ? contentTotalState.total : undefined
   const pagination = useRoutedPagination({
     totalCount: contentTotal,
     defaultPageSize: 50,
@@ -154,7 +157,6 @@ export default function UserProfile() {
     showPageSizeSelector: true,
     enabled: activeTab !== 'profile',
   })
-  const contentScopeRef = useRef<string | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [contentLoading, setContentLoading] = useState(false)
   const [contentError, setContentError] = useState<unknown | null>(null)
@@ -184,32 +186,38 @@ export default function UserProfile() {
 
   useEffect(() => {
     if (!userId) return
-    let cancelled = false
+    const controller = new AbortController()
     const run = async () => {
       setProfileLoading(true)
       setError('')
+      setProfile(null)
+      setHistory([])
       try {
-        const data = await apiGet<{ user: PublicUser }>(`/api/users/${userId}/profile`)
-        if (!cancelled) {
+        const data = await apiGet<{ user: PublicUser }>(
+          `/api/users/${userId}/profile`,
+          undefined,
+          { staleTime: 0, swr: false },
+          controller.signal
+        )
+        if (!controller.signal.aborted) {
           setProfile(data.user)
         }
       } catch (err) {
-        console.error('Fetch public profile error:', err)
-        if (!cancelled) {
-          setProfile(null)
+        if (!controller.signal.aborted) {
+          console.error('Fetch public profile error:', err)
           setError('用户不存在或暂不可见')
         }
       } finally {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setProfileLoading(false)
         }
       }
     }
     void run()
     return () => {
-      cancelled = true
+      controller.abort()
     }
-  }, [profileRetry, userId])
+  }, [profileRetry, userId, authUser?.uid])
 
   useEffect(() => {
     if (!signatureEditing) {
@@ -324,25 +332,15 @@ export default function UserProfile() {
   }
 
   useEffect(() => {
-    if (!userId) return
-    const scope = `${activeTab}:${userId}`
-    if (contentScopeRef.current !== null && contentScopeRef.current !== scope) {
-      pagination.setPage(1)
-      setContentTotal(undefined)
-    }
-    contentScopeRef.current = scope
-  }, [activeTab, userId])
-
-  useEffect(() => {
     if (!userId || !profileLoaded) return
     if (activeTab === 'profile') {
       setContentLoading(false)
       setContentError(null)
-      setContentTotal(undefined)
       return
     }
 
     let cancelled = false
+    const controller = activeTab === 'history' ? new AbortController() : undefined
     const run = async () => {
       setContentLoading(true)
       setContentError(null)
@@ -358,7 +356,7 @@ export default function UserProfile() {
           )
           if (!cancelled) {
             setPosts(data.posts || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
           return
         }
@@ -374,7 +372,7 @@ export default function UserProfile() {
           )
           if (!cancelled) {
             setGalleries(data.galleries || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
           return
         }
@@ -389,7 +387,7 @@ export default function UserProfile() {
           )
           if (!cancelled) {
             setFavorites(data.favorites || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
           return
         }
@@ -400,16 +398,20 @@ export default function UserProfile() {
             {
               page: pagination.page,
               limit: pagination.pageSize,
-            }
+            },
+            { staleTime: 0, swr: false },
+            controller?.signal
           )
           if (!cancelled) {
             setHistory(data.history || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
         }
       } catch (err) {
-        console.error('Fetch public profile content error:', err)
-        if (!cancelled) setContentError(err)
+        if (!cancelled) {
+          console.error('Fetch public profile content error:', err)
+          setContentError(err)
+        }
       } finally {
         if (!cancelled) setContentLoading(false)
       }
@@ -417,16 +419,19 @@ export default function UserProfile() {
     void run()
     return () => {
       cancelled = true
+      controller?.abort()
     }
   }, [
     activeTab,
     canViewFavorites,
     canViewHistory,
+    contentScope,
     contentRetry,
     pagination.page,
     pagination.pageSize,
     profileLoaded,
     userId,
+    authUser?.uid,
   ])
 
   useEffect(() => {
@@ -454,7 +459,7 @@ export default function UserProfile() {
         )
         if (!stopped) {
           setGalleries(data.galleries || [])
-          setContentTotal(data.total || 0)
+          setContentTotal({ scope: contentScope, total: data.total || 0 })
         }
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
@@ -476,7 +481,14 @@ export default function UserProfile() {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [activeTab, hasPendingGalleryThumbnails, pagination.page, pagination.pageSize, userId])
+  }, [
+    activeTab,
+    contentScope,
+    hasPendingGalleryThumbnails,
+    pagination.page,
+    pagination.pageSize,
+    userId,
+  ])
 
   const visibleTabs = useMemo(() => {
     const tabs: Array<{ id: UserProfileTab; label: string; icon: React.ReactNode; path: string }> =

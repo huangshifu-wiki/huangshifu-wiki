@@ -13,6 +13,30 @@ import type {
   WikiItem,
 } from './entities'
 import type { Platform } from './common'
+
+export interface PersonalApiKey {
+  id: string
+  name: string
+  prefix: string
+  createdAt: string
+  expiresAt: string | null
+  revokedAt: string | null
+  lastUsedAt: string | null
+}
+
+export interface PersonalApiKeyListResponse {
+  keys: PersonalApiKey[]
+}
+
+export interface CreatePersonalApiKeyRequest {
+  name: string
+  expiry?: '30d' | '90d' | '365d' | 'never'
+}
+
+export interface CreatePersonalApiKeyResponse {
+  key: PersonalApiKey
+  token: string
+}
 export interface ApiResponse<T> {
   data: T
 }
@@ -333,6 +357,7 @@ export interface RuntimeAdminConfig {
   semanticSearchEnabled: boolean
   galleryAdminOnly: boolean
   allowSuperAdminManageSuperAdmins: boolean
+  turnstileEnabled: boolean
   blurhashEnabled: boolean
   blurhashAutoGenerate: boolean
   blurhashComponentsX: number
@@ -383,6 +408,12 @@ export type SecretsFieldStatus = { configured: boolean; last4: string }
 export interface SecretsAdminConfig {
   disabled: boolean
   secrets: Record<string, SecretsFieldStatus>
+}
+
+// Cloudflare Turnstile 公开配置（GET /api/config/turnstile）
+export interface TurnstilePublicConfig {
+  enabled: boolean
+  siteKey: string
 }
 
 export type {

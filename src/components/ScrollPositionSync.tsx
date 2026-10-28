@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useLocation, useNavigationType } from 'react-router-dom'
+import { getContentBackgroundLocation } from '../lib/contentEditorRoutes'
 
 const STORAGE_PREFIX = 'scrollPos:'
 const RESTORE_MAX_POLLS = 30
@@ -14,7 +15,7 @@ const RESTORE_POLL_MS = 50
 export function ScrollPositionSync(): null {
   const location = useLocation()
   const navigationType = useNavigationType()
-  const pathname = location.pathname
+  const pathname = getContentBackgroundLocation(location).pathname
   const prevPathnameRef = useRef<string | null>(null)
   const rafRef = useRef<number | null>(null)
 

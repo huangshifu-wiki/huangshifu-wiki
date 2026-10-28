@@ -3,7 +3,7 @@
 // - MAOR: 破坏性变更（缓存结构变更、路由重构）→ 当前 31
 // - MINOR: 非破坏性更新（静态资源替换、样式微调）
 // 升级版本时同步修改 CACHE_NAME，旧缓存会在 activate 事件中自动清理
-const SW_CACHE_VERSION = { major: 31, minor: 1 }
+const SW_CACHE_VERSION = { major: 31, minor: 3 }
 const CACHE_NAME = `huangshifu-wiki-v${SW_CACHE_VERSION.major}.${SW_CACHE_VERSION.minor}`
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json']
 

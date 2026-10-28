@@ -166,7 +166,12 @@ export async function login(email: string, password: string) {
   await refreshAuthState()
 }
 
-export async function register(email: string, password: string, displayName?: string) {
+export async function register(
+  email: string,
+  password: string,
+  displayName?: string,
+  turnstileToken?: string
+) {
   const response = await fetch('/api/auth/register', {
     method: 'POST',
     headers: {
@@ -177,6 +182,7 @@ export async function register(email: string, password: string, displayName?: st
       email,
       password,
       ...(displayName?.trim() ? { displayName: displayName.trim() } : {}),
+      ...(turnstileToken ? { turnstileToken } : {}),
     }),
   })
 
@@ -190,13 +196,17 @@ export async function verifyEmail(token: string) {
   )
 }
 
-export async function resendEmailVerification(email: string) {
-  return apiPost<{ success: boolean; message?: string }>('/api/auth/resend-verification', { email })
+export async function resendEmailVerification(email: string, turnstileToken?: string) {
+  return apiPost<{ success: boolean; message?: string }>('/api/auth/resend-verification', {
+    email,
+    ...(turnstileToken ? { turnstileToken } : {}),
+  })
 }
 
-export async function requestPasswordReset(email: string) {
+export async function requestPasswordReset(email: string, turnstileToken?: string) {
   return apiPost<{ success: boolean; message?: string }>('/api/auth/password-reset/request', {
     email,
+    ...(turnstileToken ? { turnstileToken } : {}),
   })
 }
 

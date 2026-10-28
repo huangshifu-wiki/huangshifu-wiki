@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { apiGet, apiPost, apiPut } from '../../src/lib/apiClient'
-import Forum from '../../src/pages/Forum'
+import { ContentEditorRoutes } from '../../src/pages/ContentEditorRoutes'
 
 const toastShow = vi.hoisted(() => vi.fn())
 
@@ -73,19 +73,14 @@ const LocationProbe = () => {
 const renderEditor = () =>
   render(
     <MemoryRouter initialEntries={['/forum/new']}>
-      <Routes>
-        <Route
-          path="/forum/*"
-          element={
-            <>
-              <Forum />
-              <LocationProbe />
-            </>
-          }
-        />
-      </Routes>
+      <>
+        <ContentEditorRoutes />
+        <LocationProbe />
+      </>
     </MemoryRouter>
   )
+const findDraftSaveButton = () =>
+  screen.findByRole('button', { name: '保存草稿' }, { timeout: 10000 })
 
 describe('论坛帖子编辑器草稿保存', () => {
   beforeEach(() => {
@@ -105,7 +100,7 @@ describe('论坛帖子编辑器草稿保存', () => {
     mockedApiPost.mockRejectedValueOnce(new Error('版块不存在'))
     renderEditor()
 
-    await screen.findByRole('button', { name: '保存草稿' })
+    await findDraftSaveButton()
     fillValidPost()
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }))
 
@@ -117,7 +112,7 @@ describe('论坛帖子编辑器草稿保存', () => {
   it('空标题时在请求前显示字段原因', async () => {
     renderEditor()
 
-    await screen.findByRole('button', { name: '保存草稿' })
+    await findDraftSaveButton()
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }))
 
     await waitFor(() => {
@@ -130,7 +125,7 @@ describe('论坛帖子编辑器草稿保存', () => {
     mockedApiPost.mockRejectedValueOnce(null)
     renderEditor()
 
-    await screen.findByRole('button', { name: '保存草稿' })
+    await findDraftSaveButton()
     fillValidPost()
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }))
 

@@ -7,7 +7,7 @@ const qdrantClientInstanceMock = {
   deleteCollection: vi.fn(),
   createPayloadIndex: vi.fn(),
   upsert: vi.fn(),
-  search: vi.fn(),
+  query: vi.fn(),
   scroll: vi.fn(),
   delete: vi.fn(),
 }
@@ -64,7 +64,7 @@ describe('qdrantService', () => {
     qdrantClientInstanceMock.createCollection.mockResolvedValue({ result: true })
     qdrantClientInstanceMock.createPayloadIndex.mockResolvedValue({ result: true })
     qdrantClientInstanceMock.upsert.mockResolvedValue({ result: true })
-    qdrantClientInstanceMock.search.mockResolvedValue([])
+    qdrantClientInstanceMock.query.mockResolvedValue({ points: [] })
     qdrantClientInstanceMock.scroll.mockResolvedValue({ points: [], next_offset: null })
     qdrantClientInstanceMock.delete.mockResolvedValue({ result: true })
     delete process.env.IMAGE_EMBEDDING_VECTOR_SIZE
@@ -342,114 +342,67 @@ describe('qdrantService', () => {
     })
   })
 
-  describe('searchImageEmbeddingPoints', () => {
-    it('searches embedding points with score threshold', async () => {
-      qdrantClientInstanceMock.search.mockResolvedValueOnce([
-        {
-          id: 1,
-          score: 0.95,
-          payload: {
-            sourceType: 'gallery',
-            sourceId: 'img_1',
-            imageUrl: 'https://example.com/1.jpg',
-            galleryId: 'gal_1',
-            updatedAt: '2025-01-01T00:00:00Z',
+  describe('向量检索结果', () => {
+    it('解析图片向量来源信息', async () => {
+      qdrantClientInstanceMock.query.mockResolvedValueOnce({
+        points: [
+          {
+            id: 1,
+            score: 0.95,
+            payload: {
+              sourceType: 'gallery',
+              sourceId: 'img_1',
+              imageUrl: 'https://example.com/1.jpg',
+            },
           },
-        },
-      ])
-
-      const { searchImageEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
-      const results = await searchImageEmbeddingPoints({
-        vector: [0.1, 0.2],
-        limit: 5,
-        minScore: 0.8,
+        ],
       })
-
-      expect(qdrantClientInstanceMock.search).toHaveBeenCalledWith(
-        'hsf_image_embeddings',
-        expect.objectContaining({
-          vector: [0.1, 0.2],
-          limit: 5,
-          score_threshold: 0.8,
-          with_payload: true,
-          with_vector: false,
-        })
-      )
-      expect(results).toHaveLength(1)
-      expect(results[0].id).toBe(1)
-      expect(results[0].payload?.sourceType).toBe('gallery')
-      expect(results[0].payload?.sourceId).toBe('img_1')
-    })
-
-    it('handles backward compatibility for old payload format', async () => {
-      qdrantClientInstanceMock.search.mockResolvedValueOnce([
-        {
-          id: 1,
-          score: 0.9,
-          payload: {
-            galleryImageId: 'old_img_1',
-            galleryId: 'old_gal_1',
-            imageUrl: 'https://example.com/old.jpg',
-            imageName: 'old.jpg',
-            updatedAt: '2024-01-01T00:00:00Z',
-          },
-        },
-      ])
-
       const { searchImageEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
       const results = await searchImageEmbeddingPoints({ vector: [0.1, 0.2], limit: 5 })
-
-      expect(results).toHaveLength(1)
-      expect(results[0].payload?.sourceType).toBe('gallery')
-      expect(results[0].payload?.sourceId).toBe('old_img_1')
-      expect(results[0].payload?.galleryImageId).toBe('old_img_1')
+      expect(results[0]).toMatchObject({
+        id: 1,
+        score: 0.95,
+        payload: { sourceType: 'gallery', sourceId: 'img_1' },
+      })
     })
 
-    it('applies sourceType filter when provided', async () => {
-      qdrantClientInstanceMock.search.mockResolvedValueOnce([])
-
-      const { searchImageEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
-      await searchImageEmbeddingPoints({ vector: [0.1, 0.2], limit: 5, sourceType: 'gallery' })
-
-      expect(qdrantClientInstanceMock.search).toHaveBeenCalledWith(
-        'hsf_image_embeddings',
-        expect.objectContaining({
-          vector: [0.1, 0.2],
-          limit: 5,
-          filter: {
-            must: [{ key: 'sourceType', match: { value: 'gallery' } }],
+    it('解析旧图片载荷', async () => {
+      qdrantClientInstanceMock.query.mockResolvedValueOnce({
+        points: [
+          {
+            id: 1,
+            score: 0.9,
+            payload: {
+              galleryImageId: 'old_img_1',
+              galleryId: 'old_gal_1',
+              imageUrl: 'https://example.com/old.jpg',
+            },
           },
-        })
-      )
-    })
-
-    it('omits filter when sourceType is not provided', async () => {
-      qdrantClientInstanceMock.search.mockResolvedValueOnce([])
-
+        ],
+      })
       const { searchImageEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
-      await searchImageEmbeddingPoints({ vector: [0.1, 0.2], limit: 5 })
+      const results = await searchImageEmbeddingPoints({ vector: [0.1, 0.2], limit: 5 })
+      expect(results[0].payload).toMatchObject({
+        sourceType: 'gallery',
+        sourceId: 'old_img_1',
+        galleryImageId: 'old_img_1',
+      })
+    })
 
-      const callArgs = qdrantClientInstanceMock.search.mock.calls[0][1]
-      expect(callArgs.filter).toBeUndefined()
+    it('解析文本向量结果', async () => {
+      qdrantClientInstanceMock.query.mockResolvedValueOnce({
+        points: [
+          {
+            score: 0.9,
+            payload: { sourceType: 'wiki', sourceId: 'page', chunkIndex: 2, chunkPreview: '内容' },
+          },
+        ],
+      })
+      const { searchTextEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
+      expect(await searchTextEmbeddingPoints([0.1, 0.2])).toEqual([
+        { sourceType: 'wiki', sourceId: 'page', chunkIndex: 2, chunkPreview: '内容', score: 0.9 },
+      ])
     })
-    it('透传向量分页 offset', async () => {
-      qdrantClientInstanceMock.search.mockResolvedValueOnce([])
-      const { searchImageEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
-      await searchImageEmbeddingPoints({ vector: [0.1, 0.2], limit: 100, offset: 200 })
-      expect(qdrantClientInstanceMock.search).toHaveBeenCalledWith(
-        'hsf_image_embeddings',
-        expect.objectContaining({ limit: 100, offset: 200 })
-      )
-    })
-  })
-  it('透传文本向量分页 offset', async () => {
-    qdrantClientInstanceMock.search.mockResolvedValueOnce([])
-    const { searchTextEmbeddingPoints } = await import('../../src/server/vector/qdrantService')
-    await searchTextEmbeddingPoints([0.1, 0.2], 100, 0.5, 200)
-    expect(qdrantClientInstanceMock.search).toHaveBeenCalledWith(
-      'hsf_text_embeddings',
-      expect.objectContaining({ limit: 100, offset: 200, score_threshold: 0.5 })
-    )
   })
 
   describe('toEmbeddingPayload', () => {

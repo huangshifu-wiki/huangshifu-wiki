@@ -48,6 +48,7 @@ const runtimeConfig: RuntimeAdminConfig = {
   semanticSearchEnabled: false,
   galleryAdminOnly: false,
   allowSuperAdminManageSuperAdmins: false,
+  turnstileEnabled: false,
   blurhashEnabled: true,
   blurhashAutoGenerate: true,
   blurhashComponentsX: 4,

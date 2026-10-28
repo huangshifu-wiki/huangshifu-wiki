@@ -3,10 +3,16 @@ import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import type { SignOptions } from 'jsonwebtoken'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { authMiddleware, requireAuth } from '../../src/server/middleware/auth'
+import { createApiKeyMaterial } from '../../src/server/utils/api-keys'
 
 const mockPrisma = vi.hoisted(() => ({
   user: {
     findUnique: vi.fn(),
+  },
+  userApiKey: {
+    findUnique: vi.fn(),
+    updateMany: vi.fn(),
   },
 }))
 
@@ -217,5 +223,90 @@ describe('auth middleware', () => {
       }),
       60
     )
+  })
+  it('authenticates API keys from uncached current user data without issuing cookies', async () => {
+    const { token, tokenHash } = createApiKeyMaterial()
+    mockPrisma.userApiKey.findUnique.mockResolvedValue({
+      id: 'key-1',
+      userUid: 'user-1',
+      revokedAt: null,
+      expiresAt: null,
+      lastUsedAt: null,
+      user: {
+        ...dbUser('admin'),
+        publicId: 'public-user-1',
+        photoAssetId: null,
+        deletedAt: null,
+      },
+    })
+    mockPrisma.userApiKey.updateMany.mockResolvedValue({ count: 1 })
+
+    const app = createAuthApp(token, authMiddleware)
+    app.get('/auth-check', (req, res) => {
+      const authReq = req as express.Request & {
+        authUser?: { uid: string; role: string }
+        authSource?: string
+      }
+      res.json({
+        user: authReq.authUser,
+        source: authReq.authSource,
+      })
+    })
+
+    const response = await request(app).get('/auth-check')
+
+    expect(response.status).toBe(200)
+    expect(response.body).toEqual({
+      user: expect.objectContaining({ uid: 'user-1', role: 'admin' }),
+      source: 'api_key',
+    })
+    expect(response.headers['set-cookie']).toBeUndefined()
+    expect(mockPrisma.userApiKey.findUnique).toHaveBeenCalledWith({
+      where: { tokenHash },
+      select: expect.objectContaining({ userUid: true, user: expect.any(Object) }),
+    })
+    expect(mockPrisma.userApiKey.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'key-1', revokedAt: null }),
+      })
+    )
+    expect(mockCache.get).not.toHaveBeenCalled()
+    expect(mockCache.set).not.toHaveBeenCalled()
+  })
+
+  it('does not fall back to a valid cookie when an explicit bearer credential is invalid', async () => {
+    const { token: validCookieToken } = await signToken('user', CURRENT_PASSWORD_HASH)
+    const app = express()
+    app.use((req, _res, next) => {
+      req.headers.authorization = 'Bearer invalid-token'
+      req.cookies = { hsf_token: validCookieToken }
+      next()
+    })
+    app.use(authMiddleware)
+    app.get('/auth-check', requireAuth, (_req, res) => res.json({ ok: true }))
+
+    const response = await request(app).get('/auth-check')
+
+    expect(response.status).toBe(401)
+    expect(response.headers['set-cookie']).toBeUndefined()
+    expect(mockPrisma.user.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('forwards API key database failures instead of treating the request as anonymous', async () => {
+    const { token } = createApiKeyMaterial()
+    mockPrisma.userApiKey.findUnique.mockRejectedValue(new Error('database unavailable'))
+
+    const app = express()
+    app.use(authMiddleware)
+    app.get('/auth-check', (_req, res) => res.json({ ok: true }))
+    app.use(
+      (error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) =>
+        res.status(500).json({ error: error.message })
+    )
+
+    const response = await request(app).get('/auth-check').set('Authorization', `Bearer ${token}`)
+
+    expect(response.status).toBe(500)
+    expect(response.body.error).toBe('database unavailable')
   })
 })

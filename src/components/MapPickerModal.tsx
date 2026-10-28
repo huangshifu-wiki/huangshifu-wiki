@@ -1,10 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { X, MapPin, Search, Loader2 } from '@/src/components/icons'
+import { useCallback, useRef, useState } from 'react'
+import { MapPin, Search, Loader2 } from '@/src/components/icons'
 import { apiGet } from '../lib/apiClient'
 import { loadAmapJsApi } from '../lib/amapLoader'
-import { useFloatingPresence } from '../hooks/useFloatingPresence'
-import { isBackdropClick } from '../utils/modal'
+import { Button, Dialog, DialogContent, Input } from '@/src/components/ui'
 
 interface PickedLocation {
   lng: number
@@ -36,25 +34,29 @@ export const MapPickerModal = ({
   onConfirm,
   initialLocation,
 }: MapPickerModalProps) => {
-  const presence = useFloatingPresence(open)
-  const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<AMap.Map | null>(null)
   const markerRef = useRef<AMap.Marker | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
+  const openRef = useRef(open)
+  openRef.current = open
+  const mapGenerationRef = useRef(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [searchResults, setSearchResults] = useState<AddressSearchResult[]>([])
   const [selectedLocation, setSelectedLocation] = useState<PickedLocation | null>(null)
 
-  const initMap = useCallback(async () => {
-    if (!containerRef.current || !open) return
+  const initMap = async (container: HTMLDivElement) => {
+    const generation = mapGenerationRef.current
     try {
       setLoading(true)
       setError(null)
       const amap = await loadAmapJsApi()
+      // Portal 可能在 SDK 返回前已关闭，不能向脱离页面的容器创建地图。
+      if (!openRef.current || mapGenerationRef.current !== generation) return
       const defaultCenter = initialLocation || { lng: 116.397428, lat: 39.90923 }
-      const map = new amap.Map(containerRef.current, {
+      const map = new amap.Map(container, {
         zoom: 13,
         center: [defaultCenter.lng, defaultCenter.lat],
         viewMode: '2D',
@@ -68,24 +70,22 @@ export const MapPickerModal = ({
         await handleLocationSelect(initialLocation.lng, initialLocation.lat)
       }
     } catch (err) {
+      if (!openRef.current || mapGenerationRef.current !== generation) return
       setError(err instanceof Error ? err.message : '地图加载失败')
     } finally {
-      setLoading(false)
+      if (openRef.current && mapGenerationRef.current === generation) setLoading(false)
     }
-  }, [open, initialLocation])
+  }
 
-  useEffect(() => {
-    if (open) {
-      initMap()
-    }
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.destroy()
-        mapRef.current = null
-      }
-      markerRef.current = null
-    }
-  }, [open, initMap])
+  const initMapRef = useRef(initMap)
+  initMapRef.current = initMap
+  const attachMapContainer = useCallback((node: HTMLDivElement | null) => {
+    mapGenerationRef.current += 1
+    mapRef.current?.destroy()
+    mapRef.current = null
+    markerRef.current = null
+    if (node) void initMapRef.current(node)
+  }, [])
 
   const handleLocationSelect = async (lng: number, lat: number) => {
     if (!mapRef.current) return
@@ -134,7 +134,7 @@ export const MapPickerModal = ({
     setSearching(true)
     try {
       const data = await apiGet<{ results: AddressSearchResult[] }>('/api/regions/search/address', {
-        q: query.trim(),
+        q: query,
       })
       setSearchResults(data.results)
     } catch (err) {
@@ -160,40 +160,38 @@ export const MapPickerModal = ({
     }
   }
 
-  if (typeof document === 'undefined' || !presence.mounted) return null
-
-  return createPortal(
-    <div
-      className="floating-overlay fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--ui-overlay-bg)]"
-      data-state={presence.state}
-      aria-hidden={!open}
-      onClick={(event) => {
-        if (isBackdropClick(event)) onClose()
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose()
       }}
     >
-      <div className="floating-panel relative w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <h2 className="text-base font-bold text-text-primary">选择地点</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-alt transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
+      <DialogContent
+        title="选择地点"
+        maxWidthClassName="max-w-4xl"
+        onOpenAutoFocus={() => {
+          returnFocusRef.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          if (returnFocusRef.current?.isConnected) returnFocusRef.current.focus()
+        }}
+        className="flex h-[80vh] w-[90vw] flex-col overflow-hidden"
+      >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
           <div className="relative flex-1">
             <Search
               size={14}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
             />
-            <input
+            <Input
               ref={searchInputRef}
               type="text"
+              autoComplete="off"
               placeholder="搜索地址..."
-              className="theme-input w-full pl-9 pr-4 py-2 text-sm rounded"
+              className="pl-9 pr-4 py-2"
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing) return
                 if (e.key !== 'Enter') return
@@ -202,28 +200,24 @@ export const MapPickerModal = ({
               }}
             />
           </div>
-          <button
-            type="button"
-            onClick={handleSearch}
-            disabled={searching}
-            className="px-4 py-2 rounded theme-button-primary text-sm font-medium transition-all disabled:opacity-50"
-          >
+          <Button type="button" onClick={handleSearch} disabled={searching}>
             {searching ? <Loader2 size={14} className="animate-spin" /> : '搜索'}
-          </button>
+          </Button>
         </div>
 
         {searchResults.length > 0 && (
           <div className="absolute top-[7.5rem] left-4 right-4 bg-surface rounded border border-border z-10 max-h-60 overflow-y-auto">
             {searchResults.map((result, index) => (
-              <button
+              <Button
                 key={index}
                 type="button"
                 onClick={() => handleResultSelect(result)}
-                className="w-full px-4 py-3 text-left border-b border-border last:border-b-0 hover:bg-surface-alt transition-colors"
+                variant="ghost"
+                className="h-auto w-full flex-col items-start gap-0 whitespace-normal py-3 text-left border-b border-border last:border-b-0"
               >
                 <div className="text-sm font-medium text-text-primary">{result.name}</div>
                 <div className="text-xs text-text-muted">{result.address}</div>
-              </button>
+              </Button>
             ))}
           </div>
         )}
@@ -245,7 +239,7 @@ export const MapPickerModal = ({
               </div>
             </div>
           )}
-          <div ref={containerRef} className="w-full h-full" />
+          <div ref={attachMapContainer} className="w-full h-full" />
         </div>
 
         {selectedLocation && (
@@ -265,25 +259,15 @@ export const MapPickerModal = ({
         )}
 
         <div className="flex justify-end gap-2 px-4 py-3 border-t border-border pb-safe">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded theme-button-secondary transition-all text-sm"
-          >
+          <Button type="button" onClick={onClose} variant="secondary">
             取消
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={!selectedLocation}
-            className="px-4 py-2 rounded theme-button-primary font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-          >
+          </Button>
+          <Button type="button" onClick={handleConfirm} disabled={!selectedLocation}>
             确认选择
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>,
-    document.body
+      </DialogContent>
+    </Dialog>
   )
 }
 

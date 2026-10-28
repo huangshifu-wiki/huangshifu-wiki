@@ -1,20 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate, useParams } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Calendar,
   Image as ImageIcon,
   Loader2,
   Plus,
-  Save,
   Trash2,
   Upload,
   X,
 } from '@/src/components/icons'
 import MarkdownEditor from '../../components/MarkdownEditor'
 import {
-  BookEditorHeader,
   BookEditorSection,
   BookEditorShell,
   bookCompactInputClass,
@@ -22,10 +19,11 @@ import {
   bookSecondaryButtonClass,
   bookSmallButtonClass,
 } from '../../components/BookEditor'
-import { PageSkeleton } from '../../components/PageSkeleton'
+import { FormModal } from '../../components/Modal/FormModal'
 import { SmartImage } from '../../components/SmartImage'
 import { CoverPlaceholder } from '../../components/CoverPlaceholder'
 import { LinkRowsEditor } from '../../components/LinkRowsEditor'
+import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { apiGet, apiPost, apiPut, invalidateApiCacheByPrefix } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
@@ -35,6 +33,7 @@ import { splitTagsInput } from '../../lib/contentUtils'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
 import { useFileDropZone } from '../../hooks/useFileDropZone'
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
+import { useContentEditorNavigation } from '../../hooks/useContentEditorNavigation'
 import {
   EVENT_ALLOWED_IMAGE_TYPES,
   EVENT_IMAGE_ACCEPT,
@@ -58,7 +57,7 @@ import type {
   EventTimeSlot,
   EventTimeStatus,
 } from '../../types/entities'
-import { TagInput } from '@/src/components/ui'
+import { LoadErrorState, TagInput } from '@/src/components/ui'
 import { runInBatches } from '../../utils/asyncBatch'
 import { hasFormChanges } from '../../utils/formDirty'
 
@@ -346,20 +345,47 @@ const toUploadProgress = (progress: number) => {
   return normalized >= 100 ? 95 : Math.min(normalized, 95)
 }
 
-const AdminEventEdit = () => {
-  const { eventId } = useParams()
+type AdminEventEditProps = {
+  eventId?: string
+  onClose?: () => void
+  onSaved?: () => void
+}
+
+const AdminEventEdit = ({ eventId, onClose, onSaved }: AdminEventEditProps) => {
   const isCreating = !eventId
-  const navigate = useNavigate()
+  const { closeEditor: closeRouteEditor, navigateAfterSave } = useContentEditorNavigation()
   const { show } = useToast()
+  const { confirm } = useDialog()
   const tagSuggestions = useTagSuggestions('event')
   const [draft, setDraft] = useState<EventDraft>(createEmptyDraft)
   const [loading, setLoading] = useState(!isCreating)
+  const [loadError, setLoadError] = useState<unknown | null>(null)
   const [saving, setSaving] = useState(false)
   const [coverUpload, setCoverUpload] = useState<CoverUploadState | null>(null)
-  // 基线在加载/新建初始化后建立；上传中的封面也视为未保存修改
+  // 基线在加载/新建初始化后建立，避免异步回填误判未保存修改。
   const [baseline, setBaseline] = useState<EventDraft | null>(null)
   const isDirty = (baseline !== null && hasFormChanges(draft, baseline)) || coverUpload !== null
   const guard = useUnsavedChangesGuard(isDirty)
+  const closeEditor = async () => {
+    if (saving) return
+    if (!onClose) {
+      closeRouteEditor()
+      return
+    }
+    if (
+      isDirty &&
+      !(await confirm({
+        title: '放弃编辑？',
+        message: '活动修改尚未保存，关闭后将丢失这些更改。',
+        confirmText: '放弃修改',
+        variant: 'warning',
+      }))
+    ) {
+      return
+    }
+    guard.markClean()
+    onClose()
+  }
   const [draggingPosterIndex, setDraggingPosterIndex] = useState<number | null>(null)
   const [jsonEditors, setJsonEditors] = useState(createJsonEditorStates)
   const coverInputRef = useRef<HTMLInputElement>(null)
@@ -398,12 +424,14 @@ const AdminEventEdit = () => {
       const next = createEmptyDraft()
       setDraft(next)
       setBaseline(next)
+      setLoadError(null)
       setLoading(false)
       return
     }
 
     let cancelled = false
     setLoading(true)
+    setLoadError(null)
     apiGet<AdminEventDetailResponse>(`/api/admin/events/${eventId}`)
       .then((data) => {
         if (cancelled) return
@@ -412,9 +440,9 @@ const AdminEventEdit = () => {
         setBaseline(next)
       })
       .catch((error) => {
+        if (cancelled) return
         console.error('Fetch event for edit failed:', error)
-        show(getErrorMessage(error, '活动不存在或无法编辑'), { variant: 'error' })
-        navigate('/admin/events')
+        setLoadError(error)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -423,7 +451,7 @@ const AdminEventEdit = () => {
     return () => {
       cancelled = true
     }
-  }, [eventId, navigate, show])
+  }, [eventId])
 
   const patchDraft = (patch: Partial<EventDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }))
@@ -832,6 +860,7 @@ const AdminEventEdit = () => {
   }
 
   const save = async () => {
+    if (saving || loading || loadError || baseline === null) return
     const hasPendingUploads =
       isBusyUploadStatus(coverUpload?.status) ||
       draft.posters.some((poster) => isBusyUploadStatus(poster.uploadStatus))
@@ -969,7 +998,8 @@ const AdminEventEdit = () => {
       invalidateApiCacheByPrefix('/api/ticket-listings')
       show('活动已保存', { variant: 'success' })
       guard.markClean()
-      navigate('/admin/events', { replace: true })
+      if (onSaved) onSaved()
+      else navigateAfterSave('/admin/events')
     } catch (error) {
       show(getErrorMessage(error, '保存活动失败'), { variant: 'error' })
     } finally {
@@ -977,16 +1007,14 @@ const AdminEventEdit = () => {
     }
   }
 
-  if (loading) return <PageSkeleton variant="admin" />
-
   const isCoverUploading = isBusyUploadStatus(coverUpload?.status)
   const hasPendingUploads =
     isCoverUploading || draft.posters.some((poster) => isBusyUploadStatus(poster.uploadStatus))
   const coverDisplayUrl =
     coverUpload && coverUpload.status !== 'error' ? coverUpload.previewUrl : draft.coverUrl
 
-  return (
-    <BookEditorShell embedded {...rootHandlers}>
+  const content = loading ? null : (
+    <>
       {isDraggingFiles && activeZone !== 'cover'
         ? createPortal(
             <div className="pointer-events-none fixed inset-0 z-[1100] flex items-center justify-center bg-[color-mix(in_srgb,var(--color-bg-antique)_82%,transparent)] px-4">
@@ -998,24 +1026,6 @@ const AdminEventEdit = () => {
             document.body
           )
         : null}
-
-      <BookEditorHeader
-        title={isCreating ? '新增活动' : '编辑活动'}
-        description="维护活动正文、时间、票务、链接与图片资源，保存后回到活动管理。"
-        backTo="/admin/events"
-        backLabel="返回活动管理"
-        actions={
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={saving || hasPendingUploads}
-            className="inline-flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all disabled:cursor-wait disabled:opacity-60"
-          >
-            <Save size={14} />
-            {saving ? '保存中...' : '保存'}
-          </button>
-        }
-      />
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-7">
@@ -1412,7 +1422,36 @@ const AdminEventEdit = () => {
           </section>
         </aside>
       </div>
-    </BookEditorShell>
+    </>
+  )
+
+  return (
+    <FormModal
+      open
+      onClose={() => void closeEditor()}
+      title={isCreating ? '新增活动' : '编辑活动'}
+      subtitle="维护活动正文、时间、票务、链接与图片资源。"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void save()
+      }}
+      submitText="保存"
+      submitDisabled={loading || Boolean(loadError) || hasPendingUploads}
+      loading={saving}
+      maxWidth="max-w-6xl"
+    >
+      {loading ? (
+        <div role="status" className="py-12 text-center text-text-muted">
+          正在加载活动...
+        </div>
+      ) : loadError ? (
+        <LoadErrorState error={loadError} />
+      ) : (
+        <BookEditorShell embedded {...rootHandlers}>
+          {content}
+        </BookEditorShell>
+      )}
+    </FormModal>
   )
 }
 

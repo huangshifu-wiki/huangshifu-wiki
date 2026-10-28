@@ -89,7 +89,7 @@ export interface FullscreenSurfaceProps extends Omit<
 
 /**
  * 整屏浮层。用于编辑器全屏等需要铺满视口、并盖住页面导航与其他弹窗的表面。
- * 层级 1050：高于导航栏（1000），低于 Toast（1100）与灯箱（10000）。
+ * 层级 1083：高于编辑弹窗（1081），低于辅助浮层、确认弹窗和 Toast。
  */
 export const FullscreenSurface = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
@@ -98,10 +98,10 @@ export const FullscreenSurface = React.forwardRef<
   <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
     <DialogPrimitive.Portal>
       {/* Overlay 提供浮层打开期间的 body 滚动锁，不能省略 */}
-      <DialogPrimitive.Overlay className="fixed inset-0 bg-transparent" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-[1082] bg-transparent" />
       <DialogPrimitive.Content
         ref={ref}
-        className={cn('fixed inset-0 z-[1050] bg-[var(--ui-floating-bg)]', className)}
+        className={cn('fixed inset-0 z-[1083] bg-[var(--ui-floating-bg)]', className)}
         {...props}
       >
         <DialogPrimitive.Title className="sr-only">{label}</DialogPrimitive.Title>
@@ -131,10 +131,10 @@ export const AlertDialogContent = React.forwardRef<
   AlertDialogContentProps
 >(({ title, description, variant = 'info', className, children, ...props }, ref) => (
   <AlertDialogPrimitive.Portal>
-    <AlertDialogPrimitive.Overlay className={overlayClasses} />
+    <AlertDialogPrimitive.Overlay className="fixed inset-0 z-[1095] bg-[var(--ui-overlay-bg)]" />
     <AlertDialogPrimitive.Content
       ref={ref}
-      className={cn(contentClasses, 'max-w-md overflow-hidden', className)}
+      className={cn(contentClasses, 'z-[1096] max-w-md overflow-hidden', className)}
       data-variant={variant}
       {...props}
     >
@@ -173,7 +173,7 @@ export const PopoverContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-[130] w-72 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-4 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
+        'z-[1090] w-72 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-4 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
         className
       )}
       {...props}
@@ -206,7 +206,7 @@ export const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-[130] min-w-44 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-1.5 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
+        'z-[1090] min-w-44 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-1.5 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
         className
       )}
       {...props}
@@ -243,7 +243,7 @@ export const TooltipContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-[140] max-w-xs rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] px-3 py-1.5 text-xs text-text-primary shadow-[var(--ui-floating-shadow)]',
+        'z-[1091] max-w-xs rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] px-3 py-1.5 text-xs text-text-primary shadow-[var(--ui-floating-shadow)]',
         className
       )}
       {...props}

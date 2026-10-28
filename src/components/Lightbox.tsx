@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ZoomIn, ZoomOut, Maximize, ChevronLeft, ChevronRight, X } from '@/src/components/icons'
+import {
+  ZoomIn,
+  ZoomOut,
+  Maximize,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  X,
+} from '@/src/components/icons'
 import { Spinner } from '@/src/components/ui'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import { getFitScale as getFitScaleUtil, computeNextScale } from '../utils/lightbox'
@@ -476,6 +484,18 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
         >
           <Maximize size={18} />
         </button>
+
+        <a
+          href={currentImageUrl}
+          download
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--color-theme-text-inverse)] opacity-70 hover:opacity-100 w-8 h-8 flex items-center justify-center transition-opacity cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--color-theme-text-inverse)] rounded"
+          title="下载原图"
+          aria-label="下载原图"
+        >
+          <Download size={20} />
+        </a>
       </div>
     </div>
   )

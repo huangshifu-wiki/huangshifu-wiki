@@ -200,7 +200,28 @@ interface ApiUser {
   bio: string
 }
 
+type ApiKeyResponseInput = {
+  id: string
+  name: string
+  prefix: string
+  createdAt: Date
+  expiresAt: Date | null
+  revokedAt: Date | null
+  lastUsedAt: Date | null
+}
+
+type ApiKeyResponse = {
+  id: string
+  name: string
+  prefix: string
+  createdAt: string
+  expiresAt: string | null
+  revokedAt: string | null
+  lastUsedAt: string | null
+}
+
 type AuthenticatedRequest = Request<ParamsFlatDictionary, any, any, ParsedQs> & {
+  authSource?: 'cookie' | 'bearer' | 'api_key'
   authUser?: ApiUser
 }
 
@@ -342,6 +363,8 @@ export type {
   SessionJwtPayload,
   WechatCodeSessionResponse,
   ApiUser,
+  ApiKeyResponseInput,
+  ApiKeyResponse,
   AuthenticatedRequest,
   WikiResponseInput,
   WikiRelationPageLite,

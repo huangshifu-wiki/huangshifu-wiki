@@ -25,7 +25,15 @@ export function TrendChart({ dates, series }: TrendChartProps) {
 
   const option = useMemo<ChartOption>(() => {
     return {
-      grid: { left: 8, right: 16, top: 40, bottom: 4, containLabel: true },
+      // echarts 6：outerBoundsMode/outerBoundsContain 等价于 5.x 的 containLabel，避免轴标签溢出
+      grid: {
+        left: 8,
+        right: 16,
+        top: 40,
+        bottom: 4,
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel',
+      },
       legend: {
         top: 0,
         right: 0,

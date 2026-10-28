@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Calendar, MapPin, Tag } from '@/src/components/icons'
+import { Calendar, Edit3, MapPin, Tag } from '@/src/components/icons'
+import { useAuth } from '../context/AuthContext'
 import { ContentLinkList } from '../components/ContentLinkList'
 import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
@@ -26,6 +27,8 @@ import type { SeoMetadata } from '../lib/seo'
 import type { EventDetailResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
 import { Button, LoadErrorState } from '@/src/components/ui'
+
+const AdminEventEdit = lazy(() => import('./Admin/AdminEventEdit'))
 
 type EventPosterImage = {
   id: string
@@ -71,6 +74,8 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
 
 const EventDetail = () => {
   const { slug } = useParams()
+  const { isAdmin } = useAuth()
+  const [editing, setEditing] = useState(false)
   const [event, setEvent] = useState<EventItem | null>(null)
   const previousSlugRef = useRef<string | undefined>(undefined)
   const [loading, setLoading] = useState(true)
@@ -297,7 +302,21 @@ const EventDetail = () => {
             </div>
 
             <div className="min-w-0 flex-1 py-1">
-              <h1 className="mobile-page-title mb-3">{event.title}</h1>
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <h1 className="mobile-page-title">{event.title}</h1>
+                {isAdmin && event.id && (
+                  <Button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    variant="secondary"
+                    size="md"
+                    leftIcon={<Edit3 size={14} />}
+                    className="shrink-0 bg-transparent px-4 py-2 text-[0.875rem] transition-all duration-300"
+                  >
+                    编辑
+                  </Button>
+                )}
+              </div>
               <div className="space-y-3 text-[0.9375rem] text-text-secondary">
                 <div className="flex gap-2">
                   <Calendar size={16} className="mt-1 shrink-0 text-brand-gold" />
@@ -443,6 +462,18 @@ const EventDetail = () => {
           open={lightboxOpen}
           onClose={() => setLightboxOpen(false)}
         />
+        {isAdmin && editing && (
+          <Suspense fallback={<div role="status">编辑器加载中...</div>}>
+            <AdminEventEdit
+              eventId={event.id}
+              onClose={() => setEditing(false)}
+              onSaved={() => {
+                setEditing(false)
+                setRetryNonce((value) => value + 1)
+              }}
+            />
+          </Suspense>
+        )}
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react'
 import { ExternalLink, Plus, Trash2 } from '@/src/components/icons'
 import { apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
+import { useTagSuggestions } from '../hooks/useTagSuggestions'
 import {
   getMusicPlatformLabel,
   getPlatformExternalUrl,
@@ -13,10 +14,15 @@ import type { Platform } from '../types/common'
 import type { AdminDataItem } from '../types/entities'
 import type { DuplicateAlbumSourceWarning } from '../types/api'
 import { useDialog } from './Dialog'
-import { validateMaxLength, validateUrl, type ClientValidationError } from '../lib/clientValidation'
+import {
+  validateMaxLength,
+  validateTags,
+  validateUrl,
+  type ClientValidationError,
+} from '../lib/clientValidation'
 import { useToast } from './Toast'
 import { BookEditorSection, BookFormField, bookCompactInputClass } from './BookEditor'
-import { Button } from '@/src/components/ui'
+import { Button, TagInput } from '@/src/components/ui'
 import { FormModal } from './Modal/FormModal'
 
 interface AlbumFormData {
@@ -24,6 +30,7 @@ interface AlbumFormData {
   artist: string
   releaseDate: string
   description: string
+  tags: string[]
 }
 
 interface AlbumSourceDraft {
@@ -47,6 +54,7 @@ const emptyFormData: AlbumFormData = {
   artist: '',
   releaseDate: '',
   description: '',
+  tags: [],
 }
 
 const isAlbumSource = (
@@ -104,6 +112,7 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
   const { show } = useToast()
   const dialog = useDialog()
   const isEdit = mode === 'edit'
+  const tagSuggestions = useTagSuggestions('album', open)
 
   useEffect(() => {
     if (!open) return
@@ -114,6 +123,9 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
             artist: String(album.artist || ''),
             releaseDate: typeof album.releaseDate === 'string' ? album.releaseDate : '',
             description: typeof album.description === 'string' ? album.description : '',
+            tags: Array.isArray(album.tags)
+              ? album.tags.filter((tag): tag is string => typeof tag === 'string')
+              : [],
           }
         : { ...emptyFormData }
     )
@@ -187,6 +199,13 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
     }
 
     const validationError =
+      validateTags(
+        formData.tags,
+        'tags',
+        '标签',
+        CONTENT_LIMITS.music.tags,
+        CONTENT_LIMITS.music.tag
+      ) ||
       validateMaxLength(title, 'title', '专辑标题', CONTENT_LIMITS.album.title) ||
       validateMaxLength(artist, 'artist', '艺术家', CONTENT_LIMITS.album.artist) ||
       validateMaxLength(
@@ -218,6 +237,7 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
       artist,
       description: formData.description.trim() || null,
       releaseDate: formData.releaseDate.trim() || null,
+      tags: formData.tags,
       sources: normalizedSources,
     }
     try {
@@ -309,6 +329,15 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
                 setFormData((prev) => ({ ...prev, releaseDate: event.target.value }))
               }
               className={bookCompactInputClass}
+            />
+          </BookFormField>
+          <BookFormField label="标签（可选，回车添加）" htmlFor="album-tags">
+            <TagInput
+              id="album-tags"
+              value={formData.tags}
+              onChange={(tags) => setFormData((prev) => ({ ...prev, tags }))}
+              suggestions={tagSuggestions}
+              placeholder="输入标签后按回车添加"
             />
           </BookFormField>
           <BookFormField label="专辑简介" htmlFor="album-form-description">

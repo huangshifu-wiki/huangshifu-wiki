@@ -10,6 +10,7 @@ import type { AdminDataItem } from '../../../src/types/entities'
 import { apiPatch, apiPost } from '../../../src/lib/apiClient'
 
 vi.mock('../../../src/lib/apiClient', () => ({
+  apiGet: vi.fn().mockResolvedValue({ tags: [] }),
   apiPatch: vi.fn(),
   apiPost: vi.fn(),
   invalidateMusicApiCaches: vi.fn(),
@@ -52,7 +53,7 @@ describe('AlbumFormModal', () => {
     expect(mockedApiPost).not.toHaveBeenCalled()
   })
 
-  it('成功提交发送四字段并触发成功回调', async () => {
+  it('成功提交专辑信息并触发成功回调', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
     const onSuccess = vi.fn()
@@ -70,6 +71,7 @@ describe('AlbumFormModal', () => {
       artist: '黄诗扶',
       description: '简介',
       releaseDate: '2026-07-30',
+      tags: [],
       sources: [],
     })
     expect(onSuccess).toHaveBeenCalledOnce()
@@ -178,6 +180,7 @@ describe('AlbumFormModal', () => {
       artist: '黄诗扶',
       description: '新增简介',
       releaseDate: null,
+      tags: [],
       sources: [
         {
           resourceType: 'album',

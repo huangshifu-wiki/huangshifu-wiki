@@ -11,6 +11,7 @@ export {
   setupInitializeSchema,
 } from './auth.schema'
 export { userEmailUpdateSchema } from './user.schema'
+export { createApiKeySchema } from './api-key.schema'
 export {
   wikiCreateSchema,
   wikiUpdateSchema,
