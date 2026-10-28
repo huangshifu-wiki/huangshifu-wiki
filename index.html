@@ -181,7 +181,7 @@
          - requestIdleCallback 延迟非关键脚本
          - 用户交互后再加载分析类脚本
     -->
-    <script src="/third-party-loader.js"></script>
+    <script defer src="/third-party-loader.js"></script>
   </head>
   <body>
     <div id="root"></div>
@@ -250,6 +250,7 @@
         }, 8000)
 
         window.hideStaticFallback = function () {
+          if (window.__REACT_MOUNTED__) return
           clearTimeout(timer)
           window.__REACT_MOUNTED__ = true
           hideBootSplash(true)

@@ -74,33 +74,7 @@ export default defineConfig(({ mode }) => {
                 return 'vendor-motion'
               }
 
-              // Keep markdown/editor internals in the same vendor chunk to avoid circular chunk init.
-              if (
-                pkg === '@uiw/react-md-editor' ||
-                pkg === '@uiw/react-markdown-preview' ||
-                pkg === 'react-markdown' ||
-                pkg.startsWith('remark-') ||
-                pkg.startsWith('rehype-') ||
-                pkg === 'unified' ||
-                pkg === 'refractor' ||
-                pkg === 'micromark' ||
-                pkg.startsWith('micromark-') ||
-                pkg.startsWith('mdast-util-') ||
-                pkg.startsWith('hast-util-') ||
-                pkg === 'parse5' ||
-                pkg.startsWith('unist-util-') ||
-                pkg.startsWith('vfile') ||
-                pkg === 'property-information' ||
-                pkg === 'css-selector-parser' ||
-                pkg === 'style-to-js' ||
-                pkg === 'style-to-object' ||
-                pkg === 'lowlight' ||
-                pkg === 'highlight.js'
-              ) {
-                return 'vendor'
-              }
-
-              return 'vendor'
+              // 其余依赖由 Rollup 随使用方拆分，避免编辑器、拖拽等页面依赖进入首屏公共包。
             }
           },
           entryFileNames: `assets/v5-[name]-[hash].js`,

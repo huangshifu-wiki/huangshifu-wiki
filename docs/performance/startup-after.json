@@ -1,0 +1,1291 @@
+{
+  "url": "http://127.0.0.1:3107/",
+  "conditions": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "latency": 150,
+    "downloadMbps": 1.6,
+    "uploadKbps": 750,
+    "cpuRate": 4,
+    "runs": 5
+  },
+  "browserVersion": "156.0.8078.4",
+  "medians": {
+    "cold": {
+      "ttfb": 3.3000000715255737,
+      "fcp": 872,
+      "lcp": 3692,
+      "hero": 1897.8999999761581,
+      "html": 182.40000009536743,
+      "jsBytes": 205408,
+      "jsCount": 9
+    },
+    "warm": {
+      "ttfb": 164.80000007152557,
+      "fcp": 252,
+      "lcp": 2408,
+      "hero": 640.1999999284744,
+      "html": 189.39999997615814,
+      "jsBytes": 777,
+      "jsCount": 9
+    }
+  },
+  "samples": [
+    {
+      "run": 1,
+      "visit": "cold",
+      "ttfb": 4.900000095367432,
+      "lcp": 3692,
+      "fcp": 888,
+      "hero": 1915.1000000238419,
+      "lcpElement": "home-title",
+      "html": 182.40000009536743,
+      "jsCount": 9,
+      "scripts": [
+        {
+          "path": "/third-party-loader.js",
+          "duration": 195.89999997615814,
+          "transferredBytes": 1075,
+          "encodedBytes": 775
+        },
+        {
+          "path": "/assets/v5-index-xsQwM_LS.js",
+          "duration": 1218.1000000238419,
+          "transferredBytes": 95052,
+          "encodedBytes": 94752
+        },
+        {
+          "path": "/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "duration": 316.89999997615814,
+          "transferredBytes": 8318,
+          "encodedBytes": 8018
+        },
+        {
+          "path": "/assets/v5-vendor-react-C3YA-oXL.js",
+          "duration": 1153.0999999046326,
+          "transferredBytes": 82467,
+          "encodedBytes": 82167
+        },
+        {
+          "path": "/assets/v5-Home-D6dUjt4q.js",
+          "duration": 220.20000004768372,
+          "transferredBytes": 3518,
+          "encodedBytes": 3218
+        },
+        {
+          "path": "/assets/v5-eventFormat-h-lmq_H8.js",
+          "duration": 197.79999995231628,
+          "transferredBytes": 1269,
+          "encodedBytes": 969
+        },
+        {
+          "path": "/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "duration": 162.09999990463257,
+          "transferredBytes": 603,
+          "encodedBytes": 303
+        },
+        {
+          "path": "/assets/v5-dateUtils-D5AFk6Nm.js",
+          "duration": 247.19999992847443,
+          "transferredBytes": 6211,
+          "encodedBytes": 5911
+        },
+        {
+          "path": "/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "duration": 210.79999995231628,
+          "transferredBytes": 865,
+          "encodedBytes": 565
+        }
+      ],
+      "apis": [
+        {
+          "path": "/api/announcements/latest",
+          "duration": 182.70000004768372
+        },
+        {
+          "path": "/api/config/features",
+          "duration": 310.7999999523163
+        },
+        {
+          "path": "/api/setup/status",
+          "duration": 265.89999997615814
+        },
+        {
+          "path": "/api/auth/me",
+          "duration": 234.10000002384186
+        },
+        {
+          "path": "/api/events",
+          "duration": 158.60000002384186
+        },
+        {
+          "path": "/api/galleries",
+          "duration": 165.90000009536743
+        },
+        {
+          "path": "/api/music",
+          "duration": 171.29999995231628
+        },
+        {
+          "path": "/api/albums",
+          "duration": 177.10000002384186
+        }
+      ],
+      "controlled": false,
+      "jsBytes": 206295,
+      "jsTransfers": [
+        {
+          "url": "http://127.0.0.1:3107/third-party-loader.js",
+          "bytes": 1674
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "bytes": 8998
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-vendor-react-C3YA-oXL.js",
+          "bytes": 83186
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-index-xsQwM_LS.js",
+          "bytes": 95773
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "bytes": 1240
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-eventFormat-h-lmq_H8.js",
+          "bytes": 1947
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "bytes": 1502
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-Home-D6dUjt4q.js",
+          "bytes": 4197
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-dateUtils-D5AFk6Nm.js",
+          "bytes": 6891
+        },
+        {
+          "url": "http://127.0.0.1:3107/sw.js",
+          "bytes": 887
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "visit": "warm",
+      "ttfb": 163.19999992847443,
+      "lcp": 2408,
+      "fcp": 252,
+      "hero": 640.1999999284744,
+      "lcpElement": "home-title",
+      "html": 186.5,
+      "jsCount": 9,
+      "scripts": [
+        {
+          "path": "/third-party-loader.js",
+          "duration": 158.80000007152557,
+          "transferredBytes": 0,
+          "encodedBytes": 2169
+        },
+        {
+          "path": "/assets/v5-index-xsQwM_LS.js",
+          "duration": 12.600000023841858,
+          "transferredBytes": 0,
+          "encodedBytes": 307375
+        },
+        {
+          "path": "/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "duration": 7.200000047683716,
+          "transferredBytes": 0,
+          "encodedBytes": 24120
+        },
+        {
+          "path": "/assets/v5-vendor-react-C3YA-oXL.js",
+          "duration": 12.600000023841858,
+          "transferredBytes": 0,
+          "encodedBytes": 258581
+        },
+        {
+          "path": "/assets/v5-Home-D6dUjt4q.js",
+          "duration": 12.899999976158142,
+          "transferredBytes": 0,
+          "encodedBytes": 9666
+        },
+        {
+          "path": "/assets/v5-eventFormat-h-lmq_H8.js",
+          "duration": 12.699999928474426,
+          "transferredBytes": 0,
+          "encodedBytes": 1835
+        },
+        {
+          "path": "/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "duration": 11.799999952316284,
+          "transferredBytes": 0,
+          "encodedBytes": 303
+        },
+        {
+          "path": "/assets/v5-dateUtils-D5AFk6Nm.js",
+          "duration": 11.799999952316284,
+          "transferredBytes": 0,
+          "encodedBytes": 19627
+        },
+        {
+          "path": "/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "duration": 11.699999928474426,
+          "transferredBytes": 0,
+          "encodedBytes": 565
+        }
+      ],
+      "apis": [
+        {
+          "path": "/api/announcements/latest",
+          "duration": 159
+        },
+        {
+          "path": "/api/config/features",
+          "duration": 162.60000002384186
+        },
+        {
+          "path": "/api/setup/status",
+          "duration": 154.29999995231628
+        },
+        {
+          "path": "/api/auth/me",
+          "duration": 160.60000002384186
+        },
+        {
+          "path": "/api/events",
+          "duration": 170.10000002384186
+        },
+        {
+          "path": "/api/galleries",
+          "duration": 162.89999997615814
+        },
+        {
+          "path": "/api/music",
+          "duration": 173
+        },
+        {
+          "path": "/api/albums",
+          "duration": 177.10000002384186
+        }
+      ],
+      "controlled": true,
+      "jsBytes": 777,
+      "jsTransfers": [
+        {
+          "url": "http://127.0.0.1:3107/third-party-loader.js",
+          "bytes": 777
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "visit": "cold",
+      "ttfb": 3.3000000715255737,
+      "lcp": 3672,
+      "fcp": 872,
+      "hero": 1895,
+      "lcpElement": "home-title",
+      "html": 181.70000004768372,
+      "jsCount": 9,
+      "scripts": [
+        {
+          "path": "/third-party-loader.js",
+          "duration": 196,
+          "transferredBytes": 1075,
+          "encodedBytes": 775
+        },
+        {
+          "path": "/assets/v5-index-xsQwM_LS.js",
+          "duration": 1215.1000000238419,
+          "transferredBytes": 95052,
+          "encodedBytes": 94752
+        },
+        {
+          "path": "/assets/v5-vendor-react-C3YA-oXL.js",
+          "duration": 1151.1999999284744,
+          "transferredBytes": 82467,
+          "encodedBytes": 82167
+        },
+        {
+          "path": "/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "duration": 314.1999999284744,
+          "transferredBytes": 8318,
+          "encodedBytes": 8018
+        },
+        {
+          "path": "/assets/v5-Home-D6dUjt4q.js",
+          "duration": 218.29999995231628,
+          "transferredBytes": 3518,
+          "encodedBytes": 3218
+        },
+        {
+          "path": "/assets/v5-eventFormat-h-lmq_H8.js",
+          "duration": 202.80000007152557,
+          "transferredBytes": 1269,
+          "encodedBytes": 969
+        },
+        {
+          "path": "/assets/v5-dateUtils-D5AFk6Nm.js",
+          "duration": 245.20000004768372,
+          "transferredBytes": 6211,
+          "encodedBytes": 5911
+        },
+        {
+          "path": "/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "duration": 160,
+          "transferredBytes": 603,
+          "encodedBytes": 303
+        },
+        {
+          "path": "/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "duration": 194.69999992847443,
+          "transferredBytes": 865,
+          "encodedBytes": 565
+        }
+      ],
+      "apis": [
+        {
+          "path": "/api/announcements/latest",
+          "duration": 183.79999995231628
+        },
+        {
+          "path": "/api/config/features",
+          "duration": 309.40000009536743
+        },
+        {
+          "path": "/api/setup/status",
+          "duration": 267.2000000476837
+        },
+        {
+          "path": "/api/auth/me",
+          "duration": 249
+        },
+        {
+          "path": "/api/events",
+          "duration": 173.10000002384186
+        },
+        {
+          "path": "/api/galleries",
+          "duration": 157.79999995231628
+        },
+        {
+          "path": "/api/music",
+          "duration": 164.5
+        },
+        {
+          "path": "/api/albums",
+          "duration": 179.59999990463257
+        }
+      ],
+      "controlled": false,
+      "jsBytes": 205408,
+      "jsTransfers": [
+        {
+          "url": "http://127.0.0.1:3107/third-party-loader.js",
+          "bytes": 1674
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "bytes": 8998
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-vendor-react-C3YA-oXL.js",
+          "bytes": 83186
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-index-xsQwM_LS.js",
+          "bytes": 95773
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "bytes": 1240
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "bytes": 1502
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-eventFormat-h-lmq_H8.js",
+          "bytes": 1947
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-Home-D6dUjt4q.js",
+          "bytes": 4197
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-dateUtils-D5AFk6Nm.js",
+          "bytes": 6891
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "visit": "warm",
+      "ttfb": 164.80000007152557,
+      "lcp": 2408,
+      "fcp": 256,
+      "hero": 648.2000000476837,
+      "lcpElement": "home-title",
+      "html": 187,
+      "jsCount": 9,
+      "scripts": [
+        {
+          "path": "/third-party-loader.js",
+          "duration": 158.69999992847443,
+          "transferredBytes": 0,
+          "encodedBytes": 2169
+        },
+        {
+          "path": "/assets/v5-vendor-react-C3YA-oXL.js",
+          "duration": 14.900000095367432,
+          "transferredBytes": 0,
+          "encodedBytes": 258581
+        },
+        {
+          "path": "/assets/v5-index-xsQwM_LS.js",
+          "duration": 14.900000095367432,
+          "transferredBytes": 0,
+          "encodedBytes": 307375
+        },
+        {
+          "path": "/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "duration": 13.200000047683716,
+          "transferredBytes": 0,
+          "encodedBytes": 24120
+        },
+        {
+          "path": "/assets/v5-Home-D6dUjt4q.js",
+          "duration": 2.299999952316284,
+          "transferredBytes": 0,
+          "encodedBytes": 9666
+        },
+        {
+          "path": "/assets/v5-eventFormat-h-lmq_H8.js",
+          "duration": 3.5,
+          "transferredBytes": 0,
+          "encodedBytes": 1835
+        },
+        {
+          "path": "/assets/v5-dateUtils-D5AFk6Nm.js",
+          "duration": 3.8000000715255737,
+          "transferredBytes": 0,
+          "encodedBytes": 19627
+        },
+        {
+          "path": "/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "duration": 3.299999952316284,
+          "transferredBytes": 0,
+          "encodedBytes": 303
+        },
+        {
+          "path": "/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "duration": 3.1999999284744263,
+          "transferredBytes": 0,
+          "encodedBytes": 565
+        }
+      ],
+      "apis": [
+        {
+          "path": "/api/announcements/latest",
+          "duration": 157.29999995231628
+        },
+        {
+          "path": "/api/config/features",
+          "duration": 159.69999992847443
+        },
+        {
+          "path": "/api/setup/status",
+          "duration": 154.79999995231628
+        },
+        {
+          "path": "/api/auth/me",
+          "duration": 157.69999992847443
+        },
+        {
+          "path": "/api/events",
+          "duration": 170.69999992847443
+        },
+        {
+          "path": "/api/galleries",
+          "duration": 159.59999990463257
+        },
+        {
+          "path": "/api/music",
+          "duration": 172.39999997615814
+        },
+        {
+          "path": "/api/albums",
+          "duration": 177.70000004768372
+        }
+      ],
+      "controlled": true,
+      "jsBytes": 777,
+      "jsTransfers": [
+        {
+          "url": "http://127.0.0.1:3107/third-party-loader.js",
+          "bytes": 777
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "visit": "cold",
+      "ttfb": 3.200000047683716,
+      "lcp": 3692,
+      "fcp": 880,
+      "hero": 1906.2000000476837,
+      "lcpElement": "home-title",
+      "html": 184.5,
+      "jsCount": 9,
+      "scripts": [
+        {
+          "path": "/third-party-loader.js",
+          "duration": 199.10000002384186,
+          "transferredBytes": 1075,
+          "encodedBytes": 775
+        },
+        {
+          "path": "/assets/v5-vendor-react-C3YA-oXL.js",
+          "duration": 1155.7999999523163,
+          "transferredBytes": 82467,
+          "encodedBytes": 82167
+        },
+        {
+          "path": "/assets/v5-index-xsQwM_LS.js",
+          "duration": 1220.2999999523163,
+          "transferredBytes": 95052,
+          "encodedBytes": 94752
+        },
+        {
+          "path": "/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "duration": 319,
+          "transferredBytes": 8318,
+          "encodedBytes": 8018
+        },
+        {
+          "path": "/assets/v5-Home-D6dUjt4q.js",
+          "duration": 219.10000002384186,
+          "transferredBytes": 3518,
+          "encodedBytes": 3218
+        },
+        {
+          "path": "/assets/v5-eventFormat-h-lmq_H8.js",
+          "duration": 198,
+          "transferredBytes": 1269,
+          "encodedBytes": 969
+        },
+        {
+          "path": "/assets/v5-dateUtils-D5AFk6Nm.js",
+          "duration": 245.70000004768372,
+          "transferredBytes": 6211,
+          "encodedBytes": 5911
+        },
+        {
+          "path": "/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "duration": 167.60000002384186,
+          "transferredBytes": 603,
+          "encodedBytes": 303
+        },
+        {
+          "path": "/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "duration": 210,
+          "transferredBytes": 865,
+          "encodedBytes": 565
+        }
+      ],
+      "apis": [
+        {
+          "path": "/api/announcements/latest",
+          "duration": 183.79999995231628
+        },
+        {
+          "path": "/api/config/features",
+          "duration": 311.2000000476837
+        },
+        {
+          "path": "/api/setup/status",
+          "duration": 280.10000002384186
+        },
+        {
+          "path": "/api/auth/me",
+          "duration": 257.7999999523163
+        },
+        {
+          "path": "/api/events",
+          "duration": 155.70000004768372
+        },
+        {
+          "path": "/api/galleries",
+          "duration": 163.29999995231628
+        },
+        {
+          "path": "/api/music",
+          "duration": 166.29999995231628
+        },
+        {
+          "path": "/api/albums",
+          "duration": 171.10000002384186
+        }
+      ],
+      "controlled": false,
+      "jsBytes": 205408,
+      "jsTransfers": [
+        {
+          "url": "http://127.0.0.1:3107/third-party-loader.js",
+          "bytes": 1674
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "bytes": 8998
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-vendor-react-C3YA-oXL.js",
+          "bytes": 83186
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-index-xsQwM_LS.js",
+          "bytes": 95773
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "bytes": 1240
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-eventFormat-h-lmq_H8.js",
+          "bytes": 1947
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "bytes": 1502
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-Home-D6dUjt4q.js",
+          "bytes": 4197
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-dateUtils-D5AFk6Nm.js",
+          "bytes": 6891
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "visit": "warm",
+      "ttfb": 164.89999997615814,
+      "lcp": 2424,
+      "fcp": 252,
+      "hero": 670,
+      "lcpElement": "home-title",
+      "html": 189.39999997615814,
+      "jsCount": 9,
+      "scripts": [
+        {
+          "path": "/third-party-loader.js",
+          "duration": 157.90000009536743,
+          "transferredBytes": 0,
+          "encodedBytes": 2169
+        },
+        {
+          "path": "/assets/v5-index-xsQwM_LS.js",
+          "duration": 13.5,
+          "transferredBytes": 0,
+          "encodedBytes": 307375
+        },
+        {
+          "path": "/assets/v5-vendor-react-C3YA-oXL.js",
+          "duration": 13,
+          "transferredBytes": 0,
+          "encodedBytes": 258581
+        },
+        {
+          "path": "/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "duration": 4.600000023841858,
+          "transferredBytes": 0,
+          "encodedBytes": 24120
+        },
+        {
+          "path": "/assets/v5-Home-D6dUjt4q.js",
+          "duration": 3.5,
+          "transferredBytes": 0,
+          "encodedBytes": 9666
+        },
+        {
+          "path": "/assets/v5-eventFormat-h-lmq_H8.js",
+          "duration": 4,
+          "transferredBytes": 0,
+          "encodedBytes": 1835
+        },
+        {
+          "path": "/assets/v5-dateUtils-D5AFk6Nm.js",
+          "duration": 4.5,
+          "transferredBytes": 0,
+          "encodedBytes": 19627
+        },
+        {
+          "path": "/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "duration": 4.200000047683716,
+          "transferredBytes": 0,
+          "encodedBytes": 303
+        },
+        {
+          "path": "/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "duration": 4.899999976158142,
+          "transferredBytes": 0,
+          "encodedBytes": 565
+        }
+      ],
+      "apis": [
+        {
+          "path": "/api/announcements/latest",
+          "duration": 161.29999995231628
+        },
+        {
+          "path": "/api/config/features",
+          "duration": 164.70000004768372
+        },
+        {
+          "path": "/api/setup/status",
+          "duration": 159.89999997615814
+        },
+        {
+          "path": "/api/auth/me",
+          "duration": 155.10000002384186
+        },
+        {
+          "path": "/api/events",
+          "duration": 154.10000002384186
+        },
+        {
+          "path": "/api/galleries",
+          "duration": 159
+        },
+        {
+          "path": "/api/music",
+          "duration": 164.29999995231628
+        },
+        {
+          "path": "/api/albums",
+          "duration": 169.29999995231628
+        }
+      ],
+      "controlled": true,
+      "jsBytes": 777,
+      "jsTransfers": [
+        {
+          "url": "http://127.0.0.1:3107/third-party-loader.js",
+          "bytes": 777
+        }
+      ]
+    },
+    {
+      "run": 4,
+      "visit": "cold",
+      "ttfb": 4,
+      "lcp": 3692,
+      "fcp": 868,
+      "hero": 1895.4000000953674,
+      "lcpElement": "home-title",
+      "html": 182.40000009536743,
+      "jsCount": 9,
+      "scripts": [
+        {
+          "path": "/third-party-loader.js",
+          "duration": 191.30000007152557,
+          "transferredBytes": 1075,
+          "encodedBytes": 775
+        },
+        {
+          "path": "/assets/v5-index-xsQwM_LS.js",
+          "duration": 1213.7999999523163,
+          "transferredBytes": 95052,
+          "encodedBytes": 94752
+        },
+        {
+          "path": "/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "duration": 312.1999999284744,
+          "transferredBytes": 8318,
+          "encodedBytes": 8018
+        },
+        {
+          "path": "/assets/v5-vendor-react-C3YA-oXL.js",
+          "duration": 1148.6999999284744,
+          "transferredBytes": 82467,
+          "encodedBytes": 82167
+        },
+        {
+          "path": "/assets/v5-Home-D6dUjt4q.js",
+          "duration": 218.69999992847443,
+          "transferredBytes": 3518,
+          "encodedBytes": 3218
+        },
+        {
+          "path": "/assets/v5-eventFormat-h-lmq_H8.js",
+          "duration": 194.20000004768372,
+          "transferredBytes": 1269,
+          "encodedBytes": 969
+        },
+        {
+          "path": "/assets/v5-dateUtils-D5AFk6Nm.js",
+          "duration": 244.39999997615814,
+          "transferredBytes": 6211,
+          "encodedBytes": 5911
+        },
+        {
+          "path": "/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "duration": 179.89999997615814,
+          "transferredBytes": 603,
+          "encodedBytes": 303
+        },
+        {
+          "path": "/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "duration": 207.10000002384186,
+          "transferredBytes": 865,
+          "encodedBytes": 565
+        }
+      ],
+      "apis": [
+        {
+          "path": "/api/announcements/latest",
+          "duration": 184.70000004768372
+        },
+        {
+          "path": "/api/config/features",
+          "duration": 311
+        },
+        {
+          "path": "/api/setup/status",
+          "duration": 281.8000000715256
+        },
+        {
+          "path": "/api/auth/me",
+          "duration": 262.89999997615814
+        },
+        {
+          "path": "/api/events",
+          "duration": 158.5
+        },
+        {
+          "path": "/api/galleries",
+          "duration": 163.89999997615814
+        },
+        {
+          "path": "/api/music",
+          "duration": 176.29999995231628
+        },
+        {
+          "path": "/api/albums",
+          "duration": 180.70000004768372
+        }
+      ],
+      "controlled": false,
+      "jsBytes": 205408,
+      "jsTransfers": [
+        {
+          "url": "http://127.0.0.1:3107/third-party-loader.js",
+          "bytes": 1674
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "bytes": 8998
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-vendor-react-C3YA-oXL.js",
+          "bytes": 83186
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-index-xsQwM_LS.js",
+          "bytes": 95773
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "bytes": 1240
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-eventFormat-h-lmq_H8.js",
+          "bytes": 1947
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "bytes": 1502
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-Home-D6dUjt4q.js",
+          "bytes": 4197
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-dateUtils-D5AFk6Nm.js",
+          "bytes": 6891
+        }
+      ]
+    },
+    {
+      "run": 4,
+      "visit": "warm",
+      "ttfb": 163.60000002384186,
+      "lcp": 2372,
+      "fcp": 248,
+      "hero": 635.3999999761581,
+      "lcpElement": "home-title",
+      "html": 189.5,
+      "jsCount": 9,
+      "scripts": [
+        {
+          "path": "/third-party-loader.js",
+          "duration": 156.29999995231628,
+          "transferredBytes": 0,
+          "encodedBytes": 2169
+        },
+        {
+          "path": "/assets/v5-index-xsQwM_LS.js",
+          "duration": 19.100000023841858,
+          "transferredBytes": 0,
+          "encodedBytes": 307375
+        },
+        {
+          "path": "/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "duration": 8,
+          "transferredBytes": 0,
+          "encodedBytes": 24120
+        },
+        {
+          "path": "/assets/v5-vendor-react-C3YA-oXL.js",
+          "duration": 13.300000071525574,
+          "transferredBytes": 0,
+          "encodedBytes": 258581
+        },
+        {
+          "path": "/assets/v5-Home-D6dUjt4q.js",
+          "duration": 3.600000023841858,
+          "transferredBytes": 0,
+          "encodedBytes": 9666
+        },
+        {
+          "path": "/assets/v5-eventFormat-h-lmq_H8.js",
+          "duration": 3.799999952316284,
+          "transferredBytes": 0,
+          "encodedBytes": 1835
+        },
+        {
+          "path": "/assets/v5-dateUtils-D5AFk6Nm.js",
+          "duration": 3.9000000953674316,
+          "transferredBytes": 0,
+          "encodedBytes": 19627
+        },
+        {
+          "path": "/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "duration": 6.600000023841858,
+          "transferredBytes": 0,
+          "encodedBytes": 303
+        },
+        {
+          "path": "/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "duration": 7,
+          "transferredBytes": 0,
+          "encodedBytes": 565
+        }
+      ],
+      "apis": [
+        {
+          "path": "/api/announcements/latest",
+          "duration": 156.10000002384186
+        },
+        {
+          "path": "/api/config/features",
+          "duration": 160.39999997615814
+        },
+        {
+          "path": "/api/setup/status",
+          "duration": 157.20000004768372
+        },
+        {
+          "path": "/api/auth/me",
+          "duration": 157.09999990463257
+        },
+        {
+          "path": "/api/events",
+          "duration": 162.89999997615814
+        },
+        {
+          "path": "/api/galleries",
+          "duration": 155.10000002384186
+        },
+        {
+          "path": "/api/music",
+          "duration": 166.80000007152557
+        },
+        {
+          "path": "/api/albums",
+          "duration": 174.19999992847443
+        }
+      ],
+      "controlled": true,
+      "jsBytes": 777,
+      "jsTransfers": [
+        {
+          "url": "http://127.0.0.1:3107/third-party-loader.js",
+          "bytes": 777
+        }
+      ]
+    },
+    {
+      "run": 5,
+      "visit": "cold",
+      "ttfb": 3.1999999284744263,
+      "lcp": 3696,
+      "fcp": 872,
+      "hero": 1897.8999999761581,
+      "lcpElement": "home-title",
+      "html": 183.79999995231628,
+      "jsCount": 9,
+      "scripts": [
+        {
+          "path": "/third-party-loader.js",
+          "duration": 193.59999990463257,
+          "transferredBytes": 1075,
+          "encodedBytes": 775
+        },
+        {
+          "path": "/assets/v5-vendor-react-C3YA-oXL.js",
+          "duration": 1150.3999999761581,
+          "transferredBytes": 82467,
+          "encodedBytes": 82167
+        },
+        {
+          "path": "/assets/v5-index-xsQwM_LS.js",
+          "duration": 1215.6000000238419,
+          "transferredBytes": 95052,
+          "encodedBytes": 94752
+        },
+        {
+          "path": "/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "duration": 313.5,
+          "transferredBytes": 8318,
+          "encodedBytes": 8018
+        },
+        {
+          "path": "/assets/v5-Home-D6dUjt4q.js",
+          "duration": 220.29999995231628,
+          "transferredBytes": 3518,
+          "encodedBytes": 3218
+        },
+        {
+          "path": "/assets/v5-eventFormat-h-lmq_H8.js",
+          "duration": 204.20000004768372,
+          "transferredBytes": 1269,
+          "encodedBytes": 969
+        },
+        {
+          "path": "/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "duration": 161.79999995231628,
+          "transferredBytes": 603,
+          "encodedBytes": 303
+        },
+        {
+          "path": "/assets/v5-dateUtils-D5AFk6Nm.js",
+          "duration": 247.39999997615814,
+          "transferredBytes": 6211,
+          "encodedBytes": 5911
+        },
+        {
+          "path": "/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "duration": 197.10000002384186,
+          "transferredBytes": 865,
+          "encodedBytes": 565
+        }
+      ],
+      "apis": [
+        {
+          "path": "/api/announcements/latest",
+          "duration": 185.30000007152557
+        },
+        {
+          "path": "/api/config/features",
+          "duration": 312.10000002384186
+        },
+        {
+          "path": "/api/setup/status",
+          "duration": 264
+        },
+        {
+          "path": "/api/auth/me",
+          "duration": 238.60000002384186
+        },
+        {
+          "path": "/api/events",
+          "duration": 156.70000004768372
+        },
+        {
+          "path": "/api/galleries",
+          "duration": 162.59999990463257
+        },
+        {
+          "path": "/api/music",
+          "duration": 166.79999995231628
+        },
+        {
+          "path": "/api/albums",
+          "duration": 172.5
+        }
+      ],
+      "controlled": false,
+      "jsBytes": 205408,
+      "jsTransfers": [
+        {
+          "url": "http://127.0.0.1:3107/third-party-loader.js",
+          "bytes": 1674
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "bytes": 8998
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-vendor-react-C3YA-oXL.js",
+          "bytes": 83186
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-index-xsQwM_LS.js",
+          "bytes": 95773
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "bytes": 1240
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "bytes": 1502
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-eventFormat-h-lmq_H8.js",
+          "bytes": 1947
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-Home-D6dUjt4q.js",
+          "bytes": 4197
+        },
+        {
+          "url": "http://127.0.0.1:3107/assets/v5-dateUtils-D5AFk6Nm.js",
+          "bytes": 6891
+        }
+      ]
+    },
+    {
+      "run": 5,
+      "visit": "warm",
+      "ttfb": 169.39999997615814,
+      "lcp": 2380,
+      "fcp": 244,
+      "hero": 634.6000000238419,
+      "lcpElement": "home-title",
+      "html": 190.5,
+      "jsCount": 9,
+      "scripts": [
+        {
+          "path": "/third-party-loader.js",
+          "duration": 162.20000004768372,
+          "transferredBytes": 0,
+          "encodedBytes": 2169
+        },
+        {
+          "path": "/assets/v5-index-xsQwM_LS.js",
+          "duration": 9.600000023841858,
+          "transferredBytes": 0,
+          "encodedBytes": 307375
+        },
+        {
+          "path": "/assets/v5-vendor-icons-SrWY8Tsg.js",
+          "duration": 5.399999976158142,
+          "transferredBytes": 0,
+          "encodedBytes": 24120
+        },
+        {
+          "path": "/assets/v5-vendor-react-C3YA-oXL.js",
+          "duration": 10,
+          "transferredBytes": 0,
+          "encodedBytes": 258581
+        },
+        {
+          "path": "/assets/v5-Home-D6dUjt4q.js",
+          "duration": 4.699999928474426,
+          "transferredBytes": 0,
+          "encodedBytes": 9666
+        },
+        {
+          "path": "/assets/v5-eventFormat-h-lmq_H8.js",
+          "duration": 3.799999952316284,
+          "transferredBytes": 0,
+          "encodedBytes": 1835
+        },
+        {
+          "path": "/assets/v5-dateUtils-D5AFk6Nm.js",
+          "duration": 3.6999999284744263,
+          "transferredBytes": 0,
+          "encodedBytes": 19627
+        },
+        {
+          "path": "/assets/v5-EventDateOffset-5QuvoYWI.js",
+          "duration": 4.5,
+          "transferredBytes": 0,
+          "encodedBytes": 303
+        },
+        {
+          "path": "/assets/v5-galleryThumbnails-CW7avWVu.js",
+          "duration": 4.399999976158142,
+          "transferredBytes": 0,
+          "encodedBytes": 565
+        }
+      ],
+      "apis": [
+        {
+          "path": "/api/announcements/latest",
+          "duration": 154.89999997615814
+        },
+        {
+          "path": "/api/config/features",
+          "duration": 161.5
+        },
+        {
+          "path": "/api/setup/status",
+          "duration": 156.70000004768372
+        },
+        {
+          "path": "/api/auth/me",
+          "duration": 155.5
+        },
+        {
+          "path": "/api/events",
+          "duration": 158.10000002384186
+        },
+        {
+          "path": "/api/galleries",
+          "duration": 163
+        },
+        {
+          "path": "/api/music",
+          "duration": 169.29999995231628
+        },
+        {
+          "path": "/api/albums",
+          "duration": 175
+        }
+      ],
+      "controlled": true,
+      "jsBytes": 777,
+      "jsTransfers": [
+        {
+          "url": "http://127.0.0.1:3107/third-party-loader.js",
+          "bytes": 777
+        }
+      ]
+    }
+  ]
+}

@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Menu, X } from '@/src/components/icons'
 import { logoutRequest } from '../lib/auth'
 import { HeaderUserControls } from './HeaderUserControls'
 import { useToast } from './Toast'
 import { getErrorMessage } from '../lib/errorHandler'
-import { AuthModal } from './Navbar/AuthModal'
+import { ErrorBoundary } from './ErrorBoundary'
 import type { AuthMode } from './Navbar/types'
 import { NAV_LINK_ITEMS } from './Navbar/NavLinks'
 import { MobileMenu } from './Navbar/MobileMenu'
@@ -16,9 +16,12 @@ import styles from './Navbar.module.css'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
 import { IconButton } from '@/src/components/ui'
 
+const AuthModal = lazy(() => import('./Navbar/AuthModal').then((m) => ({ default: m.AuthModal })))
+
 export const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [authModalMounted, setAuthModalMounted] = useState(false)
   const [authInitialMode, setAuthInitialMode] = useState<AuthMode>('login')
   const [isScrolled, setIsScrolled] = useState(false)
   const { show } = useToast()
@@ -53,6 +56,7 @@ export const Navbar = () => {
   const openAuthModal = (mode: AuthMode) => {
     setAuthInitialMode(mode === 'register' && !allowRegister ? 'login' : mode)
     setIsMenuOpen(false)
+    setAuthModalMounted(true)
     setAuthModalOpen(true)
   }
 
@@ -124,15 +128,19 @@ export const Navbar = () => {
         allowRegister={allowRegister}
       />
 
-      {
-        <AuthModal
-          open={authModalOpen}
-          onClose={() => setAuthModalOpen(false)}
-          onAuthSuccess={() => setIsMenuOpen(false)}
-          initialMode={authInitialMode}
-          allowRegister={allowRegister}
-        />
-      }
+      {authModalMounted && (
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <AuthModal
+              open={authModalOpen}
+              onClose={() => setAuthModalOpen(false)}
+              onAuthSuccess={() => setIsMenuOpen(false)}
+              initialMode={authInitialMode}
+              allowRegister={allowRegister}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
     </nav>
   )
 }
