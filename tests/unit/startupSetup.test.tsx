@@ -54,14 +54,20 @@ describe('安装检查不阻塞普通页面', () => {
       await gate.promise
       res.end(JSON.stringify({ initialized: true, requiresSetup: false }))
     })
-    renderApp()
-    expect(await screen.findByRole('navigation', { name: '主导航' })).toBeVisible()
-    expect(await screen.findByRole('heading', { name: '黄诗扶', level: 1 })).toBeVisible()
-    expect(await screen.findByText('暂无活动')).toBeVisible()
-    await act(async () => {
-      gate.resolve()
-      await gate.promise
-    })
+    try {
+      renderApp()
+      await waitFor(() => expect(api.requests).toContain('/api/setup/status'))
+      expect(await screen.findByRole('navigation', { name: '主导航' })).toBeVisible()
+      expect(
+        await screen.findByRole('heading', { name: '黄诗扶', level: 1 }, { timeout: 10000 })
+      ).toBeVisible()
+      expect(await screen.findByText('暂无活动')).toBeVisible()
+    } finally {
+      await act(async () => {
+        gate.resolve()
+        await getSetupStatus()
+      })
+    }
   })
 
   it.each([false, true])('认证完成后根据实际用户决定是否跳转，已登录：%s', async (signedIn) => {
