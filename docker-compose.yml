@@ -20,7 +20,7 @@ services:
       retries: 20
 
   qdrant:
-    image: qdrant/qdrant:v1.9.4
+    image: qdrant/qdrant:v1.19.0
     container_name: hsf-qdrant
     profiles:
       - semantic
