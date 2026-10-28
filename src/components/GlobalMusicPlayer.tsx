@@ -535,7 +535,11 @@ export const GlobalMusicPlayer = () => {
         onSeeked={() => {
           const audio = audioRef.current
           if (!audio || !isPlaying) return
-          if (audio.paused || audio.seeking || audio.readyState < 3) onWaiting()
+          if (audio.paused || audio.seeking || audio.readyState < 3) {
+            onWaiting()
+          } else if (hasPlayedRef.current) {
+            onPlaying()
+          }
         }}
         onStalled={onWaiting}
         onWaiting={onWaiting}

@@ -78,6 +78,26 @@ describe('全局播放器状态', () => {
     expect(screen.getByText('正在播放')).toBeInTheDocument()
   })
 
+  it.each([
+    { readyState: 3, paused: false, seeking: false, status: '正在播放' },
+    { readyState: 2, paused: false, seeking: false, status: '缓冲中...' },
+    { readyState: 3, paused: true, seeking: false, status: '缓冲中...' },
+    { readyState: 3, paused: false, seeking: true, status: '缓冲中...' },
+  ])('跳转完成后根据媒体状态显示 $status', ({ readyState, paused, seeking, status }) => {
+    const { audio } = setup()
+    fireEvent.click(screen.getByRole('button', { name: '播放' }))
+    fireEvent.playing(audio())
+    fireEvent.seeking(audio())
+    expect(screen.getByText('缓冲中...')).toBeInTheDocument()
+    Object.defineProperties(audio(), {
+      readyState: { configurable: true, value: readyState },
+      paused: { configurable: true, value: paused },
+      seeking: { configurable: true, value: seeking },
+    })
+    fireEvent.seeked(audio())
+    expect(screen.getByText(status)).toBeInTheDocument()
+  })
+
   it.each(['media', 'play'] as const)('显示 %s 失败并停止播放意图', async (failure) => {
     if (failure === 'play')
       vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValue(new Error('blocked'))
