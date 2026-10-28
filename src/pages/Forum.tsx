@@ -1343,7 +1343,6 @@ export const PostEditor = () => {
   const { user, isAdmin, isBanned, loading: authLoading } = useAuth()
   const [searchParams] = useSearchParams()
   const musicDocIdParam = searchParams.get('musicDocId')
-  const musicTitleParam = searchParams.get('musicTitle')
   const [sections, setSections] = useState<SectionItem[]>([])
   const [formData, setFormData] = useState({
     title: '',
@@ -1382,27 +1381,21 @@ export const PostEditor = () => {
         setSections(fetchedSections)
 
         let defaultSection = fetchedSections[0]?.id || ''
-        let defaultContent = ''
 
-        if (musicDocIdParam && musicTitleParam) {
+        if (musicDocIdParam) {
           defaultSection = 'music'
-          defaultContent = `\n\n---\n${t('forum.musicReviewTemplate', { title: decodeURIComponent(musicTitleParam) })}\n`
         }
 
         setFormData((prev) => ({
-          title: prev.title,
+          ...prev,
           section: prev.section || defaultSection,
-          content: prev.content || defaultContent,
-          tags: prev.tags,
-          locationName: prev.locationName,
-          locationCode: prev.locationCode,
         }))
         setBaseline(
           (prev) =>
             prev ?? {
               title: '',
               section: defaultSection,
-              content: defaultContent,
+              content: '',
               tags: '',
               locationName: null,
               locationCode: null,
@@ -1414,7 +1407,7 @@ export const PostEditor = () => {
     }
 
     fetchSections()
-  }, [musicDocIdParam, musicTitleParam])
+  }, [musicDocIdParam])
 
   const loadEditingPost = useCallback(async () => {
     if (!postId || authLoading) return

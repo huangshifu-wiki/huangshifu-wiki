@@ -544,7 +544,7 @@ const MusicDetail = () => {
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <SectionHeading>关联乐评</SectionHeading>
                 <Link
-                  to={`/forum/new?musicDocId=${song.docId}&musicTitle=${encodeURIComponent(song.title)}`}
+                  to={`/forum/new?musicDocId=${encodeURIComponent(song.docId)}`}
                   state={{ editorBackground: location }}
                   data-pressable
                   data-press-feedback="state"
