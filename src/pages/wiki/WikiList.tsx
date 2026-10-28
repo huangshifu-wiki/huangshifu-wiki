@@ -28,7 +28,9 @@ const WikiList = () => {
   const category = searchParams.get('category') || 'all'
   const tag = searchParams.get('tag')
   const [pages, setPages] = useState<WikiItem[]>([])
-  const [total, setTotal] = useState<number>()
+  const [totalState, setTotal] = useState<{ scope: string; total: number }>()
+  const scope = JSON.stringify([category, tag || ''])
+  const total = totalState?.scope === scope ? totalState.total : undefined
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [retryNonce, setRetryNonce] = useState(0)
@@ -108,7 +110,7 @@ const WikiList = () => {
         const data = await fetchWikiPage(pagination.page)
         if (cancelled) return
         setPages(data.items)
-        setTotal(data.total)
+        setTotal({ scope, total: data.total })
       } catch (error) {
         if (cancelled) return
         console.error('Error fetching wiki pages:', error)
@@ -120,7 +122,7 @@ const WikiList = () => {
     return () => {
       cancelled = true
     }
-  }, [fetchWikiPage, isIncrementalMode, pagination.page, retryNonce])
+  }, [fetchWikiPage, isIncrementalMode, pagination.page, retryNonce, scope])
 
   const getCategoryUrl = (nextCategory: string) => {
     const params = new URLSearchParams(searchParams)

@@ -23,7 +23,9 @@ const Events = () => {
   const [sortOrder, setSortOrder] = useState<EventSortOrder>('desc')
   const [events, setEvents] = useState<EventItem[]>([])
   const [tags, setTags] = useState<string[]>([])
-  const [totalPages, setTotalPages] = useState<number>()
+  const [totalPagesState, setTotalPages] = useState<{ scope: string; total: number }>()
+  const scope = JSON.stringify([selectedTag])
+  const totalPages = totalPagesState?.scope === scope ? totalPagesState.total : undefined
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [retryNonce, setRetryNonce] = useState(0)
@@ -71,13 +73,12 @@ const Events = () => {
       .then((data) => {
         if (cancelled) return
         setEvents(data.events || [])
-        setTotalPages(data.totalPages || 1)
+        setTotalPages({ scope, total: data.totalPages || 1 })
       })
       .catch((error) => {
         console.error('Fetch events failed:', error)
         if (!cancelled) {
           setLoadError(error)
-          setTotalPages((currentTotalPages) => currentTotalPages || 1)
         }
       })
       .finally(() => {
@@ -87,7 +88,7 @@ const Events = () => {
     return () => {
       cancelled = true
     }
-  }, [page, retryNonce, selectedTag, sortOrder])
+  }, [page, retryNonce, selectedTag, sortOrder, scope])
 
   const handleSortOrderChange = (value: EventSortOrder) => {
     if (value === sortOrder) return

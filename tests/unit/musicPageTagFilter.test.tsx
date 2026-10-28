@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, useSearchParams } from 'react-router-dom'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, useNavigate, useSearchParams } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { deferred } from '../setup/deferred'
 
 import { ToastProvider } from '../../src/components/Toast'
 import { AuthProvider } from '../../src/context/AuthContext'
@@ -32,9 +33,12 @@ vi.mock('../../src/lib/auth', () => ({
 }))
 
 const UrlProbe = () => {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   return (
     <>
+      <button onClick={() => navigate(-1)}>后退</button>
+      <span data-testid="music-page">{searchParams.get('musicPage') || ''}</span>
       <span data-testid="url">{searchParams.get('tag') || ''}</span>
       <span data-testid="album-url">{searchParams.get('albumTag') || ''}</span>
       <span data-testid="album-page">{searchParams.get('albumPage') || ''}</span>
@@ -68,6 +72,65 @@ describe('音乐列表页标签按钮', () => {
       return Promise.reject(new Error(`unexpected apiGet: ${path}`))
     })
   })
+
+  it.each([
+    { tab: 'music', path: '/api/music', pageKey: 'musicPage', tag: '古风', total: 100 },
+    { tab: 'albums', path: '/api/albums', pageKey: 'albumPage', tag: '专辑古风', total: 48 },
+  ])(
+    '$tab 筛选后后退保持第 2 页，直到原范围结果返回',
+    async ({ tab, path, pageKey, tag, total }) => {
+      const { promise: delayed, resolve: resolveReturn } = deferred<unknown>()
+      let unfilteredRequests = 0
+      vi.mocked(apiGet).mockImplementation((requestPath: string, params) => {
+        if (requestPath === '/api/music/tags') return Promise.resolve({ tags: ['古风'] }) as never
+        if (requestPath === '/api/albums/tags')
+          return Promise.resolve({ tags: ['专辑古风'] }) as never
+        if (requestPath === path) {
+          const key = tab === 'music' ? 'songs' : 'albums'
+          if (params?.tag) return Promise.resolve({ [key]: [], total: 1 }) as never
+          unfilteredRequests++
+          if (unfilteredRequests > 1) return delayed as never
+          return Promise.resolve({ [key]: [], total }) as never
+        }
+        return Promise.resolve(
+          requestPath === '/api/music' ? { songs: [], total: 0 } : { albums: [], total: 0 }
+        ) as never
+      })
+      renderPage(`/music?tab=${tab}&${pageKey}=2`)
+      await screen.findByRole('button', { name: tag })
+      await waitFor(() => expect(unfilteredRequests).toBe(1))
+      fireEvent.click(screen.getByRole('button', { name: tag }))
+      await waitFor(() =>
+        expect(screen.getByTestId(tab === 'music' ? 'url' : 'album-url')).toHaveTextContent(tag)
+      )
+      await waitFor(() =>
+        expect(
+          vi.mocked(apiGet).mock.calls.some(([p, params]) => p === path && params?.tag === tag)
+        ).toBe(true)
+      )
+      fireEvent.click(screen.getByRole('button', { name: '后退' }))
+      await waitFor(() => expect(unfilteredRequests).toBe(2))
+      const pageProbe = screen.getByTestId(tab === 'music' ? 'music-page' : 'album-page')
+      expect(pageProbe).toHaveTextContent('2')
+      expect(
+        vi
+          .mocked(apiGet)
+          .mock.calls.filter(([p]) => p === path)
+          .at(-1)?.[1]?.page
+      ).toBe(2)
+      await act(async () =>
+        resolveReturn({
+          [tab === 'music' ? 'songs' : 'albums']:
+            tab === 'albums'
+              ? [{ docId: 'album-2', title: '第二页专辑', artist: '歌手', cover: '' }]
+              : [],
+          total,
+        })
+      )
+      if (tab === 'albums') expect(await screen.findByText('第二页专辑')).toBeInTheDocument()
+      expect(pageProbe).toHaveTextContent('2')
+    }
+  )
 
   it('点击标签后 URL 保留 tag 参数并携带 tag 重新请求列表', async () => {
     renderPage()

@@ -144,7 +144,10 @@ export default function UserProfile() {
   const [galleries, setGalleries] = useState<GalleryItem[]>([])
   const [favorites, setFavorites] = useState<FavoriteItem[]>([])
   const [history, setHistory] = useState<HistoryItem[]>([])
-  const [contentTotal, setContentTotal] = useState<number | undefined>()
+  const [contentTotalState, setContentTotal] = useState<{ scope: string; total: number }>()
+  const contentScope = JSON.stringify([userId, activeTab])
+  const contentTotal =
+    contentTotalState?.scope === contentScope ? contentTotalState.total : undefined
   const pagination = useRoutedPagination({
     totalCount: contentTotal,
     defaultPageSize: 50,
@@ -154,7 +157,6 @@ export default function UserProfile() {
     showPageSizeSelector: true,
     enabled: activeTab !== 'profile',
   })
-  const contentScopeRef = useRef<string | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [contentLoading, setContentLoading] = useState(false)
   const [contentError, setContentError] = useState<unknown | null>(null)
@@ -330,21 +332,10 @@ export default function UserProfile() {
   }
 
   useEffect(() => {
-    if (!userId) return
-    const scope = `${activeTab}:${userId}`
-    if (contentScopeRef.current !== null && contentScopeRef.current !== scope) {
-      pagination.setPage(1)
-      setContentTotal(undefined)
-    }
-    contentScopeRef.current = scope
-  }, [activeTab, userId])
-
-  useEffect(() => {
     if (!userId || !profileLoaded) return
     if (activeTab === 'profile') {
       setContentLoading(false)
       setContentError(null)
-      setContentTotal(undefined)
       return
     }
 
@@ -365,7 +356,7 @@ export default function UserProfile() {
           )
           if (!cancelled) {
             setPosts(data.posts || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
           return
         }
@@ -381,7 +372,7 @@ export default function UserProfile() {
           )
           if (!cancelled) {
             setGalleries(data.galleries || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
           return
         }
@@ -396,7 +387,7 @@ export default function UserProfile() {
           )
           if (!cancelled) {
             setFavorites(data.favorites || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
           return
         }
@@ -413,7 +404,7 @@ export default function UserProfile() {
           )
           if (!cancelled) {
             setHistory(data.history || [])
-            setContentTotal(data.total || 0)
+            setContentTotal({ scope: contentScope, total: data.total || 0 })
           }
         }
       } catch (err) {
@@ -434,6 +425,7 @@ export default function UserProfile() {
     activeTab,
     canViewFavorites,
     canViewHistory,
+    contentScope,
     contentRetry,
     pagination.page,
     pagination.pageSize,
@@ -467,7 +459,7 @@ export default function UserProfile() {
         )
         if (!stopped) {
           setGalleries(data.galleries || [])
-          setContentTotal(data.total || 0)
+          setContentTotal({ scope: contentScope, total: data.total || 0 })
         }
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
@@ -489,7 +481,14 @@ export default function UserProfile() {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [activeTab, hasPendingGalleryThumbnails, pagination.page, pagination.pageSize, userId])
+  }, [
+    activeTab,
+    contentScope,
+    hasPendingGalleryThumbnails,
+    pagination.page,
+    pagination.pageSize,
+    userId,
+  ])
 
   const visibleTabs = useMemo(() => {
     const tabs: Array<{ id: UserProfileTab; label: string; icon: React.ReactNode; path: string }> =

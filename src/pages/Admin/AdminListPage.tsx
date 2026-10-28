@@ -536,7 +536,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const cfg = configMap[type]
   const Icon = cfg.icon
   const [data, setData] = useState<AdminDataItem[]>([])
-  const [total, setTotal] = useState<number | undefined>()
+  const [totalState, setTotal] = useState<{ scope: string; total: number }>()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [pendingActions, setPendingActions] = useState<
@@ -550,6 +550,8 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const [categoryBaseline, setCategoryBaseline] = useState<AdminDataItem | null>(null)
   const [editingEventId, setEditingEventId] = useState<string | null>(null)
   const showDeleted = searchParams.get('includeDeleted') === 'true'
+  const scope = JSON.stringify([type, showDeleted])
+  const total = totalState?.scope === scope ? totalState.total : undefined
   const dialog = useDialog()
   const { show } = useToast()
   const saveScroll = useScrollRestore()
@@ -562,7 +564,6 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
     showPageSizeSelector: true,
   })
   const requestIdRef = useRef(0)
-  const filterScopeRef = useRef(`${type}:${showDeleted}`)
   const [newItem, setNewItem] = useState<any>({})
   const createClosePendingRef = useRef(false)
   const categoryClosePendingRef = useRef(false)
@@ -608,7 +609,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
       })
       if (requestId !== requestIdRef.current) return
       setData(result.data || [])
-      setTotal(result.total || 0)
+      setTotal({ scope, total: result.total || 0 })
       setLoadError(null)
     } catch (error) {
       if (requestId !== requestIdRef.current) return
@@ -632,13 +633,6 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   }
 
   useEffect(() => {
-    const scope = `${type}:${showDeleted}`
-    if (filterScopeRef.current === scope) return
-    filterScopeRef.current = scope
-    pagination.setPage(1)
-    setTotal(undefined)
-  }, [type, showDeleted])
-  useEffect(() => {
     setCreateOpen(false)
     setCreateBaseline(null)
     setNewItem(createInitialItem(type))
@@ -661,6 +655,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
   const handleToggleDeleted = () => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
+      next.delete('page')
       if (showDeleted) next.delete('includeDeleted')
       else next.set('includeDeleted', 'true')
       return next
