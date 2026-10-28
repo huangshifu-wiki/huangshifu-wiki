@@ -1,15 +1,6 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import {
-  Disc3,
-  Edit3,
-  Play,
-  Heart,
-  Link2,
-  List,
-  ChevronDown,
-  ChevronUp,
-} from '@/src/components/icons'
+import { Disc3, Edit3, Play, Heart, List, ChevronDown, ChevronUp } from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
@@ -21,7 +12,6 @@ import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
 import { CoverPlaceholder } from '../components/CoverPlaceholder'
 import { Lightbox } from '../components/Lightbox'
-import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { toDateValue } from '../lib/dateUtils'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { isPlayableSong } from '../lib/musicPlayback'
@@ -236,17 +226,6 @@ const AlbumDetail = () => {
     }
   }
 
-  const handleCopyAlbumLink = async () => {
-    const albumPublicId = album?.slug || album?.docId
-    if (!albumPublicId) return
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/album/${albumPublicId}`))
-    if (copied) {
-      show('专辑内链已复制')
-      return
-    }
-    show('复制链接失败，请稍后重试', { variant: 'error' })
-  }
-
   // SEO 元数据：加载中/失败不可索引，成功后输出专辑详情与 MusicAlbum JSON-LD
   const albumPath = `/album/${albumId}`
   const albumSeoMetadata: SeoMetadata = album
@@ -384,14 +363,6 @@ const AlbumDetail = () => {
                 className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Play size={16} /> {playableTracks.length > 0 ? '播放专辑' : '暂无音源'}
-              </button>
-              <button
-                type="button"
-                data-press-feedback="ripple"
-                onClick={handleCopyAlbumLink}
-                className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-[0.9375rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
-              >
-                <Link2 size={15} /> 复制内链
               </button>
               {isAdmin && (
                 <Button

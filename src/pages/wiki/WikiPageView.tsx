@@ -7,7 +7,6 @@ import {
   Save,
   Share2,
   History,
-  Link2,
   GitBranch,
   Network,
   MapPin,
@@ -336,13 +335,6 @@ const WikiPageView = () => {
                   <GitBranch size={14} /> {t('wiki.branch')}
                 </Link>
               )}
-              <button
-                onClick={handleCopyPageLink}
-                className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
-                title={t('wiki.copyInternalLink')}
-              >
-                <Link2 size={14} /> {t('wiki.copy')}
-              </button>
             </div>
           </div>
 

@@ -5,7 +5,6 @@ import {
   Edit3,
   ExternalLink,
   Heart,
-  Link2,
   MessageSquare,
   Music,
   Play,
@@ -28,7 +27,6 @@ import { CoverPlaceholder } from '../components/CoverPlaceholder'
 import { Lightbox } from '../components/Lightbox'
 import { LyricsDisplay } from '../components/LyricsDisplay'
 import MarkdownRenderer from '../components/MarkdownRenderer'
-import { copyToClipboard, toAbsoluteInternalUrl } from '../lib/copyLink'
 import { getPlatformExternalUrl } from '../lib/musicPlatformUrls'
 import { toDateValue } from '../lib/dateUtils'
 import { formatMusicCredits } from '../lib/musicCredits'
@@ -279,17 +277,6 @@ const MusicDetail = () => {
     setIsPlaying(true)
   }
 
-  const handleCopyLink = async () => {
-    const songPublicId = song?.slug || song?.docId
-    if (!songPublicId) return
-    const copied = await copyToClipboard(toAbsoluteInternalUrl(`/music/${songPublicId}`))
-    if (copied) {
-      show('歌曲内链已复制')
-      return
-    }
-    show('复制链接失败，请稍后重试', { variant: 'error' })
-  }
-
   const handleCopyLyrics = async () => {
     if (!song?.lyric) return
     const plainLyrics = song.lyricPlain || parseLyrics(song.lyric).plainText
@@ -445,14 +432,6 @@ const MusicDetail = () => {
                     <span className="text-[0.875rem]">
                       {song.favoritedByMe ? '已收藏' : '收藏'}
                     </span>
-                  </button>
-                  <button
-                    type="button"
-                    data-press-feedback="ripple"
-                    onClick={handleCopyLink}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded border border-[var(--book-ink-line)] text-[0.875rem] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
-                  >
-                    <Link2 size={14} /> 复制内链
                   </button>
                   {isAdmin && (
                     <Button

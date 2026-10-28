@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import {
   Edit3,
-  Link2,
   Heart,
   Save,
   Share2,
@@ -924,15 +923,6 @@ const GalleryDetail = () => {
               >
                 <Save size={14} /> {gallery.favoritedByMe ? '已收藏' : '收藏'}{' '}
                 {gallery.favoritesCount || 0}
-              </button>
-              <button
-                type="button"
-                data-press-feedback="ripple"
-                onClick={handleCopyLink}
-                className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
-                title={t('gallery.copyInternalLink')}
-              >
-                <Link2 size={14} /> 复制内链
               </button>
               <button
                 type="button"

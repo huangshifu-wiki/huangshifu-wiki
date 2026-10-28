@@ -22,7 +22,6 @@ import {
   Send,
   Edit3,
   Pin,
-  Link2,
   Tag,
   MapPin,
   Trash2,
@@ -925,12 +924,6 @@ const PostDetail = () => {
             </div>
 
             <div className="mobile-action-row mt-1 justify-start sm:justify-end">
-              <button
-                onClick={handleShare}
-                className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
-              >
-                <Link2 size={14} /> {t('forum.copy')}
-              </button>
               {canEditPost && (
                 <Link
                   to={`/forum/${postPublicId}/edit`}
