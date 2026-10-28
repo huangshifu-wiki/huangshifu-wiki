@@ -3,12 +3,7 @@ export const SEARCH_PAGE_SIZE = 20
 export const SEARCH_PAGINATION_DOCK_GROUP = 'search-results'
 
 export type SearchPaginationCategory =
-  | 'wiki'
-  | 'posts'
-  | 'galleries'
-  | 'music'
-  | 'lyrics'
-  | 'albums'
+  'wiki' | 'posts' | 'galleries' | 'music' | 'lyrics' | 'albums'
 
 export const SEARCH_PAGE_PARAM_BY_CATEGORY = {
   semantic: 'searchSemanticPage',

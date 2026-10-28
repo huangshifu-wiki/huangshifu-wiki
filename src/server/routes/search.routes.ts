@@ -927,9 +927,7 @@ router.get('/', searchLimiter, async (req: AuthenticatedRequest, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
     const type = typeof req.query.type === 'string' ? req.query.type : 'all'
     const mode = (typeof req.query.mode === 'string' ? req.query.mode : 'keyword') as
-      | 'keyword'
-      | 'vector'
-      | 'hybrid'
+      'keyword' | 'vector' | 'hybrid'
     const category = typeof req.query.category === 'string' ? req.query.category : undefined
     const startDate =
       typeof req.query.startDate === 'string' ? parseDate(req.query.startDate) : null

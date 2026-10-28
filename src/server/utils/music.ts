@@ -1254,8 +1254,7 @@ export async function fetchSongsWithRelations(
     take?: number
     skip?: number
     orderBy?:
-      | Prisma.MusicTrackOrderByWithRelationInput
-      | Prisma.MusicTrackOrderByWithRelationInput[]
+      Prisma.MusicTrackOrderByWithRelationInput | Prisma.MusicTrackOrderByWithRelationInput[]
   }
 ) {
   const songs = await prisma.musicTrack.findMany({

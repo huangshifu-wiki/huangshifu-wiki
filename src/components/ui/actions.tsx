@@ -5,13 +5,7 @@ import { Link, type LinkProps } from 'react-router-dom'
 import { cn } from './utils'
 
 export type ButtonVariant =
-  | 'primary'
-  | 'secondary'
-  | 'ghost'
-  | 'danger'
-  | 'warning'
-  | 'success'
-  | 'info'
+  'primary' | 'secondary' | 'ghost' | 'danger' | 'warning' | 'success' | 'info'
 
 export type ButtonSize = 'sm' | 'md' | 'lg'
 

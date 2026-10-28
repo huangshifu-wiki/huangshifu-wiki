@@ -43,12 +43,7 @@
 export type ImageMapThumbnailRepairResult = {
   imageMapId: string
   status:
-    | 'queued'
-    | 'already-queued'
-    | 'already-complete'
-    | 'missing-source'
-    | 'not-found'
-    | 'failed'
+    'queued' | 'already-queued' | 'already-complete' | 'missing-source' | 'not-found' | 'failed'
   sourcePath?: string
   reason?: string
 }

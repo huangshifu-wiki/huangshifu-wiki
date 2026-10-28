@@ -97,12 +97,7 @@ type EditableTicketPrice = {
 }
 
 type JsonField =
-  | 'timeSlots'
-  | 'ticketPrices'
-  | 'saleTimes'
-  | 'lineup'
-  | 'externalLinks'
-  | 'relatedLinks'
+  'timeSlots' | 'ticketPrices' | 'saleTimes' | 'lineup' | 'externalLinks' | 'relatedLinks'
 
 type JsonEditorState = {
   mode: 'form' | 'json'

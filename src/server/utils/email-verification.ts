@@ -40,10 +40,7 @@ export type EmailVerificationAdminConfig = Omit<EmailVerificationConfig, 'smtpPa
 type EmailVerificationConfigUpdate = Partial<EmailVerificationConfig>
 
 type EmailVerificationErrorCode =
-  | 'INVALID_TOKEN'
-  | 'TOKEN_EXPIRED'
-  | 'MAIL_NOT_CONFIGURED'
-  | 'MAIL_SEND_FAILED'
+  'INVALID_TOKEN' | 'TOKEN_EXPIRED' | 'MAIL_NOT_CONFIGURED' | 'MAIL_SEND_FAILED'
 
 export class EmailVerificationError extends Error {
   constructor(
