@@ -49,6 +49,20 @@
 
 Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`、`success`、`info`，尺寸固定为 `sm`、`md`、`lg`。`soft` 修饰符提供浅色底 + 语义文字色的轻量按钮（用于列表行内操作），对 `secondary`、`danger`、`warning`、`success`、`info` 生效，`primary` 与 `ghost` 下等同原样式。颜色必须来自 `src/index.css` 的 CSS 变量或主题语义类，UI 内部禁止十六进制、RGB、HSL 字面量。
 
+独立操作默认使用 `appearance="action"`：直角、1px 边框、常规字重和 `0.12em` 字距。primary 使用首页同款金底，secondary 使用透明金边；危险等操作保留语义色。金色悬停效果仅用于支持 hover 的精细指针。`soft` 操作仍保留浅底、语义文字色与浅边框。
+
+| 共享尺寸 | 最小高度 | 左右 / 上下间距 | 字号 / 行高 |
+| -------- | -------- | --------------- | ----------- |
+| sm       | 32px     | 10px / 5px      | 12px / 20px |
+| md       | 36px     | 14px / 7px      | 14px / 20px |
+| lg       | 44px     | 18px / 10px     | 14px / 20px |
+
+`Button`、`LinkButton` 的 action、plain 和 soft 外观共用上述尺寸；变体、选中、禁用和加载状态不得改变尺寸档位。IconButton 对应为 32px、36px、44px 正方形。页头、详情主操作和普通表单操作使用默认 md；列表行内、筛选组和区块标题中的紧凑操作使用 sm。同一位置、同一操作组使用相同 size，加载失败后的重试也保持原操作尺寸。
+
+`appearance="plain"` 用于分段选择、页码、筛选组等专用交互，保留圆角与选中形态，不另设尺寸体系。ghost 默认 plain，其余变体默认 action；显式 appearance 优先。IconButton 固定 plain，导航、播放器、整卡点击面和编辑器工具栏保留专用形态。首页 hero 使用相同 LinkButton，保留展示用的宽间距，同组成员保持一致。
+
+普通 Input、Select 最小高度 36px，左右 12px、上下 6px，行高 20px；小屏字号 16px，sm 起 14px。Textarea 保留最小 112px 的可编辑高度、业务 rows、上下 8px 与 24px 行高。Field 内部间距 6px，TagInput 最小高度 36px，内嵌输入不重复叠加最小高度。粗指针下共享按钮（含 plain、图标及各语义状态）、标签输入和普通单行输入/选择保留至少 44px 触控面积；多行输入和隐藏文件上传不受该单行规则影响。标签令牌删除、拖动手柄等内嵌控件通过 `data-control-inset` 保留专用尺寸。
+
 调用方可通过 `className` 扩展布局，但不应复制组件的基础视觉样式。合并 class 使用 `cn()`，以便 Tailwind 冲突由 `tailwind-merge` 处理。
 
 ## 无障碍要求

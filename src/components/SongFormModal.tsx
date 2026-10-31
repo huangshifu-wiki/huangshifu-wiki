@@ -40,11 +40,9 @@ import {
   BookFormField,
   bookCompactInputClass,
   bookPanelClass,
-  bookSecondaryButtonClass,
-  bookSmallButtonClass,
 } from './BookEditor'
 import { useTagSuggestions } from '../hooks/useTagSuggestions'
-import { TagInput } from '@/src/components/ui'
+import { IconButton, Button, TagInput } from '@/src/components/ui'
 
 type SongFormData = {
   title: string
@@ -715,24 +713,25 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
                         className={`${bookCompactInputClass} flex-1`}
                       />
                       {isLinked && (
-                        <a
-                          href={getPlatformExternalUrl(platform.platform, currentId) || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center rounded p-2 text-text-muted transition-colors hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
-                          aria-label={`打开${platform.label}`}
-                        >
-                          <ExternalLink size={14} />
-                        </a>
+                        <IconButton asChild variant="ghost" aria-label={`打开${platform.label}`}>
+                          <a
+                            href={getPlatformExternalUrl(platform.platform, currentId) || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`打开${platform.label}`}
+                          >
+                            <ExternalLink size={14} />
+                          </a>
+                        </IconButton>
                       )}
-                      <button
+                      <Button
+                        variant="secondary"
                         type="button"
                         onClick={() => setMatchingPlatform(platform.platform)}
-                        className={bookSmallButtonClass}
                       >
                         <Search size={13} />
                         匹配
-                      </button>
+                      </Button>
                     </div>
                   )
                 })}
@@ -747,13 +746,9 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
                     例如哔哩哔哩、5sing 或其他发布平台
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleAddCustomPlatformLink}
-                  className={bookSecondaryButtonClass}
-                >
+                <Button variant="primary" type="button" onClick={handleAddCustomPlatformLink}>
                   <Plus size={13} /> 添加链接
-                </button>
+                </Button>
               </div>
 
               {customPlatformLinks.length > 0 ? (
@@ -784,26 +779,27 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
                             className={bookCompactInputClass}
                           />
                           {previewUrl ? (
-                            <a
-                              href={previewUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center justify-center rounded p-2 text-text-muted transition-colors hover:bg-[var(--book-panel-hover)] hover:text-brand-gold"
-                              aria-label="打开自定义平台链接"
-                            >
-                              <ExternalLink size={14} />
-                            </a>
+                            <IconButton asChild variant="ghost" aria-label="打开自定义平台链接">
+                              <a
+                                href={previewUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="打开自定义平台链接"
+                              >
+                                <ExternalLink size={14} />
+                              </a>
+                            </IconButton>
                           ) : (
-                            <span aria-hidden="true" className="hidden h-8 w-8 sm:block" />
+                            <span aria-hidden="true" className="hidden h-9 w-9 sm:block" />
                           )}
-                          <button
+                          <IconButton
+                            variant="ghost"
                             type="button"
                             onClick={() => handleRemoveCustomPlatformLink(index)}
-                            className="inline-flex items-center justify-center rounded p-2 text-text-muted transition-colors hover:bg-[color-mix(in_srgb,var(--color-error)_10%,var(--book-panel-bg))] hover:text-danger"
                             aria-label="删除自定义平台链接"
                           >
                             <Trash2 size={14} />
-                          </button>
+                          </IconButton>
                         </div>
                       </div>
                     )

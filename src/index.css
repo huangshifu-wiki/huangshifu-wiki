@@ -1308,11 +1308,12 @@ a[href]:not([data-press-feedback='none']),
 }
 
 @media (pointer: coarse) {
-  button.theme-button-primary,
-  button.theme-button-secondary,
-  button.theme-button-danger,
-  button.theme-button-warning,
-  button.theme-button-success,
+  .ui-button:not([data-control-inset]),
+  .ui-tag-input,
+  input.ui-control:not([type='file']):not([type='checkbox']):not([type='radio']):not(
+      [type='range']
+    ):not([type='hidden']):not([data-control-inset]),
+  select.ui-control,
   [data-pressable],
   .mobile-touch-target {
     min-width: 44px;
@@ -2037,37 +2038,30 @@ a[href]:not([data-press-feedback='none']),
   animation: home-hero-in 1.2s ease 0.65s backwards;
 }
 
-.home-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--home-gold);
-  padding: 0.7rem 2.2rem;
-  font-size: 0.85rem;
-  letter-spacing: 0.18em;
-  text-decoration: none;
-  transition: all 0.35s ease;
-}
-
-.home-btn-fill {
+/* 独立操作沿用首页金边视觉，专用交互不受影响。 */
+.ui-action-fill {
   background: var(--home-gold);
+  border-color: var(--home-gold);
   color: var(--home-bg-deep);
 }
 
-.home-btn-fill:hover {
+.ui-action-outline {
   background: transparent;
-  color: var(--home-gold);
-  box-shadow: var(--home-button-shadow);
-}
-
-.home-btn-ghost {
-  background: transparent;
+  border-color: var(--home-gold);
   color: var(--home-gold);
 }
 
-.home-btn-ghost:hover {
-  background: var(--home-gold-dim);
-  box-shadow: var(--home-button-ghost-shadow);
+@media (hover: hover) and (pointer: fine) {
+  .ui-action-fill:hover:not(:disabled):not([aria-disabled='true']) {
+    background: transparent;
+    color: var(--home-gold);
+    box-shadow: var(--home-button-shadow);
+  }
+
+  .ui-action-outline:hover:not(:disabled):not([aria-disabled='true']) {
+    background: var(--home-gold-dim);
+    box-shadow: var(--home-button-ghost-shadow);
+  }
 }
 
 .home-container {

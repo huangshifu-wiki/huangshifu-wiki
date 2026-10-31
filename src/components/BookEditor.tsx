@@ -2,25 +2,13 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, X } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { IconButton, buttonVariants, controlVariants } from '@/src/components/ui'
+import { IconButton, controlVariants } from '@/src/components/ui'
 
 /** @deprecated 请改用 Input 或 controlVariants。 */
-export const bookInputClass = controlVariants('px-4 py-3 text-base')
+export const bookInputClass = controlVariants()
 
 /** @deprecated 请改用 Input size 样式或 controlVariants。 */
 export const bookCompactInputClass = controlVariants()
-
-/** @deprecated 请改用 Button variant="secondary"。 */
-export const bookSecondaryButtonClass = buttonVariants({ variant: 'secondary' })
-
-/** @deprecated 请改用 Button variant="secondary" size="sm"。 */
-export const bookSmallButtonClass = buttonVariants({ variant: 'secondary', size: 'sm' })
-
-/** @deprecated 请改用 IconButton。 */
-export const bookIconButtonClass = buttonVariants({
-  variant: 'secondary',
-  className: 'h-10 w-10 p-0 text-text-muted',
-})
 
 export const bookPanelClass =
   'rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)]'

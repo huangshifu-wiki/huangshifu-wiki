@@ -14,7 +14,6 @@ import {
   BookFormField,
   bookCompactInputClass,
   bookInputClass,
-  bookSecondaryButtonClass,
 } from '../components/BookEditor'
 import { LocationTagInput } from '../components/LocationTagInput'
 import { LinkRowsEditor } from '../components/LinkRowsEditor'
@@ -59,7 +58,7 @@ import type {
   UploadSessionResponse,
 } from '../types/api'
 import type { ContentLink, GalleryImageItem, GalleryItem } from '../types/entities'
-import { LoadErrorState, TagInput } from '@/src/components/ui'
+import { Button, LoadErrorState, TagInput } from '@/src/components/ui'
 
 type EditableGalleryImage = GalleryImageItem & {
   clientId: string
@@ -1028,38 +1027,35 @@ const GalleryEdit = () => {
             <BookEditorActions
               leading={
                 !isCreating && gallery ? (
-                  <button
+                  <Button
+                    variant="secondary"
+                    className="mr-auto"
                     type="button"
                     onClick={() => setShowAdvancedOptions((value) => !value)}
                     aria-expanded={showAdvancedOptions}
                     aria-controls="gallery-advanced-options"
-                    className="mr-auto flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
                   >
                     <ChevronDown
                       size={16}
                       className={`transition-transform ${showAdvancedOptions ? 'rotate-180' : ''}`}
                     />{' '}
                     {t('gallery.advancedOptions')}
-                  </button>
+                  </Button>
                 ) : null
               }
             >
-              <button
+              <Button
+                variant="secondary"
                 type="button"
                 onClick={() => void handleSave('draft')}
                 disabled={Boolean(savingMode) || uploading}
-                className={bookSecondaryButtonClass}
               >
                 <Save size={16} />{' '}
                 {savingMode === 'draft' ? t('gallery.saving') : t('gallery.saveDraft')}
-              </button>
-              <button
-                type="submit"
-                disabled={Boolean(savingMode) || uploading}
-                className="inline-flex items-center justify-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
-              >
+              </Button>
+              <Button variant="primary" type="submit" disabled={Boolean(savingMode) || uploading}>
                 <Send size={16} /> {submitButtonText}
-              </button>
+              </Button>
             </BookEditorActions>
           </form>
 
@@ -1088,15 +1084,16 @@ const GalleryEdit = () => {
                   />
                 </label>
               )}
-              <button
+              <Button
+                variant="danger"
+                className="mt-4"
                 type="button"
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Trash2 size={16} />
                 {isDeleting ? t('gallery.deletingGallery') : t('gallery.deleteGallery')}
-              </button>
+              </Button>
             </BookDangerZone>
           )}
         </BookEditorShell>

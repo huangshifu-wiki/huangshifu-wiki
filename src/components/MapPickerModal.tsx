@@ -191,7 +191,7 @@ export const MapPickerModal = ({
               type="text"
               autoComplete="off"
               placeholder="搜索地址..."
-              className="pl-9 pr-4 py-2"
+              className="pl-9 pr-4"
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing) return
                 if (e.key !== 'Enter') return

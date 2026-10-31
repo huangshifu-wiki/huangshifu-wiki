@@ -254,7 +254,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           autoComplete="off"
           aria-owns="search-suggestions"
           aria-expanded={dropdownOpen}
-          className="w-full rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] py-4 pl-12 pr-14 text-base text-text-primary shadow-[inset_0_1px_0_rgba(138,109,47,0.06)] outline-none transition-all placeholder:text-text-muted focus:border-brand-gold sm:pr-40"
+          className="min-h-11 py-2.5 pl-12 pr-14 text-base sm:text-base sm:pr-40"
         />
         <SearchIcon
           className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted transition-colors group-focus-within:text-brand-gold"
@@ -444,6 +444,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
             <IconButton
               type="button"
               variant="ghost"
+              size="sm"
               onClick={() => fileInputRef.current?.click()}
               disabled={aiSearching}
               className="bg-surface-alt text-text-muted"
@@ -453,7 +454,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
               {aiSearching ? <Sparkles className="animate-spin" size={18} /> : <Camera size={18} />}
             </IconButton>
           )}
-          <Button type="submit" className="hidden px-6 sm:inline-flex" aria-label="提交搜索">
+          <Button type="submit" size="sm" className="hidden sm:inline-flex" aria-label="提交搜索">
             搜索
           </Button>
         </div>

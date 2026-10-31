@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Loader2, Trash2, Star, Upload, X } from '@/src/components/icons'
-import { Checkbox, LoadErrorState } from '@/src/components/ui'
+import { Button, Checkbox, LoadErrorState } from '@/src/components/ui'
 import { clsx } from 'clsx'
 
 import {
@@ -361,10 +361,12 @@ export const CoverManager = ({
             />
             {resourceType === 'album' ? (
               <div className="flex gap-2">
-                <button
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading || syncing}
-                  className="flex-1 px-4 py-2.5 rounded theme-button-primary font-medium disabled:opacity-50 inline-flex items-center justify-center gap-2 text-sm transition-all"
                 >
                   {uploading ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -372,25 +374,28 @@ export const CoverManager = ({
                     <Upload size={14} />
                   )}
                   {uploading ? '上传中...' : '上传新封面'}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
+                  type="button"
                   onClick={handleSyncToSongsInternal}
                   disabled={syncing || uploading}
-                  className="px-4 py-2.5 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300 disabled:opacity-50 inline-flex items-center justify-center gap-2"
                 >
                   {syncing && <Loader2 size={14} className="animate-spin" />}
                   {syncing ? '同步中...' : '同步到歌曲'}
-                </button>
+                </Button>
               </div>
             ) : (
-              <button
+              <Button
+                variant="primary"
+                className="w-full"
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="w-full px-4 py-2.5 rounded theme-button-primary font-medium disabled:opacity-50 inline-flex items-center justify-center gap-2 text-sm transition-all"
               >
                 {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                 {uploading ? '上传中...' : '上传新封面'}
-              </button>
+              </Button>
             )}
           </div>
 
@@ -411,18 +416,15 @@ export const CoverManager = ({
                   已上传的封面 ({covers.length})
                 </span>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={selectAllCovers}
-                    className="px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-xs text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all"
-                  >
+                  <Button variant="secondary" size="sm" type="button" onClick={selectAllCovers}>
                     {selectedCoverIds.size === covers.length ? '取消全选' : '全选'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
                     type="button"
                     onClick={handleBatchDelete}
                     disabled={!selectedCoverIds.size || batchDeleting}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded theme-button-danger text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {batchDeleting ? (
                       <Loader2 size={13} className="animate-spin" />
@@ -430,7 +432,7 @@ export const CoverManager = ({
                       <Trash2 size={13} />
                     )}
                     删除 {selectedCoverIds.size || ''}
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -510,12 +512,9 @@ export const CoverManager = ({
         </div>
 
         <footer className="px-5 py-3 border-t border-[var(--book-ink-line)] bg-surface-alt/60 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded border border-[var(--book-ink-line)] text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
-          >
+          <Button variant="secondary" type="button" onClick={onClose}>
             关闭
-          </button>
+          </Button>
         </footer>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Routes, Route, Link, useParams, useSearchParams, useLocation } from 'react-router-dom'
+import { Routes, Route, useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import {
@@ -34,7 +34,7 @@ import Pagination from '../components/Pagination'
 import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
-import { Spinner } from '@/src/components/ui'
+import { LinkButton, Button, Spinner } from '@/src/components/ui'
 import { CommentActionMenu } from '../components/CommentActionMenu'
 import { useHoveredCommentMenu } from '../hooks/useHoveredCommentMenu'
 import { useI18n } from '../lib/i18n'
@@ -265,14 +265,14 @@ const PostList = () => {
               <div className="mobile-action-row">
                 {forumState.isRefreshing && <Spinner size="sm" label="论坛刷新中" />}
                 {user && !isBanned && (
-                  <Link
+                  <LinkButton
+                    variant="primary"
                     to="/forum/new"
                     state={{ editorBackground: location }}
                     data-pressable
-                    className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
                   >
                     <Plus size={15} aria-hidden="true" /> {t('forum.newPost')}
-                  </Link>
+                  </LinkButton>
                 )}
               </div>
             </div>
@@ -858,14 +858,14 @@ const PostDetail = () => {
 
             <div className="mobile-action-row mt-1 justify-start sm:justify-end">
               {canEditPost && (
-                <Link
+                <LinkButton
+                  variant="secondary"
                   to={`/forum/${postPublicId}/edit`}
                   state={{ editorBackground: location }}
                   data-pressable
-                  className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
                 >
                   <Edit3 size={14} /> {t('forum.edit')}
-                </Link>
+                </LinkButton>
               )}
             </div>
           </div>
@@ -886,13 +886,15 @@ const PostDetail = () => {
               <Clock size={14} /> {formatDate(post.updatedAt, 'yyyy-MM-dd HH:mm')}
             </span>
             {canSubmitReview && (
-              <button
+              <Button
+                variant="primary"
+                size="sm"
+                type="button"
                 onClick={handleSubmitReview}
                 disabled={submittingReview}
-                className="rounded border border-[var(--book-ink-line)] px-3 py-1 text-xs text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submittingReview ? t('forum.submitting') : t('forum.submitReview')}
-              </button>
+              </Button>
             )}
           </div>
         </header>
@@ -913,20 +915,16 @@ const PostDetail = () => {
                   {t('forum.comments')} ({comments.length})
                 </SectionHeading>
                 {isAdmin && (
-                  <button
+                  <Button
+                    variant={showDeletedComments ? 'primary' : 'secondary'}
+                    size="sm"
                     type="button"
                     onClick={() => setShowDeletedComments((prev) => !prev)}
-                    className={clsx(
-                      'inline-flex items-center gap-2 rounded border px-3 py-1.5 text-xs transition-all',
-                      showDeletedComments
-                        ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
-                        : 'border-[var(--book-ink-line)] text-text-muted hover:border-brand-gold/50 hover:text-brand-gold'
-                    )}
                     aria-pressed={showDeletedComments}
                   >
                     {showDeletedComments ? <EyeOff size={14} /> : <Eye size={14} />}
                     {t('forum.showDeletedComments')}
-                  </button>
+                  </Button>
                 )}
               </div>
 
@@ -970,7 +968,7 @@ const PostDetail = () => {
                         }
                         rows={3}
                         disabled={!canComment || isBanned}
-                        className="theme-input w-full resize-none rounded px-4 py-3 text-base"
+                        className="theme-input w-full resize-none rounded"
                       />
                       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                         <p className="text-xs text-text-muted">{t('forum.commentShortcutHint')}</p>
@@ -978,16 +976,16 @@ const PostDetail = () => {
                           current={newComment.length}
                           max={CONTENT_LIMITS.post.comment}
                         />
-                        <button
+                        <Button
+                          variant="primary"
                           type="submit"
                           disabled={
                             !newComment.trim() || !canComment || isBanned || submittingComment
                           }
-                          className="inline-flex min-h-10 items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Send size={14} />
                           {submittingComment ? t('forum.submitting') : t('forum.sendComment')}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -1120,74 +1118,64 @@ const PostDetail = () => {
           <aside className="mobile-detail-aside">
             <div className="py-5">
               <div className="flex flex-wrap gap-2">
-                <button
+                <Button
+                  variant={post.likedByMe ? 'danger' : 'secondary'}
+                  aria-pressed={post.likedByMe}
+                  className="flex-1"
+                  type="button"
                   onClick={toggleLike}
                   disabled={!user || liking}
-                  className={clsx(
-                    'flex flex-1 items-center justify-center gap-1.5 rounded border px-3 py-2 text-sm font-medium transition-all',
-                    post.likedByMe
-                      ? 'border-[color-mix(in_srgb,var(--color-error)_22%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_6%,transparent)] text-[var(--color-error)]'
-                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
-                    (!user || liking) && 'opacity-50 cursor-not-allowed'
-                  )}
                   title={post.likedByMe ? t('forum.unlike') : t('forum.like')}
                 >
                   <Heart size={15} /> {post.likesCount || 0}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant={post.dislikedByMe ? 'warning' : 'secondary'}
+                  aria-pressed={post.dislikedByMe}
+                  className="flex-1"
+                  type="button"
                   onClick={toggleDislike}
                   disabled={!user || disliking}
-                  className={clsx(
-                    'flex flex-1 items-center justify-center gap-1.5 rounded border px-3 py-2 text-sm font-medium transition-all',
-                    post.dislikedByMe
-                      ? 'border-[color-mix(in_srgb,var(--color-warning)_28%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_8%,transparent)] text-[var(--color-warning)]'
-                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
-                    (!user || disliking) && 'opacity-50 cursor-not-allowed'
-                  )}
                   title={post.dislikedByMe ? t('forum.unDislike') : t('forum.dislike')}
                 >
                   <ThumbsDown size={15} /> {post.dislikesCount || 0}
-                </button>
+                </Button>
               </div>
               <div className="flex flex-wrap gap-2 mt-2">
-                <button
+                <Button
+                  variant={post.favoritedByMe ? 'primary' : 'secondary'}
+                  aria-pressed={post.favoritedByMe}
+                  className="flex-1"
+                  type="button"
                   onClick={toggleFavorite}
                   disabled={!user || favoriting}
-                  className={clsx(
-                    'flex flex-1 items-center justify-center gap-1.5 rounded border px-3 py-2 text-sm font-medium transition-all',
-                    post.favoritedByMe
-                      ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
-                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
-                    (!user || favoriting) && 'opacity-50 cursor-not-allowed'
-                  )}
                   title={post.favoritedByMe ? t('forum.unfavorite') : t('forum.favorite')}
                 >
                   <Save size={15} />{' '}
                   {post.favoritedByMe ? t('forum.favorited') : t('forum.favorite')}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  type="button"
                   onClick={handleShare}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded border border-[var(--book-ink-line)] px-3 py-2 text-sm font-medium text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold"
                   title={t('forum.share')}
                 >
                   <Share2 size={15} /> {t('forum.share')}
-                </button>
+                </Button>
               </div>
               {isAdmin && (
                 <div className="mt-2 space-y-2">
-                  <button
+                  <Button
+                    variant={post.isPinned ? 'primary' : 'secondary'}
+                    aria-pressed={post.isPinned}
+                    className="w-full"
+                    type="button"
                     onClick={togglePin}
                     disabled={pinning}
-                    className={clsx(
-                      'flex w-full items-center justify-center gap-1.5 rounded border px-3 py-2 text-sm font-medium transition-all',
-                      post.isPinned
-                        ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
-                        : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
-                      pinning && 'opacity-50 cursor-not-allowed'
-                    )}
                   >
                     <Pin size={15} /> {post.isPinned ? t('forum.pinned') : t('forum.pin')}
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>

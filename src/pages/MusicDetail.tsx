@@ -15,7 +15,7 @@ import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
 import { apiGet } from '../lib/apiClient'
-import { Button, LoadErrorState, Skeleton } from '@/src/components/ui'
+import { Button, LinkButton, LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useMusic } from '../context/MusicContext'
 import { useToast } from '../components/Toast'
@@ -423,52 +423,33 @@ const MusicDetail = () => {
                   <span className="min-w-0 max-w-full text-wrap-anywhere">专辑：{song.album}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <button
+                  <Button
                     type="button"
                     data-press-feedback="ripple"
                     onClick={handlePlay}
                     disabled={!canPlay}
-                    className={clsx(
-                      'inline-flex items-center gap-2 px-5 py-2 rounded',
-                      'border border-[rgba(138,109,47,0.25)] text-brand-gold',
-                      'transition-all duration-300',
-                      canPlay
-                        ? 'bg-transparent hover:bg-brand-gold hover:text-white hover:border-brand-gold hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]'
-                        : 'opacity-50 cursor-not-allowed'
-                    )}
                   >
                     <Play size={15} fill="currentColor" className="ml-0.5" />
-                    <span className="text-[0.875rem] tracking-[0.06em]">
-                      {canPlay ? '播放' : '暂无音源'}
-                    </span>
-                  </button>
-                  <button
+                    <span>{canPlay ? '播放' : '暂无音源'}</span>
+                  </Button>
+                  <Button
+                    variant={song.favoritedByMe ? 'danger' : 'secondary'}
+                    aria-pressed={song.favoritedByMe}
                     type="button"
                     data-press-feedback="ripple"
                     onClick={toggleFavorite}
                     disabled={favoriting}
-                    className={clsx(
-                      'inline-flex items-center gap-2 px-4 py-2 rounded border transition-all duration-300',
-                      song.favoritedByMe
-                        ? 'border-[color-mix(in_srgb,var(--color-error)_22%,transparent)] text-[var(--color-error)] bg-[color-mix(in_srgb,var(--color-error)_6%,transparent)]'
-                        : 'border-[var(--book-ink-line)] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50',
-                      favoriting && 'opacity-50 cursor-not-allowed'
-                    )}
                   >
                     <Heart size={14} fill={song.favoritedByMe ? 'currentColor' : 'none'} />
-                    <span className="text-[0.875rem]">
-                      {song.favoritedByMe ? '已收藏' : '收藏'}
-                    </span>
-                  </button>
+                    <span>{song.favoritedByMe ? '已收藏' : '收藏'}</span>
+                  </Button>
                   {isAdmin && (
                     <Button
                       type="button"
                       onClick={() => setEditing(true)}
                       data-prefetch-module="SongForm"
                       variant="secondary"
-                      size="sm"
                       leftIcon={<Edit3 size={14} />}
-                      className="min-h-0 bg-transparent px-4 py-2 text-[0.875rem] transition-all duration-300"
                     >
                       编辑
                     </Button>
@@ -483,22 +464,24 @@ const MusicDetail = () => {
                 <SectionHeading>歌词</SectionHeading>
                 {song?.lyric && (
                   <div className="flex items-center gap-2">
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       type="button"
                       data-press-feedback="ripple"
                       onClick={handleCopyLyrics}
-                      className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
                       {lyricsCopied ? '已复制' : '复制歌词'}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       type="button"
                       data-press-feedback="ripple"
                       onClick={() => setLyricsExpanded(!lyricsExpanded)}
-                      className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
                       {lyricsExpanded ? '收起' : '展开'}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -527,11 +510,13 @@ const MusicDetail = () => {
                 >
                   <MarkdownRenderer content={song.description || ''} />
                 </div>
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   type="button"
                   data-press-feedback="ripple"
                   onClick={() => setDescExpanded(!descExpanded)}
-                  className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300 mt-3 inline-flex items-center gap-1"
+                  className="mt-3"
                 >
                   {descExpanded ? (
                     <>
@@ -542,7 +527,7 @@ const MusicDetail = () => {
                       展开 <ChevronDown size={14} />
                     </>
                   )}
-                </button>
+                </Button>
               </div>
             )}
 
@@ -550,15 +535,14 @@ const MusicDetail = () => {
             <div className="mb-10">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <SectionHeading>关联乐评</SectionHeading>
-                <Link
+                <LinkButton
+                  size="sm"
                   to={`/forum/new?musicDocId=${encodeURIComponent(song.docId)}`}
                   state={{ editorBackground: location }}
-                  data-pressable
                   data-press-feedback="state"
-                  className="px-4 py-2 theme-button-primary rounded text-xs font-semibold transition-all"
                 >
                   发表乐评
-                </Link>
+                </LinkButton>
               </div>
 
               {postsLoading ? (

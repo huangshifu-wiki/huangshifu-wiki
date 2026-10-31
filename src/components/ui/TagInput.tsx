@@ -248,7 +248,7 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
             onPointerCancel={handleWrapperPointerCancel}
             onClick={handleWrapperClick}
             className={cn(
-              'relative flex min-h-10 w-full min-w-0 items-center gap-1 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-2 py-0.5 text-sm text-text-primary transition-colors focus-within:border-brand-gold focus-within:shadow-[var(--book-focus-ring)]',
+              'ui-tag-input relative flex min-h-9 w-full min-w-0 items-center gap-1 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-2 py-0.5 text-base sm:text-sm text-text-primary transition-colors focus-within:border-brand-gold focus-within:shadow-[var(--book-focus-ring)]',
               listboxOpen && 'z-20',
               disabled && 'cursor-not-allowed opacity-50',
               className
@@ -265,6 +265,7 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
                     type="button"
                     variant="ghost"
                     size="sm"
+                    data-control-inset
                     aria-label={`删除标签：${tag}`}
                     className="h-6 w-6 min-h-6 min-w-6 shrink-0 border-0 p-0 text-current hover:bg-transparent"
                     onPointerDown={handleTagRemovePointerDown}
@@ -288,6 +289,7 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
                   }}
                   id={id}
                   type="text"
+                  data-control-inset
                   value={inputValue}
                   disabled={disabled}
                   autoComplete={autoComplete}
@@ -315,7 +317,7 @@ export const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
                   }}
                   onCompositionStart={handleCompositionStart}
                   onCompositionEnd={handleCompositionEnd}
-                  className="min-w-[8rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm shadow-none focus:border-transparent focus:shadow-none"
+                  className="min-h-0 min-w-[8rem] flex-1 border-0 bg-transparent px-1 py-1 shadow-none focus:border-transparent focus:shadow-none"
                 />
               </PopoverTrigger>
             </div>

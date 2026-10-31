@@ -609,6 +609,7 @@ export const AlbumTrackEditor = ({ open, album, onClose, onChanged }: AlbumTrack
                     <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
                       {draftDiscs.map((disc) => (
                         <Button
+                          appearance="plain"
                           key={disc.disc}
                           type="button"
                           variant={disc.disc === activeDiscNumber ? 'primary' : 'ghost'}
@@ -1045,6 +1046,7 @@ const TrackRowContent = ({
         disabled={reorderDisabled || !dragHandleProps}
         aria-label={`拖动《${title}》调整顺序，当前第 ${index + 1} 首，共 ${total} 首`}
         data-press-feedback="none"
+        data-control-inset
         className="row-span-2 self-center text-text-muted hover:text-text-primary sm:row-span-1"
       >
         <GripVertical size={16} />

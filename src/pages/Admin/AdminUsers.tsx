@@ -12,7 +12,7 @@ import {
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { CharacterCount } from '../../components/CharacterCount'
-import { Button, LoadErrorState, Switch } from '@/src/components/ui'
+import { Input, Textarea, Button, LoadErrorState, Switch } from '@/src/components/ui'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 import {
   apiDelete,
@@ -434,12 +434,9 @@ export const AdminUsers = () => {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">用户管理</h1>
-        <button
-          onClick={() => void fetchData()}
-          className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all"
-        >
+        <Button variant="secondary" type="button" onClick={() => void fetchData()}>
           <RefreshCw size={14} className="inline mr-1" /> 刷新
-        </button>
+        </Button>
       </div>
       {loadError && data.length > 0 && (
         <LoadErrorState
@@ -680,12 +677,12 @@ export const AdminUsers = () => {
                 max={PROFILE_DISPLAY_NAME_MAX_LENGTH}
               />
             </span>
-            <input
+            <Input
               type="text"
               value={editForm.displayName}
               onChange={(e) => updateEditForm('displayName', e.target.value)}
               maxLength={PROFILE_DISPLAY_NAME_MAX_LENGTH}
-              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="border-border bg-[var(--color-bg-antique)]"
             />
           </label>
 
@@ -693,11 +690,11 @@ export const AdminUsers = () => {
             <span className="text-sm font-medium text-text-secondary">
               邮箱 <span className="theme-text-error">*</span>
             </span>
-            <input
+            <Input
               type="email"
               value={editForm.email}
               onChange={(e) => updateEditForm('email', e.target.value)}
-              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="border-border bg-[var(--color-bg-antique)]"
             />
           </label>
 
@@ -723,12 +720,12 @@ export const AdminUsers = () => {
                 max={PROFILE_SIGNATURE_MAX_LENGTH}
               />
             </span>
-            <input
+            <Input
               type="text"
               value={editForm.signature}
               onChange={(e) => updateEditForm('signature', e.target.value)}
               maxLength={PROFILE_SIGNATURE_MAX_LENGTH}
-              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="border-border bg-[var(--color-bg-antique)]"
             />
           </label>
 
@@ -737,12 +734,12 @@ export const AdminUsers = () => {
               个人简介
               <CharacterCount current={editForm.bio.length} max={WIKI_MAX_CONTENT_SIZE} />
             </span>
-            <textarea
+            <Textarea
               value={editForm.bio}
               onChange={(e) => updateEditForm('bio', e.target.value)}
               maxLength={WIKI_MAX_CONTENT_SIZE}
               rows={6}
-              className="w-full resize-y rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="border-border bg-[var(--color-bg-antique)]"
             />
           </label>
 
@@ -751,27 +748,27 @@ export const AdminUsers = () => {
               新密码（可选）
               <CharacterCount current={editForm.newPassword.length} max={PASSWORD_MAX_LENGTH} />
             </span>
-            <input
+            <Input
               type="password"
               value={editForm.newPassword}
               onChange={(e) => updateEditForm('newPassword', e.target.value)}
               autoComplete="new-password"
               minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
-              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="border-border bg-[var(--color-bg-antique)]"
             />
           </label>
 
           <label className="space-y-2">
             <span className="text-sm font-medium text-text-secondary">确认新密码</span>
-            <input
+            <Input
               type="password"
               value={editForm.confirmPassword}
               onChange={(e) => updateEditForm('confirmPassword', e.target.value)}
               autoComplete="new-password"
               minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
-              className="w-full rounded border border-border bg-[var(--color-bg-antique)] px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-brand-gold"
+              className="border-border bg-[var(--color-bg-antique)]"
             />
           </label>
         </div>

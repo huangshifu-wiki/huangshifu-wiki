@@ -260,7 +260,6 @@ export const AdminDashboard = () => {
           ) : null}
           <Button
             variant="secondary"
-            size="sm"
             onClick={refresh}
             loading={refreshing}
             leftIcon={<RefreshCw size={14} />}

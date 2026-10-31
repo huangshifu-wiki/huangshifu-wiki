@@ -314,7 +314,7 @@ const EventDetail = () => {
                     variant="secondary"
                     size="md"
                     leftIcon={<Edit3 size={14} />}
-                    className="shrink-0 bg-transparent px-4 py-2 text-[0.875rem] transition-all duration-300"
+                    className="shrink-0"
                   >
                     编辑
                   </Button>

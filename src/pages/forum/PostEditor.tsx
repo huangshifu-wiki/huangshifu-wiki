@@ -12,7 +12,7 @@ import { useToast } from '../../components/Toast'
 import { splitTagsInput } from '../../lib/contentUtils'
 import { LocationTagInput } from '../../components/LocationTagInput'
 import { useContentEditorNavigation } from '../../hooks/useContentEditorNavigation'
-import { LoadErrorState, TagInput } from '@/src/components/ui'
+import { Button, LoadErrorState, TagInput } from '@/src/components/ui'
 import { useTagSuggestions } from '../../hooks/useTagSuggestions'
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
 import { hasFormChanges } from '../../utils/formDirty'
@@ -27,7 +27,6 @@ import {
   BookFormField,
   bookCompactInputClass,
   bookInputClass,
-  bookSecondaryButtonClass,
 } from '../../components/BookEditor'
 import type { PostItem, SectionItem } from '../../types/entities'
 const PostEditor = () => {
@@ -452,38 +451,35 @@ const PostEditor = () => {
             <BookEditorActions
               leading={
                 canManageEditablePost ? (
-                  <button
+                  <Button
+                    variant="secondary"
+                    className="mr-auto"
                     type="button"
                     onClick={() => setShowAdvancedOptions((value) => !value)}
                     aria-expanded={showAdvancedOptions}
                     aria-controls="post-advanced-options"
-                    className="mr-auto flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-brand-gold"
                   >
                     <ChevronDown
                       size={16}
                       className={`transition-transform ${showAdvancedOptions ? 'rotate-180' : ''}`}
                     />{' '}
                     {t('forum.advancedOptions')}
-                  </button>
+                  </Button>
                 ) : null
               }
             >
-              <button
+              <Button
+                variant="secondary"
                 type="button"
                 onClick={() => handleSubmit('draft')}
                 disabled={Boolean(savingMode)}
-                className={bookSecondaryButtonClass}
               >
                 <Save size={16} />{' '}
                 {savingMode === 'draft' ? t('forum.saving') : t('forum.saveDraft')}
-              </button>
-              <button
-                type="submit"
-                disabled={Boolean(savingMode)}
-                className="inline-flex items-center gap-2 rounded px-8 py-2.5 text-sm font-medium theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
-              >
+              </Button>
+              <Button variant="primary" type="submit" disabled={Boolean(savingMode)}>
                 <Send size={16} /> {submitButtonText}
-              </button>
+              </Button>
             </BookEditorActions>
           </form>
 
@@ -512,15 +508,16 @@ const PostEditor = () => {
                   />
                 </label>
               )}
-              <button
+              <Button
+                variant="danger"
+                className="mt-4"
                 type="button"
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="mt-4 inline-flex items-center gap-2 rounded border border-danger px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Trash2 size={16} />
                 {isDeleting ? t('forum.deletingPost') : t('forum.deletePost')}
-              </button>
+              </Button>
             </BookDangerZone>
           )}
         </BookEditorShell>

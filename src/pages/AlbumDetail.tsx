@@ -355,15 +355,14 @@ const AlbumDetail = () => {
               </div>
             )}
             <div className="mobile-action-row justify-start">
-              <button
+              <Button
                 type="button"
                 data-press-feedback="ripple"
                 onClick={() => handlePlay(0)}
                 disabled={playableTracks.length === 0}
-                className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Play size={16} /> {playableTracks.length > 0 ? '播放专辑' : '暂无音源'}
-              </button>
+              </Button>
               {isAdmin && (
                 <Button
                   type="button"
@@ -372,7 +371,6 @@ const AlbumDetail = () => {
                   variant="secondary"
                   size="md"
                   leftIcon={<Edit3 size={15} />}
-                  className="border-border bg-transparent px-5 py-2.5 text-[0.9375rem] hover:border-brand-gold"
                 >
                   编辑
                 </Button>
@@ -385,7 +383,6 @@ const AlbumDetail = () => {
                   variant="secondary"
                   size="md"
                   leftIcon={<List size={15} />}
-                  className="border-border bg-transparent px-5 py-2.5 text-[0.9375rem] hover:border-brand-gold"
                 >
                   管理
                 </Button>
@@ -411,11 +408,13 @@ const AlbumDetail = () => {
               {album.description}
             </div>
             {descNeedExpand && (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 type="button"
                 data-press-feedback="ripple"
                 onClick={() => setDescExpanded(!descExpanded)}
-                className="text-xs px-3 py-1.5 border border-border text-text-muted hover:text-brand-gold hover:border-brand-gold rounded transition-all duration-300 mt-3 inline-flex items-center gap-0.5"
+                className="mt-3"
               >
                 {descExpanded ? (
                   <>
@@ -426,7 +425,7 @@ const AlbumDetail = () => {
                     展开 <ChevronDown size={12} />
                   </>
                 )}
-              </button>
+              </Button>
             )}
           </div>
         ) : null}

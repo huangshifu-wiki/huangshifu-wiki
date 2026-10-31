@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { clsx } from 'clsx'
 import { apiGet } from '../lib/apiClient'
 import type { MentionTarget } from '../lib/mentions'
-import { Popover, PopoverAnchor, PopoverContent } from '@/src/components/ui'
+import { Popover, PopoverAnchor, PopoverContent, Textarea } from '@/src/components/ui'
 
 interface MentionTextareaProps {
   value: string
@@ -165,7 +165,7 @@ export default function MentionTextarea({
       }}
     >
       <PopoverAnchor asChild>
-        <textarea
+        <Textarea
           ref={inputRef}
           value={value}
           onChange={handleChange}

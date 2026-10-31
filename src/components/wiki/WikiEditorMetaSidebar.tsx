@@ -29,12 +29,11 @@ const WikiEditorMetaSidebar = React.memo(
     const advancedToggle = showAdvancedToggle ? (
       <Button
         type="button"
-        variant="ghost"
-        size="sm"
+        variant="secondary"
         onClick={onToggleAdvancedOptions}
         aria-expanded={showAdvancedOptions}
         aria-controls="wiki-advanced-options"
-        className="mr-auto text-text-muted"
+        className="mr-auto"
         leftIcon={
           <ChevronDown
             size={16}
@@ -60,7 +59,7 @@ const WikiEditorMetaSidebar = React.memo(
         <Button
           type="submit"
           disabled={Boolean(savingMode)}
-          className="px-8"
+
           leftIcon={<Send size={16} />}
         >
           {submitButtonText}
