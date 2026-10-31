@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import React, { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import {
   Clock,
@@ -42,10 +42,9 @@ import {
 } from '../lib/seo'
 import type { SeoMetadata } from '../lib/seo'
 import type { MusicExternalSource } from '../types/entities'
+import { routeLoaders } from '../lib/routePrefetch'
 
-const SongFormModal = lazy(() =>
-  import('../components/SongFormModal').then((module) => ({ default: module.SongFormModal }))
-)
+const SongFormModal = routeLoaders.SongForm.Component
 
 const SourceLink = ({ source }: { source: MusicExternalSource }) => {
   const label = `${source.platform} / ${source.sourceId}`
@@ -169,10 +168,13 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
 const MusicDetail = () => {
   const { songId } = useParams()
   const location = useLocation()
-  const [song, setSong] = useState<SongItem | null>(null)
+  const [songData, setSong] = useState<SongItem | null>(null)
+  const [loadedScope, setLoadedScope] = useState('')
   const [posts, setPosts] = useState<PostItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [postsLoading, setPostsLoading] = useState(true)
+  const [postsError, setPostsError] = useState<unknown | null>(null)
   const [descExpanded, setDescExpanded] = useState(false)
   const [lyricsExpanded, setLyricsExpanded] = useState(false)
   const [lyricsCopied, setLyricsCopied] = useState(false)
@@ -180,6 +182,14 @@ const MusicDetail = () => {
   const [editing, setEditing] = useState(false)
   const requestRef = useRef(0)
   const { user, isAdmin } = useAuth()
+  const scope = JSON.stringify([songId, user?.uid])
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
+  const song =
+    loadedScope === scope && (songData?.docId === songId || songData?.slug === songId)
+      ? songData
+      : null
+  const postsRequestRef = useRef(0)
   const { currentSong, currentTime, setCurrentSong, setIsPlaying, setPlaylist } = useMusic()
   const { show } = useToast()
   const { t } = useI18n()
@@ -194,9 +204,35 @@ const MusicDetail = () => {
     t,
   })
 
+  const fetchRelatedPosts = async (docId: string) => {
+    const request = ++postsRequestRef.current
+    const requestScope = scope
+    setPostsLoading(true)
+    setPostsError(null)
+    try {
+      const result = await apiGet<{ posts: PostItem[] }>(`/api/music/${docId}/posts`)
+      if (postsRequestRef.current === request && scopeRef.current === requestScope) {
+        setPosts(result.posts || [])
+      }
+    } catch (error) {
+      if (postsRequestRef.current === request && scopeRef.current === requestScope) {
+        setPostsError(error)
+      }
+    } finally {
+      if (postsRequestRef.current === request && scopeRef.current === requestScope) {
+        setPostsLoading(false)
+      }
+    }
+  }
+
   const fetchData = async () => {
     if (!songId) return
     const request = ++requestRef.current
+    const requestScope = scope
+    postsRequestRef.current += 1
+    setPosts([])
+    setPostsLoading(true)
+    setPostsError(null)
     setLoading(true)
     setLoadError(null)
     try {
@@ -204,29 +240,19 @@ const MusicDetail = () => {
         staleTime: 0,
         swr: false,
       })
-      if (requestRef.current !== request) return
-      const currentSong = detail.song || null
-      setSong(currentSong)
-      if (currentSong?.docId) {
-        try {
-          const postResult = await apiGet<{ posts: PostItem[] }>(
-            `/api/music/${currentSong.docId}/posts`
-          )
-          if (requestRef.current === request) setPosts(postResult.posts || [])
-        } catch (error) {
-          if (requestRef.current === request)
-            console.error('Fetch song related posts failed:', error)
-        }
-      } else {
-        setPosts([])
-      }
+      if (requestRef.current !== request || scopeRef.current !== requestScope) return
+      setSong(detail.song || null)
+      if (detail.song?.docId) void fetchRelatedPosts(detail.song.docId)
     } catch (error) {
-      if (requestRef.current === request) {
-        console.error('Fetch song detail failed:', error)
+      if (requestRef.current === request && scopeRef.current === requestScope) {
+        setSong(null)
         setLoadError(error)
       }
     } finally {
-      if (requestRef.current === request) setLoading(false)
+      if (requestRef.current === request && scopeRef.current === requestScope) {
+        setLoadedScope(requestScope)
+        setLoading(false)
+      }
     }
   }
 
@@ -234,6 +260,7 @@ const MusicDetail = () => {
     void fetchData()
     return () => {
       requestRef.current += 1
+      postsRequestRef.current += 1
     }
   }, [songId, user?.uid])
 
@@ -289,7 +316,7 @@ const MusicDetail = () => {
     }
   }
 
-  if (loading && !song) {
+  if ((loading || loadedScope !== scope) && !song) {
     return (
       <div className="mobile-page-shell antique-detail" role="status" aria-label="加载中">
         <div className="mobile-page-container">
@@ -437,6 +464,7 @@ const MusicDetail = () => {
                     <Button
                       type="button"
                       onClick={() => setEditing(true)}
+                      data-prefetch-module="SongForm"
                       variant="secondary"
                       size="sm"
                       leftIcon={<Edit3 size={14} />}
@@ -533,7 +561,17 @@ const MusicDetail = () => {
                 </Link>
               </div>
 
-              {posts.length > 0 ? (
+              {postsLoading ? (
+                <div role="status" aria-label="正在加载关联乐评" className="space-y-3">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : postsError ? (
+                <LoadErrorState
+                  error={postsError}
+                  onRetry={() => void fetchRelatedPosts(song.docId)}
+                />
+              ) : posts.length > 0 ? (
                 <div className="flex flex-col">
                   {posts.map((post) => (
                     <Link

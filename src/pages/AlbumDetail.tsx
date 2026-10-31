@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Disc3, Edit3, Play, Heart, List, ChevronDown, ChevronUp } from '@/src/components/icons'
 import { clsx } from 'clsx'
@@ -26,10 +26,10 @@ import type { SeoMetadata } from '../lib/seo'
 import { Button, LoadErrorState } from '@/src/components/ui'
 import type { MusicExternalSource } from '../types/entities'
 
-const AlbumFormModal = lazy(() =>
-  import('../components/AlbumFormModal').then((module) => ({ default: module.AlbumFormModal }))
-)
-const AlbumTrackEditor = lazy(() => import('../components/AlbumTrackEditor'))
+import { routeLoaders } from '../lib/routePrefetch'
+
+const AlbumFormModal = routeLoaders.AlbumForm.Component
+const AlbumTrackEditor = routeLoaders.AlbumTrackEditor.Component
 
 type SongItem = {
   docId: string
@@ -368,6 +368,7 @@ const AlbumDetail = () => {
                 <Button
                   type="button"
                   onClick={() => setEditing(true)}
+                  data-prefetch-module="AlbumForm"
                   variant="secondary"
                   size="md"
                   leftIcon={<Edit3 size={15} />}
@@ -380,6 +381,7 @@ const AlbumDetail = () => {
                 <Button
                   type="button"
                   onClick={() => setManagingTracks(true)}
+                  data-prefetch-module="AlbumTrackEditor"
                   variant="secondary"
                   size="md"
                   leftIcon={<List size={15} />}

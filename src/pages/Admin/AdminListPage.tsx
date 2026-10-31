@@ -45,7 +45,9 @@ import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
 import { hasFormChanges } from '../../utils/formDirty'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 
-const AdminEventEdit = React.lazy(() => import('./AdminEventEdit'))
+import { routeLoaders } from '../../lib/routePrefetch'
+
+const AdminEventEdit = routeLoaders.AdminEventEditor.Component
 
 type ListType =
   | 'wiki'
@@ -1030,6 +1032,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           <Button
             type="button"
             onClick={() => setEditingEventId(item.id)}
+            data-prefetch-module="AdminEventEditor"
             variant="warning"
             soft
             size="sm"

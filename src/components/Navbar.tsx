@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Menu, X } from '@/src/components/icons'
 import { logoutRequest } from '../lib/auth'
@@ -16,7 +16,9 @@ import styles from './Navbar.module.css'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
 import { Button, IconButton } from '@/src/components/ui'
 
-const AuthModal = lazy(() => import('./Navbar/AuthModal').then((m) => ({ default: m.AuthModal })))
+import { routeLoaders } from '../lib/routePrefetch'
+
+const AuthModal = routeLoaders.AuthModal.Component
 
 export const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)

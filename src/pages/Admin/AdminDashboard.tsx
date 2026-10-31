@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
@@ -27,7 +27,9 @@ import type {
   AdminDashboardVariantStats,
 } from '../../types/api'
 
-const TrendChart = lazy(() => import('@/src/components/charts/TrendChart'))
+import { routeLoaders } from '../../lib/routePrefetch'
+
+const TrendChart = routeLoaders.TrendChart.Component
 
 const STAT_ITEMS = [
   { key: 'wiki', label: '百科页面', icon: BookOpen, to: '/admin/wiki' },
