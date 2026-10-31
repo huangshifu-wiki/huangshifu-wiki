@@ -16,6 +16,7 @@ import type { WikiItem, WikiBranchItem, WikiRevisionItem, WikiPullRequestItem } 
 import { getBranchStatusText } from './types'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 import {
+  LinkButton,
   Button,
   Input,
   LoadErrorState,
@@ -399,20 +400,13 @@ const WikiBranchWorkspace = () => {
             className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-brand-gold transition-colors"
           />
           <div className="flex gap-2">
-            <Link
-              to={`/wiki/${slug}/prs`}
-              data-pressable
-              className="inline-flex items-center px-5 py-2 border border-border text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
-            >
+            <LinkButton variant="secondary" to={`/wiki/${slug}/prs`} data-pressable>
               查看 PR 列表
-            </Link>
+            </LinkButton>
             {isAdmin && (
-              <button
-                onClick={() => void handleRefresh()}
-                className="px-5 py-2 border border-border text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all"
-              >
+              <Button variant="secondary" type="button" onClick={() => void handleRefresh()}>
                 刷新
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -451,24 +445,26 @@ const WikiBranchWorkspace = () => {
               <span className="text-xs text-text-muted">
                 最近更新：{formatDate(branch.updatedAt, 'yyyy-MM-dd HH:mm')}
               </span>
-              <button
+              <Button
+                variant="secondary"
+                className="ml-auto"
                 type="button"
                 onClick={openEditor}
                 disabled={loading || !branchDetailReady}
-                className="ml-auto px-5 py-2 border border-border text-sm text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all disabled:cursor-not-allowed disabled:opacity-50"
               >
                 编辑分支
-              </button>
+              </Button>
             </div>
           ) : (
             <div className="mt-5">
-              <button
+              <Button
+                variant="primary"
+                type="button"
                 onClick={handleCreateBranch}
                 disabled={creatingBranch || isBanned || loading}
-                className="px-6 py-2 theme-button-primary text-sm rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {creatingBranch ? '创建中...' : '创建我的分支'}
-              </button>
+              </Button>
             </div>
           )}
           {openPr && (
@@ -596,7 +592,7 @@ const WikiBranchWorkspace = () => {
                     onChange={(nextTags) => setTags(nextTags.join(', '))}
                     suggestions={tagSuggestions}
                     placeholder="输入标签后按回车添加"
-                    className="theme-input w-full mt-1 px-4 py-3 rounded text-sm"
+                    className="theme-input mt-1"
                   />
                 </div>
               </div>

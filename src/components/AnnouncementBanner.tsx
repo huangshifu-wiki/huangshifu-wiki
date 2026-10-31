@@ -89,7 +89,7 @@ export default function AnnouncementBanner({
               variant="ghost"
               size="sm"
               onClick={onDismiss}
-              className="h-auto min-h-0 px-2 py-1 text-xs text-white hover:bg-black/10 hover:text-white"
+              className="text-white hover:bg-black/10 hover:text-white"
               aria-label="不再显示此公告"
             >
               不再显示

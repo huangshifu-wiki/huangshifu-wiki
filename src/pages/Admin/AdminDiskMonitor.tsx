@@ -13,7 +13,7 @@ import {
 import { apiGet, apiPut, apiPost } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
 import { SectionHeading } from '../../components/admin/AdminSection'
-import { LoadErrorState } from '@/src/components/ui'
+import { Input, Button, LoadErrorState } from '@/src/components/ui'
 
 interface DiskStatus {
   totalSpaceGB: number
@@ -296,20 +296,17 @@ export const AdminDiskMonitor: React.FC = () => {
           <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">磁盘监控</h1>
         </div>
         <div className="flex items-center gap-3">
-          <button
+          <Button
+            variant="secondary"
+            type="button"
             onClick={handleManualRefresh}
             disabled={loading || refreshing}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all disabled:opacity-50"
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> 刷新
-          </button>
-          <button
-            onClick={handleStartEdit}
-            disabled={!config}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
-          >
+          </Button>
+          <Button variant="secondary" type="button" onClick={handleStartEdit} disabled={!config}>
             <Settings size={16} /> 修改阈值
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -495,7 +492,7 @@ export const AdminDiskMonitor: React.FC = () => {
                 警告阈值 (GB)
               </label>
               <p className="text-xs text-text-muted mb-2">低于此值时输出警告日志</p>
-              <input
+              <Input
                 type="number"
                 min="1"
                 step="0.1"
@@ -506,7 +503,7 @@ export const AdminDiskMonitor: React.FC = () => {
                     warningThresholdGB: parseFloat(e.target.value),
                   })
                 }
-                className="w-full px-4 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+                className="border-border"
               />
             </div>
 
@@ -515,7 +512,7 @@ export const AdminDiskMonitor: React.FC = () => {
                 严重阈值 (GB)
               </label>
               <p className="text-xs text-text-muted mb-2">低于此值时拒绝上传</p>
-              <input
+              <Input
                 type="number"
                 min="1"
                 step="0.1"
@@ -526,7 +523,7 @@ export const AdminDiskMonitor: React.FC = () => {
                     criticalThresholdGB: parseFloat(e.target.value),
                   })
                 }
-                className="w-full px-4 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+                className="border-border"
               />
             </div>
 
@@ -535,7 +532,7 @@ export const AdminDiskMonitor: React.FC = () => {
                 检查间隔 (秒)
               </label>
               <p className="text-xs text-text-muted mb-2">两次自动检查的时间间隔</p>
-              <input
+              <Input
                 type="number"
                 min="60"
                 step="10"
@@ -546,7 +543,7 @@ export const AdminDiskMonitor: React.FC = () => {
                     checkIntervalMs: parseInt(e.target.value) * 1000,
                   })
                 }
-                className="w-full px-4 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+                className="border-border"
               />
             </div>
 
@@ -555,7 +552,7 @@ export const AdminDiskMonitor: React.FC = () => {
                 上传最小空间 (MB)
               </label>
               <p className="text-xs text-text-muted mb-2">上传前必须保留的最小空闲空间</p>
-              <input
+              <Input
                 type="number"
                 min="10"
                 step="10"
@@ -563,33 +560,26 @@ export const AdminDiskMonitor: React.FC = () => {
                 onChange={(e) =>
                   setEditingConfig({ ...editingConfig, uploadsMinFreeMB: parseInt(e.target.value) })
                 }
-                className="w-full px-4 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+                className="border-border"
               />
             </div>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-5 border-t border-border">
-            <button
+            <Button
+              variant="danger"
+              type="button"
               onClick={handleResetToDefaults}
               disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-border theme-status-error text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
             >
               <RotateCcw size={14} /> 重置默认
-            </button>
-            <button
-              onClick={handleCancelEdit}
-              disabled={saving}
-              className="px-4 py-2 rounded border border-border text-sm text-text-secondary hover:bg-surface-alt transition-all disabled:opacity-50"
-            >
+            </Button>
+            <Button variant="secondary" type="button" onClick={handleCancelEdit} disabled={saving}>
               取消
-            </button>
-            <button
-              onClick={handleSaveConfig}
-              disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
-            >
+            </Button>
+            <Button variant="primary" type="button" onClick={handleSaveConfig} disabled={saving}>
               <Save size={14} /> {saving ? '保存中...' : '保存配置'}
-            </button>
+            </Button>
           </div>
         </div>
       )}

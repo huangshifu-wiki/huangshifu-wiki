@@ -48,6 +48,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
             <span className="text-xs text-text-muted">热门:</span>
             {hotKeywords.slice(0, 6).map((tag) => (
               <Button
+                appearance="plain"
                 type="button"
                 variant="secondary"
                 size="sm"
@@ -66,7 +67,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
           size="sm"
           onClick={onToggleShowFilters}
           className={clsx(
-            'ml-auto flex items-center gap-2 rounded px-2 py-1 text-sm transition-colors',
+            'ml-auto rounded',
             showFilters ? 'text-brand-gold' : 'text-text-muted hover:text-brand-gold'
           )}
         >
@@ -91,6 +92,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                   <div className="flex flex-wrap gap-2">
                     {hotKeywords.map((tag) => (
                       <Button
+                        appearance="plain"
                         type="button"
                         size="sm"
                         variant={filters.selectedTags.includes(tag) ? 'primary' : 'secondary'}
@@ -119,7 +121,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                         dateRange: { ...filters.dateRange, start: e.target.value },
                       })
                     }
-                    className="theme-input w-full rounded px-3 py-2 text-xs"
+                    className="theme-input w-full rounded"
                   />
                   <Input
                     type="date"
@@ -129,7 +131,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                         dateRange: { ...filters.dateRange, end: e.target.value },
                       })
                     }
-                    className="theme-input w-full rounded px-3 py-2 text-xs"
+                    className="theme-input w-full rounded"
                   />
                 </div>
               </div>
@@ -144,6 +146,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                     ['all', 'wiki', 'posts', 'galleries', 'music', 'lyrics', 'albums'] as const
                   ).map((type) => (
                     <Button
+                      appearance="plain"
                       type="button"
                       size="sm"
                       variant={filters.contentType === type ? 'primary' : 'secondary'}
@@ -172,16 +175,10 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
             </div>
 
             <div className="mt-5 flex flex-wrap justify-end gap-3">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onResetFilters}
-                className="text-text-muted theme-icon-button-danger"
-              >
+              <Button type="button" variant="secondary" size="sm" onClick={onResetFilters}>
                 重置筛选
               </Button>
-              <Button type="button" size="sm" onClick={onApplyFilters} className="px-5">
+              <Button type="button" size="sm" onClick={onApplyFilters}>
                 应用筛选
               </Button>
             </div>

@@ -8,7 +8,7 @@ import {
   Link2,
   X,
 } from '@/src/components/icons'
-import { Checkbox } from '@/src/components/ui'
+import { Button, Checkbox } from '@/src/components/ui'
 import { clsx } from 'clsx'
 
 import { apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
@@ -22,8 +22,6 @@ import {
   BookFormField,
   bookCompactInputClass,
   bookPanelClass,
-  bookSecondaryButtonClass,
-  bookSmallButtonClass,
 } from './BookEditor'
 import type { Platform } from '../types/common'
 
@@ -400,14 +398,10 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
                       className={`${bookCompactInputClass} pl-9`}
                     />
                   </div>
-                  <button
-                    onClick={handleParse}
-                    disabled={parsing}
-                    className="inline-flex items-center justify-center gap-2 rounded px-5 py-2 text-sm font-medium theme-button-primary transition-all disabled:opacity-50"
-                  >
+                  <Button variant="primary" type="button" onClick={handleParse} disabled={parsing}>
                     {parsing ? <Loader2 size={14} className="animate-spin" /> : null}
                     {parsing ? '解析中' : '解析链接'}
-                  </button>
+                  </Button>
                 </div>
                 {error ? <p className="mt-2 text-sm theme-text-error">{error}</p> : null}
               </BookFormField>
@@ -441,14 +435,11 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
                         <p className="truncate text-sm text-text-secondary">{preview.artist}</p>
                       </div>
                     </div>
-                    <a
-                      href={preview.platformUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={bookSmallButtonClass}
-                    >
-                      查看原始页面
-                    </a>
+                    <Button asChild variant="secondary" size="sm">
+                      <a href={preview.platformUrl} target="_blank" rel="noopener noreferrer">
+                        查看原始页面
+                      </a>
+                    </Button>
                   </div>
 
                   {preview.description && (
@@ -520,12 +511,22 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
 
                   <div className="flex items-center gap-2">
                     <span className="text-text-muted">已勾选 {selectedCount} 首</span>
-                    <button onClick={handleSelectAllCurrentTab} className={bookSmallButtonClass}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      type="button"
+                      onClick={handleSelectAllCurrentTab}
+                    >
                       勾选本栏
-                    </button>
-                    <button onClick={handleSelectNoneCurrentTab} className={bookSmallButtonClass}>
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      type="button"
+                      onClick={handleSelectNoneCurrentTab}
+                    >
                       取消本栏
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -609,15 +610,16 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
                             </div>
 
                             {song.match && song.match.status !== 'new' && (
-                              <button
+                              <Button
+                                variant="secondary"
+                                size="sm"
                                 type="button"
                                 onClick={() => toggleDiffExpand(song.sourceId)}
-                                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-text-primary"
                                 aria-label={isExpanded ? '收起差异对比' : '展开差异对比'}
                               >
                                 <span>{isExpanded ? '收起对比' : '差异对比'}</span>
                                 {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                              </button>
+                              </Button>
                             )}
                           </div>
 
@@ -705,7 +707,9 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
 
                 {!importResult &&
                   (!confirmingImport ? (
-                    <button
+                    <Button
+                      variant="primary"
+                      type="button"
                       onClick={() => {
                         if (!selectedCount) {
                           setError('请至少选择一首歌曲')
@@ -714,10 +718,9 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
                         setConfirmingImport(true)
                         if (error) setError('')
                       }}
-                      className="rounded px-5 py-2 text-sm font-medium theme-button-primary transition-all"
                     >
                       下一步：确认导入
-                    </button>
+                    </Button>
                   ) : (
                     <div className="space-y-3 rounded border border-amber-500/30 bg-amber-500/10 p-4 text-text-primary">
                       <div className="flex items-start gap-2 text-sm">
@@ -742,20 +745,22 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <button
+                        <Button
+                          variant="primary"
+                          type="button"
                           onClick={handleFinalImport}
                           disabled={importing}
-                          className="inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium theme-button-primary transition-all disabled:opacity-50"
                         >
                           {importing ? <Loader2 size={14} className="animate-spin" /> : null}
                           {importing ? '导入中' : '最终确认导入'}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          type="button"
                           onClick={() => setConfirmingImport(false)}
-                          className={bookSecondaryButtonClass}
                         >
                           返回修改
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -765,9 +770,9 @@ export const MusicImportModal = ({ open, onClose, onImported }: MusicImportModal
         </div>
 
         <footer className="flex justify-end border-t border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-5 py-3 pb-safe md:px-6">
-          <button onClick={onClose} className={bookSecondaryButtonClass}>
+          <Button variant="secondary" onClick={onClose}>
             关闭
-          </button>
+          </Button>
         </footer>
       </div>
     </div>

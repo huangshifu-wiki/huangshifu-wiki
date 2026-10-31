@@ -38,13 +38,12 @@ export const ViewModeSelector: React.FC<ViewModeSelectorProps> = ({
             key={mode}
             type="button"
             variant="ghost"
-            size="sm"
+            size={size}
             onClick={() => onChange(mode)}
             aria-label={label}
             aria-pressed={value === mode}
             className={clsx(
-              'min-h-0 rounded-none border-0',
-              size === 'sm' ? 'p-1.5' : 'px-3 py-1.5',
+              'rounded-none border-0',
               value === mode
                 ? 'bg-brand-gold text-white'
                 : 'bg-[var(--book-panel-bg)] text-text-muted hover:bg-[var(--book-panel-hover)] hover:text-text-secondary'

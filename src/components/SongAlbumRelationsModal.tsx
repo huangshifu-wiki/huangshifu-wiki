@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from 'react'
 
 import { Loader2, Plus, Save, Trash2, X } from '@/src/components/icons'
-import { Button, Checkbox, Dialog, DialogContent, Input, Select } from '@/src/components/ui'
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  DialogContent,
+  IconButton,
+  Input,
+  Select,
+} from '@/src/components/ui'
 import { apiDelete, apiGet, apiPatch, apiPost, invalidateMusicApiCaches } from '../lib/apiClient'
 import type { AdminDataItem } from '../types/entities'
 import { useToast } from './Toast'
@@ -326,10 +334,9 @@ const RelationRow = ({
         label="展示"
       />
       <div className="flex gap-2">
-        <Button
+        <IconButton
           type="button"
           variant="secondary"
-          size="sm"
           onClick={() =>
             onUpdate({ discNumber: Number(disc), trackOrder: Number(order), isDisplay: display })
           }
@@ -337,17 +344,16 @@ const RelationRow = ({
           aria-label="保存关系"
         >
           <Save size={14} />
-        </Button>
-        <Button
+        </IconButton>
+        <IconButton
           type="button"
           variant="danger"
-          size="sm"
           onClick={onDelete}
           disabled={saving}
           aria-label="删除关系"
         >
           <Trash2 size={14} />
-        </Button>
+        </IconButton>
       </div>
     </div>
   )

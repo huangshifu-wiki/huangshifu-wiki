@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react'
+import { Button } from '@/src/components/ui'
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop'
 import { X, Upload, Loader2 } from '@/src/components/icons'
 
@@ -201,15 +202,16 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
                 </ReactCrop>
               </div>
               <p className="text-xs text-text-muted">拖动裁剪框调整头像区域</p>
-              <button
+              <Button
+                variant="secondary"
+                type="button"
                 onClick={() => {
                   setImageSrc('')
                   if (inputRef.current) inputRef.current.value = ''
                 }}
-                className="text-sm text-text-secondary hover:text-brand-gold underline"
               >
                 重新选择
-              </button>
+              </Button>
             </div>
           )}
           {error && (
@@ -220,20 +222,18 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
         </div>
 
         <footer className="px-5 py-3 border-t border-border bg-surface-alt/60 flex items-center justify-end gap-3">
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 rounded theme-button-secondary transition-all text-sm"
-          >
+          <Button variant="secondary" type="button" onClick={handleClose}>
             取消
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            type="button"
             onClick={handleConfirm}
             disabled={!imageSrc || !crop || uploading}
-            className="px-5 py-2 rounded theme-button-primary font-medium disabled:opacity-50 inline-flex items-center gap-2 text-sm transition-all"
           >
             {uploading ? <Loader2 size={14} className="animate-spin" /> : null}
             {uploading ? '上传中...' : '确认'}
-          </button>
+          </Button>
         </footer>
       </div>
     </div>

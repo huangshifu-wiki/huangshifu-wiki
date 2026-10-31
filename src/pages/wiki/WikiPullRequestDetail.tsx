@@ -228,7 +228,6 @@ const WikiPullRequestDetail = () => {
                 size="sm"
                 onClick={() => handleAdminAction('reject')}
                 disabled={saving}
-                className="font-bold"
               >
                 驳回
               </Button>
@@ -238,7 +237,6 @@ const WikiPullRequestDetail = () => {
                 size="sm"
                 onClick={() => handleAdminAction('merge')}
                 disabled={saving}
-                className="font-bold"
               >
                 合并
               </Button>
@@ -311,17 +309,12 @@ const WikiPullRequestDetail = () => {
                 onChange={(event) => setComment(event.target.value)}
                 onKeyDown={submitFormOnModifierEnter}
                 rows={3}
-                className="theme-input w-full mt-1 px-4 py-3 rounded text-sm"
+                className="theme-input w-full mt-1 rounded"
                 placeholder="写下你的评审意见..."
               />
               <p className="text-xs text-text-muted">按 Ctrl/Cmd + Enter 发布评论</p>
               <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  disabled={saving || !comment.trim()}
-                  size="sm"
-                  className="px-5"
-                >
+                <Button type="submit" disabled={saving || !comment.trim()}>
                   发表评论
                 </Button>
               </div>

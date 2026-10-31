@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import { MapPickerModal, type PickedLocation } from './MapPickerModal'
 import { apiGet, apiPost } from '../lib/apiClient'
 import { resolveLocationTagInputEnterSelectionIndex } from '../lib/locationTagInput'
-import { Popover, PopoverAnchor, PopoverContent } from '@/src/components/ui'
+import { Input, Popover, PopoverAnchor, PopoverContent } from '@/src/components/ui'
 
 interface RegionSuggestion {
   code: string
@@ -215,7 +215,7 @@ export const LocationTagInput = ({
               size={13}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
             />
-            <input
+            <Input
               ref={inputRef}
               type="text"
               autoComplete="off"
@@ -225,7 +225,7 @@ export const LocationTagInput = ({
               onFocus={handleFocus}
               placeholder="输入或选择地点..."
               className={clsx(
-                'w-full rounded py-2.5 pl-9 pr-9 text-base',
+                'pl-9 pr-9',
                 isBook
                   ? 'border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-brand-gold'
                   : 'theme-input'

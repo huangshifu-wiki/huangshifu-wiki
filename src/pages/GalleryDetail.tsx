@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
 import {
   Edit3,
   Heart,
@@ -11,7 +11,7 @@ import {
   Clock,
 } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { Checkbox, LoadErrorState, Skeleton } from '@/src/components/ui'
+import { LinkButton, Button, Checkbox, LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { SmartBackLink } from '../components/SmartBackLink'
 import { SmartImage } from '../components/SmartImage'
@@ -877,71 +877,59 @@ const GalleryDetail = () => {
             </div>
 
             <div className="mobile-action-row mt-1 justify-start sm:justify-end">
-              <button
+              <Button
+                variant={gallery.likedByMe ? 'danger' : 'secondary'}
+                aria-pressed={gallery.likedByMe}
                 type="button"
                 data-press-feedback="ripple"
                 onClick={toggleGalleryLike}
                 disabled={likingGallery}
-                className={clsx(
-                  'inline-flex items-center gap-2 rounded border px-4 py-2 text-[0.875rem] transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50',
-                  gallery.likedByMe
-                    ? 'border-[color-mix(in_srgb,var(--color-error)_22%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_6%,transparent)] text-[var(--color-error)]'
-                    : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
-                )}
                 title={gallery.likedByMe ? '取消点赞' : '点赞'}
               >
                 <Heart size={14} fill={gallery.likedByMe ? 'currentColor' : 'none'} />
                 {gallery.likesCount || 0}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant={gallery.dislikedByMe ? 'warning' : 'secondary'}
+                aria-pressed={gallery.dislikedByMe}
                 type="button"
                 data-press-feedback="ripple"
                 onClick={toggleGalleryDislike}
                 disabled={dislikingGallery}
-                className={clsx(
-                  'inline-flex items-center gap-2 rounded border px-4 py-2 text-[0.875rem] transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50',
-                  gallery.dislikedByMe
-                    ? 'border-[color-mix(in_srgb,var(--color-warning)_28%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_8%,transparent)] text-[var(--color-warning)]'
-                    : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
-                )}
                 title={gallery.dislikedByMe ? '取消点踩' : '点踩'}
               >
                 <ThumbsDown size={14} /> {gallery.dislikesCount || 0}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant={gallery.favoritedByMe ? 'primary' : 'secondary'}
+                aria-pressed={gallery.favoritedByMe}
                 type="button"
                 data-press-feedback="ripple"
                 onClick={toggleGalleryFavorite}
                 disabled={favoritingGallery}
-                className={clsx(
-                  'inline-flex items-center gap-2 rounded border px-4 py-2 text-[0.875rem] transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50',
-                  gallery.favoritedByMe
-                    ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
-                    : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
-                )}
                 title={gallery.favoritedByMe ? '取消收藏' : '收藏'}
               >
                 <Save size={14} /> {gallery.favoritedByMe ? '已收藏' : '收藏'}{' '}
                 {gallery.favoritesCount || 0}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
                 type="button"
                 data-press-feedback="ripple"
                 onClick={handleCopyLink}
-                className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
                 title="分享"
               >
                 <Share2 size={14} /> 分享
-              </button>
+              </Button>
               {canManage && (
-                <Link
+                <LinkButton
+                  variant="secondary"
                   to={`/gallery/${galleryPublicId}/edit`}
                   state={{ editorBackground: location }}
                   data-pressable
-                  className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
                 >
                   <Edit3 size={14} /> 编辑
-                </Link>
+                </LinkButton>
               )}
             </div>
           </div>
@@ -977,15 +965,16 @@ const GalleryDetail = () => {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <SectionHeading>{t('gallery.imageCount', { count: images.length })}</SectionHeading>
           {canSubmitReview && (
-            <button
+            <Button
+              variant="primary"
+              size="sm"
               type="button"
               data-press-feedback="ripple"
               onClick={() => void handleSubmitReview()}
               disabled={submittingReview}
-              className="rounded border border-[var(--book-ink-line)] px-4 py-2 text-xs text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submittingReview ? t('gallery.submitting') : t('gallery.submitReview')}
-            </button>
+            </Button>
           )}
         </div>
 
@@ -1063,14 +1052,14 @@ const GalleryDetail = () => {
                 {replyTo && (
                   <div className="mb-3 flex items-center justify-between gap-3 rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-2 text-xs text-text-muted">
                     <span>{t('gallery.replyTo', { name: getCommentAuthorName(replyTo) })}</span>
-                    <button
+                    <Button
+                      variant="secondary"
                       type="button"
                       data-press-feedback="ripple"
                       onClick={() => setReplyTo(null)}
-                      className="text-brand-gold transition-colors hover:text-text-primary"
                     >
                       {t('gallery.cancel')}
-                    </button>
+                    </Button>
                   </div>
                 )}
                 <div className="flex gap-3">
@@ -1091,7 +1080,7 @@ const GalleryDetail = () => {
                       maxLength={CONTENT_LIMITS.gallery.comment}
                       onKeyDown={submitFormOnModifierEnter}
                       placeholder={t('gallery.commentPlaceholder')}
-                      className="theme-input w-full resize-none rounded px-4 py-3 text-base"
+                      className="theme-input w-full resize-none rounded"
                       rows={3}
                     />
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -1100,14 +1089,14 @@ const GalleryDetail = () => {
                         current={newComment.length}
                         max={CONTENT_LIMITS.gallery.comment}
                       />
-                      <button
+                      <Button
+                        variant="primary"
                         type="submit"
                         data-press-feedback="ripple"
                         disabled={!newComment.trim() || submittingComment}
-                        className="min-h-10 rounded px-5 py-2 text-sm theme-button-primary transition-all disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {submittingComment ? t('gallery.sending') : t('gallery.send')}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, Disc3, Image as ImageIcon, Music, Pause, Play } from '@/src/components/icons'
 import { clsx } from 'clsx'
-import { IconButton, LoadErrorState } from '@/src/components/ui'
+import { IconButton, LinkButton, LoadErrorState } from '@/src/components/ui'
 import { SmartImage } from '../../components/SmartImage'
 import { CoverPlaceholder } from '../../components/CoverPlaceholder'
 import { SiteFooterContent } from '../../components/SiteFooter'
@@ -478,12 +478,21 @@ export const DefaultHome = () => {
           </h1>
           <p className="home-hero-subtitle">人生难得一知音</p>
           <div className="home-hero-actions">
-            <Link to="/gallery" className="home-btn home-btn-fill" data-pressable>
+            <LinkButton
+              to="/gallery"
+              appearance="action"
+              className="min-h-0 px-[2.2rem] py-[0.7rem] text-[0.85rem] leading-[1.7] tracking-[0.18em] font-normal"
+            >
               浏览图集
-            </Link>
-            <Link to="/music" className="home-btn home-btn-ghost" data-pressable>
+            </LinkButton>
+            <LinkButton
+              to="/music"
+              variant="secondary"
+              appearance="action"
+              className="min-h-0 px-[2.2rem] py-[0.7rem] text-[0.85rem] leading-[1.7] tracking-[0.18em] font-normal"
+            >
               探索音乐
-            </Link>
+            </LinkButton>
           </div>
         </div>
       </section>

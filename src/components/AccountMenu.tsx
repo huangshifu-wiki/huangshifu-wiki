@@ -231,7 +231,6 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
                       onOpenAuth('login')
                     }}
                     data-prefetch-module="AuthModal"
-                    className={styles.menuPrimaryAction}
                   >
                     登录
                   </Button>
@@ -246,7 +245,6 @@ export const AccountMenu = ({ onLogout, onOpenAuth, allowRegister = true }: Acco
                         onOpenAuth('register')
                       }}
                       data-prefetch-module="AuthModal"
-                      className={styles.menuSecondaryAction}
                     >
                       注册
                     </Button>

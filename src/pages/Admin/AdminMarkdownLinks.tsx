@@ -4,7 +4,7 @@ import { getErrorMessage } from '../../lib/errorHandler'
 import { useDialog } from '../../components/Dialog'
 import { useToast } from '../../components/Toast'
 import { clsx } from 'clsx'
-import { Checkbox } from '@/src/components/ui'
+import { Select, Input, Button, Checkbox } from '@/src/components/ui'
 import { SectionHeading } from '../../components/admin/AdminSection'
 
 interface LinkMapping {
@@ -210,13 +210,9 @@ export default function AdminMarkdownLinks() {
       {/* 链接分布扫描 */}
       <div className="space-y-4">
         <SectionHeading title="链接分布扫描" />
-        <button
-          onClick={handleScan}
-          disabled={scanning}
-          className="px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold disabled:opacity-50 transition-all"
-        >
+        <Button variant="primary" type="button" onClick={handleScan} disabled={scanning}>
           {scanning ? '扫描中...' : '开始扫描'}
-        </button>
+        </Button>
         {scanResult && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
@@ -247,27 +243,27 @@ export default function AdminMarkdownLinks() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1">源存储</label>
-            <select
+            <Select
               value={fromStorage}
               onChange={(e) => setFromStorage(e.target.value as any)}
-              className="w-full px-3 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+              className="border-border"
             >
               <option value="local">本地存储</option>
               <option value="s3">S3 存储</option>
               <option value="external">外部图床</option>
-            </select>
+            </Select>
           </div>
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1">目标存储</label>
-            <select
+            <Select
               value={toStorage}
               onChange={(e) => setToStorage(e.target.value as any)}
-              className="w-full px-3 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+              className="border-border"
             >
               <option value="local">本地存储</option>
               <option value="s3">S3 存储</option>
               <option value="external">外部图床</option>
-            </select>
+            </Select>
           </div>
           <div className="flex items-end">
             <Checkbox
@@ -282,11 +278,11 @@ export default function AdminMarkdownLinks() {
             <label className="block text-sm font-medium text-text-secondary mb-1">
               本地基础 URL
             </label>
-            <input
+            <Input
               type="text"
               value={storageConfig.localBaseUrl}
               onChange={(e) => setStorageConfig({ ...storageConfig, localBaseUrl: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+              className="border-border"
               placeholder="/uploads/"
             />
           </div>
@@ -294,11 +290,11 @@ export default function AdminMarkdownLinks() {
             <label className="block text-sm font-medium text-text-secondary mb-1">
               S3 基础 URL
             </label>
-            <input
+            <Input
               type="text"
               value={storageConfig.s3BaseUrl}
               onChange={(e) => setStorageConfig({ ...storageConfig, s3BaseUrl: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+              className="border-border"
               placeholder="https://s3.example.com/"
             />
           </div>
@@ -306,32 +302,34 @@ export default function AdminMarkdownLinks() {
             <label className="block text-sm font-medium text-text-secondary mb-1">
               外部图床基础 URL
             </label>
-            <input
+            <Input
               type="text"
               value={storageConfig.externalBaseUrl}
               onChange={(e) =>
                 setStorageConfig({ ...storageConfig, externalBaseUrl: e.target.value })
               }
-              className="w-full px-3 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+              className="border-border"
               placeholder="https://external.com/"
             />
           </div>
         </div>
         <div className="flex gap-2">
-          <button
+          <Button
+            variant="primary"
+            type="button"
             onClick={handleSwitchStorage}
             disabled={updating || fromStorage === toStorage}
-            className="px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold disabled:opacity-50 transition-all"
           >
             {updating ? '处理中...' : dryRun ? '预览切换' : '执行切换'}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="secondary"
+            type="button"
             onClick={handleSyncWithImageMap}
             disabled={updating}
-            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm font-medium disabled:opacity-50 transition-all"
           >
             同步 ImageMap
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -340,18 +338,18 @@ export default function AdminMarkdownLinks() {
         <SectionHeading title="自定义链接映射" />
         {mappings.map((mapping, index) => (
           <div key={index} className="flex gap-2 mb-2 items-start">
-            <input
+            <Input
               type="text"
               value={mapping.oldUrl}
               onChange={(e) => updateMapping(index, 'oldUrl', e.target.value)}
-              className="flex-1 px-3 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+              className="flex-1 border-border"
               placeholder="原始链接"
             />
-            <input
+            <Input
               type="text"
               value={mapping.newUrl}
               onChange={(e) => updateMapping(index, 'newUrl', e.target.value)}
-              className="flex-1 px-3 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+              className="flex-1 border-border"
               placeholder="新链接"
             />
             <div className="px-3 py-2">
@@ -361,36 +359,25 @@ export default function AdminMarkdownLinks() {
                 label={<span className="text-text-secondary">正则</span>}
               />
             </div>
-            <button
+            <Button
+              variant="danger"
               onClick={() => removeMapping(index)}
-              className="px-3 py-2 theme-icon-button-danger hover:bg-surface-alt rounded transition-all"
               disabled={mappings.length === 1}
             >
               删除
-            </button>
+            </Button>
           </div>
         ))}
-        <button
-          onClick={addMapping}
-          className="px-4 py-2 text-sm text-brand-gold border border-brand-gold/30 rounded hover:bg-brand-gold/10 transition-all"
-        >
+        <Button variant="primary" type="button" onClick={addMapping}>
           + 添加映射
-        </button>
+        </Button>
         <div className="flex gap-2">
-          <button
-            onClick={handlePreview}
-            disabled={previewing}
-            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm font-medium disabled:opacity-50 transition-all"
-          >
+          <Button variant="secondary" type="button" onClick={handlePreview} disabled={previewing}>
             {previewing ? '预览中...' : '预览效果'}
-          </button>
-          <button
-            onClick={handleUpdate}
-            disabled={updating}
-            className="px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold disabled:opacity-50 transition-all"
-          >
+          </Button>
+          <Button variant="primary" type="button" onClick={handleUpdate} disabled={updating}>
             {updating ? '更新中...' : dryRun ? '预览更新' : '执行更新'}
-          </button>
+          </Button>
         </div>
       </div>
 

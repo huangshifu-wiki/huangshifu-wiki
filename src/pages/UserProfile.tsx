@@ -11,7 +11,7 @@ import {
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
-import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
+import { LinkButton, LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import Pagination from '../components/Pagination'
 import { useToast } from '../components/Toast'
@@ -637,13 +637,14 @@ export default function UserProfile() {
             </div>
 
             {isSelf ? (
-              <Link
+              <LinkButton
+                variant="secondary"
+                className="shrink-0 self-start"
                 to="/settings/profile"
                 data-pressable
-                className="theme-button-secondary inline-flex shrink-0 items-center gap-1.5 self-start px-3 py-1.5 text-sm transition-all"
               >
                 <Settings size={14} /> 设置
-              </Link>
+              </LinkButton>
             ) : null}
           </div>
         </section>

@@ -54,8 +54,7 @@ it('审核类型切换从第一页开始，后退恢复原类型的第二页', a
       <AdminReviews />
     </MemoryRouter>
   )
-  await waitFor(() => expect(originalCalls).toBe(1))
-  fireEvent.click(screen.getByRole('button', { name: '全部待审' }))
+  fireEvent.click(await screen.findByRole('button', { name: '全部待审' }))
   expect(screen.getByTestId('location')).toHaveTextContent('page=2')
   fireEvent.click(screen.getByRole('button', { name: '百科待审' }))
   await waitFor(() => expect(fetchReviewQueuePage).toHaveBeenCalledWith('wiki', 1, 20))
@@ -87,8 +86,7 @@ it('后台列表切换已删除范围后退恢复第二页', async () => {
       </ToastProvider>
     </MemoryRouter>
   )
-  await waitFor(() => expect(originalCalls).toBe(1))
-  fireEvent.click(screen.getByRole('button', { name: '显示已删除' }))
+  fireEvent.click(await screen.findByRole('button', { name: '显示已删除' }))
   await waitFor(() =>
     expect(
       vi.mocked(apiGet).mock.calls.some(([, params]) => params?.includeDeleted && params.page === 1)

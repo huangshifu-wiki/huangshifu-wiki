@@ -61,7 +61,7 @@ export const AdminToolPage = ({ type: propType }: { type?: ToolType }) => {
           <div className="space-y-4">
             <p className="text-sm text-text-muted">输入文本内容进行敏感词检测</p>
             <Textarea
-              className="w-full p-4 bg-surface-alt border border-border rounded focus:outline-none focus:border-brand-gold text-base"
+              className="bg-surface-alt border-border"
               rows={8}
               placeholder="请输入要检测的文本内容..."
               value={sensitiveText}

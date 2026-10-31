@@ -13,7 +13,7 @@ import { isBackdropClick } from '../../utils/modal'
 import WikiMarkdown from './WikiMarkdown'
 import Pagination from '../../components/Pagination'
 import type { WikiRevisionItem, WikiRevisionListResponse } from './types'
-import { LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
+import { Button, LoadErrorState, Skeleton, Spinner } from '@/src/components/ui'
 import { SmartBackLink } from '../../components/SmartBackLink'
 
 const WikiHistory = () => {
@@ -173,20 +173,26 @@ const WikiHistory = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
+                        <Button
+                          variant="secondary"
+                          className="opacity-0 group-hover:opacity-100"
+                          size="sm"
+                          type="button"
                           onClick={() => handlePreviewRevision(rev)}
                           disabled={loadingRevision}
-                          className="rounded border border-brand-gold/20 bg-surface px-4 py-2 text-xs font-bold text-brand-gold opacity-0 transition-all hover:bg-brand-gold hover:text-white group-hover:opacity-100 disabled:opacity-50"
                         >
                           {loadingRevision ? '加载中...' : '预览内容'}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className="opacity-0 group-hover:opacity-100"
+                          size="sm"
+                          type="button"
                           onClick={() => handleRollback(rev)}
                           disabled={rollingBackId !== null}
-                          className="rounded border border-brand-gold/20 bg-surface px-4 py-2 text-xs font-bold text-brand-gold opacity-0 transition-all hover:bg-brand-gold hover:text-white group-hover:opacity-100 disabled:opacity-50"
                         >
                           {rollingBackId === rev.id ? '回滚中...' : '回滚到此版本'}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -241,22 +247,20 @@ const WikiHistory = () => {
                 <WikiMarkdown content={previewRevision.content} />
               </div>
               <div className="p-8 border-t border-border flex justify-end gap-4">
-                <button
-                  onClick={() => setSelectedRevision(null)}
-                  className="px-8 py-3 text-text-muted font-bold hover:text-brand-gold"
-                >
+                <Button variant="secondary" type="button" onClick={() => setSelectedRevision(null)}>
                   关闭
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
+                  type="button"
                   onClick={() => {
                     handleRollback(previewRevision)
                     setSelectedRevision(null)
                   }}
                   disabled={rollingBackId !== null}
-                  className="px-8 py-3 theme-button-primary rounded font-bold transition-all disabled:opacity-50"
                 >
                   回滚到此版本
-                </button>
+                </Button>
               </div>
             </div>
           </div>

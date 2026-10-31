@@ -94,12 +94,13 @@ const WikiPullRequestList = () => {
           <div className="flex gap-2">
             {(['open', 'merged', 'rejected'] as const).map((item) => (
               <Button
+                appearance="plain"
                 type="button"
                 size="sm"
                 variant={status === item ? 'primary' : 'secondary'}
                 key={item}
                 onClick={() => setStatus(item)}
-                className="font-bold"
+
                 aria-pressed={status === item}
               >
                 {getPrStatusText(item)}

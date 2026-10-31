@@ -413,6 +413,7 @@ export const Pagination: React.FC<PaginationProps> = ({
             </span>
           ) : (
             <Button
+              appearance="plain"
               type="button"
               size="sm"
               variant={item === page ? 'primary' : 'secondary'}

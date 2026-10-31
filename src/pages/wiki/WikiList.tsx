@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { Book, Plus } from '@/src/components/icons'
 import { useAuth } from '../../context/AuthContext'
 import { useUserPreferences } from '../../context/UserPreferencesContext'
@@ -9,7 +9,7 @@ import { apiGet } from '../../lib/apiClient'
 import WikiCard from '../../components/wiki/WikiCard'
 import { WikiFilters } from '../../components/wiki/WikiFilters'
 import Pagination from '../../components/Pagination'
-import { Spinner } from '@/src/components/ui'
+import { LinkButton, Spinner } from '@/src/components/ui'
 import { ListPageContentState, ListPageLoadingBoundary } from '../../components/ListPageState'
 import { IncrementalLoadFooter } from '../../components/IncrementalLoadFooter'
 import type { WikiItem } from './types'
@@ -151,14 +151,14 @@ const WikiList = () => {
               <div className="mobile-action-row">
                 {wikiState.isRefreshing && <Spinner size="sm" label="百科刷新中" />}
                 {user && !isBanned && (
-                  <Link
+                  <LinkButton
+                    variant="primary"
                     to="/wiki/new"
                     state={{ editorBackground: location }}
                     data-pressable
-                    className="flex items-center gap-2 rounded px-5 py-2 text-sm theme-button-primary transition-all"
                   >
                     <Plus size={15} aria-hidden="true" /> 创建页面
-                  </Link>
+                  </LinkButton>
                 )}
               </div>
             </div>
