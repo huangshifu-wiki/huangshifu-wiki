@@ -46,7 +46,7 @@ export default defineConfig({
           testTimeout: 30000,
           deps: {
             optimizer: {
-              web: {
+              client: {
                 include: ['react-dom', 'react-dom/server', 'react-dom/test-utils'],
               },
             },
@@ -69,7 +69,7 @@ export default defineConfig({
           testTimeout: 30000,
           deps: {
             optimizer: {
-              web: {
+              client: {
                 include: ['react-dom', 'react-dom/server', 'react-dom/test-utils'],
               },
             },

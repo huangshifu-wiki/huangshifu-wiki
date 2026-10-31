@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/huangshifu-wiki/huangshifu-wiki/actions/workflows/ci.yml/badge.svg)](https://github.com/huangshifu-wiki/huangshifu-wiki/actions/workflows/ci.yml)
 [![Security Scan](https://github.com/huangshifu-wiki/huangshifu-wiki/actions/workflows/security.yml/badge.svg)](https://github.com/huangshifu-wiki/huangshifu-wiki/actions/workflows/security.yml)
-![Node.js](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)
+![Node.js](https://img.shields.io/badge/node-22.12%2B%20%7C%2024.x%20%7C%2026%2B-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/typescript-5.8-3178c6?logo=typescript&logoColor=white)
 
 黄诗扶 Wiki 是一个面向内容整理与社区协作的全栈应用，提供 Wiki、帖子、图库、音乐资料、搜索、用户权限、后台管理和微信小程序入口。项目采用 React SPA + Express API 的单包结构，数据层使用 PostgreSQL + Prisma，图片与文本检索可接入 Qdrant。
@@ -35,7 +35,7 @@
 
 ### 环境要求
 
-- Node.js 22+
+- Node.js 22.12+（22.x）、24.x 或 26+
 - npm
 - PostgreSQL 16+
 

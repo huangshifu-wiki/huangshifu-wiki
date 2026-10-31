@@ -178,6 +178,7 @@ describe('MusicDetail 管理员编辑入口', () => {
     const view = renderDetail({ ...createSong([]), slug: '123' })
     const edit = await screen.findByRole('button', { name: '编辑' })
     await userEvent.setup().click(edit)
+    await act(() => vi.dynamicImportSettled())
     expect(await screen.findByRole('dialog', { name: '编辑歌曲' })).toBeInTheDocument()
     expect(screen.getByPlaceholderText('歌曲名称')).toHaveValue('测试歌曲')
     await userEvent.setup().click(screen.getByRole('button', { name: '取消' }))

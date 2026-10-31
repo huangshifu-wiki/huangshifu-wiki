@@ -36,7 +36,7 @@ chmod +x scripts/deploy.sh
 ## 1. 环境要求
 
 - Debian/Ubuntu Linux
-- Node.js 22+
+- Node.js 22.12+（22.x）、24.x 或 26+
 - npm 9+
 - PostgreSQL 18
 - Docker + Docker Compose（用于 Qdrant）
