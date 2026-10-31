@@ -146,7 +146,7 @@ describe('MusicDetail 异步加载', () => {
       if (path === '/api/music/1') return oldRequest as never
       if (path === '/api/music/2')
         return {
-          song: { ...createSong([]), docId: 'song-2', title: '新歌曲' },
+          song: { ...createSong([]), docId: 'song-2', slug: '2', title: '新歌曲' },
         } as never
       if (path === '/api/music/song-2/posts') return { posts: [] } as never
       throw new Error(`unexpected apiGet path: ${path}`)

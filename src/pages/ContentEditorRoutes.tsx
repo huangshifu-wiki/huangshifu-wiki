@@ -1,20 +1,15 @@
-import React, { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { FormModal } from '../components/Modal/FormModal'
 import { RouteGuard } from '../components/RouteGuard'
 import { useContentEditorNavigation } from '../hooks/useContentEditorNavigation'
 
-const WikiEditor = lazy(() => import('../components/wiki/WikiEditor'))
-const PostEditor = lazy(async () => {
-  const module = await import('./Forum')
-  return { default: module.PostEditor }
-})
-const GalleryEditor = lazy(() => import('./GalleryEdit'))
-const TicketEditor = lazy(async () => {
-  const module = await import('./Tickets')
-  return { default: module.TicketEditorPage }
-})
-const AdminEventEditor = lazy(() => import('./Admin/AdminEventEdit'))
+import { routeLoaders } from '../lib/routePrefetch'
+const WikiEditor = routeLoaders.WikiEditor.Component
+const PostEditor = routeLoaders.PostEditor.Component
+const GalleryEditor = routeLoaders.GalleryEditor.Component
+const TicketEditor = routeLoaders.TicketEditor.Component
+const AdminEventEditor = routeLoaders.AdminEventEditor.Component
 
 const EditorLoadingModal = () => {
   const { closeEditor } = useContentEditorNavigation()

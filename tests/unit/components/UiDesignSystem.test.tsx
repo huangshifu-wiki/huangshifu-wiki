@@ -1,13 +1,16 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { Save } from '@/src/components/icons'
 import {
   AlertDialog,
   AlertDialogTrigger,
   AlertDialogContent,
   AlertDialogCancel,
   Button,
+  LinkButton,
   LoadErrorState,
   Checkbox,
   Spinner,
@@ -21,6 +24,7 @@ import {
   Field,
   FullscreenSurface,
   Input,
+  IconButton,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -52,15 +56,92 @@ afterEach(() => {
 })
 
 describe('UI 设计系统', () => {
-  it('Button 在加载时禁用并暴露 busy 状态', () => {
-    render(
-      <Button loading loadingText="保存中">
-        保存
-      </Button>
+  it.each(
+    (['action', 'plain', 'icon'] as const).flatMap((appearance) =>
+      (['enabled', 'disabled', 'loading'] as const).map((status) => ({ appearance, status }))
     )
-    const button = screen.getByRole('button', { name: '保存中' })
-    expect(button).toBeDisabled()
-    expect(button).toHaveAttribute('aria-busy', 'true')
+  )('$appearance 按钮在 $status 时遵守表单提交状态', async ({ appearance, status }) => {
+    const user = userEvent.setup()
+    function FormExample() {
+      const [submitted, setSubmitted] = useState('')
+      return (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            setSubmitted(new FormData(event.currentTarget).get('title') as string)
+          }}
+        >
+          <Input name="title" aria-label="标题" />
+          {appearance === 'icon' ? (
+            <IconButton
+              type="submit"
+              aria-label="保存"
+              disabled={status === 'disabled'}
+              loading={status === 'loading'}
+            >
+              <Save aria-hidden="true" />
+            </IconButton>
+          ) : (
+            <Button
+              type="submit"
+              appearance={appearance}
+              disabled={status === 'disabled'}
+              loading={status === 'loading'}
+              loadingText="保存中"
+            >
+              保存
+            </Button>
+          )}
+          <output aria-label="提交结果">{submitted}</output>
+        </form>
+      )
+    }
+    render(<FormExample />)
+    await user.type(screen.getByRole('textbox', { name: '标题' }), '山鬼')
+    const button = screen.getByRole('button', {
+      name: status === 'loading' && appearance !== 'icon' ? '保存中' : '保存',
+    })
+    await user.click(button)
+    expect(screen.getByLabelText('提交结果').textContent).toBe(status === 'enabled' ? '山鬼' : '')
+    if (status === 'loading') expect(button).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it.each(['link', 'asChild'] as const)('%s 导航保留编辑弹窗背景路由', async (kind) => {
+    const user = userEvent.setup()
+    function UploadLink() {
+      const location = useLocation()
+      const state = { editorBackground: location }
+      return kind === 'link' ? (
+        <LinkButton to="/gallery/new" state={state}>
+          上传图集
+        </LinkButton>
+      ) : (
+        <Button asChild>
+          <Link to="/gallery/new" state={state}>
+            上传图集
+          </Link>
+        </Button>
+      )
+    }
+    function Destination() {
+      const location = useLocation()
+      return (
+        <output aria-label="背景路由">
+          {location.state.editorBackground.pathname}
+          {location.state.editorBackground.search}
+        </output>
+      )
+    }
+    render(
+      <MemoryRouter initialEntries={['/gallery?tag=live']}>
+        <Routes>
+          <Route path="/gallery" element={<UploadLink />} />
+          <Route path="/gallery/new" element={<Destination />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    await user.click(screen.getByRole('link', { name: '上传图集' }))
+    expect(screen.getByLabelText('背景路由')).toHaveTextContent('/gallery?tag=live')
   })
   it('Spinner 暴露可访问文案并支持尺寸', () => {
     render(
@@ -105,37 +186,6 @@ describe('UI 设计系统', () => {
     expect(onRetry).toHaveBeenCalledOnce()
   })
 
-  it('Button soft 变体使用浅色底与语义文字色', () => {
-    render(
-      <>
-        <Button variant="warning" soft>
-          强制释放
-        </Button>
-        <Button variant="info" soft>
-          备注
-        </Button>
-      </>
-    )
-    const warning = screen.getByRole('button', { name: '强制释放' })
-    const info = screen.getByRole('button', { name: '备注' })
-    expect(warning).toHaveClass('btn-warning-bg', 'text-warning', 'border-0', 'min-h-0')
-    expect(warning).not.toHaveClass('theme-button-warning')
-    expect(info).toHaveClass('btn-info-bg', 'text-info')
-  })
-
-  it('Button soft 在 primary 与 ghost 下等同原样式', () => {
-    render(
-      <>
-        <Button variant="primary" soft>
-          保存
-        </Button>
-        <Button variant="primary">保存</Button>
-      </>
-    )
-    const [softButton, plainButton] = screen.getAllByRole('button', { name: '保存' })
-    expect(softButton.className).toBe(plainButton.className)
-  })
-
   it('Field 自动关联 label、说明和错误', () => {
     render(
       <Field label="标题" description="公开显示" error="标题不能为空" required>
@@ -150,12 +200,11 @@ describe('UI 设计系统', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('标题不能为空')
   })
 
-  it('Select 显示下拉标记并保留原生选择行为', async () => {
+  it('Select 保留可访问名称与原生选择行为', async () => {
     const user = userEvent.setup()
-    const onChange = vi.fn()
     render(
       <Field label="分类">
-        <Select defaultValue="music" onChange={onChange}>
+        <Select defaultValue="music">
           <option value="music">音乐</option>
           <option value="event">事件</option>
         </Select>
@@ -163,12 +212,8 @@ describe('UI 设计系统', () => {
     )
 
     const select = screen.getByRole('combobox', { name: '分类' })
-    expect(select).toHaveClass('peer', 'appearance-none', 'pr-10')
-    expect(select.parentElement).toHaveClass('relative')
-    expect(select.parentElement?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
 
     await user.selectOptions(select, 'event')
-    expect(onChange).toHaveBeenCalledOnce()
     expect(select).toHaveValue('event')
   })
 
@@ -362,24 +407,35 @@ describe('UI 设计系统', () => {
     expect(control).toHaveAttribute('aria-checked', 'true')
   })
 
-  it('SegmentedControl 暴露选中状态并传递新值', async () => {
+  it('SegmentedControl 支持键盘切换受控状态', async () => {
     const user = userEvent.setup()
-    const onValueChange = vi.fn()
-    render(
-      <SegmentedControl
-        value="pagination"
-        options={[
-          { value: 'pagination', label: '分页模式' },
-          { value: 'incremental', label: '分段加载' },
-        ]}
-        onValueChange={onValueChange}
-        aria-label="加载方式"
-      />
-    )
-
+    function LoadModeExample() {
+      const [value, setValue] = useState('pagination')
+      return (
+        <>
+          <SegmentedControl
+            value={value}
+            options={[
+              { value: 'pagination', label: '分页模式' },
+              { value: 'incremental', label: '分段加载' },
+            ]}
+            onValueChange={setValue}
+            aria-label="加载方式"
+          />
+          <output aria-label="当前加载方式">{value}</output>
+        </>
+      )
+    }
+    render(<LoadModeExample />)
     expect(screen.getByRole('button', { name: '分页模式' })).toHaveAttribute('aria-pressed', 'true')
-    await user.click(screen.getByRole('button', { name: '分段加载' }))
-    expect(onValueChange).toHaveBeenCalledWith('incremental')
+    screen.getByRole('button', { name: '分段加载' }).focus()
+    await user.keyboard(' ')
+    expect(screen.getByRole('button', { name: '分页模式' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+    expect(screen.getByRole('button', { name: '分段加载' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('当前加载方式')).toHaveTextContent('incremental')
   })
 })
 

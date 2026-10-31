@@ -45,7 +45,9 @@ import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
 import { hasFormChanges } from '../../utils/formDirty'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 
-const AdminEventEdit = React.lazy(() => import('./AdminEventEdit'))
+import { routeLoaders } from '../../lib/routePrefetch'
+
+const AdminEventEdit = routeLoaders.AdminEventEditor.Component
 
 type ListType =
   | 'wiki'
@@ -1030,6 +1032,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           <Button
             type="button"
             onClick={() => setEditingEventId(item.id)}
+            data-prefetch-module="AdminEventEditor"
             variant="warning"
             soft
             size="sm"
@@ -1096,32 +1099,25 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
               </LinkButton>
             )}
             {type === 'events' && (
-              <Link
+              <LinkButton
+                variant="primary"
                 to="/admin/events/new"
                 state={{ editorBackground: location }}
-                data-pressable
-                className="inline-flex items-center rounded theme-button-primary px-4 py-2 text-sm transition-all"
               >
-                <Plus size={14} className="mr-1 inline" /> 新增活动
-              </Link>
+                <Plus size={14} /> 新增活动
+              </LinkButton>
             )}
-            <button
+            <Button
+              variant={showDeleted ? 'primary' : 'secondary'}
+              aria-pressed={showDeleted}
+              type="button"
               onClick={handleToggleDeleted}
-              className={clsx(
-                'rounded border px-4 py-2 text-sm transition-all',
-                showDeleted
-                  ? 'border-brand-gold text-brand-gold bg-brand-gold/10'
-                  : 'border-border text-text-secondary hover:border-brand-gold hover:text-brand-gold'
-              )}
             >
-              <Ban size={14} className="mr-1 inline" /> 显示已删除
-            </button>
-            <button
-              onClick={() => void fetchData()}
-              className="rounded border border-border px-4 py-2 text-sm text-text-secondary transition-all hover:border-brand-gold hover:text-brand-gold"
-            >
-              <RefreshCw size={14} className="mr-1 inline" /> 刷新
-            </button>
+              <Ban size={14} /> 显示已删除
+            </Button>
+            <Button variant="secondary" type="button" onClick={() => void fetchData()}>
+              <RefreshCw size={14} /> 刷新
+            </Button>
           </div>
         </div>
         {loadError && data.length > 0 && (

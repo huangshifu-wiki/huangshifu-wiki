@@ -22,7 +22,7 @@ import {
 } from '../lib/clientValidation'
 import { useToast } from './Toast'
 import { BookEditorSection, BookFormField, bookCompactInputClass } from './BookEditor'
-import { Button, TagInput } from '@/src/components/ui'
+import { Button, IconButton, TagInput } from '@/src/components/ui'
 import { FormModal } from './Modal/FormModal'
 
 interface AlbumFormData {
@@ -395,17 +395,17 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
                   className={bookCompactInputClass}
                 />
                 {sourceId ? (
-                  <a
-                    href={getPlatformExternalUrl(source.platform, sourceId) || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded p-2 text-text-muted hover:text-brand-gold"
-                    aria-label={`打开${platformLabel}`}
-                  >
-                    <ExternalLink size={15} />
-                  </a>
+                  <IconButton asChild variant="ghost" aria-label={`打开${platformLabel}`}>
+                    <a
+                      href={getPlatformExternalUrl(source.platform, sourceId) || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink size={15} />
+                    </a>
+                  </IconButton>
                 ) : (
-                  <span className="h-8 w-8" />
+                  <span className="h-9 w-9" />
                 )}
                 <div className="flex items-center gap-1">
                   <label className="flex items-center gap-1 text-xs text-text-muted">
@@ -417,14 +417,14 @@ export const AlbumFormModal = ({ open, mode, album, onClose, onSuccess }: AlbumF
                     />
                     主来源
                   </label>
-                  <Button
+                  <IconButton
                     type="button"
                     variant="ghost"
-                    size="sm"
                     onClick={() => removeSource(source.key)}
                     aria-label={`删除来源 ${index + 1}`}
-                    leftIcon={<Trash2 size={14} />}
-                  />
+                  >
+                    <Trash2 size={14} />
+                  </IconButton>
                 </div>
               </div>
             )

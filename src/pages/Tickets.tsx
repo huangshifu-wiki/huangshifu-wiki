@@ -65,6 +65,7 @@ import type {
   TicketListingType,
 } from '../types/entities'
 import {
+  LinkButton,
   Button,
   Field,
   Input,
@@ -218,14 +219,14 @@ function TicketListPage() {
               <div className="mobile-action-row">
                 {loading && <Spinner size="sm" label="盘票刷新中" />}
                 {user && !isBanned && (
-                  <Link
+                  <LinkButton
+                    variant="primary"
                     to="/tickets/new"
                     state={{ editorBackground: location }}
                     data-pressable
-                    className="theme-button-primary inline-flex items-center gap-2 rounded px-4 py-2 text-sm"
                   >
                     <Plus size={15} /> 发布盘票
-                  </Link>
+                  </LinkButton>
                 )}
               </div>
             </div>
@@ -235,6 +236,7 @@ function TicketListPage() {
             <div className="flex flex-wrap gap-2">
               {TICKET_TYPE_OPTIONS.map((option) => (
                 <Button
+                  appearance="plain"
                   key={option.value}
                   type="button"
                   size="sm"
@@ -451,15 +453,16 @@ function TicketDetailPage() {
         actions={
           canManage ? (
             <div className="flex flex-wrap gap-2">
-              <Button asChild variant="secondary" size="sm">
-                <Link to={`/tickets/${listing.slug}/edit`} state={{ editorBackground: location }}>
-                  <Edit3 size={14} /> 编辑
-                </Link>
-              </Button>
+              <LinkButton
+                variant="secondary"
+                to={`/tickets/${listing.slug}/edit`}
+                state={{ editorBackground: location }}
+              >
+                <Edit3 size={14} /> 编辑
+              </LinkButton>
               <Button
                 type="button"
                 variant="danger"
-                size="sm"
                 loading={deleting}
                 loadingText="删除中..."
                 onClick={handleDelete}

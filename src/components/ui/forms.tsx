@@ -45,7 +45,7 @@ export const Field = React.forwardRef<HTMLDivElement, FieldProps>(
 
     return (
       <FieldContext.Provider value={{ controlId, describedBy, invalid: Boolean(error), required }}>
-        <div ref={ref} className={cn('space-y-2', className)} {...props}>
+        <div ref={ref} className={cn('space-y-1.5', className)} {...props}>
           <label htmlFor={controlId} className="block text-sm font-medium text-text-primary">
             {label}
             {required && (
@@ -74,7 +74,7 @@ Field.displayName = 'Field'
 
 export const controlVariants = (className?: string) =>
   cn(
-    'w-full rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-brand-gold focus:shadow-[var(--book-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 read-only:bg-surface-alt',
+    'ui-control min-h-9 w-full rounded border border-[var(--book-ink-line)] bg-[var(--book-panel-bg)] px-3 py-1.5 text-base leading-5 sm:text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-brand-gold focus:shadow-[var(--book-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 read-only:bg-surface-alt',
     className
   )
 
@@ -121,7 +121,7 @@ export const Textarea = React.forwardRef<
   ) => (
     <textarea
       ref={ref}
-      className={controlVariants(cn('min-h-28 resize-y', className))}
+      className={controlVariants(cn('min-h-28 resize-y py-2 leading-6', className))}
       {...useFieldProps(id, describedBy, invalid, required)}
       {...props}
     />
@@ -223,6 +223,7 @@ export const SegmentedControl = React.forwardRef<HTMLDivElement, SegmentedContro
     >
       {options.map((option) => (
         <Button
+          appearance="plain"
           key={option.value}
           type="button"
           size="sm"

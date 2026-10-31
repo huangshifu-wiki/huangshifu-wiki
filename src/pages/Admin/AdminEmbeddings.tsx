@@ -13,7 +13,7 @@ import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { apiGet, apiPost } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
-import { LoadErrorState } from '@/src/components/ui'
+import { Input, Button, LoadErrorState } from '@/src/components/ui'
 import { useToast } from '../../components/Toast'
 import { ConfirmModal } from '../../components/Modal'
 
@@ -486,12 +486,9 @@ const AdminEmbeddings = () => {
         <h2 className="text-2xl font-bold text-text-primary tracking-[0.12em]">
           向量 Embeddings 管理
         </h2>
-        <button
-          onClick={fetchStatus}
-          className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all inline-flex items-center gap-1.5"
-        >
+        <Button variant="secondary" type="button" onClick={fetchStatus}>
           <RefreshCw size={14} /> 刷新
-        </button>
+        </Button>
       </div>
       {statusError && status && (
         <LoadErrorState
@@ -714,7 +711,12 @@ const AdminEmbeddings = () => {
                   { value: 'wiki', label: '百科' },
                   { value: 'post', label: '帖子' },
                 ].map((opt) => (
-                  <button
+                  <Button
+                    appearance="plain"
+                    size="sm"
+                    variant={selectedType === opt.value ? 'primary' : 'secondary'}
+                    aria-pressed={selectedType === opt.value}
+                    type="button"
                     key={opt.value}
                     onClick={() => {
                       const nextType = opt.value as typeof selectedType
@@ -724,44 +726,41 @@ const AdminEmbeddings = () => {
                       setSelectedType(nextType)
                     }}
                     disabled={!isImageTypeSelectable(opt.value as typeof selectedType)}
-                    className={clsx(
-                      'px-3 py-1.5 rounded text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed',
-                      selectedType === opt.value
-                        ? 'bg-brand-gold-dark text-white'
-                        : 'bg-surface-alt text-text-secondary hover:text-brand-gold'
-                    )}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
               <div className="flex items-center gap-2">
-                <input
+                <Input
                   type="number"
                   value={enqueueLimit}
                   onChange={(e) => {
                     const val = parseInt(e.target.value) || 1
                     setEnqueueLimit(Math.min(Math.max(1, val), 2000))
                   }}
-                  className="w-24 px-3 py-2 rounded border border-border text-sm focus:outline-none focus:border-brand-gold"
+                  className="w-24 border-border"
                   min={1}
                   max={2000}
                   disabled={imageEmbeddingsUnavailable}
                 />
-                <button
+                <Button
+                  variant="primary"
+                  type="button"
                   onClick={handleEnqueueMissing}
                   disabled={actionLoading !== null || imageEmbeddingsUnavailable}
-                  className="px-4 py-2 rounded bg-brand-gold-dark text-white text-sm font-medium hover:bg-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all"
                 >
                   {actionLoading === 'enqueue' ? (
                     <Loader2 size={14} className="animate-spin" />
                   ) : null}{' '}
                   补齐缺失
-                </button>
+                </Button>
               </div>
-              <button
+              <Button
+                variant="secondary"
+                type="button"
                 onClick={() =>
                   openConfirm(
                     'warning',
@@ -771,25 +770,22 @@ const AdminEmbeddings = () => {
                   )
                 }
                 disabled={actionLoading !== null || imageEmbeddingsUnavailable}
-                className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all"
               >
                 {actionLoading === 'sync' ? <Loader2 size={14} className="animate-spin" /> : null}{' '}
                 批量同步
-              </button>
-              <button
+              </Button>
+              <Button
+                variant={showErrors ? 'danger' : 'secondary'}
+                aria-pressed={showErrors}
+                type="button"
                 onClick={() => setShowErrors(!showErrors)}
                 disabled={actionLoading !== null || imageEmbeddingsUnavailable}
-                className={clsx(
-                  'px-4 py-2 rounded border text-sm font-medium inline-flex items-center gap-2 transition-all',
-                  showErrors
-                    ? 'border-border theme-status-error'
-                    : 'border-border text-text-secondary hover:bg-surface-alt',
-                  (actionLoading !== null || imageEmbeddingsUnavailable) && 'opacity-50'
-                )}
               >
                 <AlertTriangle size={14} /> 查看错误 ({imageFailedTotal})
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                type="button"
                 onClick={() =>
                   openConfirm(
                     'warning',
@@ -801,7 +797,6 @@ const AdminEmbeddings = () => {
                 disabled={
                   actionLoading !== null || imageFailedTotal === 0 || imageEmbeddingsUnavailable
                 }
-                className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all"
               >
                 {actionLoading === 'retry' ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -809,8 +804,10 @@ const AdminEmbeddings = () => {
                   <RefreshCw size={14} />
                 )}{' '}
                 重试失败
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
+                type="button"
                 onClick={() =>
                   openConfirm(
                     'danger',
@@ -820,7 +817,6 @@ const AdminEmbeddings = () => {
                   )
                 }
                 disabled={actionLoading !== null || imageEmbeddingsUnavailable}
-                className="px-4 py-2 rounded border border-border theme-status-error text-sm font-medium hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2 transition-all"
               >
                 {actionLoading === 'rebuild' ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -828,7 +824,7 @@ const AdminEmbeddings = () => {
                   <Trash2 size={14} />
                 )}{' '}
                 重建全部
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -843,47 +839,49 @@ const AdminEmbeddings = () => {
                   { value: 'music', label: '音乐' },
                   { value: 'album', label: '专辑' },
                 ].map((opt) => (
-                  <button
+                  <Button
+                    appearance="plain"
+                    size="sm"
+                    variant={textSourceType === opt.value ? 'primary' : 'secondary'}
+                    aria-pressed={textSourceType === opt.value}
+                    type="button"
                     key={opt.value}
                     onClick={() => setTextSourceType(opt.value as typeof textSourceType)}
-                    className={clsx(
-                      'px-3 py-1.5 rounded text-xs font-medium transition-all',
-                      textSourceType === opt.value
-                        ? 'bg-brand-gold-dark text-white'
-                        : 'bg-surface-alt text-text-secondary hover:text-brand-gold'
-                    )}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
               <div className="flex items-center gap-2">
-                <input
+                <Input
                   type="number"
                   value={textEnqueueLimit}
                   onChange={(e) => {
                     const val = parseInt(e.target.value) || 1
                     setTextEnqueueLimit(Math.min(Math.max(1, val), 2000))
                   }}
-                  className="w-24 px-3 py-2 rounded border border-border text-sm focus:outline-none focus:border-brand-gold"
+                  className="w-24 border-border"
                   min={1}
                   max={2000}
                   disabled={textEmbeddingsUnavailable}
                 />
-                <button
+                <Button
+                  variant="primary"
+                  type="button"
                   onClick={handleTextEnqueue}
                   disabled={textActionLoading !== null || textEmbeddingsUnavailable}
-                  className="px-4 py-2 rounded bg-brand-gold-dark text-white text-sm font-medium hover:bg-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all"
                 >
                   {textActionLoading === 'enqueue' ? (
                     <Loader2 size={14} className="animate-spin" />
                   ) : null}{' '}
                   补齐缺失
-                </button>
+                </Button>
               </div>
-              <button
+              <Button
+                variant="secondary"
+                type="button"
                 onClick={() =>
                   openConfirm(
                     'warning',
@@ -893,14 +891,15 @@ const AdminEmbeddings = () => {
                   )
                 }
                 disabled={textActionLoading !== null || textEmbeddingsUnavailable}
-                className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all"
               >
                 {textActionLoading === 'sync' ? (
                   <Loader2 size={14} className="animate-spin" />
                 ) : null}{' '}
                 批量同步
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                type="button"
                 onClick={() =>
                   openConfirm(
                     'warning',
@@ -912,7 +911,6 @@ const AdminEmbeddings = () => {
                 disabled={
                   textActionLoading !== null || textFailedTotal === 0 || textEmbeddingsUnavailable
                 }
-                className="px-4 py-2 rounded border border-border text-text-secondary text-sm font-medium hover:text-brand-gold hover:border-brand-gold disabled:opacity-50 inline-flex items-center gap-2 transition-all"
               >
                 {textActionLoading === 'retry' ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -920,8 +918,10 @@ const AdminEmbeddings = () => {
                   <RefreshCw size={14} />
                 )}{' '}
                 重试失败
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
+                type="button"
                 onClick={() =>
                   openConfirm(
                     'danger',
@@ -931,7 +931,6 @@ const AdminEmbeddings = () => {
                   )
                 }
                 disabled={textActionLoading !== null || textEmbeddingsUnavailable}
-                className="px-4 py-2 rounded border border-border theme-status-error text-sm font-medium hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2 transition-all"
               >
                 {textActionLoading === 'rebuild' ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -939,7 +938,7 @@ const AdminEmbeddings = () => {
                   <Trash2 size={14} />
                 )}{' '}
                 重建全部
-              </button>
+              </Button>
             </div>
           </div>
         </>

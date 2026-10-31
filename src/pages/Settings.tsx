@@ -1314,7 +1314,7 @@ const Settings = () => {
                             }))
                           }
                           maxLength={PROFILE_DISPLAY_NAME_MAX_LENGTH}
-                          className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                          className="theme-input w-full rounded"
                         />
                       </div>
 
@@ -1342,7 +1342,7 @@ const Settings = () => {
                           }
                           rows={2}
                           maxLength={PROFILE_SIGNATURE_MAX_LENGTH}
-                          className="theme-input w-full resize-none rounded px-4 py-3 text-sm"
+                          className="theme-input w-full resize-none rounded"
                         />
                       </div>
 
@@ -1579,7 +1579,7 @@ const Settings = () => {
                               }))
                             }
                             autoComplete="current-password"
-                            className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                            className="theme-input w-full rounded"
                           />
                         </label>
                         <label className="block">
@@ -1596,7 +1596,7 @@ const Settings = () => {
                               }))
                             }
                             autoComplete="email"
-                            className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                            className="theme-input w-full rounded"
                           />
                         </label>
                         <div className="flex justify-end gap-2">
@@ -1657,7 +1657,7 @@ const Settings = () => {
                               }))
                             }
                             autoComplete="current-password"
-                            className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                            className="theme-input w-full rounded"
                           />
                         </label>
                         <div className="block">
@@ -1686,7 +1686,7 @@ const Settings = () => {
                             autoComplete="new-password"
                             minLength={PASSWORD_MIN_LENGTH}
                             maxLength={PASSWORD_MAX_LENGTH}
-                            className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                            className="theme-input w-full rounded"
                           />
                         </div>
                         <div className="block">
@@ -1715,7 +1715,7 @@ const Settings = () => {
                             autoComplete="new-password"
                             minLength={PASSWORD_MIN_LENGTH}
                             maxLength={PASSWORD_MAX_LENGTH}
-                            className="theme-input w-full rounded px-4 py-2.5 text-sm"
+                            className="theme-input w-full rounded"
                           />
                         </div>
                         <div className="flex justify-end gap-2">

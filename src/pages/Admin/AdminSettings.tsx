@@ -1225,7 +1225,6 @@ const AdminSettings = () => {
                             const value = parsePositiveInteger(event.target.value)
                             if (value) setRateLimitField(bucket.id, 'windowMs', value * 1000)
                           }}
-                          className="py-2"
                         />
                       </Field>
 
@@ -1238,7 +1237,6 @@ const AdminSettings = () => {
                             const value = parsePositiveInteger(event.target.value)
                             if (value) setRateLimitField(bucket.id, 'max', value)
                           }}
-                          className="py-2"
                         />
                       </Field>
 
@@ -1249,7 +1247,6 @@ const AdminSettings = () => {
                           onChange={(event) =>
                             setRateLimitField(bucket.id, 'message', event.target.value)
                           }
-                          className="py-2"
                         />
                       </Field>
                     </div>
@@ -1552,7 +1549,6 @@ const AdminSettings = () => {
                                     event.target.value as RuntimeAdminConfig[typeof field.key]
                                   )
                                 }
-                                className="py-2"
                               >
                                 {field.options?.map((option) => (
                                   <option key={option} value={option}>
@@ -1574,7 +1570,6 @@ const AdminSettings = () => {
                                     )
                                   }
                                 }}
-                                className="py-2"
                               />
                             ) : (
                               <Input
@@ -1586,7 +1581,6 @@ const AdminSettings = () => {
                                     event.target.value as RuntimeAdminConfig[typeof field.key]
                                   )
                                 }
-                                className="py-2"
                               />
                             )}
                           </Field>
@@ -1641,7 +1635,6 @@ const AdminSettings = () => {
                           value={dirtyValue ?? ''}
                           onChange={(event) => setSecretsField(field.key, event.target.value)}
                           autoComplete="new-password"
-                          className="py-2"
                         />
                       </Field>
                     )
@@ -1651,8 +1644,7 @@ const AdminSettings = () => {
               {secretsConfig && !secretsConfig.disabled && (
                 <div className="flex items-center gap-3">
                   <Button
-                    variant="ghost"
-                    size="sm"
+                    variant="secondary"
                     disabled={!secretsDirty}
                     onClick={() => {
                       setSecretsForm({})

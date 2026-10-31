@@ -1,10 +1,12 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { apiGet } from '../lib/apiClient'
 import { dismissAnnouncement, isAnnouncementDismissed } from '../lib/announcementDismissal'
 import type { AnnouncementItem } from '../types/entities'
 import { ErrorBoundary } from './ErrorBoundary'
 
-const AnnouncementBanner = lazy(() => import('./AnnouncementBanner'))
+import { routeLoaders } from '../lib/routePrefetch'
+
+const AnnouncementBanner = routeLoaders.AnnouncementBanner.Component
 
 export const AnnouncementBar = () => {
   const [isVisible, setIsVisible] = useState(true)

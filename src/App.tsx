@@ -27,41 +27,43 @@ import { getSetupStatus, type SetupStatus } from './lib/setup'
 import { getRouteSkeletonVariant } from './lib/routeSkeleton'
 import { getContentBackgroundLocation } from './lib/contentEditorRoutes'
 import { ContentEditorRoutes } from './pages/ContentEditorRoutes'
+import { routeLoaders } from './lib/routePrefetch'
+import { observeRoutePrefetch } from './lib/observeRoutePrefetch'
 
-const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.default })))
-const Wiki = lazy(() => import('./pages/wiki').then((m) => ({ default: m.default })))
-const UserProfile = lazy(() => import('./pages/UserProfile').then((m) => ({ default: m.default })))
-const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.default })))
-const Forum = lazy(() => import('./pages/Forum').then((m) => ({ default: m.default })))
-const Music = lazy(() => import('./pages/Music').then((m) => ({ default: m.default })))
-const Gallery = lazy(() => import('./pages/Gallery').then((m) => ({ default: m.default })))
-const Events = lazy(() => import('./pages/Events').then((m) => ({ default: m.default })))
-const Tickets = lazy(() => import('./pages/Tickets').then((m) => ({ default: m.default })))
-const EventDetail = lazy(() => import('./pages/EventDetail').then((m) => ({ default: m.default })))
-const GalleryDetail = lazy(() =>
-  import('./pages/GalleryDetail').then((m) => ({ default: m.default }))
-)
-const AlbumDetail = lazy(() => import('./pages/AlbumDetail').then((m) => ({ default: m.default })))
-const MusicDetail = lazy(() => import('./pages/MusicDetail').then((m) => ({ default: m.default })))
-const Search = lazy(() => import('./pages/Search').then((m) => ({ default: m.default })))
-const Announcements = lazy(() =>
-  import('./pages/Announcements').then((m) => ({ default: m.default }))
-)
-const More = lazy(() => import('./pages/More').then((m) => ({ default: m.default })))
-const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.default })))
-const ForgotPassword = lazy(() =>
-  import('./pages/ForgotPassword').then((m) => ({ default: m.default }))
-)
-const ResetPassword = lazy(() =>
-  import('./pages/ResetPassword').then((m) => ({ default: m.default }))
-)
-const VerifyEmail = lazy(() => import('./pages/VerifyEmail').then((m) => ({ default: m.default })))
-const Setup = lazy(() => import('./pages/Setup').then((m) => ({ default: m.default })))
-const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.default })))
-const AdminRoutes = lazy(() =>
-  import('./pages/Admin/AdminRoutes').then((m) => ({ default: m.default }))
-)
+const Home = routeLoaders.Home.Component
+const Wiki = routeLoaders.Wiki.Component
+const UserProfile = routeLoaders.UserProfile.Component
+const Settings = routeLoaders.Settings.Component
+const Forum = routeLoaders.Forum.Component
+const Music = routeLoaders.Music.Component
+const Gallery = routeLoaders.Gallery.Component
+const Events = routeLoaders.Events.Component
+const Tickets = routeLoaders.Tickets.Component
+const EventDetail = routeLoaders.EventDetail.Component
+const GalleryDetail = routeLoaders.GalleryDetail.Component
+const AlbumDetail = routeLoaders.AlbumDetail.Component
+const MusicDetail = routeLoaders.MusicDetail.Component
+const Search = routeLoaders.Search.Component
+const Announcements = routeLoaders.Announcements.Component
+const More = routeLoaders.More.Component
+const Login = routeLoaders.Login.Component
+const ForgotPassword = routeLoaders.ForgotPassword.Component
+const ResetPassword = routeLoaders.ResetPassword.Component
+const VerifyEmail = routeLoaders.VerifyEmail.Component
+const Setup = routeLoaders.Setup.Component
+const NotFound = routeLoaders.NotFound.Component
+const AdminRoutes = routeLoaders.AdminRoutes.Component
 const UiShowcase = import.meta.env.DEV ? lazy(() => import('./pages/UiShowcase')) : null
+
+function RoutePreloader() {
+  const { pathname, search } = useLocation()
+  const { user, isAdmin, loading } = useAuth()
+  React.useEffect(() => {
+    if (loading) return
+    return observeRoutePrefetch(document.body, { authenticated: Boolean(user), admin: isAdmin })
+  }, [pathname, search, user?.uid, isAdmin, loading])
+  return null
+}
 
 const MainLayout = () => {
   const { currentSong } = useMusic()
@@ -127,6 +129,7 @@ const MainLayout = () => {
           <Routes key={backgroundRouteKey} location={viewLocation}>
             <Route path="/*" element={<AdminRoutes />} />
           </Routes>
+          <RoutePreloader />
         </Suspense>
         <ContentEditorRoutes />
       </>
@@ -201,6 +204,7 @@ const MainLayout = () => {
               />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <RoutePreloader />
           </Suspense>
           <ContentEditorRoutes />
         </ErrorBoundary>

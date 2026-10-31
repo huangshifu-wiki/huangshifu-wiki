@@ -1,13 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { X, Filter, Search, ChevronDown, ChevronUp } from '@/src/components/icons'
-import { Checkbox } from '@/src/components/ui'
+import { Button, Checkbox } from '@/src/components/ui'
 import { clsx } from 'clsx'
-import {
-  bookCompactInputClass,
-  bookPanelClass,
-  bookSecondaryButtonClass,
-} from '../../components/BookEditor'
+import { bookCompactInputClass, bookPanelClass } from '../../components/BookEditor'
 import { apiGet } from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
@@ -470,29 +466,27 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
       <div className="flex items-center justify-between gap-3">
         <label className="text-xs font-medium text-text-muted">相关页面</label>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-expanded={showFilters}
             type="button"
             data-press-feedback="ripple"
             onClick={() => setShowFilters(!showFilters)}
-            className={clsx(
-              'flex items-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium transition-all',
-              showFilters
-                ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
-                : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
-            )}
           >
             <Filter size={14} />
             筛选
             {showFilters ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             type="button"
             onClick={handleAddRelation}
             data-press-feedback="ripple"
-            className="rounded border border-[rgba(138,109,47,0.25)] px-4 py-1.5 text-xs font-medium text-brand-gold transition-all hover:border-brand-gold hover:bg-brand-gold hover:text-white"
           >
             + 添加关联
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -654,22 +648,24 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
             </div>
 
             <div className="mt-6 flex gap-3">
-              <button
+              <Button
+                variant="secondary"
+                className="flex-1"
                 type="button"
                 data-press-feedback="ripple"
                 onClick={handleCancelEdit}
-                className={`flex-1 ${bookSecondaryButtonClass}`}
               >
                 取消
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1"
                 type="button"
                 data-press-feedback="ripple"
                 onClick={handleSaveEdit}
-                className="flex-1 rounded px-4 py-2 text-sm font-medium theme-button-primary transition-all"
               >
                 保存
-              </button>
+              </Button>
             </div>
           </div>
         </div>

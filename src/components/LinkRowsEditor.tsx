@@ -62,7 +62,6 @@ export const LinkRowsEditor = ({
               <IconButton
                 type="button"
                 variant="secondary"
-                size="sm"
                 aria-label={`删除${title}`}
                 onClick={() => removeItem(index)}
               >

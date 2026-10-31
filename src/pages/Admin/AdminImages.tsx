@@ -42,7 +42,15 @@ import type {
   MediaHealthScanMode,
   MediaHealthScanResult,
 } from '../../types/api'
-import { Checkbox, LoadErrorState, Switch } from '@/src/components/ui'
+import {
+  Input,
+  Select,
+  Textarea,
+  Button,
+  Checkbox,
+  LoadErrorState,
+  Switch,
+} from '@/src/components/ui'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 
 interface ImageMap {
@@ -452,18 +460,12 @@ const AdminImages: React.FC = () => {
           <p className="text-sm text-text-muted mt-1">管理本地图片和外部图床映射</p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => fetchImages()}
-            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all inline-flex items-center gap-2"
-          >
+          <Button variant="secondary" type="button" onClick={() => fetchImages()}>
             <RefreshCw size={16} /> 刷新
-          </button>
-          <button
-            onClick={() => setShowPreferenceModal(true)}
-            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all inline-flex items-center gap-2"
-          >
+          </Button>
+          <Button variant="secondary" type="button" onClick={() => setShowPreferenceModal(true)}>
             <Settings size={16} /> 图片策略
-          </button>
+          </Button>
         </div>
       </div>
       {loadError && images.length > 0 && (
@@ -506,27 +508,28 @@ const AdminImages: React.FC = () => {
           </div>
           <div className="flex flex-wrap gap-2">
             {MEDIA_HEALTH_MODE_OPTIONS.map((option) => (
-              <button
+              <Button
+                appearance="plain"
+                size="sm"
+                variant={mediaHealthMode === option.value ? 'primary' : 'secondary'}
+                aria-pressed={mediaHealthMode === option.value}
+                type="button"
                 key={option.value}
                 onClick={() => {
                   const nextMode = option.value
                   setMediaHealthMode(nextMode)
                   if (mediaHealth) void handleScanMediaHealth(nextMode)
                 }}
-                className={clsx(
-                  'px-3 py-1.5 rounded text-xs font-medium transition-all',
-                  mediaHealthMode === option.value
-                    ? 'bg-brand-gold-dark text-white'
-                    : 'bg-surface-alt text-text-secondary hover:text-brand-gold'
-                )}
               >
                 {option.label}
-              </button>
+              </Button>
             ))}
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
+              type="button"
               onClick={() => handleScanMediaHealth()}
               disabled={mediaHealthLoading}
-              className="px-3 py-1.5 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-xs transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
             >
               {mediaHealthLoading ? (
                 <RefreshCw size={14} className="animate-spin" />
@@ -534,15 +537,17 @@ const AdminImages: React.FC = () => {
                 <Search size={14} />
               )}
               扫描
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              type="button"
               onClick={handleCleanupMediaHealth}
               disabled={mediaHealthCleaning || cleanupTargets.length === 0}
-              className="px-3 py-1.5 bg-brand-gold-dark text-white rounded text-xs font-medium hover:bg-brand-gold transition-all disabled:opacity-50 inline-flex items-center gap-1.5"
             >
               <Trash2 size={14} />
               软清理 {cleanupTargets.length || ''}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -641,24 +646,25 @@ const AdminImages: React.FC = () => {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-text-primary">图片列表</h3>
           <div className="flex gap-2">
-            <button
-              onClick={() => handleExport('csv')}
-              className="px-3 py-1.5 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-xs transition-all inline-flex items-center gap-1.5"
-            >
+            <Button variant="secondary" size="sm" type="button" onClick={() => handleExport('csv')}>
               <Download size={14} /> 导出 CSV
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              type="button"
               onClick={() => handleExport('json')}
-              className="px-3 py-1.5 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-xs transition-all inline-flex items-center gap-1.5"
             >
               <Download size={14} /> 导出 JSON
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              type="button"
               onClick={() => setShowImportModal(true)}
-              className="px-3 py-1.5 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-xs transition-all inline-flex items-center gap-1.5"
             >
               <Upload size={14} /> 导入
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -808,31 +814,31 @@ const AdminImages: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">ID</label>
-                <input
+                <Input
                   type="text"
                   value={editingImage.id}
                   disabled
-                  className="w-full px-4 py-2 bg-surface-alt border border-border rounded text-sm font-mono"
+                  className="bg-surface-alt border-border font-mono"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">MD5</label>
-                <input
+                <Input
                   type="text"
                   value={editingImage.md5}
                   disabled
-                  className="w-full px-4 py-2 bg-surface-alt border border-border rounded text-sm font-mono"
+                  className="bg-surface-alt border-border font-mono"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">
                   本地 URL
                 </label>
-                <input
+                <Input
                   type="text"
                   value={editingImage.localUrl}
                   onChange={(e) => setEditingImage({ ...editingImage, localUrl: e.target.value })}
-                  className="w-full px-4 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+                  className="border-border"
                   placeholder="https://..."
                 />
               </div>
@@ -841,11 +847,11 @@ const AdminImages: React.FC = () => {
                   S3 URL{' '}
                   {editingImage.s3Url && <span className="theme-text-success text-xs">已配置</span>}
                 </label>
-                <input
+                <Input
                   type="text"
                   value={editingImage.s3Url || ''}
                   onChange={(e) => setEditingImage({ ...editingImage, s3Url: e.target.value })}
-                  className="w-full px-4 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+                  className="border-border"
                   placeholder="https://cdn.yourdomain.com/..."
                 />
               </div>
@@ -856,13 +862,13 @@ const AdminImages: React.FC = () => {
                     <span className="theme-text-success text-xs">已配置</span>
                   )}
                 </label>
-                <input
+                <Input
                   type="text"
                   value={editingImage.externalUrl || ''}
                   onChange={(e) =>
                     setEditingImage({ ...editingImage, externalUrl: e.target.value })
                   }
-                  className="w-full px-4 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+                  className="border-border"
                   placeholder="https://..."
                 />
               </div>
@@ -870,32 +876,36 @@ const AdminImages: React.FC = () => {
                 <label className="block text-sm font-medium text-text-secondary mb-1">
                   存储类型
                 </label>
-                <select
+                <Select
                   value={editingImage.storageType || 'local'}
                   onChange={(e) =>
                     setEditingImage({ ...editingImage, storageType: e.target.value as any })
                   }
-                  className="w-full px-4 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+                  className="border-border"
                 >
                   <option value="local">本地服务器</option>
                   <option value="s3">S3 图床</option>
                   <option value="external">外部图床</option>
-                </select>
+                </Select>
               </div>
               <div className="flex gap-3 pt-2">
-                <button
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  type="button"
                   onClick={() => setEditingImage(null)}
-                  className="flex-1 px-4 py-2 bg-bg-tertiary text-text-secondary rounded font-medium hover:bg-surface-alt transition-all"
                 >
                   取消
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  type="button"
                   onClick={handleUpdate}
                   disabled={saving}
-                  className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
                 >
                   {saving ? '保存中...' : '保存修改'}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -936,17 +946,17 @@ const AdminImages: React.FC = () => {
                 <label className="block text-sm font-medium text-text-secondary mb-2">
                   优先使用
                 </label>
-                <select
+                <Select
                   value={preference.strategy}
                   onChange={(e) =>
                     setPreference({ ...preference, strategy: e.target.value as any })
                   }
-                  className="w-full px-4 py-2 border border-border rounded text-sm focus:outline-none focus:border-brand-gold"
+                  className="border-border"
                 >
                   <option value="local">本地服务器</option>
                   <option value="s3">S3 图床</option>
                   <option value="external">外部图床</option>
-                </select>
+                </Select>
                 <p className="text-xs text-text-muted mt-1">图片加载时会优先使用选定的 URL</p>
               </div>
               <div>
@@ -961,19 +971,23 @@ const AdminImages: React.FC = () => {
                 启用后，如果优先 URL 加载失败，会自动尝试其他可用 URL
               </p>
               <div className="flex gap-3 pt-2">
-                <button
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  type="button"
                   onClick={() => setShowPreferenceModal(false)}
-                  className="flex-1 px-4 py-2 bg-bg-tertiary text-text-secondary rounded font-medium hover:bg-surface-alt transition-all"
                 >
                   取消
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  type="button"
                   onClick={handlePreferenceUpdate}
                   disabled={savingPreference}
-                  className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
                 >
                   {savingPreference ? '保存中...' : '保存设置'}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1084,10 +1098,10 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) =
           <label className="block text-sm font-medium text-text-secondary mb-2">
             导入数据 (JSON 或 CSV)
           </label>
-          <textarea
+          <Textarea
             value={data}
             onChange={(e) => setData(e.target.value)}
-            className="flex-1 w-full px-4 py-2 border border-border rounded text-sm font-mono resize-none focus:outline-none focus:border-brand-gold"
+            className="flex-1 border-border font-mono resize-none"
             placeholder={
               mode === 'upsert'
                 ? '[\n  { "md5": "abc123", "localUrl": "https://...", "s3Url": "https://...", "externalUrl": "https://...", "storageType": "s3" }\n]'
@@ -1096,20 +1110,24 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) =
           />
         </div>
         <div className="flex gap-3">
-          <button
+          <Button
+            variant="secondary"
+            className="flex-1"
+            type="button"
             onClick={onClose}
-            className="flex-1 px-4 py-2 bg-bg-tertiary text-text-secondary rounded font-medium hover:bg-surface-alt transition-all"
             disabled={loading}
           >
             取消
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            className="flex-1"
+            type="button"
             onClick={handleImport}
-            className="flex-1 px-4 py-2 bg-brand-gold-dark text-white rounded font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
             disabled={loading}
           >
             {loading ? '导入中...' : '开始导入'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

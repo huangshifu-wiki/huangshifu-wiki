@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { LinkButton } from '@/src/components/ui'
 import { Seo } from '../components/Seo'
 import { normalizeCanonicalPath, SEO_SITE_NAME } from '../lib/seo'
 
@@ -34,20 +35,12 @@ const NotFound = ({ homePath = '/', homeLabel = '返回首页' }: NotFoundProps)
             {location.pathname}
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              to={homePath}
-              data-pressable
-              className="inline-flex items-center rounded bg-brand-gold px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-gold/90"
-            >
+            <LinkButton variant="primary" to={homePath} data-pressable>
               {homeLabel}
-            </Link>
-            <Link
-              to="/search"
-              data-pressable
-              className="inline-flex items-center rounded border border-border px-5 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:border-brand-gold hover:text-brand-gold"
-            >
+            </LinkButton>
+            <LinkButton variant="secondary" to="/search" data-pressable>
               去搜索
-            </Link>
+            </LinkButton>
           </div>
         </div>
       </section>

@@ -41,7 +41,7 @@ import RelationGraph from '../../components/wiki/RelationGraph'
 import type { RelationGraphData } from '../../components/wiki/RelationGraph'
 import { RELATION_TYPE_LABELS } from '../../components/wiki/types'
 import type { WikiItem, WikiRelationResolved, WikiRelationDisplayItem } from './types'
-import { LoadErrorState, Skeleton } from '@/src/components/ui'
+import { LinkButton, Button, LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useWikiCategories } from '../../hooks/useWikiCategories'
 
 const hasExpandableRelationGraph = (graph: RelationGraphData | null, currentSlug?: string) => {
@@ -308,32 +308,24 @@ const WikiPageView = () => {
             </div>
             <div className="mobile-action-row mt-1 justify-start sm:justify-end">
               {canEditPage && canEditPageCategory && (
-                <Link
+                <LinkButton
+                  variant="secondary"
                   to={`/wiki/${slug}/edit`}
                   state={{ editorBackground: location }}
                   data-pressable
-                  className="inline-flex items-center gap-2 rounded border border-[rgba(138,109,47,0.25)] px-5 py-2 text-[0.875rem] text-brand-gold transition-all duration-300 hover:border-brand-gold hover:bg-brand-gold hover:text-white hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]"
                 >
                   <Edit3 size={14} /> {t('wiki.edit')}
-                </Link>
+                </LinkButton>
               )}
               {canEditPage && canEditPageCategory && (
-                <Link
-                  to={`/wiki/${slug}/history`}
-                  data-pressable
-                  className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
-                >
+                <LinkButton variant="secondary" to={`/wiki/${slug}/history`} data-pressable>
                   <History size={14} /> {t('wiki.history')}
-                </Link>
+                </LinkButton>
               )}
               {user && !isBanned && canEditPageCategory && (
-                <Link
-                  to={`/wiki/${slug}/branches`}
-                  data-pressable
-                  className="inline-flex items-center gap-2 rounded border border-[var(--book-ink-line)] px-4 py-2 text-[0.875rem] text-text-secondary transition-all duration-300 hover:border-brand-gold/50 hover:text-brand-gold"
-                >
+                <LinkButton variant="secondary" to={`/wiki/${slug}/branches`} data-pressable>
                   <GitBranch size={14} /> {t('wiki.branch')}
-                </Link>
+                </LinkButton>
               )}
             </div>
           </div>
@@ -347,13 +339,15 @@ const WikiPageView = () => {
               {formatDate(page.updatedAt, 'yyyy-MM-dd HH:mm')}
             </span>
             {canSubmitReview && (
-              <button
+              <Button
+                variant="primary"
+                size="sm"
+                type="button"
                 onClick={handleSubmitReview}
                 disabled={submittingReview}
-                className="rounded border border-[var(--book-ink-line)] px-3 py-1 text-[0.8125rem] text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold disabled:opacity-50"
               >
                 {submitButtonText}
-              </button>
+              </Button>
             )}
             {page.status === 'rejected' && page.reviewNote ? (
               <span className="text-[0.8125rem] theme-text-error self-center mb-1">
@@ -439,86 +433,74 @@ const WikiPageView = () => {
           <aside className="mobile-detail-aside">
             <div className="py-5">
               <div className="flex flex-wrap gap-2">
-                <button
+                <Button
+                  variant={page.likedByMe ? 'danger' : 'secondary'}
+                  aria-pressed={page.likedByMe}
+                  className="flex-1"
+                  type="button"
                   onClick={toggleLike}
                   disabled={!user || liking}
-                  className={clsx(
-                    'flex-1 rounded border px-3 py-2 text-sm font-medium transition-all flex items-center justify-center gap-1.5',
-                    page.likedByMe
-                      ? 'border-[color-mix(in_srgb,var(--color-error)_22%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_6%,transparent)] text-[var(--color-error)]'
-                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
-                    (!user || liking) && 'opacity-50 cursor-not-allowed'
-                  )}
                   title={page.likedByMe ? t('wiki.unlike') : t('wiki.like')}
                 >
                   <Heart size={15} /> {page.likesCount || 0}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant={page.dislikedByMe ? 'warning' : 'secondary'}
+                  aria-pressed={page.dislikedByMe}
+                  className="flex-1"
+                  type="button"
                   onClick={toggleDislike}
                   disabled={!user || disliking}
-                  className={clsx(
-                    'flex-1 rounded border px-3 py-2 text-sm font-medium transition-all flex items-center justify-center gap-1.5',
-                    page.dislikedByMe
-                      ? 'border-[color-mix(in_srgb,var(--color-warning)_28%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_8%,transparent)] text-[var(--color-warning)]'
-                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
-                    (!user || disliking) && 'opacity-50 cursor-not-allowed'
-                  )}
                   title={page.dislikedByMe ? t('wiki.undislike') : t('wiki.dislike')}
                 >
                   <ThumbsDown size={15} /> {page.dislikesCount || 0}
-                </button>
+                </Button>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button
+                <Button
+                  variant={page.favoritedByMe ? 'primary' : 'secondary'}
+                  aria-pressed={page.favoritedByMe}
+                  className="flex-1"
+                  type="button"
                   onClick={toggleFavorite}
                   disabled={!user || favoriting}
-                  className={clsx(
-                    'flex-1 rounded border px-3 py-2 text-sm font-medium transition-all flex items-center justify-center gap-1.5',
-                    page.favoritedByMe
-                      ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
-                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
-                    (!user || favoriting) && 'opacity-50 cursor-not-allowed'
-                  )}
                   title={page.favoritedByMe ? t('wiki.unfavorite') : t('wiki.favoritePage')}
                 >
                   <Save size={15} /> {page.favoritedByMe ? t('wiki.favorited') : t('wiki.favorite')}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  type="button"
                   onClick={handleCopyPageLink}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded border border-[var(--book-ink-line)] px-3 py-2 text-sm font-medium text-text-secondary transition-all hover:border-brand-gold/50 hover:text-brand-gold"
                   title={t('wiki.share')}
                 >
                   <Share2 size={15} /> {t('wiki.share')}
-                </button>
+                </Button>
               </div>
               {isAdmin && (
-                <button
+                <Button
+                  variant={page.isPinned ? 'primary' : 'secondary'}
+                  aria-pressed={page.isPinned}
+                  className="mt-2 w-full"
+                  type="button"
                   onClick={togglePin}
                   disabled={pinning}
-                  className={clsx(
-                    'mt-2 flex w-full items-center justify-center gap-1.5 rounded border px-3 py-2 text-sm font-medium transition-all',
-                    page.isPinned
-                      ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
-                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold',
-                    pinning && 'opacity-50 cursor-not-allowed'
-                  )}
                 >
                   <Pin size={15} /> {page.isPinned ? t('wiki.pinned') : t('wiki.pin')}
-                </button>
+                </Button>
               )}
               {canShowRelationGraph && (
-                <button
+                <Button
+                  variant={showGraph ? 'primary' : 'secondary'}
+                  aria-pressed={showGraph}
+                  className="mt-2 w-full"
+                  type="button"
                   onClick={() => setShowGraph(!showGraph)}
-                  className={clsx(
-                    'mt-2 flex w-full items-center justify-center gap-1.5 rounded border px-3 py-2 text-sm font-medium transition-all',
-                    showGraph
-                      ? 'border-brand-gold/50 bg-[color-mix(in_srgb,var(--color-theme-accent)_10%,transparent)] text-brand-gold'
-                      : 'border-[var(--book-ink-line)] text-text-secondary hover:border-brand-gold/50 hover:text-brand-gold'
-                  )}
                 >
                   <Network size={15} />{' '}
                   {showGraph ? t('wiki.collapseGraph') : t('wiki.expandGraph')}
-                </button>
+                </Button>
               )}
             </div>
 

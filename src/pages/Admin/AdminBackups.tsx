@@ -12,12 +12,12 @@ import {
   XCircle,
 } from '@/src/components/icons'
 import { format } from 'date-fns'
-import { clsx } from 'clsx'
+
 import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'
 import { getApiErrorMessage, getErrorMessage } from '../../lib/errorHandler'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { validateMaxLength } from '../../lib/clientValidation'
-import { Button, LoadErrorState } from '@/src/components/ui'
+import { Input, Textarea, Button, LoadErrorState } from '@/src/components/ui'
 import { PageSkeleton } from '@/src/components/PageSkeleton'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
@@ -337,24 +337,15 @@ const AdminBackups = () => {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-text-primary tracking-[0.12em]">数据库备份</h2>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => fetchBackups()}
-            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all inline-flex items-center gap-1.5"
-          >
+          <Button variant="secondary" type="button" onClick={() => fetchBackups()}>
             <RefreshCw size={14} /> 刷新
-          </button>
-          <button
-            onClick={() => setDialog('restore')}
-            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all inline-flex items-center gap-1.5"
-          >
+          </Button>
+          <Button variant="secondary" type="button" onClick={() => setDialog('restore')}>
             <Upload size={14} /> 上传恢复
-          </button>
-          <button
-            onClick={() => setDialog('create')}
-            className="px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all inline-flex items-center gap-1.5"
-          >
+          </Button>
+          <Button variant="primary" type="button" onClick={() => setDialog('create')}>
             <Database size={14} /> 创建备份
-          </button>
+          </Button>
         </div>
       </div>
       {loadError && backups.length > 0 && (
@@ -381,13 +372,15 @@ const AdminBackups = () => {
               )}
             </div>
             {lastMediaReport && (
-              <button
+              <Button
+                variant="secondary"
+                className="shrink-0"
+                type="button"
                 onClick={() => handleDownloadMediaReport(lastMediaReport.filename)}
                 disabled={actionLoading !== null}
-                className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all inline-flex items-center gap-1.5 disabled:opacity-50 shrink-0"
               >
                 <Download size={14} /> 下载完整清单
-              </button>
+              </Button>
             )}
           </div>
 
@@ -591,13 +584,13 @@ const AdminBackups = () => {
                 <label className="block text-sm font-medium text-text-secondary mb-2">
                   备份备注（可选）
                 </label>
-                <textarea
+                <Textarea
                   aria-label="备份备注（可选）"
                   value={createNote}
                   onChange={(e) => setCreateNote(e.target.value)}
                   maxLength={CONTENT_LIMITS.admin.backupNote}
                   rows={4}
-                  className="w-full px-4 py-2.5 rounded border border-border text-sm focus:outline-none focus:border-brand-gold resize-y"
+                  className="border-border"
                 />
                 <p className="mt-1.5 text-xs text-text-muted text-right">
                   {createNote.length}/{CONTENT_LIMITS.admin.backupNote}
@@ -610,13 +603,13 @@ const AdminBackups = () => {
                 <label className="block text-sm font-medium text-text-secondary mb-2">
                   备份备注
                 </label>
-                <textarea
+                <Textarea
                   aria-label="备份备注"
                   value={editNote}
                   onChange={(e) => setEditNote(e.target.value)}
                   maxLength={CONTENT_LIMITS.admin.backupNote}
                   rows={5}
-                  className="w-full px-4 py-2.5 rounded border border-border text-sm focus:outline-none focus:border-brand-gold resize-y"
+                  className="border-border"
                 />
                 <p className="mt-1.5 text-xs text-text-muted text-right">
                   {editNote.length}/{CONTENT_LIMITS.admin.backupNote}
@@ -655,12 +648,12 @@ const AdminBackups = () => {
                 <label className="block text-sm font-medium text-text-secondary mb-2">
                   备份解密密码（可选）
                 </label>
-                <input
+                <Input
                   type="password"
                   value={restorePassword}
                   onChange={(e) => setRestorePassword(e.target.value)}
                   placeholder="服务器密钥不匹配或未配置时填写"
-                  className="w-full px-4 py-2.5 rounded border border-border text-sm focus:outline-none focus:border-brand-gold"
+                  className="border-border"
                   onKeyDown={(e) => {
                     if (actionLoading) return
                     if (e.key === 'Enter') {
@@ -676,13 +669,18 @@ const AdminBackups = () => {
             )}
 
             <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                onClick={closeDialog}
-                className="px-4 py-2 rounded border border-border text-sm text-text-secondary hover:bg-surface-alt transition-all"
-              >
+              <Button variant="secondary" type="button" onClick={closeDialog}>
                 取消
-              </button>
-              <button
+              </Button>
+              <Button
+                variant={
+                  visibleDialog === 'delete' ||
+                  visibleDialog === 'restore' ||
+                  visibleDialog === 'restore-existing'
+                    ? 'danger'
+                    : 'primary'
+                }
+                type="button"
                 onClick={() => {
                   if (visibleDialog === 'create') handleCreate()
                   else if (visibleDialog === 'restore') handleRestore()
@@ -691,14 +689,6 @@ const AdminBackups = () => {
                   else if (visibleDialog === 'note') handleUpdateNote()
                 }}
                 disabled={actionLoading !== null}
-                className={clsx(
-                  'px-4 py-2 rounded text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2',
-                  visibleDialog === 'delete' ||
-                    visibleDialog === 'restore' ||
-                    visibleDialog === 'restore-existing'
-                    ? 'theme-button-danger'
-                    : 'theme-button-primary'
-                )}
               >
                 {actionLoading && <Loader2 size={14} className="animate-spin" />}
                 {visibleDialog === 'create' && '创建备份'}
@@ -706,7 +696,7 @@ const AdminBackups = () => {
                 {visibleDialog === 'restore-existing' && '恢复数据库'}
                 {visibleDialog === 'delete' && '确认删除'}
                 {visibleDialog === 'note' && '保存备注'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -14,7 +14,7 @@ import {
 import { apiGet, apiPost } from '../../lib/apiClient'
 import { useDialog } from '../../components/Dialog'
 import { clsx } from 'clsx'
-import { LoadErrorState } from '@/src/components/ui'
+import { Button, LoadErrorState } from '@/src/components/ui'
 
 interface TypeVariantStats {
   total: number
@@ -217,13 +217,9 @@ export const AdminVariantManager: React.FC = () => {
           <Image size={24} className="text-brand-gold" />
           <h1 className="text-2xl font-bold text-text-primary tracking-[0.12em]">变体管理</h1>
         </div>
-        <button
-          onClick={() => fetchStats()}
-          disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded transition-all disabled:opacity-50"
-        >
+        <Button variant="secondary" type="button" onClick={() => fetchStats()} disabled={loading}>
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> 刷新
-        </button>
+        </Button>
       </div>
 
       {error && (
@@ -339,19 +335,18 @@ export const AdminVariantManager: React.FC = () => {
 
         <div className="flex flex-wrap gap-2 mb-4">
           {scopeOptions.map((opt) => (
-            <button
+            <Button
+              appearance="plain"
+              size="sm"
+              variant={rebuildScope === opt.value ? 'primary' : 'secondary'}
+              aria-pressed={rebuildScope === opt.value}
+              type="button"
               key={opt.value}
               disabled={rebuilding || coverRebuilding}
               onClick={() => setRebuildScope(opt.value)}
-              className={clsx(
-                'px-3 py-1.5 rounded text-xs font-medium transition-all',
-                rebuildScope === opt.value
-                  ? 'bg-brand-gold-dark text-white'
-                  : 'bg-surface-alt text-text-secondary hover:bg-bg-tertiary hover:text-brand-gold'
-              )}
             >
               {opt.label}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -359,14 +354,15 @@ export const AdminVariantManager: React.FC = () => {
           {scopeOptions.find((o) => o.value === rebuildScope)?.desc}
         </p>
 
-        <button
+        <Button
+          variant="primary"
+          type="button"
           onClick={() => handleRebuildVariants(rebuildScope)}
           disabled={rebuilding || coverRebuilding}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
         >
           {rebuilding ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
           {rebuilding ? '正在处理...' : `开始重建`}
-        </button>
+        </Button>
 
         {rebuildResult && (
           <div className="mt-4 p-3 rounded theme-status-success">
@@ -461,14 +457,15 @@ export const AdminVariantManager: React.FC = () => {
             ))}
           </div>
 
-          <button
+          <Button
+            variant="primary"
+            type="button"
             onClick={handleRebuildMusicCovers}
             disabled={coverRebuilding || rebuilding}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-gold-dark text-white rounded text-sm font-medium hover:bg-brand-gold transition-all disabled:opacity-50"
           >
             {coverRebuilding ? <Loader2 size={14} className="animate-spin" /> : <Music size={14} />}
             {coverRebuilding ? '正在处理...' : '补齐缺失封面'}
-          </button>
+          </Button>
 
           {coverRebuildResult && (
             <div className="mt-4 p-3 rounded theme-status-success">

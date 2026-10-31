@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Calendar, Edit3, MapPin, Tag } from '@/src/components/icons'
 import { useAuth } from '../context/AuthContext'
@@ -28,7 +28,9 @@ import type { EventDetailResponse } from '../types/api'
 import type { EventItem } from '../types/entities'
 import { Button, LoadErrorState } from '@/src/components/ui'
 
-const AdminEventEdit = lazy(() => import('./Admin/AdminEventEdit'))
+import { routeLoaders } from '../lib/routePrefetch'
+
+const AdminEventEdit = routeLoaders.AdminEventEditor.Component
 
 type EventPosterImage = {
   id: string
@@ -308,10 +310,11 @@ const EventDetail = () => {
                   <Button
                     type="button"
                     onClick={() => setEditing(true)}
+                    data-prefetch-module="AdminEventEditor"
                     variant="secondary"
                     size="md"
                     leftIcon={<Edit3 size={14} />}
-                    className="shrink-0 bg-transparent px-4 py-2 text-[0.875rem] transition-all duration-300"
+                    className="shrink-0"
                   >
                     编辑
                   </Button>

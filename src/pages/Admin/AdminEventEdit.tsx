@@ -16,8 +16,6 @@ import {
   BookEditorShell,
   bookCompactInputClass,
   bookPanelClass,
-  bookSecondaryButtonClass,
-  bookSmallButtonClass,
 } from '../../components/BookEditor'
 import { FormModal } from '../../components/Modal/FormModal'
 import { SmartImage } from '../../components/SmartImage'
@@ -57,7 +55,7 @@ import type {
   EventTimeSlot,
   EventTimeStatus,
 } from '../../types/entities'
-import { LoadErrorState, TagInput } from '@/src/components/ui'
+import { Button, IconButton, LoadErrorState, TagInput } from '@/src/components/ui'
 import { runInBatches } from '../../utils/asyncBatch'
 import { hasFormChanges } from '../../utils/formDirty'
 
@@ -1142,7 +1140,14 @@ const AdminEventEdit = ({ eventId, onClose, onSaved }: AdminEventEditProps) => {
                     onChange={(event) => updateTimeSlot(index, { end: event.target.value })}
                     className={bookCompactInputClass}
                   />
-                  <IconButton label="删除时间段" onClick={() => removeTimeSlot(index)} />
+                  <IconButton
+                    variant="secondary"
+                    aria-label="删除时间段"
+                    title="删除时间段"
+                    onClick={() => removeTimeSlot(index)}
+                  >
+                    <Trash2 size={14} />
+                  </IconButton>
                 </div>
               ))}
             </div>
@@ -1219,7 +1224,9 @@ const AdminEventEdit = ({ eventId, onClose, onSaved }: AdminEventEditProps) => {
                     className={bookCompactInputClass}
                   />
                   <IconButton
-                    label="删除起售时间"
+                    variant="secondary"
+                    aria-label="删除起售时间"
+                    title="删除起售时间"
                     onClick={() =>
                       patchDraft({
                         saleTimes: draft.saleTimes.filter(
@@ -1227,7 +1234,9 @@ const AdminEventEdit = ({ eventId, onClose, onSaved }: AdminEventEditProps) => {
                         ),
                       })
                     }
-                  />
+                  >
+                    <Trash2 size={14} />
+                  </IconButton>
                 </div>
               ))}
             </div>
@@ -1305,18 +1314,21 @@ const AdminEventEdit = ({ eventId, onClose, onSaved }: AdminEventEditProps) => {
               />
             )}
             <div className="flex gap-2">
-              <button
+              <Button
+                variant="secondary"
+                className="flex-1"
                 type="button"
                 onClick={() => coverInputRef.current?.click()}
                 disabled={saving || isCoverUploading}
-                className={`flex-1 ${bookSecondaryButtonClass}`}
               >
-                <Upload size={14} className="mr-1 inline" />
+                <Upload size={14} />
                 {isCoverUploading ? '上传中...' : '上传'}
-              </button>
+              </Button>
               {draft.coverUrl && (
-                <button
+                <IconButton
+                  variant="secondary"
                   type="button"
+                  aria-label="清除封面"
                   onClick={() => {
                     coverUploadControllerRef.current?.abort()
                     coverUploadControllerRef.current = null
@@ -1324,10 +1336,9 @@ const AdminEventEdit = ({ eventId, onClose, onSaved }: AdminEventEditProps) => {
                     setCoverUpload(null)
                     patchDraft({ coverAssetId: null, coverUrl: null })
                   }}
-                  className={bookSmallButtonClass}
                 >
                   <X size={14} />
-                </button>
+                </IconButton>
               )}
             </div>
             <input
@@ -1345,15 +1356,16 @@ const AdminEventEdit = ({ eventId, onClose, onSaved }: AdminEventEditProps) => {
                 <ImageIcon size={16} className="text-brand-gold" />
                 海报
               </h2>
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 type="button"
                 onClick={() => postersInputRef.current?.click()}
                 disabled={saving}
-                className={bookSmallButtonClass}
               >
-                <Upload size={13} className="mr-1 inline" />
+                <Upload size={13} />
                 上传
-              </button>
+              </Button>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {draft.posters.map((poster, index) => (
@@ -1452,28 +1464,11 @@ const AdminEventEdit = ({ eventId, onClose, onSaved }: AdminEventEditProps) => {
 
 const ListHeader = ({ title, onAdd }: { title: string; onAdd: () => void }) => (
   <div className="mb-4 flex justify-end">
-    <button
-      type="button"
-      onClick={onAdd}
-      aria-label={`添加${title}`}
-      className={bookSmallButtonClass}
-    >
-      <Plus size={13} className="mr-1 inline" />
+    <Button variant="secondary" size="sm" type="button" onClick={onAdd} aria-label={`添加${title}`}>
+      <Plus size={13} />
       添加
-    </button>
+    </Button>
   </div>
-)
-
-const IconButton = ({ label, onClick }: { label: string; onClick: () => void }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="rounded border border-[var(--book-ink-line)] px-3 py-2 text-text-muted transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
-    aria-label={label}
-    title={label}
-  >
-    <Trash2 size={14} />
-  </button>
 )
 
 const UploadProgressOverlay = ({
@@ -1565,21 +1560,17 @@ const JsonEditableSection = ({
         </span>
         {state.mode === 'json' ? (
           <div className="flex gap-2">
-            <button type="button" onClick={applyJson} className={bookSmallButtonClass}>
+            <Button variant="secondary" size="sm" type="button" onClick={applyJson}>
               应用 JSON
-            </button>
-            <button
-              type="button"
-              onClick={() => onCloseJson(field)}
-              className={bookSmallButtonClass}
-            >
+            </Button>
+            <Button variant="secondary" size="sm" type="button" onClick={() => onCloseJson(field)}>
               表单
-            </button>
+            </Button>
           </div>
         ) : (
-          <button type="button" onClick={openJson} className={bookSmallButtonClass}>
+          <Button variant="secondary" size="sm" type="button" onClick={openJson}>
             JSON
-          </button>
+          </Button>
         )}
       </div>
       {state.mode === 'json' ? (
@@ -1676,9 +1667,13 @@ const TicketPriceEditor = ({
               className={bookCompactInputClass}
             />
             <IconButton
-              label="删除票价"
+              variant="secondary"
+              aria-label="删除票价"
+              title="删除票价"
               onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
-            />
+            >
+              <Trash2 size={14} />
+            </IconButton>
           </div>
         ))}
       </div>
@@ -1818,9 +1813,13 @@ const StringListEditor = ({
                 )}
               />
               <IconButton
-                label={`删除${title}`}
+                variant="secondary"
+                aria-label={`删除${title}`}
+                title={`删除${title}`}
                 onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index))}
-              />
+              >
+                <Trash2 size={14} />
+              </IconButton>
             </div>
           )
         })}

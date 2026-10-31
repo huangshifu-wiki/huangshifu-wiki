@@ -35,7 +35,7 @@ export function IncrementalLoadFooter({
         <div className="flex flex-col items-center gap-2" role="alert">
           <span className="text-[0.8125rem] text-error">{error}</span>
           {onRetry && (
-            <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+            <Button type="button" variant="secondary" onClick={onRetry}>
               重新加载
             </Button>
           )}

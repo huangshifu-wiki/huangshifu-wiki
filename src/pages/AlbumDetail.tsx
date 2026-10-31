@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Disc3, Edit3, Play, Heart, List, ChevronDown, ChevronUp } from '@/src/components/icons'
 import { clsx } from 'clsx'
@@ -26,10 +26,10 @@ import type { SeoMetadata } from '../lib/seo'
 import { Button, LoadErrorState } from '@/src/components/ui'
 import type { MusicExternalSource } from '../types/entities'
 
-const AlbumFormModal = lazy(() =>
-  import('../components/AlbumFormModal').then((module) => ({ default: module.AlbumFormModal }))
-)
-const AlbumTrackEditor = lazy(() => import('../components/AlbumTrackEditor'))
+import { routeLoaders } from '../lib/routePrefetch'
+
+const AlbumFormModal = routeLoaders.AlbumForm.Component
+const AlbumTrackEditor = routeLoaders.AlbumTrackEditor.Component
 
 type SongItem = {
   docId: string
@@ -355,23 +355,22 @@ const AlbumDetail = () => {
               </div>
             )}
             <div className="mobile-action-row justify-start">
-              <button
+              <Button
                 type="button"
                 data-press-feedback="ripple"
                 onClick={() => handlePlay(0)}
                 disabled={playableTracks.length === 0}
-                className="inline-flex items-center gap-2 px-6 py-2 theme-button-primary rounded text-[0.9375rem] tracking-[0.08em] transition-all disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Play size={16} /> {playableTracks.length > 0 ? '播放专辑' : '暂无音源'}
-              </button>
+              </Button>
               {isAdmin && (
                 <Button
                   type="button"
                   onClick={() => setEditing(true)}
+                  data-prefetch-module="AlbumForm"
                   variant="secondary"
                   size="md"
                   leftIcon={<Edit3 size={15} />}
-                  className="border-border bg-transparent px-5 py-2.5 text-[0.9375rem] hover:border-brand-gold"
                 >
                   编辑
                 </Button>
@@ -380,10 +379,10 @@ const AlbumDetail = () => {
                 <Button
                   type="button"
                   onClick={() => setManagingTracks(true)}
+                  data-prefetch-module="AlbumTrackEditor"
                   variant="secondary"
                   size="md"
                   leftIcon={<List size={15} />}
-                  className="border-border bg-transparent px-5 py-2.5 text-[0.9375rem] hover:border-brand-gold"
                 >
                   管理
                 </Button>
@@ -409,11 +408,13 @@ const AlbumDetail = () => {
               {album.description}
             </div>
             {descNeedExpand && (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 type="button"
                 data-press-feedback="ripple"
                 onClick={() => setDescExpanded(!descExpanded)}
-                className="text-xs px-3 py-1.5 border border-border text-text-muted hover:text-brand-gold hover:border-brand-gold rounded transition-all duration-300 mt-3 inline-flex items-center gap-0.5"
+                className="mt-3"
               >
                 {descExpanded ? (
                   <>
@@ -424,7 +425,7 @@ const AlbumDetail = () => {
                     展开 <ChevronDown size={12} />
                   </>
                 )}
-              </button>
+              </Button>
             )}
           </div>
         ) : null}

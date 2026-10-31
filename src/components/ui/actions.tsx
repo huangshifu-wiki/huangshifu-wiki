@@ -8,6 +8,7 @@ export type ButtonVariant =
   'primary' | 'secondary' | 'ghost' | 'danger' | 'warning' | 'success' | 'info'
 
 export type ButtonSize = 'sm' | 'md' | 'lg'
+export type ButtonAppearance = 'action' | 'plain'
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'theme-button-primary border-transparent',
@@ -38,10 +39,11 @@ const SOFT_VARIANTS: ReadonlySet<ButtonVariant> = new Set([
   'info',
 ])
 
+// 外观和语义只改变视觉，不改变同一 size 的几何尺寸。
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'min-h-8 px-3 py-1.5 text-xs',
-  md: 'min-h-10 px-4 py-2 text-sm',
-  lg: 'min-h-12 px-5 py-3 text-base',
+  sm: 'min-h-8 px-2.5 py-[5px] text-xs leading-5',
+  md: 'min-h-9 px-3.5 py-[7px] text-sm leading-5',
+  lg: 'min-h-11 px-[18px] py-2.5 text-sm leading-5',
 }
 
 export const buttonVariants = ({
@@ -49,21 +51,36 @@ export const buttonVariants = ({
   size = 'md',
   fullWidth = false,
   soft = false,
+  appearance = variant === 'ghost' ? 'plain' : 'action',
   className,
 }: {
   variant?: ButtonVariant
   size?: ButtonSize
   fullWidth?: boolean
   soft?: boolean
+  appearance?: ButtonAppearance
   className?: string
 } = {}) =>
   cn(
-    'inline-flex select-none items-center justify-center gap-2 rounded border font-medium transition-all duration-200',
+    'ui-button inline-flex select-none items-center justify-center border transition-all',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
     'disabled:pointer-events-none disabled:opacity-50',
-    soft ? softVariantClasses[variant] : variantClasses[variant],
+    appearance === 'action'
+      ? 'ui-action gap-1.5 rounded-none font-normal tracking-[0.12em] duration-350'
+      : 'gap-2 rounded font-medium duration-200',
+    appearance === 'action' && variant === 'primary'
+      ? 'ui-action-fill'
+      : appearance === 'action' && !soft && variant === 'secondary'
+        ? 'ui-action-outline'
+        : soft
+          ? softVariantClasses[variant]
+          : variantClasses[variant],
     sizeClasses[size],
-    soft && SOFT_VARIANTS.has(variant) && 'gap-1.5 rounded-lg border-0 min-h-0',
+    soft &&
+      SOFT_VARIANTS.has(variant) &&
+      (appearance === 'action'
+        ? 'border-[color-mix(in_srgb,currentColor_20%,transparent)]'
+        : 'gap-1.5 rounded-lg'),
     fullWidth && 'w-full',
     className
   )
@@ -76,6 +93,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   loadingText?: React.ReactNode
   fullWidth?: boolean
   soft?: boolean
+  appearance?: ButtonAppearance
   leftIcon?: React.ReactNode
   rightIcon?: React.ReactNode
 }
@@ -90,6 +108,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       loadingText,
       fullWidth = false,
       soft = false,
+      appearance,
       leftIcon,
       rightIcon,
       className,
@@ -105,7 +124,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <Component
         ref={ref}
         type={asChild ? undefined : type}
-        className={buttonVariants({ variant, size, fullWidth, soft, className })}
+        className={buttonVariants({ variant, size, fullWidth, soft, appearance, className })}
         disabled={asChild ? undefined : disabled || loading}
         aria-disabled={disabled || loading || undefined}
         aria-busy={loading || undefined}
@@ -127,7 +146,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = 'Button'
 
 export type LinkButtonProps = LinkProps &
-  Pick<ButtonProps, 'variant' | 'size' | 'fullWidth' | 'soft' | 'leftIcon' | 'rightIcon'>
+  Pick<
+    ButtonProps,
+    'variant' | 'size' | 'fullWidth' | 'soft' | 'appearance' | 'leftIcon' | 'rightIcon'
+  >
 
 export const LinkButton = React.forwardRef<HTMLAnchorElement, LinkButtonProps>(
   (
@@ -136,6 +158,7 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, LinkButtonProps>(
       size = 'md',
       fullWidth = false,
       soft = false,
+      appearance,
       leftIcon,
       rightIcon,
       className,
@@ -146,7 +169,7 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, LinkButtonProps>(
   ) => (
     <Link
       ref={ref}
-      className={buttonVariants({ variant, size, fullWidth, soft, className })}
+      className={buttonVariants({ variant, size, fullWidth, soft, appearance, className })}
       data-pressable
       {...props}
     >
@@ -158,7 +181,10 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, LinkButtonProps>(
 )
 LinkButton.displayName = 'LinkButton'
 
-export interface IconButtonProps extends Omit<ButtonProps, 'leftIcon' | 'rightIcon'> {
+export interface IconButtonProps extends Omit<
+  ButtonProps,
+  'leftIcon' | 'rightIcon' | 'appearance'
+> {
   'aria-label': string
 }
 
@@ -169,11 +195,12 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
       size={size}
       className={cn(
         size === 'sm' && 'h-8 w-8 min-h-0 p-0',
-        size === 'md' && 'h-10 w-10 min-h-0 p-0',
-        size === 'lg' && 'h-12 w-12 min-h-0 p-0',
+        size === 'md' && 'h-9 w-9 min-h-0 p-0',
+        size === 'lg' && 'h-11 w-11 min-h-0 p-0',
         className
       )}
       {...props}
+      appearance="plain"
     >
       {children}
     </Button>

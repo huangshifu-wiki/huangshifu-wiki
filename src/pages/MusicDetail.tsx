@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import React, { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import {
   Clock,
@@ -15,7 +15,7 @@ import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
 import { apiGet } from '../lib/apiClient'
-import { Button, LoadErrorState, Skeleton } from '@/src/components/ui'
+import { Button, LinkButton, LoadErrorState, Skeleton } from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useMusic } from '../context/MusicContext'
 import { useToast } from '../components/Toast'
@@ -42,10 +42,9 @@ import {
 } from '../lib/seo'
 import type { SeoMetadata } from '../lib/seo'
 import type { MusicExternalSource } from '../types/entities'
+import { routeLoaders } from '../lib/routePrefetch'
 
-const SongFormModal = lazy(() =>
-  import('../components/SongFormModal').then((module) => ({ default: module.SongFormModal }))
-)
+const SongFormModal = routeLoaders.SongForm.Component
 
 const SourceLink = ({ source }: { source: MusicExternalSource }) => {
   const label = `${source.platform} / ${source.sourceId}`
@@ -169,10 +168,13 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
 const MusicDetail = () => {
   const { songId } = useParams()
   const location = useLocation()
-  const [song, setSong] = useState<SongItem | null>(null)
+  const [songData, setSong] = useState<SongItem | null>(null)
+  const [loadedScope, setLoadedScope] = useState('')
   const [posts, setPosts] = useState<PostItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
+  const [postsLoading, setPostsLoading] = useState(true)
+  const [postsError, setPostsError] = useState<unknown | null>(null)
   const [descExpanded, setDescExpanded] = useState(false)
   const [lyricsExpanded, setLyricsExpanded] = useState(false)
   const [lyricsCopied, setLyricsCopied] = useState(false)
@@ -180,6 +182,14 @@ const MusicDetail = () => {
   const [editing, setEditing] = useState(false)
   const requestRef = useRef(0)
   const { user, isAdmin } = useAuth()
+  const scope = JSON.stringify([songId, user?.uid])
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
+  const song =
+    loadedScope === scope && (songData?.docId === songId || songData?.slug === songId)
+      ? songData
+      : null
+  const postsRequestRef = useRef(0)
   const { currentSong, currentTime, setCurrentSong, setIsPlaying, setPlaylist } = useMusic()
   const { show } = useToast()
   const { t } = useI18n()
@@ -194,9 +204,35 @@ const MusicDetail = () => {
     t,
   })
 
+  const fetchRelatedPosts = async (docId: string) => {
+    const request = ++postsRequestRef.current
+    const requestScope = scope
+    setPostsLoading(true)
+    setPostsError(null)
+    try {
+      const result = await apiGet<{ posts: PostItem[] }>(`/api/music/${docId}/posts`)
+      if (postsRequestRef.current === request && scopeRef.current === requestScope) {
+        setPosts(result.posts || [])
+      }
+    } catch (error) {
+      if (postsRequestRef.current === request && scopeRef.current === requestScope) {
+        setPostsError(error)
+      }
+    } finally {
+      if (postsRequestRef.current === request && scopeRef.current === requestScope) {
+        setPostsLoading(false)
+      }
+    }
+  }
+
   const fetchData = async () => {
     if (!songId) return
     const request = ++requestRef.current
+    const requestScope = scope
+    postsRequestRef.current += 1
+    setPosts([])
+    setPostsLoading(true)
+    setPostsError(null)
     setLoading(true)
     setLoadError(null)
     try {
@@ -204,29 +240,19 @@ const MusicDetail = () => {
         staleTime: 0,
         swr: false,
       })
-      if (requestRef.current !== request) return
-      const currentSong = detail.song || null
-      setSong(currentSong)
-      if (currentSong?.docId) {
-        try {
-          const postResult = await apiGet<{ posts: PostItem[] }>(
-            `/api/music/${currentSong.docId}/posts`
-          )
-          if (requestRef.current === request) setPosts(postResult.posts || [])
-        } catch (error) {
-          if (requestRef.current === request)
-            console.error('Fetch song related posts failed:', error)
-        }
-      } else {
-        setPosts([])
-      }
+      if (requestRef.current !== request || scopeRef.current !== requestScope) return
+      setSong(detail.song || null)
+      if (detail.song?.docId) void fetchRelatedPosts(detail.song.docId)
     } catch (error) {
-      if (requestRef.current === request) {
-        console.error('Fetch song detail failed:', error)
+      if (requestRef.current === request && scopeRef.current === requestScope) {
+        setSong(null)
         setLoadError(error)
       }
     } finally {
-      if (requestRef.current === request) setLoading(false)
+      if (requestRef.current === request && scopeRef.current === requestScope) {
+        setLoadedScope(requestScope)
+        setLoading(false)
+      }
     }
   }
 
@@ -234,6 +260,7 @@ const MusicDetail = () => {
     void fetchData()
     return () => {
       requestRef.current += 1
+      postsRequestRef.current += 1
     }
   }, [songId, user?.uid])
 
@@ -289,7 +316,7 @@ const MusicDetail = () => {
     }
   }
 
-  if (loading && !song) {
+  if ((loading || loadedScope !== scope) && !song) {
     return (
       <div className="mobile-page-shell antique-detail" role="status" aria-label="加载中">
         <div className="mobile-page-container">
@@ -396,51 +423,33 @@ const MusicDetail = () => {
                   <span className="min-w-0 max-w-full text-wrap-anywhere">专辑：{song.album}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <button
+                  <Button
                     type="button"
                     data-press-feedback="ripple"
                     onClick={handlePlay}
                     disabled={!canPlay}
-                    className={clsx(
-                      'inline-flex items-center gap-2 px-5 py-2 rounded',
-                      'border border-[rgba(138,109,47,0.25)] text-brand-gold',
-                      'transition-all duration-300',
-                      canPlay
-                        ? 'bg-transparent hover:bg-brand-gold hover:text-white hover:border-brand-gold hover:shadow-[0_0_18px_rgba(138,109,47,0.15)]'
-                        : 'opacity-50 cursor-not-allowed'
-                    )}
                   >
                     <Play size={15} fill="currentColor" className="ml-0.5" />
-                    <span className="text-[0.875rem] tracking-[0.06em]">
-                      {canPlay ? '播放' : '暂无音源'}
-                    </span>
-                  </button>
-                  <button
+                    <span>{canPlay ? '播放' : '暂无音源'}</span>
+                  </Button>
+                  <Button
+                    variant={song.favoritedByMe ? 'danger' : 'secondary'}
+                    aria-pressed={song.favoritedByMe}
                     type="button"
                     data-press-feedback="ripple"
                     onClick={toggleFavorite}
                     disabled={favoriting}
-                    className={clsx(
-                      'inline-flex items-center gap-2 px-4 py-2 rounded border transition-all duration-300',
-                      song.favoritedByMe
-                        ? 'border-[color-mix(in_srgb,var(--color-error)_22%,transparent)] text-[var(--color-error)] bg-[color-mix(in_srgb,var(--color-error)_6%,transparent)]'
-                        : 'border-[var(--book-ink-line)] text-text-secondary hover:text-brand-gold hover:border-brand-gold/50',
-                      favoriting && 'opacity-50 cursor-not-allowed'
-                    )}
                   >
                     <Heart size={14} fill={song.favoritedByMe ? 'currentColor' : 'none'} />
-                    <span className="text-[0.875rem]">
-                      {song.favoritedByMe ? '已收藏' : '收藏'}
-                    </span>
-                  </button>
+                    <span>{song.favoritedByMe ? '已收藏' : '收藏'}</span>
+                  </Button>
                   {isAdmin && (
                     <Button
                       type="button"
                       onClick={() => setEditing(true)}
+                      data-prefetch-module="SongForm"
                       variant="secondary"
-                      size="sm"
                       leftIcon={<Edit3 size={14} />}
-                      className="min-h-0 bg-transparent px-4 py-2 text-[0.875rem] transition-all duration-300"
                     >
                       编辑
                     </Button>
@@ -455,22 +464,24 @@ const MusicDetail = () => {
                 <SectionHeading>歌词</SectionHeading>
                 {song?.lyric && (
                   <div className="flex items-center gap-2">
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       type="button"
                       data-press-feedback="ripple"
                       onClick={handleCopyLyrics}
-                      className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
                       {lyricsCopied ? '已复制' : '复制歌词'}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       type="button"
                       data-press-feedback="ripple"
                       onClick={() => setLyricsExpanded(!lyricsExpanded)}
-                      className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300"
                     >
                       {lyricsExpanded ? '收起' : '展开'}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -499,11 +510,13 @@ const MusicDetail = () => {
                 >
                   <MarkdownRenderer content={song.description || ''} />
                 </div>
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   type="button"
                   data-press-feedback="ripple"
                   onClick={() => setDescExpanded(!descExpanded)}
-                  className="text-xs px-3 py-1.5 rounded border border-[var(--book-ink-line)] text-text-muted hover:text-brand-gold hover:border-brand-gold/50 transition-all duration-300 mt-3 inline-flex items-center gap-1"
+                  className="mt-3"
                 >
                   {descExpanded ? (
                     <>
@@ -514,7 +527,7 @@ const MusicDetail = () => {
                       展开 <ChevronDown size={14} />
                     </>
                   )}
-                </button>
+                </Button>
               </div>
             )}
 
@@ -522,18 +535,27 @@ const MusicDetail = () => {
             <div className="mb-10">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <SectionHeading>关联乐评</SectionHeading>
-                <Link
+                <LinkButton
+                  size="sm"
                   to={`/forum/new?musicDocId=${encodeURIComponent(song.docId)}`}
                   state={{ editorBackground: location }}
-                  data-pressable
                   data-press-feedback="state"
-                  className="px-4 py-2 theme-button-primary rounded text-xs font-semibold transition-all"
                 >
                   发表乐评
-                </Link>
+                </LinkButton>
               </div>
 
-              {posts.length > 0 ? (
+              {postsLoading ? (
+                <div role="status" aria-label="正在加载关联乐评" className="space-y-3">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : postsError ? (
+                <LoadErrorState
+                  error={postsError}
+                  onRetry={() => void fetchRelatedPosts(song.docId)}
+                />
+              ) : posts.length > 0 ? (
                 <div className="flex flex-col">
                   {posts.map((post) => (
                     <Link

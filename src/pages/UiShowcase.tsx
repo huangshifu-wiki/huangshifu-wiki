@@ -17,6 +17,7 @@ import {
   FullscreenSurface,
   IconButton,
   Input,
+  LinkButton,
   Panel,
   LoadErrorState,
   Popover,
@@ -96,6 +97,11 @@ const UiShowcase = () => {
         </header>
 
         <ShowcaseSection title="操作">
+          <div className="flex flex-wrap items-center gap-3">
+            <LinkButton to="/gallery">浏览图集</LinkButton>
+            <LinkButton to="/gallery/new">上传图集</LinkButton>
+            <LinkButton to="/forum/new">发表乐评</LinkButton>
+          </div>
           <div className="flex flex-wrap gap-3">
             {variants.map((variant) => (
               <Button key={variant} variant={variant}>
@@ -118,7 +124,7 @@ const UiShowcase = () => {
             >
               透明 inline 文字导航
             </Link>
-            <Button type="button" data-press-feedback="ripple" variant="ghost">
+            <Button type="button" data-press-feedback="ripple" variant="secondary">
               ripple 操作按钮
             </Button>
           </div>
@@ -129,22 +135,44 @@ const UiShowcase = () => {
               </Button>
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button size="sm">小按钮</Button>
-            <Button size="md" loading loadingText="正在保存">
-              保存
-            </Button>
-            <Button size="lg" disabled>
-              禁用按钮
-            </Button>
-            <IconButton variant="secondary" aria-label="设置">
-              <Settings className="h-4 w-4" />
-            </IconButton>
+          <div className="space-y-3">
+            {(['sm', 'md', 'lg'] as const).map((size) => (
+              <div
+                key={size}
+                role="group"
+                aria-label={`${size} 尺寸对齐`}
+                className="flex flex-wrap items-center gap-3"
+              >
+                <span className="w-8 text-xs text-text-muted">{size}</span>
+                <Button size={size}>保存</Button>
+                <Button size={size} variant="secondary">
+                  取消
+                </Button>
+                <Button size={size} variant="danger" soft>
+                  删除
+                </Button>
+                <Button size={size} appearance="plain" variant="secondary">
+                  列表选项
+                </Button>
+                <Button size={size} appearance="plain" variant="danger" soft>
+                  暂停
+                </Button>
+                <Button size={size} loading loadingText="正在保存">
+                  保存
+                </Button>
+                <Button size={size} disabled>
+                  不可用
+                </Button>
+                <IconButton size={size} variant="secondary" aria-label={`${size} 设置`}>
+                  <Settings className="h-4 w-4" />
+                </IconButton>
+              </div>
+            ))}
           </div>
         </ShowcaseSection>
 
         <ShowcaseSection title="表单">
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid items-end gap-3 md:grid-cols-3">
             <Field label="条目标题" description="用于 Wiki 列表与搜索结果。" required>
               <Input placeholder="输入标题" />
             </Field>
@@ -161,17 +189,23 @@ const UiShowcase = () => {
               <Textarea placeholder="输入简介" />
             </Field>
           </div>
-          <Field
-            label="标签令牌"
-            description="聚焦显示站内候选，回车添加；默认关闭浏览器自动补全。"
-          >
-            <TagInput
-              value={demoTags}
-              onChange={setDemoTags}
-              suggestions={['古风', '现场', '原创']}
-              placeholder="输入标签后按回车添加"
-            />
-          </Field>
+          <div className="flex flex-wrap items-end gap-3">
+            <Field
+              label="标签令牌"
+              description="聚焦显示站内候选，回车添加；默认关闭浏览器自动补全。"
+              className="min-w-0 flex-1"
+            >
+              <TagInput
+                value={demoTags}
+                onChange={setDemoTags}
+                suggestions={['古风', '现场', '原创']}
+                placeholder="输入标签后按回车添加"
+              />
+            </Field>
+            <Button variant="secondary" onClick={() => setDemoTags([])}>
+              清空标签
+            </Button>
+          </div>
           <div className="flex flex-wrap gap-6">
             <Checkbox label="允许评论" defaultChecked />
             <Switch label="公开展示" defaultChecked />

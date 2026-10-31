@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, RotateCw } from '@/src/components/icons'
-import { clsx } from 'clsx'
+
 import { apiGet, apiPut } from '../../lib/apiClient'
 import { getErrorMessage } from '../../lib/errorHandler'
 import { useDialog } from '../../components/Dialog'
@@ -16,7 +16,7 @@ import {
   normalizeReviewFilter,
 } from './reviewQueue'
 import type { AdminReviewQueueMergedItem } from '../../types/api'
-import { LoadErrorState } from '@/src/components/ui'
+import { Button, LoadErrorState } from '@/src/components/ui'
 
 const getCurrentItemIndex = (items: AdminReviewQueueMergedItem[], currentKey: string | null) => {
   if (!items.length) return -1
@@ -244,52 +244,46 @@ const AdminReviewWorkbench = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <Button
+            variant="secondary"
             type="button"
             onClick={handleRefreshQueue}
             disabled={loading || Boolean(actionLoading)}
-            className="px-4 py-2 border border-border text-text-secondary hover:text-brand-gold hover:border-brand-gold rounded text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             <RotateCw size={15} /> 刷新队列
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="secondary"
             type="button"
             onClick={() => moveToIndex(currentIndex - 1)}
             disabled={loading || Boolean(actionLoading) || isFirst}
-            className="px-4 py-2 rounded text-sm theme-button-secondary transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             <ChevronLeft size={15} /> 上一个
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="secondary"
             type="button"
             onClick={() => moveToIndex(currentIndex + 1)}
             disabled={loading || Boolean(actionLoading) || isLast}
-            className="px-4 py-2 rounded text-sm theme-button-secondary transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             下一个 <ChevronRight size={15} />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="danger"
             type="button"
             onClick={() => void handleAction('reject')}
             disabled={!currentItem || loading || Boolean(actionLoading)}
-            className={clsx(
-              'px-4 py-2 rounded text-sm theme-status-error hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed',
-              actionLoading === 'reject' && 'opacity-70'
-            )}
           >
             {actionLoading === 'reject' ? '驳回中...' : '驳回'}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="success"
             type="button"
             onClick={() => void handleAction('approve')}
             disabled={!currentItem || loading || Boolean(actionLoading)}
-            className={clsx(
-              'px-4 py-2 rounded text-sm theme-status-success hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed',
-              actionLoading === 'approve' && 'opacity-70'
-            )}
           >
             {actionLoading === 'approve' ? '通过中...' : '通过'}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -316,20 +310,12 @@ const AdminReviewWorkbench = () => {
             可以返回队列，或刷新查看是否有新的待审内容。
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate(queuePath)}
-              className="px-4 py-2 rounded text-sm theme-button-secondary transition-all"
-            >
+            <Button variant="secondary" type="button" onClick={() => navigate(queuePath)}>
               返回队列
-            </button>
-            <button
-              type="button"
-              onClick={handleRefreshQueue}
-              className="px-4 py-2 rounded text-sm theme-button-primary transition-all"
-            >
+            </Button>
+            <Button variant="primary" type="button" onClick={handleRefreshQueue}>
               刷新队列
-            </button>
+            </Button>
           </div>
         </div>
       )}

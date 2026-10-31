@@ -79,7 +79,6 @@ const EventFilters = ({
         data-press-feedback="ripple"
         size="sm"
         onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
-        className="h-auto min-h-0 cursor-pointer px-1.5 py-0.5"
         rightIcon={<ArrowUpDown size={12} />}
         title={sortOrder === 'asc' ? '时间正序' : '时间倒序'}
       >

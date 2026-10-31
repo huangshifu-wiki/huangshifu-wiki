@@ -105,6 +105,7 @@ export const AdminReviews = () => {
       <div className="bg-surface border border-border rounded p-4 flex flex-wrap items-center gap-3">
         {REVIEW_FILTER_OPTIONS.map((item) => (
           <Button
+            appearance="plain"
             type="button"
             size="sm"
             variant={filter === item.id ? 'primary' : 'secondary'}
