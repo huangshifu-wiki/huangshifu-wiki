@@ -124,7 +124,7 @@
     "@types/supertest": "^7.2.1",
     "@uiw/react-md-editor": "^4.1.6",
     "@vitejs/plugin-react": "^5.0.4",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^5.0.5",
     "autoprefixer": "^10.6.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
