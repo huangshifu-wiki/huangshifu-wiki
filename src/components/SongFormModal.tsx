@@ -225,11 +225,11 @@ export const SongFormModal = ({ open, onClose, onSuccess, mode, song }: SongForm
     if (isEdit && song) {
       setFormData({
         title: song.title || '',
-        artists: formatMusicCredits(song.artists),
-        lyricists: formatMusicCredits(song.lyricists),
-        composers: formatMusicCredits(song.composers),
-        arrangers: formatMusicCredits(song.arrangers),
-        vocals: formatMusicCredits(song.vocals),
+        artists: normalizeStringListInput(song.artists).join(', '),
+        lyricists: normalizeStringListInput(song.lyricists).join(', '),
+        composers: normalizeStringListInput(song.composers).join(', '),
+        arrangers: normalizeStringListInput(song.arrangers).join(', '),
+        vocals: normalizeStringListInput(song.vocals).join(', '),
         album: song.album || '',
         audioUrl: song.audioUrl || '',
         tagsText: (song.tags || []).join(', '),
