@@ -531,6 +531,7 @@ export const AdminUsers = () => {
                             <Button
                               onClick={() => openEditModal(item)}
                               variant="info"
+                              appearance="plain"
                               soft
                               size="sm"
                               leftIcon={<Pencil size={14} />}
@@ -544,6 +545,7 @@ export const AdminUsers = () => {
                               <Button
                                 onClick={() => toggleRole(item)}
                                 variant="info"
+                                appearance="plain"
                                 soft
                                 size="sm"
                                 leftIcon={
@@ -561,6 +563,7 @@ export const AdminUsers = () => {
                             <Button
                               onClick={() => toggleBan(item)}
                               variant={item.status === 'banned' ? 'success' : 'warning'}
+                              appearance="plain"
                               soft
                               size="sm"
                               leftIcon={
@@ -578,6 +581,7 @@ export const AdminUsers = () => {
                             <Button
                               onClick={() => void handleDeleteUser(item)}
                               variant="danger"
+                              appearance="plain"
                               soft
                               size="sm"
                               leftIcon={<Trash2 size={14} />}
@@ -598,6 +602,7 @@ export const AdminUsers = () => {
                                   )
                                 }
                                 variant="secondary"
+                                appearance="plain"
                                 soft
                                 size="sm"
                                 leftIcon={<MoreVertical size={14} />}

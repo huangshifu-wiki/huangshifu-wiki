@@ -236,6 +236,7 @@ export const AdminLocks = () => {
                       <Button
                         type="button"
                         variant="warning"
+                        appearance="plain"
                         soft
                         size="sm"
                         onClick={() => releaseLock(item)}

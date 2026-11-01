@@ -493,6 +493,7 @@ const AdminBackups = () => {
                     <Button
                       onClick={() => openNoteDialog(backup)}
                       variant="info"
+                      appearance="plain"
                       soft
                       size="sm"
                       leftIcon={<Pencil size={14} />}
@@ -502,6 +503,7 @@ const AdminBackups = () => {
                     <Button
                       onClick={() => handleDownload(backup.filename)}
                       variant="secondary"
+                      appearance="plain"
                       soft
                       size="sm"
                       leftIcon={<Download size={14} />}
@@ -511,6 +513,7 @@ const AdminBackups = () => {
                     <Button
                       onClick={() => openRestoreExistingDialog(backup.filename)}
                       variant="success"
+                      appearance="plain"
                       soft
                       size="sm"
                       leftIcon={<RotateCcw size={14} />}
@@ -520,6 +523,7 @@ const AdminBackups = () => {
                     <Button
                       onClick={() => openDeleteDialog(backup.filename)}
                       variant="danger"
+                      appearance="plain"
                       soft
                       size="sm"
                       leftIcon={<Trash2 size={14} />}

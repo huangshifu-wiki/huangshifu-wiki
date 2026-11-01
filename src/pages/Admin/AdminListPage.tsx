@@ -983,6 +983,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             to={`${itemHref}/edit`}
             state={{ editorBackground: location }}
             variant="warning"
+            appearance="plain"
             soft
             size="sm"
             leftIcon={<Edit3 size={14} />}
@@ -993,6 +994,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
         {isPending && pendingAction !== 'toggle' && (
           <Button
             variant={pendingAction === 'restore' ? 'success' : 'danger'}
+            appearance="plain"
             soft
             size="sm"
             loading
@@ -1010,6 +1012,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             disabled={isPending}
             loading={pendingAction === 'toggle'}
             variant="warning"
+            appearance="plain"
             soft
             size="sm"
             leftIcon={item.active ? <CheckCircle size={14} /> : <XCircle size={14} />}
@@ -1021,6 +1024,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           <Button
             onClick={() => openCategoryModal(item)}
             variant="warning"
+            appearance="plain"
             soft
             size="sm"
             leftIcon={<Edit3 size={14} />}
@@ -1034,6 +1038,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             onClick={() => setEditingEventId(item.id)}
             data-prefetch-module="AdminEventEditor"
             variant="warning"
+            appearance="plain"
             soft
             size="sm"
             leftIcon={<Edit3 size={14} />}
@@ -1046,6 +1051,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             <Button
               onClick={() => handleRestore(rowId)}
               variant="success"
+              appearance="plain"
               soft
               size="sm"
               leftIcon={<RotateCcw size={14} />}
@@ -1055,6 +1061,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
             <Button
               onClick={() => handlePermanentDelete(rowId)}
               variant="danger"
+              appearance="plain"
               soft
               size="sm"
               leftIcon={<Trash2 size={14} />}
@@ -1066,6 +1073,7 @@ export const AdminListPage = ({ type }: { type: ListType }) => {
           <Button
             onClick={() => handleDelete(rowId)}
             variant="danger"
+            appearance="plain"
             soft
             size="sm"
             leftIcon={<Trash2 size={14} />}

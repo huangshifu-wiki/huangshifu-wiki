@@ -59,7 +59,7 @@ Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`�
 
 `Button`、`LinkButton` 的 action、plain 和 soft 外观共用上述尺寸；变体、选中、禁用和加载状态不得改变尺寸档位。IconButton 对应为 32px、36px、44px 正方形。页头、详情主操作和普通表单操作使用默认 md；列表行内、筛选组和区块标题中的紧凑操作使用 sm。同一位置、同一操作组使用相同 size，加载失败后的重试也保持原操作尺寸。
 
-`appearance="plain"` 用于分段选择、页码、筛选组等专用交互，保留圆角与选中形态，不另设尺寸体系。ghost 默认 plain，其余变体默认 action；显式 appearance 优先。IconButton 固定 plain，导航、播放器、整卡点击面和编辑器工具栏保留专用形态。首页 hero 使用相同 LinkButton，保留展示用的宽间距，同组成员保持一致。
+`appearance="plain"` 用于分段选择、页码、筛选组等专用交互，保留圆角与选中形态，不另设尺寸体系。管理面板列表行内的彩色操作按钮显式使用 `appearance="plain"` 配合 `soft`，保留圆角浅底样式，与直角 action 外观共存。ghost 默认 plain，其余变体默认 action；显式 appearance 优先。IconButton 固定 plain，导航、播放器、整卡点击面和编辑器工具栏保留专用形态。首页 hero 使用相同 LinkButton，保留展示用的宽间距，同组成员保持一致。
 
 普通 Input、Select 最小高度 36px，左右 12px、上下 6px，行高 20px；小屏字号 16px，sm 起 14px。Textarea 保留最小 112px 的可编辑高度、业务 rows、上下 8px 与 24px 行高。Field 内部间距 6px，TagInput 最小高度 36px，内嵌输入不重复叠加最小高度。共享按钮在移动端与桌面端使用相同尺寸；粗指针下标签输入和普通单行输入/选择保留至少 44px 触控面积，多行输入和隐藏文件上传不受该单行规则影响。标签令牌删除、拖动手柄等内嵌控件通过 `data-control-inset` 保留专用尺寸。
 
