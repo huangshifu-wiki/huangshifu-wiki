@@ -1520,32 +1520,11 @@ a[href]:not([data-press-feedback='none']),
 }
 
 .bottom-nav-label {
-  position: relative;
   font-weight: 400;
-}
-
-.bottom-nav-label::after {
-  content: '';
-  position: absolute;
-  bottom: -0.125rem;
-  left: 0;
-  width: 0;
-  height: 1px;
-  background: currentColor;
-  transition: width 0.3s ease;
 }
 
 .bottom-nav-link[aria-current='page'] .bottom-nav-label {
   font-weight: 600;
-}
-
-.bottom-nav-link[aria-current='page'] .bottom-nav-label::after,
-.bottom-nav-link:hover .bottom-nav-label::after {
-  width: 100%;
-}
-
-.bottom-nav:hover .bottom-nav-link[aria-current='page']:not(:hover) .bottom-nav-label::after {
-  width: 0;
 }
 
 .mobile-filterbar {

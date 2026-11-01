@@ -1,4 +1,12 @@
-import { ChevronRight, Megaphone, Search, Settings, Ticket } from '@/src/components/icons'
+import {
+  Calendar,
+  ChevronRight,
+  Megaphone,
+  MessageSquare,
+  Search,
+  Settings,
+  Ticket,
+} from '@/src/components/icons'
 import { Link } from 'react-router-dom'
 
 interface MoreEntry {
@@ -9,6 +17,18 @@ interface MoreEntry {
 }
 
 const MORE_ENTRIES: MoreEntry[] = [
+  {
+    to: '/events',
+    label: '游记',
+    description: '浏览演出与活动游记',
+    Icon: Calendar,
+  },
+  {
+    to: '/forum',
+    label: '论坛',
+    description: '浏览帖子，参与社区讨论',
+    Icon: MessageSquare,
+  },
   {
     to: '/announcements',
     label: '公告',
